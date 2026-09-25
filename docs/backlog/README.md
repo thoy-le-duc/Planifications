@@ -16,7 +16,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T04](T04-rotation.md) | Alertes de rotation | T03 | à faire |
 | [T05](T05-besoins-semences.md) | Besoins en semences et en plants | T01 | à faire |
 | [T06](T06-semainier.md) | Semainier | T02 | à faire |
-| [T07](T07-mesure-sqlite.md) | Mesure : SQLite PowerSync sur téléphone simulé | — | à faire |
+| [T07](T07-mesure-sqlite.md) | Mesure : SQLite PowerSync sur téléphone simulé | — | à préciser |
 | [T08](T08-schema-postgres.md) | Schéma PostgreSQL et migrations | T01 | à faire |
 | [T09](T09-comptes-jetons.md) | Comptes, fermes et jetons | T08 | à préciser |
 | [T10](T10-synchro.md) | Synchro de bout en bout | T07, T08, T09 | à faire |
