@@ -117,7 +117,7 @@ Ne code aucune fonctionnalité tout de suite. Ta première mission est la phase 
 - [x] Poser à Théophane les questions nécessaires sur le modèle de données : comment il découpe ses parcelles, ce qu'est une série pour lui, quelles informations il saisit vraiment au champ. Une question à la fois, en français.
 - [x] Proposer le modèle de données (entités, relations, dimension temporelle des planches) dans `docs/modele-donnees.md`, avec un schéma.
 - [x] Comparer les moteurs de synchro hors-ligne et recommander un choix argumenté (`docs/choix-synchro.md`).
-- [ ] Monter le squelette du monorepo, la CI (tests, lint, typage strict, budget de performance) et le conteneur isolé pour la boucle.
+- [x] Monter le squelette du monorepo, la CI (tests, lint, typage strict, budget de performance) et le conteneur isolé pour la boucle (`docs/boucle.md`).
 - [x] Rédiger les 10 à 15 premiers tickets de la phase 1 dans `docs/backlog/`, chacun avec ses critères d'acceptation.
 
 Questions ouvertes à trancher avec Théophane :

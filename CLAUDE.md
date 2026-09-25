@@ -46,8 +46,8 @@ flowchart LR
 
 Règles de la boucle :
 
-- **Un ticket à la fois**, pris dans `docs/backlog/`. Chaque ticket a un objectif, des critères d'acceptation vérifiables et un périmètre de fichiers.
-- **Tests d'abord** : si le ticket n'a pas de tests, écris-les en premier, puis fais-les passer. Ne modifie jamais un test pour qu'il passe sans le justifier dans la PR.
+- **Un ticket à la fois par développeur**, pris dans `docs/backlog/`. Chaque ticket a un objectif, des critères d'acceptation vérifiables et un périmètre de fichiers. La boucle travaille en équipe (chef d'équipe, testeur, développeur, relecteur) et mène au plus deux tickets indépendants en parallèle : voir `docs/boucle.md`.
+- **Tests d'abord** : si le ticket n'a pas de tests, le testeur les écrit en premier, puis le développeur les fait passer. Ne modifie jamais un test pour qu'il passe sans le justifier dans la PR.
 - **Pas de travail inventé.** Backlog vide ou ticket flou : arrête-toi et écris tes questions dans `docs/questions.md`. Mieux vaut trois tickets nets par fenêtre que dix vagues.
 - **Environnement isolé.** Mode sans demande de permission autorisé uniquement dans un conteneur dédié, sans accès aux données ni aux secrets de production.
 - **Git-centré** : une branche par ticket, commits atomiques, jamais de push direct sur `main`.
