@@ -25,6 +25,7 @@
  *     readonly culture: string;
  *     readonly variete: string | null;
  *     readonly debutRecoltePrevu: DateCalendaire | null;   // Campagne.debutRecoltePrevu
+ *     readonly finRecoltePrevue: DateCalendaire | null;    // Campagne.finRecoltePrevue
  *     readonly nombrePlants: number;                       // Plantation.nombrePlants
  *     readonly emplacements: readonly EmplacementConcerne[];
  *   }
@@ -60,6 +61,11 @@
  *     dateDuJour: DateCalendaire,
  *   ): readonly TacheSemainier[]               (pure : n'écrit dans aucune entrée)
  *
+ * Responsabilités de l'appelant (le semainier ne les vérifie pas) :
+ *   - écarter les lignes supprimées (`supprimeLe` renseigné) : séries, campagnes, emplacements ;
+ *   - écarter les campagnes d'une plantation arrachée (`Plantation.dateArrachage` renseignée) ;
+ *   - dériver les réalisés du journal en tenant compte des corrections et annulations.
+ *
  * Règles :
  *   - Semaine demandée : du lundi `lundiDeSemaine(annee, semaine)` au dimanche (lundi + 6).
  *     Une semaine qui n'existe pas (S53 d'une année à 52 semaines) : RangeError.
@@ -72,7 +78,12 @@
  *       debutRecolte   → 'debut_recolte'
  *       finRecolte     → 'arrachage' (fin d'occupation)
  *     Campagne : une seule tâche 'debut_recolte' à `debutRecoltePrevu` ; rien si elle vaut null.
+ *     Elle n'est plus listée une fois `finRecoltePrevue` passée (finRecoltePrevue < dateDuJour ;
+ *     le jour même de la fin, elle l'est encore). `finRecoltePrevue` null : pas de borne.
  *   - Une tâche disparaît dès que son étape est réalisée (quelle que soit la date du réalisé).
+ *   - Réalisé incohérent : une étape réalisée absente des dates prévues de la série (semis
+ *     pépinière saisi sur un semis direct ou un plant acheté) est ignorée ; pas de RangeError,
+ *     le semainier ne plante pas, les autres réalisés s'appliquent normalement.
  *   - DÉCISION PROVISOIRE (question à Théophane, PR #2) : une étape non saisie est considérée
  *     comme faite dès qu'une étape postérieure de la même série est réalisée. Plantation réalisée
  *     sans semis saisi : le semis pépinière n'apparaît ni dû ni en retard.
@@ -83,14 +94,23 @@
  *       · sa date prévue est avant le lundi de la semaine ET elle est en retard.
  *     Une tâche d'avant la semaine mais pas encore en retard (on regarde une semaine future)
  *     n'y figure pas : elle reste dans sa propre semaine.
+ *     Le retard se compte toujours par rapport à `dateDuJour`, jamais par rapport à la semaine
+ *     consultée : une tâche du dimanche consultée le lundi suivant a 1 jour de retard.
+ *     Semaine passée (son dimanche est avant la date du jour) : on y trouve ses propres tâches non
+ *     réalisées, toutes en retard, et les retards d'avant son lundi. Une tâche prévue après son
+ *     dimanche n'y figure jamais, même si elle est en retard aujourd'hui : elle apparaît dans sa
+ *     propre semaine et dans les semaines suivantes.
  *     Pas de limite dans le temps : une tâche en retard reste listée tant qu'elle n'est pas
  *     réalisée (ou rendue caduque par une étape postérieure), ou que la série n'est pas passée
  *     'terminee' ou 'abandonnee'. On ne cache jamais en silence un travail oublié.
  *   - Ordre : en retard d'abord ; puis date prévue croissante ; puis zone, puis code du premier
  *     emplacement de la tâche (après tri de ses emplacements), en ordre naturel : les nombres
  *     comptent pour leur valeur ('T2-P9' avant 'T2-P10'). Une tâche sans emplacement passe après
- *     les autres à date égale. Égalité restante : ordre chronologique des étapes, puis ordre
- *     d'entrée (séries puis campagnes).
+ *     les autres à date égale. Puis l'étape : l'arrachage passe avant toute autre étape (on
+ *     libère la planche avant de semer ou de planter), les autres suivent l'ordre chronologique
+ *     (semis pépinière, semis direct ou plantation, début de récolte). Égalité restante :
+ *     identifiant de la série ou de la campagne (ordre des chaînes). Le résultat ne dépend
+ *     donc jamais de l'ordre d'entrée.
  *   - 3 000 séries traitées en moins de 30 ms.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
@@ -236,6 +256,7 @@ describe('types du module', () => {
       readonly culture: string;
       readonly variete: string | null;
       readonly debutRecoltePrevu: DateCalendaire | null;
+      readonly finRecoltePrevue: DateCalendaire | null;
       readonly nombrePlants: number;
       readonly emplacements: readonly EmplacementConcerne[];
     }>();
@@ -361,6 +382,29 @@ describe('réalisés : une tâche disparaît dès que son étape est réalisée'
     }
   });
 
+  it('réalisé incohérent (semis pépinière saisi sur un semis direct) : ignoré, pas de RangeError', () => {
+    const radis = serie('radis', miseEnPlaceSeule('2027-04-06'), { mode: 'semis_direct', culture: 'Radis' });
+    const seul = realisesDe([['radis', { semisPepiniere: d('2027-03-01') }]]);
+    expect(() => semainier(s(2027, 14), [radis], [], seul, d('2027-04-06'))).not.toThrow();
+    expect(semainier(s(2027, 14), [radis], [], seul, d('2027-04-06')).map(resume)).toStrictEqual([
+      'radis:semis_direct:2027-04-06',
+    ]);
+  });
+
+  it('réalisé incohérent à côté d’un réalisé valable : seul le valable compte et décale la suite', () => {
+    const radis = serie(
+      'radis',
+      calculerDatesSerie({ mode: 'semis_direct', dureeAvantRecolteJours: 28, fenetreRecolteJours: 7 }, { type: 'semis', date: d('2027-04-06') }),
+      { mode: 'semis_direct', culture: 'Radis' },
+    );
+    // Semis direct réalisé 2 jours en retard : début de récolte du 2027-05-04 au 2027-05-06 (S18).
+    const r = realisesDe([['radis', { semisPepiniere: d('2027-03-01'), miseEnPlace: d('2027-04-08') }]]);
+    expect(semainier(s(2027, 14), [radis], [], r, d('2027-04-08'))).toStrictEqual([]);
+    expect(semainier(s(2027, 18), [radis], [], r, d('2027-04-08')).map(resume)).toStrictEqual([
+      'radis:debut_recolte:2027-05-06',
+    ]);
+  });
+
   it('un réalisé d’une autre série ne retire rien', () => {
     const realises = realisesDe([['autre', { semisPepiniere: d('2027-03-08'), miseEnPlace: d('2027-04-05') }]]);
     expect(semainier(s(2027, 14), [batavia], [], realises, d('2027-03-01')).map(resume)).toStrictEqual([
@@ -415,6 +459,23 @@ describe('retard', () => {
     // Aujourd'hui 2027-03-01 : le semis (S10) n'est pas en retard, il ne remonte pas en S14.
     expect(semainier(s(2027, 14), [batavia], [], AUCUN_REALISE, d('2027-03-01')).map(resume)).toStrictEqual([
       'batavia:plantation:2027-04-05',
+    ]);
+  });
+
+  it('borne du lundi : tâche du dimanche d’avant, consultée le lundi : 1 jour de retard', () => {
+    const tomate = serie('tomate', miseEnPlaceSeule('2027-04-04'), { mode: 'plant_achete', culture: 'Tomate' });
+    expect(semainier(s(2027, 14), [tomate], [], AUCUN_REALISE, d('2027-04-05')).map(resume)).toStrictEqual([
+      'tomate:plantation:2027-04-04:retard 1',
+    ]);
+  });
+
+  it('semaine passée (S12 consultée en S16) : ses tâches et les retards d’avant, jamais celles d’après son dimanche', () => {
+    // Batavia : semis S10 (en retard, d'avant le lundi de S12), plantation S14 (après le dimanche
+    // de S12 : absente de S12 bien qu'en retard aujourd'hui). Poireau : plantation en S12.
+    const poireau = serie('poireau', miseEnPlaceSeule('2027-03-24'), { mode: 'plant_achete', culture: 'Poireau' });
+    expect(semainier(s(2027, 12), [batavia, poireau], [], AUCUN_REALISE, d('2027-04-20')).map(resume)).toStrictEqual([
+      'batavia:semis_pepiniere:2027-03-08:retard 43',
+      'poireau:plantation:2027-03-24:retard 27',
     ]);
   });
 
@@ -516,9 +577,10 @@ describe('statut de la série', () => {
   });
 
   it('seules les séries prévues et en cours apparaissent (terminée : absente aussi)', () => {
+    // Égalité complète : départage par identifiant ('en_cours' < 'prevue').
     expect(semainier(s(2027, 14), series, [], AUCUN_REALISE, d('2027-03-01')).map(resume)).toStrictEqual([
-      'prevue:plantation:2027-04-05',
       'en_cours:plantation:2027-04-05',
+      'prevue:plantation:2027-04-05',
     ]);
   });
 });
@@ -577,15 +639,50 @@ describe('ordre : en retard, puis date, puis zone et code d’emplacement', () =
     expect(b.map(resume)).toStrictEqual(a.map(resume));
   });
 
-  it('même date et même emplacement : ordre chronologique des étapes', () => {
-    // Semis direct le 2027-04-05 d'une série, arrachage le 2027-04-05 d'une autre, même planche.
+  it('même date et même emplacement : l’arrachage passe avant le semis et la plantation', () => {
+    // Changement après relecture : on libère la planche avant de semer ou de planter. Semis direct
+    // et plantation le 2027-04-05 de deux séries, arrachage le même jour d'une troisième, même planche.
     const arrachage = serie('arrachage', { miseEnPlace: d('2027-01-04'), debutRecolte: d('2027-03-01'), finRecolte: d('2027-04-05') }, { ...achete, emplacements: [T2_P04] });
     const semis = serie('semis', miseEnPlaceSeule('2027-04-05'), { mode: 'semis_direct', emplacements: [T2_P04] });
+    const plantation = serie('plantation', miseEnPlaceSeule('2027-04-05'), { ...achete, emplacements: [T2_P04] });
     const r = realisesDe([['arrachage', { miseEnPlace: d('2027-01-04'), debutRecolte: d('2027-03-01') }]]);
-    expect(semainier(s(2027, 14), [arrachage, semis], [], r, d('2027-04-05')).map(resume)).toStrictEqual([
-      'semis:semis_direct:2027-04-05',
+    const attendu = [
       'arrachage:arrachage:2027-04-05',
+      // Semis direct et plantation ont le même rang : départage par identifiant.
+      'plantation:plantation:2027-04-05',
+      'semis:semis_direct:2027-04-05',
+    ];
+    expect(semainier(s(2027, 14), [semis, plantation, arrachage], [], r, d('2027-04-05')).map(resume)).toStrictEqual(attendu);
+    expect(semainier(s(2027, 14), [arrachage, plantation, semis], [], r, d('2027-04-05')).map(resume)).toStrictEqual(attendu);
+  });
+
+  it('égalité complète : départage par identifiant, quel que soit l’ordre d’entrée', () => {
+    // Même étape (début de récolte), même date, même planche : deux séries et une campagne.
+    const recolte = { miseEnPlace: d('2027-02-01'), debutRecolte: d('2027-04-07'), finRecolte: d('2027-06-01') };
+    const zz = serie('zz', recolte, achete);
+    const aa = serie('aa', recolte, achete);
+    const mm: CampagneSemainier = {
+      id: id<'Campagne'>('mm'),
+      culture: 'Fraise',
+      variete: null,
+      debutRecoltePrevu: d('2027-04-07'),
+      finRecoltePrevue: d('2027-06-30'),
+      nombrePlants: 200,
+      emplacements: [T2_P03],
+    };
+    const nn: CampagneSemainier = { ...mm, id: id<'Campagne'>('nn') };
+    const r = realisesDe([
+      ['zz', { miseEnPlace: d('2027-02-01') }],
+      ['aa', { miseEnPlace: d('2027-02-01') }],
     ]);
+    const attendu = [
+      'aa:debut_recolte:2027-04-07',
+      'mm:debut_recolte:2027-04-07',
+      'nn:debut_recolte:2027-04-07',
+      'zz:debut_recolte:2027-04-07',
+    ];
+    expect(semainier(s(2027, 14), [zz, aa], [nn, mm], r, d('2027-04-05')).map(resume)).toStrictEqual(attendu);
+    expect(semainier(s(2027, 14), [aa, zz], [mm, nn], r, d('2027-04-05')).map(resume)).toStrictEqual(attendu);
   });
 });
 
@@ -608,12 +705,14 @@ describe('campagne de pérenne : début de récolte', () => {
     culture: 'Asperge',
     variete: 'Argenteuil',
     debutRecoltePrevu: dates?.debutRecolte ?? null,
+    finRecoltePrevue: dates?.finRecolte ?? null,
     nombrePlants: 400,
     emplacements: [aspergeraie],
   };
 
-  it('la campagne 2027 commence le 2027-04-12 (T02)', () => {
+  it('la campagne 2027 va du 2027-04-12 au 2027-06-20 (T02)', () => {
     expect(dates?.debutRecolte).toBe('2027-04-12');
+    expect(dates?.finRecolte).toBe('2027-06-20');
   });
 
   it('une tâche « début de récolte » en S15, avec le nombre de plants', () => {
@@ -651,6 +750,45 @@ describe('campagne de pérenne : début de récolte', () => {
     };
     expect(semainier(s(2027, 15), [], [asperges], realises, d('2027-04-14'))).toStrictEqual([]);
     expect(semainier(s(2027, 16), [], [asperges], realises, d('2027-04-19'))).toStrictEqual([]);
+  });
+
+  it('le dernier jour de récolte prévu, la tâche non commencée est encore listée', () => {
+    expect(semainier(s(2027, 24), [], [asperges], AUCUN_REALISE, d('2027-06-20')).map(resume)).toStrictEqual([
+      'asperges-2027:debut_recolte:2027-04-12:retard 69',
+    ]);
+  });
+
+  it('une fois la fin de récolte prévue passée, la tâche n’est plus listée', () => {
+    expect(semainier(s(2027, 25), [], [asperges], AUCUN_REALISE, d('2027-06-21'))).toStrictEqual([]);
+  });
+
+  it('asperges de la campagne 2025 jamais récoltées, consultées en 2027-S40 : absentes', () => {
+    const dates2025 = calculerDatesCampagne(
+      {
+        datePlantation: d('2023-03-01'),
+        perenne: {
+          anneesAvantPremiereRecolte: 2,
+          periodeRecolteAnnuelle: { semaineDebut: 15, semaineFin: 24 },
+          rendementParPlantParAn: null,
+        },
+      },
+      2025,
+    );
+    expect(dates2025).toStrictEqual({ debutRecolte: d('2025-04-07'), finRecolte: d('2025-06-15') });
+    const asperges2025: CampagneSemainier = {
+      ...asperges,
+      id: id<'Campagne'>('asperges-2025'),
+      debutRecoltePrevu: dates2025?.debutRecolte ?? null,
+      finRecoltePrevue: dates2025?.finRecolte ?? null,
+    };
+    expect(semainier(s(2027, 40), [], [asperges2025], AUCUN_REALISE, d('2027-10-04'))).toStrictEqual([]);
+  });
+
+  it('sans fin de récolte prévue (null) : pas de borne, la tâche en retard reste listée', () => {
+    const sansFin: CampagneSemainier = { ...asperges, finRecoltePrevue: null };
+    expect(semainier(s(2027, 40), [], [sansFin], AUCUN_REALISE, d('2027-10-04')).map(resume)).toStrictEqual([
+      'asperges-2027:debut_recolte:2027-04-12:retard 175',
+    ]);
   });
 
   it('sans date de récolte prévue (null) : aucune tâche', () => {
