@@ -36,11 +36,24 @@ Proposition :
 
 Question : est-ce comme ça que vous voyez une série ?
 
+Réponse : « ok ». Série (culture + date + itinéraire + longueur d'emplacement, prévu et réel) et, pour les pérennes, plantation pluriannuelle + campagne annuelle : validé.
+
+### Q3 — Ce qui se saisit au champ (posée le 2026-09-25)
+
+Proposition. Règle commune : une saisie = quoi, où, combien, en trois taps au plus ; date, heure et auteur remplis automatiquement ; photo et note toujours facultatives.
+
+| Saisie | Champs indispensables | Relié à |
+| --- | --- | --- |
+| Réalisé (semis, plantation, arrachage) | série, date réelle, longueur ou nombre de plants si différent du prévu | série |
+| Récolte | série ou campagne, quantité, unité (kg, botte, pièce) | stock |
+| Intervention (désherbage, paillage, taille, palissage, effeuillage, fertilisation) | type, emplacement ou série | série ou emplacement |
+| Irrigation | vanne, durée | secteur d'irrigation ; saisie manuelle en attendant l'intégration fertirrigation (phase 3) |
+| Traitement phyto | produit, dose, surface, cible, emplacement | registre phytosanitaire (délai avant récolte calculé) |
+| Observation | emplacement ou série, type (ravageur, maladie, stade, autre), texte ou photo | série ou emplacement |
+
+Question : est-ce la bonne liste ? Barrez ce que vous ne saisiriez jamais, ajoutez ce qui manque.
+
 Réponse : _en attente_
-
-### À suivre
-
-- Q3 — Ce que vous saisissez vraiment au champ.
 
 ## Questions ouvertes du brief
 
