@@ -74,7 +74,7 @@ Corrections apportées au modèle :
 
 Question : avec ces corrections, le modèle est-il validé ?
 
-Réponse : _en attente_
+Réponse : « ok ». Modèle v1 validé le 2026-09-25.
 
 ## Questions ouvertes du brief
 

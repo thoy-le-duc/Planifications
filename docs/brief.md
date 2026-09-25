@@ -115,7 +115,7 @@ Ne code aucune fonctionnalité tout de suite. Ta première mission est la phase 
 
 - [x] Copier ce brief dans le dépôt : `CLAUDE.md` (esprit, principes, méthode) et `docs/brief.md` (le reste).
 - [x] Poser à Théophane les questions nécessaires sur le modèle de données : comment il découpe ses parcelles, ce qu'est une série pour lui, quelles informations il saisit vraiment au champ. Une question à la fois, en français.
-- [ ] Proposer le modèle de données (entités, relations, dimension temporelle des planches) dans `docs/modele-donnees.md`, avec un schéma.
+- [x] Proposer le modèle de données (entités, relations, dimension temporelle des planches) dans `docs/modele-donnees.md`, avec un schéma.
 - [ ] Comparer les moteurs de synchro hors-ligne et recommander un choix argumenté.
 - [ ] Monter le squelette du monorepo, la CI (tests, lint, typage strict, budget de performance) et le conteneur isolé pour la boucle.
 - [ ] Rédiger les 10 à 15 premiers tickets de la phase 1 dans `docs/backlog/`, chacun avec ses critères d'acceptation.
