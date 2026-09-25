@@ -2,10 +2,10 @@
  * Dates d'une série (T02) : calcul depuis une ancre, en avant ou à rebours, puis recalage sur
  * les dates réellement saisies. Fonctions pures, calculs en jours entiers via `dates/`.
  */
-import { ajouterJours, ecartEnJours, lundiDeSemaine } from '../dates/index.ts';
+import { ajouterJours, ecartEnJours, lundiDeSemaine, nombreSemainesIso } from '../dates/index.ts';
 import type { DateCalendaire } from '../dates/index.ts';
 import { verifierExhaustif } from '../domaine/index.ts';
-import type { AncreSerie, Jours, ParametresPerenne } from '../domaine/index.ts';
+import type { AncreSerie, DatesPrevuesSerie, Jours, ParametresPerenne } from '../domaine/index.ts';
 
 /** Étapes d'une série, dans l'ordre chronologique. */
 export type EtapeSerie = 'semisPepiniere' | 'miseEnPlace' | 'debutRecolte' | 'finRecolte';
@@ -24,13 +24,11 @@ export type ParametresDatesSerie =
   | (DureesRecolte & { readonly mode: 'plant_maison'; readonly dureePepiniereJours: Jours })
   | (DureesRecolte & { readonly mode: 'plant_achete' });
 
-/** Dates d'une série. `semisPepiniere` n'existe qu'en plant maison : ailleurs la clé est absente. */
-export interface DatesSerie {
-  readonly semisPepiniere?: DateCalendaire;
-  readonly miseEnPlace: DateCalendaire;
-  readonly debutRecolte: DateCalendaire;
-  readonly finRecolte: DateCalendaire;
-}
+/**
+ * Dates d'une série : le type `DatesPrevuesSerie` de T01, sous un nom propre au module.
+ * `semisPepiniere` n'existe qu'en plant maison : ailleurs la clé est absente.
+ */
+export type DatesSerie = DatesPrevuesSerie;
 
 /** Dates réelles saisies, étape par étape. */
 export type RealisesSerie = Readonly<Partial<Record<EtapeSerie, DateCalendaire>>>;
@@ -45,9 +43,10 @@ export interface DatesCampagne {
   readonly finRecolte: DateCalendaire;
 }
 
-function exigerDuree(n: Jours, nom: string): Jours {
+/** Durée (jours ou années) entière et positive ou nulle, sinon RangeError. */
+function exigerDuree(n: number, nom: string): number {
   if (!Number.isSafeInteger(n) || n < 0) {
-    throw new RangeError(`${nom} doit être un nombre entier de jours positif ou nul : ${String(n)}`);
+    throw new RangeError(`${nom} doit être un nombre entier positif ou nul : ${String(n)}`);
   }
   return n;
 }
@@ -140,22 +139,38 @@ export function appliquerRealises(datesPrevues: DatesSerie, realises: RealisesSe
   });
 }
 
+/** Lundi de la semaine ISO demandée, la semaine 53 étant ramenée à la S52 les années qui n'en ont que 52. */
+function lundiDeSemaineBornee(annee: number, semaine: number): DateCalendaire {
+  return lundiDeSemaine(annee, Math.min(semaine, nombreSemainesIso(annee)));
+}
+
 /**
- * Dates de récolte d'une pérenne pour la campagne `annee` (année où la récolte commence), ou
- * `null` avant la première année de production. Période en semaines ISO : du lundi de la semaine
- * de début au dimanche de la semaine de fin, l'année suivante si la période chevauche le nouvel an.
- * RangeError si une semaine de la période n'existe pas dans l'année visée (semaine 53).
+ * Dates de récolte d'une pérenne pour la campagne `annee`, ou `null` quand il n'y a pas de récolte
+ * cette année-là.
+ *
+ * - `annee` est une année ISO : la période est en semaines ISO, et la S1 peut commencer fin
+ *   décembre de l'année civile précédente (S1 2026 = lundi 2025-12-29).
+ * - Récolte du lundi de la semaine de début au dimanche de la semaine de fin ; si la fin est avant
+ *   le début, la période chevauche le nouvel an et finit l'année suivante (la campagne porte
+ *   l'année où la récolte commence).
+ * - Une semaine 53 est ramenée à la dernière semaine des années qui n'en ont que 52.
+ * - `null` avant l'année de plantation + `anneesAvantPremiereRecolte` (année civile de la
+ *   plantation), et aussi quand le début de récolte tombe avant la plantation : une plantation
+ *   faite pendant ou après la période de récolte ne récolte pas cette année-là, la campagne entière
+ *   est sautée (règle simple, sans période tronquée).
+ * - RangeError si `anneesAvantPremiereRecolte` n'est pas un entier positif ou nul.
  */
 export function calculerDatesCampagne(plantation: PlantationPerenne, annee: number): DatesCampagne | null {
-  const { anneesAvantPremiereRecolte, periodeRecolteAnnuelle } = plantation.perenne;
-  const anneePlantation = Number(plantation.datePlantation.slice(0, 4));
-  if (annee < anneePlantation + anneesAvantPremiereRecolte) {
+  const { datePlantation, perenne } = plantation;
+  const attente = exigerDuree(perenne.anneesAvantPremiereRecolte, "le nombre d'années avant la première récolte");
+  if (annee < Number(datePlantation.slice(0, 4)) + attente) {
     return null;
   }
-  const { semaineDebut, semaineFin } = periodeRecolteAnnuelle;
+  const { semaineDebut, semaineFin } = perenne.periodeRecolteAnnuelle;
+  const debutRecolte = lundiDeSemaineBornee(annee, semaineDebut);
+  if (debutRecolte < datePlantation) {
+    return null;
+  }
   const anneeFin = semaineFin < semaineDebut ? annee + 1 : annee;
-  return {
-    debutRecolte: lundiDeSemaine(annee, semaineDebut),
-    finRecolte: ajouterJours(lundiDeSemaine(anneeFin, semaineFin), 6),
-  };
+  return { debutRecolte, finRecolte: ajouterJours(lundiDeSemaineBornee(anneeFin, semaineFin), 6) };
 }
