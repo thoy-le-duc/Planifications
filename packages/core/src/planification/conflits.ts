@@ -1,18 +1,19 @@
 /**
  * Conflits de place sur un emplacement (T03) : chevauchement de tronçons, surcharge de longueur
- * ou de places, occupation hors de la période active de l'emplacement.
+ * ou de places, tronçon qui dépasse l'emplacement, occupation hors de la période active de
+ * l'emplacement, période inversée.
  *
  * Tout se calcule en entiers : jours absolus pour le temps, centimètres (ou places) pour l'espace.
- * Le temps est parcouru par balayage des débuts et fins triés : entre deux événements, l'ensemble
- * des occupations présentes ne change pas, on l'examine une fois par tranche.
+ * Le temps est parcouru par balayage des débuts et fins triés : entre deux jours de bascule,
+ * l'ensemble des occupations présentes ne change pas, on l'examine une fois par tranche.
  */
 import { dateDepuisJourAbsolu, jourAbsolu } from '../dates/index.ts';
 import type { DateCalendaire } from '../dates/index.ts';
 import { verifierExhaustif } from '../domaine/index.ts';
 import type { Emplacement, Id, Occupation, PlaceOccupee } from '../domaine/index.ts';
-import { DATE_SANS_FIN, periodeOccupation } from './occupations.ts';
+import { centimetres, DATE_SANS_FIN, periodeOccupation } from './occupations.ts';
 
-export type SorteConflit = 'chevauchement' | 'surcharge' | 'emplacement_inactif';
+export type SorteConflit = 'chevauchement' | 'surcharge' | 'depassement' | 'emplacement_inactif' | 'periode_invalide';
 
 export interface Conflit {
   readonly sorte: SorteConflit;
@@ -25,7 +26,13 @@ export interface Conflit {
   readonly au: DateCalendaire | null;
 }
 
-const RANG_SORTE: Readonly<Record<SorteConflit, number>> = { chevauchement: 0, surcharge: 1, emplacement_inactif: 2 };
+const RANG_SORTE: Readonly<Record<SorteConflit, number>> = {
+  chevauchement: 0,
+  surcharge: 1,
+  depassement: 2,
+  emplacement_inactif: 3,
+  periode_invalide: 4,
+};
 
 /** Jour absolu de DATE_SANS_FIN : la fin « infinie », en entier. */
 const JOUR_SANS_FIN = jourAbsolu(DATE_SANS_FIN);
@@ -44,13 +51,15 @@ interface Segment {
 /** Conflit en cours de construction, en entiers. */
 interface ConflitBrut {
   readonly sorte: SorteConflit;
-  readonly debut: number;
+  debut: number;
   fin: number;
   readonly rangs: Set<number>;
 }
 
-function centimetres(metres: number): number {
-  return Math.round(metres * 100);
+/** Occupations en cause ensemble pendant une tranche. */
+interface Groupe {
+  readonly sorte: SorteConflit;
+  readonly segments: readonly Segment[];
 }
 
 /** Place en unités entières : centimètres ou places. */
@@ -81,62 +90,66 @@ function versSegment(occupation: Occupation, rang: number): Segment {
   };
 }
 
-/** Segments de cet emplacement, non supprimés et de durée non nulle. */
-function segmentsDe(emplacement: Emplacement, occupations: readonly Occupation[]): Segment[] {
-  const segments: Segment[] = [];
-  occupations.forEach((occupation, rang) => {
-    if (occupation.emplacementId === emplacement.id && occupation.supprimeLe === null) {
-      const segment = versSegment(occupation, rang);
-      if (segment.debut < segment.fin) {
-        segments.push(segment);
-      }
-    }
-  });
-  return segments;
+function brut(sorte: SorteConflit, debut: number, fin: number, segments: readonly Segment[]): ConflitBrut {
+  return { sorte, debut, fin, rangs: new Set(segments.map((s) => s.rang)) };
 }
 
 /**
- * Tronçons positionnés qui en recouvrent au moins un autre. Triés par début, les tronçons forment
- * des grappes (chaque début avant la fin la plus lointaine déjà vue) : tout membre d'une grappe
- * d'au moins deux tronçons en recouvre un autre, et réciproquement.
+ * Occupations de cet emplacement, non supprimées : les périodes valides deviennent des segments,
+ * les périodes inversées des conflits 'periode_invalide' ; les périodes nulles sont ignorées.
  */
-function tronconsEnRecouvrement(presents: readonly Segment[]): Segment[] {
+function trier(
+  emplacement: Emplacement,
+  occupations: readonly Occupation[],
+): { readonly segments: Segment[]; readonly invalides: ConflitBrut[] } {
+  const segments: Segment[] = [];
+  const invalides: ConflitBrut[] = [];
+  occupations.forEach((occupation, rang) => {
+    if (occupation.emplacementId !== emplacement.id || occupation.supprimeLe !== null) {
+      return;
+    }
+    const segment = versSegment(occupation, rang);
+    if (segment.debut < segment.fin) {
+      segments.push(segment);
+    } else if (segment.debut > segment.fin) {
+      invalides.push(brut('periode_invalide', segment.debut, segment.fin, [segment]));
+    }
+  });
+  return { segments, invalides };
+}
+
+/**
+ * Grappes de tronçons positionnés reliés par recouvrement. Triés par début, un tronçon rejoint la
+ * grappe s'il commence avant la fin la plus lointaine déjà vue. Seules les grappes d'au moins deux
+ * tronçons sont rendues : chacun de leurs membres en recouvre un autre.
+ */
+function grappesEnRecouvrement(presents: readonly Segment[]): Segment[][] {
   const troncons = presents
     .filter((s) => s.positionCm !== null && s.quantite > 0)
     .sort((a, b) => (a.positionCm ?? 0) - (b.positionCm ?? 0));
-  const enCause: Segment[] = [];
+  const grappes: Segment[][] = [];
   let grappe: Segment[] = [];
   let finGrappe = Number.NEGATIVE_INFINITY;
-  const clore = (): void => {
-    if (grappe.length > 1) {
-      enCause.push(...grappe);
-    }
-  };
   for (const troncon of troncons) {
     const debut = troncon.positionCm ?? 0;
     if (debut >= finGrappe) {
-      clore();
       grappe = [];
+      grappes.push(grappe);
     }
     grappe.push(troncon);
     finGrappe = Math.max(finGrappe, debut + troncon.quantite);
   }
-  clore();
-  return enCause;
+  return grappes.filter((g) => g.length > 1);
 }
 
-/** Occupations en cause pendant une tranche où l'ensemble des présents est fixe. */
-function enCauseDansTranche(presents: readonly Segment[], capaciteMax: number): Map<SorteConflit, readonly Segment[]> {
-  const resultat = new Map<SorteConflit, readonly Segment[]>();
-  const chevauchants = tronconsEnRecouvrement(presents);
-  if (chevauchants.length > 0) {
-    resultat.set('chevauchement', chevauchants);
-  }
+/** Groupes en conflit pendant une tranche où l'ensemble des présents est fixe. */
+function groupesDeTranche(presents: readonly Segment[], capaciteMax: number): Groupe[] {
+  const groupes: Groupe[] = grappesEnRecouvrement(presents).map((segments) => ({ sorte: 'chevauchement', segments }));
   const total = presents.reduce((somme, s) => somme + s.quantite, 0);
   if (presents.some((s) => s.positionCm === null) && total > capaciteMax) {
-    resultat.set('surcharge', presents);
+    groupes.push({ sorte: 'surcharge', segments: presents });
   }
-  return resultat;
+  return groupes;
 }
 
 /** Jours où l'ensemble des présents change, triés. */
@@ -150,15 +163,47 @@ function joursDeBascule(segments: readonly Segment[]): number[] {
 }
 
 /**
- * Balayage du temps : débuts et fins triés par jour, les fins traitées avant les débuts du même
- * jour (intervalles [du, au[). Les tranches en conflit qui se suivent, pour une même sorte, sont
- * fusionnées.
+ * Rattache un groupe de la tranche [jour, suivant[ aux conflits de même sorte finis le `jour` et
+ * qui partagent une de ses occupations : ils sont prolongés et fusionnés. Sans lien, nouveau
+ * conflit. Les conflits fusionnés dans un autre vont dans `absorbes`.
+ */
+function rattacher(
+  groupe: Groupe,
+  candidats: readonly ConflitBrut[],
+  absorbes: Set<ConflitBrut>,
+  bruts: ConflitBrut[],
+  suivant: number,
+  jour: number,
+): ConflitBrut {
+  const lies = candidats.filter(
+    (c) => c.sorte === groupe.sorte && !absorbes.has(c) && groupe.segments.some((s) => c.rangs.has(s.rang)),
+  );
+  const [cible, ...autres] = lies;
+  if (cible === undefined) {
+    const nouveau = brut(groupe.sorte, jour, suivant, groupe.segments);
+    bruts.push(nouveau);
+    return nouveau;
+  }
+  for (const autre of autres) {
+    cible.debut = Math.min(cible.debut, autre.debut);
+    autre.rangs.forEach((rang) => cible.rangs.add(rang));
+    absorbes.add(autre);
+  }
+  groupe.segments.forEach((s) => cible.rangs.add(s.rang));
+  cible.fin = suivant;
+  return cible;
+}
+
+/**
+ * Balayage du temps : à chaque jour de bascule, on retire les occupations finies et on ajoute
+ * celles qui commencent (intervalles [du, au[), puis on examine la tranche jusqu'au jour suivant.
  */
 function conflitsDePlace(segments: readonly Segment[], capaciteMax: number): ConflitBrut[] {
   const parDebut = [...segments].sort((a, b) => a.debut - b.debut);
   const jours = joursDeBascule(segments);
   const bruts: ConflitBrut[] = [];
-  const ouverts = new Map<SorteConflit, ConflitBrut>();
+  const absorbes = new Set<ConflitBrut>();
+  let ouverts: ConflitBrut[] = [];
   let presents: Segment[] = [];
   let prochain = 0;
   for (const [i, jour] of jours.entries()) {
@@ -171,40 +216,45 @@ function conflitsDePlace(segments: readonly Segment[], capaciteMax: number): Con
       presents.push(entrant);
       prochain += 1;
     }
-    for (const [sorte, enCause] of enCauseDansTranche(presents, capaciteMax)) {
-      const ouvert = ouverts.get(sorte);
-      if (ouvert?.fin === jour) {
-        ouvert.fin = suivant;
-        enCause.forEach((s) => ouvert.rangs.add(s.rang));
-      } else {
-        const nouveau: ConflitBrut = { sorte, debut: jour, fin: suivant, rangs: new Set(enCause.map((s) => s.rang)) };
-        bruts.push(nouveau);
-        ouverts.set(sorte, nouveau);
-      }
-    }
+    const candidats = ouverts.filter((c) => c.fin === jour);
+    ouverts = groupesDeTranche(presents, capaciteMax).map((groupe) =>
+      rattacher(groupe, candidats, absorbes, bruts, suivant, jour),
+    );
   }
-  return bruts;
+  return bruts.filter((b) => !absorbes.has(b));
 }
 
-/** Parties d'occupation hors de [actifDu, actifAu[ : un conflit par côté qui déborde. */
+/** Tronçons positionnés qui sortent de l'emplacement : un conflit par occupation, toute sa période. */
+function conflitsDepassement(segments: readonly Segment[], capaciteMax: number): ConflitBrut[] {
+  return segments
+    .filter((s) => s.positionCm !== null && s.positionCm + s.quantite > capaciteMax)
+    .map((s) => brut('depassement', s.debut, s.fin, [s]));
+}
+
+/**
+ * Parties d'occupation hors de [actifDu, actifAu[ : un conflit par côté qui déborde. Emplacement
+ * en suppression douce : inactif partout, un conflit par occupation sur toute sa période.
+ */
 function conflitsInactifs(emplacement: Emplacement, segments: readonly Segment[]): ConflitBrut[] {
+  if (emplacement.supprimeLe !== null) {
+    return segments.map((s) => brut('emplacement_inactif', s.debut, s.fin, [s]));
+  }
   const actifDu = jourAbsolu(emplacement.actifDu);
   const actifAu = emplacement.actifAu === null ? null : jourAbsolu(emplacement.actifAu);
   const bruts: ConflitBrut[] = [];
   for (const s of segments) {
-    const rangs = new Set([s.rang]);
     if (s.debut < actifDu) {
-      bruts.push({ sorte: 'emplacement_inactif', debut: s.debut, fin: Math.min(s.fin, actifDu), rangs });
+      bruts.push(brut('emplacement_inactif', s.debut, Math.min(s.fin, actifDu), [s]));
     }
     if (actifAu !== null && s.fin > actifAu) {
-      bruts.push({ sorte: 'emplacement_inactif', debut: Math.max(s.debut, actifAu), fin: s.fin, rangs });
+      bruts.push(brut('emplacement_inactif', Math.max(s.debut, actifAu), s.fin, [s]));
     }
   }
   return bruts;
 }
 
-function premierRang(brut: ConflitBrut): number {
-  return Math.min(...brut.rangs);
+function premierRang(conflit: ConflitBrut): number {
+  return Math.min(...conflit.rangs);
 }
 
 /** Ordre du résultat : début, puis sorte, puis rang de la première occupation en cause. */
@@ -212,13 +262,13 @@ function comparer(a: ConflitBrut, b: ConflitBrut): number {
   return a.debut - b.debut || RANG_SORTE[a.sorte] - RANG_SORTE[b.sorte] || premierRang(a) - premierRang(b);
 }
 
-function versConflit(emplacement: Emplacement, brut: ConflitBrut, ids: ReadonlyMap<number, Id<'Occupation'>>): Conflit {
+function versConflit(emplacement: Emplacement, conflit: ConflitBrut, ids: readonly Id<'Occupation'>[]): Conflit {
   return {
-    sorte: brut.sorte,
+    sorte: conflit.sorte,
     emplacementId: emplacement.id,
-    occupations: [...brut.rangs].sort((a, b) => a - b).flatMap((rang) => ids.get(rang) ?? []),
-    du: dateDepuisJourAbsolu(brut.debut),
-    au: brut.fin === JOUR_SANS_FIN ? null : dateDepuisJourAbsolu(brut.fin),
+    occupations: [...conflit.rangs].sort((a, b) => a - b).flatMap((rang) => ids[rang] ?? []),
+    du: dateDepuisJourAbsolu(conflit.debut),
+    au: conflit.fin === JOUR_SANS_FIN ? null : dateDepuisJourAbsolu(conflit.fin),
   };
 }
 
@@ -227,9 +277,15 @@ function versConflit(emplacement: Emplacement, brut: ConflitBrut, ids: ReadonlyM
  * réelles priment sur les prévues. Résultat trié par date, sorte, puis ordre d'entrée.
  */
 export function detecterConflits(emplacement: Emplacement, occupations: readonly Occupation[]): Conflit[] {
-  const segments = segmentsDe(emplacement, occupations);
-  const ids = new Map(segments.map((s) => [s.rang, s.id]));
-  return [...conflitsDePlace(segments, capacite(emplacement)), ...conflitsInactifs(emplacement, segments)]
+  const { segments, invalides } = trier(emplacement, occupations);
+  const capaciteMax = capacite(emplacement);
+  const ids = occupations.map((o) => o.id);
+  return [
+    ...conflitsDePlace(segments, capaciteMax),
+    ...conflitsDepassement(segments, capaciteMax),
+    ...conflitsInactifs(emplacement, segments),
+    ...invalides,
+  ]
     .sort(comparer)
-    .map((brut) => versConflit(emplacement, brut, ids));
+    .map((conflit) => versConflit(emplacement, conflit, ids));
 }

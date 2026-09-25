@@ -5,7 +5,7 @@
  * Convention des intervalles : [du, au[, `au` étant le jour où l'emplacement se libère.
  * Arracher et replanter le même jour ne fait donc pas de recouvrement.
  */
-import { ajouterJours } from '../dates/index.ts';
+import { ajouterJours, ecartEnJours } from '../dates/index.ts';
 import type { DateCalendaire } from '../dates/index.ts';
 import { verifierExhaustif } from '../domaine/index.ts';
 import type {
@@ -34,10 +34,18 @@ export interface PeriodeOccupation {
   readonly au: DateCalendaire | null;
 }
 
+/** Longueur minimale d'une place : un centimètre, la résolution du moteur. */
+const LONGUEUR_MIN_M = 0.01;
+
+/** Mètres ramenés en centimètres entiers : toutes les comparaisons de longueur se font ainsi. */
+export function centimetres(metres: Metres): number {
+  return Math.round(metres * 100);
+}
+
 /** Place prise sur l'emplacement : mètres (planche, rang) ou places entières (gouttière). */
 function placeSur(emplacement: Emplacement, longueur: number, position: Metres | null): PlaceOccupee {
-  if (!Number.isFinite(longueur) || longueur <= 0) {
-    throw new RangeError(`la place occupée doit être un nombre positif : ${String(longueur)}`);
+  if (!Number.isFinite(longueur)) {
+    throw new RangeError(`la place occupée doit être un nombre fini : ${String(longueur)}`);
   }
   if (position !== null && (!Number.isFinite(position) || position < 0)) {
     throw new RangeError(`la position doit être un nombre positif ou nul : ${String(position)}`);
@@ -45,9 +53,17 @@ function placeSur(emplacement: Emplacement, longueur: number, position: Metres |
   switch (emplacement.sorte) {
     case 'planche':
     case 'rang':
+      if (longueur < LONGUEUR_MIN_M) {
+        throw new RangeError(`la longueur doit valoir au moins un centimètre : ${String(longueur)} m`);
+      }
+      if (position !== null && centimetres(position) + centimetres(longueur) > centimetres(emplacement.longueurM)) {
+        throw new RangeError(
+          `le tronçon ${String(position)}–${String(position + longueur)} m dépasse l'emplacement de ${String(emplacement.longueurM)} m`,
+        );
+      }
       return { unite: 'longueur', longueurM: longueur };
     case 'gouttiere':
-      if (!Number.isSafeInteger(longueur)) {
+      if (!Number.isSafeInteger(longueur) || longueur <= 0) {
         throw new RangeError(`une gouttière se remplit par places entières : ${String(longueur)}`);
       }
       if (position !== null) {
@@ -85,10 +101,14 @@ export function occupationDeSerie(
 ): NouvelleOccupation {
   const dates = appliquerRealises(serie.datesPrevues, realises);
   const debutReel = realises.miseEnPlace;
+  const finReelle = realises.finRecolte;
+  if (debutReel !== undefined && finReelle !== undefined && ecartEnJours(debutReel, finReelle) < 0) {
+    throw new RangeError(`fin réelle (${finReelle}) avant la mise en place réelle (${debutReel})`);
+  }
   return occupation(serie.fermeId, { sorte: 'serie', serieId: serie.id }, emplacement, longueur, position, {
     prevuDu: dates.miseEnPlace,
     prevuAu: dates.finRecolte,
-    reel: debutReel === undefined ? null : { du: debutReel, au: realises.finRecolte ?? null },
+    reel: debutReel === undefined ? null : { du: debutReel, au: finReelle ?? null },
   });
 }
 
@@ -118,8 +138,8 @@ export function occupationDeCouverture(
     throw new RangeError('seule une intervention de couverture occupe un emplacement');
   }
   const duree = evenement.detail.dureeOccupationJours;
-  if (duree === null) {
-    throw new RangeError("couverture courte : sans durée d'occupation, elle n'occupe pas l'emplacement");
+  if (duree === null || duree <= 0) {
+    throw new RangeError(`couverture sans durée d'occupation positive, elle n'occupe pas l'emplacement : ${String(duree)}`);
   }
   const occupant: OccupantEmplacement = { sorte: 'couverture', evenementId: evenement.id };
   return occupation(evenement.fermeId, occupant, emplacement, longueur, position, {
