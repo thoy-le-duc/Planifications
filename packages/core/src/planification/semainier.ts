@@ -16,7 +16,7 @@ import type {
   StatutSerie,
   TailleSerie,
 } from '../domaine/index.ts';
-import { appliquerRealises } from './dates-serie.ts';
+import { ETAPES_SERIE, appliquerRealises } from './dates-serie.ts';
 import type { EtapeSerie, RealisesSerie } from './dates-serie.ts';
 
 export interface EmplacementConcerne {
@@ -46,6 +46,8 @@ export interface CampagneSemainier {
   readonly culture: string;
   readonly variete: string | null;
   readonly debutRecoltePrevu: DateCalendaire | null;
+  /** Au-delà (strictement), la tâche de début de récolte n'est plus listée ; `null` : pas de borne. */
+  readonly finRecoltePrevue: DateCalendaire | null;
   readonly nombrePlants: number;
   readonly emplacements: readonly EmplacementConcerne[];
 }
@@ -77,9 +79,16 @@ export interface TacheSemainier {
   readonly joursDeRetard: number;
 }
 
-/** Étapes d'une série dans l'ordre chronologique : leur rang sert à la fois aux réalisés et au tri. */
-const ETAPES_SERIE: readonly EtapeSerie[] = ['semisPepiniere', 'miseEnPlace', 'debutRecolte', 'finRecolte'];
-const RANG_DEBUT_RECOLTE = ETAPES_SERIE.indexOf('debutRecolte');
+/**
+ * Rang de tri d'une étape à date et emplacement égaux : l'arrachage d'abord (on libère la planche
+ * avant de semer ou de planter), puis l'ordre chronologique.
+ */
+const RANG_TRI: Readonly<Record<EtapeSerie, number>> = {
+  finRecolte: 0,
+  semisPepiniere: 1,
+  miseEnPlace: 2,
+  debutRecolte: 3,
+};
 
 /** Ordre naturel français : 'T2-P9' avant 'T2-P10'. Créé une fois pour tout le module. */
 const COLLATOR = new Intl.Collator('fr', { numeric: true });
@@ -113,6 +122,8 @@ interface Candidate {
   readonly tache: TacheSemainier;
   readonly jour: number;
   readonly rangEtape: number;
+  /** Identifiant de la série ou de la campagne : départage final. */
+  readonly idCible: string;
 }
 
 /** Bornes de la semaine et date du jour, en jours absolus, calculées une seule fois. */
@@ -158,27 +169,43 @@ function comparerCandidates(a: Candidate, b: Candidate): number {
       return parEmplacement;
     }
   }
-  // Égalité restante : rang de l'étape, puis ordre d'entrée (tri stable).
-  return a.rangEtape - b.rangEtape;
+  if (a.rangEtape !== b.rangEtape) {
+    return a.rangEtape - b.rangEtape;
+  }
+  // Ordre des chaînes (pas de collator) : le résultat ne dépend jamais de l'ordre d'entrée.
+  return a.idCible < b.idCible ? -1 : a.idCible > b.idCible ? 1 : 0;
+}
+
+/**
+ * Réalisés sans les étapes absentes des dates prévues (semis pépinière saisi sur un semis direct
+ * ou un plant acheté) : ignorées plutôt que de faire planter le semainier. Même objet si tout va.
+ */
+function realisesCoherents(prevues: DatesPrevuesSerie, realises: RealisesSerie): RealisesSerie {
+  if (realises.semisPepiniere === undefined || prevues.semisPepiniere !== undefined) {
+    return realises;
+  }
+  const reste: Partial<Record<EtapeSerie, DateCalendaire>> = { ...realises };
+  delete reste.semisPepiniere;
+  return reste;
 }
 
 function ajouterSerie(serie: SerieSemainier, realises: RealisesSerie | undefined, fenetre: Fenetre, sortie: Candidate[]): void {
-  const dates = realises === undefined ? serie.datesPrevues : appliquerRealises(serie.datesPrevues, realises);
+  const prevues = serie.datesPrevues;
+  const coherents = realises === undefined ? undefined : realisesCoherents(prevues, realises);
+  const dates = coherents === undefined ? prevues : appliquerRealises(prevues, coherents);
   // Décision provisoire (PR #2) : une étape réalisée vaut pour toutes les étapes antérieures.
   let dernierRealise = -1;
-  if (realises !== undefined) {
-    for (let rang = 0; rang < ETAPES_SERIE.length; rang++) {
-      const etape = ETAPES_SERIE[rang];
-      if (etape !== undefined && realises[etape] !== undefined) {
-        dernierRealise = rang;
+  if (coherents !== undefined) {
+    for (const [index, etape] of ETAPES_SERIE.entries()) {
+      if (coherents[etape] !== undefined) {
+        dernierRealise = index;
       }
     }
   }
   let emplacements: readonly EmplacementConcerne[] | null = null;
-  for (let rang = dernierRealise + 1; rang < ETAPES_SERIE.length; rang++) {
-    const etape = ETAPES_SERIE[rang];
-    const date = etape === undefined ? undefined : dates[etape];
-    if (etape === undefined || date === undefined) {
+  for (const [index, etape] of ETAPES_SERIE.entries()) {
+    const date = dates[etape];
+    if (index <= dernierRealise || date === undefined) {
       continue;
     }
     const jour = jourAbsolu(date);
@@ -189,7 +216,8 @@ function ajouterSerie(serie: SerieSemainier, realises: RealisesSerie | undefined
     emplacements ??= trierEmplacements(serie.emplacements);
     sortie.push({
       jour,
-      rangEtape: rang,
+      rangEtape: RANG_TRI[etape],
+      idCible: serie.id,
       tache: {
         etape: etapeTache(etape, serie.mode),
         cible: { sorte: 'serie', serieId: serie.id },
@@ -207,7 +235,8 @@ function ajouterSerie(serie: SerieSemainier, realises: RealisesSerie | undefined
 
 function ajouterCampagne(campagne: CampagneSemainier, fenetre: Fenetre, sortie: Candidate[]): void {
   const date = campagne.debutRecoltePrevu;
-  if (date === null) {
+  const fin = campagne.finRecoltePrevue;
+  if (date === null || (fin !== null && jourAbsolu(fin) < fenetre.aujourdhui)) {
     return;
   }
   const jour = jourAbsolu(date);
@@ -217,7 +246,8 @@ function ajouterCampagne(campagne: CampagneSemainier, fenetre: Fenetre, sortie: 
   }
   sortie.push({
     jour,
-    rangEtape: RANG_DEBUT_RECOLTE,
+    rangEtape: RANG_TRI.debutRecolte,
+    idCible: campagne.id,
     tache: {
       etape: 'debut_recolte',
       cible: { sorte: 'campagne', campagneId: campagne.id },
@@ -234,10 +264,13 @@ function ajouterCampagne(campagne: CampagneSemainier, fenetre: Fenetre, sortie: 
 
 /**
  * Tâches de la semaine ISO demandée, triées : en retard d'abord, puis par date, par zone et code
- * du premier emplacement (ordre naturel, sans emplacement en dernier), par étape, par ordre d'entrée.
+ * du premier emplacement (ordre naturel, sans emplacement en dernier), par étape (arrachage
+ * d'abord), puis par identifiant.
  *
  * - Seules les séries 'prevue' et 'en_cours' comptent.
  * - Une étape réalisée, ou antérieure à une étape réalisée, ne donne plus de tâche.
+ * - Un réalisé d'une étape absente des dates prévues est ignoré.
+ * - Campagne : plus listée une fois sa fin de récolte prévue passée.
  * - Une tâche en retard (date prévue avant la date du jour) d'avant la semaine y est reprise,
  *   sans limite dans le temps.
  * - RangeError si la semaine n'existe pas (S53 d'une année qui n'en a que 52).
