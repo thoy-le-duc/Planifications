@@ -81,6 +81,8 @@ Relever un budget (poids ou temps) se justifie dans la PR, jamais en silence.
 | `apps/api` | API Hono sur Node |
 | `apps/mcp` | Serveur MCP qui exposera la ferme à l'agent |
 | `docs/brief.md` | Contexte, périmètre, stack, risques, plan en phases, première mission |
+| `docs/boucle.md` | Procédure de la boucle autonome, branches, message de la routine |
+| `.claude/hooks/session-start.sh` | Prépare chaque session web : dépendances, Chromium pour Playwright |
 | `docs/journal.md` | Journal de fin de ticket (fait, décidé, bloquant) |
 | `docs/questions.md` | Questions en attente de Théophane |
 | `docs/backlog/` | Tickets spécifiés, un fichier par ticket |

@@ -1,6 +1,8 @@
 # Backlog
 
-Un fichier par ticket. La boucle prend **le premier ticket « à faire » dont toutes les dépendances sont « fait »**, dans l'ordre du tableau. Un ticket « à préciser » attend une réponse de Théophane : ne pas le prendre, voir `docs/questions.md`.
+Un fichier par ticket. La boucle prend **le premier ticket « à faire » dont chaque dépendance est « fait » ou « en revue » avec une CI verte**, dans l'ordre du tableau (procédure complète dans `docs/boucle.md`). Un ticket « à préciser » attend une réponse de Théophane : ne pas le prendre, voir `docs/questions.md`.
+
+Statuts : `à faire` → `en revue` (PR ouverte) → `fait` (fusionné dans `main`) ; `à préciser`.
 
 ## Phase 1 — Noyau
 
