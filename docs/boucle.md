@@ -7,7 +7,7 @@ Toutes les 5 heures, une session Claude Code démarre seule et travaille **en é
 - **Sessions Claude Code on the web**, environnement cloud « Planification » : un conteneur isolé, recréé à chaque session et jeté ensuite.
 - Aucun accès aux données ni aux secrets de production : il n'y en a pas dans cet environnement, et il ne faut jamais en ajouter.
 - Au démarrage, le hook `.claude/hooks/session-start.sh` installe les dépendances et indique à Playwright le Chromium déjà présent.
-- Déclenchement : une routine Claude Code toutes les 5 heures, qui crée une session neuve à chaque fois.
+- Déclenchement : une routine Claude Code toutes les 5 heures, qui crée une session neuve à chaque fois. La routine se crée depuis la page des routines de claude.ai, **avec le dépôt `thoy-le-duc/Planifications` sélectionné** : les dépôts d'une session sont choisis à son démarrage. Sans dépôt sélectionné, la session n'a ni le code ni les outils GitHub (constaté au premier essai, le 2026-09-25).
 
 ## Les branches
 

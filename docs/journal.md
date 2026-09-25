@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-25 — Premier essai de la boucle : échec d'accès au dépôt
+
+- **Fait** : première session lancée à la main ; arrêtée au bout de 2 min 30 sans rien pousser : pas de dépôt ni d'outils GitHub dans la session. Routine mise en pause.
+- **Décidé** : la routine doit être recréée depuis la page des routines de claude.ai avec le dépôt sélectionné ; `docs/boucle.md` le précise.
+- **Bloquant** : création de la routine par Théophane.
+
 ## 2026-09-25 — Phase 0 terminée : lancement de la boucle en équipe
 
 - **Fait** : organisation en équipe dans `docs/boucle.md` (chef d'équipe, testeur, développeur, relecteur) ; branche `main` créée à partir de l'état validé ; routine toutes les 5 heures.
