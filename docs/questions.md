@@ -53,6 +53,14 @@ Proposition. Règle commune : une saisie = quoi, où, combien, en trois taps au 
 
 Question : est-ce la bonne liste ? Barrez ce que vous ne saisiriez jamais, ajoutez ce qui manque.
 
+Réponse : « ok et pas oublier travail du sol, assolement, etc. ». Liste validée. Ajouts : le travail du sol (et plus largement couverture, fertilisation, amendement) comme types d'intervention ; l'assolement dans le modèle, en vue calculée et en plan prévu facultatif.
+
+### Q4 — Validation du modèle de données v1 (posée le 2026-09-25)
+
+Proposition complète dans [`modele-donnees.md`](modele-donnees.md).
+
+Question : qu'est-ce qui cloche dans ce modèle ? Point le moins sûr : l'assolement prévu (par zone, par emplacement, ou pas du tout).
+
 Réponse : _en attente_
 
 ## Questions ouvertes du brief
