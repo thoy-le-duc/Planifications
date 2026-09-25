@@ -13,12 +13,12 @@
  *   figé de la série et variété) :
  *
  *   type ItineraireBesoins =
- *     | { mode: 'semis_direct'; densite: DensiteEcartement;             // T01
+ *     | { mode: 'semis_direct'; facon: 'ecartement'; densite: DensiteEcartement;     // T01
  *         grainesParPoquet: number; germination: Pourcentage;
  *         margeSecurite: Pourcentage; pmgMg: number | null }
- *     | { mode: 'semis_direct'; densite: DensiteMetreLineaire;          // T01, germination déjà comptée
- *         margeSecurite: Pourcentage; pmgMg: number | null }
- *     | { mode: 'semis_direct'; densite: DensiteVoleeBesoins;
+ *     | { mode: 'semis_direct'; facon: 'metre_lineaire'; densite: DensiteMetreLineaire; // T01
+ *         margeSecurite: Pourcentage; pmgMg: number | null }      // germination déjà comptée
+ *     | { mode: 'semis_direct'; facon: 'volee'; densite: DensiteVoleeBesoins;
  *         margeSecurite: Pourcentage }
  *     | { mode: 'plant_maison'; densite: DensiteEcartement;
  *         grainesParMotte: number; plantsParMotte: number; germination: Pourcentage;
@@ -27,6 +27,16 @@
  *     | { mode: 'plant_achete'; densite: DensiteEcartement; margeSecurite: Pourcentage }
  *
  *   interface DensiteVoleeBesoins { facon: 'volee'; largeurSemeeCm: Centimetres; doseMgParM2: number }
+ *
+ *   Pourquoi `facon` au premier niveau du semis direct, en plus de `densite.facon` : TypeScript
+ *   ne discrimine une union (et ne signale les propriétés en trop d'un littéral) que sur des
+ *   discriminants de premier niveau. Avec `facon` rangé seulement dans `densite`, les trois
+ *   variantes du semis direct partagent `mode: 'semis_direct'` et un semis au mètre linéaire
+ *   portant `germination` et `grainesParPoquet`, ou une volée portant `pmgMg`, compilaient sans
+ *   erreur. Le couple (`mode`, `facon`) désigne maintenant une seule variante, et chaque variante
+ *   lie `facon` à sa densité : `facon: 'volee'` avec une densité à l'écartement est refusé.
+ *   `densite` garde sa forme T01 (avec son propre `facon`) pour être copiée telle quelle.
+ *   Plant maison et plant acheté n'ont pas de `facon` : ils comptent toujours à l'écartement.
  *
  *   Tous les champs sont `readonly`. Unités entières, sans exception :
  *     - pourcentages entiers (Pourcentage de T01) : 80 pour 80 % ;
@@ -68,10 +78,15 @@
  *     poids          : poidsDg = ⌈graines × pmgMg ÷ 100 000⌉ (graines × mg/1000 graines → mg → dg)
  *
  *   Les grandeurs intermédiaires du plant maison sont arrondies (on sème des mottes entières) :
- *   c'est ce que donne le tableau du ticket (348 mottes → 387 graines, et non 386).
+ *   c'est ce que donne le tableau du ticket (348 mottes → 387 graines, et non 386). Partout
+ *   ailleurs, un seul arrondi : des cas où la division ne tombe pas juste (germination 85 % et
+ *   86 %, 3001 cm) font échouer un arrondi au-dessous comme un double arrondi.
  *
- *   RangeError si longueurCm n'est pas un entier ≥ 0, si l'écartement est ≤ 0, si la germination
- *   n'est pas dans ]0, 100] ou si la perte en pépinière n'est pas dans [0, 100[.
+ *   RangeError :
+ *     - longueurCm n'est pas un entier ≥ 0 ;
+ *     - écartement ≤ 0 ; rangsParPlanche, grainesParPoquet, grainesParMotte ou plantsParMotte < 1 ;
+ *     - germination hors de ]0, 100] ; perte en pépinière hors de [0, 100[ ;
+ *     - un résultat (ou un total de saison) dépasse Number.MAX_SAFE_INTEGER.
  *
  * ── besoinsSaison(series: readonly SerieBesoins[]): LigneBesoinsSaison[] ─────────────────────
  *
@@ -84,15 +99,25 @@
  *   interface LigneBesoinsSaison {
  *     varieteId: Id<'Variete'>;
  *     semaine: SemaineIso;             // semaineIso(dateSemis) ou semaineIso(datePlantation), de T01
- *     graines?; poidsDg?; mottesASemer?; plaques?; plantsACommander?;
+ *     graines?; poidsDg?; mottesASemer?; plantsACommander?;         // entiers
+ *     plaques?: readonly { alveoles: number; nombre: number }[];     // un élément par format
  *   }
  *
  *   Une ligne par (variété, semaine ISO). Chaque champ est la somme des besoinsSerie des séries
- *   de la ligne ; il est absent si aucune série de la ligne ne le fournit. Deux exceptions :
- *     - plaques : somme des plaques de chaque série (chaque série a ses plaques), pas un
- *       nouvel arrondi sur le total des mottes ;
- *     - poidsDg : absent dès qu'une série de la ligne a des graines sans poids connu, pour ne
- *       jamais afficher un poids total sous-estimé.
+ *   de la ligne ; il est absent si aucune série de la ligne ne le fournit. Précisions :
+ *     - plaques : une entrée par format (nombre d'alvéoles), triées par alvéoles croissantes ;
+ *       `nombre` additionne les plaques de chaque série de ce format (chaque série a ses
+ *       plaques), sans nouvel arrondi sur le total des mottes. Le champ est ABSENT dès qu'une
+ *       série de la ligne a des mottes sans nombre d'alvéoles : une liste partielle ferait
+ *       commander trop peu de plaques ;
+ *     - poidsDg : somme des poids DÉJÀ ARRONDIS de chaque série, et non arrondi du poids total :
+ *       le total est donc supérieur ou égal au poids exact, ce qui va dans le sens prudent.
+ *       Absent dès qu'une série de la ligne a des graines sans poids connu, pour ne jamais
+ *       afficher un poids total sous-estimé ;
+ *     - une ligne peut mêler des graines comptées (écartement, mètre linéaire, plant maison) et
+ *       le poids d'une volée de la même variété : poidsDg est alors le poids total à commander,
+ *       graines ne compte que les séries comptées en graines. Si le poids est absent faute de
+ *       PMG, celui de la volée l'est aussi (même règle : pas de total sous-estimé).
  *   Lignes triées par varieteId (ordre des chaînes), puis par semaine (année, puis numéro).
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
@@ -108,6 +133,7 @@ import type { BesoinsSerie, ItineraireBesoins, LigneBesoinsSaison, SerieBesoins 
 /** Carotte, semis direct à l'écartement : 4 rangs, 3 cm, 1 graine/poquet, 80 %, marge 10 %, PMG 1,2 g. */
 const carotteEcartement = {
   mode: 'semis_direct',
+  facon: 'ecartement',
   densite: { facon: 'ecartement', rangsParPlanche: 4, ecartementSurRangCm: 3 },
   grainesParPoquet: 1,
   germination: 80,
@@ -118,6 +144,7 @@ const carotteEcartement = {
 /** Carotte au mètre linéaire : 4 rangs, 60 graines/m, marge 10 %, PMG 1,2 g. */
 const carotteMetreLineaire = {
   mode: 'semis_direct',
+  facon: 'metre_lineaire',
   densite: { facon: 'metre_lineaire', rangsParPlanche: 4, grainesParMetre: 60 },
   margeSecurite: 10,
   pmgMg: 1200,
@@ -159,6 +186,7 @@ const oignonMottes = {
 /** Engrais vert à la volée : 80 cm semés, 15 g/m², marge 0 %. */
 const engraisVert = {
   mode: 'semis_direct',
+  facon: 'volee',
   densite: { facon: 'volee', largeurSemeeCm: 80, doseMgParM2: 15_000 },
   margeSecurite: 0,
 } as const satisfies ItineraireBesoins;
@@ -367,6 +395,7 @@ describe('besoinsSerie — pièges du flottant', () => {
     // 35 m × 4 rangs × 50 graines/m = 7000 ; en flottant 7000 × 1.1 ÷ 1000 × 10 = 77,00000000000001.
     const itineraire = {
       mode: 'semis_direct',
+      facon: 'metre_lineaire',
       densite: { facon: 'metre_lineaire', rangsParPlanche: 4, grainesParMetre: 50 },
       margeSecurite: 0,
       pmgMg: 1100,
@@ -377,6 +406,72 @@ describe('besoinsSerie — pièges du flottant', () => {
       graines: 7000,
       poidsDg: 77,
     });
+  });
+});
+
+describe('besoinsSerie — divisions qui ne tombent pas juste', () => {
+  // Chaque cas fait échouer un arrondi au-dessous ; ceux marqués « double arrondi » font aussi
+  // échouer un calcul qui arrondirait une étape intermédiaire avant la suivante.
+
+  it('carotte à 85 % de germination : 5 177 graines', () => {
+    // 4000 × 110 ÷ 85 = 5176,47 → 5177 (au-dessous : 5176) ; 5177 × 1,2 g ÷ 1000 = 6,2124 g → 6,3 g.
+    expect(besoinsSerie({ ...carotteEcartement, germination: 85 }, 3000)).toStrictEqual({
+      mode: 'semis_direct',
+      facon: 'ecartement',
+      plants: 4000,
+      graines: 5177,
+      poidsDg: 63,
+    });
+  });
+
+  it('carotte à 86 % de germination : 5 117 graines (double arrondi : 5 118)', () => {
+    // 4000 × 110 ÷ 86 = 5116,28 → 5117. En deux temps : ⌈4000 ÷ 0,86⌉ = 4652, × 1,1 = 5117,2 → 5118.
+    // 5117 × 1,2 g ÷ 1000 = 6,1404 g → 6,2 g.
+    expect(besoinsSerie({ ...carotteEcartement, germination: 86 }, 3000)).toStrictEqual({
+      mode: 'semis_direct',
+      facon: 'ecartement',
+      plants: 4000,
+      graines: 5117,
+      poidsDg: 62,
+    });
+  });
+
+  it('mètre linéaire sur 3001 cm : 7 923 graines (double arrondi : 7 924)', () => {
+    // 30,01 × 4 × 60 = 7202,4 ; × 1,1 = 7922,64 → 7923. En deux temps : 7203 × 1,1 = 7923,3 → 7924.
+    // 7923 × 1,2 g ÷ 1000 = 9,5076 g → 9,6 g.
+    expect(besoinsSerie(carotteMetreLineaire, 3001)).toStrictEqual({
+      mode: 'semis_direct',
+      facon: 'metre_lineaire',
+      graines: 7923,
+      poidsDg: 96,
+    });
+  });
+
+  it('volée sur 3001 cm : 360,2 g', () => {
+    // 30,01 × 0,80 = 24,008 m² × 15 g = 360,12 g → 360,2 g (au-dessous : 360,1).
+    expect(besoinsSerie(engraisVert, 3001)).toStrictEqual({
+      mode: 'semis_direct',
+      facon: 'volee',
+      poidsDg: 3602,
+    });
+  });
+
+  it('1 km de carotte à l’écartement', () => {
+    // 100 000 ÷ 3 = 33 333 × 4 = 133 332 ; × 110 ÷ 80 = 183 331,5 → 183 332 ;
+    // 183 332 × 1,2 g ÷ 1000 = 219,9984 g → 220 g.
+    expect(besoinsSerie(carotteEcartement, 100_000)).toStrictEqual({
+      mode: 'semis_direct',
+      facon: 'ecartement',
+      plants: 133_332,
+      graines: 183_332,
+      poidsDg: 2200,
+    });
+  });
+
+  it('refuse un résultat au-delà des entiers sûrs', () => {
+    // Number.MAX_SAFE_INTEGER cm à 1 cm sur 2 rangs : plus de 2⁵³ plants.
+    const serre = { ...plantAchete, densite: { ...plantAchete.densite, ecartementSurRangCm: 1 } };
+    expect(() => besoinsSerie(serre, Number.MAX_SAFE_INTEGER)).toThrow(RangeError);
   });
 });
 
@@ -431,6 +526,24 @@ describe('besoinsSerie — paramètres impossibles', () => {
     expect(() => besoinsSerie({ ...batavia, pertePepiniere: 100 }, 3000)).toThrow(RangeError);
   });
 
+  it('refuse moins d’un rang par planche', () => {
+    expect(() =>
+      besoinsSerie({ ...plantAchete, densite: { ...plantAchete.densite, rangsParPlanche: 0 } }, 1000),
+    ).toThrow(RangeError);
+    expect(() =>
+      besoinsSerie({ ...carotteMetreLineaire, densite: { ...carotteMetreLineaire.densite, rangsParPlanche: 0 } }, 3000),
+    ).toThrow(RangeError);
+  });
+
+  it('refuse moins d’une graine par poquet ou par motte', () => {
+    expect(() => besoinsSerie({ ...carotteEcartement, grainesParPoquet: 0 }, 3000)).toThrow(RangeError);
+    expect(() => besoinsSerie({ ...batavia, grainesParMotte: 0 }, 3000)).toThrow(RangeError);
+  });
+
+  it('refuse moins d’un plant par motte', () => {
+    expect(() => besoinsSerie({ ...batavia, plantsParMotte: 0 }, 3000)).toThrow(RangeError);
+  });
+
   it('refuse un écartement nul', () => {
     expect(() =>
       besoinsSerie({ ...plantAchete, densite: { ...plantAchete.densite, ecartementSurRangCm: 0 } }, 1000),
@@ -473,6 +586,7 @@ describe('typage des itinéraires', () => {
     // @ts-expect-error il manque les graines par poquet.
     const sansPoquet: ItineraireBesoins = {
       mode: 'semis_direct',
+      facon: 'ecartement',
       densite: { facon: 'ecartement', rangsParPlanche: 4, ecartementSurRangCm: 3 },
       germination: 80,
       margeSecurite: 10,
@@ -481,6 +595,7 @@ describe('typage des itinéraires', () => {
     // @ts-expect-error il manque la germination.
     const sansGermination: ItineraireBesoins = {
       mode: 'semis_direct',
+      facon: 'ecartement',
       densite: { facon: 'ecartement', rangsParPlanche: 4, ecartementSurRangCm: 3 },
       grainesParPoquet: 1,
       margeSecurite: 10,
@@ -518,8 +633,46 @@ describe('typage des itinéraires', () => {
   it('refuse une dose à la volée exprimée en grammes plutôt qu’en milligrammes', () => {
     const incoherent: ItineraireBesoins = {
       mode: 'semis_direct',
+      facon: 'volee',
       // @ts-expect-error la dose est `doseMgParM2`, entière, pas `doseGParM2`.
       densite: { facon: 'volee', largeurSemeeCm: 80, doseGParM2: 15 },
+      margeSecurite: 0,
+    };
+    expect(incoherent.mode).toBe('semis_direct');
+  });
+
+  it('refuse germination et graines par poquet sur un semis au mètre linéaire', () => {
+    const incoherent: ItineraireBesoins = {
+      mode: 'semis_direct',
+      facon: 'metre_lineaire',
+      densite: { facon: 'metre_lineaire', rangsParPlanche: 4, grainesParMetre: 60 },
+      // @ts-expect-error au mètre linéaire, la densité compte déjà la germination.
+      germination: 80,
+      grainesParPoquet: 1,
+      margeSecurite: 10,
+      pmgMg: 1200,
+    };
+    expect(incoherent.mode).toBe('semis_direct');
+  });
+
+  it('refuse un poids de mille graines sur une volée', () => {
+    const incoherent: ItineraireBesoins = {
+      mode: 'semis_direct',
+      facon: 'volee',
+      densite: { facon: 'volee', largeurSemeeCm: 80, doseMgParM2: 15_000 },
+      margeSecurite: 0,
+      // @ts-expect-error à la volée, on compte un poids par m², pas des graines.
+      pmgMg: 1200,
+    };
+    expect(incoherent.mode).toBe('semis_direct');
+  });
+
+  it('refuse une façon de compter qui contredit la densité', () => {
+    const incoherent: ItineraireBesoins = {
+      mode: 'semis_direct',
+      facon: 'volee',
+      // @ts-expect-error `facon: 'volee'` exige une densité à la volée.
+      densite: { facon: 'ecartement', rangsParPlanche: 4, ecartementSurRangCm: 3 },
       margeSecurite: 0,
     };
     expect(incoherent.mode).toBe('semis_direct');
@@ -581,7 +734,8 @@ describe('besoinsSaison', () => {
       },
       { varieteId: varieteA, itineraire: carotteEcartement, longueurCm: 3000, dateSemis: date('2027-03-16') },
       // Variété C en plant maison, à la semaine du semis en pépinière (2027-S09) :
-      // 348 mottes, 387 graines, 4 plaques + 330 mottes, 367 graines, ⌈330 ÷ 104⌉ = 4 plaques.
+      // 348 mottes, 387 graines, 4 plaques de 104 ; 330 mottes, 367 graines, ⌈330 ÷ 104⌉ = 4 plaques
+      // de 104 ; 330 mottes, 367 graines, ⌈330 ÷ 77⌉ = 5 plaques de 77.
       { varieteId: varieteC, itineraire: bataviaPertePlaques, longueurCm: 3000, dateSemis: date('2027-03-03') },
       {
         varieteId: varieteC,
@@ -589,13 +743,21 @@ describe('besoinsSaison', () => {
         longueurCm: 3000,
         dateSemis: date('2027-03-05'),
       },
-      // Le 1er janvier 2027 est dans la semaine ISO 53 de 2026.
+      {
+        varieteId: varieteC,
+        itineraire: { ...batavia, alveolesParPlaque: 77 },
+        longueurCm: 3000,
+        dateSemis: date('2027-03-04'),
+      },
+      // Le 1er janvier 2027 est dans la semaine ISO 53 de 2026. Une des deux séries n'a pas de
+      // nombre d'alvéoles : les plaques de la ligne sont absentes.
       {
         varieteId: varieteC,
         itineraire: { ...batavia, alveolesParPlaque: 104 },
         longueurCm: 3000,
         dateSemis: date('2027-01-01'),
       },
+      { varieteId: varieteC, itineraire: batavia, longueurCm: 3000, dateSemis: date('2027-01-03') },
     ];
 
     const attendu: LigneBesoinsSaison[] = [
@@ -603,12 +765,33 @@ describe('besoinsSaison', () => {
       { varieteId: varieteA, semaine: semaine(2027, 10), graines: 7920, poidsDg: 3696 },
       { varieteId: varieteA, semaine: semaine(2027, 11), graines: 13_420 },
       { varieteId: varieteB, semaine: semaine(2027, 15), plantsACommander: 330 },
-      { varieteId: varieteC, semaine: semaine(2026, 53), mottesASemer: 330, graines: 367, plaques: 4 },
-      // 8 plaques (4 + 4, une série = ses plaques) et non ⌈678 ÷ 104⌉ = 7.
-      { varieteId: varieteC, semaine: semaine(2027, 9), mottesASemer: 678, graines: 754, plaques: 8 },
+      { varieteId: varieteC, semaine: semaine(2026, 53), mottesASemer: 660, graines: 734 },
+      // 8 plaques de 104 (4 + 4, une série = ses plaques) et non ⌈678 ÷ 104⌉ = 7 ; triées par alvéoles.
+      {
+        varieteId: varieteC,
+        semaine: semaine(2027, 9),
+        mottesASemer: 1008,
+        graines: 1121,
+        plaques: [
+          { alveoles: 77, nombre: 5 },
+          { alveoles: 104, nombre: 8 },
+        ],
+      },
     ];
 
     expect(besoinsSaison(series)).toStrictEqual(attendu);
+  });
+
+  it('le poids d’une ligne est la somme des poids arrondis de chaque série', () => {
+    // Carotte sur 30,50 m : 5588 graines, 6,7056 g → 6,8 g par série. Deux séries : 13,6 g,
+    // et non ⌈13,4112⌉ = 13,5 g : le total ne descend jamais sous le poids exact.
+    const series: SerieBesoins[] = [
+      { varieteId: varieteA, itineraire: carotteEcartement, longueurCm: 3050, dateSemis: date('2027-03-01') },
+      { varieteId: varieteA, itineraire: carotteEcartement, longueurCm: 3050, dateSemis: date('2027-03-02') },
+    ];
+    expect(besoinsSaison(series)).toStrictEqual([
+      { varieteId: varieteA, semaine: semaine(2027, 9), graines: 11_176, poidsDg: 136 },
+    ]);
   });
 
   it('une même semaine de deux variétés donne deux lignes', () => {
