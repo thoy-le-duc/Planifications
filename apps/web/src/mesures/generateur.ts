@@ -59,7 +59,7 @@ export interface FermeGeneree {
   evenements: Evenement[];
 }
 
-export const VOLUMES = {
+const VOLUMES = {
   zones: 30,
   emplacements: 400,
   saisons: 5,
@@ -68,7 +68,7 @@ export const VOLUMES = {
 } as const;
 
 /** Première année civile du jeu : cinq saisons de 2022 à 2026. */
-export const PREMIERE_ANNEE = 2022;
+const PREMIERE_ANNEE = 2022;
 
 const FAMILLES: readonly { nom: string; especes: readonly string[] }[] = [
   { nom: 'Solanacées', especes: ['Tomate', 'Aubergine', 'Poivron', 'Pomme de terre'] },
@@ -98,7 +98,7 @@ function creerAlea(graine: number): () => number {
 }
 
 /** Jours depuis le 1970-01-01 (calendrier grégorien proleptique), algorithme de H. Hinnant. */
-export function joursDepuisEpoque(annee: number, mois: number, jour: number): number {
+function joursDepuisEpoque(annee: number, mois: number, jour: number): number {
   const a = mois <= 2 ? annee - 1 : annee;
   const ere = Math.floor(a / 400);
   const ane = a - ere * 400;
@@ -109,7 +109,7 @@ export function joursDepuisEpoque(annee: number, mois: number, jour: number): nu
 }
 
 /** Inverse de `joursDepuisEpoque`, formaté en `AAAA-MM-JJ`. */
-export function formaterJour(jours: number): string {
+function formaterJour(jours: number): string {
   const z = jours + 719468;
   const ere = Math.floor(z / 146097);
   const jde = z - ere * 146097;

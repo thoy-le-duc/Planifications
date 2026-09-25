@@ -9,13 +9,19 @@ const PREFIXE_PAGES_MESURE = '/mesures/';
 /** Code de la base locale (PowerSync, wa-sqlite) : rangé à part pour rester hors du précache. */
 const MOTIF_SQLITE = /node_modules\/(\.pnpm\/[^/]+\/node_modules\/)?(@powersync|@journeyapps)\//;
 
+const ENTREE_MESURE = 'mesureSqlite';
+
 function nomSortie(dossier: string): string {
   return `assets/${dossier}/[name]-[hash][extname]`;
 }
 
-/** Range les morceaux JS : pages de mesure dans `assets/mesures/`, SQLite dans `assets/sqlite/`. */
-function nomMorceau(morceau: { name: string; moduleIds: readonly string[] }): string {
-  if (morceau.name === 'mesureSqlite') return nomSortie('mesures').replace('[extname]', '.js');
+/**
+ * Range les morceaux JS : l'entrée de mesure dans `assets/mesures/`, les morceaux SQLite (hors entrées)
+ * dans `assets/sqlite/`. Une entrée n'est jamais classée « SQLite » : si l'appli importe un jour
+ * PowerSync (T10), `index-*.js` doit rester dans le précache.
+ */
+function nomMorceau(morceau: { name: string; isEntry: boolean; moduleIds: readonly string[] }): string {
+  if (morceau.isEntry) return morceau.name === ENTREE_MESURE ? nomSortie('mesures').replace('[extname]', '.js') : 'assets/[name]-[hash].js';
   if (morceau.moduleIds.some((id) => MOTIF_SQLITE.test(id))) return nomSortie('sqlite').replace('[extname]', '.js');
   return 'assets/[name]-[hash].js';
 }
@@ -39,9 +45,14 @@ function pagesMesureSansServiceWorker(): Plugin {
       order: 'post',
       handler(html, contexte) {
         if (!contexte.path.startsWith(PREFIXE_PAGES_MESURE)) return html;
-        return html
-          .replace(/<link rel="manifest"[^>]*>/g, '')
-          .replace(/<script id="vite-plugin-pwa:register-sw"[^>]*><\/script>/g, '');
+        let resultat = html;
+        for (const motif of [/<link rel="manifest"[^>]*>/g, /<script id="vite-plugin-pwa:register-sw"[^>]*><\/script>/g]) {
+          // Échec franc si vite-plugin-pwa change sa façon d'injecter : sinon le SW reviendrait sans bruit.
+          if (!motif.test(resultat)) throw new Error(`${contexte.path} : balise du service worker introuvable (${motif.source})`);
+          motif.lastIndex = 0;
+          resultat = resultat.replace(motif, '');
+        }
+        return resultat;
       },
     },
   };
@@ -76,8 +87,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        main: fileURLToPath(new URL('index.html', import.meta.url)),
-        mesureSqlite: fileURLToPath(new URL('mesures/sqlite.html', import.meta.url)),
+        index: fileURLToPath(new URL('index.html', import.meta.url)),
+        [ENTREE_MESURE]: fileURLToPath(new URL('mesures/sqlite.html', import.meta.url)),
       },
       output: {
         entryFileNames: nomMorceau,

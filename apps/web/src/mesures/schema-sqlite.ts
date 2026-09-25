@@ -11,10 +11,10 @@
  *
  * Mêmes noms de tables et de colonnes dans les deux variantes : les requêtes mesurées sont identiques.
  */
-import { column, Schema, Table } from '@powersync/web';
+import { column, Schema, Table, type RawTableType } from '@powersync/web';
 
-/** Le type `RawTable` n'est pas exporté par le SDK : on le lit sur la signature publique. */
-type RawTable = Parameters<typeof Schema.rawTableToJson>[0];
+/** Le SDK n'exporte pas `RawTable` (marqué interne) : c'est `RawTableType` plus le nom de la table. */
+type RawTable = RawTableType & { name: string };
 
 export type Variante = 'json' | 'raw';
 
