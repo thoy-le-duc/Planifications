@@ -106,7 +106,7 @@ Exemples : carotte en semis direct sur 30 m, 4 rangs, 3 cm, germination 80 %, ma
 
 Question : ces calculs sont-ils ceux que vous faites ?
 
-Réponse : _en attente_
+Réponse : « il y a de ça, oui ». Validé dans le principe, pas dans le détail. Pour s'adapter à toutes les fermes, T05 couvre maintenant trois façons de compter la densité (écartement, au mètre linéaire, à la volée), les mottes à plusieurs plants, la perte en pépinière et le nombre de plaques. Un cas qui n'entre dans aucune se signalera ici.
 
 ### À suivre
 
