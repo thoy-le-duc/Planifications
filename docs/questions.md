@@ -22,12 +22,25 @@ Réponse : « oui plutôt comme ça oui ». D'accord sur des niveaux qui couvren
 
 Question : qu'est-ce qui cloche dans ce découpage ?
 
+Réponse : « ok ». Découpage ferme → zone → emplacement (planche, rang, gouttière), irrigation à part : validé.
+
+### Q2 — Ce qu'est une série (posée le 2026-09-25)
+
+Proposition :
+
+1. **Série** : une culture (espèce et variété) mise en place à une date donnée, selon un itinéraire technique, sur une longueur d'emplacement. Exemple : « batavia, plantée semaine 14, 60 m sur les planches 3 et 4, récolte semaines 20 à 22 ».
+    - Elle peut occuper une partie d'une planche, ou plusieurs planches.
+    - Elle a des dates prévues (calculées par le moteur) et des dates réelles (saisies au champ).
+    - Des semis échelonnés toutes les deux semaines font plusieurs séries.
+2. **Pérennes à part** : une **plantation** (kiwis plantés en 2019 sur les rangs 1 à 6) dure des années ; chaque année, une **campagne** porte la taille, les récoltes et le rendement.
+
+Question : est-ce comme ça que vous voyez une série ?
+
 Réponse : _en attente_
 
 ### À suivre
 
-- Q2 — Ce qu'est une série pour toi.
-- Q3 — Ce que tu saisis vraiment au champ.
+- Q3 — Ce que vous saisissez vraiment au champ.
 
 ## Questions ouvertes du brief
 
