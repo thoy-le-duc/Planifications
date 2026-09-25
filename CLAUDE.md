@@ -54,12 +54,34 @@ Règles de la boucle :
 - **Journal** : à la fin de chaque ticket, ajoute trois lignes à `docs/journal.md` (fait, décidé, bloquant). C'est ce que Théophane lit le matin.
 - **Communication en français**, directe, sans jargon inutile.
 
+## Commandes
+
+Node 22.18 ou plus (exécute le TypeScript sans compilation), pnpm 10.
+
+| Commande | Rôle |
+| --- | --- |
+| `pnpm install` | Installe tout le monorepo |
+| `pnpm verif` | Tout ce que vérifie la CI, dans l'ordre : typage, lint, tests, build, budgets |
+| `pnpm typecheck` | TypeScript strict sur chaque paquet |
+| `pnpm lint` | ESLint strict, aucun `any`, zéro avertissement |
+| `pnpm test` | Tests unitaires Vitest de tous les paquets |
+| `pnpm budget` | Poids du JavaScript de démarrage (limite dans `apps/web/budget.json`) |
+| `pnpm e2e` | Playwright : temps d'affichage avec CPU ralenti ×4 et réouverture hors ligne (après `pnpm build`) |
+
+Sur une machine où Chromium est déjà installé, `CHROMIUM_PATH=/chemin/vers/chrome pnpm e2e` évite le téléchargement.
+
+Relever un budget (poids ou temps) se justifie dans la PR, jamais en silence.
+
 ## Repères dans le dépôt
 
 | Chemin | Contenu |
 | --- | --- |
+| `packages/core` | Moteur métier déterministe, TypeScript pur, sans réseau ni IA |
+| `apps/web` | PWA React + Vite, hors ligne via service worker |
+| `apps/api` | API Hono sur Node |
+| `apps/mcp` | Serveur MCP qui exposera la ferme à l'agent |
 | `docs/brief.md` | Contexte, périmètre, stack, risques, plan en phases, première mission |
 | `docs/journal.md` | Journal de fin de ticket (fait, décidé, bloquant) |
 | `docs/questions.md` | Questions en attente de Théophane |
 | `docs/backlog/` | Tickets spécifiés, un fichier par ticket |
-| `docs/modele-donnees.md` | Modèle de données (à venir, phase 0) |
+| `docs/modele-donnees.md` | Modèle de données v1, validé |

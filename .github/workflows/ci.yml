@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verifications:
+    name: Typage, lint, tests, build, budgets
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typage strict
+        run: pnpm typecheck
+      - name: Lint (aucun any)
+        run: pnpm lint
+      - name: Tests unitaires
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+      - name: Budget de poids JavaScript
+        run: pnpm budget
+      - name: Installation de Chromium
+        run: pnpm --filter @planif/web exec playwright install --with-deps chromium
+      - name: Budgets de temps d'affichage et hors-ligne
+        run: pnpm e2e

@@ -1,0 +1,13 @@
+{
+  "name": "@planif/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Moteur métier déterministe : aucune dépendance réseau ni IA.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

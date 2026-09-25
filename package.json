@@ -1,0 +1,28 @@
+{
+  "name": "planifications",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit && pnpm -r --parallel typecheck",
+    "lint": "eslint --max-warnings 0 .",
+    "test": "vitest run",
+    "build": "pnpm -r build",
+    "budget": "pnpm --filter @planif/web budget",
+    "e2e": "pnpm --filter @planif/web e2e",
+    "verif": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm budget && pnpm e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.4",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.70.1",
+    "vitest": "^5.0.2"
+  }
+}
