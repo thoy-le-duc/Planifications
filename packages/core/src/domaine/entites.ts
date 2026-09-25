@@ -295,9 +295,12 @@ export type AncreSerie =
   | { readonly type: 'plantation'; readonly date: DateCalendaire }
   | { readonly type: 'debut_recolte'; readonly date: DateCalendaire };
 
-/** Dates prévues calculées par le moteur ; `semisPepiniere` n'existe qu'en plant maison. */
+/**
+ * Dates prévues calculées par le moteur (T02). Une étape sans objet est absente, pas `null` :
+ * `semisPepiniere` n'existe qu'en plant maison. Le `null` n'apparaît qu'au bord du stockage (T08).
+ */
 export interface DatesPrevuesSerie {
-  readonly semisPepiniere: DateCalendaire | null;
+  readonly semisPepiniere?: DateCalendaire;
   readonly miseEnPlace: DateCalendaire;
   readonly debutRecolte: DateCalendaire;
   readonly finRecolte: DateCalendaire;
