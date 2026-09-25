@@ -19,7 +19,10 @@
  *   - déterministe : mêmes sources injectées → même suite d'identifiants ;
  *   - strictement croissant (ordre des chaînes) pour un même générateur, y compris quand
  *     l'horloge ne bouge pas ou recule (compteur monotone, méthode 1 ou 3 de la RFC 9562 §6.2) :
- *     c'est ce qui garde l'ordre de création des lignes créées hors ligne sur un téléphone.
+ *     c'est ce qui garde l'ordre de création des lignes créées hors ligne sur un téléphone ;
+ *   - quand le compteur de rand_a (12 bits) déborde, l'horodatage avance d'une milliseconde ;
+ *   - rand_b (62 bits) vient de l'aléa injecté, derrière la variante 10 : aléa à 0x00 → fin
+ *     '8000-000000000000', aléa à 0xff → fin 'bfff-ffffffffffff'.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { creerGenerateurId } from './index.ts';
@@ -132,6 +135,28 @@ describe('creerGenerateurId', () => {
         expect.unreachable(`format rompu à ${String(i)} : ${courant}`);
       }
     }
+  });
+
+  it('déborde proprement : au-delà de 4 096 identifiants dans la même milliseconde, l’horodatage avance', () => {
+    const generer = creerGenerateurId({ horloge: () => INSTANT_RFC, aleatoire: octetsConstants(0xff) });
+    const ids = Array.from({ length: 5_000 }, () => generer<'Serie'>());
+    expect(new Set(ids).size).toBe(ids.length);
+    for (let i = 1; i < ids.length; i++) {
+      const precedent = ids[i - 1] ?? '';
+      const courant = ids[i] ?? '';
+      if (!(precedent < courant) || !FORMAT_UUID_V7.test(courant)) {
+        expect.unreachable(`ordre ou format rompu à ${String(i)} : ${precedent} → ${courant}`);
+      }
+    }
+    expect(horodatage(ids[0] ?? '')).toBe(INSTANT_RFC);
+    expect(horodatage(ids[ids.length - 1] ?? '')).toBeGreaterThan(INSTANT_RFC);
+  });
+
+  it('rand_b vient de l’aléa injecté, derrière la variante 10', () => {
+    const zero = creerGenerateurId({ horloge: () => INSTANT_RFC, aleatoire: octetsConstants(0x00) });
+    const plein = creerGenerateurId({ horloge: () => INSTANT_RFC, aleatoire: octetsConstants(0xff) });
+    expect(zero<'Serie'>().slice(-17)).toBe('8000-000000000000');
+    expect(plein<'Serie'>().slice(-17)).toBe('bfff-ffffffffffff');
   });
 
   it('reste strictement croissant quand l’horloge recule', () => {

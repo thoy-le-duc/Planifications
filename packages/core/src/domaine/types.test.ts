@@ -30,12 +30,43 @@
  *                                                                     discriminant Itineraire['mode']
  *     TypeAncreSerie    = 'semis' | 'plantation' | 'debut_recolte'  discriminant AncreSerie['type']
  *     NatureAssolement  = 'prevu' | 'passe_saisi' | 'passe_importe' discriminant Assolement['nature']
+ *
+ *   Liens entre discriminant et contenu :
+ *     Evenement : `type` choisit `detail` (DetailRealise, DetailRecolte, DetailIntervention,
+ *                 DetailIrrigation, DetailTraitement, DetailObservation).
+ *     Itineraire : `mode` contraint `densite` (semis direct : Densite ; plant maison ou acheté :
+ *                 DensiteEcartement) ; Densite est discriminée par `facon`.
+ *   verifierExhaustif(valeur: never): never — garde des `default` de switch ; lève à l'exécution.
+ *
+ *   Proposition : union discriminée par `statut` :
+ *     'en_attente' → decideLe: null ; 'validee' | 'rejetee' → decideLe: Instant (number).
+ *
+ *   Événements en ajout seul : un événement ne se modifie pas, il est corrigé ou annulé par un
+ *   nouvel événement qui désigne l'ancien :
+ *     Evenement.remplaceEvenement:
+ *       { readonly sorte: 'correction' | 'annulation'; readonly evenementId: Id<'Evenement'> } | null
+ *     (remplace l'ancien champ `corrigeEvenementId`, qui ne doit plus exister).
+ *   Evenement.date (DateCalendaire) est le jour où l'action a eu lieu au champ ;
+ *   Evenement.horodatage (Instant) est l'instant de la saisie. Ils peuvent différer (saisie le
+ *   lendemain d'une récolte).
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { DateCalendaire } from '../dates/index.ts';
+import { verifierExhaustif } from './index.ts';
 import type {
   AncreSerie,
   ArticleStock,
+  Densite,
+  DensiteEcartement,
+  DensiteMetreLineaire,
+  DensiteVolee,
+  DetailIntervention,
+  DetailIrrigation,
+  DetailObservation,
+  DetailRealise,
+  DetailRecolte,
+  DetailTraitement,
+  Instant,
   Assolement,
   Campagne,
   Emplacement,
@@ -286,5 +317,114 @@ describe('ré-export depuis la racine du paquet', () => {
     expectTypeOf<Racine.Serie>().toEqualTypeOf<Serie>();
     expectTypeOf<Racine.Evenement>().toEqualTypeOf<Evenement>();
     expectTypeOf<Racine.DateCalendaire>().toEqualTypeOf<DateCalendaire>();
+  });
+});
+
+describe('lien entre discriminant et contenu', () => {
+  it('le type d’un événement choisit son détail', () => {
+    expectTypeOf<Extract<Evenement, { type: 'realise' }>['detail']>().toEqualTypeOf<DetailRealise>();
+    expectTypeOf<Extract<Evenement, { type: 'recolte' }>['detail']>().toEqualTypeOf<DetailRecolte>();
+    expectTypeOf<Extract<Evenement, { type: 'intervention' }>['detail']>().toEqualTypeOf<DetailIntervention>();
+    expectTypeOf<Extract<Evenement, { type: 'irrigation' }>['detail']>().toEqualTypeOf<DetailIrrigation>();
+    expectTypeOf<Extract<Evenement, { type: 'traitement' }>['detail']>().toEqualTypeOf<DetailTraitement>();
+    expectTypeOf<Extract<Evenement, { type: 'observation' }>['detail']>().toEqualTypeOf<DetailObservation>();
+  });
+
+  it('le mode d’un itinéraire contraint sa densité', () => {
+    expectTypeOf<Extract<Itineraire, { mode: 'semis_direct' }>['densite']>().toEqualTypeOf<Densite>();
+    expectTypeOf<Extract<Itineraire, { mode: 'plant_maison' }>['densite']>().toEqualTypeOf<DensiteEcartement>();
+    expectTypeOf<Extract<Itineraire, { mode: 'plant_achete' }>['densite']>().toEqualTypeOf<DensiteEcartement>();
+    expectTypeOf<Densite['facon']>().toEqualTypeOf<'ecartement' | 'metre_lineaire' | 'volee'>();
+    expectTypeOf<Extract<Densite, { facon: 'ecartement' }>>().toEqualTypeOf<DensiteEcartement>();
+    expectTypeOf<Extract<Densite, { facon: 'metre_lineaire' }>>().toEqualTypeOf<DensiteMetreLineaire>();
+    expectTypeOf<Extract<Densite, { facon: 'volee' }>>().toEqualTypeOf<DensiteVolee>();
+  });
+
+  /** Lit un champ propre à chaque détail : ne compile que si `type` restreint bien `detail`. */
+  function resume(evenement: Evenement): string {
+    switch (evenement.type) {
+      case 'realise':
+        return `réalisé ${evenement.detail.etape}`;
+      case 'recolte':
+        return `récolte ${String(evenement.detail.quantite)} ${evenement.detail.unite}`;
+      case 'intervention':
+        return `intervention ${evenement.detail.categorie}`;
+      case 'irrigation':
+        return `irrigation ${String(evenement.detail.dureeMinutes)} min`;
+      case 'traitement':
+        return `traitement, récolte autorisée le ${evenement.detail.recolteAutoriseeLe}`;
+      case 'observation':
+        return `observation ${evenement.detail.nature}`;
+      default:
+        return verifierExhaustif(evenement);
+    }
+  }
+
+  /** Événement minimal pour l'exécution : seuls `type` et `detail` sont lus par `resume`. */
+  function evenementDeTest(type: string, detail: Readonly<Record<string, unknown>>): Evenement {
+    return { type, detail } as unknown as Evenement;
+  }
+
+  it('un switch sur evenement.type lit le détail propre à chaque variante', () => {
+    expect(resume(evenementDeTest('realise', { etape: 'plantation' }))).toBe('réalisé plantation');
+    expect(resume(evenementDeTest('recolte', { quantite: 12, unite: 'kg' }))).toBe('récolte 12 kg');
+    expect(resume(evenementDeTest('intervention', { categorie: 'travail_sol' }))).toBe('intervention travail_sol');
+    expect(resume(evenementDeTest('irrigation', { dureeMinutes: 30 }))).toBe('irrigation 30 min');
+    expect(resume(evenementDeTest('traitement', { recolteAutoriseeLe: '2027-06-10' }))).toBe(
+      'traitement, récolte autorisée le 2027-06-10',
+    );
+    expect(resume(evenementDeTest('observation', { nature: 'ravageur' }))).toBe('observation ravageur');
+  });
+
+  it('verifierExhaustif lève une erreur à l’exécution (donnée corrompue ou d’une version plus récente)', () => {
+    expectTypeOf(verifierExhaustif).parameter(0).toBeNever();
+    expect(() => verifierExhaustif('inconnu' as never)).toThrow(Error);
+    expect(() => resume(evenementDeTest('arrosage_magique', {}))).toThrow(Error);
+  });
+});
+
+describe('Proposition : union discriminée par le statut', () => {
+  const base = {
+    id: '0190a5c8-0000-7000-8000-000000000001' as Id<'Proposition'>,
+    fermeId: '0190a5c8-0000-7000-8000-000000000002' as Id<'Ferme'>,
+    supprimeLe: null,
+    source: 'voix',
+    auteurId: '0190a5c8-0000-7000-8000-000000000003' as Id<'Utilisateur'>,
+    creeLe: 1_800_000_000_000,
+    changements: [],
+  } as const;
+
+  it('decideLe est vide tant que la proposition attend, rempli une fois décidée', () => {
+    const enAttente: Proposition = { ...base, statut: 'en_attente', decideLe: null };
+    const validee: Proposition = { ...base, statut: 'validee', decideLe: 1_800_000_060_000 };
+    const rejetee: Proposition = { ...base, statut: 'rejetee', decideLe: 1_800_000_060_000 };
+    // @ts-expect-error une proposition en attente n'a pas encore été décidée.
+    const attenteDecidee: Proposition = { ...base, statut: 'en_attente', decideLe: 1_800_000_060_000 };
+    // @ts-expect-error une proposition validée porte l'instant de sa validation.
+    const valideeSansDate: Proposition = { ...base, statut: 'validee', decideLe: null };
+    // @ts-expect-error une proposition rejetée porte l'instant de son rejet.
+    const rejeteeSansDate: Proposition = { ...base, statut: 'rejetee', decideLe: null };
+    expect([enAttente, validee, rejetee, attenteDecidee, valideeSansDate, rejeteeSansDate]).toHaveLength(6);
+  });
+
+  it('le statut restreint le type de decideLe', () => {
+    expectTypeOf<Extract<Proposition, { statut: 'en_attente' }>['decideLe']>().toEqualTypeOf<null>();
+    expectTypeOf<Extract<Proposition, { statut: 'validee' }>['decideLe']>().toEqualTypeOf<Instant>();
+    expectTypeOf<Extract<Proposition, { statut: 'rejetee' }>['decideLe']>().toEqualTypeOf<Instant>();
+  });
+});
+
+describe('événements en ajout seul', () => {
+  it('un événement peut corriger ou annuler un événement précédent', () => {
+    type Remplacement = NonNullable<Evenement['remplaceEvenement']>;
+    expectTypeOf<Remplacement['sorte']>().toEqualTypeOf<'correction' | 'annulation'>();
+    expectTypeOf<Remplacement['evenementId']>().toEqualTypeOf<Id<'Evenement'>>();
+    expectTypeOf<null>().toExtend<Evenement['remplaceEvenement']>();
+    expectTypeOf<Evenement>().not.toHaveProperty('corrigeEvenementId');
+  });
+
+  it('date = jour de l’action au champ, horodatage = instant de la saisie', () => {
+    expectTypeOf<Evenement['date']>().toEqualTypeOf<DateCalendaire>();
+    expectTypeOf<Evenement['horodatage']>().toEqualTypeOf<Instant>();
   });
 });

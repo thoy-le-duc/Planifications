@@ -423,3 +423,21 @@ describe('ré-export depuis la racine du paquet', () => {
     expect(racine.dateDepuisJourAbsolu).toBe(dateDepuisJourAbsolu);
   });
 });
+
+describe('bornes du calendrier (années 0001 à 9999)', () => {
+  it('ajouterJours refuse de sortir des années 0001 à 9999 (RangeError)', () => {
+    expect(() => ajouterJours(d('9999-12-31'), 1)).toThrow(RangeError);
+    expect(() => ajouterJours(d('0001-01-01'), -1)).toThrow(RangeError);
+    expect(ajouterJours(d('9999-12-30'), 1)).toBe('9999-12-31');
+    expect(ajouterJours(d('0001-01-02'), -1)).toBe('0001-01-01');
+  });
+
+  it('semaineIso aux deux bornes', () => {
+    expect(sem('0001-01-01')).toBe('0001-S01');
+    expect(sem('9999-12-31')).toBe('9999-S52');
+  });
+
+  it('lundiDeSemaine(1, 1) = 0001-01-01 (un lundi du calendrier grégorien proleptique)', () => {
+    expect(lundiDeSemaine(1, 1)).toBe('0001-01-01');
+  });
+});
