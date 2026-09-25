@@ -76,6 +76,16 @@ Question : avec ces corrections, le modèle est-il validé ?
 
 Réponse : « ok ». Modèle v1 validé le 2026-09-25.
 
+## Technique
+
+### Q5 — Moteur de synchro (posée le 2026-09-25)
+
+Recommandation dans [`choix-synchro.md`](choix-synchro.md) : PowerSync, auto-hébergé en UE.
+
+Question : on part sur PowerSync ?
+
+Réponse : _en attente_
+
 ## Questions ouvertes du brief
 
 - Nom du produit.
