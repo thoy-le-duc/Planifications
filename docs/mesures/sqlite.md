@@ -8,8 +8,9 @@ Mesure du 2026-09-25. Page `/mesures/sqlite.html`, test `apps/web/e2e/mesure-sql
 - **Le budget de 300 ms (ouverture + requête 2D) n'est pas tenu de façon fiable.** Dans les conditions du test, les raw tables passent de justesse (médiane 293 ms, de 243 à 318 ms ; 415 ms pendant `pnpm verif`), et les vues JSON dépassent (372 ms).
 - **Le test sous-estime le vrai coût.** Le ralentissement CPU ×4 de Chrome ne touche que le fil principal de la page, pas le worker où tourne SQLite. Quand SQLite tourne lui aussi sous le ralentissement, les deux variantes dépassent : 426 ms en raw, 566 ms en JSON.
 - **Pistes chiffrées :**
-  - OPFS au lieu d'IndexedDB : raw passe à 237 ms (worker non ralenti) ;
-  - ouvrir la base au lancement, pendant l'affichage de l'appli : il ne reste que la requête sur le budget d'un écran, de 53 à 162 ms.
+  - OPFS au lieu d'IndexedDB : raw passe à 237 ms avec le worker non ralenti, environ 345 ms en extrapolant avec SQLite ralenti ;
+  - ouvrir la base au lancement, pendant l'affichage de l'appli : cela ne sauve pas le lancement à froid, qui est fréquent (290 à 460 ms), seulement les écrans suivants (raw : 53 à 162 ms).
+- **Tous ces chiffres sont des minorants** : ni le chargement de la bibliothèque PowerSync ni le rendu des 674 lignes ne sont comptés (voir les limites).
 
 ## Conditions
 
@@ -97,19 +98,23 @@ Index des deux variantes :
 
 ## Poids du WASM et du code SQLite
 
-Aujourd'hui, **rien de SQLite n'entre dans le cache du service worker.** La page de mesure et le code SQLite sont rangés dans `assets/mesures/` et `assets/sqlite/`, exclus du précache. Le précache de l'appli reste à 6 entrées (215,6 Kio). La seule nouveauté est `modulepreload-polyfill` (0,4 Kio gzip), que Vite sépare dès qu'il y a deux pages HTML. Le budget de démarrage est inchangé : 66,7 Kio gzip sur 90.
+Aujourd'hui, **rien de SQLite n'entre dans le cache du service worker.** La page de mesure et le code SQLite sont rangés dans `assets/mesures/` et `assets/sqlite/`, exclus du précache.
+
+Le précache de l'appli passe de 5 à 6 entrées (215,6 Kio). L'entrée ajoutée est `modulepreload-polyfill` (0,4 Kio gzip) : Vite la sépare dès qu'il y a deux pages HTML. Elle compte aussi dans le démarrage, qui reste à 66,7 Kio gzip sur 90.
+
+**Méthode de calcul** : celle de `pnpm budget`, c'est-à-dire `gzipSync` de Node (niveau par défaut), en Kio de 1 024 octets. Vite affiche d'autres chiffres pour les mêmes fichiers, en kB de 1 000 octets et avec sa propre compression : 773 Kio pour le WASM async, 506 Kio pour le WASM sync, 37,2 Kio pour le module de mesure. Il faut comparer des chiffres calculés de la même façon.
 
 Quand l'appli utilisera la base (T10), voici ce qu'il faudra ajouter au cache, fichiers réellement chargés par la page :
 
 | Fichier | IndexedDB (défaut) brut / gzip | OPFS brut / gzip |
 | --- | ---: | ---: |
-| WASM SQLite + PowerSync | `wa-sqlite-async.wasm` : 2 204 / **760** Kio | `wa-sqlite.wasm` : 1 082 / **498** Kio |
-| Code d'appui de wa-sqlite | 62,3 / 20,1 Kio | 58,6 / 19,0 Kio |
-| Worker PowerSync | 76,4 / 23,1 Kio | 76,4 / 23,1 Kio |
+| WASM SQLite + PowerSync | `wa-sqlite-async.wasm` : 2 204 / **765** Kio | `wa-sqlite.wasm` : 1 082 / **501** Kio |
+| Code d'appui de wa-sqlite | 62,3 / 20,2 Kio | 58,6 / 19,0 Kio |
+| Worker PowerSync | 76,4 / 23,2 Kio | 76,4 / 23,2 Kio |
 | VFS (+ FacadeVFS 6,2 / 1,9) | 12,8 / 4,0 Kio | 7,5 / 2,4 Kio |
-| **Total dans le cache** | **2 362 Kio brut, 809 Kio gzip** | **1 231 Kio brut, 545 Kio gzip** |
+| **Total dans le cache** | **2 362 Kio brut, 814 Kio gzip** | **1 231 Kio brut, 547 Kio gzip** |
 
-À cela s'ajoute la bibliothèque PowerSync côté page : au plus 36,7 Kio gzip, chargée en arrière-plan. Ce chiffre est celui du module de mesure, qui contient aussi le générateur.
+À cela s'ajoute la bibliothèque PowerSync côté page : au plus 36,8 Kio gzip, chargée à la demande. Ce chiffre est celui du module de mesure, qui contient aussi le générateur.
 
 Points d'attention pour T10 :
 
@@ -119,21 +124,66 @@ Points d'attention pour T10 :
 
 ## Limites de la mesure
 
+**Tous les temps ci-dessus sont des minorants.**
+
 - **Le worker n'est pas ralenti** par le ×4 de Chrome : le test donne une borne basse. La mesure `&fil=page` donne une estimation plus dure mais imparfaite. Seul un vrai téléphone Android milieu de gamme tranchera. La page peut s'ouvrir telle quelle sur le téléphone de Théophane : `/mesures/sqlite.html?variante=raw`, puis `&vfs=opfs`.
+- **Le ×4 est en réalité un facteur 2,5 à 3.** La boucle d'étalonnage (`etalonCpuMs`) passe de 4 à 7 ms à ×1 et de 13 à 17 ms à ×4. Un vrai téléphone milieu de gamme pourrait donc être plus lent encore que la mesure `&fil=page`.
+- **OPFS n'est mesuré qu'avec le worker, donc non ralenti** : OPFS n'accepte pas le mode `fil=page`. En appliquant le rapport observé en IndexedDB raw (426 / 293 ≈ 1,45), raw + OPFS donnerait environ **345 ms** avec SQLite ralenti.
+- **Chargement de la bibliothèque PowerSync non compté** : environ 37 Kio gzip, chargés à la demande. L'ouverture est chronométrée une fois ce module déjà évalué.
+- **Rendu non compté** : le temps de la requête 2D s'arrête à l'arrivée des 674 lignes. L'affichage React de la grille s'y ajoutera.
 - **Bruit important.** Le conteneur a un CPU partagé : la requête 2D JSON a varié de 124 à 425 ms d'un passage à l'autre. Les médianes sur 5 passages restent fragiles à ±50 ms près.
 - **WASM relu depuis le cache HTTP** du serveur de prévisualisation, pas depuis le service worker. Chaque contexte neuf recompile le WASM.
 - **Jeu synthétique et schéma simplifié** : pas de `ferme_id`, pas de suppression douce, pas d'itinéraire. Le schéma définitif (T08) ajoutera des colonnes et des filtres.
+- **Occupations qui se chevauchent** : le générateur tire les planches au hasard, donc plusieurs occupations se superposent parfois sur une même planche. C'est sans effet sur les temps, mais ce n'est pas une ferme sans conflit.
 - **File d'envoi pleine** : le jeu est chargé par des écritures locales, donc `ps_crud` contient environ 36 000 entrées dans les deux variantes. Une base remplie par la synchro n'en aurait pas. L'effet attendu est nul sur les lectures.
 - **Une seule insertion**, mesurée isolément, sans écran ni React autour.
+
+## Reproduire la mesure
+
+Il faut Chromium : sur une machine qui l'a déjà, préfixer par `CHROMIUM_PATH=/chemin/vers/chrome`.
+
+**Configuration du test** (worker + IndexedDB, CPU ×4, les deux variantes), 5 passages. Chaque passage affiche ses temps dans la console : prendre la médiane.
+
+```sh
+pnpm build
+pnpm e2e --repeat-each=5 mesure-sqlite
+```
+
+**Autres configurations** : le test e2e ne les couvre pas. On sert le build puis on ouvre la page avec des paramètres d'URL :
+
+```sh
+pnpm --filter @planif/web preview --port 4173
+```
+
+| Configuration | URL |
+| --- | --- |
+| Test, vues JSON | `http://localhost:4173/mesures/sqlite.html?variante=json` |
+| Test, raw tables | `http://localhost:4173/mesures/sqlite.html?variante=raw` |
+| SQLite ralenti aussi (fil principal) | ajouter `&fil=page` |
+| OPFS | ajouter `&vfs=opfs` (incompatible avec `&fil=page`) |
+
+Pour chaque passage :
+
+1. ouvrir un profil neuf (fenêtre de navigation privée) ;
+2. dans les DevTools, onglet Performance, choisir CPU « 4× slowdown » ;
+3. pour la mesure CPU ×1, laisser « No throttling » ;
+4. charger l'URL et attendre le JSON affiché dans la page, qui est aussi dans `window.__mesuresSqlite`.
+
+Les médianes de ce document ont été obtenues de la même façon, automatisée par un script Playwright jetable (non versionné) :
+
+- un contexte neuf par passage, au profil `devices['Pixel 7']` ;
+- `Emulation.setCPUThrottlingRate` à 4 (ou 1) ;
+- `page.goto(url)`, puis `waitForFunction(() => window.__mesuresSqlite)` ;
+- 5 passages par configuration.
 
 ## Pistes si le budget est confirmé trop juste
 
 1. **Raw tables** (recommandé) : −88 ms sur la requête 2D en configuration de l'appli, −91 ms quand SQLite est ralenti.
 2. **OPFS (`OPFSCoopSyncVFS`)** :
-   - gain : ouverture −38 ms, requête 2D −20 ms en raw, soit 237 ms au total, et WASM de 498 Kio gzip au lieu de 760 ;
+   - gain : ouverture −38 ms, requête 2D −20 ms en raw, soit 237 ms au total avec le worker non ralenti, environ 345 ms en extrapolant avec SQLite ralenti, et WASM de 501 Kio gzip au lieu de 765 ;
    - coût : chargement initial deux fois plus lent (12 s contre 6 s pour la ferme entière) et OPFS à valider sur Safari iOS.
 3. **Ouvrir la base une fois, au lancement, en parallèle de l'affichage de l'appli**, et la garder ouverte :
-   - l'appli s'affiche en 72 à 153 ms, et l'ouverture (180 à 300 ms) se fait pendant ce temps ;
-   - un écran courant ne paie plus que sa requête, de 53 à 162 ms selon la configuration ;
-   - seul le tout premier écran après un lancement à froid reste au-delà de 300 ms.
+   - **cela ne règle pas le cas courant.** Rouvrir l'appli au champ, c'est le geste de tous les jours. Or Android tue souvent l'appli en arrière-plan, donc le lancement à froid est fréquent ;
+   - à froid, le premier écran coûte environ max(affichage de l'appli ≈ 110 ms, ouverture 220 à 313 ms) + requête 2D. Selon la variante et la configuration, cela fait **290 à 460 ms** : au-delà du budget, sauf en raw dans les conditions optimistes du test ;
+   - le gain ne vaut que pour les écrans suivants, base déjà ouverte : ils ne paient que leur requête, **53 à 162 ms en raw** (OPFS worker à IndexedDB `fil=page`). En JSON, la requête seule atteint 253 ms en `fil=page`, ce qui laisse peu de marge pour le rendu.
 4. **Requête 2D plus étroite** : ne lire que les planches visibles (une zone compte 13 à 14 planches sur 400), au lieu des 674 occupations de la saison. Non mesuré.
