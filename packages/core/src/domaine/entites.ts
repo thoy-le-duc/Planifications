@@ -43,10 +43,14 @@ export interface Quantite {
   readonly unite: string;
 }
 
-/** Colonnes communes à toutes les lignes rattachées à une ferme. */
-interface LigneDeFerme<E extends NomEntite> {
+/** Identité d'une ligne rattachée à une ferme. */
+interface IdentiteDeLigne<E extends NomEntite> {
   readonly id: Id<E>;
   readonly fermeId: Id<'Ferme'>;
+}
+
+/** Colonnes communes aux lignes modifiables d'une ferme (toutes sauf les événements). */
+interface LigneDeFerme<E extends NomEntite> extends IdentiteDeLigne<E> {
   /** Suppression douce : instant de la suppression, `null` tant que la ligne est active. */
   readonly supprimeLe: Instant | null;
 }
@@ -147,6 +151,12 @@ export interface Famille extends LigneDeFerme<'Famille'> {
   readonly delaiRetourConseilleAns: Annees;
 }
 
+/** Délais de retour propres à une espèce : remplis ensemble ou pas du tout. */
+export interface DelaisRetour {
+  readonly minimalAns: Annees;
+  readonly conseilleAns: Annees;
+}
+
 export type CategorieEspece = 'legume' | 'petit_fruit' | 'fruit' | 'fleur' | 'aromatique' | 'engrais_vert';
 
 export interface Espece extends LigneDeFerme<'Espece'> {
@@ -155,9 +165,8 @@ export interface Espece extends LigneDeFerme<'Espece'> {
   readonly categorie: CategorieEspece;
   readonly perenne: boolean;
   readonly uniteRecolte: UniteRecolte;
-  /** Remplacent ceux de la famille quand ils sont remplis (choux : 4 ans minimum, 6 conseillés). */
-  readonly delaiRetourMinimalAns: Annees | null;
-  readonly delaiRetourConseilleAns: Annees | null;
+  /** Remplacent ceux de la famille quand ils sont remplis (choux : 4 ans minimum, 6 conseillés) ; `null` : ceux de la famille s'appliquent. */
+  readonly delaisRetour: DelaisRetour | null;
 }
 
 export interface Variete extends LigneDeFerme<'Variete'> {
@@ -230,8 +239,11 @@ interface ParametresCommuns {
 export interface ParametresSemisDirect extends ParametresCommuns {
   readonly mode: 'semis_direct';
   readonly densite: Densite;
-  /** Graines par poquet, pour un semis à l'écartement. */
-  readonly grainesParPoquet: number;
+  /**
+   * Graines par poquet : ne sert qu'au semis direct à l'écartement (T05) ; `null` pour les
+   * autres façons de compter, où la densité donne déjà les graines.
+   */
+  readonly grainesParPoquet: number | null;
 }
 
 /** Plant élevé à la ferme en pépinière, en mottes. */
@@ -403,10 +415,25 @@ export type CultureConcernee =
   | { readonly sorte: 'serie'; readonly serieId: Id<'Serie'> }
   | { readonly sorte: 'campagne'; readonly campagneId: Id<'Campagne'> };
 
-interface EvenementCommun extends LigneDeFerme<'Evenement'> {
-  /** Jour de la saisie dans le fuseau de la ferme. */
+/** Un événement qui en remplace un précédent, sans jamais le modifier. */
+export interface RemplacementEvenement {
+  readonly sorte: 'correction' | 'annulation';
+  readonly evenementId: Id<'Evenement'>;
+}
+
+/**
+ * Colonnes communes des événements. Les événements sont en ajout seul : un événement ne se
+ * modifie ni ne se supprime ; il est corrigé ou annulé par un nouvel événement qui le désigne
+ * (`remplaceEvenement`). C'est ce qui rend la synchro hors ligne sans conflit sur le journal.
+ * Ils n'ont donc pas de `supprimeLe`.
+ */
+interface EvenementCommun extends IdentiteDeLigne<'Evenement'> {
+  /**
+   * Jour où l'action a eu lieu au champ. Par défaut, le jour local de la ferme au moment de la
+   * saisie ; il peut être antérieur (récolte saisie le lendemain).
+   */
   readonly date: DateCalendaire;
-  /** Instant exact de la saisie. */
+  /** Instant de la saisie. */
   readonly horodatage: Instant;
   readonly auteurId: Id<'Utilisateur'>;
   readonly source: SourceSaisie;
@@ -415,8 +442,8 @@ interface EvenementCommun extends LigneDeFerme<'Evenement'> {
   readonly note: string | null;
   /** Références des photos, gardées sur le téléphone jusqu'au retour du réseau. */
   readonly photos: readonly string[];
-  /** Événements en ajout seul : un événement se corrige par un nouveau qui désigne l'ancien. */
-  readonly corrigeEvenementId: Id<'Evenement'> | null;
+  /** Événement précédent que celui-ci corrige ou annule ; `null` pour une saisie nouvelle. */
+  readonly remplaceEvenement: RemplacementEvenement | null;
 }
 
 export type EtapeRealisee = 'semis_pepiniere' | 'semis_direct' | 'plantation' | 'arrachage';
@@ -562,36 +589,60 @@ export type OperationLigne = 'creation' | 'modification' | 'suppression';
 /** Valeurs d'une ligne, telles qu'exportées (clés en camelCase). */
 export type ValeursLigne = Readonly<Record<string, unknown>>;
 
+/**
+ * Tables des données de la ferme, que l'on peut créer, modifier ou supprimer. Le journal de
+ * validation (propositions, modifications) et les comptes n'en font pas partie.
+ */
+export type TableDeFerme = Exclude<NomEntite, 'Modification' | 'Proposition' | 'Utilisateur'>;
+
+/** Ligne visée : la table et l'Id de la même entité, liés par le typage. */
+export type ReferenceLigne<T extends NomEntite = TableDeFerme> = {
+  readonly [N in T]: { readonly table: N; readonly ligneId: Id<N> };
+}[T];
+
 /** Un changement proposé, pas encore appliqué. */
-export interface ChangementPropose {
+export type ChangementPropose = ReferenceLigne & {
   readonly operation: OperationLigne;
-  readonly table: NomEntite;
-  readonly ligneId: string;
   /** Valeurs à écrire ; `null` pour une suppression. */
   readonly valeurs: ValeursLigne | null;
-}
+};
 
 export type StatutProposition = 'en_attente' | 'validee' | 'rejetee';
 
-/** Tout ce qui vient de la voix, de l'agent ou d'une photo : rien n'est écrit avant le tap de validation. */
-export interface Proposition extends LigneDeFerme<'Proposition'> {
+interface PropositionCommune extends LigneDeFerme<'Proposition'> {
   readonly source: 'voix' | 'agent' | 'photo';
   readonly auteurId: Id<'Utilisateur'>;
   readonly creeLe: Instant;
   readonly changements: readonly ChangementPropose[];
-  readonly statut: StatutProposition;
-  /** Instant de la validation ou du rejet. */
-  readonly decideLe: Instant | null;
 }
 
-/** Journal des modifications : qui, quand, avant, après, et la proposition d'origine. */
-export interface Modification extends LigneDeFerme<'Modification'> {
-  readonly auteurId: Id<'Utilisateur'>;
-  readonly horodatage: Instant;
-  readonly operation: OperationLigne;
-  readonly table: NomEntite;
-  readonly ligneId: string;
-  readonly avant: ValeursLigne | null;
-  readonly apres: ValeursLigne | null;
-  readonly propositionId: Id<'Proposition'> | null;
-}
+/**
+ * Tout ce qui vient de la voix, de l'agent ou d'une photo : rien n'est écrit avant le tap de
+ * validation. `decideLe` n'existe qu'une fois la proposition validée ou rejetée.
+ */
+export type Proposition =
+  | (PropositionCommune & { readonly statut: 'en_attente'; readonly decideLe: null })
+  | (PropositionCommune & {
+      readonly statut: 'validee';
+      /** Instant de la validation. */
+      readonly decideLe: Instant;
+    })
+  | (PropositionCommune & {
+      readonly statut: 'rejetee';
+      /** Instant du rejet. */
+      readonly decideLe: Instant;
+    });
+
+/**
+ * Journal des modifications : qui, quand, avant, après, et la proposition d'origine.
+ * Il couvre les tables de la ferme et les propositions (validation, rejet).
+ */
+export type Modification = LigneDeFerme<'Modification'> &
+  ReferenceLigne<TableDeFerme | 'Proposition'> & {
+    readonly auteurId: Id<'Utilisateur'>;
+    readonly horodatage: Instant;
+    readonly operation: OperationLigne;
+    readonly avant: ValeursLigne | null;
+    readonly apres: ValeursLigne | null;
+    readonly propositionId: Id<'Proposition'> | null;
+  };
