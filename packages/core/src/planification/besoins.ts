@@ -33,6 +33,7 @@ export interface DensiteVoleeBesoins {
 
 export interface SemisDirectEcartement {
   readonly mode: 'semis_direct';
+  readonly facon: 'ecartement';
   readonly densite: DensiteEcartement;
   readonly grainesParPoquet: number;
   readonly germination: Pourcentage;
@@ -44,6 +45,7 @@ export interface SemisDirectEcartement {
 /** La densité au mètre linéaire compte déjà la germination. */
 export interface SemisDirectMetreLineaire {
   readonly mode: 'semis_direct';
+  readonly facon: 'metre_lineaire';
   readonly densite: DensiteMetreLineaire;
   readonly margeSecurite: Pourcentage;
   readonly pmgMg: number | null;
@@ -51,6 +53,7 @@ export interface SemisDirectMetreLineaire {
 
 export interface SemisDirectVolee {
   readonly mode: 'semis_direct';
+  readonly facon: 'volee';
   readonly densite: DensiteVoleeBesoins;
   readonly margeSecurite: Pourcentage;
 }
@@ -73,7 +76,11 @@ export interface PlantAcheteBesoins {
   readonly margeSecurite: Pourcentage;
 }
 
-/** Itinéraire d'une série vu du calcul des besoins : chaque combinaison ne porte que ses paramètres. */
+/**
+ * Itinéraire d'une série vu du calcul des besoins : chaque combinaison ne porte que ses paramètres.
+ * Le semis direct répète `facon` au premier niveau : TypeScript ne discrimine une union (et ne
+ * signale les propriétés en trop) que sur un discriminant de premier niveau.
+ */
 export type ItineraireBesoins =
   | SemisDirectEcartement
   | SemisDirectMetreLineaire
@@ -195,7 +202,7 @@ function controlerPmg(pmgMg: number | null): void {
 /** Plants (ou mottes) en place : ⌊longueur ÷ écartement⌋ × rangs. */
 function placesEnPlace(densite: DensiteEcartement, longueurCm: number): number {
   exigerEntier(densite.ecartementSurRangCm, 'écartement sur le rang (cm)', 1);
-  exigerEntier(densite.rangsParPlanche, 'rangs par planche', 0);
+  exigerEntier(densite.rangsParPlanche, 'rangs par planche', 1);
   const placesParRang = diviserArrondiBas(BigInt(longueurCm), BigInt(densite.ecartementSurRangCm));
   return versNombre(produit(placesParRang, densite.rangsParPlanche));
 }
@@ -214,7 +221,7 @@ function avecPoids(graines: number, pmgMg: number | null): PoidsFacultatif {
 // ---------------------------------------------------------------------------------------------
 
 function besoinsSemisEcartement(it: SemisDirectEcartement, longueurCm: number): BesoinsSemisEcartement {
-  exigerEntier(it.grainesParPoquet, 'graines par poquet', 0);
+  exigerEntier(it.grainesParPoquet, 'graines par poquet', 1);
   exigerPourcentage(it.germination, 'germination', 1, 100);
   controlerPmg(it.pmgMg);
   const plants = placesEnPlace(it.densite, longueurCm);
@@ -226,7 +233,7 @@ function besoinsSemisEcartement(it: SemisDirectEcartement, longueurCm: number): 
 }
 
 function besoinsSemisMetreLineaire(it: SemisDirectMetreLineaire, longueurCm: number): BesoinsSemisMetreLineaire {
-  exigerEntier(it.densite.rangsParPlanche, 'rangs par planche', 0);
+  exigerEntier(it.densite.rangsParPlanche, 'rangs par planche', 1);
   exigerEntier(it.densite.grainesParMetre, 'graines par mètre', 0);
   controlerPmg(it.pmgMg);
   const graines = diviserArrondiHaut(
@@ -254,8 +261,8 @@ function nombrePlaques(mottesASemer: number, alveolesParPlaque: number | null): 
 }
 
 function besoinsPlantMaison(it: PlantMaisonBesoins, longueurCm: number): BesoinsPlantMaison {
-  exigerEntier(it.grainesParMotte, 'graines par motte', 0);
-  exigerEntier(it.plantsParMotte, 'plants par motte', 0);
+  exigerEntier(it.grainesParMotte, 'graines par motte', 1);
+  exigerEntier(it.plantsParMotte, 'plants par motte', 1);
   exigerPourcentage(it.germination, 'germination', 1, 100);
   exigerPourcentage(it.pertePepiniere, 'perte en pépinière', 0, 99);
   controlerPmg(it.pmgMg);
@@ -280,21 +287,19 @@ function besoinsPlantAchete(it: PlantAcheteBesoins, longueurCm: number): Besoins
   return { mode: 'plant_achete', plants, plantsACommander: avecMarge(plants, it.margeSecurite) };
 }
 
-function besoinsSemisDirect(
-  it: SemisDirectEcartement | SemisDirectMetreLineaire | SemisDirectVolee,
-  longueurCm: number,
-): BesoinsSerie {
-  // Le discriminant est imbriqué dans la densité : TypeScript resserre `it.densite` mais pas
-  // `it`. Les assertions sont sûres, chaque variante n'admettant qu'une façon de compter.
-  switch (it.densite.facon) {
+type SemisDirectBesoins = SemisDirectEcartement | SemisDirectMetreLineaire | SemisDirectVolee;
+type BesoinsSemisDirect = BesoinsSemisEcartement | BesoinsSemisMetreLineaire | BesoinsSemisVolee;
+
+function besoinsSemisDirect(it: SemisDirectBesoins, longueurCm: number): BesoinsSemisDirect {
+  switch (it.facon) {
     case 'ecartement':
-      return besoinsSemisEcartement(it as SemisDirectEcartement, longueurCm);
+      return besoinsSemisEcartement(it, longueurCm);
     case 'metre_lineaire':
-      return besoinsSemisMetreLineaire(it as SemisDirectMetreLineaire, longueurCm);
+      return besoinsSemisMetreLineaire(it, longueurCm);
     case 'volee':
-      return besoinsSemisVolee(it as SemisDirectVolee, longueurCm);
+      return besoinsSemisVolee(it, longueurCm);
     default:
-      return verifierExhaustif(it.densite);
+      return verifierExhaustif(it);
   }
 }
 
@@ -335,71 +340,121 @@ export interface SeriePlantee {
 
 export type SerieBesoins = SerieSemee | SeriePlantee;
 
-interface Quantites {
+
+/** Plaques d'un même format (nombre d'alvéoles). */
+export interface PlaquesFormat {
+  readonly alveoles: number;
+  readonly nombre: number;
+}
+
+export interface LigneBesoinsSaison {
+  readonly varieteId: Id<'Variete'>;
+  readonly semaine: SemaineIso;
   readonly graines?: number;
   readonly poidsDg?: number;
   readonly mottesASemer?: number;
-  readonly plaques?: number;
   readonly plantsACommander?: number;
+  /** Une entrée par format, triée par alvéoles ; absent si une série a des mottes sans format. */
+  readonly plaques?: readonly PlaquesFormat[];
 }
 
-export interface LigneBesoinsSaison extends Quantites {
-  readonly varieteId: Id<'Variete'>;
-  readonly semaine: SemaineIso;
-}
-
-type Champ = keyof Quantites;
-const CHAMPS: readonly Champ[] = ['graines', 'poidsDg', 'mottesASemer', 'plaques', 'plantsACommander'];
+type ChampSomme = 'graines' | 'poidsDg' | 'mottesASemer' | 'plantsACommander';
+const CHAMPS_SOMMES: readonly ChampSomme[] = ['graines', 'poidsDg', 'mottesASemer', 'plantsACommander'];
 
 /** Ce qu'une série apporte à sa ligne de saison. */
-function quantitesSerie(b: BesoinsSerie): Quantites {
-  switch (b.mode) {
-    case 'semis_direct':
-      if (b.facon === 'volee') return { poidsDg: b.poidsDg };
-      return { graines: b.graines, ...(b.poidsDg === undefined ? {} : { poidsDg: b.poidsDg }) };
-    case 'plant_maison': {
-      const { mottesASemer, graines, plaques, poidsDg } = b;
-      return {
-        mottesASemer,
-        graines,
-        ...(plaques === undefined ? {} : { plaques }),
-        ...(poidsDg === undefined ? {} : { poidsDg }),
-      };
-    }
-    case 'plant_achete':
-      return { plantsACommander: b.plantsACommander };
+interface Apport {
+  readonly graines?: number;
+  readonly poidsDg?: number;
+  readonly mottesASemer?: number;
+  readonly plantsACommander?: number;
+  readonly plaques?: PlaquesFormat;
+}
+
+function poidsDe(b: PoidsFacultatif): Apport {
+  return b.poidsDg === undefined ? {} : { poidsDg: b.poidsDg };
+}
+
+function apportSemisDirect(b: BesoinsSemisDirect): Apport {
+  switch (b.facon) {
+    case 'ecartement':
+    case 'metre_lineaire':
+      return { graines: b.graines, ...poidsDe(b) };
+    case 'volee':
+      return { poidsDg: b.poidsDg };
     default:
       return verifierExhaustif(b);
+  }
+}
+
+function apportPlantMaison(it: PlantMaisonBesoins, b: BesoinsPlantMaison): Apport {
+  const plaques =
+    it.alveolesParPlaque === null || b.plaques === undefined
+      ? {}
+      : { plaques: { alveoles: it.alveolesParPlaque, nombre: b.plaques } };
+  return { mottesASemer: b.mottesASemer, graines: b.graines, ...plaques, ...poidsDe(b) };
+}
+
+function apportSerie(serie: SerieBesoins): Apport {
+  const it = serie.itineraire;
+  controlerCommun(it, serie.longueurCm);
+  switch (it.mode) {
+    case 'semis_direct':
+      return apportSemisDirect(besoinsSemisDirect(it, serie.longueurCm));
+    case 'plant_maison':
+      return apportPlantMaison(it, besoinsPlantMaison(it, serie.longueurCm));
+    case 'plant_achete':
+      return { plantsACommander: besoinsPlantAchete(it, serie.longueurCm).plantsACommander };
+    default:
+      return verifierExhaustif(it);
   }
 }
 
 interface Accumulateur {
   readonly varieteId: Id<'Variete'>;
   readonly semaine: SemaineIso;
-  readonly totaux: Map<Champ, number>;
-  /** Une série de la ligne a des graines sans poids connu : le poids total serait sous-estimé. */
+  readonly totaux: Map<ChampSomme, number>;
+  /** Nombre de plaques par format d'alvéoles. */
+  readonly plaques: Map<number, number>;
+  /** Une série a des graines sans poids connu : le poids total serait sous-estimé. */
   poidsIncomplet: boolean;
+  /** Une série a des mottes sans format de plaque : la liste ferait commander trop peu. */
+  plaquesIncompletes: boolean;
 }
 
-function semaineDeSerie(serie: SerieBesoins): SemaineIso {
-  return semaineIso('dateSemis' in serie ? serie.dateSemis : serie.datePlantation);
+function somme(a: number | undefined, b: number): number {
+  return versNombre(BigInt(a ?? 0) + BigInt(b));
 }
 
-function ajouter(acc: Accumulateur, q: Quantites): void {
-  for (const champ of CHAMPS) {
-    const valeur = q[champ];
-    if (valeur !== undefined) acc.totaux.set(champ, versNombre(BigInt(acc.totaux.get(champ) ?? 0) + BigInt(valeur)));
+function ajouter(acc: Accumulateur, apport: Apport): void {
+  for (const champ of CHAMPS_SOMMES) {
+    const valeur = apport[champ];
+    if (valeur !== undefined) acc.totaux.set(champ, somme(acc.totaux.get(champ), valeur));
   }
-  if (q.graines !== undefined && q.poidsDg === undefined) acc.poidsIncomplet = true;
+  if (apport.plaques !== undefined) {
+    const { alveoles, nombre } = apport.plaques;
+    acc.plaques.set(alveoles, somme(acc.plaques.get(alveoles), nombre));
+  }
+  if (apport.graines !== undefined && apport.poidsDg === undefined) acc.poidsIncomplet = true;
+  if (apport.mottesASemer !== undefined && apport.plaques === undefined) acc.plaquesIncompletes = true;
+}
+
+function listePlaques(acc: Accumulateur): { readonly plaques?: readonly PlaquesFormat[] } {
+  if (acc.plaquesIncompletes || acc.plaques.size === 0) return {};
+  const plaques = [...acc.plaques].map(([alveoles, nombre]) => ({ alveoles, nombre }));
+  return { plaques: plaques.sort((a, b) => a.alveoles - b.alveoles) };
 }
 
 function versLigne(acc: Accumulateur): LigneBesoinsSaison {
-  let ligne: LigneBesoinsSaison = { varieteId: acc.varieteId, semaine: acc.semaine };
+  let ligne: LigneBesoinsSaison = { varieteId: acc.varieteId, semaine: acc.semaine, ...listePlaques(acc) };
   for (const [champ, total] of acc.totaux) {
     if (champ === 'poidsDg' && acc.poidsIncomplet) continue;
     ligne = { ...ligne, [champ]: total };
   }
   return ligne;
+}
+
+function semaineDeSerie(serie: SerieBesoins): SemaineIso {
+  return semaineIso('dateSemis' in serie ? serie.dateSemis : serie.datePlantation);
 }
 
 function comparerLignes(a: LigneBesoinsSaison, b: LigneBesoinsSaison): number {
@@ -408,7 +463,11 @@ function comparerLignes(a: LigneBesoinsSaison, b: LigneBesoinsSaison): number {
   return a.semaine.semaine - b.semaine.semaine;
 }
 
-/** Besoins de la saison, une ligne par variété et par semaine ISO de semis (ou de plantation). */
+/**
+ * Besoins de la saison, une ligne par variété et par semaine ISO de semis (ou de plantation).
+ * Le poids d'une ligne additionne les poids déjà arrondis de chaque série : il ne descend
+ * jamais sous le poids exact.
+ */
 export function besoinsSaison(series: readonly SerieBesoins[]): LigneBesoinsSaison[] {
   const lignes = new Map<string, Accumulateur>();
   for (const serie of series) {
@@ -416,10 +475,17 @@ export function besoinsSaison(series: readonly SerieBesoins[]): LigneBesoinsSais
     const cle = `${serie.varieteId}|${String(semaine.annee)}|${String(semaine.semaine)}`;
     let acc = lignes.get(cle);
     if (acc === undefined) {
-      acc = { varieteId: serie.varieteId, semaine, totaux: new Map(), poidsIncomplet: false };
+      acc = {
+        varieteId: serie.varieteId,
+        semaine,
+        totaux: new Map(),
+        plaques: new Map(),
+        poidsIncomplet: false,
+        plaquesIncompletes: false,
+      };
       lignes.set(cle, acc);
     }
-    ajouter(acc, quantitesSerie(besoinsSerie(serie.itineraire, serie.longueurCm)));
+    ajouter(acc, apportSerie(serie));
   }
   return [...lignes.values()].map(versLigne).sort(comparerLignes);
 }
