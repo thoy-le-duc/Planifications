@@ -65,18 +65,27 @@
  *     Règles (les champs de `Campagne` de T01 sont `debutRecoltePrevu | null`, d'où `null`) :
  *       - première année de récolte = année civile de plantation + anneesAvantPremiereRecolte ;
  *         avant cette année (et avant la plantation) : null ;
+ *       - pas de récolte avant la plantation : une plantation le 2026-10-01 sans année d'attente et
+ *         une période S15–S24 donne null en 2026, puis une récolte en 2027 ;
+ *       - RangeError si anneesAvantPremiereRecolte est négatif ou non entier ;
+ *       - semaine 53 : une semaine de début ou de fin à 53 est ramenée à la dernière semaine ISO
+ *         de l'année visée quand celle-ci n'en a que 52 (jamais de RangeError pour cette raison) ;
  *       - période de récolte annuelle en semaines ISO (modèle de T01, `PeriodeSemaines`) :
  *           debutRecolte = lundiDeSemaine(annee, semaineDebut)
  *           finRecolte   = dimanche de la semaine semaineFin, soit lundiDeSemaine(…, semaineFin) + 6
  *       - si semaineFin < semaineDebut, la période chevauche le nouvel an : elle commence en
  *         `annee` et finit en `annee + 1` (la campagne est celle de l'année où la récolte commence).
  *
+ * Compatibilité avec T01 : `Serie['datesPrevues']` et `DatesSerie` s'assignent l'un à l'autre
+ * (T01 rend `semisPepiniere` facultatif) ; ce test de type échoue tant que ce changement de T01
+ * n'est pas fusionné dans la branche T02.
+ *
  * Le module n'est pas obligé d'être ré-exporté par `packages/core/src/index.ts` (périmètre T02).
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { ajouterJours, analyserDate, dateDepuisJourAbsolu, jourAbsolu, lundiDeSemaine } from '../dates/index.ts';
 import type { DateCalendaire } from '../dates/index.ts';
-import type { AncreSerie, ParametresItineraire, ParametresPerenne } from '../domaine/index.ts';
+import type { AncreSerie, ParametresItineraire, ParametresPerenne, Serie } from '../domaine/index.ts';
 import { appliquerRealises, calculerDatesCampagne, calculerDatesSerie } from './dates-serie.ts';
 import type {
   DatesCampagne,
@@ -157,6 +166,11 @@ describe('types du module', () => {
     expectTypeOf(appliquerRealises).returns.toEqualTypeOf<DatesSerie>();
     expectTypeOf(calculerDatesCampagne).parameters.toEqualTypeOf<[PlantationPerenne, number]>();
     expectTypeOf(calculerDatesCampagne).returns.toEqualTypeOf<DatesCampagne | null>();
+  });
+
+  it("les dates prévues d'une Serie (T01) et DatesSerie s'assignent l'une à l'autre", () => {
+    expectTypeOf<Serie['datesPrevues']>().toExtend<DatesSerie>();
+    expectTypeOf<DatesSerie>().toExtend<Serie['datesPrevues']>();
   });
 });
 
@@ -637,5 +651,78 @@ describe('calculerDatesCampagne — pérennes', () => {
     const plantation = Object.freeze({ ...ASPERGES, perenne: Object.freeze({ ...ASPERGES_PERENNE }) });
     calculerDatesCampagne(plantation, 2028);
     expect(plantation).toStrictEqual(ASPERGES);
+  });
+  it('semaine 53 en fin de période : S40→S53 en 2026 (53 semaines)', () => {
+    const tardive: PlantationPerenne = {
+      datePlantation: d('2024-04-15'),
+      perenne: { ...ASPERGES_PERENNE, periodeRecolteAnnuelle: { semaineDebut: 40, semaineFin: 53 } },
+    };
+    expect(calculerDatesCampagne(tardive, 2026)).toStrictEqual({
+      debutRecolte: d('2026-09-28'),
+      finRecolte: d('2027-01-03'),
+    });
+  });
+
+  it("semaine 53 en fin de période : ramenée à la S52 en 2027 (52 semaines), sans RangeError", () => {
+    const tardive: PlantationPerenne = {
+      datePlantation: d('2024-04-15'),
+      perenne: { ...ASPERGES_PERENNE, periodeRecolteAnnuelle: { semaineDebut: 40, semaineFin: 53 } },
+    };
+    expect(() => calculerDatesCampagne(tardive, 2027)).not.toThrow();
+    expect(calculerDatesCampagne(tardive, 2027)).toStrictEqual({
+      debutRecolte: d('2027-10-04'),
+      finRecolte: d('2028-01-02'),
+    });
+  });
+
+  it('semaine 53 en début de période : ramenée à la dernière semaine de l’année', () => {
+    const hiver: PlantationPerenne = {
+      datePlantation: d('2024-04-15'),
+      perenne: { ...ASPERGES_PERENNE, periodeRecolteAnnuelle: { semaineDebut: 53, semaineFin: 5 } },
+    };
+    // 2026 a 53 semaines : lundi S53 2026, dimanche S5 2027.
+    expect(calculerDatesCampagne(hiver, 2026)).toStrictEqual({
+      debutRecolte: d('2026-12-28'),
+      finRecolte: d('2027-02-07'),
+    });
+    // 2027 n'en a que 52 : lundi S52 2027, dimanche S5 2028.
+    expect(() => calculerDatesCampagne(hiver, 2027)).not.toThrow();
+    expect(calculerDatesCampagne(hiver, 2027)).toStrictEqual({
+      debutRecolte: d('2027-12-27'),
+      finRecolte: d('2028-02-06'),
+    });
+  });
+
+  it('pas de récolte avant la plantation : plantée le 2026-10-01 sans attente, S15–S24 → rien en 2026, récolte en 2027', () => {
+    const automne: PlantationPerenne = {
+      datePlantation: d('2026-10-01'),
+      perenne: { ...ASPERGES_PERENNE, anneesAvantPremiereRecolte: 0 },
+    };
+    expect(calculerDatesCampagne(automne, 2026)).toBeNull();
+    expect(calculerDatesCampagne(automne, 2027)).toStrictEqual({
+      debutRecolte: d('2027-04-12'),
+      finRecolte: d('2027-06-20'),
+    });
+  });
+
+  it('années avant première récolte négatives ou non entières : RangeError', () => {
+    for (const anneesAvantPremiereRecolte of [-1, 1.5]) {
+      const invalide: PlantationPerenne = {
+        datePlantation: d('2026-04-15'),
+        perenne: { ...ASPERGES_PERENNE, anneesAvantPremiereRecolte },
+      };
+      expect(() => calculerDatesCampagne(invalide, 2028), String(anneesAvantPremiereRecolte)).toThrow(RangeError);
+    }
+  });
+
+  it("période d'une seule semaine : du lundi au dimanche de cette semaine", () => {
+    const courte: PlantationPerenne = {
+      datePlantation: d('2026-04-15'),
+      perenne: { ...ASPERGES_PERENNE, periodeRecolteAnnuelle: { semaineDebut: 20, semaineFin: 20 } },
+    };
+    expect(calculerDatesCampagne(courte, 2028)).toStrictEqual({
+      debutRecolte: d('2028-05-15'),
+      finRecolte: d('2028-05-21'),
+    });
   });
 });
