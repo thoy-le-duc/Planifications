@@ -90,11 +90,26 @@ Réponse : « ok ». PowerSync auto-hébergé en UE, validé le 2026-09-25.
 
 Pour T14 (import) et pour vérifier le moteur sur de vraies données : quels fichiers pouvez-vous fournir ? Par exemple un export Elzéard, un tableur Excel du parcellaire (zones, chapelles, planches et dimensions), la liste des cultures et itinéraires, le plan 2026 et l'assolement des années passées. Même incomplets, dans l'état.
 
+Réponse : « il faudrait qu'on fasse quelque chose qui puisse s'adapter à toutes les fermes ». T14 réécrit en import générique : n'importe quel tableur, correspondance des colonnes et des valeurs proposée puis validée, modèle d'import réutilisable, jeu de test de six formes de fichiers. Plus de dépendance aux fichiers d'une ferme.
+
+### Q7 — Formules de besoins en semences et en plants (posée le 2026-09-25)
+
+Formules du ticket T05 :
+
+- Plants en place = longueur ÷ écartement sur le rang (arrondi en dessous) × nombre de rangs.
+- Semis direct : graines = plants × graines par poquet ÷ taux de germination, + marge de sécurité.
+- Plant maison : mottes = plants + marge ; graines = mottes × graines par motte ÷ taux de germination.
+- Plant acheté : plants à commander = plants + marge.
+- Poids = graines × poids de mille graines ÷ 1 000.
+
+Exemples : carotte en semis direct sur 30 m, 4 rangs, 3 cm, germination 80 %, marge 10 % → 4 000 plants, 5 500 graines, 6,6 g. Batavia en plant maison sur 30 m, 3 rangs, 30 cm, germination 90 %, marge 10 % → 300 plants, 330 mottes, 367 graines.
+
+Question : ces calculs sont-ils ceux que vous faites ?
+
 Réponse : _en attente_
 
 ### À suivre
 
-- Q7 — Formules de besoins en semences et en plants (T05) : à valider.
 - Q8 — Méthode de connexion (T09) : code par e-mail, lien magique, clé d'accès ou mot de passe.
 
 ## Questions ouvertes du brief

@@ -30,4 +30,4 @@ Paramètres : longueur de la série (m), rangs par planche, écartement entre pl
 
 **Hors périmètre** : stocks de semences, commandes fournisseurs, interface.
 
-**À confirmer par Théophane** : les formules ci-dessus (voir `docs/questions.md`).
+**À confirmer par Théophane** : les formules ci-dessus (Q7 dans `docs/questions.md`).
