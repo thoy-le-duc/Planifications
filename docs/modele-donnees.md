@@ -1,14 +1,15 @@
 # Modèle de données — proposition v1
 
-Proposition du 2026-09-25, à valider par Théophane (critère de sortie de la phase 0). Elle s'appuie sur les réponses Q1 à Q3 de [`questions.md`](questions.md).
+Proposition du 2026-09-25, à valider par Théophane (critère de sortie de la phase 0). Elle s'appuie sur les réponses Q1 à Q4 de [`questions.md`](questions.md).
 
-Le modèle tient en quatre blocs : **parcellaire**, **bibliothèque**, **planification**, **journal de terrain** (avec stocks et registre phyto). Une planche est une ligne de temps : ce sont les **occupations datées** qui la remplissent, et l'assolement, le semainier et les alertes se calculent à partir d'elles.
+Le modèle tient en quatre blocs : **parcellaire**, **bibliothèque**, **planification**, **journal de terrain** (avec stocks et registre phyto). Une planche est une ligne de temps : ce sont les **occupations datées** qui la remplissent. Avec l'**assolement enregistré** sur plusieurs années, elles alimentent le semainier et les alertes de rotation.
 
 ## Ce qui est déjà validé
 
 - **Découpage** : ferme → zone → emplacement (planche, rang ou gouttière). L'irrigation est une couche à part : une vanne arrose un ou plusieurs emplacements.
 - **Série** : une culture, une date, un itinéraire, une longueur d'emplacement, avec du prévu et du réel. Les pérennes ont une **plantation** pluriannuelle et une **campagne** par an.
-- **Saisies au champ** : réalisé, récolte, intervention, irrigation, traitement phyto, observation, plus le **travail du sol**. L'**assolement** doit apparaître dans le modèle.
+- **Saisies au champ** : réalisé, récolte, intervention, irrigation, traitement phyto, observation, plus le **travail du sol**.
+- **Assolement** : il se décide selon les cas par zone, par chapelle ou par planche, et il doit être **enregistré sur plusieurs années**, parce qu'on ne remet pas des choux au même endroit avant 4, 5 ou 6 ans.
 
 ## Vue d'ensemble
 
@@ -17,6 +18,7 @@ Parcellaire, bibliothèque et planification :
 ```mermaid
 erDiagram
   FERME ||--o{ ZONE : "contient"
+  ZONE |o--o{ ZONE : "contient (chapelles)"
   ZONE ||--o{ EMPLACEMENT : "contient"
   FERME ||--o{ SECTEUR_IRRIGATION : "possède"
   SECTEUR_IRRIGATION ||--o{ SECTEUR_EMPLACEMENT : "arrose"
@@ -33,9 +35,11 @@ erDiagram
   SERIE ||--o{ OCCUPATION : "occupe"
   PLANTATION ||--o{ OCCUPATION : "occupe"
   EMPLACEMENT ||--o{ OCCUPATION : "reçoit"
-  SAISON ||--o{ ASSOLEMENT_PREVU : "prévoit"
-  ZONE ||--o{ ASSOLEMENT_PREVU : "reçoit"
-  FAMILLE ||--o{ ASSOLEMENT_PREVU : "concerne"
+  SAISON ||--o{ ASSOLEMENT : "enregistre"
+  ZONE |o--o{ ASSOLEMENT : "reçoit"
+  EMPLACEMENT |o--o{ ASSOLEMENT : "reçoit"
+  FAMILLE |o--o{ ASSOLEMENT : "concerne"
+  ESPECE |o--o{ ASSOLEMENT : "précise"
 ```
 
 Journal de terrain, stocks, registre phyto et validation :
@@ -62,8 +66,8 @@ erDiagram
 | Entité | Champs principaux | Remarques |
 | --- | --- | --- |
 | Ferme | nom, fuseau horaire, position (pour la météo), unités | Chaque ligne de chaque table porte `ferme_id` : c'est la frontière de la synchro et de l'export. |
-| Zone | nom, type d'abri (plein champ, tunnel, serre, hors-sol), surface | Un tunnel, une serre, un îlot, le verger. |
-| Emplacement | code court, sorte (planche, rang, gouttière), longueur (m), largeur (m), nombre de places (gouttière), actif du / au | Le code (`T2-P03`) est unique dans la ferme : c'est ce que la voix reconnaît (« planche 3 du tunnel 2 »). |
+| Zone | nom, zone parente (facultative), type d'abri (plein champ, tunnel, serre, hors-sol), surface | Un tunnel, une serre, un îlot, le verger. Une zone peut contenir des sous-zones : une serre multichapelle contient ses chapelles, un îlot ses sous-îlots. |
+| Emplacement | code court, sorte (planche, rang, gouttière), longueur (m), largeur (m), nombre de places (gouttière), actif du / au, remplace (anciens emplacements) | Le code (`T2-P03`) est unique dans la ferme : c'est ce que la voix reconnaît (« planche 3 du tunnel 2 »). Le lien « remplace » garde l'historique de rotation quand on redessine des planches. |
 | Secteur d'irrigation | numéro de vanne, nom, débit (facultatif), adresse Modbus (phase 3) | Les 60 vannes. |
 | Secteur ↔ emplacement | secteur, emplacement, du / au | Plusieurs emplacements par vanne, éventuellement dans plusieurs zones. Datée pour garder l'historique si le réseau change. |
 
@@ -71,8 +75,8 @@ erDiagram
 
 | Entité | Champs principaux | Remarques |
 | --- | --- | --- |
-| Famille botanique | nom, délai de retour (années) | Sert aux alertes de rotation. |
-| Espèce | nom, famille, catégorie (légume, petit fruit, fruit, fleur, aromatique, engrais vert), pérenne oui/non, unité de récolte par défaut (kg, botte, pièce, barquette) | Les engrais verts sont des espèces comme les autres : ils comptent dans la rotation. |
+| Famille botanique | nom, délai de retour minimal (années), délai de retour conseillé (années) | Sert aux alertes de rotation. Réglable par ferme. |
+| Espèce | nom, famille, catégorie (légume, petit fruit, fruit, fleur, aromatique, engrais vert), pérenne oui/non, unité de récolte par défaut (kg, botte, pièce, barquette), délais de retour propres (facultatifs) | Les engrais verts sont des espèces comme les autres : ils comptent dans la rotation. Les délais de l'espèce remplacent ceux de la famille quand ils sont remplis (choux : 4 ans minimum, 6 conseillés). |
 | Variété | espèce, nom, fournisseur, poids de mille graines, taux de germination | |
 | Itinéraire technique | espèce, variété (facultative), nom, mode (semis direct, plant maison, plant acheté), période d'usage (semaines), type d'abri, durée en pépinière (jours), durée avant récolte (jours), fenêtre de récolte (jours), écartement rangs et plants (cm), rangs par planche, graines par motte, marge de sécurité (%), rendement attendu (par m ou par plant) | Pour les pérennes : années avant la première récolte (asperges), période de récolte annuelle, rendement par plant et par an. |
 
@@ -87,9 +91,11 @@ La bibliothèque de référence (base INRAE Pépinière-Mesclun) est en lecture 
 | Plantation | espèce, variété, date de plantation, nombre de plants, date d'arrachage (vide tant qu'elle est en place) | Kiwis, asperges, pivoines, fraisiers conservés plusieurs années. |
 | Campagne | plantation, année, dates de récolte prévues, rendement prévu | Porte la taille, les récoltes et le rendement de l'année. |
 | Occupation | emplacement, série **ou** plantation, longueur (m) ou nombre de places, position sur la planche (facultative), du / au prévus, du / au réels | Le cœur de la dimension temporelle, voir ci-dessous. |
-| Assolement prévu | saison, zone (ou emplacement), famille ou groupe de cultures | Facultatif : le plan de rotation sur plusieurs années, décidé avant de détailler les séries. |
+| Assolement | saison, cible (zone, chapelle ou emplacement), famille ou espèce, nature (prévu, passé saisi, passé importé) | Enregistré, jamais effacé. Il sert à planifier la rotation avant de détailler les séries, et à garder l'historique des années où aucune série n'existe dans l'appli. |
 
 L'ancre permet de planifier à rebours : « je veux des batavias à partir de la semaine 22 » donne la date de plantation et la date de semis en pépinière.
+
+L'assolement enregistré est indispensable dès le premier jour. Quand une ferme arrive, l'appli ne connaît aucune de ses séries passées. Pour savoir que des choux étaient dans la chapelle 3 en 2023, il faut pouvoir le saisir ou l'importer en une ligne, sans recréer la série.
 
 ## 4. La dimension temporelle des planches
 
@@ -112,7 +118,7 @@ T2-P03 (30 m)            S10   S14   S18   S22   S26   S30   S34
 Ce que le moteur en tire :
 
 - **Conflit d'occupation** : deux occupations qui se chevauchent dans le temps et dont les longueurs dépassent celle de la planche (ou dont les positions se recouvrent).
-- **Alerte de rotation** : même famille botanique sur le même emplacement avant la fin du délai de retour.
+- **Alerte de rotation** : même famille (ou même espèce si elle a ses propres délais) sur le même endroit avant la fin du délai de retour. Le moteur lit, sur plusieurs années, les occupations réelles et l'assolement enregistré, pour la planche elle-même et pour sa chapelle et sa zone. Des choux notés sur toute la chapelle 3 en 2023 concernent donc chacune de ses planches. En dessous du délai minimal, l'alerte est rouge ; entre le minimal et le conseillé, elle est orange.
 - **Décalage** : quand un réalisé arrive en retard, les dates prévues restantes de la série et de son occupation glissent d'autant.
 
 Les dates prévues d'une occupation sont recalculées par le moteur à chaque changement de la série, jamais saisies à la main. Elles sont stockées pour que la vue 2D planches × semaines s'affiche vite.
@@ -170,12 +176,12 @@ Le stock n'est jamais un compteur stocké : c'est la somme des mouvements. Deux 
 | Vue | Calculée à partir de |
 | --- | --- |
 | Semainier (semis, plantations, récoltes de la semaine) | dates prévues des séries et campagnes, moins les réalisés déjà saisis |
-| Assolement réel | occupations par emplacement et par saison, avec la famille de chaque culture |
+| Assolement réel (vue par année) | occupations par emplacement et par saison, complétées par l'assolement passé enregistré |
 | Besoins en semences et en plants | longueurs des séries + densité, graines par motte, germination et marge de l'itinéraire |
 | Stock | somme des mouvements |
 | Alertes (rotation, conflit, délai avant récolte) | occupations, familles, traitements |
 
-## Questions ouvertes
+## Choix par défaut, modifiables
 
-- L'assolement prévu se décide-t-il par zone, par emplacement, ou pas du tout (l'assolement réel suffit) ?
-- Faut-il des catégories de récolte (calibre, catégorie I ou II) dès la phase 1, ou l'unité suffit-elle ?
+- Catégorie de récolte (calibre, catégorie I ou II) : champ facultatif dès la phase 1, sans liste imposée.
+- Profondeur des sous-zones : libre dans le modèle ; l'interface propose deux niveaux (zone puis chapelle ou sous-îlot).

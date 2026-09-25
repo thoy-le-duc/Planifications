@@ -61,6 +61,19 @@ Proposition complète dans [`modele-donnees.md`](modele-donnees.md).
 
 Question : qu'est-ce qui cloche dans ce modèle ? Point le moins sûr : l'assolement prévu (par zone, par emplacement, ou pas du tout).
 
+Réponse : « ça dépend : par zone, par chapelle, par planche. Et il faut stocker l'assolement, car par exemple on ne remet pas des choux au même endroit avant 4, 5 ou 6 ans. »
+
+Corrections apportées au modèle :
+
+- Une zone peut contenir des sous-zones (serre multichapelle → chapelles).
+- L'assolement est une table enregistrée, jamais effacée, à n'importe quel niveau (zone, chapelle, planche), prévu ou passé ; l'historique des années antérieures à l'appli se saisit ou s'importe en une ligne.
+- Délais de retour minimal et conseillé par famille, remplaçables par espèce (choux : 4 minimum, 6 conseillés) ; alerte rouge ou orange.
+- Un emplacement redessiné garde le lien vers ceux qu'il remplace, pour ne pas perdre l'historique de rotation.
+
+### Q4 bis — Validation finale du modèle (posée le 2026-09-25)
+
+Question : avec ces corrections, le modèle est-il validé ?
+
 Réponse : _en attente_
 
 ## Questions ouvertes du brief
