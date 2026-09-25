@@ -37,8 +37,16 @@
  *       l'emplacement : le semis pépinière n'intervient jamais ;
  *     - reel = null tant que la mise en place n'est pas réalisée ; sinon
  *       { du: realises.miseEnPlace, au: realises.finRecolte ?? null } ;
- *     - RangeError : longueur ≤ 0 ou non finie ; nombre de places non entier (gouttière) ;
- *       position négative ou non finie ; position sur une gouttière.
+ *       la fin réelle vient TOUJOURS de `realises.finRecolte` : c'est à l'appelant de la tirer de
+ *       l'événement d'arrachage (`realise` d'étape 'arrachage') avant d'appeler ;
+ *     - RangeError (validation de la place, commune aux trois fonctions) :
+ *         longueur non finie ou < 0,01 m (un centimètre, la résolution du moteur) ;
+ *         nombre de places non entier ou ≤ 0 (gouttière) ;
+ *         position négative ou non finie ; position sur une gouttière ;
+ *         position + longueur > emplacement.longueurM (comparé en centimètres entiers :
+ *         10 m posés à 20 m sur 30 m passent, à 25 m ils dépassent) ;
+ *     - RangeError propre à la série : fin réelle (realises.finRecolte) STRICTEMENT avant la
+ *       mise en place réelle (realises.miseEnPlace). Le même jour est permis (durée nulle).
  *
  *   occupationDePlantation(
  *     plantation: Plantation,
@@ -61,7 +69,7 @@
  *     - prevuDu = evenement.date ; prevuAu = evenement.date + detail.dureeOccupationJours ;
  *       reel = null ;
  *     - RangeError si l'événement n'est pas une intervention de couverture, ou si sa durée
- *       d'occupation est `null` (couverture courte : pas d'occupation).
+ *       d'occupation est `null` (couverture courte : pas d'occupation) ou ≤ 0.
  *
  *   periodeOccupation(occupation: Pick<Occupation, 'prevuDu' | 'prevuAu' | 'reel'>):
  *     { readonly du: DateCalendaire; readonly au: DateCalendaire | null }   (pure)
@@ -71,6 +79,10 @@
  *     Convention des intervalles (toute la T03) : `au` est le jour où l'emplacement se libère.
  *     Deux périodes A et B se recouvrent si et seulement si du(A) < au(B) et du(B) < au(A)
  *     (`au: null` = +∞) : arracher et replanter le même jour ne se recouvre pas.
+ *
+ *     RÈGLE DE LECTURE : la période d'une occupation se lit TOUJOURS par `periodeOccupation`,
+ *     jamais par `prevuDu` / `prevuAu` directement. `prevuAu` peut valoir DATE_SANS_FIN (sentinelle
+ *     de stockage, pas une vraie date), et le réel prime sur le prévu.
  *
  * Le module n'est pas obligé d'être ré-exporté par `packages/core/src/index.ts` (périmètre T03).
  */
@@ -318,6 +330,35 @@ describe('occupationDeSerie', () => {
     expect(() => occupationDeSerie(s, P03, 10, -1)).toThrow(RangeError);
     expect(() => occupationDeSerie(s, gouttiere('G-07', 20), 2.5)).toThrow(RangeError);
     expect(() => occupationDeSerie(s, gouttiere('G-07', 20), 4, 0)).toThrow(RangeError);
+    expect(() => occupationDeSerie(s, gouttiere('G-07', 20), 0)).toThrow(RangeError);
+  });
+
+  it('longueur minimale : un centimètre', () => {
+    const s = serie('batavia-1', BATAVIA_PREVU);
+    expect(() => occupationDeSerie(s, P03, 0.009)).toThrow(RangeError);
+    expect(() => occupationDeSerie(s, P03, 0.004)).toThrow(RangeError);
+    expect(occupationDeSerie(s, P03, 0.01).place).toEqual({ unite: 'longueur', longueurM: 0.01 });
+  });
+
+  it('refuse un tronçon qui dépasse l’emplacement', () => {
+    const s = serie('batavia-1', BATAVIA_PREVU);
+    expect(() => occupationDeSerie(s, P03, 10, 25)).toThrow(RangeError);
+    expect(() => occupationDeSerie(s, P03, 30.01, 0)).toThrow(RangeError);
+    expect(() => occupationDeSerie(s, P03, 10, 30)).toThrow(RangeError);
+    // Pile à la limite : 20 + 10 = 30 m, et 5,1 + 16,1 = 21,2 m sans erreur de flottant.
+    expect(occupationDeSerie(s, P03, 10, 20).positionM).toBe(20);
+    expect(occupationDeSerie(s, planche('P-21', 21.2), 16.1, 5.1).positionM).toBe(5.1);
+  });
+
+  it('refuse une fin réelle avant la mise en place réelle', () => {
+    const s = serie('batavia-2', BATAVIA_PREVU);
+    expect(() =>
+      occupationDeSerie(s, P03, 15, 15, { miseEnPlace: d('2027-04-12'), finRecolte: d('2027-04-10') }),
+    ).toThrow(RangeError);
+    // Le même jour : durée nulle, permise.
+    expect(
+      occupationDeSerie(s, P03, 15, 15, { miseEnPlace: d('2027-04-12'), finRecolte: d('2027-04-12') }).reel,
+    ).toEqual({ du: d('2027-04-12'), au: d('2027-04-12') });
   });
 });
 
@@ -359,6 +400,9 @@ describe('occupationDePlantation', () => {
     expect(() => occupationDePlantation(p, P03, 0)).toThrow(RangeError);
     expect(() => occupationDePlantation(p, gouttiere('G-07', 20), 1.5)).toThrow(RangeError);
     expect(() => occupationDePlantation(p, gouttiere('G-07', 20), 3, 2)).toThrow(RangeError);
+    expect(() => occupationDePlantation(p, P03, 0.005)).toThrow(RangeError);
+    expect(() => occupationDePlantation(p, P03, 10, 25)).toThrow(RangeError);
+    expect(occupationDePlantation(p, P03, 10, 20).positionM).toBe(20);
   });
 });
 
@@ -389,6 +433,18 @@ describe('occupationDeCouverture', () => {
       detail: { categorie: 'entretien', type: 'désherbage', outil: null },
     };
     expect(() => occupationDeCouverture(desherbage, P03, 30)).toThrow(RangeError);
+  });
+
+  it('refuse une durée d’occupation nulle ou négative', () => {
+    expect(() => occupationDeCouverture(couverture('bache', '2027-02-01', 0), P03, 30)).toThrow(RangeError);
+    expect(() => occupationDeCouverture(couverture('bache', '2027-02-01', -5), P03, 30)).toThrow(RangeError);
+  });
+
+  it('refuse une place impossible, comme les autres occupations', () => {
+    const bache = couverture('bache', '2027-02-01', 42);
+    expect(() => occupationDeCouverture(bache, P03, 0.009)).toThrow(RangeError);
+    expect(() => occupationDeCouverture(bache, P03, 30, 0.5)).toThrow(RangeError);
+    expect(occupationDeCouverture(bache, P03, 29.5, 0.5).positionM).toBe(0.5);
   });
 });
 

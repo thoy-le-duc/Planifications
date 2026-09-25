@@ -4,7 +4,8 @@
  *
  * API attendue, exportée par `packages/core/src/planification/conflits.ts` :
  *
- *   type SorteConflit = 'chevauchement' | 'surcharge' | 'emplacement_inactif'
+ *   type SorteConflit =
+ *     | 'chevauchement' | 'surcharge' | 'depassement' | 'emplacement_inactif' | 'periode_invalide'
  *
  *   interface Conflit {
  *     readonly sorte: SorteConflit;
@@ -16,37 +17,58 @@
  *
  *   detecterConflits(emplacement: Emplacement, occupations: readonly Occupation[]): Conflit[]   (pure)
  *
+ * Usage prévu : un appel par emplacement, avec les occupations de cet emplacement (l'appelant les
+ * a déjà par emplacement, c'est ainsi que la vue 2D les lit). Les occupations d'un autre
+ * emplacement sont tolérées et ignorées, mais ce n'est pas le chemin mesuré en performance.
+ *
  * Règles :
  *   - Seules comptent les occupations de CET emplacement (`emplacementId`) et non supprimées
  *     (`supprimeLe === null`) : les autres sont ignorées, sans erreur.
- *   - Période d'une occupation = `periodeOccupation` (occupations.ts) : réel prioritaire sur le
- *     prévu, `au` = jour où l'emplacement se libère, DATE_SANS_FIN = sans fin. Deux occupations
- *     ne sont présentes ensemble que si du(A) < au(B) et du(B) < au(A) : arracher et replanter
- *     le même jour ne fait pas de conflit.
+ *   - Période d'une occupation = `periodeOccupation` (occupations.ts), JAMAIS `prevuAu` lu
+ *     directement (DATE_SANS_FIN est une sentinelle de stockage) : réel prioritaire sur le prévu,
+ *     `au` = jour où l'emplacement se libère, `null` = sans fin. Deux occupations ne sont
+ *     présentes ensemble que si du(A) < au(B) et du(B) < au(A) : arracher et replanter le même
+ *     jour ne fait pas de conflit.
+ *   - Période de durée nulle (du = au) : occupation ignorée, sans conflit.
+ *   - 'periode_invalide' : période inversée (du > au), erreur de données. L'occupation n'est pas
+ *     écartée en silence : un conflit avec cette seule occupation, `du` et `au` recopiés TELS
+ *     QUELS depuis `periodeOccupation` (donc du > au), pour que l'écran montre la donnée fautive.
+ *     Elle ne participe à aucun autre conflit. detecterConflits ne lève jamais pour ça.
  *   - Longueurs et positions comparées en CENTIMÈTRES ENTIERS (mètres × 100, arrondis) : aucune
  *     erreur de flottant (5,1 m + 16,1 m tiennent sur 21,2 m).
  *   - 'chevauchement' : deux occupations présentes ensemble, TOUTES DEUX avec une position, dont
  *     les tronçons [positionM, positionM + longueurM[ se recouvrent (0–15 m et 15–30 m se
- *     touchent sans se recouvrir). En cause : les occupations positionnées qui se recouvrent.
+ *     touchent sans se recouvrir). En cause : une GRAPPE de tronçons reliés par recouvrement ;
+ *     deux grappes disjointes au même moment (0–10/5–15 et 20–25/22–27) font deux conflits.
  *   - 'surcharge' : à un moment donné, au moins une occupation présente est SANS position et la
  *     somme des places présentes (positionnées ou non) dépasse la capacité : `longueurM` pour une
  *     planche ou un rang, `nombrePlaces` pour une gouttière. En cause : toutes les occupations
  *     présentes à ce moment-là. (Si toutes ont une position, seul le chevauchement s'applique.)
- *   - Regroupement : pour une même sorte, les moments en conflit qui se suivent sans interruption
- *     forment UN seul conflit, dont `occupations` est l'union des occupations en cause et
- *     [du, au[ la période totale. C'est ce qui donne, dans l'exemple du ticket, un conflit unique
- *     « tomate + deux batavias du 2027-06-01 au 2027-06-21 ».
+ *   - 'depassement' : occupation positionnée dont le tronçon sort de l'emplacement
+ *     (positionM + longueurM > emplacement.longueurM), par exemple après qu'une planche a été
+ *     redessinée plus courte. Un conflit par occupation, sur toute sa période. (Les fonctions
+ *     occupationDe… refusent déjà ce cas à la création ; ce conflit couvre les lignes déjà
+ *     enregistrées.) Une occupation sans position trop longue reste une 'surcharge'.
+ *   - Regroupement : pour une même sorte, une tranche de temps en conflit PROLONGE un conflit
+ *     ouvert seulement si elle le suit sans interruption ET partage au moins une occupation avec
+ *     lui ; `occupations` est alors l'union, [du, au[ la période totale. Sinon, c'est un nouveau
+ *     conflit : A+B de janvier à mars puis C+D de mars à mai font deux conflits. L'exemple du
+ *     ticket reste un conflit unique « tomate + deux batavias du 2027-06-01 au 2027-06-21 »
+ *     (la tomate est commune aux deux tranches).
  *   - 'emplacement_inactif' (« emplacement supprimé ») : l'emplacement est actif sur
  *     [actifDu, actifAu[ (actifAu null = sans fin). Pour chaque occupation qui en déborde, un
  *     conflit par côté, avec cette seule occupation et la partie hors de la période active :
  *       avant : { du: du(occ), au: min(au(occ), actifDu) }
  *       après : { du: max(du(occ), actifAu), au: au(occ) }
  *     Une occupation qui finit le jour de actifAu ne déborde pas.
- *   - Ordre du résultat : par `du` croissant, puis sorte (chevauchement, surcharge,
- *     emplacement_inactif), puis rang dans la liste d'entrée de la première occupation en cause.
- *     Aucun conflit : tableau vide.
+ *     Emplacement en suppression douce (`supprimeLe` renseigné) : inactif partout ; chaque
+ *     occupation (non supprimée, de période valide et non nulle) donne UN conflit sur toute sa
+ *     période, à la place des conflits par côté.
+ *   - Ordre du résultat : par `du` croissant, puis sorte (chevauchement, surcharge, depassement,
+ *     emplacement_inactif, periode_invalide), puis rang dans la liste d'entrée de la première
+ *     occupation en cause. Aucun conflit : tableau vide.
  *   - Performance : 3 000 occupations sur 400 emplacements (un appel par emplacement) en moins
- *     de 50 ms.
+ *     de 50 ms, meilleure de 5 mesures après échauffement.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { ajouterJours, analyserDate } from '../dates/index.ts';
@@ -81,13 +103,14 @@ const FERME = id<'Ferme'>('ferme');
 interface OptionsEmplacement {
   readonly actifDu?: string;
   readonly actifAu?: string | null;
+  readonly supprime?: boolean;
 }
 
 function planche(code: string, longueurM: number, options: OptionsEmplacement = {}): Emplacement {
   return {
     id: id<'Emplacement'>(code),
     fermeId: FERME,
-    supprimeLe: null,
+    supprimeLe: options.supprime === true ? 1_790_000_000_000 : null,
     zoneId: id<'Zone'>('tunnel-2'),
     code,
     sorte: 'planche',
@@ -206,7 +229,9 @@ const P03 = planche('T2-P03', 30);
 
 describe('types', () => {
   it('forme d’un conflit', () => {
-    expectTypeOf<SorteConflit>().toEqualTypeOf<'chevauchement' | 'surcharge' | 'emplacement_inactif'>();
+    expectTypeOf<SorteConflit>().toEqualTypeOf<
+      'chevauchement' | 'surcharge' | 'depassement' | 'emplacement_inactif' | 'periode_invalide'
+    >();
     expectTypeOf<Conflit['occupations']>().toEqualTypeOf<readonly Id<'Occupation'>[]>();
     expectTypeOf<Conflit['emplacementId']>().toEqualTypeOf<Id<'Emplacement'>>();
     expectTypeOf<Conflit['du']>().toEqualTypeOf<DateCalendaire>();
@@ -597,6 +622,170 @@ describe('emplacement inactif (« emplacement supprimé »)', () => {
 });
 
 // ---------------------------------------------------------------------------------------------
+// Dépassement de l'emplacement
+// ---------------------------------------------------------------------------------------------
+
+describe('dépassement de l’emplacement (occupation déjà enregistrée)', () => {
+  it('10 m posés à 25 m sur une planche de 30 m : dépassement sur toute la période', () => {
+    const a = occ('a', P03, { longueurM: 10, positionM: 25, du: '2027-04-01', au: '2027-06-01' });
+    expect(detecterConflits(P03, [a])).toEqual([conflit('depassement', P03, ['a'], '2027-04-01', '2027-06-01')]);
+  });
+
+  it('0–30 m et 30–40 m sur 30 m : seule la seconde dépasse, pas de chevauchement', () => {
+    const a = occ('a', P03, { longueurM: 30, positionM: 0, du: '2027-04-01', au: '2027-06-01' });
+    const b = occ('b', P03, { longueurM: 10, positionM: 30, du: '2027-04-01', au: '2027-06-01' });
+    expect(detecterConflits(P03, [a, b])).toEqual([conflit('depassement', P03, ['b'], '2027-04-01', '2027-06-01')]);
+  });
+
+  it('planche redessinée plus courte : les occupations d’avant dépassent', () => {
+    const courte = planche('T2-P03', 20);
+    const a = occ('a', courte, { longueurM: 15, positionM: 0, du: '2027-04-05', au: '2027-06-07' });
+    const b = occ('b', courte, { longueurM: 15, positionM: 15, du: '2027-04-19', au: '2027-06-21' });
+    expect(detecterConflits(courte, [a, b])).toEqual([
+      conflit('depassement', courte, ['b'], '2027-04-19', '2027-06-21'),
+    ]);
+  });
+
+  it('pile à la limite (20 m + 10 m sur 30 m) : pas de dépassement', () => {
+    const a = occ('a', P03, { longueurM: 10, positionM: 20, du: '2027-04-01', au: '2027-06-01' });
+    expect(detecterConflits(P03, [a])).toEqual([]);
+  });
+
+  it('pérenne sans fin qui dépasse : au null', () => {
+    const a = occ('a', P03, { longueurM: 10, positionM: 25, du: '2026-03-01', au: DATE_SANS_FIN });
+    expect(detecterConflits(P03, [a])).toEqual([conflit('depassement', P03, ['a'], '2026-03-01', null)]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Conflits indépendants
+// ---------------------------------------------------------------------------------------------
+
+describe('des conflits indépendants ne se fusionnent pas', () => {
+  it('deux grappes de tronçons au même moment : deux conflits', () => {
+    const a = occ('a', P03, { longueurM: 10, positionM: 0, du: '2027-04-01', au: '2027-06-01' });
+    const b = occ('b', P03, { longueurM: 10, positionM: 5, du: '2027-04-01', au: '2027-06-01' });
+    const c = occ('c', P03, { longueurM: 5, positionM: 20, du: '2027-04-01', au: '2027-06-01' });
+    const dd = occ('d', P03, { longueurM: 5, positionM: 22, du: '2027-04-01', au: '2027-06-01' });
+    expect(detecterConflits(P03, [a, b, c, dd])).toEqual([
+      conflit('chevauchement', P03, ['a', 'b'], '2027-04-01', '2027-06-01'),
+      conflit('chevauchement', P03, ['c', 'd'], '2027-04-01', '2027-06-01'),
+    ]);
+  });
+
+  it('deux grappes décalées dans le temps restent distinctes', () => {
+    const a = occ('a', P03, { longueurM: 10, positionM: 0, du: '2027-04-01', au: '2027-06-01' });
+    const b = occ('b', P03, { longueurM: 10, positionM: 5, du: '2027-04-01', au: '2027-06-01' });
+    const c = occ('c', P03, { longueurM: 5, positionM: 20, du: '2027-05-01', au: '2027-07-01' });
+    const dd = occ('d', P03, { longueurM: 5, positionM: 22, du: '2027-05-01', au: '2027-07-01' });
+    expect(detecterConflits(P03, [a, b, c, dd])).toEqual([
+      conflit('chevauchement', P03, ['a', 'b'], '2027-04-01', '2027-06-01'),
+      conflit('chevauchement', P03, ['c', 'd'], '2027-05-01', '2027-07-01'),
+    ]);
+  });
+
+  it('A et B de janvier à mars, puis C et D de mars à mai, sans position : deux surcharges', () => {
+    const a = occ('a', P03, { longueurM: 20, du: '2027-01-01', au: '2027-03-01' });
+    const b = occ('b', P03, { longueurM: 20, du: '2027-01-01', au: '2027-03-01' });
+    const c = occ('c', P03, { longueurM: 20, du: '2027-03-01', au: '2027-05-01' });
+    const dd = occ('d', P03, { longueurM: 20, du: '2027-03-01', au: '2027-05-01' });
+    expect(detecterConflits(P03, [a, b, c, dd])).toEqual([
+      conflit('surcharge', P03, ['a', 'b'], '2027-01-01', '2027-03-01'),
+      conflit('surcharge', P03, ['c', 'd'], '2027-03-01', '2027-05-01'),
+    ]);
+  });
+
+  it('A et B de janvier à mars, puis C et D de mars à mai, positionnés : deux chevauchements', () => {
+    const a = occ('a', P03, { longueurM: 10, positionM: 0, du: '2027-01-01', au: '2027-03-01' });
+    const b = occ('b', P03, { longueurM: 10, positionM: 5, du: '2027-01-01', au: '2027-03-01' });
+    const c = occ('c', P03, { longueurM: 10, positionM: 0, du: '2027-03-01', au: '2027-05-01' });
+    const dd = occ('d', P03, { longueurM: 10, positionM: 5, du: '2027-03-01', au: '2027-05-01' });
+    expect(detecterConflits(P03, [a, b, c, dd])).toEqual([
+      conflit('chevauchement', P03, ['a', 'b'], '2027-01-01', '2027-03-01'),
+      conflit('chevauchement', P03, ['c', 'd'], '2027-03-01', '2027-05-01'),
+    ]);
+  });
+
+  it('une occupation commune relie les tranches : un seul conflit', () => {
+    // B reste en place et recouvre A, puis C : c'est le même problème qui se prolonge.
+    const a = occ('a', P03, { longueurM: 10, positionM: 0, du: '2027-01-01', au: '2027-03-01' });
+    const b = occ('b', P03, { longueurM: 10, positionM: 5, du: '2027-01-01', au: '2027-05-01' });
+    const c = occ('c', P03, { longueurM: 10, positionM: 10, du: '2027-03-01', au: '2027-05-01' });
+    expect(detecterConflits(P03, [a, b, c])).toEqual([
+      conflit('chevauchement', P03, ['a', 'b', 'c'], '2027-01-01', '2027-05-01'),
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Périodes invalides
+// ---------------------------------------------------------------------------------------------
+
+describe('période inversée ou nulle', () => {
+  it('période prévue inversée : conflit periode_invalide, dates recopiées telles quelles', () => {
+    const a = occ('a', P03, { du: '2027-06-01', au: '2027-04-01' });
+    const b = occ('b', P03, { du: '2027-04-15', au: '2027-05-15' });
+    expect(detecterConflits(P03, [a, b])).toEqual([
+      conflit('periode_invalide', P03, ['a'], '2027-06-01', '2027-04-01'),
+    ]);
+  });
+
+  it('période réelle inversée : même traitement, le réel prime', () => {
+    const a = occ('a', P03, { du: '2027-04-01', au: '2027-06-01', reel: { du: '2027-04-10', au: '2027-04-05' } });
+    expect(detecterConflits(P03, [a])).toEqual([conflit('periode_invalide', P03, ['a'], '2027-04-10', '2027-04-05')]);
+  });
+
+  it('elle ne compte ni en surcharge, ni en dépassement, ni hors période active', () => {
+    const p = planche('T2-P03', 30, { actifAu: '2027-05-01' });
+    const a = occ('a', p, { longueurM: 10, positionM: 25, du: '2027-06-01', au: '2027-04-01' });
+    expect(detecterConflits(p, [a])).toEqual([conflit('periode_invalide', p, ['a'], '2027-06-01', '2027-04-01')]);
+  });
+
+  it('période de durée nulle : ignorée, sans conflit', () => {
+    const a = occ('a', P03, { du: '2027-04-01', au: '2027-04-01' });
+    const b = occ('b', P03, { du: '2027-03-01', au: '2027-06-01' });
+    expect(detecterConflits(P03, [a, b])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Emplacement en suppression douce
+// ---------------------------------------------------------------------------------------------
+
+describe('emplacement en suppression douce', () => {
+  const supprime = planche('T2-P03', 30, { supprime: true });
+
+  it('chaque occupation non supprimée donne un conflit emplacement_inactif sur toute sa période', () => {
+    const a = occ('a', supprime, { longueurM: 10, du: '2027-04-01', au: '2027-06-01' });
+    const b = occ('b', supprime, { longueurM: 10, du: '2027-03-01', au: '2027-05-01' });
+    expect(detecterConflits(supprime, [a, b])).toEqual([
+      conflit('emplacement_inactif', supprime, ['b'], '2027-03-01', '2027-05-01'),
+      conflit('emplacement_inactif', supprime, ['a'], '2027-04-01', '2027-06-01'),
+    ]);
+  });
+
+  it('un seul conflit par occupation, même si elle déborde aussi de actifAu', () => {
+    const fermeeEtSupprimee = planche('T2-P03', 30, { supprime: true, actifAu: '2027-05-01' });
+    const a = occ('a', fermeeEtSupprimee, { longueurM: 10, du: '2027-04-01', au: '2027-06-01' });
+    expect(detecterConflits(fermeeEtSupprimee, [a])).toEqual([
+      conflit('emplacement_inactif', fermeeEtSupprimee, ['a'], '2027-04-01', '2027-06-01'),
+    ]);
+  });
+
+  it('pérenne sans fin : conflit sans fin', () => {
+    const kiwis = occ('kiwis', supprime, { du: '2022-03-01', au: DATE_SANS_FIN });
+    expect(detecterConflits(supprime, [kiwis])).toEqual([
+      conflit('emplacement_inactif', supprime, ['kiwis'], '2022-03-01', null),
+    ]);
+  });
+
+  it('les occupations supprimées y sont ignorées', () => {
+    const a = occ('a', supprime, { du: '2027-04-01', au: '2027-06-01', supprimee: true });
+    expect(detecterConflits(supprime, [a])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
 // Filtrage et cas limites
 // ---------------------------------------------------------------------------------------------
 
@@ -692,9 +881,14 @@ describe('performance', () => {
       analyser();
     }
 
-    const debut = performance.now();
-    const conflits = analyser();
-    const duree = performance.now() - debut;
+    // Meilleure de 5 mesures : on juge l'algorithme, pas un ramasse-miettes ou une machine chargée.
+    let duree = Number.POSITIVE_INFINITY;
+    let conflits: Conflit[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      const debut = performance.now();
+      conflits = analyser();
+      duree = Math.min(duree, performance.now() - debut);
+    }
 
     // Le jeu est assez dense pour produire des conflits : l'algorithme a vraiment travaillé.
     expect(conflits.length).toBeGreaterThan(0);
