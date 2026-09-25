@@ -86,6 +86,17 @@ Question : on part sur PowerSync ?
 
 Réponse : « ok ». PowerSync auto-hébergé en UE, validé le 2026-09-25.
 
+### Q6 — Données réelles des Jardins de Garonne (posée le 2026-09-25)
+
+Pour T14 (import) et pour vérifier le moteur sur de vraies données : quels fichiers pouvez-vous fournir ? Par exemple un export Elzéard, un tableur Excel du parcellaire (zones, chapelles, planches et dimensions), la liste des cultures et itinéraires, le plan 2026 et l'assolement des années passées. Même incomplets, dans l'état.
+
+Réponse : _en attente_
+
+### À suivre
+
+- Q7 — Formules de besoins en semences et en plants (T05) : à valider.
+- Q8 — Méthode de connexion (T09) : code par e-mail, lien magique, clé d'accès ou mot de passe.
+
 ## Questions ouvertes du brief
 
 - Nom du produit.
