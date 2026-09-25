@@ -49,21 +49,27 @@ interface MesuresSqlite {
 
 const DUREES = ['ouvertureMs', 'requete2dMs', 'semainierMs', 'insertionMs'] as const;
 
-/** Chargement de 36 000 lignes avec le CPU ralenti : large marge. */
-const DELAI_MESURE_MS = 240_000;
+/**
+ * Une mesure dure environ 7 s avec le CPU ralenti. 90 s de marge : un blocage échoue vite,
+ * sans manger le job CI de 15 minutes.
+ */
+const DELAI_MESURE_MS = 90_000;
+
+/** Temps laissé au service worker pour s'installer et précacher, après `ready`. */
+const ATTENTE_PRECACHE_MS = 1_500;
 
 const dossierRapport = join(import.meta.dirname, '..', 'test-results');
 
 for (const variante of VARIANTES) {
   test(`mesure SQLite, variante ${variante}, CPU ralenti`, async ({ page }) => {
-    test.setTimeout(DELAI_MESURE_MS + 30_000);
+    test.setTimeout(DELAI_MESURE_MS);
     await ralentirCpu(page);
     await page.goto(`/mesures/sqlite.html?variante=${variante}`);
 
     const poignee = await page.waitForFunction(
       () => (window as unknown as { __mesuresSqlite?: unknown }).__mesuresSqlite,
       undefined,
-      { timeout: DELAI_MESURE_MS },
+      { timeout: DELAI_MESURE_MS - 10_000 },
     );
     const brut: unknown = await poignee.jsonValue();
     expect(brut, 'window.__mesuresSqlite doit être un objet').toBeInstanceOf(Object);
@@ -78,6 +84,10 @@ for (const variante of VARIANTES) {
       expect(Number.isFinite(ms), cle).toBe(true);
       expect(ms, cle).toBeGreaterThan(0);
     }
+    // La page de mesure reste hors du service worker : aucun ne doit s'y installer.
+    const inscriptions = await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length);
+    expect(inscriptions, 'service worker inscrit sur la page de mesure').toBe(0);
+
     // La requête 2D doit vraiment ramener des occupations, sinon la mesure ne vaut rien.
     expect(resultat.lignes2d).toBeGreaterThan(0);
     expect(typeof resultat.lignesSemainier).toBe('number');
@@ -97,15 +107,21 @@ for (const variante of VARIANTES) {
   });
 }
 
-test('le WASM SQLite ne se charge pas au démarrage de l’appli', async ({ page }) => {
+test('le WASM SQLite ne se charge pas au démarrage de l’appli', async ({ page, context }) => {
+  // Écoute au niveau du contexte : couvre aussi les requêtes du service worker (précache).
   const requetes: Request[] = [];
-  page.on('request', (r) => requetes.push(r));
+  context.on('request', (r) => requetes.push(r));
   await ralentirCpu(page);
   await page.goto('/');
   await tempsAppPrete(page);
+  // Le service worker précache à son installation : on attend qu'il soit prêt, puis un instant.
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.waitForTimeout(ATTENTE_PRECACHE_MS);
 
   const suspectes = requetes
     .map((r) => r.url())
-    .filter((url) => /\.wasm(\?|$)|powersync|wa-sqlite|\/mesures\//i.test(url));
-  expect(suspectes, 'requêtes SQLite ou mesure avant l’affichage de l’appli').toEqual([]);
+    .filter((url) => /\.wasm(\?|$)|powersync|wa-sqlite|\/mesures\/|\/assets\/sqlite\//i.test(url));
+  expect(suspectes, 'requêtes SQLite ou mesure au démarrage ou au précache').toEqual([]);
 });
