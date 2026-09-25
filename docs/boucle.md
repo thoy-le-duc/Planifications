@@ -7,7 +7,9 @@ Toutes les 5 heures, une session Claude Code démarre seule et travaille **en é
 - **Sessions Claude Code on the web**, environnement cloud « Planification » : un conteneur isolé, recréé à chaque session et jeté ensuite.
 - Aucun accès aux données ni aux secrets de production : il n'y en a pas dans cet environnement, et il ne faut jamais en ajouter.
 - Au démarrage, le hook `.claude/hooks/session-start.sh` installe les dépendances et indique à Playwright le Chromium déjà présent.
-- Déclenchement : une routine Claude Code toutes les 5 heures, qui crée une session neuve à chaque fois. La routine se crée depuis la page des routines de claude.ai, **avec le dépôt `thoy-le-duc/Planifications` sélectionné** : les dépôts d'une session sont choisis à son démarrage. Sans dépôt sélectionné, la session n'a ni le code ni les outils GitHub (constaté au premier essai, le 2026-09-25).
+- **Une session dédiée à la boucle**, « Boucle Planifications (équipe) », créée avec le dépôt `thoy-le-duc/Planifications` attaché : les dépôts d'une session sont choisis à son démarrage, et une routine qui crée une session neuve à chaque fois n'a ni le code ni les outils GitHub (constaté au premier essai, le 2026-09-25).
+- **Déclenchement** : une routine toutes les 5 heures réveille cette même session avec le message ci-dessous. Chaque fenêtre commence par se remettre à jour sur `main`.
+- Capacités vérifiées le 2026-09-25 : dépôt à jour, push de branches, outils GitHub pour les PR, sous-agents et copies de travail, tests. La session ne peut pas supprimer une branche distante : c'est Théophane qui les supprime en fusionnant.
 
 ## Les branches
 
@@ -49,12 +51,12 @@ Un conflit sur `docs/journal.md` ou `docs/backlog/README.md` entre deux PR se r�
 
 ## Message de la routine
 
-Texte envoyé à chaque session neuve :
+Texte envoyé à la session de la boucle à chaque réveil :
 
 ```text
-Tu es le chef d'équipe de la boucle autonome du projet Planifications (dépôt GitHub thoy-le-duc/Planifications).
-Si le dépôt n'est pas dans ta session, attache-le et clone-le, puis place-toi sur la branche main à jour.
-Lis docs/boucle.md et suis à la lettre « Ce que fait chaque session » et « L'équipe » :
+Nouvelle fenêtre de travail de la boucle. Tu es le chef d'équipe de la boucle autonome du projet Planifications (dépôt thoy-le-duc/Planifications).
+Commence par te mettre à jour : git fetch, puis place-toi sur la branche main à jour (les fenêtres précédentes ont pu laisser des branches et des PR ouvertes).
+Relis docs/boucle.md (il a pu changer) et suis à la lettre « Ce que fait chaque session » et « L'équipe » :
 PR ouvertes de la boucle d'abord ; puis au plus trois tickets du backlog, deux indépendants en parallèle au plus ;
 pour chaque ticket, un sous-agent testeur écrit les tests d'abord, un sous-agent développeur fait passer pnpm verif
 dans sa propre copie de travail sans toucher aux tests, un sous-agent relecteur relit avant la PR.

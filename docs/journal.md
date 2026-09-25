@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-25 — Boucle lancée dans une session dédiée
+
+- **Fait** : session « Boucle Planifications (équipe) » créée avec le dépôt attaché ; capacités vérifiées ; routine toutes les 5 heures qui réveille cette session ; première fenêtre lancée à la main.
+- **Décidé** : une session persistante plutôt qu'une session neuve par fenêtre, seule façon d'avoir le dépôt et les outils GitHub depuis une routine créée par Claude.
+- **Bloquant** : la boucle ne peut pas supprimer de branche distante ; la branche vide `essai/acces-boucle` est à supprimer sur GitHub.
+
 ## 2026-09-25 — Premier essai de la boucle : échec d'accès au dépôt
 
 - **Fait** : première session lancée à la main ; arrêtée au bout de 2 min 30 sans rien pousser : pas de dépôt ni d'outils GitHub dans la session. Routine mise en pause.
