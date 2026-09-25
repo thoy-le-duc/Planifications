@@ -1,6 +1,6 @@
 # Choix du moteur de synchro hors ligne
 
-Recommandation du 2026-09-25, à valider par Théophane. Sources ouvertes le même jour, listées en fin de page.
+Recommandation du 2026-09-25, validée par Théophane le même jour. Sources ouvertes le même jour, listées en fin de page.
 
 **Recommandation : PowerSync, auto-hébergé en UE, derrière une petite couche à nous (`packages/sync`).** C'est la seule option mûre qui réunit, dans notre stack, les cinq besoins du brief :
 

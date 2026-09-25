@@ -84,7 +84,7 @@ Recommandation dans [`choix-synchro.md`](choix-synchro.md) : PowerSync, auto-hé
 
 Question : on part sur PowerSync ?
 
-Réponse : _en attente_
+Réponse : « ok ». PowerSync auto-hébergé en UE, validé le 2026-09-25.
 
 ## Questions ouvertes du brief
 
