@@ -54,25 +54,38 @@
  *     anneeMiseEnPlace: number,
  *     historique: HistoriqueRotation,
  *     hierarchie: HierarchieParcellaire,
+ *     exclure?: ReadonlySet<Id<'Occupation'>>,   // défaut : ensemble vide
  *   ): readonly AlerteRotation[]        (pure : aucune donnée lue ailleurs, entrées jamais modifiées)
  *     Renvoie [] ou UNE seule alerte qui regroupe toutes les lignes en cause.
+ *
+ *   `anneeMiseEnPlace` est l'année civile de la date de mise en place prévue de la culture.
+ *   `exclure` : occupations qui ne comptent pas. Sert à ne pas comparer une série à elle-même
+ *   quand on revérifie une culture déjà placée : l'appelant y met ses propres occupations.
  *
  * Règles :
  *   - Délais : `espece.delaisRetour` s'il est rempli (origine 'espece'), sinon ceux de `famille`
  *     (origine 'famille'). Ni l'un ni l'autre : [] (pas d'alerte, pas d'erreur).
+ *     Délais applicables incohérents (minimal > conseillé) : RangeError, c'est une erreur de
+ *     saisie à corriger, pas un cas à deviner. Minimal = conseillé est permis (jamais d'orange).
+ *   - Culture prévue : `famille` non nulle dont l'id diffère de `espece.familleId` : RangeError.
  *   - Lieux pris en compte pour E :
  *       emplacements : E, puis les emplacements que E remplace, de proche en proche (A remplace B,
  *       B remplace C… : A, B, C). Un emplacement absent de `hierarchie.emplacements` compte avec
  *       son propre id, mais on ne peut pas remonter plus loin depuis lui ;
- *       zones : la zone de E (`E.zoneId`, sa chapelle), puis ses parentes par `zoneParenteId`
- *       jusqu'à la racine. Les zones des emplacements remplacés ne sont PAS ajoutées.
+ *       zones : la zone de E (`E.zoneId`, sa chapelle) ET la zone de chaque emplacement remplacé
+ *       connu de la hiérarchie, puis toutes leurs parentes par `zoneParenteId` jusqu'à la racine.
+ *       C'est le même sol : on préfère une alerte en trop à une alerte manquée. Une zone absente
+ *       de `hierarchie.zones` compte avec son propre id, sans remonter plus loin.
  *     Les deux parcours se protègent des cycles (A remplace B qui remplace A ; zone parente
  *     d'elle-même) : chaque lieu est visité une fois, pas de boucle infinie, pas de doublon.
- *   - Occupations : celles dont `emplacementId` est l'un des emplacements retenus.
+ *   - Occupations : celles dont `emplacementId` est l'un des emplacements retenus, hors `exclure`.
+ *     L'historique comprend toutes les occupations fournies antérieures à l'année prévue (ou en
+ *     place cette année-là), y compris celles qui sont prévues mais pas encore réalisées.
  *     Assolement : les lignes 'passe_saisi' et 'passe_importe' dont la cible est l'un des
  *     emplacements retenus (E ou un emplacement qu'il remplace) ou l'une des zones retenues.
  *     L'assolement 'prevu' est ignoré. Toute ligne avec `supprimeLe !== null` est ignorée.
- *   - Même famille seulement : `ligne.familleId === culturePrevue.espece.familleId`.
+ *   - Même famille seulement : `ligne.familleId === culturePrevue.espece.familleId`. Sur une ligne
+ *     d'assolement, `familleId` fait foi quelle que soit son `especeId` (jamais relue).
  *   - Année d'une occupation : période lue par `periodeOccupation` (réel prioritaire sur le prévu,
  *     DATE_SANS_FIN → au null). `au` est le jour où l'emplacement se libère (exclu) : l'année de
  *     fin est celle du DERNIER JOUR OCCUPÉ, au − 1 jour (au = 2026-01-01 → 2025).
@@ -83,7 +96,8 @@
  *         année-là : la culture est encore en place, année ramenée à anneeMiseEnPlace (écart 0) ;
  *       · occupation qui COMMENCE après l'année prévue : ignorée (ce n'est pas de l'historique ;
  *         l'alerte viendra quand cette culture-là sera vérifiée).
- *     Année d'un assolement : année de `fin` de sa saison (comme l'année de fin d'occupation ; une
+ *     Année d'un assolement : année civile de la `fin` de sa saison, choix prudent (comme l'année
+ *     de fin d'occupation, elle rapproche la ligne de l'année prévue ; une
  *     saison 2025-09-01 → 2026-08-31 compte pour 2026). Saison postérieure à l'année prévue :
  *     ignorée. Saison introuvable dans `historique.saisons` : ligne ignorée.
  *     Bilan : un écart n'est jamais négatif.
@@ -747,5 +761,136 @@ describe('entrées invalides', () => {
     const h = historique([], [BRASSICACEES_C3_2023]);
     expect(() => alertesChoux(2026.5, h)).toThrow(RangeError);
     expect(() => alertesChoux(Number.NaN, h)).toThrow(RangeError);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Décisions de relecture
+// ---------------------------------------------------------------------------------------------
+
+describe('série comparée à elle-même : paramètre `exclure`', () => {
+  const propre = occupation('choux-2027', C3_P02, CHOU, '2027-03-01', '2027-07-01');
+
+  it('sans exclusion, la propre occupation des choux 2027 donne une alerte rouge (écart 0)', () => {
+    expect(resume(alertesChoux(2027, historique([propre], [])))).toEqual(['rouge 2027 écart 0']);
+  });
+
+  it('exclue, elle ne compte pas : aucune alerte', () => {
+    const exclure: ReadonlySet<Id<'Occupation'>> = new Set([propre.occupation.id]);
+    expect(alertesRotation(CHOUX_PREVUS, C3_P02, 2027, historique([propre], []), HIERARCHIE, exclure)).toEqual([]);
+  });
+
+  it('l’exclusion ne touche que les occupations désignées', () => {
+    const radis = occupation('radis-2025', C3_P02, RADIS, '2025-04-01', '2025-05-20');
+    const exclure: ReadonlySet<Id<'Occupation'>> = new Set([propre.occupation.id]);
+    const alertes = alertesRotation(CHOUX_PREVUS, C3_P02, 2027, historique([propre, radis], []), HIERARCHIE, exclure);
+    expect(resume(alertes)).toEqual(['rouge 2025 écart 2']);
+  });
+});
+
+describe('zones des emplacements remplacés', () => {
+  const champ = zone('champ', null);
+  const ilot = zone('ILOT', 'champ');
+  const ancienne = planche('OLD', ilot.id);
+  const p02 = planche('P02', C3.id, ['OLD']);
+  const hierarchie: HierarchieParcellaire = {
+    zones: [SERRE, C3, ilot, champ],
+    emplacements: [ancienne, p02],
+  };
+
+  it('P02 (zone C3) remplace OLD (zone ILOT) : brassicacées sur ILOT en 2025 → alerte pour des choux en 2027', () => {
+    const surIlot = assolement('brassicacees-ILOT', 'passe_saisi', surZone(ilot), BRASSICACEES, 2025);
+    expect(alertesRotation(CHOUX_PREVUS, p02, 2027, historique([], [surIlot]), hierarchie)).toEqual([
+      {
+        niveau: 'rouge',
+        delais: { minimalAns: 4, conseilleAns: 6 },
+        origineDelais: 'espece',
+        lignes: [ligneAssolement(surIlot, 2025, 2, 'rouge')],
+      },
+    ]);
+  });
+
+  it('les parentes de la zone d’un emplacement remplacé comptent aussi', () => {
+    const surChamp = assolement('brassicacees-champ', 'passe_saisi', surZone(champ), BRASSICACEES, 2024);
+    expect(resume(alertesRotation(CHOUX_PREVUS, p02, 2027, historique([], [surChamp]), hierarchie))).toEqual([
+      'rouge 2024 écart 3',
+    ]);
+  });
+});
+
+describe('zone de E absente de la hiérarchie', () => {
+  const e = planche('Z-P01', id<'Zone'>('zone-inconnue'));
+  const hierarchie: HierarchieParcellaire = { zones: HIERARCHIE.zones, emplacements: [e] };
+
+  it('les lignes posées sur cette zone comptent, sans remonter plus haut ni lever', () => {
+    const surZoneInconnue = assolement('brassicacees-inconnue', 'passe_saisi', { sorte: 'zone', zoneId: e.zoneId }, BRASSICACEES, 2024);
+    const surSerre = assolement('brassicacees-serre', 'passe_saisi', surZone(SERRE), BRASSICACEES, 2024);
+    expect(resume(alertesRotation(CHOUX_PREVUS, e, 2027, historique([], [surZoneInconnue, surSerre]), hierarchie))).toEqual([
+      'rouge 2024 écart 3',
+    ]);
+  });
+});
+
+describe('familles : `familleId` fait foi', () => {
+  it('ligne d’assolement brassicacées précisée « tomate » : comptée comme brassicacée', () => {
+    const ligne = assolement('incoherente-1', 'passe_saisi', surZone(C3), BRASSICACEES, 2025, { especeId: TOMATE.id });
+    expect(resume(alertesChoux(2027, historique([], [ligne])))).toEqual(['rouge 2025 écart 2']);
+  });
+
+  it('ligne d’assolement solanacées précisée « chou » : ignorée pour des choux', () => {
+    const ligne = assolement('incoherente-2', 'passe_saisi', surZone(C3), SOLANACEES, 2025, { especeId: CHOU.id });
+    expect(alertesChoux(2027, historique([], [ligne]))).toEqual([]);
+  });
+
+  it('culture prévue dont la famille n’est pas celle de l’espèce : RangeError', () => {
+    const h = historique([], [BRASSICACEES_C3_2023]);
+    expect(() => alertesRotation({ espece: CHOU, famille: SOLANACEES }, C3_P02, 2027, h, HIERARCHIE)).toThrow(RangeError);
+    expect(() => alertesRotation({ espece: RADIS, famille: SOLANACEES }, C3_P02, 2027, h, HIERARCHIE)).toThrow(RangeError);
+  });
+});
+
+describe('occupations : compléments', () => {
+  it('pérenne arrachée (réel.au rempli) : l’année vient de l’arrachage', () => {
+    const perpetuel = occupation('perpetuel-arrache', C3_P02, CHOU_PERPETUEL, '2018-04-01', DATE_SANS_FIN, {
+      reel: { du: d('2018-04-01'), au: d('2024-11-01') },
+    });
+    expect(alertesChoux(2027, historique([perpetuel], []))).toEqual([
+      {
+        niveau: 'rouge',
+        delais: { minimalAns: 4, conseilleAns: 6 },
+        origineDelais: 'espece',
+        lignes: [ligneOccupation(perpetuel, 2024, 3, 'rouge')],
+      },
+    ]);
+  });
+
+  it('occupation prévue mais pas encore réalisée, antérieure à l’année prévue : comptée', () => {
+    const prevue = occupation('radis-prevu-2026', C3_P02, RADIS, '2026-09-01', '2026-10-20');
+    expect(resume(alertesChoux(2027, historique([prevue], [])))).toEqual(['rouge 2026 écart 1']);
+  });
+});
+
+describe('délais incohérents', () => {
+  const h = historique([], [BRASSICACEES_C3_2023]);
+
+  it('délais de l’espèce minimal > conseillé : RangeError', () => {
+    const bizarre = espece('chou-bizarre', BRASSICACEES, { minimalAns: 6, conseilleAns: 4 });
+    expect(() => alertesRotation({ espece: bizarre, famille: BRASSICACEES }, C3_P02, 2027, h, HIERARCHIE)).toThrow(
+      RangeError,
+    );
+  });
+
+  it('délais de la famille minimal > conseillé, appliqués faute de délais d’espèce : RangeError', () => {
+    const familleBizarre = famille('brassicacees', 5, 2);
+    expect(() => alertesRotation({ espece: RADIS, famille: familleBizarre }, C3_P02, 2027, h, HIERARCHIE)).toThrow(
+      RangeError,
+    );
+  });
+
+  it('minimal = conseillé : permis, rouge en dessous, jamais d’orange', () => {
+    const net = espece('chou-net', BRASSICACEES, { minimalAns: 4, conseilleAns: 4 });
+    const culture: CulturePrevue = { espece: net, famille: BRASSICACEES };
+    expect(resume(alertesRotation(culture, C3_P02, 2026, h, HIERARCHIE))).toEqual(['rouge 2023 écart 3']);
+    expect(alertesRotation(culture, C3_P02, 2027, h, HIERARCHIE)).toEqual([]);
   });
 });
