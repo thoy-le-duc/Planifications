@@ -2,8 +2,8 @@
  * Alertes de rotation (T04) : ne pas remettre une famille trop tôt au même endroit.
  *
  * L'historique d'un emplacement E réunit ses occupations passées, celles des emplacements qu'il
- * remplace (de proche en proche), et l'assolement passé posé sur ces emplacements, sur la zone
- * de E ou sur ses zones parentes. Fonctions pures : aucune donnée lue ailleurs.
+ * remplace (de proche en proche), et l'assolement passé posé sur ces emplacements, sur leurs
+ * zones ou sur les zones parentes de celles-ci. Fonctions pures : aucune donnée lue ailleurs.
  */
 import { ajouterJours } from '../dates/index.ts';
 import type { DateCalendaire } from '../dates/index.ts';
@@ -88,10 +88,13 @@ function anneeDe(date: DateCalendaire): number {
   return Number(date.slice(0, 4));
 }
 
+interface DelaisApplicables {
+  readonly delais: DelaisRetour;
+  readonly origine: AlerteRotation['origineDelais'];
+}
+
 /** Délais de l'espèce s'ils sont remplis, sinon ceux de la famille ; `null` si aucun. */
-function delaisApplicables(
-  culture: CulturePrevue,
-): { readonly delais: DelaisRetour; readonly origine: AlerteRotation['origineDelais'] } | null {
+function choisirDelais(culture: CulturePrevue): DelaisApplicables | null {
   if (culture.espece.delaisRetour !== null) {
     return { delais: culture.espece.delaisRetour, origine: 'espece' };
   }
@@ -102,12 +105,31 @@ function delaisApplicables(
   return { delais: { minimalAns: delaiRetourMinimalAns, conseilleAns: delaiRetourConseilleAns }, origine: 'famille' };
 }
 
+/**
+ * Délais applicables, après contrôle de la culture prévue. RangeError si la famille fournie
+ * n'est pas celle de l'espèce, ou si les délais retenus ont un minimal supérieur au conseillé.
+ */
+function delaisApplicables(culture: CulturePrevue): DelaisApplicables | null {
+  if (culture.famille !== null && culture.famille.id !== culture.espece.familleId) {
+    throw new RangeError(
+      `la famille ${culture.famille.id} n'est pas celle de l'espèce ${culture.espece.id} (${culture.espece.familleId})`,
+    );
+  }
+  const applicables = choisirDelais(culture);
+  if (applicables !== null && applicables.delais.minimalAns > applicables.delais.conseilleAns) {
+    const { minimalAns, conseilleAns } = applicables.delais;
+    throw new RangeError(
+      `délais de retour incohérents (${applicables.origine}) : minimal ${String(minimalAns)} an(s) > conseillé ${String(conseilleAns)} an(s)`,
+    );
+  }
+  return applicables;
+}
+
 /** E puis les emplacements qu'il remplace, de proche en proche ; chaque sommet une seule fois. */
 function emplacementsRetenus(
   emplacement: EmplacementParcellaire,
-  hierarchie: HierarchieParcellaire,
+  parId: ReadonlyMap<Id<'Emplacement'>, EmplacementParcellaire>,
 ): ReadonlySet<Id<'Emplacement'>> {
-  const parId = new Map(hierarchie.emplacements.map((e) => [e.id, e]));
   const visites = new Set<Id<'Emplacement'>>([emplacement.id]);
   const aVisiter = [...emplacement.remplace];
   for (let suivant = aVisiter.shift(); suivant !== undefined; suivant = aVisiter.shift()) {
@@ -119,16 +141,35 @@ function emplacementsRetenus(
   return visites;
 }
 
-/** La zone de E puis ses parentes jusqu'à la racine ; s'arrête sur un cycle ou une zone inconnue. */
-function zonesRetenues(emplacement: EmplacementParcellaire, hierarchie: HierarchieParcellaire): ReadonlySet<Id<'Zone'>> {
+/** Les zones de départ puis toutes leurs parentes ; s'arrête sur un cycle ou une zone inconnue. */
+function zonesRetenues(
+  depart: readonly Id<'Zone'>[],
+  hierarchie: HierarchieParcellaire,
+): ReadonlySet<Id<'Zone'>> {
   const parentes = new Map(hierarchie.zones.map((z) => [z.id, z.zoneParenteId]));
   const visites = new Set<Id<'Zone'>>();
-  let zone: Id<'Zone'> | null = emplacement.zoneId;
-  while (zone !== null && !visites.has(zone)) {
-    visites.add(zone);
-    zone = parentes.get(zone) ?? null;
+  for (const zoneDepart of depart) {
+    let zone: Id<'Zone'> | null = zoneDepart;
+    while (zone !== null && !visites.has(zone)) {
+      visites.add(zone);
+      zone = parentes.get(zone) ?? null;
+    }
   }
   return visites;
+}
+
+/**
+ * Lieux de E : E et les emplacements qu'il remplace ; la zone de E et celles des emplacements
+ * remplacés connus (c'est le même sol), avec toutes leurs parentes.
+ */
+function lieuxRetenus(emplacement: EmplacementParcellaire, hierarchie: HierarchieParcellaire): LieuxRetenus {
+  const parId = new Map(hierarchie.emplacements.map((e) => [e.id, e]));
+  const emplacements = emplacementsRetenus(emplacement, parId);
+  const zonesRemplacees = [...emplacements].flatMap((id) => {
+    const connu = parId.get(id);
+    return connu === undefined ? [] : [connu.zoneId];
+  });
+  return { emplacements, zones: zonesRetenues([emplacement.zoneId, ...zonesRemplacees], hierarchie) };
 }
 
 /**
@@ -151,9 +192,15 @@ function lignesOccupations(
   familleId: Id<'Famille'>,
   lieux: LieuxRetenus,
   anneeMiseEnPlace: number,
+  exclure: ReadonlySet<Id<'Occupation'>>,
 ): LigneRetenue[] {
   return historique.occupations.flatMap(({ occupation, especeId, familleId: familleLigne }) => {
-    if (occupation.supprimeLe !== null || familleLigne !== familleId || !lieux.emplacements.has(occupation.emplacementId)) {
+    if (
+      occupation.supprimeLe !== null ||
+      exclure.has(occupation.id) ||
+      familleLigne !== familleId ||
+      !lieux.emplacements.has(occupation.emplacementId)
+    ) {
       return [];
     }
     const annee = anneeOccupation(occupation, anneeMiseEnPlace);
@@ -233,8 +280,10 @@ function comparerLignes(a: LigneEnCause, b: LigneEnCause): number {
 
 /**
  * Alertes de rotation pour `culturePrevue` mise en place sur `emplacement` l'année
- * `anneeMiseEnPlace` : [] ou une seule alerte regroupant toutes les lignes en cause.
- * RangeError si l'année n'est pas un entier.
+ * `anneeMiseEnPlace` (année civile de sa mise en place prévue) : [] ou une seule alerte
+ * regroupant toutes les lignes en cause. `exclure` : occupations à ne pas compter, typiquement
+ * celles de la culture revérifiée, pour ne pas la comparer à elle-même.
+ * RangeError si l'année n'est pas un entier, ou si la culture prévue est incohérente.
  */
 export function alertesRotation(
   culturePrevue: CulturePrevue,
@@ -242,6 +291,7 @@ export function alertesRotation(
   anneeMiseEnPlace: number,
   historique: HistoriqueRotation,
   hierarchie: HierarchieParcellaire,
+  exclure: ReadonlySet<Id<'Occupation'>> = new Set(),
 ): readonly AlerteRotation[] {
   if (!Number.isInteger(anneeMiseEnPlace)) {
     throw new RangeError(`l'année de mise en place doit être un entier : ${String(anneeMiseEnPlace)}`);
@@ -252,12 +302,9 @@ export function alertesRotation(
   }
   const { delais, origine } = applicables;
   const familleId = culturePrevue.espece.familleId;
-  const lieux: LieuxRetenus = {
-    emplacements: emplacementsRetenus(emplacement, hierarchie),
-    zones: zonesRetenues(emplacement, hierarchie),
-  };
+  const lieux = lieuxRetenus(emplacement, hierarchie);
   const lignes = [
-    ...lignesOccupations(historique, familleId, lieux, anneeMiseEnPlace),
+    ...lignesOccupations(historique, familleId, lieux, anneeMiseEnPlace, exclure),
     ...lignesAssolements(historique, familleId, lieux, anneeMiseEnPlace),
   ]
     .flatMap((ligne): LigneEnCause[] => {
