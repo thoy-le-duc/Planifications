@@ -108,6 +108,20 @@ Question : ces calculs sont-ils ceux que vous faites ?
 
 Réponse : « il y a de ça, oui ». Validé dans le principe, pas dans le détail. Pour s'adapter à toutes les fermes, T05 couvre maintenant trois façons de compter la densité (écartement, au mètre linéaire, à la volée), les mottes à plusieurs plants, la perte en pépinière et le nombre de plaques. Un cas qui n'entre dans aucune se signalera ici.
 
+### Q10 — Récoltes, interventions et traitements : tables séparées ou détail de l'événement ? (posée le 2026-09-26)
+
+Pour T08 (schéma PostgreSQL). Le modèle v1 prévoit des tables séparées **Récolte**, **Intervention** et **Traitement**. T01 (PR #1) a choisi autre chose : un seul **événement** du journal, avec un détail qui change selon le type (réalisé, récolte, intervention, irrigation, traitement, observation). Le mouvement de stock d'une récolte pointe alors vers l'événement.
+
+| | Un événement + détail (choix de T01) | Tables séparées (modèle v1) |
+| --- | --- | --- |
+| Saisie au champ, synchro | une seule table en ajout seul, simple à synchroniser sans conflit | une écriture dans deux tables par saisie |
+| Registre phyto, cahier de récolte | une requête filtrée par type | une table directe, plus simple à exporter |
+| Contraintes côté serveur | vérifiées dans un champ JSON | colonnes typées, contrôles natifs |
+
+Ma recommandation : **un événement + détail**, avec des vues SQL « récoltes », « interventions » et « traitements » pour les exports et le registre phyto. On garde la simplicité de la synchro hors ligne et les tableaux lisibles.
+
+Question : on part là-dessus pour T08 ?
+
 ### À suivre
 
 - Q8 — Méthode de connexion (T09) : code par e-mail, lien magique, clé d'accès ou mot de passe.
