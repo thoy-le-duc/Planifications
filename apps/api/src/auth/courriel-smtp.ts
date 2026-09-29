@@ -19,7 +19,7 @@ export interface OptionsSmtp {
   /**
    * 'tls' : TLS dès la connexion (port 465) ; 'starttls' : STARTTLS obligatoire (port 587),
    * rien ne part si le serveur ne le propose pas ; 'aucune' : en clair, développement seulement
-   * (refusé en production par lireConfig).
+   * (refusé par lireConfig hors NODE_ENV=development).
    */
   readonly securite: SecuriteSmtp;
   /** Identifiants AUTH (PLAIN ou LOGIN) : les deux ou aucun. */
@@ -65,9 +65,14 @@ export function expediteurSmtp(options: OptionsSmtp): ExpediteurCourriel {
           echec(new Error(`Courriel non envoyé : pas de réponse du serveur SMTP en ${String(delaiMs)} ms.`));
         }, delaiMs);
       });
+      // `a` est UNE adresse, jamais analysée : passée en objet (en-tête To) et dans une enveloppe
+      // explicite, elle ne peut pas être décomposée en liste (« a@x.fr,pirate@y.fr ») ni réduite
+      // à l'adresse entre chevrons d'un nom d'affichage. Un seul RCPT TO par message.
+      const destinataire = { name: '', address: message.a };
       const envoi = transport.sendMail({
         from: options.expediteur,
-        to: message.a,
+        to: destinataire,
+        envelope: { from: options.expediteur, to: [destinataire] },
         subject: message.sujet,
         text: message.texte,
         textEncoding: 'quoted-printable',
