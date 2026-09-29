@@ -9,8 +9,9 @@
  * - Limites de la balise (frame-ancestors, report-uri et sandbox y sont ignorés) : à poser en
  *   en-tête chez l'hébergeur le jour de la mise en production (frame-ancestors 'none').
  * - Posée au build seulement (le serveur de développement de Vite injecte un script en ligne
- *   pour le rechargement à chaud), et seulement dans index.html : les pages de mesure et de
- *   diagnostic sont hors appli.
+ *   pour le rechargement à chaud), sur les trois pages du build : index.html, et aussi les
+ *   pages de mesure et de diagnostic, servies sur la même origine que la session (relecture
+ *   T09b ; vérifié par e2e/csp.e2e.ts).
  *
  * ── Contrat ─────────────────────────────────────────────────────────────────────────────────
  *
