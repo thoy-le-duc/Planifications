@@ -2,9 +2,9 @@
  * Modèle d'import (T14) : la correspondance validée d'un fichier (colonnes et choix de valeurs),
  * pour importer le fichier suivant de même forme sans rien reprendre.
  */
-import { CHAMPS_IMPORT } from './champs.ts';
-import { cle, estUnite, texteCellule } from './normalisation.ts';
-import type { Cellule, ChoixValeur, CleChamp, ColonneAssociee, ColonneModele, Correspondance, DecisionPrise, ModeleImport, TypeContenu } from './types.ts';
+import { CHAMPS_IMPORT, uniteAcceptee } from './champs.ts';
+import { cle, texteCellule } from './normalisation.ts';
+import type { Cellule, ChoixValeur, CleChamp, ColonneAssociee, ColonneModele, Correspondance, DecisionPrise, ModeleImport, TypeContenu, UniteColonne } from './types.ts';
 
 function copierChoix(c: ChoixValeur): ChoixValeur {
   const decision: DecisionPrise = c.decision.sorte === 'existante' ? { sorte: 'existante', id: c.decision.id } : { sorte: 'nouvelle', nom: c.decision.nom };
@@ -30,18 +30,29 @@ function estType(v: unknown): v is TypeContenu {
   return v === 'parcellaire' || v === 'cultures' || v === 'series' || v === 'assolement';
 }
 
-function lireColonne(v: unknown, champs: ReadonlySet<string>): ColonneModele | null {
+function estUniteColonne(v: unknown): v is UniteColonne {
+  return v === 'm' || v === 'cm' || v === 'kg' || v === 'g' || v === 'ha' || v === 'semaine';
+}
+
+/** Colonne relue : champ du type, unité acceptée pour ce champ (aucune sur une colonne ignorée). */
+function lireColonne(v: unknown, champs: ReadonlySet<CleChamp>): ColonneModele | null {
   if (!estObjet(v) || typeof v.entete !== 'string') return null;
   const { champ, unite } = v;
-  if (champ !== null && (typeof champ !== 'string' || !champs.has(champ))) return null;
-  if (unite !== null && (typeof unite !== 'string' || !estUnite(unite))) return null;
-  return { entete: v.entete, champ: champ as CleChamp | null, unite };
+  let cleChamp: CleChamp | null = null;
+  if (champ !== null) {
+    const trouve = [...champs].find((c) => c === champ);
+    if (trouve === undefined) return null;
+    cleChamp = trouve;
+  }
+  if (unite === null) return { entete: v.entete, champ: cleChamp, unite: null };
+  if (cleChamp === null || !estUniteColonne(unite) || !uniteAcceptee(cleChamp, unite)) return null;
+  return { entete: v.entete, champ: cleChamp, unite };
 }
 
 function lireChoix(v: unknown): ChoixValeur | null {
   if (!estObjet(v) || (v.champ !== 'espece' && v.champ !== 'famille') || typeof v.valeur !== 'string' || !estObjet(v.decision)) return null;
   const d = v.decision;
-  if (d.sorte === 'existante' && typeof d.id === 'string') return { champ: v.champ, valeur: v.valeur, decision: { sorte: 'existante', id: d.id } };
+  if (d.sorte === 'existante' && typeof d.id === 'string' && d.id !== '') return { champ: v.champ, valeur: v.valeur, decision: { sorte: 'existante', id: d.id } };
   if (d.sorte === 'nouvelle' && typeof d.nom === 'string') return { champ: v.champ, valeur: v.valeur, decision: { sorte: 'nouvelle', nom: d.nom } };
   return null;
 }
@@ -55,7 +66,7 @@ export function lireModele(texte: string): ModeleImport | null {
     return null;
   }
   if (!estObjet(brut) || brut.version !== 1 || !estType(brut.type) || !Array.isArray(brut.colonnes) || !Array.isArray(brut.choix)) return null;
-  const champs = new Set<string>(CHAMPS_IMPORT[brut.type].map((d) => d.cle));
+  const champs = new Set<CleChamp>(CHAMPS_IMPORT[brut.type].map((d) => d.cle));
   const colonnes: ColonneModele[] = [];
   for (const c of brut.colonnes as unknown[]) {
     const lue = lireColonne(c, champs);

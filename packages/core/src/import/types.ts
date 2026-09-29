@@ -76,6 +76,8 @@ export type CleChamp =
   | 'annee';
 
 export type UniteMesure = 'm' | 'cm' | 'kg' | 'g';
+/** Unité lue dans un en-tête : une mesure, ou une conversion (hectares, semaines). */
+export type UniteColonne = UniteMesure | 'ha' | 'semaine';
 
 export interface DefinitionChamp {
   readonly cle: CleChamp;
@@ -86,7 +88,7 @@ export interface DefinitionChamp {
 
 export interface ColonneAssociee {
   readonly champ: CleChamp | null;
-  readonly unite: UniteMesure | null;
+  readonly unite: UniteColonne | null;
 }
 
 export interface Correspondance {
@@ -216,7 +218,7 @@ export interface PlanImport {
 export interface ColonneModele {
   readonly entete: string;
   readonly champ: CleChamp | null;
-  readonly unite: UniteMesure | null;
+  readonly unite: UniteColonne | null;
 }
 
 export interface ModeleImport {

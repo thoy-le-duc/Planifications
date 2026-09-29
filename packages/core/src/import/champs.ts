@@ -2,8 +2,8 @@
  * Champs de l'appli par type de contenu, dictionnaire des synonymes d'en-têtes, détection de la
  * ligne d'en-tête et du type de contenu, correspondance des colonnes proposée (T14).
  */
-import { cle, estUnite, grandeur, texteCellule } from './normalisation.ts';
-import type { Cellule, CleChamp, ColonneAssociee, Correspondance, DefinitionChamp, LigneBrute, TypeContenu, UniteMesure } from './types.ts';
+import { cle, texteCellule } from './normalisation.ts';
+import type { Cellule, CleChamp, ColonneAssociee, Correspondance, DefinitionChamp, LigneBrute, TypeContenu, UniteColonne } from './types.ts';
 
 const champ = (cleChamp: CleChamp, libelle: string, obligatoire = false): DefinitionChamp => ({ cle: cleChamp, libelle, obligatoire });
 
@@ -74,21 +74,108 @@ const SYNONYMES: Readonly<Record<CleChamp, readonly string[]>> = {
   rangs_par_planche: ['rangs', 'rangs/planche', 'rangs par planche', 'nombre de rangs', 'nb rangs', 'rangs_par_planche'],
   ecartement_cm: ['écartement', 'espacement', 'spacing'],
   poids_mille_graines_g: ['pmg', 'poids de mille graines', 'poids_mille_graines'],
-  date_semis: ['semis', 'date de semis', 'date semis', 'prevu_semis_pepiniere'],
-  date_plantation: ['plantation', 'date de plantation', 'date plantation', 'prevu_mise_en_place'],
-  date_debut_recolte: ['début récolte', 'début de récolte', 'récolte', 'prevu_debut_recolte'],
-  date_fin_recolte: ['fin récolte', 'fin de récolte', 'prevu_fin_recolte'],
+  date_semis: ['semis', 'date de semis', 'date semis', 'prevu_semis_pepiniere', 'sowing', 'sowing date'],
+  date_plantation: ['plantation', 'date de plantation', 'date plantation', 'prevu_mise_en_place', 'planting', 'planting date', 'transplanting'],
+  date_debut_recolte: ['début récolte', 'début de récolte', 'récolte', 'prevu_debut_recolte', 'harvest start', 'first harvest'],
+  date_fin_recolte: ['fin récolte', 'fin de récolte', 'prevu_fin_recolte', 'harvest end', 'last harvest'],
   nombre_plants: ['nombre de plants', 'nb plants', 'plants', 'nombre_plants'],
   annee: ['année', 'saison', 'year'],
 };
 
-/** Champs mesurés : l'unité de l'en-tête ne vaut que si elle est de leur grandeur. */
-const GRANDEUR_CHAMP: Partial<Record<CleChamp, 'longueur' | 'masse'>> = {
-  longueur_m: 'longueur',
-  largeur_m: 'longueur',
-  ecartement_cm: 'longueur',
-  poids_mille_graines_g: 'masse',
+/** Longueur au-delà de laquelle un en-tête n'est jamais reconnu (temps linéaire garanti). */
+const LONGUEUR_MAX_ENTETE = 200;
+
+/**
+ * Unités explicites qu'un en-tête peut porter (liste fermée), par écriture normalisée (casse,
+ * accents et points ignorés) → unité canonique. Une unité connue qui ne va pas au champ dit que
+ * la colonne n'est pas ce champ : elle n'est pas proposée.
+ */
+const UNITES_CONNUES: ReadonlyMap<string, string> = /* @__PURE__ */ new Map([
+  ['m', 'm'],
+  ['cm', 'cm'],
+  ['mm', 'mm'],
+  ['km', 'km'],
+  ['g', 'g'],
+  ['kg', 'kg'],
+  ['t', 't'],
+  ['ha', 'ha'],
+  ['a', 'a'],
+  ['m²', 'm2'],
+  ['m2', 'm2'],
+  ['j', 'jour'],
+  ['jour', 'jour'],
+  ['jours', 'jour'],
+  ['sem', 'semaine'],
+  ['semaine', 'semaine'],
+  ['semaines', 'semaine'],
+  ['mois', 'mois'],
+  ['an', 'an'],
+  ['ans', 'an'],
+  ['h', 'h'],
+  ['nb', 'nb'],
+  ['nombre', 'nb'],
+  ['graines', 'graines'],
+  ['plants', 'plants'],
+  ['pieds', 'pieds'],
+  ['pouces', 'pouces'],
+  ['l', 'l'],
+  ['€', 'eur'],
+  ['eur', 'eur'],
+  ['euros', 'eur'],
+  ['%', '%'],
+]);
+
+/** Unités qu'un simple espace suffit à détacher du nom (« Longueur m ») : les seules sans ambiguïté. */
+const UNITES_SUFFIXE_NU: ReadonlySet<string> = /* @__PURE__ */ new Set(['m', 'cm', 'kg', 'g']);
+
+const MARQUES = /[\u0300-\u036f]/g;
+
+/** Unité canonique d'un texte d'en-tête, ou `null` si ce n'est pas une unité connue. */
+function uniteConnue(texte: string): string | null {
+  const u = texte.normalize('NFD').replace(MARQUES, '').toLowerCase().replaceAll('.', '').trim();
+  return UNITES_CONNUES.get(u) ?? null;
+}
+
+/** Unités acceptées par champ : unité canonique → unité rendue (`null` : celle du champ). */
+const LONGUEUR: ReadonlyMap<string, UniteColonne | null> = /* @__PURE__ */ new Map([
+  ['m', 'm'],
+  ['cm', 'cm'],
+]);
+const MASSE: ReadonlyMap<string, UniteColonne | null> = /* @__PURE__ */ new Map([
+  ['g', 'g'],
+  ['kg', 'kg'],
+]);
+const SURFACE: ReadonlyMap<string, UniteColonne | null> = /* @__PURE__ */ new Map([
+  ['m2', null],
+  ['ha', 'ha'],
+]);
+const DUREE: ReadonlyMap<string, UniteColonne | null> = /* @__PURE__ */ new Map([
+  ['jour', null],
+  ['semaine', 'semaine'],
+]);
+const COMPTAGE: ReadonlyMap<string, UniteColonne | null> = /* @__PURE__ */ new Map([['nb', null]]);
+
+const UNITES_CHAMP: Partial<Record<CleChamp, ReadonlyMap<string, UniteColonne | null>>> = {
+  longueur_m: LONGUEUR,
+  largeur_m: LONGUEUR,
+  ecartement_cm: LONGUEUR,
+  poids_mille_graines_g: MASSE,
+  surface_m2: SURFACE,
+  duree_pepiniere_jours: DUREE,
+  duree_avant_recolte_jours: DUREE,
+  fenetre_recolte_jours: DUREE,
+  nombre_places: COMPTAGE,
+  nombre_plants: COMPTAGE,
+  rangs_par_planche: COMPTAGE,
 };
+
+/** Une unité de colonne (modèle d'import, correspondance) est-elle acceptée pour ce champ ? */
+export function uniteAcceptee(champ: CleChamp, unite: UniteColonne): boolean {
+  const permises = UNITES_CHAMP[champ];
+  if (permises === undefined) return false;
+  for (const u of permises.values()) if (u === unite) return true;
+  return false;
+}
 
 let dictionnaire: Map<string, CleChamp> | undefined;
 
@@ -103,47 +190,93 @@ function synonymes(): Map<string, CleChamp> {
   return d;
 }
 
-const ENTRE_PARENTHESES = /\s*[([]([^()[\]]*)[)\]]\s*$/;
-const UNITE_APRES_EN = /^(.+) en (m|cm|kg|g)$/;
-const UNITE_SUFFIXE = /^(.+) (m|cm|kg|g)$/;
 const PREFIXE_NUMERO = /^(?:n|no|nr|num|numero)(?: (?:de|du|d))? (.+)$/;
-
-export interface EnteteReconnu {
-  readonly champ: CleChamp;
-  readonly unite: UniteMesure | null;
-}
-
-/** Champ (tous types confondus) et unité d'un en-tête, ou `null` s'il n'est pas reconnu. */
-export function reconnaitreEntete(entete: Cellule | undefined): EnteteReconnu | null {
-  const brut = texteCellule(entete);
-  if (brut === null) return null;
-  const d = synonymes();
-  let texte = brut;
-  let unite: string | null = null;
-  const parentheses = ENTRE_PARENTHESES.exec(texte);
-  if (parentheses !== null) {
-    texte = texte.slice(0, parentheses.index);
-    unite = cle(parentheses[1] ?? '');
-  }
-  let k = cle(texte);
-  if (k === '') return null;
-  if (unite === null) {
-    const en = UNITE_APRES_EN.exec(k) ?? UNITE_SUFFIXE.exec(k);
-    const base = en?.[1];
-    if (en !== null && base !== undefined && (d.has(base) || d.has(sansPrefixe(base)))) {
-      k = base;
-      unite = en[2] ?? null;
-    }
-  }
-  const c = d.get(k) ?? d.get(sansPrefixe(k));
-  if (c === undefined) return null;
-  const g = GRANDEUR_CHAMP[c];
-  const u = unite !== null && estUnite(unite) && g !== undefined && grandeur(unite) === g ? unite : null;
-  return { champ: c, unite: u };
-}
 
 function sansPrefixe(k: string): string {
   return PREFIXE_NUMERO.exec(k)?.[1] ?? k;
+}
+
+function chercher(k: string): CleChamp | undefined {
+  if (k === '') return undefined;
+  const d = synonymes();
+  return d.get(k) ?? d.get(sansPrefixe(k));
+}
+
+/**
+ * Texte final entre parenthèses ou crochets (« Durée (j) ») : ce qui précède et ce qui est
+ * dedans ; `null` s'il n'y en a pas. Un seul parcours depuis la fin.
+ */
+function parenthesesFinales(t: string): { readonly avant: string; readonly dedans: string } | null {
+  const fin = t.length - 1;
+  const dernier = t[fin];
+  if (dernier !== ')' && dernier !== ']') return null;
+  for (let i = fin - 1; i >= 0; i--) {
+    const c = t[i];
+    if (c === '(' || c === '[') return { avant: t.slice(0, i), dedans: t.slice(i + 1, fin) };
+    if (c === ')' || c === ']') return null;
+  }
+  return null;
+}
+
+const estEspace = (c: string | undefined): boolean => c?.trim() === '';
+
+/**
+ * Unité en fin d'en-tête hors parenthèses : après « / » (« Plants/m² »), « en » ou « par »
+ * (« Longueur en cm »), en suffixe de l'export T15 (« poids_mille_graines_g »), ou après un
+ * simple espace pour m, cm, kg, g. Rend la clé de ce qui précède et l'unité canonique.
+ */
+function uniteFinale(t: string): { readonly base: string; readonly unite: string } | null {
+  let i = t.length;
+  while (i > 0) {
+    const c = t[i - 1];
+    if (c === '/' || c === '_' || estEspace(c)) break;
+    i--;
+  }
+  if (i === 0) return null;
+  const unite = uniteConnue(t.slice(i));
+  if (unite === null) return null;
+  let j = i;
+  while (j > 0 && estEspace(t[j - 1])) j--;
+  const lien = t[j - 1];
+  if (lien === '/' || lien === '_') return { base: cle(t.slice(0, j - 1)), unite };
+  const k = cle(t.slice(0, j));
+  if (k.endsWith(' en')) return { base: k.slice(0, -3), unite };
+  if (k.endsWith(' par')) return { base: k.slice(0, -4), unite };
+  return UNITES_SUFFIXE_NU.has(unite) ? { base: k, unite } : null;
+}
+
+export interface EnteteReconnu {
+  readonly champ: CleChamp;
+  readonly unite: UniteColonne | null;
+}
+
+/**
+ * Champ (tous types confondus) et unité d'un en-tête, ou `null` s'il n'est pas reconnu : texte
+ * de plus de 200 caractères, synonyme inconnu, ou unité explicite qui ne va pas au champ.
+ */
+export function reconnaitreEntete(entete: Cellule | undefined): EnteteReconnu | null {
+  const brut = texteCellule(entete);
+  if (brut === null || brut.length > LONGUEUR_MAX_ENTETE) return null;
+  let texte = brut;
+  let explicite: string | null = null;
+  const parentheses = parenthesesFinales(texte);
+  if (parentheses !== null) {
+    texte = parentheses.avant;
+    explicite = uniteConnue(parentheses.dedans);
+  }
+  let c = chercher(cle(texte));
+  if (c === undefined && explicite === null) {
+    const finale = uniteFinale(texte.trim());
+    if (finale !== null) {
+      c = chercher(finale.base);
+      explicite = finale.unite;
+    }
+  }
+  if (c === undefined) return null;
+  if (explicite === null) return { champ: c, unite: null };
+  const permises = UNITES_CHAMP[c];
+  if (permises?.has(explicite) !== true) return null;
+  return { champ: c, unite: permises.get(explicite) ?? null };
 }
 
 const LIGNES_ENTETE = 20;

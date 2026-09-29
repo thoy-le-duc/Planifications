@@ -4,7 +4,7 @@
  * vides et de total ignorées ; hiérarchie du parcellaire reprise des cellules fusionnées.
  */
 import { CHAMPS_IMPORT } from './champs.ts';
-import { cle, lireDate, lireMesure, lireNombre, texteCellule } from './normalisation.ts';
+import { cle, lireDate, lireMesure, lireNombre, multiplierPuissanceDix, texteCellule } from './normalisation.ts';
 import { rapprocher } from './rapprochement.ts';
 import type {
   Bibliotheque,
@@ -23,6 +23,7 @@ import type {
   PropositionValeur,
   ReferenceImport,
   StatutLigne,
+  UniteColonne,
   UniteMesure,
   ValeurImport,
 } from './types.ts';
@@ -148,7 +149,7 @@ type Lu = { readonly ok: true; readonly valeur: ValeurImport } | { readonly ok: 
 
 interface Contexte {
   readonly anneeSaison: number | null;
-  readonly unite: UniteMesure | null;
+  readonly unite: UniteColonne | null;
   readonly referencer: (champ: ChampReference, texte: string) => ReferenceImport;
 }
 
@@ -163,21 +164,25 @@ function lireCellule(nature: Nature, c: Cellule, ctx: Contexte): Lu {
       return v === undefined ? { ok: false, code: 'valeur_inconnue', detail: ` (attendu : ${nature.attendus})` } : { ok: true, valeur: v };
     }
     case 'mesure': {
-      const r = lireMesure(c, nature.unite, ctx.unite);
+      const r = lireMesure(c, nature.unite, uniteMesure(ctx.unite));
       if (!r.ok) return r;
       if (r.valeur !== null && r.valeur <= 0) return { ok: false, code: 'hors_bornes', detail: ' : elle doit être positive' };
       return r;
     }
     case 'nombre': {
-      const r = lireNombre(c);
-      if (!r.ok) return r;
+      const lu = lireNombre(c);
+      if (!lu.ok) return lu;
+      // Hectares → m², exact (« 1,5 » → 15 000).
+      const r = lu.valeur !== null && ctx.unite === 'ha' ? { ok: true as const, valeur: multiplierPuissanceDix(lu.valeur, 4) } : lu;
       if (r.valeur !== null && r.valeur <= 0) return { ok: false, code: 'hors_bornes', detail: ' : il doit être positif' };
       return r;
     }
     case 'entier': {
-      const r = lireNombre(c);
-      if (!r.ok) return r;
-      if (r.valeur === null) return r;
+      const lu = lireNombre(c);
+      if (!lu.ok) return lu;
+      if (lu.valeur === null) return lu;
+      // Semaines → jours : le résultat doit rester un nombre entier de jours.
+      const r = { ok: true as const, valeur: ctx.unite === 'semaine' ? lu.valeur * 7 : lu.valeur };
       if (!Number.isInteger(r.valeur)) return { ok: false, code: 'nombre_invalide', detail: ' entier' };
       if (r.valeur < nature.min || (nature.max !== null && r.valeur > nature.max)) {
         const borne = nature.max === null ? `au moins ${String(nature.min)}` : `de ${String(nature.min)} à ${String(nature.max)}`;
@@ -192,6 +197,10 @@ function lireCellule(nature: Nature, c: Cellule, ctx: Contexte): Lu {
       return { ok: true, valeur: t === null ? null : ctx.referencer(nature.champ, t) };
     }
   }
+}
+
+function uniteMesure(u: UniteColonne | null): UniteMesure | null {
+  return u === 'm' || u === 'cm' || u === 'kg' || u === 'g' ? u : null;
 }
 
 // ── Lignes ignorées ──────────────────────────────────────────────────────────────────────────
@@ -250,7 +259,7 @@ export function preparerImport(entree: EntreeImport): PlanImport {
   const permis = new Set<CleChamp>(definitions.map((d) => d.cle));
 
   // Colonnes associées : un champ du type par colonne, la première seulement.
-  const colonnes: { readonly indice: number; readonly champ: CleChamp; readonly unite: UniteMesure | null }[] = [];
+  const colonnes: { readonly indice: number; readonly champ: CleChamp; readonly unite: UniteColonne | null }[] = [];
   const colonneDe = new Map<CleChamp, number>();
   correspondance.colonnes.forEach((a, indice) => {
     if (a.champ === null || !permis.has(a.champ) || colonneDe.has(a.champ)) return;
