@@ -11,10 +11,10 @@
  * Contrat détaillé : ./test/contrat.ts.
  */
 import { TABLES_EXPORTEES, type DescriptionTable, type TypeExport } from './tables.ts';
-import { creerZip, type Compresseur, type FichierZip, type MorceauZip } from './zip.ts';
+import { annulable, creerZip, verifierAnnulation, type Compresseur, type FichierZip, type MorceauZip, type SignalAnnulation } from './zip.ts';
 
 export { TABLES_EXPORTEES, type DescriptionColonne, type DescriptionTable, type TypeExport } from './tables.ts';
-export { creerZip, type Compresseur, type FichierZip, type MorceauZip, type OptionsZip } from './zip.ts';
+export { annulable, creerZip, type Compresseur, type FichierZip, type MorceauZip, type OptionsZip, type SignalAnnulation } from './zip.ts';
 
 export type ValeurLocale = string | number | null;
 export type LigneLocale = Readonly<Record<string, ValeurLocale>>;
@@ -53,6 +53,8 @@ export interface OptionsArchive {
   readonly compresseur?: Compresseur;
   /** Barre d'avancement ; une exception ici fait échouer l'export. */
   readonly avancement?: (a: Avancement) => void;
+  /** Annulation : promesse rejetée (`signal.reason`, AbortError) dès l'annulation. */
+  readonly signal?: SignalAnnulation;
 }
 
 export interface ArchiveConstruite {
@@ -252,7 +254,7 @@ function lisezmoi(nomFerme: string, genereLe: string): string {
     '- les colonnes JSON (détails, paramètres) sont gardées en texte JSON.',
     '',
     'Formules : un texte qui commence par =, +, -, @, une tabulation ou un retour à la ligne',
-    '(par exemple une note « =SOMME(A1) » ou « -3 plants ») est précédé d’une apostrophe (’) dans',
+    "(par exemple une note « =SOMME(A1) » ou « -3 plants ») est précédé d’une apostrophe (') dans",
     'les CSV, pour qu’Excel ne l’exécute pas comme une formule. Les nombres négatifs ne sont pas',
     'touchés. ferme.json garde la valeur exacte, sans apostrophe.',
     '',
@@ -409,15 +411,20 @@ const BOM_OCTETS = [0xef, 0xbb, 0xbf] as const;
  * Mêmes octets décompressés que `construireExport`.
  */
 export async function construireArchive(entree: EntreeExport, options: OptionsArchive): Promise<ArchiveConstruite> {
+  const { signal } = options;
+  verifierAnnulation(signal);
   const rendeur = creerRendeur();
   let tranche = Date.now();
   const peutEtreRendre = async () => {
+    verifierAnnulation(signal);
     if (Date.now() - tranche < TRANCHE_MS) return;
     await rendeur.rendre();
     tranche = Date.now();
+    verifierAnnulation(signal);
   };
   try {
-    return await archiver(entree, options, peutEtreRendre);
+    // Annulé : rejet immédiat, même si le compresseur ne rend plus la main ; le canal est fermé.
+    return await annulable(signal, () => archiver(entree, options, peutEtreRendre));
   } finally {
     rendeur.fermer();
   }
@@ -469,7 +476,11 @@ async function archiver(entree: EntreeExport, options: OptionsArchive, peutEtreR
 
   signaler();
   const fichiers: FichierZip[] = plan.fichiers.map((f) => ({ chemin: f.chemin, contenu: flux(f) }));
-  const octets = await creerZip(fichiers, options.compresseur === undefined ? { date: options.date } : { date: options.date, compresseur: options.compresseur });
+  const octets = await creerZip(fichiers, {
+    date: options.date,
+    ...(options.compresseur === undefined ? {} : { compresseur: options.compresseur }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
   if (arret.echec !== undefined) throw arret.echec.erreur;
   return { octets, lignes: plan.lignes };
 }

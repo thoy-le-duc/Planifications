@@ -27,6 +27,57 @@ export interface OptionsZip {
   readonly date?: string;
   /** Absent : entrées stockées (méthode 0). Présent : toutes en deflate (méthode 8). */
   readonly compresseur?: Compresseur;
+  /** Annulation : promesse rejetée (`signal.reason`, AbortError) dès l'annulation. */
+  readonly signal?: SignalAnnulation;
+}
+
+/**
+ * Signal d'annulation : le strict nécessaire d'un `AbortSignal`, décrit ici (le cœur n'a pas les
+ * types du DOM ni de Node). Un `AbortSignal` s'y range tel quel.
+ */
+export interface SignalAnnulation {
+  readonly aborted: boolean;
+  readonly reason?: unknown;
+  addEventListener(type: 'abort', ecouteur: () => void, options?: { readonly once?: boolean }): void;
+  removeEventListener(type: 'abort', ecouteur: () => void): void;
+}
+
+/** Erreur d'une annulation : `signal.reason`, ou à défaut une Error de nom 'AbortError'. */
+export function raisonAnnulation(signal: SignalAnnulation): unknown {
+  if (signal.reason !== undefined) return signal.reason;
+  const e = new Error('export annulé');
+  e.name = 'AbortError';
+  return e;
+}
+
+/** Lève l'erreur d'annulation si le signal est annulé. */
+export function verifierAnnulation(signal: SignalAnnulation | undefined): void {
+  if (signal?.aborted === true) throw raisonAnnulation(signal);
+}
+
+/**
+ * Promesse de `travail`, rejetée dès l'annulation du signal, même si `travail` ne se termine
+ * jamais (compresseur bloqué, base qui ne répond pas). Déjà annulé : `travail` n'est pas lancé.
+ */
+export async function annulable<T>(signal: SignalAnnulation | undefined, travail: () => Promise<T>): Promise<T> {
+  if (signal === undefined) return travail();
+  verifierAnnulation(signal);
+  let ecouteur: () => void = () => undefined;
+  const annulation = new Promise<void>((ok) => {
+    ecouteur = () => {
+      ok();
+    };
+    signal.addEventListener('abort', ecouteur, { once: true });
+  }).then((): never => {
+    throw raisonAnnulation(signal);
+  });
+  try {
+    const p = travail();
+    p.catch(() => undefined); // après une annulation, son rejet éventuel n'est plus lu
+    return await Promise.race([p, annulation]);
+  } finally {
+    signal.removeEventListener('abort', ecouteur);
+  }
 }
 
 const EN_TETE_LOCAL = 30;
@@ -38,6 +89,8 @@ const DRAPEAU_UTF8 = 0x0800;
 const MAX_32 = 0xffffffff;
 /** Taille des blocs d'octets bruts passés au compresseur. */
 const BLOC = 65_536;
+/** Longue chaîne d'un seul tenant : encodée par tranches d'environ ce nombre de caractères. */
+const TRANCHE_TEXTE = 16_000;
 /** Octets plus courts que ça : recopiés dans le bloc courant plutôt que passés seuls. */
 const PETITS_OCTETS = 4_096;
 /** Entrées dont le compresseur finit encore pendant qu'on lit les suivantes (chacune tient un contexte deflate). */
@@ -181,13 +234,34 @@ function dateDos(jour: string | undefined): number {
 interface Suivi {
   crc: number;
   taille: number;
+  /** Source lue jusqu'au bout (et pas seulement abandonnée par le compresseur). */
+  lue: boolean;
+}
+
+/** Tranches d'environ `TRANCHE_TEXTE` caractères, jamais coupées au milieu d'une paire de substitution. */
+function* tranches(texte: string): Generator<string> {
+  const n = texte.length;
+  if (n <= TRANCHE_TEXTE) {
+    yield texte;
+    return;
+  }
+  let i = 0;
+  while (i < n) {
+    let j = Math.min(i + TRANCHE_TEXTE, n);
+    if (j < n) {
+      const c = texte.charCodeAt(j - 1);
+      if (c >= 0xd800 && c <= 0xdbff) j--;
+    }
+    yield texte.slice(i, j);
+    i = j;
+  }
 }
 
 /**
  * Octets bruts d'une entrée, par blocs ; CRC-32 et taille tenus dans `suivi` au fil de la lecture.
  * `fin` est appelé quand la source est épuisée (ou abandonnée).
  */
-async function* blocsBruts(contenu: FichierZip['contenu'], suivi: Suivi, fin: () => void): AsyncGenerator<Uint8Array> {
+async function* blocsBruts(contenu: FichierZip['contenu'], suivi: Suivi, signal: SignalAnnulation | undefined, fin: () => void): AsyncGenerator<Uint8Array> {
   try {
     const morceaux: Iterable<MorceauZip> | AsyncIterable<MorceauZip> = typeof contenu === 'string' || contenu instanceof Uint8Array ? [contenu] : contenu;
     const e = new Encodeur();
@@ -200,12 +274,21 @@ async function* blocsBruts(contenu: FichierZip['contenu'], suivi: Suivi, fin: ()
       e.prets.length = 0;
     };
     for await (const m of morceaux) {
-      if (typeof m === 'string') e.texte(m);
-      else e.octets(m);
-      if (e.prets.length > 0) yield* rendre();
+      verifierAnnulation(signal);
+      if (typeof m === 'string') {
+        for (const t of tranches(m)) {
+          verifierAnnulation(signal);
+          e.texte(t);
+          if (e.prets.length > 0) yield* rendre();
+        }
+      } else {
+        e.octets(m);
+        if (e.prets.length > 0) yield* rendre();
+      }
     }
     e.fin();
     yield* rendre();
+    suivi.lue = true;
   } finally {
     fin();
   }
@@ -243,9 +326,14 @@ interface Centrale {
 
 /**
  * Construit une archive ZIP : en-têtes locaux, répertoire central, fin de répertoire.
- * Deux chemins identiques, ou une archive de plus de 4 Gio : promesse rejetée.
+ * Deux chemins identiques, une archive de plus de 4 Gio, une source que le compresseur n'a pas
+ * lue en entier, ou une annulation (`options.signal`) : promesse rejetée.
  */
 export async function creerZip(fichiers: readonly FichierZip[], options: OptionsZip = {}): Promise<Uint8Array> {
+  return annulable(options.signal, () => construireZip(fichiers, options));
+}
+
+async function construireZip(fichiers: readonly FichierZip[], options: OptionsZip): Promise<Uint8Array> {
   const date = dateDos(options.date);
   if (fichiers.length > 0xffff) throw new RangeError('trop de fichiers pour une archive ZIP simple');
   const vus = new Set<string>();
@@ -253,7 +341,7 @@ export async function creerZip(fichiers: readonly FichierZip[], options: Options
     if (vus.has(f.chemin)) throw new Error(`chemin en double dans l’archive : ${f.chemin}`);
     vus.add(f.chemin);
   }
-  const { compresseur } = options;
+  const { compresseur, signal } = options;
   const methode = compresseur === undefined ? 0 : 8;
 
   // Entrées en chaîne : dès que la source d'une entrée est lue, la suivante commence, pendant que
@@ -266,16 +354,22 @@ export async function creerZip(fichiers: readonly FichierZip[], options: Options
     const nom = utf8(f.chemin);
     if (nom.length > 0xffff) throw new RangeError(`chemin trop long : ${f.chemin.slice(0, 40)}…`);
     noms.push(nom);
-    const suivi: Suivi = { crc: -1, taille: 0 };
+    verifierAnnulation(signal);
+    const suivi: Suivi = { crc: -1, taille: 0, lue: false };
     suivis.push(suivi);
     let sourceLue: () => void = () => undefined;
     const finSource = new Promise<void>((ok) => {
       sourceLue = ok;
     });
-    const brut = blocsBruts(f.contenu, suivi, () => {
+    const brut = blocsBruts(f.contenu, suivi, signal, () => {
       sourceLue();
     });
-    const travail = collecter(compresseur === undefined ? brut : compresseur(brut));
+    // Sans cette vérification, un compresseur qui s'arrête tôt donnerait une entrée valide mais
+    // tronquée (CRC et taille d'un début de fichier seulement).
+    const travail = collecter(compresseur === undefined ? brut : compresseur(brut)).then((c) => {
+      if (!suivi.lue) throw new Error(`source non lue en entier par le compresseur : ${f.chemin}`);
+      return c;
+    });
     travail.catch(() => undefined); // rejet lu plus bas ; évite un rejet « non traité » entre-temps
     travaux.push(travail);
     await Promise.race([finSource, travail]);
@@ -283,13 +377,14 @@ export async function creerZip(fichiers: readonly FichierZip[], options: Options
     if (ancien !== undefined) await ancien;
   }
   const compressees = await Promise.all(travaux);
+  verifierAnnulation(signal);
 
   const parties: Uint8Array[] = [];
   const centrales: Centrale[] = [];
   let p = 0;
   compressees.forEach(({ donnees, tailleComp }, k) => {
     const nom = noms[k] ?? new Uint8Array(0);
-    const suivi = suivis[k] ?? { crc: -1, taille: 0 };
+    const suivi = suivis[k] ?? { crc: -1, taille: 0, lue: true };
     const crc = (suivi.crc ^ -1) >>> 0;
     if (suivi.taille > MAX_32 || p + EN_TETE_LOCAL + nom.length + tailleComp > MAX_32) {
       throw new RangeError('archive de plus de 4 Gio : ZIP64 non pris en charge');
