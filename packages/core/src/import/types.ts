@@ -108,7 +108,8 @@ export type CodeErreurImport =
   | 'valeur_inconnue'
   | 'hors_bornes'
   | 'dates_incoherentes'
-  | 'colonnes_en_trop';
+  | 'colonnes_en_trop'
+  | 'texte_trop_long';
 
 export type Lecture<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly code: CodeErreurImport };
 
@@ -197,8 +198,10 @@ export interface DecisionValeur {
   readonly propositions: readonly PropositionValeur[];
 }
 
+/** Plage de lignes ignorées qui se suivent avec le même motif (`debut` ≤ `fin`, bornes comprises). */
 export interface LigneIgnoree {
-  readonly ligne: number;
+  readonly debut: number;
+  readonly fin: number;
   readonly motif: 'vide' | 'total';
 }
 

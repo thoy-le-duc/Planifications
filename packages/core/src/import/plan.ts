@@ -4,7 +4,7 @@
  * vides et de total ignorées ; hiérarchie du parcellaire reprise des cellules fusionnées.
  */
 import { CHAMPS_IMPORT } from './champs.ts';
-import { cle, lireDate, lireMesure, lireNombre, multiplierPuissanceDix, premiersNombresDate, texteCellule } from './normalisation.ts';
+import { LONGUEUR_MAX_CELLULE, cle, lireDate, lireMesure, lireNombre, multiplierPuissanceDix, premiersNombresDate, texteCellule } from './normalisation.ts';
 import { rapprocher } from './rapprochement.ts';
 import type {
   Bibliotheque,
@@ -17,7 +17,6 @@ import type {
   EntreeImport,
   ErreurImport,
   LigneBrute,
-  LigneIgnoree,
   LignePlan,
   PlanImport,
   PropositionValeur,
@@ -152,6 +151,8 @@ function message(code: CodeErreurImport, nomChamp: string, cellule: Cellule | un
         return `${nomChamp} : ${v} précède ${detail} ; les dates d’une série doivent se suivre (semis, plantation, début puis fin de récolte).`;
       case 'colonnes_en_trop':
         return `Cellule ${v} hors des colonnes de l’en-tête (colonne ${detail}) : ajoutez-lui un en-tête ou effacez-la.`;
+      case 'texte_trop_long':
+        return `${nomChamp} : ${v} est trop long (${String(LONGUEUR_MAX_CELLULE)} caractères au plus).`;
     }
   })();
   return couper(m, 200);
@@ -180,13 +181,20 @@ interface Contexte {
   readonly referencer: (champ: ChampReference, texte: string) => ReferenceImport;
 }
 
+/** Texte, choix ou référence de plus de 200 caractères (espaces autour retirés) : refusé, jamais normalisé. */
+const TROP_LONG: Lu = { ok: false, code: 'texte_trop_long' };
+const tropLong = (t: string | null): boolean => t !== null && t.length > LONGUEUR_MAX_CELLULE;
+
 function lireCellule(nature: Nature, c: Cellule, ctx: Contexte): Lu {
   switch (nature.sorte) {
-    case 'texte':
-      return { ok: true, valeur: texteCellule(c) };
+    case 'texte': {
+      const t = texteCellule(c);
+      return tropLong(t) ? TROP_LONG : { ok: true, valeur: t };
+    }
     case 'choix': {
       const t = texteCellule(c);
       if (t === null) return { ok: true, valeur: null };
+      if (tropLong(t)) return TROP_LONG;
       const k = cle(t);
       // Jamais une propriété héritée (« constructor », « __proto__ »…).
       const v = Object.hasOwn(nature.valeurs, k) ? nature.valeurs[k] : undefined;
@@ -223,6 +231,7 @@ function lireCellule(nature: Nature, c: Cellule, ctx: Contexte): Lu {
       return lireDate(c, ctx.anneeSaison, ctx.optionsDate);
     case 'reference': {
       const t = texteCellule(c);
+      if (tropLong(t)) return TROP_LONG;
       return { ok: true, valeur: t === null ? null : ctx.referencer(nature.champ, t) };
     }
   }
@@ -284,18 +293,34 @@ function largeurEntete(entete: LigneBrute | undefined): number | null {
 
 // ── Doublons ─────────────────────────────────────────────────────────────────────────────────
 
-function cleValeur(v: ValeurImport | undefined): string {
+function cleValeur(v: ValeurImport | undefined, k: (t: string) => string): string {
   if (v === null || v === undefined) return '';
   if (typeof v === 'number') return String(v);
-  if (typeof v === 'string') return cle(v);
+  if (typeof v === 'string') return k(v);
   switch (v.sorte) {
     case 'existante':
       return `e:${v.id}`;
     case 'nouvelle':
-      return `n:${cle(v.nom)}`;
+      return `n:${k(v.nom)}`;
     case 'a_decider':
-      return `d:${cle(v.valeur)}`;
+      return `d:${k(v.valeur)}`;
   }
+}
+
+/**
+ * `cle` mémorisée pour un plan : une même chaîne (chaîne partagée d'un classeur répétée sur des
+ * milliers de lignes) n'est normalisée qu'une fois, le temps reste linéaire.
+ */
+function cleMemorisee(): (t: string) => string {
+  const memoire = new Map<string, string>();
+  return (t) => {
+    let k = memoire.get(t);
+    if (k === undefined) {
+      k = cle(t);
+      memoire.set(t, k);
+    }
+    return k;
+  };
 }
 
 // ── Plan ─────────────────────────────────────────────────────────────────────────────────────
@@ -331,6 +356,7 @@ function entierBorne(n: number, defaut: number): number {
 /** Prépare l'import : ce qui SERAIT importé, ligne par ligne. Pur, ne lève pas, n'écrit rien. */
 export function preparerImport(entree: EntreeImport): PlanImport {
   const { correspondance, bibliotheque, anneeSaison } = entree;
+  const cleDe = cleMemorisee();
   const systemeDates: SystemeDates = entree.systemeDates === 1904 ? 1904 : 1900;
   const type = correspondance.type;
   const definitions = CHAMPS_IMPORT[type];
@@ -367,7 +393,7 @@ export function preparerImport(entree: EntreeImport): PlanImport {
   const decisions = new Map<string, DecisionEnCours>();
   let numeroCourant = 0;
   const referencer = (champ: ChampReference, texte: string): ReferenceImport => {
-    const k = `${champ}\u0001${cle(texte)}`;
+    const k = `${champ}\u0001${cleDe(texte)}`;
     let r = cache.get(k);
     if (r === undefined) {
       const decidee = choix.get(k);
@@ -390,7 +416,8 @@ export function preparerImport(entree: EntreeImport): PlanImport {
   };
 
   const lignes: LignePlan[] = [];
-  const ignorees: LigneIgnoree[] = [];
+  const ignorees: { readonly debut: number; fin: number; readonly motif: 'vide' | 'total' }[] = [];
+  let nombreIgnorees = 0;
   const vues = new Map<string, number>();
   const cleDoublon = CLES_DOUBLON[type];
   const hierarchie = type === 'parcellaire';
@@ -415,7 +442,11 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     const numero = i + 1;
     const motif = motifIgnoree(brute, associees, colEmplacement);
     if (motif !== null) {
-      ignorees.push({ ligne: numero, motif });
+      // Plages : une ligne qui suit la précédente ignorée, avec le même motif, l'allonge.
+      nombreIgnorees++;
+      const derniere = ignorees[ignorees.length - 1];
+      if (derniere?.motif === motif && derniere.fin === numero - 1) derniere.fin = numero;
+      else ignorees.push({ debut: numero, fin: numero, motif });
       continue;
     }
     numeroCourant = numero;
@@ -427,7 +458,7 @@ export function preparerImport(entree: EntreeImport): PlanImport {
       if (z === null) {
         if (zoneReprise !== null) remplacees.set(colZone, zoneReprise);
       } else {
-        if (zoneReprise === null || cle(z) !== cle(zoneReprise)) sousZoneReprise = null;
+        if (zoneReprise === null || cleDe(z) !== cleDe(zoneReprise)) sousZoneReprise = null;
         zoneReprise = z;
       }
     }
@@ -500,7 +531,7 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     else {
       const aDecider = Object.values(valeurs).some((v) => typeof v === 'object' && v !== null && v.sorte === 'a_decider');
       const champsCle = cleDoublon ?? colonnes.map((c) => c.champ);
-      const k = champsCle.map((c) => cleValeur(valeurs[c])).join('\u0001');
+      const k = champsCle.map((c) => cleValeur(valeurs[c], cleDe)).join('\u0001');
       const premiere = vues.get(k);
       if (premiere === undefined) vues.set(k, numero);
       if (aDecider) statut = 'a_decider';
@@ -526,6 +557,6 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     ignorees,
     decisions: listeDecisions,
     niveaux,
-    resume: { valides: compter('valide'), erreurs: compter('erreur'), aDecider: compter('a_decider'), doublons: compter('doublon'), ignorees: ignorees.length },
+    resume: { valides: compter('valide'), erreurs: compter('erreur'), aDecider: compter('a_decider'), doublons: compter('doublon'), ignorees: nombreIgnorees },
   };
 }
