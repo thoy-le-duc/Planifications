@@ -13,19 +13,6 @@ import { ligneDepuisEvenement, type LigneEvenement } from '@planif/db';
 export type Lecture<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly raison: string };
 
 /**
- * JSON.stringify qui ne lève jamais (relecture T10, R2) : une valeur imbriquée sur des dizaines
- * de milliers de niveaux dépasse la pile (RangeError). null si la valeur ne s'écrit pas.
- */
-export function jsonSansErreur(valeur: unknown): string | null {
-  try {
-    const texte: unknown = JSON.stringify(valeur);
-    return typeof texte === 'string' ? texte : null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Données d'un PUT sur `evenement` → ligne à insérer (hors horodatages remplis par le serveur),
  * ou la raison du refus (message du cœur, en français).
  */
