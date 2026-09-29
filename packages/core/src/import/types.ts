@@ -109,7 +109,9 @@ export type CodeErreurImport =
   | 'hors_bornes'
   | 'dates_incoherentes'
   | 'colonnes_en_trop'
-  | 'texte_trop_long';
+  | 'texte_trop_long'
+  /** Correspondance qui associe le même champ à plusieurs colonnes. */
+  | 'champ_en_double';
 
 export type Lecture<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly code: CodeErreurImport };
 

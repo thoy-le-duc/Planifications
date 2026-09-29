@@ -153,6 +153,8 @@ function message(code: CodeErreurImport, nomChamp: string, cellule: Cellule | un
         return `Cellule ${v} hors des colonnes de l’en-tête (colonne ${detail}) : ajoutez-lui un en-tête ou effacez-la.`;
       case 'texte_trop_long':
         return `${nomChamp} : ${v} est trop long (${String(LONGUEUR_MAX_CELLULE)} caractères au plus).`;
+      case 'champ_en_double':
+        return `${nomChamp} : associé à plusieurs colonnes (${detail}) ; n’en gardez qu’une dans la correspondance.`;
     }
   })();
   return couper(m, 200);
@@ -273,10 +275,10 @@ function motifIgnoree(ligne: LigneBrute, associees: readonly number[], colEmplac
  * JJ/MM ou MM/JJ, décidé par colonne sur toutes ses lignes : une valeur « a/b/AAAA » avec a > 12
  * → JJ/MM ; sinon une avec b > 12 → MM/JJ ; sinon JJ/MM (défaut français).
  */
-function ordreColonne(lignes: readonly LigneBrute[], debut: number, colonne: number): 'jj_mm' | 'mm_jj' {
+function ordreColonne(lignes: readonly LigneBrute[], debut: number, colonne: number, nettoyer: (c: Cellule | undefined) => Cellule): 'jj_mm' | 'mm_jj' {
   let mmJj = false;
   for (let i = debut; i < lignes.length; i++) {
-    const n = premiersNombresDate(lignes[i]?.[colonne]);
+    const n = premiersNombresDate(nettoyer(lignes[i]?.[colonne]));
     if (n === null) continue;
     if (n[0] > 12) return 'jj_mm';
     if (n[1] > 12) mmJj = true;
@@ -323,6 +325,25 @@ function cleMemorisee(): (t: string) => string {
   };
 }
 
+/**
+ * Cellule sans espaces autour, mémorisée par chaîne pour un plan (3e relecture, point 1) : une
+ * chaîne partagée de 32 767 caractères répétée sur 100 000 lignes n'est nettoyée qu'une fois.
+ * Toutes les lectures retirent ces espaces : le résultat ne change pas, seul le temps baisse.
+ */
+function nettoyageMemorise(): (c: Cellule | undefined) => Cellule {
+  const memoire = new Map<string, string>();
+  return (c) => {
+    if (c === undefined) return null;
+    if (typeof c !== 'string') return c;
+    let t = memoire.get(c);
+    if (t === undefined) {
+      t = c.trim();
+      memoire.set(c, t);
+    }
+    return t;
+  };
+}
+
 // ── Plan ─────────────────────────────────────────────────────────────────────────────────────
 
 interface DecisionEnCours {
@@ -357,19 +378,32 @@ function entierBorne(n: number, defaut: number): number {
 export function preparerImport(entree: EntreeImport): PlanImport {
   const { correspondance, bibliotheque, anneeSaison } = entree;
   const cleDe = cleMemorisee();
+  const nettoyer = nettoyageMemorise();
   const systemeDates: SystemeDates = entree.systemeDates === 1904 ? 1904 : 1900;
   const type = correspondance.type;
   const definitions = CHAMPS_IMPORT[type];
   const permis = new Set<CleChamp>(definitions.map((d) => d.cle));
 
-  // Colonnes associées : un champ du type par colonne, la première seulement.
+  // Colonnes associées, par champ du type. Un champ sur plusieurs colonnes n'est lu sur aucune :
+  // chaque ligne est en erreur 'champ_en_double' (colonne = la deuxième qui le porte).
+  const indicesDe = new Map<CleChamp, { readonly indices: number[]; readonly unite: UniteColonne | null }>();
+  correspondance.colonnes.forEach((a, indice) => {
+    if (a.champ === null || !permis.has(a.champ)) return;
+    const deja = indicesDe.get(a.champ);
+    if (deja === undefined) indicesDe.set(a.champ, { indices: [indice], unite: a.unite });
+    else deja.indices.push(indice);
+  });
   const colonnes: { readonly indice: number; readonly champ: CleChamp; readonly unite: UniteColonne | null }[] = [];
   const colonneDe = new Map<CleChamp, number>();
-  correspondance.colonnes.forEach((a, indice) => {
-    if (a.champ === null || !permis.has(a.champ) || colonneDe.has(a.champ)) return;
-    colonneDe.set(a.champ, indice);
-    colonnes.push({ indice, champ: a.champ, unite: a.unite });
-  });
+  const enDouble: { readonly champ: CleChamp; readonly indices: readonly number[] }[] = [];
+  for (const [champ, { indices, unite }] of indicesDe) {
+    const [premier, deuxieme] = indices;
+    if (premier === undefined) continue;
+    colonneDe.set(champ, premier);
+    if (deuxieme === undefined) colonnes.push({ indice: premier, champ, unite });
+    else enDouble.push({ champ, indices });
+  }
+  colonnes.sort((a, b) => a.indice - b.indice);
   const obligatoires = definitions.filter((d) => d.obligatoire).map((d) => d.cle);
   const nonAssocies = obligatoires.filter((c) => !colonneDe.has(c));
 
@@ -429,16 +463,17 @@ export function preparerImport(entree: EntreeImport): PlanImport {
   const ligneEntete = entierBorne(entree.ligneEntete, -1);
   const debut = Math.max(0, ligneEntete + 1);
   const largeur = ligneEntete >= 0 ? largeurEntete(entree.lignes[ligneEntete]) : null;
-  const associees = colonnes.map((c) => c.indice).sort((a, b) => a - b);
+  const associees = [...indicesDe.values()].flatMap((d) => d.indices).sort((a, b) => a - b);
   const colEmplacement = colonneDe.get('emplacement');
   const optionsDates = new Map<number, OptionsDate>();
   for (const col of colonnes) {
-    if (NATURES[col.champ].sorte === 'date') optionsDates.set(col.indice, { ordre: ordreColonne(entree.lignes, debut, col.indice), systemeDates });
+    if (NATURES[col.champ].sorte === 'date') optionsDates.set(col.indice, { ordre: ordreColonne(entree.lignes, debut, col.indice, nettoyer), systemeDates });
   }
   const optionsParDefaut: OptionsDate = { systemeDates };
 
   for (let i = debut; i < entree.lignes.length; i++) {
-    const brute = entree.lignes[i] ?? [];
+    // Cellules nettoyées une fois par chaîne (toutes les lectures retirent les espaces autour).
+    const brute = (entree.lignes[i] ?? []).map(nettoyer);
     const numero = i + 1;
     const motif = motifIgnoree(brute, associees, colEmplacement);
     if (motif !== null) {
@@ -473,6 +508,11 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     const erreurs: ErreurImport[] = [];
     for (const c of nonAssocies) {
       erreurs.push({ code: 'champ_manquant', champ: c, colonne: null, message: `${libelle(type, c)} : aucune colonne du fichier n’y est associée.` });
+    }
+    for (const d of enDouble) {
+      const deuxieme = d.indices[1] ?? null;
+      const lettres = d.indices.map(lettreColonne).join(', ');
+      erreurs.push({ code: 'champ_en_double', champ: d.champ, colonne: deuxieme, message: message('champ_en_double', libelle(type, d.champ), null, lettres) });
     }
     const ctxBase = { anneeSaison, referencer };
     for (const col of colonnes) {
