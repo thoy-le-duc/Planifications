@@ -23,9 +23,12 @@ export interface OptionsClient {
 /** Nombre de chiffres d'un code de connexion. */
 export const LONGUEUR_CODE = 6;
 
-/** Adresse telle que l'API la stocke : espaces retirés, minuscules. */
+/**
+ * Adresse telle que l'API la stocke : espaces retirés, minuscules, forme NFC (un « é » saisi
+ * décomposé part précomposé ; l'API refuse les caractères combinants).
+ */
 export function normaliserEmail(email: string): string {
-  return email.trim().toLowerCase();
+  return email.trim().toLowerCase().normalize('NFC');
 }
 
 /** URL de l'API dans l'appli : VITE_API_URL, sinon '/api' (même origine). */
