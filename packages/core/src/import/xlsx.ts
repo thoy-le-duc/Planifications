@@ -10,8 +10,10 @@
  * Ne rejette jamais : tout ce qui n'est pas un classeur lisible → `classeur_illisible`. Protégé
  * contre les archives piégées : au plus 50 Mo décompressés en tout (bombe de décompression),
  * tailles et positions vérifiées contre la longueur réelle des octets ; au plus 5 millions de
- * cases créées pour tout le classeur (vérifié avant d'allouer) ; chaque partie lue une fois ;
- * balises de 64 Kio au plus, lues en un seul passage (temps linéaire).
+ * cases créées pour tout le classeur (vérifié avant d'allouer), chaînes partagées comprises ;
+ * chaque partie lue une fois ; balises de 64 Kio au plus, lues en un seul passage (temps
+ * linéaire) ; entités XML et échappements OOXML décodés en un balayage, cellule de 32 767
+ * caractères au plus une fois décodée (la limite d'Excel).
  */
 import { decoderUtf8 } from './texte.ts';
 import type { Cellule, Feuille, LecteurClasseur, LigneBrute, ResultatClasseur, SystemeDates } from './types.ts';
@@ -205,17 +207,113 @@ interface Rappels {
   texte(t: string): void;
 }
 
-const ENTITES: Readonly<Record<string, string>> = { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'" };
+/** Limite d'Excel : une cellule contient au plus 32 767 caractères. */
+const CELLULE_MAX = 32_767;
+/**
+ * Texte brut d'une cellule avant les échappements OOXML : « _x0041_ » (7 caractères) donne un
+ * caractère, donc au-delà de 7 × 32 767 caractères la cellule dépasse sûrement la limite.
+ */
+const TEXTE_MAX = 7 * CELLULE_MAX;
 
-function decoderEntites(t: string): string {
-  if (!t.includes('&')) return t;
-  return t.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g, (tout, e: string) => {
-    if (e.startsWith('#')) {
-      const code = e[1] === 'x' || e[1] === 'X' ? Number.parseInt(e.slice(2), 16) : Number.parseInt(e.slice(1), 10);
-      return Number.isInteger(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : tout;
+const ENTITES: ReadonlyMap<string, string> = new Map([
+  ['lt', '<'],
+  ['gt', '>'],
+  ['amp', '&'],
+  ['quot', '"'],
+  ['apos', "'"],
+]);
+
+const chiffre = (c: number): boolean => c >= 0x30 && c <= 0x39;
+const hexa = (c: number): boolean => chiffre(c) || (c >= 0x41 && c <= 0x46) || (c >= 0x61 && c <= 0x66);
+const lettre = (c: number): boolean => (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a);
+
+/** Assemble les morceaux décodés en vérifiant la longueur au fur et à mesure. */
+class Sortie {
+  private readonly morceaux: string[] = [];
+  private longueur = 0;
+  private readonly plafond: number;
+
+  constructor(plafond: number) {
+    this.plafond = plafond;
+  }
+
+  ajouter(t: string): void {
+    if (t === '') return;
+    this.longueur += t.length;
+    if (this.longueur > this.plafond) throw new Illisible('cellule de plus de 32 767 caractères');
+    this.morceaux.push(t);
+  }
+
+  texte(): string {
+    return this.morceaux.length === 1 ? (this.morceaux[0] ?? '') : this.morceaux.join('');
+  }
+}
+
+/**
+ * Entités XML (« &amp; », « &#233; », « &#xE9; ») décodées en un seul balayage (`indexOf`),
+ * au plus `plafond` caractères produits (au-delà : illisible, sans aller plus loin). Une entité
+ * inconnue ou invalide reste telle quelle.
+ */
+function decoderEntites(t: string, plafond: number): string {
+  let amp = t.indexOf('&');
+  if (amp === -1) {
+    if (t.length > plafond) throw new Illisible('cellule de plus de 32 767 caractères');
+    return t;
+  }
+  const sortie = new Sortie(plafond);
+  let i = 0;
+  const n = t.length;
+  while (amp !== -1) {
+    // Nom ou numéro de l'entité : un seul passage sur des caractères qui ne sont pas « & ».
+    let j = amp + 1;
+    let remplacement: string | undefined;
+    if (t.charCodeAt(j) === 0x23) {
+      const x = t.charCodeAt(j + 1) === 0x78 || t.charCodeAt(j + 1) === 0x58;
+      j += x ? 2 : 1;
+      const debut = j;
+      while (j < n && (x ? hexa(t.charCodeAt(j)) : chiffre(t.charCodeAt(j)))) j++;
+      if (j > debut && t.charCodeAt(j) === 0x3b) {
+        const code = Number.parseInt(t.slice(debut, j), x ? 16 : 10);
+        if (Number.isInteger(code) && code >= 0 && code <= 0x10ffff) remplacement = String.fromCodePoint(code);
+      }
+    } else {
+      const debut = j;
+      while (j < n && lettre(t.charCodeAt(j))) j++;
+      if (j > debut && t.charCodeAt(j) === 0x3b) remplacement = ENTITES.get(t.slice(debut, j));
     }
-    return ENTITES[e] ?? tout;
-  });
+    if (remplacement !== undefined) {
+      sortie.ajouter(t.slice(i, amp));
+      sortie.ajouter(remplacement);
+      i = j + 1;
+    }
+    amp = t.indexOf('&', remplacement === undefined ? amp + 1 : i);
+  }
+  sortie.ajouter(t.slice(i));
+  return sortie.texte();
+}
+
+/**
+ * Échappements OOXML (« _x000D_ » → retour chariot, « _x005F_ » → « _ ») décodés en un seul
+ * balayage (`indexOf`) ; plus de 32 767 caractères produits → illisible.
+ */
+function decoderOoxml(t: string): string {
+  let p = t.indexOf('_x');
+  if (p === -1) {
+    if (t.length > CELLULE_MAX) throw new Illisible('cellule de plus de 32 767 caractères');
+    return t;
+  }
+  const sortie = new Sortie(CELLULE_MAX);
+  let i = 0;
+  while (p !== -1) {
+    if (p + 6 < t.length && hexa(t.charCodeAt(p + 2)) && hexa(t.charCodeAt(p + 3)) && hexa(t.charCodeAt(p + 4)) && hexa(t.charCodeAt(p + 5)) && t.charCodeAt(p + 6) === 0x5f) {
+      sortie.ajouter(t.slice(i, p));
+      sortie.ajouter(String.fromCharCode(Number.parseInt(t.slice(p + 2, p + 6), 16)));
+      i = p + 7;
+      p = t.indexOf('_x', i);
+    } else p = t.indexOf('_x', p + 1);
+  }
+  sortie.ajouter(t.slice(i));
+  return sortie.texte();
 }
 
 /** Nom local (sans préfixe d'espace de noms). */
@@ -272,10 +370,13 @@ function lireAttributs(corps: string, depuis: number): Map<string, string> {
     if (q !== GUILLEMET && q !== APOSTROPHE) throw new Illisible('attribut XML sans guillemets');
     const f = corps.indexOf(q === GUILLEMET ? '"' : "'", i + 1);
     if (f === -1) throw new Illisible('attribut XML jamais refermé');
-    attributs.set(nom, decoderEntites(corps.slice(i + 1, f)));
+    attributs.set(nom, decoderEntites(corps.slice(i + 1, f), BALISE_MAX));
     i = f + 1;
   }
 }
+
+/** Attributs d'une balise qui n'en a pas (partagé, jamais modifié). */
+const SANS_ATTRIBUT: Attributs = new Map<string, string>();
 
 /** Parcours d'un XML : balises (nom local), attributs (noms tels quels), texte décodé. */
 function parcourir(xml: string, r: Rappels): void {
@@ -284,10 +385,10 @@ function parcourir(xml: string, r: Rappels): void {
   while (i < n) {
     const lt = xml.indexOf('<', i);
     if (lt === -1) {
-      r.texte(decoderEntites(xml.slice(i)));
+      r.texte(decoderEntites(xml.slice(i), TEXTE_MAX));
       break;
     }
-    if (lt > i) r.texte(decoderEntites(xml.slice(i, lt)));
+    if (lt > i) r.texte(decoderEntites(xml.slice(i, lt), TEXTE_MAX));
     if (xml.startsWith('<!--', lt)) {
       const f = xml.indexOf('-->', lt + 4);
       if (f === -1) throw new Illisible('XML abîmé');
@@ -297,24 +398,26 @@ function parcourir(xml: string, r: Rappels): void {
     if (xml.startsWith('<![CDATA[', lt)) {
       const f = xml.indexOf(']]>', lt + 9);
       if (f === -1) throw new Illisible('XML abîmé');
+      if (f - lt - 9 > TEXTE_MAX) throw new Illisible('cellule de plus de 32 767 caractères');
       r.texte(xml.slice(lt + 9, f));
       i = f + 3;
       continue;
     }
     const gt = finDeBalise(xml, lt);
-    const contenu = xml.slice(lt + 1, gt);
     i = gt + 1;
-    if (contenu.startsWith('?') || contenu.startsWith('!')) continue;
-    if (contenu.startsWith('/')) {
-      r.fermer(local(contenu.slice(1).trim()));
+    const premier = xml.charCodeAt(lt + 1);
+    if (premier === 0x3f || premier === 0x21) continue; // « ? », « ! »
+    if (premier === 0x2f) {
+      r.fermer(local(xml.slice(lt + 2, gt).trim()));
       continue;
     }
-    const vide = contenu.endsWith('/');
-    const corps = vide ? contenu.slice(0, -1) : contenu;
-    let espace = 0;
-    while (espace < corps.length && !blanc(corps.charCodeAt(espace))) espace++;
-    const nom = local(corps.slice(0, espace));
-    r.ouvrir(nom, lireAttributs(corps, espace), vide);
+    // Positions plutôt que morceaux : une balise sans attribut n'alloue que son nom.
+    const vide = gt > lt + 1 && xml.charCodeAt(gt - 1) === 0x2f;
+    const finCorps = vide ? gt - 1 : gt;
+    let espace = lt + 1;
+    while (espace < finCorps && !blanc(xml.charCodeAt(espace))) espace++;
+    const nom = local(xml.slice(lt + 1, espace));
+    r.ouvrir(nom, espace < finCorps ? lireAttributs(xml.slice(espace, finCorps), 0) : SANS_ATTRIBUT, vide);
     if (vide) r.fermer(nom);
   }
 }
@@ -325,11 +428,6 @@ function attribut(a: Attributs, nom: string): string | undefined {
   if (direct !== undefined) return direct;
   for (const [k, v] of a) if (local(k) === nom) return v;
   return undefined;
-}
-
-/** Échappements OOXML « _x000D_ » dans les chaînes. */
-function decoderOoxml(t: string): string {
-  return t.includes('_x') ? t.replace(/_x([0-9a-fA-F]{4})_/g, (_tout, h: string) => String.fromCharCode(Number.parseInt(h, 16))) : t;
 }
 
 // ── Parties du classeur ──────────────────────────────────────────────────────────────────────
@@ -370,26 +468,55 @@ async function relations(archive: Archive, source: string): Promise<{ readonly i
   return { id, type };
 }
 
-function lireChainesPartagees(xml: string): string[] {
+/**
+ * Texte brut d'une cellule, morceau par morceau ; plus de `TEXTE_MAX` caractères avant les
+ * échappements OOXML → illisible (la cellule dépasserait la limite d'Excel).
+ */
+class TexteCellule {
+  private morceaux: string[] = [];
+  private longueur = 0;
+
+  ajouter(t: string): void {
+    this.longueur += t.length;
+    if (this.longueur > TEXTE_MAX) throw new Illisible('cellule de plus de 32 767 caractères');
+    this.morceaux.push(t);
+  }
+
+  /** Texte décodé (échappements OOXML), puis remise à zéro. */
+  vider(): string {
+    if (this.morceaux.length === 0) return '';
+    const t = this.morceaux.length === 1 ? (this.morceaux[0] ?? '') : this.morceaux.join('');
+    this.morceaux = [];
+    this.longueur = 0;
+    return decoderOoxml(t);
+  }
+}
+
+/** Chaînes partagées : chacune (`<si/>` compris) compte pour une case dans le plafond. */
+function lireChainesPartagees(xml: string, budget: Budget): string[] {
   const chaines: string[] = [];
-  let courante: string[] | null = null;
+  const courante = new TexteCellule();
+  let dansSi = false;
   let dansT = false;
   let phonetique = 0;
   parcourir(xml, {
     ouvrir(nom, _a, vide) {
-      if (nom === 'si') courante = [];
-      else if (nom === 'rPh') phonetique++;
+      if (nom === 'si') {
+        depenser(budget, 1);
+        dansSi = true;
+        courante.vider();
+      } else if (nom === 'rPh') phonetique++;
       else if (nom === 't' && !vide) dansT = true;
     },
     fermer(nom) {
-      if (nom === 'si' && courante !== null) {
-        chaines.push(decoderOoxml(courante.join('')));
-        courante = null;
+      if (nom === 'si' && dansSi) {
+        chaines.push(courante.vider());
+        dansSi = false;
       } else if (nom === 'rPh') phonetique--;
       else if (nom === 't') dansT = false;
     },
     texte(t) {
-      if (dansT && phonetique === 0 && courante !== null) courante.push(t);
+      if (dansT && phonetique === 0 && dansSi) courante.ajouter(t);
     },
   });
   return chaines;
@@ -442,6 +569,8 @@ function lireFeuille(xml: string, chaines: readonly string[], budget: Budget): L
   let valeur: string | null = null;
   let enLigne: string[] | null = null;
   let tampon: string[] | null = null;
+  /** Caractères bruts lus dans la cellule courante (toutes ses balises `<t>` ou `<v>`). */
+  let longueurCellule = 0;
   let phonetique = 0;
 
   const cellule = (): Cellule => {
@@ -489,6 +618,7 @@ function lireFeuille(xml: string, chaines: readonly string[], budget: Budget): L
           typeCellule = a.get('t') ?? 'n';
           valeur = null;
           enLigne = null;
+          longueurCellule = 0;
           return;
         }
         case 'v':
@@ -545,7 +675,10 @@ function lireFeuille(xml: string, chaines: readonly string[], budget: Budget): L
       }
     },
     texte(t) {
-      if (tampon !== null) tampon.push(t);
+      if (tampon === null) return;
+      longueurCellule += t.length;
+      if (longueurCellule > TEXTE_MAX) throw new Illisible('cellule de plus de 32 767 caractères');
+      tampon.push(t);
     },
   });
   return lignes;
@@ -583,9 +716,8 @@ async function lireClasseur(octets: Uint8Array): Promise<Feuille[]> {
   }
 
   const cheminChaines = liens.type.get('sharedStrings') ?? resoudre(dossierDe(classeur), 'sharedStrings.xml');
-  const chaines = archive.a(cheminChaines) ? lireChainesPartagees(await archive.lireTexte(cheminChaines)) : [];
-
   const budget: Budget = { restant: PLAFOND_CASES };
+  const chaines = archive.a(cheminChaines) ? lireChainesPartagees(await archive.lireTexte(cheminChaines), budget) : [];
   const feuilles: Feuille[] = [];
   for (const f of feuillesDeclarees) {
     if (!archive.a(f.chemin)) throw new Illisible(`feuille absente : ${f.nom}`);
