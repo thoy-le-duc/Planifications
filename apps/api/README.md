@@ -27,8 +27,8 @@ Code à 6 chiffres reçu par e-mail, pas de mot de passe.
 
 | Route | Rôle |
 | --- | --- |
-| `POST /auth/code` | Envoie un code (10 min, 5 tentatives, usage unique). Au plus un envoi par minute et cinq par heure par adresse (429 + `Retry-After`). Même réponse que le compte existe ou non |
-| `POST /auth/verifier` | Code → jeton d'accès + jeton de renouvellement. Crée le compte à la première connexion |
+| `POST /auth/code` | Envoie un code (10 min, 5 tentatives, usage unique). Au plus un envoi par minute, cinq par heure et dix par 24 h glissantes par adresse (429 + `Retry-After`). Un nouveau code invalide le précédent. Même réponse que le compte existe ou non |
+| `POST /auth/verifier` | Code → jeton d'accès + jeton de renouvellement. Crée le compte à la première connexion. À partir de 10 échecs pour une adresse sur 24 h glissantes, tous codes confondus, toute vérification reçoit la même 401 `code_invalide`, même avec le bon code |
 | `POST /auth/renouveler` | Jeton de renouvellement → nouveau jeton d'accès, **sans** jeton d'accès valide : les écritures faites hors ligne partent au retour du réseau |
 | `GET /.well-known/jwks.json` | Clés publiques, pour PowerSync |
 | `GET /moi`, `POST /fermes`, `GET`/`PATCH /fermes/:id`, `POST /fermes/:id/membres` | Protégées par `Authorization: Bearer` |

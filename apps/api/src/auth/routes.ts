@@ -7,6 +7,7 @@ import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { Contexte } from '../dependances.ts';
 import { lireCorps, normaliserEmail } from '../http.ts';
+import { libreSelonFenetre, secondesAvant } from '../limites.ts';
 import { jwksPublic } from './cles.ts';
 import { emettreJetonAcces } from './jetons.ts';
 import { codeCorrespond, empreinteCode, empreinteJeton, tirerCode, tirerJetonRenouvellement } from './secrets.ts';
@@ -17,9 +18,16 @@ const JOUR = 24 * 60 * MINUTE;
 /** Un code vaut 10 minutes, 5 tentatives, une seule fois. */
 export const DUREE_CODE_MS = 10 * MINUTE;
 export const TENTATIVES_MAX = 5;
-/** Au plus un envoi par minute et cinq par heure pour une même adresse. */
+/** Au plus un envoi par minute, cinq par heure et dix par 24 h glissantes pour une même adresse. */
 export const INTERVALLE_ENVOI_MS = MINUTE;
 export const ENVOIS_PAR_HEURE = 5;
+export const ENVOIS_PAR_JOUR = 10;
+/**
+ * Force brute par adresse : à partir de ECHECS_PAR_JOUR échecs sur 24 h glissantes, tous codes
+ * confondus, toute vérification échoue (même réponse), jusqu'à ce que les échecs sortent de la
+ * fenêtre.
+ */
+export const ECHECS_PAR_JOUR = 10;
 /**
  * Jeton de renouvellement : glissant sur 90 jours (au moins 30 jours hors ligne, exigence T09),
  * plafonné à 365 jours après la connexion : un code par an au plus, et jamais 400 jours.
@@ -47,18 +55,21 @@ export function routesAuth(ctx: Contexte): Hono {
     const refus: Refus = await db.transaction(async (tx) => {
       // Sérialise les demandes d'une même adresse : la limite ne se contourne pas en parallèle.
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`code:${email}`}))`);
-      const recents = await tx
-        .select({ creeLe: codeConnexion.creeLe })
-        .from(codeConnexion)
-        .where(and(eq(codeConnexion.email, email), gt(codeConnexion.creeLe, new Date(maintenant.getTime() - 60 * MINUTE))))
-        .orderBy(asc(codeConnexion.creeLe));
-      const dernier = recents.at(-1)?.creeLe.getTime();
-      const premier = recents[0]?.creeLe.getTime();
-      let libreA = 0;
-      if (dernier !== undefined) libreA = Math.max(libreA, dernier + INTERVALLE_ENVOI_MS);
-      if (premier !== undefined && recents.length >= ENVOIS_PAR_HEURE) libreA = Math.max(libreA, premier + 60 * MINUTE);
-      if (libreA > maintenant.getTime()) {
-        return { erreur: 'trop_de_demandes', apresS: Math.max(1, Math.ceil((libreA - maintenant.getTime()) / 1000)) };
+      const t = maintenant.getTime();
+      const recents = (
+        await tx
+          .select({ creeLe: codeConnexion.creeLe })
+          .from(codeConnexion)
+          .where(and(eq(codeConnexion.email, email), gt(codeConnexion.creeLe, new Date(t - JOUR))))
+          .orderBy(asc(codeConnexion.creeLe))
+      ).map((l) => l.creeLe.getTime());
+      const libreA = Math.max(
+        libreSelonFenetre(recents, 1, INTERVALLE_ENVOI_MS, t),
+        libreSelonFenetre(recents, ENVOIS_PAR_HEURE, 60 * MINUTE, t),
+        libreSelonFenetre(recents, ENVOIS_PAR_JOUR, JOUR, t),
+      );
+      if (libreA > t) {
+        return { erreur: 'trop_de_demandes', apresS: secondesAvant(libreA, t) };
       }
       await tx.insert(codeConnexion).values({
         id: ctx.nouvelId(),
@@ -104,7 +115,18 @@ export function routesAuth(ctx: Contexte): Hono {
         .for('update');
       if (ligne === undefined) return null;
       if (ligne.utiliseLe !== null) return null; // déjà utilisé
-      const valable = ligne.expireLe.getTime() > maintenant.getTime() && ligne.tentatives < TENTATIVES_MAX;
+
+      // Force brute par adresse. Les échecs sont les tentatives des codes de l'adresse créés dans
+      // les 24 h : un échec suit toujours la création de son code, et un échec sur un code créé
+      // plus tôt visait un code expiré (10 minutes), sans chance d'aboutir.
+      const [echecs] = await tx
+        .select({ n: sql<number>`coalesce(sum(${codeConnexion.tentatives}), 0)::int` })
+        .from(codeConnexion)
+        .where(and(eq(codeConnexion.email, email), gt(codeConnexion.creeLe, new Date(maintenant.getTime() - JOUR))));
+      const bloque = (echecs?.n ?? 0) >= ECHECS_PAR_JOUR;
+
+      const valable =
+        !bloque && ligne.expireLe.getTime() > maintenant.getTime() && ligne.tentatives < TENTATIVES_MAX;
       if (!valable || !codeCorrespond(code, ligne.codeHache)) {
         // Chaque échec compte une tentative.
         await tx
