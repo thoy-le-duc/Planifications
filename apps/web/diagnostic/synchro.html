@@ -10,6 +10,7 @@
       h1 { font-size: 1.2rem; }
       [data-etat='synchronise'] { color: #2f6b3a; }
       [data-etat='hors-ligne'] { color: #8a5a00; }
+      [data-etat='session-expiree'] { color: #9b1c1c; }
       form { display: flex; gap: 0.5rem; align-items: end; flex-wrap: wrap; margin: 1rem 0; }
       label { display: flex; flex-direction: column; gap: 0.25rem; }
       input, button { font-size: 1.1rem; padding: 0.6rem; min-height: 48px; }
@@ -27,8 +28,12 @@
       <button type="submit">Enregistrer la récolte</button>
     </form>
     <button id="modifier" type="button">Modifier la dernière récolte sur place</button>
+    <button id="autre-ferme" type="button">Saisir une récolte pour une autre ferme</button>
+    <p>Écriture interdite envoyée : <code id="put-interdit" data-testid="put-interdit"></code></p>
     <h2>Récoltes</h2>
     <ul id="recoltes"></ul>
+    <h2>Événements en base locale</h2>
+    <ul id="evenements-locaux"></ul>
     <h2>Refus du serveur</h2>
     <ul id="refus" class="refus"></ul>
     <script type="module" src="/src/diagnostic/synchro.ts"></script>

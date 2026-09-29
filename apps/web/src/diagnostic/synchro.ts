@@ -44,6 +44,8 @@ function aujourdhui(fuseau: string): DateCalendaire {
 interface Recolte {
   readonly id: string;
   readonly quantite: number | null;
+  /** Colonne `note` de la ligne locale ('' si NULL) : montre qu'une modification refusée est défaite. */
+  readonly note: string;
 }
 
 function recolteDepuisLigne(l: Readonly<Record<string, unknown>>): Recolte {
@@ -55,11 +57,12 @@ function recolteDepuisLigne(l: Readonly<Record<string, unknown>>): Recolte {
   } catch {
     // Détail illisible : la ligne s'affiche sans quantité.
   }
-  return { id: String(l.id), quantite };
+  return { id: String(l.id), quantite, note: typeof l.note === 'string' ? l.note : '' };
 }
 
-function brancher(porte: PorteDonnees, fermeId: Id<'Ferme'>): void {
+function brancher(porte: PorteDonnees, fermeId: Id<'Ferme'>, auteurId: string): void {
   let fuseau = FUSEAU_PAR_DEFAUT;
+  brancherPutInterdit(porte, auteurId, () => fuseau);
   porte.surveiller<string>(
     { sql: 'SELECT fuseau_horaire FROM ferme WHERE id = ?', parametres: [fermeId], tables: ['ferme'], convertir: (l) => String(l.fuseau_horaire) },
     (lignes) => {
@@ -70,7 +73,7 @@ function brancher(porte: PorteDonnees, fermeId: Id<'Ferme'>): void {
   const liste = element('recoltes', HTMLUListElement);
   porte.surveiller<Recolte>(
     {
-      sql: "SELECT id, detail FROM evenement WHERE ferme_id = ? AND type = 'recolte' ORDER BY id",
+      sql: "SELECT id, detail, note FROM evenement WHERE ferme_id = ? AND type = 'recolte' ORDER BY id",
       parametres: [fermeId],
       tables: ['evenement'],
       convertir: recolteDepuisLigne,
@@ -82,7 +85,25 @@ function brancher(porte: PorteDonnees, fermeId: Id<'Ferme'>): void {
           li.dataset.testid = 'recolte';
           li.dataset.id = r.id;
           li.dataset.quantite = String(r.quantite);
+          li.dataset.note = r.note;
           li.textContent = `${String(r.quantite)} kg`;
+          return li;
+        }),
+      );
+    },
+  );
+
+  // Toutes fermes confondues : une création refusée doit quitter la base locale après la synchro.
+  const listeLocale = element('evenements-locaux', HTMLUListElement);
+  porte.surveiller<string>(
+    { sql: 'SELECT id FROM evenement ORDER BY id', tables: ['evenement'], convertir: (l) => String(l.id) },
+    (ids) => {
+      listeLocale.replaceChildren(
+        ...ids.map((id) => {
+          const li = document.createElement('li');
+          li.dataset.testid = 'evenement-local';
+          li.dataset.id = id;
+          li.textContent = id;
           return li;
         }),
       );
@@ -138,6 +159,32 @@ function brancher(porte: PorteDonnees, fermeId: Id<'Ferme'>): void {
   });
 }
 
+/**
+ * Écriture que le serveur doit refuser (ferme_interdite) : une récolte valide en tout point, mais
+ * pour une ferme dont l'utilisateur n'est pas membre (UUID neuf).
+ */
+function brancherPutInterdit(porte: PorteDonnees, auteurId: string, fuseau: () => string): void {
+  const temoin = element('put-interdit', HTMLElement);
+  element('autre-ferme', HTMLButtonElement).addEventListener('click', () => {
+    const id = crypto.randomUUID();
+    const detail = JSON.stringify({ quantite: 99, unite: 'kg', categorie: null });
+    void porte
+      .ecrire(
+        `INSERT INTO evenement (id, ferme_id, type, date, horodatage, auteur_id, source, serie_id, campagne_id,
+           emplacement_ids, note, photos, remplace_sorte, remplace_evenement_id, detail)
+         VALUES (?, ?, 'recolte', ?, ?, ?, 'tap', NULL, NULL, '[]', NULL, '[]', NULL, NULL, ?)`,
+        [id, crypto.randomUUID(), aujourdhui(fuseau()), new Date().toISOString(), auteurId, detail],
+      )
+      .then(() => {
+        temoin.dataset.id = id;
+        temoin.textContent = id;
+      })
+      .catch((erreur: unknown) => {
+        afficherErreur(`Écriture impossible : ${String(erreur)}`);
+      });
+  });
+}
+
 function demarrer(): void {
   const session = lireSession(stockageNavigateur());
   const ferme = new URLSearchParams(location.search).get('ferme') ?? '';
@@ -156,12 +203,17 @@ function demarrer(): void {
 
   const donnees = ouvrirDonnees({ session, fermeId, urlApi: urlApi(), urlPowerSync: powersync, stockage: stockageNavigateur() });
   const etat = element('etat', HTMLElement);
-  const LIBELLES = { connexion: 'connexion…', synchronise: 'synchronisé', 'hors-ligne': 'hors ligne' } as const;
+  const LIBELLES = {
+    connexion: 'connexion…',
+    synchronise: 'synchronisé',
+    'hors-ligne': 'hors ligne',
+    'session-expiree': 'session expirée : reconnectez-vous',
+  } as const;
   donnees.surveillerEtat((e) => {
     etat.dataset.etat = e;
     etat.textContent = LIBELLES[e];
   });
-  brancher(donnees.porte, fermeId);
+  brancher(donnees.porte, fermeId, session.utilisateurId);
 }
 
 demarrer();
