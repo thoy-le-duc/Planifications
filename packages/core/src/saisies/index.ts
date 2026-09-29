@@ -189,15 +189,26 @@ function json(v: unknown, champ: string, libelle: string): Lu<unknown> {
   }
 }
 
-/** JSON.stringify qui ne lève jamais (valeur imbriquée sur des milliers de niveaux). */
-function texteJson(v: unknown): string | null {
+/**
+ * JSON.stringify qui ne lève jamais : le texte, ou le motif de l'échec ('imbrique' : pile
+ * dépassée, RangeError ; 'illisible' : BigInt, valeur qui ne s'écrit pas).
+ */
+function texteJson(v: unknown): { readonly texte: string } | { readonly echec: 'imbrique' | 'illisible' } {
   try {
     const texte: unknown = JSON.stringify(v);
-    return typeof texte === 'string' ? texte : null;
-  } catch {
-    return null;
+    return typeof texte === 'string' ? { texte } : { echec: 'illisible' };
+  } catch (e) {
+    return { echec: e instanceof RangeError ? 'imbrique' : 'illisible' };
   }
 }
+
+/**
+ * Copie des propriétés propres et énumérables (un niveau) : une valeur héritée par prototype est
+ * absente, et modifier l'objet reçu après coup ne change rien. `Object.fromEntries` crée des
+ * propriétés propres : une clé '__proto__' reste une clé (refusée ensuite), pas un prototype.
+ */
+const copiePropre = (o: Objet): Objet => Object.fromEntries(Object.keys(o).map((cle) => [cle, o[cle]]));
+
 
 function idObligatoire(v: unknown, champ: string, libelle: string): Lu<string> {
   if (absent(v)) return echec(erreur('champ_manquant', champ, `${libelle} manquant`));
@@ -235,11 +246,14 @@ interface RegleNombre {
   readonly plafond: number;
   /** Strictement positif (quantité récoltée) ; sinon positif ou nul. */
   readonly strictementPositif?: boolean;
+  /** Entier (minutes, jours : T01). */
+  readonly entier?: boolean;
 }
 
 function verifNombre(v: unknown, champ: string, r: RegleNombre): Verif {
   if (absent(v)) return r.obligatoire ? erreur('champ_manquant', champ, `${r.libelle} manquante`) : null;
   if (!estNombre(v)) return erreur('champ_invalide', champ, `${r.libelle} : nombre attendu`);
+  if (r.entier === true && !Number.isInteger(v)) return erreur('champ_invalide', champ, `${r.libelle} : nombre entier attendu`);
   if (r.strictementPositif === true ? v <= 0 : v < 0) {
     return erreur('champ_invalide', champ, `${r.libelle} : nombre ${r.strictementPositif === true ? 'positif' : 'positif ou nul'} attendu`);
   }
@@ -280,14 +294,14 @@ function cleInconnue(type: TypeEvenement, d: Objet): Verif {
   const permises = CLES_DETAIL[type];
   for (const cle of Object.keys(d)) {
     if (!permises.includes(cle) && !propres.includes(cle)) {
-      return erreur('cle_inconnue', `detail.${cle}`, `clé inconnue dans le détail : ${extrait(cle)}`);
+      return erreur('cle_inconnue', `detail.${extrait(cle)}`, `clé inconnue dans le détail : ${extrait(cle)}`);
     }
   }
   for (const nom of ['dose', 'quantite']) {
     const q = d[nom];
     if (!estObjet(q) || !(type === 'traitement' || type === 'intervention')) continue;
     const cle = Object.keys(q).find((c) => !CLES_QUANTITE.includes(c));
-    if (cle !== undefined) return erreur('cle_inconnue', `detail.${nom}.${cle}`, `clé inconnue dans ${nom} : ${extrait(cle)}`);
+    if (cle !== undefined) return erreur('cle_inconnue', `detail.${nom}.${extrait(cle)}`, `clé inconnue dans ${nom} : ${extrait(cle)}`);
   }
   return null;
 }
@@ -319,6 +333,7 @@ function verifDetail(type: TypeEvenement, d: Objet): Verif {
           libelle: "durée d'occupation",
           obligatoire: false,
           plafond: P.couvertureJours,
+          entier: true,
         });
       }
       if (d.categorie === 'fertilisation' || d.categorie === 'amendement') {
@@ -332,7 +347,12 @@ function verifDetail(type: TypeEvenement, d: Objet): Verif {
     case 'irrigation':
       return (
         verifUuid(d.secteurIrrigationId, 'detail.secteurIrrigationId', "secteur d'irrigation") ??
-        verifNombre(d.dureeMinutes, 'detail.dureeMinutes', { libelle: "durée d'irrigation", obligatoire: true, plafond: P.irrigationMinutes })
+        verifNombre(d.dureeMinutes, 'detail.dureeMinutes', {
+          libelle: "durée d'irrigation",
+          obligatoire: true,
+          plafond: P.irrigationMinutes,
+          entier: true,
+        })
       );
     case 'traitement':
       return (
@@ -362,14 +382,24 @@ function lireDetail(type: TypeEvenement, v: unknown): Lu<Objet> {
   const valeur = json(v, 'detail', 'détail');
   if (!valeur.ok) return valeur;
   if (!estObjet(valeur.valeur)) return echec(erreur('champ_invalide', 'detail', 'détail : objet attendu'));
-  const texte = texteJson(valeur.valeur);
-  if (texte === null) return echec(erreur('json_illisible', 'detail', 'détail illisible (trop imbriqué)'));
+  // Copie propre (quantite et dose copiées aussi) : c'est elle qui est vérifiée puis rendue.
+  const d: Record<string, unknown> = { ...copiePropre(valeur.valeur) };
+  for (const nom of ['dose', 'quantite']) {
+    const q = d[nom];
+    if (estObjet(q)) d[nom] = copiePropre(q);
+  }
+  const ecrit = texteJson(d);
+  if ('echec' in ecrit) {
+    const message = ecrit.echec === 'imbrique' ? 'détail illisible (trop imbriqué)' : 'détail illisible (valeur non JSON)';
+    return echec(erreur('json_illisible', 'detail', message));
+  }
+  const texte = ecrit.texte;
   // Chaque caractère fait au moins un octet : inutile de compter un texte déjà trop long.
   if (texte.length > LIMITES_SAISIE.detailOctets || octetsUtf8(texte) > LIMITES_SAISIE.detailOctets) {
     return echec(erreur('trop_volumineux', 'detail', `détail trop volumineux (${String(LIMITES_SAISIE.detailOctets)} octets au plus)`));
   }
-  const e = cleInconnue(type, valeur.valeur) ?? verifDetail(type, valeur.valeur);
-  return e === null ? lu(valeur.valeur) : echec(e);
+  const e = cleInconnue(type, d) ?? verifDetail(type, d);
+  return e === null ? lu(d) : echec(e);
 }
 
 // ── Colonnes ─────────────────────────────────────────────────────────────────────────────────
@@ -442,7 +472,7 @@ function lireRemplacement(sorte: unknown, cible: unknown, id: string): Lu<Rempla
 
 function lire(l: Objet): Lu<Evenement> {
   for (const cle of Object.keys(l)) {
-    if (!COLONNES.has(cle)) return echec(erreur('colonne_inconnue', cle, `colonne inconnue : ${extrait(cle)}`));
+    if (!COLONNES.has(cle)) return echec(erreur('colonne_inconnue', extrait(cle), `colonne inconnue : ${extrait(cle)}`));
   }
   const id = idObligatoire(l.id, 'id', "identifiant de l'événement");
   if (!id.ok) return id;
@@ -486,7 +516,7 @@ function lire(l: Objet): Lu<Evenement> {
   if (serieId.valeur !== null) culture = { sorte: 'serie', serieId: serieId.valeur as Id<'Serie'> };
   else if (campagneId.valeur !== null) culture = { sorte: 'campagne', campagneId: campagneId.valeur as Id<'Campagne'> };
 
-  // Le détail a été vérifié clé par clé contre le Detail* de son type : c'est lui, tel quel.
+  // Le détail (copie propre) a été vérifié clé par clé contre le Detail* de son type.
   const evenement = {
     id: id.valeur as Id<'Evenement'>,
     fermeId: fermeId.valeur as Id<'Ferme'>,
@@ -510,9 +540,11 @@ function lire(l: Objet): Lu<Evenement> {
  * T01, ou renvoie la première règle violée. Pure, ne lève jamais.
  */
 export function validerSaisie(entree: unknown): ResultatSaisie {
-  if (!estObjet(entree)) return { ok: false, erreur: erreur('entree_invalide', null, 'saisie illisible : objet attendu') };
   try {
-    const r = lire(entree);
+    // Array.isArray lève sur un Proxy révoqué : tout le corps est dans le filet.
+    if (!estObjet(entree)) return { ok: false, erreur: erreur('entree_invalide', null, 'saisie illisible : objet attendu') };
+    // Seules les colonnes propres comptent : une valeur héritée par prototype est absente.
+    const r = lire(copiePropre(entree));
     return r.ok ? { ok: true, saisie: r.valeur } : { ok: false, erreur: r.erreur };
   } catch {
     // Filet de sécurité (accesseur qui lève, Proxy…) : jamais d'exception vers l'appelant.
