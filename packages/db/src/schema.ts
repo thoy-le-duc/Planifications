@@ -38,6 +38,7 @@ import {
   integer,
   jsonb,
   numeric,
+  pgSchema,
   pgTable,
   text,
   timestamp,
@@ -863,6 +864,13 @@ export const codeConnexion = pgTable(
 
 /**
  * Jeton de renouvellement (long, opaque), stocké haché : révocable (téléphone perdu). NON publiée.
+ *
+ * Rotation (T09b) : chaque renouvellement crée un jeton neuf de la même famille (`famille_id` =
+ * id du premier jeton de la connexion) ; l'ancien note son premier usage (`utilise_le`) et ne vaut
+ * plus que 2 minutes après. Déconnexion et rejeu révoquent toute la famille. `connexion_le` porte
+ * l'instant de la connexion, pour le plafond de 365 jours de toute la famille.
+ * Colonnes facultatives pour les lignes écrites hors API : NULL vaut `id` (famille d'un seul
+ * jeton) et `cree_le` (connexion) ; l'API les remplit toujours.
  */
 export const jetonRenouvellement = pgTable(
   'jeton_renouvellement',
@@ -875,8 +883,43 @@ export const jetonRenouvellement = pgTable(
     expireLe: instant('expire_le').notNull(),
     revoqueLe: instant('revoque_le'),
     creeLe: creeLe(),
+    familleId: uuid('famille_id'),
+    connexionLe: instant('connexion_le'),
+    utiliseLe: instant('utilise_le'),
   },
-  (t) => [index('jeton_renouvellement_utilisateur_idx').on(t.utilisateurId)],
+  (t) => [
+    index('jeton_renouvellement_utilisateur_idx').on(t.utilisateurId),
+    index('jeton_renouvellement_famille_idx').on(t.familleId),
+  ],
+);
+
+/**
+ * Données du serveur seul (T09b), hors du schéma `public` : jamais publiées vers PowerSync (la
+ * publication couvre `public`), jamais sur un téléphone.
+ */
+export const securite = pgSchema('securite');
+
+/** Actions limitées par adresse IP. */
+export const ACTIONS_LIMITEES_IP = ['code', 'verifier'] as const;
+
+/**
+ * Demande reçue d'une adresse IP sur /auth/code ou /auth/verifier (limite par IP, fenêtre
+ * glissante d'une heure). Donnée personnelle : l'API efface les lignes de plus de 24 heures à
+ * chaque insertion.
+ */
+export const demandeIp = securite.table(
+  'demande_ip',
+  {
+    id: uuid('id').primaryKey(),
+    ip: text('ip').notNull(),
+    action: text('action', { enum: ACTIONS_LIMITEES_IP }).notNull(),
+    creeLe: creeLe(),
+  },
+  (t) => [
+    verif('demande_ip', 'action', parmi(t.action, ACTIONS_LIMITEES_IP)),
+    index('demande_ip_action_ip_cree_idx').on(t.action, t.ip, t.creeLe),
+    index('demande_ip_cree_idx').on(t.creeLe),
+  ],
 );
 
 // ---------------------------------------------------------------------------------------------

@@ -71,6 +71,13 @@
       "when": 1790701410244,
       "tag": "0009_refus_synchro_sans_doublon",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790705164325,
+      "tag": "0010_durcissement_connexion",
+      "breakpoints": true
     }
   ]
 }
