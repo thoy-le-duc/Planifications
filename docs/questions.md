@@ -134,6 +134,33 @@ Question : tu acceptes cette règle ?
 Sinon, on cherche encore à gagner sur l'ouverture avant de construire la synchro (T10). La mesure sur ton propre téléphone Android trancherait. Elle demande de mettre en ligne une page de test : dis-moi si tu le veux.
 
 Réponse (2026-09-29) : « ok ». Règle retenue : 300 ms pour tout écran courant, base ouverte ; 500 ms au plus pour le premier écran avec données après un lancement à froid, avec un squelette affiché tout de suite. Tables brutes (« raw tables ») retenues ; la base s'ouvre au lancement et reste ouverte (T10).
+### Q10 — Récoltes, interventions et traitements : tables séparées ou détail de l'événement ? (posée le 2026-09-26)
+
+Pour T08 (schéma PostgreSQL). Le modèle v1 prévoit des tables séparées **Récolte**, **Intervention** et **Traitement**. T01 (PR #1) a choisi autre chose : un seul **événement** du journal, avec un détail qui change selon le type (réalisé, récolte, intervention, irrigation, traitement, observation). Le mouvement de stock d'une récolte pointe alors vers l'événement.
+
+| | Un événement + détail (choix de T01) | Tables séparées (modèle v1) |
+| --- | --- | --- |
+| Saisie au champ, synchro | une seule table en ajout seul, simple à synchroniser sans conflit | une écriture dans deux tables par saisie |
+| Registre phyto, cahier de récolte | une requête filtrée par type | une table directe, plus simple à exporter |
+| Contraintes côté serveur | vérifiées dans un champ JSON | colonnes typées, contrôles natifs |
+
+Ma recommandation : **un événement + détail**, avec des vues SQL « récoltes », « interventions » et « traitements » pour les exports et le registre phyto. On garde la simplicité de la synchro hors ligne et les tableaux lisibles.
+
+Question : on part là-dessus pour T08 ?
+
+Réponse (2026-09-29) : « ok ». Un événement + détail, avec des vues SQL « récoltes », « interventions » et « traitements » pour les exports et le registre phyto. Le modèle v1 est à mettre à jour dans ce sens avec T08.
+
+### Q11 — Semis non saisi avant une plantation réalisée (posée le 2026-09-25, PR #2)
+
+Question : si la plantation est saisie mais pas le semis en pépinière, le semis compte-t-il comme fait ?
+
+Réponse (2026-09-29) : « ok ». Oui : une étape antérieure non saisie compte comme faite dès qu'une étape postérieure est réalisée. C'est la règle déjà codée dans T06.
+
+### Q12 — Tâches en retard dans le semainier (posée le 2026-09-25, PR #6)
+
+Question : faut-il limiter les tâches en retard ? Proposition : une seule ligne en retard par série, celle de la plus ancienne étape non faite.
+
+Réponse (2026-09-29) : « ok ». Une seule ligne en retard par série. Ticket T06b.
 
 ### À suivre
 
