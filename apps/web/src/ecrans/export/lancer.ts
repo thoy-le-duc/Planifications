@@ -12,6 +12,8 @@ export interface OptionsLancerExport {
   readonly telecharger: (nomFichier: string, octets: Uint8Array) => void;
   /** Barre d'avancement (T15b) : transmis à `exporterFerme`. */
   readonly avancement?: (a: Avancement) => void;
+  /** Annulation (bouton « Annuler ») : transmis à `exporterFerme`. */
+  readonly signal?: AbortSignal;
 }
 
 const deux = (n: number): string => String(n).padStart(2, '0');
@@ -29,7 +31,10 @@ export async function lancerExport(o: OptionsLancerExport): Promise<ArchiveExpor
     genereLe: quand.toISOString(),
     jour: jourLocal(quand),
     ...(o.avancement === undefined ? {} : { avancement: o.avancement }),
+    ...(o.signal === undefined ? {} : { signal: o.signal }),
   });
+  // Annulé au tout dernier moment : pas de téléchargement tardif.
+  o.signal?.throwIfAborted();
   o.telecharger(archive.nomFichier, archive.octets);
   return archive;
 }
