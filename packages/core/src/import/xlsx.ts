@@ -274,7 +274,10 @@ function decoderEntites(t: string, plafond: number): string {
       while (j < n && (x ? hexa(t.charCodeAt(j)) : chiffre(t.charCodeAt(j)))) j++;
       if (j > debut && t.charCodeAt(j) === 0x3b) {
         const code = Number.parseInt(t.slice(debut, j), x ? 16 : 10);
-        if (Number.isInteger(code) && code >= 0 && code <= 0x10ffff) remplacement = String.fromCodePoint(code);
+        // Pas un caractère XML : nul, ou moitié de paire de substitution (même écrite en deux
+        // références) → illisible, jamais un caractère nul ni une paire cassée dans une cellule.
+        if (code === 0 || (code >= 0xd800 && code <= 0xdfff)) throw new Illisible('référence à un caractère interdit en XML');
+        if (Number.isInteger(code) && code <= 0x10ffff) remplacement = String.fromCodePoint(code);
       }
     } else {
       const debut = j;
@@ -573,6 +576,11 @@ function lireFeuille(xml: string, chaines: readonly string[], budget: Budget): L
   let longueurCellule = 0;
   let phonetique = 0;
 
+  /** Valeur d'un `<v>` (nombre, booléen, date, erreur) : 32 767 caractères au plus, comme tout texte de cellule. */
+  const bornee = (v: string): string => {
+    if (v.length > CELLULE_MAX) throw new Illisible('cellule de plus de 32 767 caractères');
+    return v;
+  };
   const cellule = (): Cellule => {
     switch (typeCellule) {
       case 's': {
@@ -584,15 +592,15 @@ function lireFeuille(xml: string, chaines: readonly string[], budget: Budget): L
       case 'str':
         return valeur === null ? null : decoderOoxml(valeur);
       case 'b':
-        return valeur === null ? null : valeur.trim() === '1' ? 'VRAI' : 'FAUX';
+        return valeur === null ? null : bornee(valeur).trim() === '1' ? 'VRAI' : 'FAUX';
       case 'd':
         // Date ISO « 2027-03-15T00:00:00 » → « 2027-03-15 » ; autre contenu tel quel.
         if (valeur === null) return null;
-        return DATE_ISO.test(valeur) ? valeur.slice(0, 10) : valeur;
+        return DATE_ISO.test(bornee(valeur)) ? valeur.slice(0, 10) : valeur;
       case 'e':
-        return valeur;
+        return valeur === null ? null : bornee(valeur);
       default: {
-        if (valeur === null || valeur.trim() === '') return null;
+        if (valeur === null || bornee(valeur).trim() === '') return null;
         const n = Number(valeur);
         return Number.isFinite(n) ? n : valeur;
       }
