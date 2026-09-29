@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "budget": "node scripts/budget.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "jetons": "node scripts/jetons-css.ts"
   },
   "dependencies": {
     "@planif/core": "workspace:*",

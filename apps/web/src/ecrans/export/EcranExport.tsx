@@ -2,10 +2,11 @@
  * Écran « Exporter toute ma ferme » (T15, principe 5) : un bouton, pensé pour des gants, qui
  * construit l'archive sur le téléphone depuis la base locale et la télécharge, même hors ligne.
  * Pendant l'export, une barre d'avancement et un bouton « Annuler » (T15b). Chargé par import dynamique seulement : hors
- * du JavaScript de démarrage.
+ * du JavaScript de démarrage. Habillage T16 : composants et jetons de src/ui.
  */
 import { useRef, useState, type CSSProperties } from 'react';
 import type { PorteDonnees } from '@planif/sync/export';
+import { AlerteOrange, BoutonPrincipal, BoutonSecondaire } from '../../ui/elements.tsx';
 import { lancerExport, telechargerDansLeNavigateur } from './lancer.ts';
 
 export interface ProprietesEcranExport {
@@ -16,36 +17,7 @@ export interface ProprietesEcranExport {
 }
 
 const PILE: CSSProperties = { display: 'grid', gap: 16, maxWidth: 420, margin: '24px auto', padding: '0 16px' };
-const BOUTON: CSSProperties = {
-  boxSizing: 'border-box',
-  display: 'block',
-  width: '100%',
-  minHeight: 56,
-  fontSize: 20,
-  borderRadius: 10,
-  padding: '0 16px',
-  border: 'none',
-  background: '#2f6b3a',
-  color: '#fff',
-  fontWeight: 600,
-};
-
-/** Bouton secondaire, lui aussi pensé pour des gants (au moins 48 px). */
-const BOUTON_ANNULER: CSSProperties = {
-  boxSizing: 'border-box',
-  display: 'block',
-  width: '100%',
-  minHeight: 48,
-  fontSize: 18,
-  borderRadius: 10,
-  padding: '0 16px',
-  border: '2px solid #2f6b3a',
-  background: '#fff',
-  color: '#2f6b3a',
-  fontWeight: 600,
-};
-
-const BARRE: CSSProperties = { width: '100%', height: 16 };
+const BARRE: CSSProperties = { width: '100%', height: 16, accentColor: 'var(--couleur-foret)' };
 
 const nombre = new Intl.NumberFormat('fr-FR');
 
@@ -93,9 +65,9 @@ export function EcranExport({ porte, fermeId, maintenant = () => new Date(), tel
   return (
     <section style={PILE}>
       <p>Toutes les données de la ferme, dans une archive ZIP : un fichier JSON complet et un tableau CSV par table, lisible dans Excel. Fonctionne sans réseau.</p>
-      <button style={BOUTON} type="button" disabled={etat.etape === 'en_cours'} onClick={() => void exporter()}>
+      <BoutonPrincipal disabled={etat.etape === 'en_cours'} onClick={() => void exporter()}>
         {etat.etape === 'en_cours' ? 'Export en cours…' : 'Exporter toute ma ferme'}
-      </button>
+      </BoutonPrincipal>
       {etat.etape === 'en_cours' &&
         (etat.total > 0 ? (
           <progress style={BARRE} max={etat.total} value={etat.fait} aria-label="Avancement de l’export" />
@@ -103,13 +75,11 @@ export function EcranExport({ porte, fermeId, maintenant = () => new Date(), tel
           <progress style={BARRE} aria-label="Avancement de l’export" />
         ))}
       {etat.etape === 'en_cours' && (
-        <button style={BOUTON_ANNULER} type="button" onClick={annuler}>
-          Annuler
-        </button>
+        <BoutonSecondaire onClick={annuler}>Annuler</BoutonSecondaire>
       )}
       {etat.etape === 'annule' && <p role="status">Export annulé.</p>}
       {etat.etape === 'fini' && <p role="status">{etat.message}</p>}
-      {etat.etape === 'echec' && <p role="alert">L’export n’a pas pu se faire. Réessayez ; si cela recommence, signalez-le.</p>}
+      {etat.etape === 'echec' && <AlerteOrange>L’export n’a pas pu se faire. Réessayez ; si cela recommence, signalez-le.</AlerteOrange>}
     </section>
   );
 }

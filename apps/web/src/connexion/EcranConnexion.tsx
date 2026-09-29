@@ -1,8 +1,11 @@
 /**
  * Écran de connexion, pensé pour des gants (Q9) : un seul champ par étape, cibles de 56 px,
  * focus déjà dans le champ, vérification qui part seule au 6e chiffre, adresse jamais redemandée.
+ * Habillage (T16) : carte claire de la maquette « Connexion » ; le bandeau vert est dans App, les
+ * styles dans ./connexion.css (chargée au démarrage par App).
  */
-import { useRef, useState, type CSSProperties, type SyntheticEvent } from 'react';
+import { useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
+import { BoutonPrincipal, BoutonSecondaire } from '../ui/elements.tsx';
 import { LONGUEUR_CODE, normaliserEmail, type ClientConnexion } from './client.ts';
 import type { SessionConnexion } from './session.ts';
 
@@ -12,22 +15,9 @@ export interface ProprietesEcranConnexion {
   readonly client: ClientConnexion;
   readonly surConnexion: (session: SessionConnexion) => void;
   readonly etapeInitiale?: EtapeConnexion;
+  /** Avertissements de l'appli (effacement en attente…), en tête de la carte. */
+  readonly children?: ReactNode;
 }
-
-const CIBLE: CSSProperties = {
-  boxSizing: 'border-box',
-  display: 'block',
-  width: '100%',
-  minHeight: 56,
-  fontSize: 20,
-  borderRadius: 10,
-  padding: '0 16px',
-};
-const CHAMP: CSSProperties = { ...CIBLE, border: '2px solid #5c6b5e', background: '#fff', color: '#1d2a1f' };
-const BOUTON: CSSProperties = { ...CIBLE, border: 'none', background: '#2f6b3a', color: '#fff', fontWeight: 600 };
-const BOUTON_SECONDAIRE: CSSProperties = { ...BOUTON, background: 'transparent', color: '#2f6b3a', border: '2px solid #2f6b3a' };
-const PILE: CSSProperties = { display: 'grid', gap: 16, maxWidth: 420, margin: '24px auto', padding: '0 16px' };
-const LIBELLE: CSSProperties = { display: 'grid', gap: 8, fontSize: 18, fontWeight: 600 };
 
 const MESSAGES = {
   email_invalide: 'Cette adresse ne semble pas valide.',
@@ -37,7 +27,7 @@ const MESSAGES = {
   erreur: 'Le serveur ne répond pas correctement. Réessayez dans un instant.',
 } as const;
 
-export function EcranConnexion({ client, surConnexion, etapeInitiale = { etape: 'email' } }: ProprietesEcranConnexion) {
+export function EcranConnexion({ client, surConnexion, etapeInitiale = { etape: 'email' }, children }: ProprietesEcranConnexion) {
   const [etape, setEtape] = useState<EtapeConnexion>(etapeInitiale);
   const [email, setEmail] = useState(etapeInitiale.etape === 'code' ? etapeInitiale.email : '');
   const [code, setCode] = useState('');
@@ -62,6 +52,18 @@ export function EcranConnexion({ client, surConnexion, etapeInitiale = { etape: 
     setMessage(MESSAGES[r.raison]);
   }
 
+  /** Nouveau code pour la même adresse : on reste sur la saisie du code. */
+  async function renvoyer(adresse: string) {
+    if (enCours) return;
+    setEnCours(true);
+    setMessage(null);
+    const r = await client.demanderCode(adresse);
+    setEnCours(false);
+    setCode('');
+    champCode.current?.focus();
+    if (!r.ok) setMessage(MESSAGES[r.raison]);
+  }
+
   async function verifier(adresse: string, saisi: string) {
     if (enCours || saisi.length !== LONGUEUR_CODE) return;
     setEnCours(true);
@@ -79,13 +81,22 @@ export function EcranConnexion({ client, surConnexion, etapeInitiale = { etape: 
     }
   }
 
+  const alerte = message !== null && (
+    <p role="alert" className="message-connexion">
+      {message}
+    </p>
+  );
+
+  let formulaire: ReactNode;
   if (etape.etape === 'email') {
-    return (
-      <form key="email" style={PILE} onSubmit={(e) => void demander(e)} noValidate>
-        <label style={LIBELLE}>
+    formulaire = (
+      <form key="email" onSubmit={(e) => void demander(e)} noValidate>
+        <p className="carte-connexion-titre">Connexion</p>
+        <p className="carte-connexion-aide">Pas de mot de passe : un code arrive par e-mail.</p>
+        <label className="champ-libelle">
           Adresse e-mail
           <input
-            style={CHAMP}
+            className="champ"
             type="email"
             name="email"
             autoComplete="email"
@@ -100,62 +111,74 @@ export function EcranConnexion({ client, surConnexion, etapeInitiale = { etape: 
             }}
           />
         </label>
-        {message !== null && <p role="alert">{message}</p>}
-        <button style={BOUTON} type="submit" disabled={enCours}>
+        {alerte}
+        <BoutonPrincipal type="submit" disabled={enCours}>
           Recevoir un code
+        </BoutonPrincipal>
+      </form>
+    );
+  } else {
+    const adresse = etape.email;
+    const complet = code.length === LONGUEUR_CODE;
+    formulaire = (
+      <form
+        key="code"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void verifier(adresse, code);
+        }}
+      >
+        <label className="champ-libelle">
+          <span className="carte-connexion-titre">Entre le code reçu</span>
+          <span className="carte-connexion-aide">Envoyé à {adresse} · valable 10 minutes</span>
+          <span className="saisie-code">
+            {Array.from({ length: LONGUEUR_CODE }, (_, i) => (
+              <span key={i} data-testid="case-code" aria-hidden="true" className={i === code.length ? 'case-code case-code-active' : 'case-code'}>
+                {i === code.length ? <i data-testid="curseur-code" className="curseur-code" /> : code[i]}
+              </span>
+            ))}
+            <input
+              ref={champCode}
+              type="text"
+              name="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
+              maxLength={LONGUEUR_CODE}
+              autoFocus
+              value={code}
+              onChange={(e) => {
+                const chiffres = e.target.value.replace(/\D/g, '').slice(0, LONGUEUR_CODE);
+                setCode(chiffres);
+                // Les 6 chiffres saisis : la vérification part seule, sans toucher de bouton.
+                if (chiffres.length === LONGUEUR_CODE) void verifier(adresse, chiffres);
+              }}
+            />
+          </span>
+        </label>
+        {alerte}
+        <BoutonPrincipal type="submit" disabled={enCours || !complet}>
+          Se connecter
+        </BoutonPrincipal>
+        <BoutonSecondaire
+          onClick={() => {
+            setEtape({ etape: 'email' });
+            setMessage(null);
+          }}
+        >
+          Changer d’adresse
+        </BoutonSecondaire>
+        <button type="button" className="lien-connexion" disabled={enCours} onClick={() => void renvoyer(adresse)}>
+          Renvoyer un code
         </button>
       </form>
     );
   }
 
-  const adresse = etape.email;
   return (
-    <form
-      key="code"
-      style={PILE}
-      onSubmit={(e) => {
-        e.preventDefault();
-        void verifier(adresse, code);
-      }}
-    >
-      <p style={{ margin: 0, fontSize: 18 }}>
-        Code envoyé à <strong>{adresse}</strong>
-      </p>
-      <label style={LIBELLE}>
-        Code reçu par e-mail (6 chiffres)
-        <input
-          ref={champCode}
-          style={{ ...CHAMP, letterSpacing: '0.4em', fontSize: 28, textAlign: 'center' }}
-          type="text"
-          name="code"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          pattern="[0-9]*"
-          maxLength={LONGUEUR_CODE}
-          autoFocus
-          value={code}
-          onChange={(e) => {
-            const chiffres = e.target.value.replace(/\D/g, '').slice(0, LONGUEUR_CODE);
-            setCode(chiffres);
-            // Les 6 chiffres saisis : la vérification part seule, sans toucher de bouton.
-            if (chiffres.length === LONGUEUR_CODE) void verifier(adresse, chiffres);
-          }}
-        />
-      </label>
-      {message !== null && <p role="alert">{message}</p>}
-      <button style={BOUTON} type="submit" disabled={enCours}>
-        Valider
-      </button>
-      <button
-        style={BOUTON_SECONDAIRE}
-        type="button"
-        onClick={() => {
-          setEtape({ etape: 'email' });
-          setMessage(null);
-        }}
-      >
-        Changer d’adresse
-      </button>
-    </form>
+    <div data-testid="carte-connexion" className="carte-connexion">
+      {children}
+      {formulaire}
+    </div>
   );
 }
