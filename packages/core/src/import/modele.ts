@@ -57,7 +57,7 @@ function lireChoix(v: unknown): ChoixValeur | null {
   return null;
 }
 
-/** Relit un modèle sérialisé ; `null` si illisible, de version inconnue ou de champ inconnu. */
+/** Relit un modèle sérialisé ; `null` si illisible, de version inconnue, de champ inconnu ou associé à deux colonnes. */
 export function lireModele(texte: string): ModeleImport | null {
   let brut: unknown;
   try {
@@ -68,9 +68,15 @@ export function lireModele(texte: string): ModeleImport | null {
   if (!estObjet(brut) || brut.version !== 1 || !estType(brut.type) || !Array.isArray(brut.colonnes) || !Array.isArray(brut.choix)) return null;
   const champs = new Set<CleChamp>(CHAMPS_IMPORT[brut.type].map((d) => d.cle));
   const colonnes: ColonneModele[] = [];
+  const associes = new Set<CleChamp>();
   for (const c of brut.colonnes as unknown[]) {
     const lue = lireColonne(c, champs);
     if (lue === null) return null;
+    // Un champ sur deux colonnes : laquelle lire ? Le modèle est refusé plutôt que deviné.
+    if (lue.champ !== null) {
+      if (associes.has(lue.champ)) return null;
+      associes.add(lue.champ);
+    }
     colonnes.push(lue);
   }
   const choix: ChoixValeur[] = [];
@@ -88,17 +94,21 @@ export function lireModele(texte: string): ModeleImport | null {
  */
 export function appliquerModele(modele: ModeleImport, entetes: readonly Cellule[]): Correspondance | null {
   if (entetes.length !== modele.colonnes.length) return null;
-  const libres = new Map<string, ColonneModele[]>();
+  // Par en-tête normalisé : ses colonnes du modèle, et l'indice de la prochaine libre (pas de
+  // `shift()`, linéaire en tout).
+  const libres = new Map<string, { readonly liste: ColonneModele[]; suivante: number }>();
   for (const c of modele.colonnes) {
     const k = cle(c.entete);
-    const liste = libres.get(k);
-    if (liste === undefined) libres.set(k, [c]);
-    else liste.push(c);
+    const l = libres.get(k);
+    if (l === undefined) libres.set(k, { liste: [c], suivante: 0 });
+    else l.liste.push(c);
   }
   const colonnes: ColonneAssociee[] = [];
   for (const e of entetes) {
-    const c = libres.get(cle(texteCellule(e) ?? ''))?.shift();
-    if (c === undefined) return null;
+    const l = libres.get(cle(texteCellule(e) ?? ''));
+    const c = l?.liste[l.suivante];
+    if (l === undefined || c === undefined) return null;
+    l.suivante++;
     colonnes.push({ champ: c.champ, unite: c.unite });
   }
   return { type: modele.type, colonnes };
