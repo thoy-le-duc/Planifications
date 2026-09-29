@@ -74,21 +74,26 @@ export function decoderUtf8(octets: Uint8Array, debut = 0, fin = octets.length):
   return texteDepuisUnites(unites, n);
 }
 
-function decoderCp1252(octets: Uint8Array): string {
-  const unites = new Uint16Array(octets.length);
-  for (let i = 0; i < octets.length; i++) {
-    const b = octets[i] ?? 0;
+function decoderCp1252(octets: Uint8Array, debut: number): string {
+  const n = Math.max(0, octets.length - debut);
+  const unites = new Uint16Array(n);
+  for (let i = 0; i < n; i++) {
+    const b = octets[debut + i] ?? 0;
     unites[i] = b >= 0x80 && b <= 0x9f ? (CP1252_80_9F[b - 0x80] ?? b) : b;
   }
-  return texteDepuisUnites(unites, octets.length);
+  return texteDepuisUnites(unites, n);
 }
 
-/** UTF-8 s'il est valide (BOM retiré et signalé), sinon Windows-1252 (exports Excel). */
+/**
+ * UTF-8 s'il est valide, sinon Windows-1252 (exports Excel). Le BOM UTF-8 est retiré du texte et
+ * signalé dans les deux cas (un BOM suivi d'octets Windows-1252 arrive après un copier-coller).
+ */
 export function decoderTexte(octets: Uint8Array): TexteDecode {
   const bom = octets.length >= 3 && octets[0] === 0xef && octets[1] === 0xbb && octets[2] === 0xbf;
-  const utf8 = decoderUtf8(octets, bom ? 3 : 0);
+  const debut = bom ? 3 : 0;
+  const utf8 = decoderUtf8(octets, debut);
   if (utf8 !== null) return { texte: utf8, encodage: 'utf-8', bom };
-  return { texte: decoderCp1252(octets), encodage: 'windows-1252', bom: false };
+  return { texte: decoderCp1252(octets, debut), encodage: 'windows-1252', bom };
 }
 
 // ── Découpage ────────────────────────────────────────────────────────────────────────────────
@@ -208,10 +213,28 @@ export function detecterSeparateur(texte: string): Separateur {
   return choisi?.separateur ?? ';';
 }
 
+/** Signature ZIP (un .xlsx renommé en .csv) ou octet nul (fichier binaire, UTF-16…). */
+function estBinaire(octets: Uint8Array): boolean {
+  if (octets.length >= 4 && octets[0] === 0x50 && octets[1] === 0x4b && octets[2] === 0x03 && octets[3] === 0x04) return true;
+  return octets.includes(0);
+}
+
+const binaire = (): CsvLu => ({
+  encodage: 'utf-8',
+  bom: false,
+  separateur: ';',
+  lignes: [],
+  erreur: {
+    code: 'fichier_binaire',
+    message: 'Ce fichier n’est pas un texte CSV (c’est peut-être un classeur Excel renommé) : déposez le fichier .xlsx tel quel, ou enregistrez-le en CSV depuis le tableur.',
+  },
+});
+
 /** Octets d'un CSV → lignes de chaînes (vide = ''), avec l'encodage et le séparateur détectés. */
 export function lireCsv(octets: Uint8Array): CsvLu {
+  if (estBinaire(octets)) return binaire();
   const { texte, encodage, bom } = decoderTexte(octets);
   const separateur = detecterSeparateur(texte);
   const lignes = decouper(texte, separateur.charCodeAt(0), Number.POSITIVE_INFINITY);
-  return { encodage, bom, separateur, lignes };
+  return { encodage, bom, separateur, lignes, erreur: null };
 }

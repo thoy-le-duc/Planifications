@@ -40,6 +40,8 @@ export interface CsvLu {
   readonly bom: boolean;
   readonly separateur: Separateur;
   readonly lignes: readonly (readonly string[])[];
+  /** Fichier binaire (un .xlsx renommé, octets nuls) : `lignes` vide. */
+  readonly erreur: { readonly code: 'fichier_binaire'; readonly message: string } | null;
 }
 
 // ── Champs et correspondance ─────────────────────────────────────────────────────────────────
