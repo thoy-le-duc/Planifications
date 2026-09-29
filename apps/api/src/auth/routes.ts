@@ -91,6 +91,7 @@ export function routesAuth(ctx: Contexte): Hono {
     if (email === null || typeof code !== 'string') return refuse();
 
     const maintenant = ctx.maintenant();
+    const jetonRenouvellementNeuf = tirerJetonRenouvellement();
     const utilisateurId = await db.transaction(async (tx) => {
       // Seul le dernier code demandé pour cette adresse compte ; verrouillé pour que deux
       // vérifications simultanées ne dépassent pas la limite de tentatives.
@@ -125,18 +126,19 @@ export function routesAuth(ctx: Contexte): Hono {
         .where(eq(utilisateur.email, email));
       if (compte === undefined) return null;
       if (compte.supprimeLe !== null) return null; // compte supprimé
+
+      // Dans la même transaction : un code n'est consommé que si la session est bien créée.
+      await tx.insert(jetonRenouvellement).values({
+        id: ctx.nouvelId(),
+        utilisateurId: compte.id,
+        jetonHache: empreinteJeton(jetonRenouvellementNeuf),
+        expireLe: new Date(maintenant.getTime() + DUREE_RENOUVELLEMENT_MS),
+        creeLe: maintenant,
+      });
       return compte.id;
     });
     if (utilisateurId === null) return refuse();
 
-    const jetonRenouvellementNeuf = tirerJetonRenouvellement();
-    await db.insert(jetonRenouvellement).values({
-      id: ctx.nouvelId(),
-      utilisateurId,
-      jetonHache: empreinteJeton(jetonRenouvellementNeuf),
-      expireLe: new Date(maintenant.getTime() + DUREE_RENOUVELLEMENT_MS),
-      creeLe: maintenant,
-    });
     return c.json({
       utilisateurId,
       jetonAcces: await emettreJetonAcces(ctx, utilisateurId, maintenant),
