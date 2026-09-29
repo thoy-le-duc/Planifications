@@ -19,8 +19,9 @@
  *   SMTP_PORT          défaut 465 (tls), 587 (starttls), 25 (aucune)
  *   SMTP_EXPEDITEUR    en-tête From (obligatoire avec SMTP_HOTE)
  *   SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE   identifiants du relais : les deux ou aucun
- *   PROXY_DE_CONFIANCE « 1 » derrière le proxy de production : l'adresse IP du client (limite par
- *                      IP) est lue dans la dernière valeur de X-Forwarded-For. Sinon « 0 » ou absente :
+ *   PROXY_DE_CONFIANCE « 1 » derrière exactement un proxy de confiance (production) : l'adresse IP
+ *                      du client (limite par IP) est la dernière valeur de X-Forwarded-For, si
+ *                      c'est une adresse IP valide. Sinon « 0 » ou absente :
  *                      adresse de la socket, en-têtes ignorés
  *   CORS_ORIGINES      origines autorisées à appeler l'API depuis un navigateur, séparées par des
  *                      virgules (ex. https://app.planif.fr,http://localhost:4174). Liste blanche
