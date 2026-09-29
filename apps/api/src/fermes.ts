@@ -27,8 +27,15 @@ interface FermeVue {
   readonly role: RoleMembre;
 }
 
+/**
+ * Caractères de contrôle (\r, \n, \t, \u0000…) et de format (U+202E inversion de sens, espace
+ * sans chasse…) : le nom de ferme finit dans le sujet des e-mails d'invitation et à l'écran, où
+ * ils serviraient à injecter un en-tête ou à maquiller le nom. Refusés, même en bord de chaîne.
+ */
+const CARACTERE_INTERDIT = /[\p{Cc}\p{Cf}]/u;
+
 function nomValide(v: unknown): string | null {
-  if (typeof v !== 'string') return null;
+  if (typeof v !== 'string' || CARACTERE_INTERDIT.test(v)) return null;
   const nom = v.trim();
   return nom === '' || nom.length > 200 ? null : nom;
 }
