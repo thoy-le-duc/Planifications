@@ -14,7 +14,7 @@
  *   surface      '#FFFFFF'  cartes, barre de navigation, cases du code
  *   encre        '#15201A'  texte
  *   secondaire   '#4B5A50'  texte secondaire
- *   tertiaire    (maquettes : '#6B786F', valeur libre)  onglets inactifs, « ou », flèches
+ *   tertiaire    (maquettes : '#6B786F', 4,05:1 sur le fond ; le chef retient '#606D64', 4,75:1 ; valeur libre)  onglets inactifs, « ou », flèches
  *   trait        '#D6DDD0'  séparateurs, ombre des cartes
  *   foret        '#1F4D3A'  tout ce qui se touche, en-têtes
  *   foretClair   '#2C6450'  pastilles sur l'en-tête
@@ -26,7 +26,8 @@
  *   (d'autres clés sont permises.)
  *
  * FAMILLES : Readonly<Record<'salades' | 'solanacees' | 'cruciferes' | 'racines', { bande: string; texte: string }>>
- *   bandes des cartes et du plan (maquette Plan) : salades '#2A78D6', solanacees '#C0392B',
+ *   bandes des cartes et du plan (maquette Plan ; salades foncée à '#2670CC' par le chef pour le contraste AA du texte blanc,
+ *   4,92:1 au lieu de 4,42:1) : salades '#2670CC', solanacees '#C0392B',
  *   cruciferes '#1BAF7A', racines '#EDA100' ; `texte` = couleur du texte posé sur la bande.
  *
  * POLICES : { titre, texte, code } (valeurs CSS font-family) : titre commence par Archivo,
@@ -111,7 +112,7 @@ const COULEURS_MAQUETTES: Readonly<Record<string, string>> = {
 };
 
 const BANDES_MAQUETTES: Readonly<Record<string, string>> = {
-  salades: '#2A78D6',
+  salades: '#2670CC',
   solanacees: '#C0392B',
   cruciferes: '#1BAF7A',
   racines: '#EDA100',
