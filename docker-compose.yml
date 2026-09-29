@@ -1,29 +1,71 @@
-# Base PostgreSQL de développement local (T08). Identifiants de développement seulement,
-# jamais utilisés en production.
+# Services de développement local : Postgres (T08) et le service PowerSync (T10).
+# Identifiants de développement seulement, jamais utilisés en production.
 #
-#   docker compose up -d
+#   docker compose up -d --wait postgres
 #   DATABASE_URL=postgres://planif:planif@localhost:5432/planif pnpm --filter @planif/db migrer
-#   DATABASE_URL=postgres://planif:planif@localhost:5432/planif pnpm test
+#   docker compose up -d --wait powersync      (après les migrations : la publication doit exister)
 #
 # wal_level=logical : réplication logique, nécessaire au service PowerSync (publication
-# « powersync », créée par les migrations).
+# « powersync », créée par les migrations). Le service range ses buckets dans une base à part du
+# même serveur (powersync_stockage, créée au premier démarrage du volume).
+#
+# PowerSync vérifie les jetons de l'API avec son JWKS : l'API tourne sur la machine hôte
+# (pnpm --filter @planif/api dev, port 3000), jointe par host.docker.internal.
+#
+# Variables (toutes facultatives) :
+#   POSTGRES_IMAGE, POWERSYNC_IMAGE   images (miroir si Docker Hub est limité)
+#   POSTGRES_PORT, POWERSYNC_PORT     ports publiés sur l'hôte (5432, 8080)
+#   PS_JWKS_URI, PS_JWT_AUDIENCE      JWKS et audience de l'API
 services:
   postgres:
-    image: postgres:17
+    image: ${POSTGRES_IMAGE:-postgres:17}
     command: postgres -c wal_level=logical
     environment:
       POSTGRES_USER: planif
       POSTGRES_PASSWORD: planif
       POSTGRES_DB: planif
     ports:
-      - '5432:5432'
+      - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - planif-postgres:/var/lib/postgresql/data
+      - ./powersync/initialiser-stockage.sql:/docker-entrypoint-initdb.d/initialiser-stockage.sql:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U planif -d planif']
-      interval: 5s
+      interval: 2s
       timeout: 5s
-      retries: 10
+      retries: 30
+
+  powersync:
+    image: ${POWERSYNC_IMAGE:-journeyapps/powersync-service:1.26.1}
+    command: ['start', '-r', 'unified']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/powersync.yaml
+      PS_DATA_SOURCE_URI: postgresql://planif:planif@postgres:5432/planif
+      PS_STORAGE_URI: postgresql://planif:planif@postgres:5432/powersync_stockage
+      PS_SSLMODE: disable
+      PS_PORT: '8080'
+      PS_JWKS_URI: ${PS_JWKS_URI:-http://host.docker.internal:3000/.well-known/jwks.json}
+      PS_JWT_AUDIENCE: ${PS_JWT_AUDIENCE:-powersync-planif}
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '${POWERSYNC_PORT:-8080}:8080'
+    volumes:
+      - ./powersync:/config:ro
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:8080/probes/liveness').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 60
 
 volumes:
   planif-postgres:

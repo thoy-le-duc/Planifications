@@ -1,0 +1,49 @@
+# Configuration du service PowerSync auto-hébergé (T10, docs/choix-synchro.md).
+#
+# Rien ne dépend de l'environnement dans ce fichier : tout passe par des variables (!env), les
+# mêmes en local (docker-compose.yml), en test (apps/api/src/sync/test/powersync.ts) et en
+# production.
+#
+#   PS_DATA_SOURCE_URI  base Postgres répliquée (celle de l'API), wal_level=logical, publication
+#                       « powersync » créée par les migrations de @planif/db
+#   PS_STORAGE_URI      base Postgres où le service range ses buckets (une base à part)
+#   PS_SSLMODE          sslmode des deux connexions : 'verify-full' en production, 'disable' en
+#                       local et en test (PowerSync ignore le sslmode écrit dans l'URI)
+#   PS_PORT             port HTTP du service
+#   PS_JWKS_URI         clés publiques de l'API (GET /.well-known/jwks.json)
+#   PS_JWT_AUDIENCE     audience des jetons d'accès (JWT_AUDIENCE de l'API)
+
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_DATA_SOURCE_URI
+      sslmode: !env PS_SSLMODE
+
+storage:
+  type: postgresql
+  uri: !env PS_STORAGE_URI
+  sslmode: !env PS_SSLMODE
+
+port: !env PS_PORT
+
+sync_config:
+  path: sync-config.yaml
+  # Une règle de synchro invalide arrête le service : mieux qu'une synchro qui envoie n'importe quoi.
+  exit_on_error: true
+
+client_auth:
+  # Jetons d'accès de l'API (T09) : JWT RS256, `sub` = utilisateur. Les droits sur les fermes
+  # ne sont pas dans le jeton : les règles de synchro les relisent dans `membre`.
+  # L'émetteur (`iss`) n'est PAS vérifié par PowerSync : la sécurité repose sur les clés de
+  # l'API (seules les clés de ce JWKS signent un jeton accepté) et sur l'audience
+  # `powersync-planif`, propre aux jetons destinés à la synchro.
+  jwks_uri: !env PS_JWKS_URI
+  audience: [!env PS_JWT_AUDIENCE]
+
+healthcheck:
+  probes:
+    use_http: true
+
+telemetry:
+  # Les données appartiennent au maraîcher : rien ne part chez l'éditeur, même anonymisé.
+  disable_telemetry_sharing: true

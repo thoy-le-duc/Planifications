@@ -1,0 +1,131 @@
+# Règles de synchro (Sync Streams, édition 3) : ce que chaque téléphone reçoit (T10).
+#
+# Règle de découpage : celle de fermesDeLUtilisateur (@planif/db). Un téléphone reçoit les
+# lignes des fermes dont son utilisateur est membre ACTIF : membre accepté (etat = 'accepte',
+# pas seulement invité), et ni le membre, ni la ferme, ni l'utilisateur supprimés.
+# Plus la bibliothèque de référence partagée (ferme_id nul), en flux global.
+#
+# Jamais synchronisés : code_connexion et jeton_renouvellement (aucun flux ne les lit), l'e-mail
+# des utilisateurs (flux `utilisateur` : son propre compte, sans e-mail), les données reçues
+# d'un refus.
+#
+# Tous les flux sont en auto_subscribe : le téléphone les reçoit sans abonnement explicite.
+# Une nouvelle table synchronisée : l'ajouter à la publication (migration de @planif/db), ici,
+# et au schéma local (packages/sync/src/schema.ts).
+
+config:
+  edition: 3
+  # Instants en ISO 8601 à la milliseconde, comme new Date(ms).toISOString() côté téléphone.
+  timestamp_max_precision: milliseconds
+
+with:
+  fermes_actives: >-
+    SELECT m.ferme_id AS ferme_id FROM membre m
+    INNER JOIN ferme f ON f.id = m.ferme_id
+    INNER JOIN utilisateur u ON u.id = m.utilisateur_id
+    WHERE m.utilisateur_id = auth.user_id()
+    AND m.etat = 'accepte'
+    AND m.supprime_le IS NULL
+    AND f.supprime_le IS NULL
+    AND u.supprime_le IS NULL
+
+streams:
+  ferme:
+    auto_subscribe: true
+    query: SELECT * FROM ferme WHERE id IN (SELECT ferme_id FROM fermes_actives)
+  zone:
+    auto_subscribe: true
+    query: SELECT * FROM zone WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  emplacement:
+    auto_subscribe: true
+    query: SELECT * FROM emplacement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  secteur_irrigation:
+    auto_subscribe: true
+    query: SELECT * FROM secteur_irrigation WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  secteur_emplacement:
+    auto_subscribe: true
+    query: SELECT * FROM secteur_emplacement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  saison:
+    auto_subscribe: true
+    query: SELECT * FROM saison WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  serie:
+    auto_subscribe: true
+    query: SELECT * FROM serie WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  plantation:
+    auto_subscribe: true
+    query: SELECT * FROM plantation WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  campagne:
+    auto_subscribe: true
+    query: SELECT * FROM campagne WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  occupation:
+    auto_subscribe: true
+    query: SELECT * FROM occupation WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  assolement:
+    auto_subscribe: true
+    query: SELECT * FROM assolement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  evenement:
+    auto_subscribe: true
+    query: SELECT * FROM evenement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  article_stock:
+    auto_subscribe: true
+    query: SELECT * FROM article_stock WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  mouvement_stock:
+    auto_subscribe: true
+    query: SELECT * FROM mouvement_stock WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  proposition:
+    auto_subscribe: true
+    query: SELECT * FROM proposition WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  modification:
+    auto_subscribe: true
+    query: SELECT * FROM modification WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  membre:
+    auto_subscribe: true
+    query: SELECT * FROM membre WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+
+  # Bibliothèque de référence : réglages propres à la ferme, puis lignes partagées (flux global).
+  famille_ferme:
+    auto_subscribe: true
+    query: SELECT * FROM famille WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  famille_reference:
+    auto_subscribe: true
+    query: SELECT * FROM famille WHERE ferme_id IS NULL
+  espece_ferme:
+    auto_subscribe: true
+    query: SELECT * FROM espece WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  espece_reference:
+    auto_subscribe: true
+    query: SELECT * FROM espece WHERE ferme_id IS NULL
+  variete_ferme:
+    auto_subscribe: true
+    query: SELECT * FROM variete WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  variete_reference:
+    auto_subscribe: true
+    query: SELECT * FROM variete WHERE ferme_id IS NULL
+  itineraire_ferme:
+    auto_subscribe: true
+    query: SELECT * FROM itineraire WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  itineraire_reference:
+    auto_subscribe: true
+    query: SELECT * FROM itineraire WHERE ferme_id IS NULL
+  produit_phyto_ferme:
+    auto_subscribe: true
+    query: SELECT * FROM produit_phyto WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  produit_phyto_reference:
+    auto_subscribe: true
+    query: SELECT * FROM produit_phyto WHERE ferme_id IS NULL
+
+  # Son propre compte seulement, sans e-mail. Pas les collègues : le nom est libre (rien n'empêche
+  # d'y mettre son adresse), et aucun écran n'en a encore besoin. À revoir avec les écrans qui
+  # afficheront l'auteur d'une saisie.
+  utilisateur:
+    auto_subscribe: true
+    query: >-
+      SELECT id, nom, cree_le, modifie_le, supprime_le FROM utilisateur
+      WHERE id = auth.user_id() AND supprime_le IS NULL
+
+  # Écritures refusées par le serveur : à leur seul auteur, sans les données reçues.
+  refus_synchro:
+    auto_subscribe: true
+    query: >-
+      SELECT id, utilisateur_id, ferme_id, nom_table, ligne_id, operation, motif, message, cree_le
+      FROM refus_synchro WHERE utilisateur_id = auth.user_id()

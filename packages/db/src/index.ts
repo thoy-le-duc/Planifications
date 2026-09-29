@@ -5,3 +5,4 @@ export * from './conversions.ts';
 export * from './migrations.ts';
 export * from './schema.ts';
 export * from './comptes.ts';
+export * from './valeurs.ts';

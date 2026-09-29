@@ -22,7 +22,14 @@ const cles = await trousseauDepuisJwks(config.jwtClesPrivees);
 const expediteur = expediteurConsole();
 
 const pool = new pg.Pool({ connectionString: config.databaseUrl });
-const app = creerApp({ db: drizzle(pool), expediteur, cles, emetteur: config.emetteur, audience: config.audience });
+const app = creerApp({
+  db: drizzle(pool),
+  expediteur,
+  cles,
+  emetteur: config.emetteur,
+  audience: config.audience,
+  ...(config.corsOrigines === undefined ? {} : { corsOrigines: config.corsOrigines }),
+});
 
 serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`API à l'écoute sur http://localhost:${String(info.port)}`);

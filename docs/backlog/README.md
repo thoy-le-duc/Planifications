@@ -21,7 +21,8 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T08](T08-schema-postgres.md) | Schéma PostgreSQL et migrations | T01 | fait |
 | [T09](T09-comptes-jetons.md) | Comptes, fermes et jetons | T08 | fait |
 | [T09b](T09b-durcissement-connexion.md) | Connexion : durcissement avant la mise en production | T09 | à faire |
-| [T10](T10-synchro.md) | Synchro de bout en bout | T07, T08, T09 | à faire |
+| [T10](T10-synchro.md) | Synchro de bout en bout | T07, T08, T09 | fait |
+| [T10b](T10b-regles-saisies-coeur.md) | Règles des saisies dans le cœur | T10 | à faire |
 | [T11](T11-vue-2d.md) | Vue 2D planches × semaines | T03, T10 | à faire |
 | [T12](T12-plan-de-culture.md) | Plan de culture : créer et modifier une série | T04, T05, T11 | à faire |
 | [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10 | à faire |
