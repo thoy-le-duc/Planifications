@@ -3,7 +3,7 @@
  * hors ligne, lecture seule par la porte, aucun réseau. Le format de l'archive est dans
  * @planif/core ; l'archive est construite morceau par morceau et compressée (deflate).
  */
-import { construireArchive, nomArchive, TABLES_EXPORTEES, type Avancement, type Compresseur, type LigneLocale } from '@planif/core';
+import { annulable, construireArchive, nomArchive, TABLES_EXPORTEES, type Avancement, type Compresseur, type LigneLocale } from '@planif/core';
 import type { PorteDonnees } from './types.ts';
 
 export type { Avancement, Compresseur };
@@ -18,6 +18,8 @@ export interface OptionsExportFerme {
   readonly compresseur?: Compresseur;
   /** Barre d'avancement (appels de `construireArchive`). */
   readonly avancement?: (a: Avancement) => void;
+  /** Annulation (bouton « Annuler ») : promesse rejetée (AbortError) dès l'annulation. */
+  readonly signal?: AbortSignal;
 }
 
 export interface ArchiveExport {
@@ -101,13 +103,16 @@ function requete(table: string, colonnes: readonly string[]): { sql: string; par
 
 /** Construit l'archive ZIP de la ferme, depuis la base locale seulement. */
 export async function exporterFerme(porte: PorteDonnees, options: OptionsExportFerme): Promise<ArchiveExport> {
-  const { fermeId, genereLe, jour, avancement } = options;
+  const { fermeId, genereLe, jour, avancement, signal } = options;
   const noms = Object.keys(TABLES_EXPORTEES);
-  const lues = await Promise.all(
-    noms.map((table) => {
-      const { sql, parametres } = requete(table, Object.keys(TABLES_EXPORTEES[table]?.colonnes ?? {}));
-      return porte.lire<LigneLocale>(sql, parametres === 1 ? [fermeId] : []);
-    }),
+  // Annulé pendant la lecture : rejet immédiat, sans attendre la base.
+  const lues = await annulable(signal, () =>
+    Promise.all(
+      noms.map((table) => {
+        const { sql, parametres } = requete(table, Object.keys(TABLES_EXPORTEES[table]?.colonnes ?? {}));
+        return porte.lire<LigneLocale>(sql, parametres === 1 ? [fermeId] : []);
+      }),
+    ),
   );
   const tables: Record<string, readonly LigneLocale[]> = {};
   noms.forEach((table, k) => {
@@ -121,6 +126,7 @@ export async function exporterFerme(porte: PorteDonnees, options: OptionsExportF
       date: jour,
       ...(compresseur === undefined ? {} : { compresseur }),
       ...(avancement === undefined ? {} : { avancement }),
+      ...(signal === undefined ? {} : { signal }),
     },
   );
   const ferme = tables.ferme?.find((l) => l.id === fermeId);
