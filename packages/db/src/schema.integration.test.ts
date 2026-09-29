@@ -3,9 +3,8 @@
  *
  * ── Exécution ───────────────────────────────────────────────────────────────────────────────
  *
- * DATABASE_URL : URL d'un Postgres dont l'utilisateur peut créer et supprimer des bases et créer
- *   une publication `FOR ALL TABLES` (superutilisateur : c'est le cas du service Postgres de
- *   GitHub Actions et du docker-compose). Exemple : postgres://postgres:postgres@localhost:5432/postgres
+ * DATABASE_URL : URL d'un Postgres dont l'utilisateur peut créer et supprimer des bases
+ *   (CREATEDB ; c'est le cas du service Postgres de GitHub Actions et du docker-compose). Exemple : postgres://postgres:postgres@localhost:5432/postgres
  *   Le test n'écrit rien dans cette base : il crée à côté des bases jetables `t08_…` et les
  *   supprime à la fin.
  *
@@ -94,12 +93,38 @@
  * référencée par l'historique échoue (23503).
  * Index : occupation (emplacement_id + prevu_du/prevu_au) pour la vue 2D ; serie (dates
  * prévues) pour le semainier.
- * Publication `powersync` : insert, update, delete, et couvre les 21 tables.
+ * Publication `powersync` : liste explicite de tables (pas `FOR ALL TABLES`, qui exige un
+ * superutilisateur), insert, update et delete. Elle couvre toutes les tables du schéma public
+ * (pg_tables), sauf les exclusions explicites de TABLES_NON_PUBLIEES (suivi des migrations).
+ *
+ * Complété après relecture :
+ * - détail jsonb contrôlé à l'insertion (23514) : ce que les vues convertissent doit être
+ *   convertible, pour qu'un SELECT * sur une vue ne lève jamais ;
+ * - un remplacement (correction, annulation) vise un événement de la même ferme et du même type ;
+ * - vues : un événement corrigé plusieurs fois n'y apparaît qu'une fois, par sa correction la
+ *   plus récente (horodatage le plus grand ; à égalité, id le plus grand) ;
+ * - refus de l'ajout seul en 23001 (restrict_violation), TRUNCATE compris ;
+ * - une campagne par an et par plantation (23505) ;
+ * - aller-retour réel entité → ligne → base → ligne → entité pour Serie, Occupation,
+ *   Emplacement, Evenement (conversions de @planif/db, requêtes Drizzle).
  */
 import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync } from 'node:fs';
-import type { DetailIntervention, DetailRecolte, DetailTraitement, ParametresItineraire } from '@planif/core';
-import { getTableColumns, is, Table } from 'drizzle-orm';
+import type {
+  DateCalendaire,
+  DetailIntervention,
+  DetailRecolte,
+  DetailTraitement,
+  Emplacement,
+  Evenement,
+  Id,
+  NomEntite,
+  Occupation,
+  ParametresItineraire,
+  Serie,
+} from '@planif/core';
+import { eq, getTableColumns, is, Table } from 'drizzle-orm';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import * as db from './index.ts';
@@ -140,6 +165,12 @@ const AJOUT_SEUL: readonly NomTable[] = ['evenement', 'mouvement_stock'];
 
 const VUES = ['recoltes', 'interventions', 'traitements'] as const;
 
+/** Tables du schéma public qui ne sont pas publiées vers PowerSync, chacune justifiée. */
+const TABLES_NON_PUBLIEES: readonly string[] = [
+  // Suivi des migrations Drizzle, s'il est un jour placé dans public (par défaut : schéma drizzle).
+  '__drizzle_migrations',
+];
+
 function camel(nom: string): string {
   return nom.replace(/_([a-z0-9])/g, (_m, lettre: string) => lettre.toUpperCase());
 }
@@ -175,6 +206,9 @@ async function codeErreur(requete: Promise<unknown>): Promise<string> {
 const VIOLATION_CHECK = '23514';
 const VIOLATION_CLE_ETRANGERE = '23503';
 const VIOLATION_NOT_NULL = '23502';
+const VIOLATION_UNICITE = '23505';
+/** restrict_violation : refus de l'ajout seul par déclencheur. */
+const VIOLATION_RESTRICT = '23001';
 /** Valeur hors d'un enum Postgres : accepté à la place d'un CHECK pour les unions. */
 const VALEUR_ENUM_INVALIDE = '22P02';
 
@@ -341,15 +375,19 @@ interface OptionsEvenement {
   readonly serieId?: string | null;
   readonly campagneId?: string | null;
   readonly date?: string;
+  /** Instant de la saisie, en SQL (timestamptz) ; par défaut now(). */
+  readonly horodatage?: string;
+  /** Id imposé (pour tester le départage par id). */
+  readonly id?: string;
   readonly remplace?: { readonly sorte: 'correction' | 'annulation'; readonly evenementId: string };
 }
 
 async function insererEvenement(c: pg.Client, b: Base, o: OptionsEvenement): Promise<string> {
-  const id = randomUUID();
+  const id = o.id ?? randomUUID();
   await c.query(
     `INSERT INTO evenement (id, ferme_id, type, date, horodatage, auteur_id, source, serie_id,
                            campagne_id, remplace_sorte, remplace_evenement_id, detail)
-     VALUES ($1, $2, $3, $4, now(), $5, 'tap', $6, $7, $8, $9, $10)`,
+     VALUES ($1, $2, $3, $4, coalesce($11::timestamptz, now()), $5, 'tap', $6, $7, $8, $9, $10)`,
     [
       id,
       b.ferme,
@@ -361,6 +399,7 @@ async function insererEvenement(c: pg.Client, b: Base, o: OptionsEvenement): Pro
       o.remplace?.sorte ?? null,
       o.remplace?.evenementId ?? null,
       JSON.stringify(o.detail),
+      o.horodatage ?? null,
     ],
   );
   return id;
@@ -835,10 +874,14 @@ decrireAvecBase('T08 : schéma PostgreSQL', { timeout: 30_000 }, () => {
     it('evenement : UPDATE refusé par déclencheur, la ligne reste intacte', async () => {
       const b = await peupler(c);
       const id = await insererEvenement(c, b, { type: 'recolte', detail: RECOLTE });
-      await expect(c.query(`UPDATE evenement SET note = 'corrigé' WHERE id = $1`, [id])).rejects.toThrow();
-      await expect(
-        c.query(`UPDATE evenement SET detail = jsonb_set(detail, '{quantite}', '40') WHERE id = $1`, [id]),
-      ).rejects.toThrow();
+      expect(await codeErreur(c.query(`UPDATE evenement SET note = 'corrigé' WHERE id = $1`, [id]))).toBe(
+        VIOLATION_RESTRICT,
+      );
+      expect(
+        await codeErreur(
+          c.query(`UPDATE evenement SET detail = jsonb_set(detail, '{quantite}', '40') WHERE id = $1`, [id]),
+        ),
+      ).toBe(VIOLATION_RESTRICT);
       const r = await c.query<{ note: string | null; quantite: string }>(
         `SELECT note, detail->>'quantite' AS quantite FROM evenement WHERE id = $1`,
         [id],
@@ -849,7 +892,7 @@ decrireAvecBase('T08 : schéma PostgreSQL', { timeout: 30_000 }, () => {
     it('evenement : DELETE refusé par déclencheur, la ligne reste', async () => {
       const b = await peupler(c);
       const id = await insererEvenement(c, b, { type: 'observation', detail: { nature: 'ravageur', gravite: 'faible' } });
-      await expect(c.query(`DELETE FROM evenement WHERE id = $1`, [id])).rejects.toThrow();
+      expect(await codeErreur(c.query(`DELETE FROM evenement WHERE id = $1`, [id]))).toBe(VIOLATION_RESTRICT);
       expect(await compter(c, 'SELECT id FROM evenement WHERE id = $1', [id])).toBe(1);
     });
 
@@ -872,12 +915,28 @@ decrireAvecBase('T08 : schéma PostgreSQL', { timeout: 30_000 }, () => {
          VALUES ($1, $2, $3, '2027-05-26', -10, 'vente')`,
         [id, b.ferme, b.article],
       );
-      await expect(c.query(`UPDATE mouvement_stock SET quantite = -12 WHERE id = $1`, [id])).rejects.toThrow();
-      await expect(c.query(`DELETE FROM mouvement_stock WHERE id = $1`, [id])).rejects.toThrow();
+      expect(await codeErreur(c.query(`UPDATE mouvement_stock SET quantite = -12 WHERE id = $1`, [id]))).toBe(
+        VIOLATION_RESTRICT,
+      );
+      expect(await codeErreur(c.query(`DELETE FROM mouvement_stock WHERE id = $1`, [id]))).toBe(VIOLATION_RESTRICT);
       const r = await c.query<{ quantite: string }>(`SELECT quantite::text AS quantite FROM mouvement_stock WHERE id = $1`, [
         id,
       ]);
       expect(r.rows.map((l) => Number(l.quantite))).toEqual([-10]);
+    });
+
+    it('TRUNCATE refusé sur evenement et mouvement_stock, les lignes restent', async () => {
+      const b = await peupler(c);
+      const recolte = await insererEvenement(c, b, { type: 'recolte', detail: RECOLTE });
+      await c.query(
+        `INSERT INTO mouvement_stock (id, ferme_id, article_stock_id, date, quantite, motif, recolte_id)
+         VALUES ($1, $2, $3, '2027-05-26', 42, 'recolte', $4)`,
+        [randomUUID(), b.ferme, b.article, recolte],
+      );
+      expect(await codeErreur(c.query('TRUNCATE mouvement_stock'))).toBe(VIOLATION_RESTRICT);
+      expect(await codeErreur(c.query('TRUNCATE evenement CASCADE'))).toBe(VIOLATION_RESTRICT);
+      expect(await compter(c, 'SELECT id FROM evenement', [])).toBe(1);
+      expect(await compter(c, 'SELECT id FROM mouvement_stock', [])).toBe(1);
     });
 
     it('les autres tables restent modifiables', async () => {
@@ -1043,6 +1102,444 @@ decrireAvecBase('T08 : schéma PostgreSQL', { timeout: 30_000 }, () => {
     });
   });
 
+  // --- Détail jsonb ---------------------------------------------------------------------------
+
+  describe('détail jsonb des événements', () => {
+    it('un détail incomplet ou mal typé est refusé à l’insertion (23514)', async () => {
+      const b = await peupler(c);
+      const traitementValide = {
+        produitPhytoId: b.produitPhyto,
+        dose: { valeur: 0.5, unite: 'kg/ha' },
+        surfaceTraiteeM2: 36,
+        cible: 'mildiou',
+        operateur: 'Théophane',
+        recolteAutoriseeLe: '2027-05-31',
+      };
+      const cas: readonly (readonly [string, string, object])[] = [
+        ['récolte sans quantite', 'recolte', { unite: 'kg', categorie: null }],
+        ['réalisé sans etape', 'realise', { quantiteReelle: null }],
+        ['intervention sans categorie', 'intervention', { type: 'taille', outil: null }],
+        [
+          'traitement sans produitPhytoId',
+          'traitement',
+          Object.fromEntries(Object.entries(traitementValide).filter(([k]) => k !== 'produitPhytoId')),
+        ],
+        ['traitement au 2027-13-45', 'traitement', { ...traitementValide, recolteAutoriseeLe: '2027-13-45' }],
+        [
+          'intervention avec quantite.valeur « beaucoup »',
+          'intervention',
+          {
+            categorie: 'fertilisation',
+            type: 'engrais',
+            outil: null,
+            produit: 'Orgasol',
+            quantite: { valeur: 'beaucoup', unite: 'kg' },
+          },
+        ],
+        [
+          'intervention avec dureeOccupationJours « x »',
+          'intervention',
+          { categorie: 'couverture', type: 'paillage', outil: null, dureeOccupationJours: 'x' },
+        ],
+      ];
+      const nonRefuses: string[] = [];
+      for (const [nom, type, detail] of cas) {
+        try {
+          const code = await codeErreur(insererEvenement(c, b, { type, detail }));
+          if (code !== VIOLATION_CHECK) nonRefuses.push(`${nom} (SQLSTATE ${code})`);
+        } catch {
+          nonRefuses.push(`${nom} (accepté)`);
+        }
+      }
+      expect(nonRefuses).toEqual([]);
+      expect(await compter(c, 'SELECT id FROM evenement', [])).toBe(0);
+    });
+
+    it('après des saisies valides, SELECT * sur les trois vues ne lève jamais', async () => {
+      const b = await peupler(c);
+      const interventions: readonly DetailIntervention[] = [
+        { categorie: 'travail_sol', type: 'grelinette', outil: null },
+        { categorie: 'couverture', type: 'paillage', outil: null, dureeOccupationJours: null },
+        { categorie: 'couverture', type: 'bâchage ou occultation', outil: 'bâche', dureeOccupationJours: 42 },
+        { categorie: 'fertilisation', type: 'engrais', outil: null, produit: 'Orgasol', quantite: { valeur: 3.5, unite: 'kg' } },
+        { categorie: 'amendement', type: 'compost', outil: 'épandeur', produit: 'compost', quantite: { valeur: 2, unite: 't' } },
+        { categorie: 'entretien', type: 'désherbage', outil: null },
+      ];
+      for (const detail of interventions) {
+        await insererEvenement(c, b, { type: 'intervention', detail });
+      }
+      await insererEvenement(c, b, { type: 'recolte', detail: RECOLTE });
+      await insererEvenement(c, b, { type: 'recolte', detail: { quantite: 0.25, unite: 'kg', categorie: null } });
+      await insererEvenement(c, b, {
+        type: 'recolte',
+        serieId: null,
+        campagneId: b.campagne,
+        detail: { quantite: 12, unite: 'barquette', categorie: null },
+      });
+      await insererEvenement(c, b, {
+        type: 'traitement',
+        detail: {
+          produitPhytoId: b.produitPhyto as DetailTraitement['produitPhytoId'],
+          dose: { valeur: 5, unite: 'kg/ha' },
+          surfaceTraiteeM2: 120.5,
+          cible: 'oïdium',
+          operateur: 'Théophane',
+          recolteAutoriseeLe: '2027-06-01' as DetailTraitement['recolteAutoriseeLe'],
+        } satisfies DetailTraitement,
+      });
+      await insererEvenement(c, b, { type: 'realise', detail: { etape: 'arrachage', quantiteReelle: null } });
+      await insererEvenement(c, b, { type: 'observation', detail: { nature: 'maladie', gravite: 'moyenne' } });
+      await insererEvenement(c, b, {
+        type: 'irrigation',
+        serieId: null,
+        detail: { secteurIrrigationId: randomUUID(), dureeMinutes: 30 },
+      });
+
+      const nombres: Record<string, number> = {};
+      for (const vue of VUES) {
+        const r = await c.query(`SELECT * FROM ${vue}`);
+        nombres[vue] = r.rowCount ?? -1;
+      }
+      expect(nombres).toEqual({ recoltes: 3, interventions: interventions.length, traitements: 1 });
+    });
+  });
+
+  // --- Remplacement ---------------------------------------------------------------------------
+
+  describe('remplacement d’un événement', () => {
+    it('un événement ne corrige ni n’annule un événement d’une autre ferme', async () => {
+      const f = await peupler(c);
+      const g = await peupler(c);
+      const deF = await insererEvenement(c, f, { type: 'recolte', detail: RECOLTE });
+      for (const sorte of ['correction', 'annulation'] as const) {
+        const code = await codeErreur(
+          insererEvenement(c, g, { type: 'recolte', detail: RECOLTE, remplace: { sorte, evenementId: deF } }),
+        );
+        expect(code, `${sorte} depuis une autre ferme`).toMatch(/^23/);
+      }
+      expect(await compter(c, 'SELECT id FROM evenement WHERE remplace_evenement_id = $1', [deF])).toBe(0);
+    });
+
+    it('un remplacement est du même type que l’événement remplacé', async () => {
+      const b = await peupler(c);
+      const recolte = await insererEvenement(c, b, { type: 'recolte', detail: RECOLTE });
+      const intervention: DetailIntervention = { categorie: 'entretien', type: 'taille', outil: null };
+      for (const sorte of ['correction', 'annulation'] as const) {
+        const code = await codeErreur(
+          insererEvenement(c, b, { type: 'intervention', detail: intervention, remplace: { sorte, evenementId: recolte } }),
+        );
+        expect(code, `intervention en ${sorte} d’une récolte`).toMatch(/^23/);
+      }
+      // Même type : accepté.
+      await insererEvenement(c, b, { type: 'recolte', detail: RECOLTE, remplace: { sorte: 'annulation', evenementId: recolte } });
+    });
+
+    it('deux corrections du même événement : la vue ne garde que la plus récente (horodatage)', async () => {
+      const b = await peupler(c);
+      const origine = await insererEvenement(c, b, {
+        type: 'recolte',
+        horodatage: '2027-05-26T08:00:00Z',
+        detail: RECOLTE,
+      });
+      // La plus récente est insérée en premier : l'ordre d'insertion ne doit pas compter.
+      const recente = await insererEvenement(c, b, {
+        type: 'recolte',
+        horodatage: '2027-05-26T12:00:00Z',
+        detail: { ...RECOLTE, quantite: 38 },
+        remplace: { sorte: 'correction', evenementId: origine },
+      });
+      await insererEvenement(c, b, {
+        type: 'recolte',
+        horodatage: '2027-05-26T10:00:00Z',
+        detail: { ...RECOLTE, quantite: 40 },
+        remplace: { sorte: 'correction', evenementId: origine },
+      });
+      const r = await c.query<{ id: string; quantite: string }>(
+        `SELECT id::text, quantite::numeric::text AS quantite FROM recoltes`,
+      );
+      expect(r.rows).toEqual([{ id: recente, quantite: '38' }]);
+    });
+
+    it('deux corrections au même horodatage : départage par l’id le plus grand', async () => {
+      const b = await peupler(c);
+      const origine = await insererEvenement(c, b, { type: 'recolte', detail: RECOLTE });
+      const instant = '2027-05-26T12:00:00Z';
+      const grand = '0190a5c8-ffff-7fff-bfff-ffffffffffff';
+      const petit = '0190a5c8-0000-7000-8000-000000000001';
+      await insererEvenement(c, b, {
+        id: grand,
+        type: 'recolte',
+        horodatage: instant,
+        detail: { ...RECOLTE, quantite: 38 },
+        remplace: { sorte: 'correction', evenementId: origine },
+      });
+      await insererEvenement(c, b, {
+        id: petit,
+        type: 'recolte',
+        horodatage: instant,
+        detail: { ...RECOLTE, quantite: 40 },
+        remplace: { sorte: 'correction', evenementId: origine },
+      });
+      const r = await c.query<{ id: string }>(`SELECT id::text FROM recoltes`);
+      expect(r.rows).toEqual([{ id: grand }]);
+    });
+  });
+
+  // --- Campagne -------------------------------------------------------------------------------
+
+  describe('campagne', () => {
+    it('une seule campagne par an et par plantation', async () => {
+      const b = await peupler(c);
+      const inserer = (annee: number) =>
+        c.query(`INSERT INTO campagne (id, ferme_id, plantation_id, annee) VALUES ($1, $2, $3, $4)`, [
+          randomUUID(),
+          b.ferme,
+          b.plantation,
+          annee,
+        ]);
+      expect(await codeErreur(inserer(2027))).toBe(VIOLATION_UNICITE);
+      await inserer(2028);
+    });
+  });
+
+  // --- Aller-retour réel ----------------------------------------------------------------------
+
+  describe('aller-retour réel entité → base → entité', () => {
+    const idDe = <E extends NomEntite>(s: string): Id<E> => s as Id<E>;
+    const jour = (s: string): DateCalendaire => s as DateCalendaire;
+
+    it('Serie', async () => {
+      const b = await peupler(c);
+      const d = drizzle(c);
+      const series: readonly Serie[] = [
+        {
+          id: idDe<'Serie'>(randomUUID()),
+          fermeId: idDe<'Ferme'>(b.ferme),
+          supprimeLe: null,
+          saisonId: idDe<'Saison'>(b.saison),
+          especeId: idDe<'Espece'>(b.laitue),
+          varieteId: null,
+          itineraireId: idDe<'Itineraire'>(b.itineraire),
+          parametres: PARAMETRES_BATAVIA,
+          ancre: { type: 'plantation', date: jour('2027-04-05') },
+          datesPrevues: {
+            semisPepiniere: jour('2027-03-08'),
+            miseEnPlace: jour('2027-04-05'),
+            debutRecolte: jour('2027-05-25'),
+            finRecolte: jour('2027-06-08'),
+          },
+          taille: { unite: 'longueur', longueurM: 27.5 },
+          statut: 'prevue',
+        },
+        {
+          id: idDe<'Serie'>(randomUUID()),
+          fermeId: idDe<'Ferme'>(b.ferme),
+          supprimeLe: Date.UTC(2027, 5, 1, 8, 30, 0, 123),
+          saisonId: idDe<'Saison'>(b.saison),
+          especeId: idDe<'Espece'>(b.laitue),
+          varieteId: null,
+          itineraireId: idDe<'Itineraire'>(b.itineraire),
+          parametres: {
+            mode: 'semis_direct',
+            densite: { facon: 'volee', largeurSemeeCm: 80, doseGParM2: 2 },
+            grainesParPoquet: null,
+            periodeUsage: null,
+            typeAbri: null,
+            dureeAvantRecolteJours: 30,
+            fenetreRecolteJours: 7,
+            margeSecurite: 10,
+            rendementAttendu: null,
+            perenne: null,
+          },
+          ancre: { type: 'debut_recolte', date: jour('2027-07-01') },
+          datesPrevues: {
+            miseEnPlace: jour('2027-06-01'),
+            debutRecolte: jour('2027-07-01'),
+            finRecolte: jour('2027-07-08'),
+          },
+          taille: { unite: 'plants', nombrePlants: 4000 },
+          statut: 'abandonnee',
+        },
+      ];
+      for (const s of series) {
+        await d.insert(db.serie).values(db.ligneDepuisSerie(s));
+        const lues = await d.select().from(db.serie).where(eq(db.serie.id, s.id));
+        expect(lues).toHaveLength(1);
+        const [lue] = lues;
+        if (lue === undefined) throw new Error('série non relue');
+        expect(db.serieDepuisLigne(lue)).toStrictEqual(s);
+      }
+    });
+
+    it('Emplacement', async () => {
+      const b = await peupler(c);
+      const d = drizzle(c);
+      const commun = {
+        fermeId: idDe<'Ferme'>(b.ferme),
+        supprimeLe: null,
+        zoneId: idDe<'Zone'>(b.zone),
+        largeurM: 0.8,
+        actifDu: jour('2026-01-01'),
+        actifAu: null,
+        remplace: [],
+      } as const;
+      const emplacements: readonly Emplacement[] = [
+        { ...commun, id: idDe<'Emplacement'>(randomUUID()), sorte: 'planche', code: 'T2-P04', longueurM: 30 },
+        {
+          ...commun,
+          id: idDe<'Emplacement'>(randomUUID()),
+          sorte: 'rang',
+          code: 'V-R01',
+          longueurM: 85.5,
+          largeurM: null,
+          actifAu: jour('2031-12-31'),
+          supprimeLe: Date.UTC(2027, 0, 2, 3, 4, 5, 6),
+        },
+        {
+          ...commun,
+          id: idDe<'Emplacement'>(randomUUID()),
+          sorte: 'gouttiere',
+          code: 'HS-G12',
+          longueurM: 40,
+          largeurM: 0.25,
+          nombrePlaces: 320,
+          remplace: [idDe<'Emplacement'>(b.planche), idDe<'Emplacement'>(randomUUID())],
+        },
+      ];
+      for (const e of emplacements) {
+        await d.insert(db.emplacement).values(db.ligneDepuisEmplacement(e));
+        const [lue] = await d.select().from(db.emplacement).where(eq(db.emplacement.id, e.id));
+        if (lue === undefined) throw new Error('emplacement non relu');
+        expect(db.emplacementDepuisLigne(lue)).toStrictEqual(e);
+      }
+    });
+
+    it('Evenement, pour chacun des six types', async () => {
+      const b = await peupler(c);
+      const d = drizzle(c);
+      const commun = {
+        fermeId: idDe<'Ferme'>(b.ferme),
+        date: jour('2027-05-26'),
+        horodatage: Date.UTC(2027, 4, 27, 6, 15, 42, 7),
+        auteurId: idDe<'Utilisateur'>(b.auteur),
+        source: 'tap',
+        culture: { sorte: 'serie', serieId: idDe<'Serie'>(b.serie) },
+        emplacementIds: [idDe<'Emplacement'>(b.planche)],
+        note: null,
+        photos: [],
+        remplaceEvenement: null,
+      } as const;
+      const observation = idDe<'Evenement'>(randomUUID());
+      const evenements: readonly Evenement[] = [
+        { ...commun, id: idDe<'Evenement'>(randomUUID()), type: 'realise', detail: { etape: 'plantation', quantiteReelle: 290 } },
+        {
+          ...commun,
+          id: idDe<'Evenement'>(randomUUID()),
+          type: 'recolte',
+          culture: { sorte: 'campagne', campagneId: idDe<'Campagne'>(b.campagne) },
+          emplacementIds: [],
+          source: 'voix',
+          note: 'belle cueillette',
+          photos: ['photo-1.jpg', 'photo-2.jpg'],
+          detail: { quantite: 42.5, unite: 'kg', categorie: 'I' },
+        },
+        {
+          ...commun,
+          id: idDe<'Evenement'>(randomUUID()),
+          type: 'intervention',
+          culture: null,
+          detail: { categorie: 'fertilisation', type: 'engrais', outil: null, produit: 'Orgasol', quantite: { valeur: 3, unite: 'kg' } },
+        },
+        {
+          ...commun,
+          id: idDe<'Evenement'>(randomUUID()),
+          type: 'irrigation',
+          culture: null,
+          detail: { secteurIrrigationId: idDe<'SecteurIrrigation'>(randomUUID()), dureeMinutes: 45 },
+        },
+        {
+          ...commun,
+          id: idDe<'Evenement'>(randomUUID()),
+          type: 'traitement',
+          detail: {
+            produitPhytoId: idDe<'ProduitPhyto'>(b.produitPhyto),
+            dose: { valeur: 0.5, unite: 'kg/ha' },
+            surfaceTraiteeM2: 36,
+            cible: 'mildiou',
+            operateur: 'Théophane',
+            recolteAutoriseeLe: jour('2027-06-16'),
+          },
+        },
+        { ...commun, id: observation, type: 'observation', detail: { nature: 'ravageur', gravite: null } },
+        {
+          ...commun,
+          id: idDe<'Evenement'>(randomUUID()),
+          type: 'observation',
+          horodatage: commun.horodatage + 60_000,
+          remplaceEvenement: { sorte: 'correction', evenementId: observation },
+          detail: { nature: 'ravageur', gravite: 'forte' },
+        },
+      ];
+      for (const e of evenements) {
+        await d.insert(db.evenement).values(db.ligneDepuisEvenement(e));
+        const [lue] = await d.select().from(db.evenement).where(eq(db.evenement.id, e.id));
+        if (lue === undefined) throw new Error('événement non relu');
+        expect(db.evenementDepuisLigne(lue)).toStrictEqual(e);
+      }
+    });
+
+    it('Occupation : série, plantation et couverture', async () => {
+      const b = await peupler(c);
+      const d = drizzle(c);
+      const bache = await insererEvenement(c, b, {
+        type: 'intervention',
+        serieId: null,
+        detail: { categorie: 'couverture', type: 'solarisation', outil: null, dureeOccupationJours: 42 },
+      });
+      const commun = {
+        fermeId: idDe<'Ferme'>(b.ferme),
+        supprimeLe: null,
+        emplacementId: idDe<'Emplacement'>(b.planche),
+        prevuDu: jour('2027-04-05'),
+        prevuAu: jour('2027-06-09'),
+      } as const;
+      const occupations: readonly Occupation[] = [
+        {
+          ...commun,
+          id: idDe<'Occupation'>(randomUUID()),
+          occupant: { sorte: 'serie', serieId: idDe<'Serie'>(b.serie) },
+          place: { unite: 'longueur', longueurM: 15 },
+          positionM: null,
+          reel: null,
+        },
+        {
+          ...commun,
+          id: idDe<'Occupation'>(randomUUID()),
+          occupant: { sorte: 'plantation', plantationId: idDe<'Plantation'>(b.plantation) },
+          place: { unite: 'places', nombrePlaces: 24 },
+          positionM: null,
+          prevuAu: jour('2030-01-01'),
+          reel: { du: jour('2027-04-07'), au: null },
+        },
+        {
+          ...commun,
+          id: idDe<'Occupation'>(randomUUID()),
+          supprimeLe: Date.UTC(2027, 5, 1, 8, 30, 0, 123),
+          occupant: { sorte: 'couverture', evenementId: idDe<'Evenement'>(bache) },
+          place: { unite: 'longueur', longueurM: 12.5 },
+          positionM: 17.5,
+          reel: { du: jour('2027-04-06'), au: jour('2027-05-18') },
+        },
+      ];
+      for (const o of occupations) {
+        await d.insert(db.occupation).values(db.ligneDepuisOccupation(o));
+        const [lue] = await d.select().from(db.occupation).where(eq(db.occupation.id, o.id));
+        if (lue === undefined) throw new Error('occupation non relue');
+        expect(db.occupationDepuisLigne(lue)).toStrictEqual(o);
+      }
+    });
+  });
+
   // --- Index ----------------------------------------------------------------------------------
 
   describe('index', () => {
@@ -1074,18 +1571,26 @@ decrireAvecBase('T08 : schéma PostgreSQL', { timeout: 30_000 }, () => {
   // --- PowerSync ------------------------------------------------------------------------------
 
   describe('publication PowerSync', () => {
-    it('la publication « powersync » publie insert, update et delete des 21 tables', async () => {
-      const pub = await c.query<{ ins: boolean; maj: boolean; sup: boolean }>(
-        `SELECT pubinsert AS ins, pubupdate AS maj, pubdelete AS sup FROM pg_publication WHERE pubname = 'powersync'`,
+    it('la publication « powersync » est une liste explicite, en insert, update et delete', async () => {
+      const pub = await c.query<{ ins: boolean; maj: boolean; sup: boolean; toutes: boolean }>(
+        `SELECT pubinsert AS ins, pubupdate AS maj, pubdelete AS sup, puballtables AS toutes
+         FROM pg_publication WHERE pubname = 'powersync'`,
       );
-      expect(pub.rows).toEqual([{ ins: true, maj: true, sup: true }]);
-      const r = await c.query<{ nom: string }>(
-        `SELECT tablename::text AS nom FROM pg_publication_tables WHERE pubname = 'powersync' AND schemaname = 'public'`,
+      expect(pub.rows).toEqual([{ ins: true, maj: true, sup: true, toutes: false }]);
+    });
+
+    it('elle couvre toutes les tables du schéma public, sauf les exclusions explicites', async () => {
+      const toutes = await c.query<{ nom: string }>(
+        `SELECT tablename::text AS nom FROM pg_tables WHERE schemaname = 'public' ORDER BY 1`,
       );
-      const publiees = r.rows.map((l) => l.nom);
-      for (const t of TABLES) {
-        expect(publiees, `table ${t} publiée`).toContain(t);
-      }
+      const publiees = await c.query<{ nom: string }>(
+        `SELECT tablename::text AS nom FROM pg_publication_tables
+         WHERE pubname = 'powersync' AND schemaname = 'public' ORDER BY 1`,
+      );
+      const attendues = toutes.rows.map((l) => l.nom).filter((t) => !TABLES_NON_PUBLIEES.includes(t));
+      expect(publiees.rows.map((l) => l.nom)).toEqual(attendues);
+      // Garde-fou : la comparaison porte bien sur les 21 tables du modèle.
+      expect(attendues).toEqual(expect.arrayContaining([...TABLES]));
     });
   });
 });
