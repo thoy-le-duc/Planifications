@@ -40,7 +40,7 @@
 import { describe, expect, it } from 'vitest';
 
 interface ModuleCsp {
-  politiqueCsp(o: { readonly urlApi?: string; readonly urlPowerSync?: string }): string;
+  politiqueCsp: (o: { readonly urlApi?: string; readonly urlPowerSync?: string }) => string;
 }
 
 const CHEMIN = './csp.ts';
