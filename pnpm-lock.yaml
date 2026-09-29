@@ -41,9 +41,25 @@ importers:
       '@planif/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@planif/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      drizzle-orm:
+        specifier: ^0.45.3
+        version: 0.45.3(@types/pg@8.23.1)(pg@8.23.0)
       hono:
         specifier: ^4.13.9
         version: 4.13.9
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.12
+      pg:
+        specifier: ^8.23.0
+        version: 8.23.0
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.23.1
+        version: 8.23.1
 
   apps/mcp:
     dependencies:
