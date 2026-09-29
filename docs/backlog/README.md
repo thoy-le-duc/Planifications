@@ -31,7 +31,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16 | à faire |
 | [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | à faire |
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
-| [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | à faire |
+| [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | fait |
 
 T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 300 ms avec la base) : la boucle peut le prendre dès le début, en parallèle du moteur.
 
