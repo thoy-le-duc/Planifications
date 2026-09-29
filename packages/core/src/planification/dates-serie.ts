@@ -10,7 +10,7 @@ import type { AncreSerie, DatesPrevuesSerie, Jours, ParametresPerenne } from '..
 /** Étapes d'une série, dans l'ordre chronologique. */
 export type EtapeSerie = 'semisPepiniere' | 'miseEnPlace' | 'debutRecolte' | 'finRecolte';
 
-const ETAPES: readonly EtapeSerie[] = ['semisPepiniere', 'miseEnPlace', 'debutRecolte', 'finRecolte'];
+export const ETAPES_SERIE = ['semisPepiniere', 'miseEnPlace', 'debutRecolte', 'finRecolte'] as const satisfies readonly EtapeSerie[];
 
 interface DureesRecolte {
   /** Comptée depuis la mise en place (semis direct ou plantation). */
@@ -104,7 +104,7 @@ export function calculerDatesSerie(parametres: ParametresDatesSerie, ancre: Ancr
 /** Dernière étape réalisée (ordre chronologique) et son écart au prévu, ou `null` sans réalisé. */
 function dernierEcart(prevues: DatesSerie, realises: RealisesSerie): { index: number; ecart: number } | null {
   let dernier: { index: number; ecart: number } | null = null;
-  for (const [index, etape] of ETAPES.entries()) {
+  for (const [index, etape] of ETAPES_SERIE.entries()) {
     const reel = realises[etape];
     if (reel === undefined) {
       continue;
@@ -129,7 +129,7 @@ export function appliquerRealises(datesPrevues: DatesSerie, realises: RealisesSe
     if (reel !== undefined) {
       return reel;
     }
-    return dernier !== null && ETAPES.indexOf(etape) > dernier.index ? ajouterJours(prevue, dernier.ecart) : prevue;
+    return dernier !== null && ETAPES_SERIE.indexOf(etape) > dernier.index ? ajouterJours(prevue, dernier.ecart) : prevue;
   };
   const semis = datesPrevues.semisPepiniere;
   return assembler(semis === undefined ? undefined : recaler('semisPepiniere', semis), {
