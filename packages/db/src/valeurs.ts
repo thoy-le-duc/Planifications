@@ -96,3 +96,7 @@ export const TABLES_MODIFIABLES = toutes<Modification['table']>()([
   'ProduitPhyto',
   'Proposition',
 ]);
+
+/** Rôle d'un membre dans une ferme (T09). Pas d'union dans T01 : la liste fait foi. */
+export const ROLES_MEMBRE = ['gerant', 'equipier'] as const;
+export type RoleMembre = (typeof ROLES_MEMBRE)[number];
