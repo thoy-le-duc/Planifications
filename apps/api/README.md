@@ -28,14 +28,17 @@ Code à 6 chiffres reçu par e-mail, pas de mot de passe.
 | Route | Rôle |
 | --- | --- |
 | `POST /auth/code` | Envoie un code (10 min, 5 tentatives, usage unique). Au plus un envoi par minute, cinq par heure et dix par 24 h glissantes par adresse (429 + `Retry-After`). Un nouveau code invalide le précédent. Même réponse que le compte existe ou non |
-| `POST /auth/verifier` | Code → jeton d'accès + jeton de renouvellement. Crée le compte à la première connexion. À partir de 10 échecs pour une adresse sur 24 h glissantes, tous codes confondus, toute vérification reçoit la même 401 `code_invalide`, même avec le bon code |
+| `POST /auth/verifier` | Code → jeton d'accès + jeton de renouvellement. Crée le compte à la première connexion, et vaut acceptation des invitations en attente. À partir de 10 échecs pour une adresse sur 24 h glissantes, tous codes confondus, toute vérification reçoit la même 401 `code_invalide`, même avec le bon code |
 | `POST /auth/renouveler` | Jeton de renouvellement → nouveau jeton d'accès, **sans** jeton d'accès valide : les écritures faites hors ligne partent au retour du réseau |
 | `GET /.well-known/jwks.json` | Clés publiques, pour PowerSync |
 | `GET /moi`, `POST /fermes`, `GET`/`PATCH /fermes/:id`, `POST /fermes/:id/membres` | Protégées par `Authorization: Bearer` |
 
 - **Jeton d'accès** : JWT RS256, 1 heure, claims `sub`, `iss`, `aud`, `iat`, `exp` seulement. Jamais la liste des fermes : les droits sont relus en base à chaque requête (`fermesDeLUtilisateur`, `roleDansLaFerme` de `@planif/db`). Un membre retiré perd l'accès tout de suite.
 - **Jeton de renouvellement** : 256 bits aléatoires, opaque. Échéance glissante de 90 jours (la session tient donc au moins 30 jours hors ligne), plafonnée à 365 jours après la connexion. Pas de rotation stricte : le même jeton reste valable après usage, pour qu'une réponse perdue sur un réseau faible ne déconnecte pas.
-- **Isolement** : pour une ferme dont on n'est pas membre actif (ou inexistante, ou id invalide), toute route `/fermes/:id…` répond 404 `ferme_introuvable` et n'écrit rien. Le renommage et l'invitation sont réservés au gérant (403 sinon).
+- **Isolement** : pour une ferme dont on n'est pas membre actif (ou inexistante, ou id invalide), toute route `/fermes/:id…` répond 404 `ferme_introuvable` et n'écrit rien. Un utilisateur supprimé n'est membre actif de rien. Le renommage et l'invitation sont réservés au gérant (403 sinon).
+- **Nom de ferme** : refusé (400 `requete_invalide`) s'il contient un caractère de contrôle ou de format (`/[\p{Cc}\p{Cf}]/u`) : il finit dans le sujet des e-mails d'invitation.
+- **Invitation** : réponse `{ email, role }`, sans identifiant, identique que le compte existe ou non. L'invité reste « invité » (`membre.etat = 'invite'`), sans accès à la ferme, jusqu'à sa prochaine connexion réussie ; un membre retiré puis réinvité aussi. Au plus 20 invitations par gérant et par heure glissante, toutes fermes confondues (429 + `Retry-After`).
+- **Courriel** : `verifierEnTetes` refuse un retour à la ligne dans le destinataire ou le sujet ; tout expéditeur l'appelle avant d'envoyer.
 
 ### Empreintes des secrets
 

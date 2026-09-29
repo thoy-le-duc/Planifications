@@ -2,8 +2,8 @@
  * Routes de connexion : code à 6 chiffres par e-mail (Q9), jetons, JWKS.
  * Contrat : auth.integration.test.ts.
  */
-import { utilisateur, codeConnexion, jetonRenouvellement } from '@planif/db';
-import { and, asc, desc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { utilisateur, codeConnexion, jetonRenouvellement, membre } from '@planif/db';
+import { and, asc, desc, eq, gt, isNull, lte, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import type { Contexte } from '../dependances.ts';
 import { lireCorps, normaliserEmail } from '../http.ts';
@@ -148,6 +148,19 @@ export function routesAuth(ctx: Contexte): Hono {
         .where(eq(utilisateur.email, email));
       if (compte === undefined) return null;
       if (compte.supprimeLe !== null) return null; // compte supprimé
+
+      // Une connexion réussie vaut acceptation des invitations en attente, faites avant elle.
+      await tx
+        .update(membre)
+        .set({ etat: 'accepte', modifieLe: maintenant })
+        .where(
+          and(
+            eq(membre.utilisateurId, compte.id),
+            eq(membre.etat, 'invite'),
+            isNull(membre.supprimeLe),
+            lte(membre.inviteLe, maintenant),
+          ),
+        );
 
       // Dans la même transaction : un code n'est consommé que si la session est bien créée.
       await tx.insert(jetonRenouvellement).values({

@@ -7,14 +7,18 @@
  */
 import type { Id } from '@planif/core';
 import { ferme, membre, roleDansLaFerme, utilisateur, type RoleMembre } from '@planif/db';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 import { garde, type VariablesAuthentifiees } from './auth/garde.ts';
 import { estUuid } from './auth/jetons.ts';
 import type { Contexte } from './dependances.ts';
 import { lireCorps, normaliserEmail } from './http.ts';
+import { libreSelonFenetre, secondesAvant } from './limites.ts';
 
 const FUSEAU_PAR_DEFAUT = 'Europe/Paris';
+const HEURE = 60 * 60_000;
+/** Au plus 20 invitations par gérant et par heure glissante, toutes fermes confondues. */
+export const INVITATIONS_PAR_HEURE = 20;
 
 interface Env {
   Variables: VariablesAuthentifiees;
@@ -89,7 +93,14 @@ export function routesFermes(ctx: Contexte): Hono<Env> {
       .select({ id: ferme.id, nom: ferme.nom, role: membre.role })
       .from(membre)
       .innerJoin(ferme, eq(ferme.id, membre.fermeId))
-      .where(and(eq(membre.utilisateurId, id), isNull(membre.supprimeLe), isNull(ferme.supprimeLe)))
+      .where(
+        and(
+          eq(membre.utilisateurId, id),
+          eq(membre.etat, 'accepte'),
+          isNull(membre.supprimeLe),
+          isNull(ferme.supprimeLe),
+        ),
+      )
       .orderBy(asc(ferme.nom), asc(ferme.id));
     return c.json({ ...moi, fermes });
   });
@@ -153,8 +164,22 @@ export function routesFermes(ctx: Contexte): Hono<Env> {
     if (email === null) return c.json({ erreur: 'email_invalide' }, 400);
 
     const maintenant = ctx.maintenant();
+    const t = maintenant.getTime();
+    const gerantId = c.get('utilisateurId');
     const { fermeId } = droit;
     const resultat = await db.transaction(async (tx) => {
+      // Limite par gérant, sérialisée : elle ne se contourne pas en parallèle.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`invitation:${gerantId}`}))`);
+      const recentes = (
+        await tx
+          .select({ inviteLe: membre.inviteLe })
+          .from(membre)
+          .where(and(eq(membre.invitePar, gerantId), gt(membre.inviteLe, new Date(t - HEURE))))
+          .orderBy(asc(membre.inviteLe))
+      ).flatMap((l) => (l.inviteLe === null ? [] : [l.inviteLe.getTime()]));
+      const libreA = libreSelonFenetre(recentes, INVITATIONS_PAR_HEURE, HEURE, t);
+      if (libreA > t) return { refus: true as const, apresS: secondesAvant(libreA, t) };
+
       await tx
         .insert(utilisateur)
         .values({ id: ctx.nouvelId<'Utilisateur'>(), email, creeLe: maintenant, modifieLe: maintenant })
@@ -167,28 +192,36 @@ export function routesFermes(ctx: Contexte): Hono<Env> {
         .where(and(eq(membre.utilisateurId, invite.id), eq(membre.fermeId, fermeId)))
         .for('update');
       if (existant?.supprimeLe === null) {
-        return { utilisateurId: invite.id, role: existant.role, nouveau: false };
+        return { refus: false as const, role: existant.role, nouveau: false };
       }
+      // Invité, pas encore membre actif : il le devient à sa prochaine connexion réussie.
+      const invitation = { etat: 'invite', invitePar: gerantId, inviteLe: maintenant } as const;
       if (existant === undefined) {
         await tx.insert(membre).values({
           id: ctx.nouvelId(),
           utilisateurId: invite.id,
           fermeId,
           role: 'equipier',
+          ...invitation,
           creeLe: maintenant,
           modifieLe: maintenant,
         });
       } else {
-        // Membre retiré puis réinvité : il revient en équipier.
+        // Membre retiré puis réinvité : il revient en équipier, invité.
         await tx
           .update(membre)
-          .set({ role: 'equipier', supprimeLe: null, modifieLe: maintenant })
+          .set({ role: 'equipier', ...invitation, supprimeLe: null, modifieLe: maintenant })
           .where(eq(membre.id, existant.id));
       }
-      return { utilisateurId: invite.id, role: 'equipier' as const, nouveau: true };
+      return { refus: false as const, role: 'equipier' as const, nouveau: true };
     });
+    if (resultat.refus) {
+      c.header('retry-after', String(resultat.apresS));
+      return c.json({ erreur: 'trop_de_demandes' }, 429);
+    }
 
-    const reponse = { utilisateurId: resultat.utilisateurId, email, role: resultat.role };
+    // Ni identifiant ni autre indice : la réponse ne dit pas si le compte existait.
+    const reponse = { email, role: resultat.role };
     if (!resultat.nouveau) return c.json(reponse, 200);
 
     const vue = await vueFerme(fermeId, droit.role);
