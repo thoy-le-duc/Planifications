@@ -20,8 +20,8 @@
  * Le conteneur tourne en `--network host` (Linux : CI GitHub, conteneur de la boucle) : il
  * joint Postgres et le serveur JWKS du test sur localhost.
  *
- * Image : POWERSYNC_IMAGE, par défaut `journeyapps/powersync-service:latest` (Docker Hub, CI).
- * Dans le conteneur de la boucle : POWERSYNC_IMAGE=mirror.gcr.io/journeyapps/powersync-service:latest.
+ * Image : POWERSYNC_IMAGE, par défaut `journeyapps/powersync-service:1.26.1` (Docker Hub, CI).
+ * Dans le conteneur de la boucle : POWERSYNC_IMAGE=mirror.gcr.io/journeyapps/powersync-service:1.26.1.
  */
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -30,7 +30,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 
-export const IMAGE_POWERSYNC = process.env.POWERSYNC_IMAGE ?? 'journeyapps/powersync-service:latest';
+export const IMAGE_POWERSYNC = process.env.POWERSYNC_IMAGE ?? 'journeyapps/powersync-service:1.26.1';
 export const DOSSIER_CONFIG = fileURLToPath(new URL('../../../../../powersync/', import.meta.url));
 export const FICHIER_SERVICE = `${DOSSIER_CONFIG}powersync.yaml`;
 export const FICHIER_FLUX = `${DOSSIER_CONFIG}sync-config.yaml`;
