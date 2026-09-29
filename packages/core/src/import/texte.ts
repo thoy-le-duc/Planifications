@@ -1,6 +1,8 @@
 /**
- * Lecture d'un CSV (T14) : décodage des octets (UTF-8 ou Windows-1252), détection du séparateur,
- * découpage RFC 4180. Le cœur n'a ni `TextDecoder` ni `Buffer` déclarés : décodage écrit ici.
+ * Lecture d'un CSV (T14) : décodage des octets (UTF-16 avec BOM, UTF-8 ou Windows-1252), détection
+ * du séparateur, découpage RFC 4180, plafond de 5 millions de cases. Le cœur n'a ni `TextDecoder`
+ * ni `Buffer` déclarés : `TextDecoder` est retrouvé par `globalThis` (type local), avec un décodage
+ * écrit ici quand il manque.
  * Aucune fonction ne lève ; les octets reçus ne sont jamais modifiés.
  */
 import type { CsvLu, Separateur, TexteDecode } from './types.ts';
@@ -22,6 +24,45 @@ function texteDepuisUnites(unites: Uint16Array, longueur: number): string {
   return morceaux.join('');
 }
 
+// ── TextDecoder natif, s'il existe (type local : le cœur n'a pas les types du DOM) ─────────────
+
+interface DecodeurNatif {
+  decode(octets: Uint8Array): string;
+}
+type ConstructeurDecodeur = new (etiquette: string, options: { readonly fatal: boolean; readonly ignoreBOM: boolean }) => DecodeurNatif;
+
+const decodeurs = new Map<string, DecodeurNatif | null>();
+
+/**
+ * Décodeur natif (bien plus rapide que la boucle écrite ici), `fatal` pour UTF-8 : une séquence
+ * invalide lève, et la lecture repasse en Windows-1252. `null` s'il n'existe pas : boucles ci-dessous.
+ */
+function decodeurNatif(etiquette: 'utf-8' | 'windows-1252' | 'utf-16le' | 'utf-16be'): DecodeurNatif | null {
+  let d = decodeurs.get(etiquette);
+  if (d !== undefined) return d;
+  d = null;
+  const C = (globalThis as { readonly TextDecoder?: ConstructeurDecodeur }).TextDecoder;
+  if (C !== undefined) {
+    try {
+      d = new C(etiquette, { fatal: etiquette === 'utf-8', ignoreBOM: true });
+    } catch {
+      d = null;
+    }
+  }
+  decodeurs.set(etiquette, d);
+  return d;
+}
+
+function decoderNatif(etiquette: 'utf-8' | 'windows-1252' | 'utf-16le' | 'utf-16be', octets: Uint8Array): string | null | undefined {
+  const d = decodeurNatif(etiquette);
+  if (d === null) return undefined;
+  try {
+    return d.decode(octets);
+  } catch {
+    return null;
+  }
+}
+
 const suite = (b: number | undefined): b is number => b !== undefined && (b & 0xc0) === 0x80;
 
 /**
@@ -29,6 +70,8 @@ const suite = (b: number | undefined): b is number => b !== undefined && (b & 0x
  * substitution, ni point de code au-delà de U+10FFFF) ; `null` si ce n'est pas de l'UTF-8 valide.
  */
 export function decoderUtf8(octets: Uint8Array, debut = 0, fin = octets.length): string | null {
+  const natif = decoderNatif('utf-8', octets.subarray(debut, Math.max(debut, fin)));
+  if (natif !== undefined) return natif;
   const unites = new Uint16Array(Math.max(0, fin - debut));
   let n = 0;
   let i = debut;
@@ -75,6 +118,8 @@ export function decoderUtf8(octets: Uint8Array, debut = 0, fin = octets.length):
 }
 
 function decoderCp1252(octets: Uint8Array, debut: number): string {
+  const natif = decoderNatif('windows-1252', octets.subarray(debut));
+  if (typeof natif === 'string') return natif;
   const n = Math.max(0, octets.length - debut);
   const unites = new Uint16Array(n);
   for (let i = 0; i < n; i++) {
@@ -84,11 +129,38 @@ function decoderCp1252(octets: Uint8Array, debut: number): string {
   return texteDepuisUnites(unites, n);
 }
 
+/** UTF-16 (petit- ou gros-boutiste) à partir de `debut` ; un octet final isolé → U+FFFD. */
+function decoderUtf16(octets: Uint8Array, debut: number, petit: boolean): string {
+  const natif = decoderNatif(petit ? 'utf-16le' : 'utf-16be', octets.subarray(debut));
+  if (typeof natif === 'string') return natif;
+  const n = Math.max(0, octets.length - debut);
+  const paires = n >> 1;
+  const unites = new Uint16Array(paires + (n & 1));
+  for (let i = 0; i < paires; i++) {
+    const a = octets[debut + 2 * i] ?? 0;
+    const b = octets[debut + 2 * i + 1] ?? 0;
+    unites[i] = petit ? a | (b << 8) : (a << 8) | b;
+  }
+  if (n & 1) unites[paires] = 0xfffd;
+  return texteDepuisUnites(unites, unites.length);
+}
+
+/** Encodage UTF-16 annoncé par un BOM (FF FE, FE FF : export « Texte Unicode » d'Excel), ou `null`. */
+function bomUtf16(octets: Uint8Array): 'utf-16le' | 'utf-16be' | null {
+  if (octets.length < 2) return null;
+  if (octets[0] === 0xff && octets[1] === 0xfe) return 'utf-16le';
+  if (octets[0] === 0xfe && octets[1] === 0xff) return 'utf-16be';
+  return null;
+}
+
 /**
- * UTF-8 s'il est valide, sinon Windows-1252 (exports Excel). Le BOM UTF-8 est retiré du texte et
- * signalé dans les deux cas (un BOM suivi d'octets Windows-1252 arrive après un copier-coller).
+ * UTF-16 si un BOM UTF-16 l'annonce ; sinon UTF-8 s'il est valide, sinon Windows-1252 (exports
+ * Excel). Le BOM est retiré du texte et signalé (un BOM UTF-8 suivi d'octets Windows-1252 arrive
+ * après un copier-coller).
  */
 export function decoderTexte(octets: Uint8Array): TexteDecode {
+  const utf16 = bomUtf16(octets);
+  if (utf16 !== null) return { texte: decoderUtf16(octets, 2, utf16 === 'utf-16le'), encodage: utf16, bom: true };
   const bom = octets.length >= 3 && octets[0] === 0xef && octets[1] === 0xbb && octets[2] === 0xbf;
   const debut = bom ? 3 : 0;
   const utf8 = decoderUtf8(octets, debut);
@@ -114,17 +186,35 @@ function finDeChamp(texte: string, i: number, sep: number): number {
   return k;
 }
 
+/** Une ligne lue : position qui la suit, nombre de champs, tous vides (ou espaces) ?, champs gardés. */
+interface LigneLue {
+  readonly fin: number;
+  readonly nombre: number;
+  readonly vide: boolean;
+  /** Les champs, ou `null` s'ils sont plus de `garder` (comptés, pas gardés). */
+  readonly champs: string[] | null;
+}
+
 /**
- * Découpage RFC 4180, `max` lignes au plus : champs entre guillemets (séparateur, guillemets
- * doublés et retours à la ligne gardés), fins de ligne CRLF, LF ou CR ; la dernière fin de ligne
- * ne crée pas de ligne vide ; guillemet non fermé : le reste du texte est le dernier champ.
+ * Lit la ligne qui commence en `i` (< longueur du texte), RFC 4180 : champs entre guillemets
+ * (séparateur, guillemets doublés et retours à la ligne gardés), fin de ligne CRLF, LF ou CR ;
+ * guillemet non fermé : le reste du texte est le dernier champ. Garde au plus `garder` champs :
+ * au-delà, ils sont seulement comptés (une ligne démesurée n'est jamais allouée).
  */
-function decouper(texte: string, sep: number, max: number): string[][] {
-  const lignes: string[][] = [];
+function lireLigne(texte: string, depart: number, sep: number, garder: number): LigneLue {
   const n = texte.length;
-  let ligne: string[] = [];
-  let i = 0;
-  while (i < n && lignes.length < max) {
+  let champs: string[] | null = [];
+  let nombre = 0;
+  let vide = true;
+  let i = depart;
+  const ajouter = (valeur: string): void => {
+    nombre++;
+    if (vide && valeur.trim() !== '') vide = false;
+    if (champs === null) return;
+    if (nombre > garder) champs = null;
+    else champs.push(valeur);
+  };
+  for (;;) {
     let valeur: string;
     if (texte.charCodeAt(i) === GUILLEMET) {
       let protege = '';
@@ -151,23 +241,24 @@ function decouper(texte: string, sep: number, max: number): string[][] {
       i = k;
     } else {
       const k = finDeChamp(texte, i, sep);
-      valeur = texte.slice(i, k);
+      valeur = i === k ? '' : texte.slice(i, k);
       i = k;
     }
-    ligne.push(valeur);
+    ajouter(valeur);
     if (i >= n) break;
     const c = texte.charCodeAt(i);
     if (c === sep) {
       i++;
-      if (i >= n) ligne.push('');
+      if (i >= n) {
+        ajouter('');
+        break;
+      }
       continue;
     }
     i += c === CR && texte.charCodeAt(i + 1) === LF ? 2 : 1;
-    lignes.push(ligne);
-    ligne = [];
+    break;
   }
-  if (ligne.length > 0 && lignes.length < max) lignes.push(ligne);
-  return lignes;
+  return { fin: i, nombre, vide, champs };
 }
 
 const SEPARATEURS: readonly Separateur[] = [';', ',', '\t'];
@@ -194,10 +285,17 @@ function meilleur(a: Candidat, b: Candidat): Candidat {
 export function detecterSeparateur(texte: string): Separateur {
   let choisi: Candidat | null = null;
   for (const separateur of SEPARATEURS) {
-    const lignes = decouper(texte, separateur.charCodeAt(0), LIGNES_DETECTION).filter((l) => l.length > 1 || (l[0] ?? '').trim() !== '');
-    if (lignes.length === 0) continue;
+    // Nombre de champs des premières lignes (hors ligne d'un seul champ vide), sans les garder.
+    const nombres: number[] = [];
+    const sep = separateur.charCodeAt(0);
+    for (let i = 0, lues = 0; i < texte.length && lues < LIGNES_DETECTION; lues++) {
+      const l = lireLigne(texte, i, sep, 0);
+      i = l.fin;
+      if (l.nombre > 1 || !l.vide) nombres.push(l.nombre);
+    }
+    if (nombres.length === 0) continue;
     const frequences = new Map<number, number>();
-    for (const l of lignes) frequences.set(l.length, (frequences.get(l.length) ?? 0) + 1);
+    for (const l of nombres) frequences.set(l, (frequences.get(l) ?? 0) + 1);
     let mode = 0;
     let accord = 0;
     for (const [nombre, fois] of frequences) {
@@ -207,34 +305,70 @@ export function detecterSeparateur(texte: string): Separateur {
       }
     }
     if (mode <= 1) continue;
-    const candidat: Candidat = { separateur, tous: accord === lignes.length, accord, frequenceEntete: (lignes[0]?.length ?? 1) - 1 };
+    const candidat: Candidat = { separateur, tous: accord === nombres.length, accord, frequenceEntete: (nombres[0] ?? 1) - 1 };
     choisi = choisi === null ? candidat : meilleur(choisi, candidat);
   }
   return choisi?.separateur ?? ';';
 }
 
-/** Signature ZIP (un .xlsx renommé en .csv) ou octet nul (fichier binaire, UTF-16…). */
+/** Signature ZIP (un .xlsx renommé en .csv) ou octet nul (fichier binaire). */
 function estBinaire(octets: Uint8Array): boolean {
   if (octets.length >= 4 && octets[0] === 0x50 && octets[1] === 0x4b && octets[2] === 0x03 && octets[3] === 0x04) return true;
   return octets.includes(0);
 }
 
-const binaire = (): CsvLu => ({
-  encodage: 'utf-8',
-  bom: false,
-  separateur: ';',
+const refus = (code: 'fichier_binaire' | 'fichier_trop_grand', message: string, lu?: TexteDecode, separateur?: Separateur): CsvLu => ({
+  encodage: lu?.encodage ?? 'utf-8',
+  bom: lu?.bom ?? false,
+  separateur: separateur ?? ';',
   lignes: [],
-  erreur: {
-    code: 'fichier_binaire',
-    message: 'Ce fichier n’est pas un texte CSV (c’est peut-être un classeur Excel renommé) : déposez le fichier .xlsx tel quel, ou enregistrez-le en CSV depuis le tableur.',
-  },
+  erreur: { code, message },
 });
 
-/** Octets d'un CSV → lignes de chaînes (vide = ''), avec l'encodage et le séparateur détectés. */
+const MESSAGE_BINAIRE =
+  'Ce fichier n’est pas un texte CSV (c’est peut-être un classeur Excel renommé) : déposez le fichier .xlsx tel quel, ou enregistrez-le en CSV depuis le tableur.';
+const MESSAGE_TROP_GRAND = 'Ce fichier est trop grand (plus de 5 millions de cases) : découpez-le en plusieurs fichiers plus petits et importez-les l’un après l’autre.';
+
+/** Plafond des cases d'un CSV (même que le .xlsx) : chaque ligne rendue compte pour une case, chacun de ses champs aussi. */
+const PLAFOND_CASES = 5_000_000;
+
+/**
+ * Octets d'un CSV → lignes de chaînes (vide = ''), avec l'encodage et le séparateur détectés.
+ * Les lignes vides (champs vides ou espaces) de fin de fichier ne sont ni créées ni comptées ;
+ * celles d'avant une ligne utile restent (elles gardent les numéros de ligne). Au-delà de
+ * 5 000 000 de cases → `fichier_trop_grand`, sans tout allouer.
+ */
 export function lireCsv(octets: Uint8Array): CsvLu {
-  if (estBinaire(octets)) return binaire();
-  const { texte, encodage, bom } = decoderTexte(octets);
+  if (bomUtf16(octets) === null && estBinaire(octets)) return refus('fichier_binaire', MESSAGE_BINAIRE);
+  const lu = decoderTexte(octets);
+  const { texte, encodage, bom } = lu;
   const separateur = detecterSeparateur(texte);
-  const lignes = decouper(texte, separateur.charCodeAt(0), Number.POSITIVE_INFINITY);
+  const sep = separateur.charCodeAt(0);
+  const lignes: string[][] = [];
+  let cases = 0;
+  // Lignes vides en attente : rendues seulement si une ligne utile les suit (relues alors).
+  let attenteDebut = -1;
+  let attenteCases = 0;
+  let i = 0;
+  while (i < texte.length) {
+    const debut = i;
+    const l = lireLigne(texte, i, sep, Math.max(0, PLAFOND_CASES - cases - attenteCases - 1));
+    i = l.fin;
+    if (l.vide) {
+      if (attenteDebut < 0) attenteDebut = debut;
+      attenteCases += 1 + l.nombre;
+      continue;
+    }
+    if (l.champs === null || cases + attenteCases + 1 + l.nombre > PLAFOND_CASES) return refus('fichier_trop_grand', MESSAGE_TROP_GRAND, lu, separateur);
+    for (let j = attenteDebut; attenteDebut >= 0 && j < debut; ) {
+      const v = lireLigne(texte, j, sep, Number.POSITIVE_INFINITY);
+      j = v.fin;
+      lignes.push(v.champs ?? []);
+    }
+    cases += attenteCases + 1 + l.nombre;
+    attenteDebut = -1;
+    attenteCases = 0;
+    lignes.push(l.champs);
+  }
   return { encodage, bom, separateur, lignes, erreur: null };
 }

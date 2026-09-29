@@ -26,7 +26,7 @@ export interface LecteurClasseur {
   lire(octets: Uint8Array): Promise<ResultatClasseur>;
 }
 
-export type Encodage = 'utf-8' | 'windows-1252';
+export type Encodage = 'utf-8' | 'windows-1252' | 'utf-16le' | 'utf-16be';
 export type Separateur = ';' | ',' | '\t';
 
 export interface TexteDecode {
@@ -40,8 +40,8 @@ export interface CsvLu {
   readonly bom: boolean;
   readonly separateur: Separateur;
   readonly lignes: readonly (readonly string[])[];
-  /** Fichier binaire (un .xlsx renommé, octets nuls) : `lignes` vide. */
-  readonly erreur: { readonly code: 'fichier_binaire'; readonly message: string } | null;
+  /** Fichier binaire (un .xlsx renommé, octets nuls) ou trop grand (plus de 5 000 000 de cases) : `lignes` vide. */
+  readonly erreur: { readonly code: 'fichier_binaire' | 'fichier_trop_grand'; readonly message: string } | null;
 }
 
 // ── Champs et correspondance ─────────────────────────────────────────────────────────────────
