@@ -4,6 +4,7 @@ import { defineConfig, type Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { baliseCsp, type OptionsCsp } from './scripts/csp.ts';
+import { COULEURS } from './src/ui/jetons.ts';
 
 /**
  * Pages de mesure (T07) et de diagnostic (T10) : hors navigation, hors service worker, jamais
@@ -111,8 +112,8 @@ export default defineConfig(({ mode }) => {
           lang: 'fr',
           start_url: '/',
           display: 'standalone',
-          background_color: '#f4efe3',
-          theme_color: '#2f6b3a',
+          background_color: COULEURS.fond,
+          theme_color: COULEURS.foret,
           icons: [{ src: 'icone.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
         },
         workbox: {
