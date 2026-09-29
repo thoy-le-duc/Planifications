@@ -19,12 +19,27 @@ export function nomBaseLocale(utilisateurId: string): string {
 export const DELAI_BASE_OUVERTE_MS = 10_000;
 
 /**
- * Supprime la base IndexedDB `nom`. Si une autre page la garde ouverte, la suppression attend sa
- * fermeture ; au-delà de `delaiMs`, la promesse rejette (l'écran doit le dire).
+ * Demandes de suppression lancées par cette page et pas encore abouties, par nom de base. Une
+ * demande bloquée (base ouverte dans un autre onglet) reste en file dans IndexedDB même si on
+ * cesse de l'attendre : elle s'exécutera à la fermeture de l'autre onglet, et rien ne l'annule.
+ * On n'en empile donc pas d'autre tant qu'elle n'a pas abouti. Rangées par fabrique IndexedDB
+ * (une seule dans le navigateur).
  */
-export function supprimerBaseIndexedDb(nom: string, delaiMs = DELAI_BASE_OUVERTE_MS): Promise<void> {
+const demandesEnFile = new WeakMap<IDBFactory, Map<string, Promise<void>>>();
+
+/** Demandes en file auprès de la fabrique IndexedDB courante. */
+function fileDe(fabrique: IDBFactory): Map<string, Promise<void>> {
+  let file = demandesEnFile.get(fabrique);
+  if (file === undefined) {
+    file = new Map();
+    demandesEnFile.set(fabrique, file);
+  }
+  return file;
+}
+
+/** Lance `indexedDB.deleteDatabase(nom)` ; `bloquee` est appelé si une autre page la garde ouverte. */
+function demanderSuppression(nom: string, bloquee: () => void): Promise<void> {
   return new Promise<void>((ok, echec) => {
-    let minuterie: ReturnType<typeof setTimeout> | undefined;
     let requete: IDBOpenDBRequest;
     try {
       requete = indexedDB.deleteDatabase(nom);
@@ -33,19 +48,71 @@ export function supprimerBaseIndexedDb(nom: string, delaiMs = DELAI_BASE_OUVERTE
       return;
     }
     requete.onsuccess = () => {
-      clearTimeout(minuterie);
       ok();
     };
     requete.onerror = () => {
-      clearTimeout(minuterie);
       echec(requete.error ?? new Error('base locale : effacement impossible'));
     };
-    requete.onblocked = () => {
-      minuterie ??= setTimeout(() => {
-        echec(new Error('Base locale ouverte dans une autre page : fermez-la, puis recommencez.'));
-      }, delaiMs);
-    };
+    requete.onblocked = bloquee;
   });
+}
+
+/**
+ * Supprime la base IndexedDB `nom`. Si une autre page la garde ouverte, la suppression attend sa
+ * fermeture ; au-delà de `delaiMs`, la promesse rejette (l'écran doit le dire). Tant qu'une
+ * demande précédente pour `nom` est en file, on l'attend au lieu d'en lancer une autre.
+ */
+export function supprimerBaseIndexedDb(nom: string, delaiMs = DELAI_BASE_OUVERTE_MS): Promise<void> {
+  let minuterie: ReturnType<typeof setTimeout> | undefined;
+  let abandon: ((raison: Error) => void) | undefined;
+  const delai = new Promise<never>((_, echec) => {
+    abandon = echec;
+  });
+  const demarrerDelai = () => {
+    minuterie ??= setTimeout(() => {
+      abandon?.(new Error('Base locale ouverte dans une autre page : fermez-la, puis recommencez.'));
+    }, delaiMs);
+  };
+
+  let file: Map<string, Promise<void>> | undefined;
+  try {
+    file = fileDe(indexedDB);
+  } catch {
+    // IndexedDB absent : demanderSuppression le dira.
+  }
+  let demande = file?.get(nom);
+  if (demande === undefined) {
+    const neuve = demanderSuppression(nom, demarrerDelai);
+    demande = neuve;
+    file?.set(nom, neuve);
+    const liberer = () => {
+      if (file?.get(nom) === neuve) file.delete(nom);
+    };
+    neuve.then(liberer, liberer);
+  } else {
+    // Déjà en file (sans doute bloquée) : le délai court dès maintenant.
+    demarrerDelai();
+  }
+  return Promise.race([demande, delai]).finally(() => {
+    clearTimeout(minuterie);
+  });
+}
+
+/**
+ * Vrai si une base locale de l'utilisateur existe (indexedDB.databases()), sans charger
+ * PowerSync. Sans moyen de le savoir (indexedDB ou databases() absents, ou qui rejettent) : vrai,
+ * pour demander confirmation plutôt que de risquer une perte silencieuse.
+ */
+export async function baseLocaleExiste(utilisateurId: string): Promise<boolean> {
+  try {
+    const idb: Partial<Pick<IDBFactory, 'databases'>> | undefined = typeof indexedDB === 'undefined' ? undefined : indexedDB;
+    if (idb?.databases === undefined) return true;
+    const bases = await idb.databases();
+    const nom = nomBaseLocale(utilisateurId);
+    return bases.some((b) => b.name === nom);
+  } catch {
+    return true;
+  }
 }
 
 /** Efface toute la base locale de l'utilisateur (données synchronisées et écritures en attente). */

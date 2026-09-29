@@ -3,7 +3,7 @@
  * lisible. Contrat : deconnexion.test.ts. Ni PowerSync ni jose : JavaScript de démarrage ;
  * l'effacement de la base locale est injecté (src/donnees, chargé à la demande).
  */
-import { effacerSession, type SessionConnexion } from './session.ts';
+import { effacerSession, lireSession, type SessionConnexion } from './session.ts';
 
 export interface OptionsDeconnexion {
   readonly urlApi: string;
@@ -65,8 +65,26 @@ async function effacerEtMarquer(
 }
 
 /**
+ * Retire `utilisateurId` du marqueur (les autres restent ; clé retirée quand il est vide). Appelée
+ * à la connexion : la base de l'utilisateur connecté ne doit plus être effacée. Ne lève jamais.
+ */
+export function retirerEffacementEnAttente(stockage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>, utilisateurId: string): void {
+  const attente = effacementsEnAttente(stockage);
+  if (attente.includes(utilisateurId)) rangerEnAttente(stockage, attente.filter((id) => id !== utilisateurId));
+}
+
+/** Utilisateur de la session rangée (relue à chaque fois), ou null. */
+function utilisateurConnecte(stockage: Pick<Storage, 'getItem'>): string | null {
+  return lireSession(stockage)?.utilisateurId ?? null;
+}
+
+/**
  * Retente chaque effacement en attente, l'un après l'autre ; rend les utilisateurId qui attendent
  * encore. Ne rejette jamais. Marqueur illisible : clé retirée.
+ *
+ * 2e relecture sécurité (B2) : l'utilisateur de la session rangée, relue avant chaque essai et à
+ * la fin, n'est JAMAIS effacé (reconnecté pendant que l'effacement attendait) : il quitte le
+ * marqueur et n'est pas rendu.
  */
 export async function reprendreEffacements(o: {
   readonly stockage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -75,20 +93,23 @@ export async function reprendreEffacements(o: {
   const attente = effacementsEnAttente(o.stockage);
   const restants: string[] = [];
   for (const id of attente) {
+    if (utilisateurConnecte(o.stockage) === id) continue;
     try {
       await o.effacerBaseLocale(id);
     } catch {
       restants.push(id);
     }
   }
+  const connecte = utilisateurConnecte(o.stockage);
+  const encore = restants.filter((id) => id !== connecte);
   let brut: string | null = null;
   try {
     brut = o.stockage.getItem(CLE_EFFACEMENT_EN_ATTENTE);
   } catch {
     // Stockage indisponible : rien à retirer.
   }
-  if (brut !== null) rangerEnAttente(o.stockage, restants);
-  return restants;
+  if (brut !== null) rangerEnAttente(o.stockage, encore);
+  return encore;
 }
 
 /** Demande à l'API de révoquer la session ; n'échoue jamais (hors ligne, erreur, délai). */
@@ -140,8 +161,11 @@ export function messagePerteSaisies(n: number): string {
 }
 
 export interface OptionsConfirmation extends OptionsDeconnexion {
-  /** Nombre de saisies encore dans la file d'envoi. */
-  readonly compterEnAttente: () => Promise<number>;
+  /**
+   * Nombre de saisies encore dans la file d'envoi ; null si on ne sait pas les compter (base
+   * locale présente, PowerSync non ouvert) : message générique.
+   */
+  readonly compterEnAttente: () => Promise<number | null>;
   /** Écran de confirmation en un tap : vrai pour se déconnecter quand même. */
   readonly confirmer: (message: string) => Promise<boolean>;
 }

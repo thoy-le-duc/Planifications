@@ -20,6 +20,7 @@ export {
   effacementsEnAttente,
   messagePerteSaisies,
   reprendreEffacements,
+  retirerEffacementEnAttente,
   type OptionsConfirmation,
   type OptionsDeconnexion,
 } from './deconnexion.ts';
