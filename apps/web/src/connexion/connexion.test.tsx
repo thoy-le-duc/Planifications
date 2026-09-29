@@ -48,6 +48,12 @@
  *   d'adresse » ramène à l'étape e-mail.
  *   Aucun champ mot de passe. Le module n'importe ni jose ni PowerSync (poids de démarrage).
  *
+ * T09b, 3e relecture — normaliserEmail(email: string): string (réexporté par index.ts) :
+ *   espaces de bord retirés, minuscules ET forme NFC (normalize('NFC')). Un « é » saisi
+ *   décomposé (e + U+0301, certains claviers ou copier-coller) part précomposé : l'API refuse les
+ *   caractères combinants, l'adresse doit être acceptée quand même. demanderCode et verifierCode
+ *   envoient cette forme ; la session rendue porte la même adresse.
+ *
  * Intégration dans App (apps/web/src/App.tsx) : sans session enregistrée, App affiche
  * EcranConnexion à l'intérieur de son élément data-testid="app" (la marque de performance est
  * toujours posée) ; après connexion, la session est enregistrée et l'appli s'affiche.
@@ -62,6 +68,7 @@ import {
   effacerSession,
   enregistrerSession,
   lireSession,
+  normaliserEmail,
   type ClientConnexion,
   type SessionConnexion,
 } from './index.ts';
@@ -249,6 +256,28 @@ describe('T09 : client de connexion', () => {
         corps: { email: 'theophane@ferme.fr', code: '012345' },
       },
     ]);
+  });
+
+  it('T09b : « é » décomposé (e + U+0301) envoyé précomposé (NFC), par demanderCode et verifierCode', async () => {
+    const decompose = '  Rene\u0301@Ferme.FR ';
+    const attendue = 'ren\u00e9@ferme.fr';
+    expect(normaliserEmail(decompose)).toBe(attendue);
+    expect(normaliserEmail('RENE\u0301@ferme.fr')).toBe(attendue);
+
+    const { fetch, appels } = fauxFetch([
+      json(202, { ok: true }),
+      json(200, {
+        utilisateurId: SESSION.utilisateurId,
+        jetonAcces: SESSION.jetonAcces,
+        jetonRenouvellement: SESSION.jetonRenouvellement,
+      }),
+    ]);
+    const client = creerClientConnexion({ baseUrl: '/api', fetch });
+    expect(await client.demanderCode(decompose)).toEqual({ ok: true });
+    expect(await client.verifierCode(decompose, '012345')).toEqual({ ok: true, session: { ...SESSION, email: attendue } });
+    expect(appels.map((a) => a.corps)).toEqual([{ email: attendue }, { email: attendue, code: '012345' }]);
+    // Aucun caractère combinant ne part.
+    expect(JSON.stringify(appels)).not.toMatch(/\p{M}/u);
   });
 
   it('verifierCode : code invalide, hors ligne', async () => {

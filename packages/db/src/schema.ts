@@ -863,6 +863,16 @@ export const codeConnexion = pgTable(
 
 /**
  * Jeton de renouvellement (long, opaque), stocké haché : révocable (téléphone perdu). NON publiée.
+ *
+ * Rotation (T09b) : chaque renouvellement crée un jeton neuf de la même famille (`famille_id` =
+ * id du premier jeton de la connexion), dont `parent_id` désigne le jeton présenté ; l'ancien note
+ * son premier usage (`utilise_le`). Il reste acceptable 7 jours au plus tant qu'aucun de ses
+ * successeurs n'a servi (réponse perdue) : ses successeurs inutilisés sont alors remplacés
+ * (`remplace_le`). Présenter un jeton remplacé, déconnexion et rejeu révoquent toute la famille
+ * (`revoque_le`). `connexion_le` porte l'instant de la connexion, pour le plafond de
+ * 365 jours de toute la famille. Lignes expirées ou révoquées depuis plus de 90 jours : effacées.
+ * Colonnes facultatives pour les lignes écrites hors API : NULL vaut `id` (famille d'un seul
+ * jeton) et `cree_le` (connexion) ; l'API les remplit toujours.
  */
 export const jetonRenouvellement = pgTable(
   'jeton_renouvellement',
@@ -875,8 +885,19 @@ export const jetonRenouvellement = pgTable(
     expireLe: instant('expire_le').notNull(),
     revoqueLe: instant('revoque_le'),
     creeLe: creeLe(),
+    familleId: uuid('famille_id'),
+    connexionLe: instant('connexion_le'),
+    utiliseLe: instant('utilise_le'),
+    parentId: uuid('parent_id'),
+    remplaceLe: instant('remplace_le'),
   },
-  (t) => [index('jeton_renouvellement_utilisateur_idx').on(t.utilisateurId)],
+  (t) => [
+    index('jeton_renouvellement_utilisateur_idx').on(t.utilisateurId),
+    index('jeton_renouvellement_famille_idx').on(t.familleId),
+    index('jeton_renouvellement_parent_idx').on(t.parentId),
+    index('jeton_renouvellement_expire_idx').on(t.expireLe),
+    index('jeton_renouvellement_revoque_idx').on(t.revoqueLe),
+  ],
 );
 
 // ---------------------------------------------------------------------------------------------

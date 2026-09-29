@@ -11,16 +11,18 @@ import { creerPorte, SCHEMA_LOCAL, type PorteDonnees } from '@planif/sync';
 import { PowerSyncDatabase, SyncStreamConnectionMethod } from '@powersync/web';
 import type { SessionConnexion } from '../connexion/session.ts';
 import { brancherSynchro, type EtatSynchro } from './connecteur.ts';
+import { nomBaseLocale } from './effacer.ts';
 import { gererJetons } from './jeton.ts';
 
 export { etatDepuisStatut, type EtatSynchro } from './connecteur.ts';
+export { effacerDonneesLocales } from './effacer.ts';
 
 export interface OptionsOuverture {
   readonly session: SessionConnexion;
   readonly fermeId: Id<'Ferme'>;
   readonly urlApi: string;
   readonly urlPowerSync: string;
-  readonly stockage: Pick<Storage, 'setItem'>;
+  readonly stockage: Pick<Storage, 'getItem' | 'setItem'>;
 }
 
 export interface DonneesLocales {
@@ -28,6 +30,16 @@ export interface DonneesLocales {
   /** Appelle `rappel` avec l'état tout de suite, puis à chaque changement ; rend le désabonnement. */
   surveillerEtat(rappel: (etat: EtatSynchro) => void): () => void;
   fermer(): Promise<void>;
+  /**
+   * Déconnexion (T09b) : arrête la synchro, efface toutes les tables locales et la file
+   * d'écritures en attente, puis ferme la base.
+   */
+  effacer(): Promise<void>;
+  /**
+   * Nombre de saisies (transactions locales) encore dans la file d'envoi (T09b) : la déconnexion
+   * demande confirmation avant de les perdre.
+   */
+  ecrituresEnAttente(): Promise<number>;
 }
 
 export function ouvrirDonnees(o: OptionsOuverture): DonneesLocales {
@@ -35,7 +47,7 @@ export function ouvrirDonnees(o: OptionsOuverture): DonneesLocales {
     schema: SCHEMA_LOCAL,
     database: {
       // Une base par utilisateur : deux comptes sur un même téléphone ne se mélangent pas.
-      dbFilename: `planif-${o.session.utilisateurId}.sqlite`,
+      dbFilename: nomBaseLocale(o.session.utilisateurId),
       // Worker dédié plutôt que SharedWorker : c'est le défaut du SDK sur Android et iOS (T07).
       enableMultiTabs: false,
       useWebWorker: true,
@@ -72,5 +84,16 @@ export function ouvrirDonnees(o: OptionsOuverture): DonneesLocales {
       };
     },
     fermer: () => base.close(),
+    async ecrituresEnAttente() {
+      // File d'envoi de PowerSync : une ligne par écriture, regroupées par transaction (tx_id).
+      const ligne = await base.get<{ n: number }>(
+        'SELECT (SELECT count(DISTINCT tx_id) FROM ps_crud) + (SELECT count(*) FROM ps_crud WHERE tx_id IS NULL) AS n',
+      );
+      return ligne.n;
+    },
+    async effacer() {
+      await base.disconnectAndClear({ clearLocal: true, soft: false });
+      await base.close();
+    },
   };
 }
