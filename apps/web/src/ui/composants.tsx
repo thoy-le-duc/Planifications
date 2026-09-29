@@ -18,8 +18,13 @@ export interface ProprietesEnTete {
   readonly children?: ReactNode;
 }
 
-/** En-tête vert de chaque écran. */
+/**
+ * En-tête vert de chaque écran. Titre de 32 px (34 px quand un surtitre le précède, Aujourd'hui) ;
+ * plus petit sur un écran étroit ou zoomé (9vw atteint le maximum dès 380 px de large), coupé
+ * plutôt que de déborder.
+ */
 export function EnTete({ titre, surtitre, children }: ProprietesEnTete) {
+  const taille = surtitre === undefined ? 32 : 34;
   return (
     <header
       style={{
@@ -29,6 +34,7 @@ export function EnTete({ titre, surtitre, children }: ProprietesEnTete) {
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
+        overflowWrap: 'anywhere',
       }}
     >
       {surtitre !== undefined && (
@@ -36,7 +42,17 @@ export function EnTete({ titre, surtitre, children }: ProprietesEnTete) {
           {surtitre}
         </span>
       )}
-      <h1 style={{ fontFamily: 'var(--police-titre)', fontWeight: 800, fontSize: 34, lineHeight: 1.02 }}>{titre}</h1>
+      <h1
+        style={{
+          fontFamily: 'var(--police-titre)',
+          fontWeight: 800,
+          fontSize: `clamp(20px, 9vw, ${String(taille)}px)`,
+          letterSpacing: '-0.01em',
+          lineHeight: 1.02,
+        }}
+      >
+        {titre}
+      </h1>
       {children !== undefined && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{children}</div>}
     </header>
   );
@@ -106,7 +122,12 @@ export interface ProprietesBarreNavigation {
   readonly surChoix: (onglet: Onglet) => void;
 }
 
-/** Barre basse : quatre onglets de 64 px de haut, l'actif en forêt. */
+/**
+ * Barre basse : quatre onglets de même largeur, 48 px au moins (quatre tiennent dans 195 px, un
+ * téléphone zoomé à 200 %), l'actif en forêt ; les libellés se replient plutôt que de déborder.
+ * Focus : contour à l'intérieur de l'onglet (classe onglet, src/ui/base.css), jamais rogné par le
+ * bord de l'écran.
+ */
 export function BarreNavigation({ actif, surChoix }: ProprietesBarreNavigation) {
   return (
     <nav
@@ -115,8 +136,7 @@ export function BarreNavigation({ actif, surChoix }: ProprietesBarreNavigation) 
         background: 'var(--couleur-surface)',
         borderTop: '1px solid var(--couleur-trait)',
         display: 'flex',
-        justifyContent: 'space-around',
-        padding: '6px 8px max(10px, env(safe-area-inset-bottom))',
+        padding: '6px 0 max(10px, env(safe-area-inset-bottom))',
       }}
     >
       {ONGLETS.map(({ id, libelle }) => {
@@ -125,13 +145,16 @@ export function BarreNavigation({ actif, surChoix }: ProprietesBarreNavigation) 
           <button
             key={id}
             type="button"
+            className="onglet"
             aria-current={courant ? 'page' : undefined}
             onClick={() => {
               surChoix(id);
             }}
             style={{
-              minWidth: 72,
+              flex: '1 1 0',
+              minWidth: 48,
               minHeight: 60,
+              padding: 0,
               border: 0,
               background: 'none',
               display: 'flex',
@@ -139,8 +162,11 @@ export function BarreNavigation({ actif, surChoix }: ProprietesBarreNavigation) 
               alignItems: 'center',
               justifyContent: 'center',
               gap: 4,
-              fontSize: 13,
+              fontSize: 'clamp(10px, 3.4vw, 13px)',
               fontWeight: 700,
+              lineHeight: 1.1,
+              textAlign: 'center',
+              overflowWrap: 'anywhere',
               color: courant ? 'var(--couleur-foret)' : 'var(--couleur-tertiaire)',
             }}
           >

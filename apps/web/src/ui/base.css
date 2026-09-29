@@ -90,6 +90,23 @@ button:disabled {
   cursor: default;
 }
 
+/*
+ * Focus au clavier, partout le même : contour plein de 3 px en forêt (≥ 3:1 sur le fond, le
+ * blanc et les cartes). Posé autour de l'élément ; à l'intérieur (décalage négatif) pour ce qui
+ * touche un bord qui rogne : onglets (bord de l'écran) et lignes des cartes (overflow hidden).
+ * Rien ne se focalise encore sur la forêt ; le jour venu, contour en --couleur-sur-foret (l'orange
+ * n'y fait que 2,98:1).
+ */
+:focus-visible {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: 2px;
+}
+
+.onglet:focus-visible,
+.ligne-carte:focus-visible {
+  outline-offset: -4px;
+}
+
 h1,
 h2,
 p {
