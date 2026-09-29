@@ -44,7 +44,13 @@ jobs:
         run: pnpm lint
       - name: Schéma et migrations synchronisés
         run: |
-          pnpm --filter @planif/db exec drizzle-kit generate
+          # </dev/null : une question interactive (renommage de colonne ?) échoue au lieu d'attendre.
+          sortie="$(pnpm --filter @planif/db exec drizzle-kit generate </dev/null 2>&1)" || true
+          echo "$sortie"
+          if ! grep -q "No schema changes" <<<"$sortie"; then
+            echo "::error::drizzle-kit generate n'a pas conclu « No schema changes » : schéma et migrations désynchronisés, ou question interactive (renommage)."
+            exit 1
+          fi
           if [ -n "$(git status --porcelain -- packages/db/migrations)" ]; then
             echo "::error::Le schéma Drizzle a changé sans migration : lancer pnpm --filter @planif/db generer et versionner le résultat."
             git status --porcelain -- packages/db/migrations
