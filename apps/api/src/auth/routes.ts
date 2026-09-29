@@ -3,10 +3,10 @@
  * Contrat : auth.integration.test.ts.
  */
 import { utilisateur, codeConnexion, jetonRenouvellement, membre } from '@planif/db';
-import { and, asc, desc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 import type { Contexte } from '../dependances.ts';
-import { lireCorps, normaliserEmail } from '../http.ts';
+import { emailPiege, lireCorps, normaliserEmail } from '../http.ts';
 import { libreSelonFenetre, secondesAvant } from '../limites.ts';
 import { jwksPublic } from './cles.ts';
 import { adresseClient, enregistrerDemandeIp, type ActionLimitee } from './limite-ip.ts';
@@ -36,11 +36,14 @@ export const ECHECS_PAR_JOUR = 10;
 export const DUREE_RENOUVELLEMENT_MS = 90 * JOUR;
 export const DUREE_MAX_SESSION_MS = 365 * JOUR;
 /**
- * Rotation (T09b) : un jeton de renouvellement déjà utilisé reste accepté DELAI_GRACE_MS après son
- * premier usage (réponse perdue au champ) ; présenté plus tard, c'est un rejeu : toute sa famille
- * est révoquée.
+ * Rotation (T09b), règle « successeur jamais utilisé » : un jeton déjà utilisé reste acceptable
+ * REJEU_MAX_MS après son premier usage tant qu'aucun de ses successeurs (jetons émis en le
+ * présentant) n'a servi : c'est une réponse perdue au champ. Sinon c'est un rejeu (vol, copie) :
+ * toute sa famille est révoquée.
  */
-export const DELAI_GRACE_MS = 2 * MINUTE;
+export const REJEU_MAX_MS = 7 * JOUR;
+/** Jetons expirés ou révoqués depuis plus longtemps : effacés à chaque renouvellement. */
+export const PURGE_JETONS_MS = 90 * JOUR;
 
 type Refus = { readonly erreur: 'trop_de_demandes'; readonly apresS: number } | null;
 
@@ -118,6 +121,8 @@ export function routesAuth(ctx: Contexte): Hono {
     const tropParIp = await limiteIp(c, 'verifier');
     if (tropParIp !== null) return tropParIp;
     const corps = await lireCorps(c);
+    // Séparateur ou caractère de contrôle : jamais une adresse que /auth/code aurait acceptée.
+    if (emailPiege(corps?.email)) return c.json({ erreur: 'requete_invalide' }, 400);
     const email = normaliserEmail(corps?.email);
     const code = corps?.code;
     const refuse = () => c.json({ erreur: 'code_invalide' }, 401);
@@ -207,8 +212,10 @@ export function routesAuth(ctx: Contexte): Hono {
     });
   });
 
+  type Executeur = Pick<typeof db, 'update' | 'execute'>;
+
   /** Révoque toute la famille (même connexion) : `famille_id`, ou l'id pour une ligne écrite hors API. */
-  async function revoquerFamille(executeur: Pick<typeof db, 'update'>, famille: string, maintenant: Date): Promise<void> {
+  async function revoquerFamille(executeur: Executeur, famille: string, maintenant: Date): Promise<void> {
     await executeur
       .update(jetonRenouvellement)
       .set({ revoqueLe: maintenant })
@@ -220,6 +227,38 @@ export function routesAuth(ctx: Contexte): Hono {
       );
   }
 
+  /**
+   * Verrou de famille, jusqu'à la fin de la transaction : vérification et émission d'un jeton
+   * d'une part, révocation (rejeu, déconnexion) d'autre part, passent l'une après l'autre. Sans
+   * lui, un renouvellement concurrent d'un rejeu pourrait émettre un jeton que la révocation ne
+   * voit pas.
+   */
+  async function verrouillerFamille(executeur: Executeur, famille: string): Promise<void> {
+    await executeur.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`famille:${famille}`}))`);
+  }
+
+  /** Ligne d'un jeton présenté, relue sous le verrou de famille. */
+  async function lireJeton(executeur: Pick<typeof db, 'select'>, empreinte: string) {
+    const [ligne] = await executeur
+      .select({
+        id: jetonRenouvellement.id,
+        utilisateurId: jetonRenouvellement.utilisateurId,
+        expireLe: jetonRenouvellement.expireLe,
+        revoqueLe: jetonRenouvellement.revoqueLe,
+        remplaceLe: jetonRenouvellement.remplaceLe,
+        creeLe: jetonRenouvellement.creeLe,
+        familleId: jetonRenouvellement.familleId,
+        connexionLe: jetonRenouvellement.connexionLe,
+        utiliseLe: jetonRenouvellement.utiliseLe,
+        supprimeLe: utilisateur.supprimeLe,
+      })
+      .from(jetonRenouvellement)
+      .innerJoin(utilisateur, eq(utilisateur.id, jetonRenouvellement.utilisateurId))
+      .where(eq(jetonRenouvellement.jetonHache, empreinte))
+      .limit(1);
+    return ligne;
+  }
+
   // Ne demande PAS de jeton d'accès valide : c'est ce qui permet aux écritures faites hors
   // ligne de partir au retour du réseau, même après expiration du jeton d'accès.
   routes.post('/auth/renouveler', async (c) => {
@@ -229,37 +268,42 @@ export function routesAuth(ctx: Contexte): Hono {
 
     const maintenant = ctx.maintenant();
     const t = maintenant.getTime();
+    const empreinte = empreinteJeton(jeton);
     const jetonNeuf = tirerJetonRenouvellement();
     const utilisateurId = await db.transaction(async (tx) => {
-      // Verrouillé : des renouvellements simultanés du même jeton passent l'un après l'autre.
-      const [ligne] = await tx
-        .select({
-          id: jetonRenouvellement.id,
-          utilisateurId: jetonRenouvellement.utilisateurId,
-          expireLe: jetonRenouvellement.expireLe,
-          revoqueLe: jetonRenouvellement.revoqueLe,
-          creeLe: jetonRenouvellement.creeLe,
-          familleId: jetonRenouvellement.familleId,
-          connexionLe: jetonRenouvellement.connexionLe,
-          utiliseLe: jetonRenouvellement.utiliseLe,
-          supprimeLe: utilisateur.supprimeLe,
-        })
-        .from(jetonRenouvellement)
-        .innerJoin(utilisateur, eq(utilisateur.id, jetonRenouvellement.utilisateurId))
-        .where(eq(jetonRenouvellement.jetonHache, empreinteJeton(jeton)))
-        .limit(1)
-        .for('update', { of: jetonRenouvellement });
-      if (ligne?.revoqueLe !== null || ligne.supprimeLe !== null || ligne.expireLe.getTime() <= t) return null;
+      const premiere = await lireJeton(tx, empreinte);
+      if (premiere === undefined) return null;
+      const famille = premiere.familleId ?? premiere.id;
+      await verrouillerFamille(tx, famille);
+      // Relue sous le verrou : un rejeu ou une déconnexion a pu révoquer la famille entre-temps.
+      const ligne = await lireJeton(tx, empreinte);
+      if (ligne === undefined) return null;
+      // Famille révoquée (rejeu, déconnexion), ou utilisateur supprimé, ou jeton expiré : refus.
+      if (ligne.revoqueLe !== null || ligne.supprimeLe !== null || ligne.expireLe.getTime() <= t) return null;
+      // Successeur remplacé (réponse perdue, puis ancien jeton présenté de nouveau) : il ne vaut
+      // plus rien, mais le présenter ne coupe pas la session de celui qui a le dernier jeton.
+      if (ligne.remplaceLe !== null) return null;
 
-      const famille = ligne.familleId ?? ligne.id;
-      if (ligne.utiliseLe !== null && t - ligne.utiliseLe.getTime() > DELAI_GRACE_MS) {
-        // Rejeu d'un jeton déjà remplacé : volé, ou copié sur un autre téléphone. On ne sait pas
-        // lequel est légitime : toute la session tombe, l'utilisateur se reconnecte par code.
-        await revoquerFamille(tx, famille, maintenant);
-        return null;
-      }
       if (ligne.utiliseLe === null) {
         await tx.update(jetonRenouvellement).set({ utiliseLe: maintenant }).where(eq(jetonRenouvellement.id, ligne.id));
+      } else {
+        const [successeurUtilise] = await tx
+          .select({ id: jetonRenouvellement.id })
+          .from(jetonRenouvellement)
+          .where(and(eq(jetonRenouvellement.parentId, ligne.id), isNotNull(jetonRenouvellement.utiliseLe)))
+          .limit(1);
+        if (successeurUtilise !== undefined || t - ligne.utiliseLe.getTime() > REJEU_MAX_MS) {
+          // Rejeu d'un jeton dont le successeur a servi, ou trop ancien : volé, ou copié sur un
+          // autre téléphone. On ne sait pas lequel est légitime : toute la session tombe,
+          // l'utilisateur se reconnecte par code.
+          await revoquerFamille(tx, famille, maintenant);
+          return null;
+        }
+        // Réponse perdue : les successeurs jamais utilisés sont remplacés par le jeton neuf.
+        await tx
+          .update(jetonRenouvellement)
+          .set({ remplaceLe: maintenant })
+          .where(and(eq(jetonRenouvellement.parentId, ligne.id), isNull(jetonRenouvellement.remplaceLe)));
       }
 
       // Jeton neuf de la même famille ; échéance glissante, plafonnée à 365 jours après la connexion.
@@ -272,10 +316,17 @@ export function routesAuth(ctx: Contexte): Hono {
         creeLe: maintenant,
         familleId: famille,
         connexionLe,
+        parentId: ligne.id,
       });
       return ligne.utilisateurId;
     });
     if (utilisateurId === null) return refuse();
+
+    // Purge, tous comptes confondus : rien ne reste plus de 90 jours après expiration ou révocation.
+    const limite = new Date(t - PURGE_JETONS_MS);
+    await db
+      .delete(jetonRenouvellement)
+      .where(or(lt(jetonRenouvellement.expireLe, limite), lt(jetonRenouvellement.revoqueLe, limite)));
 
     return c.json({
       jetonAcces: await emettreJetonAcces(ctx, utilisateurId, maintenant),
@@ -284,26 +335,32 @@ export function routesAuth(ctx: Contexte): Hono {
   });
 
   // Déconnexion : sans jeton d'accès (il a pu expirer). Révoque toute la famille du jeton
-  // présenté ; un jeton d'accès déjà émis reste valable jusqu'à son exp (1 h au plus).
+  // présenté, même remplacé ; un jeton d'accès déjà émis reste valable jusqu'à son exp (1 h au plus).
   routes.post('/auth/deconnexion', async (c) => {
     const jeton = (await lireCorps(c))?.jetonRenouvellement;
     if (typeof jeton !== 'string' || jeton === '') return c.json({ erreur: 'requete_invalide' }, 400);
 
     const maintenant = ctx.maintenant();
-    const [ligne] = await db
-      .select({
-        id: jetonRenouvellement.id,
-        familleId: jetonRenouvellement.familleId,
-        revoqueLe: jetonRenouvellement.revoqueLe,
-        expireLe: jetonRenouvellement.expireLe,
-      })
-      .from(jetonRenouvellement)
-      .where(eq(jetonRenouvellement.jetonHache, empreinteJeton(jeton)))
-      .limit(1);
-    // Inconnu, déjà révoqué ou expiré : même réponse, rien ne change (rejouer est sans risque).
-    if (ligne?.revoqueLe === null && ligne.expireLe.getTime() > maintenant.getTime()) {
-      await revoquerFamille(db, ligne.familleId ?? ligne.id, maintenant);
-    }
+    const empreinte = empreinteJeton(jeton);
+    await db.transaction(async (tx) => {
+      const [ligne] = await tx
+        .select({
+          id: jetonRenouvellement.id,
+          familleId: jetonRenouvellement.familleId,
+          revoqueLe: jetonRenouvellement.revoqueLe,
+          expireLe: jetonRenouvellement.expireLe,
+        })
+        .from(jetonRenouvellement)
+        .where(eq(jetonRenouvellement.jetonHache, empreinte))
+        .limit(1);
+      // Inconnu, déjà révoqué ou expiré : même réponse, rien ne change (rejouer est sans risque).
+      if (ligne?.revoqueLe === null && ligne.expireLe.getTime() > maintenant.getTime()) {
+        const famille = ligne.familleId ?? ligne.id;
+        // Sous le verrou : un renouvellement en cours ne rend pas un jeton que la révocation ignore.
+        await verrouillerFamille(tx, famille);
+        await revoquerFamille(tx, famille, maintenant);
+      }
+    });
     return c.body(null, 204);
   });
 
