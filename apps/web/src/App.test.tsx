@@ -3,9 +3,10 @@ import { renderToString } from 'react-dom/server';
 import { App } from './App.tsx';
 
 describe('App', () => {
-  it('affiche le titre et la version du modèle', () => {
+  // T16 : la ligne « Squelette technique — modèle de données v1 » disparaît avec l'habillage
+  // (maquette « Connexion ») ; sans session, l'appli montre l'écran de connexion et son titre.
+  it('affiche le titre', () => {
     const html = renderToString(<App />);
     expect(html).toContain('Planifications');
-    expect(html).toContain('modèle de données v<!-- -->1');
   });
 });

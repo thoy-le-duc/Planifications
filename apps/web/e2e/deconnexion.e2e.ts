@@ -51,6 +51,12 @@ import { surveillerCsp } from './outils.ts';
  *   dans la page B ; des jetons tournés (même compte) ne la déconnectent pas.
  *
  * L'API est simulée (page.route), comme dans connexion.e2e.ts.
+ *
+ * T16 — adapté à l'habillage : « Se déconnecter » est sur l'écran Ferme (maquette « Ferme »),
+ * atteint par la barre de navigation basse (« Navigation principale », onglet « Ferme »).
+ * `ouvrirConnecte` et `allerFerme` y mènent avant chaque tap sur « Se déconnecter » ; « l'appli
+ * est connectée » se lit à la barre de navigation (présente connecté, absente sur l'écran de
+ * connexion) au lieu du bouton. Ce que vérifient les tests ne change pas.
  */
 
 const CIBLE_MIN_PX = 48;
@@ -67,6 +73,15 @@ const SESSION = {
 // Le service worker intercepterait les requêtes avant page.route.
 test.use({ serviceWorkers: 'block' });
 
+const navigation = (page: Page) => page.getByRole('navigation', { name: 'Navigation principale' });
+
+/** T16 : écran Ferme, qui porte « Se déconnecter ». */
+async function allerFerme(page: Page): Promise<void> {
+  await navigation(page).locator('button').filter({ hasText: 'Ferme' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Ferme' })).toBeVisible();
+}
+
+/** Appli connectée (session rangée), sur l'écran Ferme. */
 async function ouvrirConnecte(page: Page): Promise<void> {
   await page.goto('/');
   await page.evaluate(([cle, valeur]) => {
@@ -74,6 +89,7 @@ async function ouvrirConnecte(page: Page): Promise<void> {
   }, [CLE_SESSION, JSON.stringify(SESSION)] as const);
   await page.reload();
   await expect(page.getByTestId('app')).toBeVisible();
+  await allerFerme(page);
 }
 
 function sessionRangee(page: Page): Promise<string | null> {
@@ -253,6 +269,7 @@ test.describe('hors ligne, appli servie par le service worker', () => {
 
     await context.setOffline(true);
     await page.reload();
+    await allerFerme(page);
     await page.getByRole('button', { name: /se déconnecter/i }).click();
     await expect(page.getByLabel(/adresse e-mail/i)).toBeVisible({ timeout: DELAI_EFFACEMENT_MS });
     expect(await sessionRangee(page)).toBeNull();
@@ -394,6 +411,8 @@ test.describe('effacement en attente et reconnexion (2e relecture sécurité, B2
     await page.getByRole('button', { name: /recevoir un code/i }).click();
     await expect(page.getByLabel(/code/i)).toBeVisible();
     await page.keyboard.type('012345');
+    await expect(navigation(page)).toBeVisible();
+    await allerFerme(page);
     await expect(page.getByRole('button', { name: 'Se déconnecter', exact: true })).toBeVisible();
 
     // Connecté : l'utilisateur quitte le marqueur, l'alerte disparaît, aucune nouvelle demande.
@@ -413,7 +432,7 @@ test.describe('effacement en attente et reconnexion (2e relecture sécurité, B2
     await page.waitForTimeout(20_000);
     expect(await temoinPresent(page, nom)).toBe(true);
     await page.reload();
-    await expect(page.getByRole('button', { name: 'Se déconnecter', exact: true })).toBeVisible();
+    await expect(navigation(page)).toBeVisible();
     await page.waitForTimeout(12_000);
     expect(await temoinPresent(page, nom)).toBe(true);
     expect(await suppressions(page, nom)).toBe(avant);
@@ -427,6 +446,7 @@ test.describe('déconnexion dans un autre onglet (3e relecture)', () => {
     await ouvrirConnecte(page);
     const autre = await context.newPage();
     await autre.goto('/');
+    await allerFerme(autre);
     await expect(autre.getByRole('button', { name: /se déconnecter/i })).toBeVisible();
 
     // Jetons tournés par la page A (même compte) : la page B reste connectée.
@@ -442,6 +462,7 @@ test.describe('déconnexion dans un autre onglet (3e relecture)', () => {
     // Sans rechargement : écran de connexion, plus rien du compte.
     await expect(autre.getByLabel(/adresse e-mail/i)).toBeVisible({ timeout: 5_000 });
     await expect(autre.getByRole('button', { name: /se déconnecter/i })).toHaveCount(0);
+    await expect(navigation(autre)).toHaveCount(0);
     await expect(autre.getByTestId('app')).not.toContainText(SESSION.email);
     await autre.close();
   });
@@ -450,6 +471,7 @@ test.describe('déconnexion dans un autre onglet (3e relecture)', () => {
     await ouvrirConnecte(page);
     const autre = await context.newPage();
     await autre.goto('/');
+    await allerFerme(autre);
     await expect(autre.getByRole('button', { name: /se déconnecter/i })).toBeVisible();
 
     await page.evaluate(([cle, valeur]) => {
@@ -458,6 +480,7 @@ test.describe('déconnexion dans un autre onglet (3e relecture)', () => {
 
     await expect(autre.getByLabel(/adresse e-mail/i)).toBeVisible({ timeout: 5_000 });
     await expect(autre.getByRole('button', { name: /se déconnecter/i })).toHaveCount(0);
+    await expect(navigation(autre)).toHaveCount(0);
     await expect(autre.getByTestId('app')).not.toContainText(SESSION.email);
     await autre.close();
   });
