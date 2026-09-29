@@ -6,9 +6,17 @@
  *
  * `invalider()` : le serveur a refusé le jeton (401) alors que l'horloge du téléphone le croit
  * valide (téléphone en retard) ; le prochain `jetonValide()` en demande un neuf.
+ *
+ * T09b :
+ * - rotation : chaque renouvellement rend un jeton de renouvellement neuf, rangé aussitôt ;
+ *   avant de renouveler, on relit la session rangée (une autre page a pu le faire tourner :
+ *   représenter l'ancien après 2 minutes révoquerait toute la session). Réponse perdue : on
+ *   garde l'ancien, que le serveur accepte encore 2 minutes ;
+ * - écart d'horloge : l'heure du serveur est estimée par l'iat des jetons reçus (sans appel
+ *   réseau de plus), et c'est elle qui décide du renouvellement.
  */
 import { SessionExpiree } from '@planif/sync';
-import { enregistrerSession, sessionValide, type SessionConnexion } from '../connexion/session.ts';
+import { enregistrerSession, lireSession, sessionValide, type SessionConnexion } from '../connexion/session.ts';
 
 /** La classe de @planif/sync : un seul `instanceof` pour l'envoi et le renouvellement. */
 export { SessionExpiree };
@@ -16,23 +24,37 @@ export { SessionExpiree };
 /** On renouvelle un peu avant l'expiration : le jeton doit rester valide le temps de la requête. */
 export const MARGE_RENOUVELLEMENT_MS = 60_000;
 
-/** Instant d'expiration (ms) d'un JWT, lu sans vérifier la signature (le serveur la vérifie) ; null si illisible. */
-export function expirationJeton(jeton: string): number | null {
+/** Claim numérique (en secondes) d'un JWT, en ms, lu sans vérifier la signature ; null si illisible. */
+function claimInstant(jeton: string, nom: 'exp' | 'iat'): number | null {
   const charge = jeton.split('.')[1];
   if (charge === undefined) return null;
   try {
     const json = atob(charge.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(charge.length / 4) * 4, '='));
-    const exp: unknown = (JSON.parse(json) as Record<string, unknown>).exp;
-    return typeof exp === 'number' && Number.isFinite(exp) ? exp * 1000 : null;
+    const valeur: unknown = (JSON.parse(json) as Record<string, unknown>)[nom];
+    return typeof valeur === 'number' && Number.isFinite(valeur) ? valeur * 1000 : null;
   } catch {
     return null;
   }
 }
 
+/** Instant d'expiration (ms) d'un JWT, lu sans vérifier la signature (le serveur la vérifie) ; null si illisible. */
+export function expirationJeton(jeton: string): number | null {
+  return claimInstant(jeton, 'exp');
+}
+
+/** Instant d'émission (ms) d'un JWT, à l'heure du serveur ; null si illisible. */
+export function emissionJeton(jeton: string): number | null {
+  return claimInstant(jeton, 'iat');
+}
+
 export interface OptionsJetons {
   readonly urlApi: string;
   readonly fetch: typeof fetch;
-  readonly stockage: Pick<Storage, 'setItem'>;
+  /**
+   * Session rangée : réécrite après chaque renouvellement, et relue avant (getItem ; sans lui,
+   * seul le jeton en mémoire compte).
+   */
+  readonly stockage: Pick<Storage, 'setItem'> & Partial<Pick<Storage, 'getItem'>>;
   readonly maintenant?: () => number;
 }
 
@@ -52,8 +74,20 @@ export function gererJetons(depart: SessionConnexion, options: OptionsJetons): G
   let enCours: Promise<string> | null = null;
   /** Jeton refusé par le serveur : à renouveler même s'il paraît valide. */
   let invalide = false;
+  /**
+   * Heure du serveur − heure du téléphone (ms). Au départ, seul un iat dans le futur prouve un
+   * retard du téléphone (un iat passé ne dit rien : le jeton a pu être rangé la veille).
+   */
+  const iatDepart = emissionJeton(depart.jetonAcces);
+  let ecart = iatDepart === null ? 0 : Math.max(0, iatDepart - maintenant());
 
   async function renouveler(): Promise<string> {
+    // Une autre page ou un autre onglet a pu faire tourner le jeton : on présente le plus récent.
+    const stockage = options.stockage;
+    const rangee = stockage.getItem === undefined ? null : lireSession({ getItem: (cle) => stockage.getItem?.(cle) ?? null });
+    if (rangee !== null && rangee.utilisateurId === session.utilisateurId && rangee.jetonRenouvellement !== session.jetonRenouvellement) {
+      session = rangee;
+    }
     const res = await envoyer(`${options.urlApi}/auth/renouveler`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -66,6 +100,8 @@ export function gererJetons(depart: SessionConnexion, options: OptionsJetons): G
     if (nouvelle === null) throw new Error('renouvellement du jeton : réponse illisible');
     session = nouvelle;
     invalide = false;
+    const iat = emissionJeton(nouvelle.jetonAcces);
+    if (iat !== null) ecart = iat - maintenant();
     enregistrerSession(options.stockage, session);
     return session.jetonAcces;
   }
@@ -77,7 +113,9 @@ export function gererJetons(depart: SessionConnexion, options: OptionsJetons): G
     },
     jetonValide() {
       const exp = expirationJeton(session.jetonAcces);
-      if (!invalide && exp !== null && exp - maintenant() > MARGE_RENOUVELLEMENT_MS) return Promise.resolve(session.jetonAcces);
+      if (!invalide && exp !== null && exp - (maintenant() + ecart) > MARGE_RENOUVELLEMENT_MS) {
+        return Promise.resolve(session.jetonAcces);
+      }
       enCours ??= renouveler().finally(() => {
         enCours = null;
       });
