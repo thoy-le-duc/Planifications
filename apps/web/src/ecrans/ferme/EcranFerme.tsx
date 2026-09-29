@@ -41,6 +41,7 @@ const LIGNE: CSSProperties = {
   border: 0,
   background: 'var(--couleur-surface)',
   textAlign: 'left',
+  overflowWrap: 'anywhere',
 };
 
 const SOUS_TITRE: CSSProperties = { display: 'block', fontSize: 14, color: 'var(--couleur-secondaire)' };
@@ -57,7 +58,7 @@ interface ProprietesLigne {
 /** Nom accessible = le nom seul (aria-label) : le détail reste un complément visuel. */
 function Ligne({ nom, detail, signe, couleur, desactivee, surTap }: ProprietesLigne) {
   return (
-    <button type="button" aria-label={nom} disabled={desactivee} onClick={surTap} style={LIGNE}>
+    <button type="button" className="ligne-carte" aria-label={nom} disabled={desactivee} onClick={surTap} style={LIGNE}>
       <span>
         <span style={{ display: 'block', fontSize: 17, fontWeight: 700, color: couleur }}>{nom}</span>
         <span style={SOUS_TITRE}>{detail}</span>
@@ -75,9 +76,9 @@ function Carte({ titre, children }: { readonly titre: string; readonly children:
       <h2
         style={{
           padding: '12px 16px 6px',
-          fontFamily: 'var(--police-titre)',
-          fontWeight: 600,
-          fontSize: 11,
+          fontFamily: 'var(--police-texte)',
+          fontWeight: 700,
+          fontSize: 13,
           letterSpacing: '.08em',
           textTransform: 'uppercase',
           color: 'var(--couleur-secondaire)',
@@ -90,7 +91,12 @@ function Carte({ titre, children }: { readonly titre: string; readonly children:
   );
 }
 
+/** Effacement d'un ancien compte resté en attente (T09b) : le dire, jusqu'à ce qu'il aboutisse. */
+const ALERTE_EFFACEMENT = 'Les données d’un ancien compte n’ont pas encore été effacées de ce téléphone : fermez les autres onglets.';
+
 export default function EcranFerme({ session, surDeconnecte }: ProprietesEcranFerme) {
+  // Lu à l'ouverture de l'écran : l'effacement n'est repris que sur l'écran de connexion.
+  const [effacementEnAttente] = useState(() => effacementsEnAttente(stockageNavigateur()).length > 0);
   const [exportDemande, setExportDemande] = useState(false);
   const [deconnexionEnCours, setDeconnexionEnCours] = useState(false);
   const [confirmation, setConfirmation] = useState<ConfirmationEnAttente | null>(null);
@@ -140,6 +146,7 @@ export default function EcranFerme({ session, surDeconnecte }: ProprietesEcranFe
 
   return (
     <>
+      {effacementEnAttente && <AlerteOrange>{ALERTE_EFFACEMENT}</AlerteOrange>}
       <Carte titre="Mes données">
         <Ligne
           nom="Exporter toute ma ferme"
