@@ -1,5 +1,6 @@
 /**
  * Tests d'acceptation T06 — semainier : ce qu'il y a à faire dans une semaine ISO, tiré du plan.
+ * Complétés par T06b (réponse de Théophane à Q12) : une seule ligne en retard par série.
  *
  * API attendue, exportée par `packages/core/src/planification/semainier.ts` :
  *
@@ -84,9 +85,9 @@
  *   - Réalisé incohérent : une étape réalisée absente des dates prévues de la série (semis
  *     pépinière saisi sur un semis direct ou un plant acheté) est ignorée ; pas de RangeError,
  *     le semainier ne plante pas, les autres réalisés s'appliquent normalement.
- *   - DÉCISION PROVISOIRE (question à Théophane, PR #2) : une étape non saisie est considérée
- *     comme faite dès qu'une étape postérieure de la même série est réalisée. Plantation réalisée
- *     sans semis saisi : le semis pépinière n'apparaît ni dû ni en retard.
+ *   - Règle validée par Théophane (Q11, décision provisoire de la PR #2) : une étape non saisie
+ *     est considérée comme faite dès qu'une étape postérieure de la même série est réalisée.
+ *     Plantation réalisée sans semis saisi : le semis pépinière n'apparaît ni dû ni en retard.
  *   - Retard : enRetard ⇔ datePrevue < dateDuJour (une tâche prévue aujourd'hui n'est pas en
  *     retard) ; joursDeRetard = dateDuJour − datePrevue en jours, 0 sinon.
  *   - Une tâche non réalisée figure dans la semaine si :
@@ -103,6 +104,14 @@
  *     Pas de limite dans le temps : une tâche en retard reste listée tant qu'elle n'est pas
  *     réalisée (ou rendue caduque par une étape postérieure), ou que la série n'est pas passée
  *     'terminee' ou 'abandonnee'. On ne cache jamais en silence un travail oublié.
+ *   - Une seule ligne en retard par série (T06b, réponse de Théophane à Q12) : parmi les tâches
+ *     en retard d'une série qui figureraient dans la semaine, seule la plus ancienne (la première
+ *     étape non faite) est listée ; son retard se compte depuis sa propre date prévue. Les étapes
+ *     suivantes, en retard elles aussi, n'apparaissent pas tant qu'elle n'est pas réalisée : elles
+ *     remontent une à une. Une tâche de la semaine pas encore en retard (date prévue ≥ date du
+ *     jour) reste listée normalement à côté de la ligne en retard de sa série. Une campagne n'a
+ *     qu'une tâche : rien ne change pour elle. La règle de Q11 s'applique avant : une étape
+ *     rendue caduque par une étape postérieure réalisée n'est pas « la plus ancienne non faite ».
  *   - Ordre : en retard d'abord ; puis date prévue croissante ; puis zone, puis code du premier
  *     emplacement de la tâche (après tri de ses emplacements), en ordre naturel : les nombres
  *     comptent pour leur valeur ('T2-P9' avant 'T2-P10'). Une tâche sans emplacement passe après
@@ -426,21 +435,22 @@ describe('retard', () => {
     });
   });
 
-  it('rien de saisi : semis et plantation en retard en S15, le plus ancien d’abord', () => {
+  it('rien de saisi : en S15, seul le semis (le plus ancien) est en retard, pas la plantation', () => {
+    // Modifié pour T06b (Q12) : T06 listait aussi « plantation, retard 7 ». Une seule ligne en
+    // retard par série : la plus ancienne étape non faite, le semis pépinière.
     expect(semainier(s(2027, 15), [batavia], [], AUCUN_REALISE, d('2027-04-12')).map(resume)).toStrictEqual([
       'batavia:semis_pepiniere:2027-03-08:retard 35',
-      'batavia:plantation:2027-04-05:retard 7',
     ]);
   });
 
   it('pas de limite dans le temps : la plantation oubliée reste listée en retard des mois après', () => {
     const realises = realisesDe([['batavia', { semisPepiniere: d('2027-03-08') }]]);
     const taches = semainier(s(2027, 40), [batavia], [], realises, d('2027-10-04'));
-    // Plantation, début de récolte et arrachage : tous en retard, aucun n'a été saisi.
+    // Modifié pour T06b (Q12) : T06 listait aussi le début de récolte (retard 133) et l'arrachage
+    // (retard 119). Plantation, début de récolte et arrachage sont tous en retard, mais une seule
+    // ligne par série : la plus ancienne étape non faite, la plantation.
     expect(taches.map(resume)).toStrictEqual([
       'batavia:plantation:2027-04-05:retard 182',
-      'batavia:debut_recolte:2027-05-24:retard 133',
-      'batavia:arrachage:2027-06-07:retard 119',
     ]);
   });
 
@@ -486,7 +496,7 @@ describe('retard', () => {
   });
 });
 
-describe('DÉCISION PROVISOIRE (question à Théophane, PR #2) : une étape postérieure réalisée vaut pour les étapes antérieures non saisies', () => {
+describe('Q11 (décision de la PR #2 validée) : une étape postérieure réalisée vaut pour les étapes antérieures non saisies', () => {
   it('plantation réalisée sans semis saisi : le semis pépinière n’est ni dû ni en retard', () => {
     const realises = realisesDe([['batavia', { miseEnPlace: d('2027-04-05') }]]);
     expect(semainier(s(2027, 15), [batavia], [], realises, d('2027-04-12'))).toStrictEqual([]);
@@ -503,6 +513,133 @@ describe('DÉCISION PROVISOIRE (question à Théophane, PR #2) : une étape post
   it('arrachage réalisé : plus aucune tâche pour la série', () => {
     const realises = realisesDe([['batavia', { finRecolte: d('2027-06-07') }]]);
     expect(semainier(s(2027, 30), [batavia], [], realises, d('2027-07-26'))).toStrictEqual([]);
+  });
+});
+
+describe('T06b (Q12) : une seule ligne en retard par série, la plus ancienne étape non faite', () => {
+  // Batavia de T02 consultée en 2027-S22 (du 2027-05-31 au 2027-06-06), le lundi 2027-05-31.
+  const lundiS22 = d('2027-05-31');
+
+  it('rien de réalisé : une seule ligne, « semis en pépinière », 84 jours de retard', () => {
+    expect(semainier(s(2027, 22), [batavia], [], AUCUN_REALISE, lundiS22)).toStrictEqual([
+      {
+        etape: 'semis_pepiniere',
+        cible: { sorte: 'serie', serieId: id<'Serie'>('batavia') },
+        culture: 'Laitue',
+        variete: 'Batavia blonde',
+        emplacements: [T2_P03],
+        taille: { unite: 'longueur', longueurM: 30 },
+        datePrevue: d('2027-03-08'),
+        enRetard: true,
+        joursDeRetard: 84,
+      },
+    ]);
+  });
+
+  it('semis saisi le 2027-03-08 : une seule ligne, « plantation », 56 jours de retard', () => {
+    const realises = realisesDe([['batavia', { semisPepiniere: d('2027-03-08') }]]);
+    expect(semainier(s(2027, 22), [batavia], [], realises, lundiS22)).toStrictEqual([
+      {
+        etape: 'plantation',
+        cible: { sorte: 'serie', serieId: id<'Serie'>('batavia') },
+        culture: 'Laitue',
+        variete: 'Batavia blonde',
+        emplacements: [T2_P03],
+        taille: { unite: 'longueur', longueurM: 30 },
+        datePrevue: d('2027-04-05'),
+        enRetard: true,
+        joursDeRetard: 56,
+      },
+    ]);
+  });
+
+  it('les étapes remontent une à une : plantation saisie, le début de récolte (7 jours) prend la place', () => {
+    const realises = realisesDe([['batavia', { semisPepiniere: d('2027-03-08'), miseEnPlace: d('2027-04-05') }]]);
+    expect(semainier(s(2027, 22), [batavia], [], realises, lundiS22).map(resume)).toStrictEqual([
+      'batavia:debut_recolte:2027-05-24:retard 7',
+    ]);
+  });
+
+  it('Q11 inchangée : plantation saisie sans semis, la ligne en retard est le début de récolte', () => {
+    const realises = realisesDe([['batavia', { miseEnPlace: d('2027-04-05') }]]);
+    expect(semainier(s(2027, 22), [batavia], [], realises, lundiS22).map(resume)).toStrictEqual([
+      'batavia:debut_recolte:2027-05-24:retard 7',
+    ]);
+  });
+
+  it('série sans retard : inchangée', () => {
+    expect(semainier(s(2027, 14), [batavia], [], AUCUN_REALISE, d('2027-03-01')).map(resume)).toStrictEqual([
+      'batavia:plantation:2027-04-05',
+    ]);
+    // Une seule étape en retard : sa ligne est inchangée.
+    const realises = realisesDe([['batavia', { semisPepiniere: d('2027-03-08') }]]);
+    expect(semainier(s(2027, 15), [batavia], [], realises, d('2027-04-12')).map(resume)).toStrictEqual([
+      'batavia:plantation:2027-04-05:retard 7',
+    ]);
+  });
+
+  it('campagne de pérenne : inchangée, sa ligne en retard reste à côté de celle d’une série', () => {
+    const fraises: CampagneSemainier = {
+      id: id<'Campagne'>('fraises-2027'),
+      culture: 'Fraise',
+      variete: 'Gariguette',
+      debutRecoltePrevu: d('2027-04-12'),
+      finRecoltePrevue: d('2027-06-30'),
+      nombrePlants: 2000,
+      emplacements: [emplacement('S-01', 'Serre')],
+    };
+    expect(semainier(s(2027, 22), [], [fraises], AUCUN_REALISE, lundiS22)).toStrictEqual([
+      {
+        etape: 'debut_recolte',
+        cible: { sorte: 'campagne', campagneId: id<'Campagne'>('fraises-2027') },
+        culture: 'Fraise',
+        variete: 'Gariguette',
+        emplacements: [emplacement('S-01', 'Serre')],
+        taille: { unite: 'plants', nombrePlants: 2000 },
+        datePrevue: d('2027-04-12'),
+        enRetard: true,
+        joursDeRetard: 49,
+      },
+    ]);
+    expect(semainier(s(2027, 22), [batavia], [fraises], AUCUN_REALISE, lundiS22).map(resume)).toStrictEqual([
+      'batavia:semis_pepiniere:2027-03-08:retard 84',
+      'fraises-2027:debut_recolte:2027-04-12:retard 49',
+    ]);
+  });
+
+  it('deux séries en retard donnent deux lignes, une par série', () => {
+    const tardive = serie('batavia-tardive', calculerDatesSerie(BATAVIA, { type: 'plantation', date: d('2027-04-19') }), {
+      emplacements: [T2_P04],
+    });
+    // Tardive : semis 2027-03-22, plantation 2027-04-19, début de récolte 2027-06-07 (S23).
+    expect(semainier(s(2027, 22), [tardive, batavia], [], AUCUN_REALISE, lundiS22).map(resume)).toStrictEqual([
+      'batavia:semis_pepiniere:2027-03-08:retard 84',
+      'batavia-tardive:semis_pepiniere:2027-03-22:retard 70',
+    ]);
+  });
+
+  it('une étape de la semaine pas encore en retard reste listée à côté de la ligne en retard de sa série', () => {
+    // Rien de saisi, consultée le lundi 2027-04-05 en S14 : le semis est en retard (28 jours),
+    // la plantation est prévue aujourd'hui, pas encore en retard.
+    expect(semainier(s(2027, 14), [batavia], [], AUCUN_REALISE, d('2027-04-05')).map(resume)).toStrictEqual([
+      'batavia:semis_pepiniere:2027-03-08:retard 28',
+      'batavia:plantation:2027-04-05',
+    ]);
+  });
+
+  it('une étape de la semaine déjà passée (consultée un mercredi) est une deuxième étape en retard : pas listée', () => {
+    // Rien de saisi, consultée le mercredi 2027-04-07 : la plantation du lundi a 2 jours de retard,
+    // mais le semis, plus ancien, porte déjà la ligne en retard de la série.
+    expect(semainier(s(2027, 14), [batavia], [], AUCUN_REALISE, d('2027-04-07')).map(resume)).toStrictEqual([
+      'batavia:semis_pepiniere:2027-03-08:retard 30',
+    ]);
+  });
+
+  it('semaine passée : la même règle s’applique (S21 consultée en S22)', () => {
+    // S21 : semis et plantation d'avant son lundi, début de récolte le 2027-05-24 : tous en retard.
+    expect(semainier(s(2027, 21), [batavia], [], AUCUN_REALISE, lundiS22).map(resume)).toStrictEqual([
+      'batavia:semis_pepiniere:2027-03-08:retard 84',
+    ]);
   });
 });
 
