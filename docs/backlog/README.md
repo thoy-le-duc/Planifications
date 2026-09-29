@@ -10,11 +10,11 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 
 | Ticket | Sujet | Dépend de | Statut |
 | --- | --- | --- | --- |
-| [T01](T01-types-et-dates.md) | Types du domaine et dates calendaires | — | en revue |
-| [T02](T02-dates-serie.md) | Dates d'une série, planification à rebours et décalage | T01 | en revue |
-| [T03](T03-occupations-conflits.md) | Occupations et conflits de place | T02 | en revue |
-| [T04](T04-rotation.md) | Alertes de rotation | T03 | en revue |
-| [T05](T05-besoins-semences.md) | Besoins en semences et en plants | T01 | à faire |
+| [T01](T01-types-et-dates.md) | Types du domaine et dates calendaires | — | fait |
+| [T02](T02-dates-serie.md) | Dates d'une série, planification à rebours et décalage | T01 | fait |
+| [T03](T03-occupations-conflits.md) | Occupations et conflits de place | T02 | fait |
+| [T04](T04-rotation.md) | Alertes de rotation | T03 | fait |
+| [T05](T05-besoins-semences.md) | Besoins en semences et en plants | T01 | en revue |
 | [T06](T06-semainier.md) | Semainier | T02 | à faire |
 | [T07](T07-mesure-sqlite.md) | Mesure : SQLite PowerSync sur téléphone simulé | — | à faire |
 | [T08](T08-schema-postgres.md) | Schéma PostgreSQL et migrations | T01 | à faire |
