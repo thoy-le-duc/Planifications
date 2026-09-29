@@ -55,6 +55,7 @@ import {
   NATURES_OBSERVATION,
   NATURES_ASSOLEMENT,
   OPERATIONS_LIGNE,
+  OPERATIONS_SYNCHRO,
   ROLES_MEMBRE,
   SORTES_EMPLACEMENT,
   SORTES_REMPLACEMENT,
@@ -876,4 +877,42 @@ export const jetonRenouvellement = pgTable(
     creeLe: creeLe(),
   },
   (t) => [index('jeton_renouvellement_utilisateur_idx').on(t.utilisateurId)],
+);
+
+// ---------------------------------------------------------------------------------------------
+// 9. Synchro (T10)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Écriture reçue du téléphone (POST /sync/upload) et refusée par le serveur : ferme interdite,
+ * événement modifié après coup, données invalides… Écrite par le serveur seulement ; publiée
+ * vers PowerSync, où les règles de synchro ne la font descendre qu'à `utilisateur_id` : le
+ * maraîcher voit sur son téléphone pourquoi sa saisie n'est pas passée.
+ *
+ * `ferme_id` : ferme visée si elle est connue, sans clé étrangère (elle peut être inexistante ou
+ * interdite). `ligne_id` en texte : l'id reçu n'est pas forcément un UUID.
+ */
+export const refusSynchro = pgTable(
+  'refus_synchro',
+  {
+    id: uuid('id').primaryKey(),
+    utilisateurId: idDe<'Utilisateur'>('utilisateur_id')
+      .notNull()
+      .references(() => utilisateur.id),
+    fermeId: idDe<'Ferme'>('ferme_id'),
+    nomTable: text('nom_table').notNull(),
+    ligneId: text('ligne_id').notNull(),
+    operation: text('operation', { enum: OPERATIONS_SYNCHRO }).notNull(),
+    /** Code stable : 'ferme_interdite', 'ajout_seul', 'auteur_invalide', 'table_interdite', 'ecriture_invalide'. */
+    motif: text('motif').notNull(),
+    /** Explication en français, affichée telle quelle sur le téléphone. */
+    message: text('message').notNull(),
+    /** Ce qui a été reçu (`donnees` de l'écriture), pour comprendre après coup. */
+    donnees: jsonb('donnees').$type<Readonly<Record<string, unknown>>>(),
+    creeLe: creeLe(),
+  },
+  (t) => [
+    verif('refus_synchro', 'operation', parmi(t.operation, OPERATIONS_SYNCHRO)),
+    index('refus_synchro_utilisateur_idx').on(t.utilisateurId, t.creeLe),
+  ],
 );

@@ -50,6 +50,20 @@
       "when": 1790696140821,
       "tag": "0006_membre_invitation",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790698293075,
+      "tag": "0007_refus_synchro",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790698305532,
+      "tag": "0008_publication_refus_synchro",
+      "breakpoints": true
     }
   ]
 }

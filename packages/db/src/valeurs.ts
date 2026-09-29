@@ -107,3 +107,7 @@ export type RoleMembre = (typeof ROLES_MEMBRE)[number];
  */
 export const ETATS_MEMBRE = ['invite', 'accepte'] as const;
 export type EtatMembre = (typeof ETATS_MEMBRE)[number];
+
+/** Opérations de la file d'écritures de PowerSync (`CrudEntry.op`), reçues par POST /sync/upload (T10). */
+export const OPERATIONS_SYNCHRO = ['PUT', 'PATCH', 'DELETE'] as const;
+export type OperationSynchro = (typeof OPERATIONS_SYNCHRO)[number];
