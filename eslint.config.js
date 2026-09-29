@@ -25,6 +25,18 @@ export default defineConfig(
     languageOptions: { globals: globals.browser },
   },
   {
+    // T10 : les écrans passent par @planif/sync, jamais par PowerSync directement. Seuls la couche
+    // de données (connecteur, ouverture de la base) et les pages de mesure de T07 y touchent.
+    files: ['apps/web/src/**/*.{ts,tsx}'],
+    ignores: ['apps/web/src/donnees/**', 'apps/web/src/mesures/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: [{ group: ['@powersync/*'], message: 'Passer par @planif/sync (porte) ou src/donnees, jamais par PowerSync.' }] },
+      ],
+    },
+  },
+  {
     files: ['**/*.js'],
     extends: [tseslint.configs.disableTypeChecked],
   },

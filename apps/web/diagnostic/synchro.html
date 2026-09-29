@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <title>Diagnostic de la synchro</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 1rem; background: #f4efe3; color: #1d2a1f; }
+      h1 { font-size: 1.2rem; }
+      [data-etat='synchronise'] { color: #2f6b3a; }
+      [data-etat='hors-ligne'] { color: #8a5a00; }
+      form { display: flex; gap: 0.5rem; align-items: end; flex-wrap: wrap; margin: 1rem 0; }
+      label { display: flex; flex-direction: column; gap: 0.25rem; }
+      input, button { font-size: 1.1rem; padding: 0.6rem; min-height: 48px; }
+      ul { padding-left: 1.2rem; }
+      .refus { color: #9b1c1c; }
+    </style>
+  </head>
+  <body>
+    <h1>Diagnostic de la synchro</h1>
+    <p>État : <strong id="etat" data-testid="etat-synchro" data-etat="connexion">connexion…</strong></p>
+    <p id="erreur" class="refus" hidden></p>
+    <form id="saisie">
+      <label for="quantite">Quantité (kg)</label>
+      <input id="quantite" name="quantite" type="number" inputmode="decimal" step="any" min="0" required />
+      <button type="submit">Enregistrer la récolte</button>
+    </form>
+    <button id="modifier" type="button">Modifier la dernière récolte sur place</button>
+    <h2>Récoltes</h2>
+    <ul id="recoltes"></ul>
+    <h2>Refus du serveur</h2>
+    <ul id="refus" class="refus"></ul>
+    <script type="module" src="/src/diagnostic/synchro.ts"></script>
+  </body>
+</html>
