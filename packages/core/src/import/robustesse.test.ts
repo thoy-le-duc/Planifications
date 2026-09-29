@@ -399,3 +399,121 @@ describe('lireCsv : plafond de 5 millions de cases, lignes vides de fin non cré
     DELAI_TEST_MS,
   );
 });
+
+// ── 3e relecture ─────────────────────────────────────────────────────────────────────────────
+
+describe('plan d’import : texte nettoyé une fois par chaîne, pas une fois par cellule (3e relecture, point 1)', () => {
+  const SST = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const LIGNES = 100_000;
+  const COLONNES = ['A', 'B', 'C', 'D', 'E'] as const;
+
+  it(
+    'classeur de 100 000 lignes × 5 colonnes de chaînes partagées de 32 767 caractères (« a » + espaces, espaces, « Total » + espaces) → plan en < 2 s',
+    async () => {
+      // Chaînes partagées : 0 = « a » + 32 766 espaces, 1 = 32 767 espaces, 2 = « Total » + espaces.
+      const chaines = [`a${' '.repeat(32_766)}`, ' '.repeat(32_767), `Total${' '.repeat(32_762)}`];
+      // Ligne Excel r (2 à 100 001) : r % 3 = 0 → planche « a » (zone a, planche a, le reste vide) ;
+      // r % 3 = 1 → ligne vide (espaces seuls) ; r % 3 = 2 → ligne de total.
+      const motif = (r: number): readonly number[] => (r % 3 === 0 ? [0, 1, 0, 1, 1] : r % 3 === 1 ? [1, 1, 1, 1, 1] : [2, 1, 0, 1, 1]);
+      const entetes = ['Zone', 'Chapelle', 'Planche', 'Longueur', 'Abri'];
+      const xml = [`<row r="1">${entetes.map((e, j) => `<c r="${COLONNES[j] ?? 'A'}1" t="inlineStr"><is><t>${e}</t></is></c>`).join('')}</row>`];
+      let donnees = 0;
+      let ignorees = 0;
+      for (let r = 2; r <= LIGNES + 1; r++) {
+        const m = motif(r);
+        if (r % 3 === 0) donnees++;
+        else ignorees++;
+        xml.push(`<row r="${String(r)}">${m.map((s, j) => `<c r="${COLONNES[j] ?? 'A'}${String(r)}" t="s"><v>${String(s)}</v></c>`).join('')}</row>`);
+      }
+      const octets = classeur({
+        feuilles: [{ nom: 'Feuil1', partie: 'worksheets/sheet1.xml' }],
+        parties: {
+          'worksheets/sheet1.xml': feuilleXml(xml.join('')),
+          'sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="${SST}">${chaines.map((c) => `<si><t xml:space="preserve">${c}</t></si>`).join('')}</sst>`,
+        },
+      });
+      const r = await executerIsole('scenarios', ['planClasseur'], [octets, 'parcellaire'], { arretMs: 15_000, memoireMo: 512 });
+      expect(r).toMatchObject({
+        issue: 'resultat',
+        valeur: {
+          champs: ['zone', 'sous_zone', 'emplacement', 'longueur_m', 'type_abri'],
+          nombreLignes: donnees,
+          resume: { valides: 1, erreurs: 0, aDecider: 0, doublons: donnees - 1, ignorees },
+          erreursPremiere: [],
+          erreursDerniere: [],
+        },
+      });
+      if (r.issue !== 'resultat') return;
+      const duree = (r.valeur as { dureePlanMs: number }).dureePlanMs;
+      expect(duree, `plan en ${String(Math.round(duree))} ms`).toBeLessThan(2_000);
+    },
+    DELAI_TEST_MS,
+  );
+});
+
+describe('lireCsv : au plus 1 048 576 lignes, mémoire bornée (3e relecture, point 2)', () => {
+  /** Tas plafonné à 300 Mo : lire sans dépasser, c'est un pic de mémoire sous 300 Mo. */
+  async function lireCsvIsole(texte: string, memoireMo: number): Promise<Issue> {
+    return executerIsole('scenarios', ['resumerCsv'], [utf8(texte)], { arretMs: 4_000 + CHARGEMENT_MS, memoireMo });
+  }
+
+  it(
+    '1 048 577 lignes « a » (2,1 millions de cases seulement) → fichier_trop_grand',
+    async () => {
+      const r = await lireCsvIsole('a\n'.repeat(1_048_577), 512);
+      expect(r).toMatchObject({ issue: 'resultat', valeur: { erreur: 'fichier_trop_grand', nombreLignes: 0 } });
+    },
+    DELAI_TEST_MS,
+  );
+
+  it(
+    '1 048 576 lignes vides puis une ligne utile (1 048 577 lignes rendues) → fichier_trop_grand',
+    async () => {
+      const r = await lireCsvIsole(`${'\n'.repeat(1_048_576)}a;b\n`, 512);
+      expect(r).toMatchObject({ issue: 'resultat', valeur: { erreur: 'fichier_trop_grand', nombreLignes: 0 } });
+    },
+    DELAI_TEST_MS,
+  );
+
+  it(
+    '1 048 576 lignes « a » (la limite d’Excel) → lues',
+    async () => {
+      const r = await lireCsvIsole('a\n'.repeat(1_048_576), 512);
+      expect(r).toMatchObject({ issue: 'resultat', valeur: { erreur: null, nombreLignes: 1_048_576 } });
+    },
+    DELAI_TEST_MS,
+  );
+
+  it.each([
+    ['1 000 000 de lignes « ab »', 'ab\n'.repeat(1_000_000), 1_000_000, [['ab'], ['ab'], ['ab']]],
+    ['1 000 000 de lignes « a;b »', 'a;b\n'.repeat(1_000_000), 1_000_000, [['a', 'b'], ['a', 'b'], ['a', 'b']]],
+    ['1 000 000 de lignes vides au milieu, puis une ligne utile', `Zone;Planche\n${'\n'.repeat(1_000_000)}T1;P1\n`, 1_000_002, [['Zone', 'Planche'], [''], ['']]],
+  ] as const)(
+    '%s → lues avec un tas plafonné à 300 Mo',
+    async (_cas, texte, nombreLignes, debut) => {
+      const r = await lireCsvIsole(texte, 300);
+      expect(r).toMatchObject({ issue: 'resultat', valeur: { erreur: null, nombreLignes, debut } });
+    },
+    DELAI_TEST_MS,
+  );
+});
+
+describe('appliquerModele en temps linéaire (3e relecture)', () => {
+  it(
+    '400 000 colonnes à l’en-tête vide → correspondance rendue en < 1 s',
+    async () => {
+      const n = 400_000;
+      const entetes: string[] = Array.from({ length: n }, () => '');
+      const modele = { version: 1, type: 'parcellaire', colonnes: entetes.map(() => ({ entete: '', champ: null, unite: null })), choix: [] };
+      const r = await executerIsole('import', ['appliquerModele'], [modele, entetes], { arretMs: 1_000 + CHARGEMENT_MS, memoireMo: 512 });
+      expect(r).toMatchObject({ issue: 'resultat' });
+      if (r.issue !== 'resultat') return;
+      const c = r.valeur as { type: string; colonnes: readonly unknown[] };
+      expect(c.type).toBe('parcellaire');
+      expect(c.colonnes).toHaveLength(n);
+      expect(c.colonnes[n - 1]).toStrictEqual({ champ: null, unite: null });
+      attendreDuree(r, 1_000);
+    },
+    DELAI_TEST_MS,
+  );
+});

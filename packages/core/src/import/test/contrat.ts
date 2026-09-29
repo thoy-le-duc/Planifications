@@ -68,7 +68,12 @@
  *   - (2e relecture) chaque chaîne partagée (`<si>` de xl/sharedStrings.xml, `<si/>` compris) compte
  *     aussi pour une case dans le plafond de 5 000 000 (9 millions de `<si/>` → illisible, < 2 s) ;
  *   - (2e relecture) une cellule de plus de 32 767 caractères une fois décodée (la limite d'Excel),
- *     chaîne partagée ou en ligne → illisible ; 32 767 passe.
+ *     chaîne partagée ou en ligne → illisible ; 32 767 passe ;
+ *   - (3e relecture) de même pour TOUTE valeur de cellule, quel que soit son type : le texte d'un
+ *     `<v>` de plus de 32 767 caractères (nombre, `t="e"`, `t="d"`, `t="b"`, `t="str"`) → illisible ;
+ *   - (3e relecture) une référence numérique qui n'est pas un caractère XML (`&#0;`, `&#x0;`, une
+ *     moitié de paire de substitution `&#xD800;` … `&#xDFFF;`, en décimal comme en hexadécimal)
+ *     → illisible, jamais une moitié de paire ni un caractère nul dans une cellule.
  * Entités XML (`&amp;` `&lt;` `&gt;` `&quot;` `&apos;`, `&#233;`, `&#xE9;`) et échappements OOXML
  * (`_x0041_` → 'A', `_x005F_x0041_` → '_x0041_' : `_x005F_` échappe le soulignement) décodés dans
  * les textes et les attributs, en temps et en mémoire LINÉAIRES : une chaîne en ligne de 5 millions
@@ -81,12 +86,21 @@
  * (2e relecture) BOM UTF-16 en tête (FF FE → 'utf-16le', FE FF → 'utf-16be' : export « Texte
  * Unicode » d'Excel) : décodé en UTF-16 (paires de substitution comprises), BOM retiré, `bom: true`.
  * Sans BOM, des octets nuls restent un fichier binaire (voir lireCsv).
+ * (3e relecture) Une moitié de paire de substitution isolée (unité D800–DFFF sans sa moitié) ou un
+ * octet final impair → U+FFFD, comme `TextDecoder`.
  * UTF-8 si les octets sont de l'UTF-8 valide (BOM EF BB BF retiré du texte, `bom: true`) ;
  * sinon Windows-1252 (exports Excel) : 0xE9 → 'é', 0x80 → '€', 0x92 → '’', 0x9C → 'œ',
  * (BOM UTF-8 suivi d'octets qui ne sont pas de l'UTF-8 : décodé en Windows-1252, BOM retiré du
  * texte, `bom: true`) ;
  * 0x8C → 'Œ' ; les cinq octets non définis (0x81, 0x8D, 0x8F, 0x90, 0x9D) → U+0081… comme le
  * WHATWG. ASCII pur → 'utf-8'. Vide → texte '' en 'utf-8'.
+ * (3e relecture) Seul un BOM UTF (EF BB BF, FF FE, FE FF) est retiré : un fichier Windows-1252 qui
+ * commence par 0xFF (« ÿ ») ou 0xFE (« þ ») garde ce caractère.
+ * Décodeur natif et repli (3e relecture, point 4) : `TextDecoder` (retrouvé par `globalThis`) peut
+ * servir ; le décodage écrit à la main sert quand `globalThis.TextDecoder` n'existe pas au moment
+ * du premier décodage (le test le retire dans un fil isolé, avant de charger le module). Les deux
+ * rendent EXACTEMENT le même résultat, cas limites compris (paires isolées, octet impair, UTF-8
+ * invalide ou tronqué, BOM suivi de Windows-1252).
  *
  *   detecterSeparateur(texte: string): Separateur
  * ';', ',' ou tabulation : celui qui découpe les premières lignes (hors guillemets) en un même
@@ -103,6 +117,9 @@
  * .xlsx renommé —, ou qui contiennent un octet nul hors UTF-16 avec BOM) → `erreur: { code:
  * 'fichier_binaire', message }` (message en français qui dit quoi faire), `lignes: []`. Jamais
  * d'exception.
+ * (3e relecture) Avec un BOM UTF-16, le fichier est binaire si les octets qui suivent le BOM
+ * commencent par la signature ZIP, ou si le texte décodé contient un caractère nul (U+0000) :
+ * `fichier_binaire` aussi.
  * Limites (2e relecture, point 3), tas de 512 Mo dans les tests :
  *   - lignes vides de FIN de fichier (tous leurs champs vides ou faits d'espaces) : ni créées ni
  *     comptées. 5 Mo de « \n » seuls → `lignes: []`, `erreur: null` ; 20 Mo de « ; » seuls (une
@@ -113,7 +130,13 @@
  *     case et chacun de ses champs aussi ; au-delà → `erreur: { code: 'fichier_trop_grand',
  *     message }` (en français, dit de découper le fichier), `lignes: []`, en moins de 2 s et sans
  *     tout allouer (5 Mo de « \n » puis une ligne utile ; une ligne de 20 Mo de « ; » suivie d'une
- *     ligne utile). 1 000 000 de lignes « a;b » (3 millions de cases) passent.
+ *     ligne utile). 1 000 000 de lignes « a;b » (3 millions de cases) passent ;
+ *   - (3e relecture, point 2) au plus 1 048 576 lignes rendues (comme une feuille Excel, lignes
+ *     vides d'avant une ligne utile comprises) ; au-delà → `fichier_trop_grand`, même si le plafond
+ *     de cases n'est pas atteint (1 048 577 lignes « a ») ; 1 048 576 passent ;
+ *   - (3e relecture, point 2) mémoire bornée : 1 000 000 de lignes « ab », 1 000 000 de lignes
+ *     « a;b », et 1 000 000 de lignes vides AU MILIEU (suivies d'une ligne utile) sont lues avec un
+ *     tas plafonné à 300 Mo.
  *
  * ── Détection ───────────────────────────────────────────────────────────────────────────────
  *
@@ -354,6 +377,14 @@
  * la valeur repasse « à décider » (décision demandée comme sans choix).
  * Temps linéaire (2e relecture, point 2) : une même chaîne de 1 Mo (chaîne partagée d'un classeur)
  * dans toutes les colonnes de 3 000 lignes → plan en moins de 2 s, tas de 512 Mo.
+ * (3e relecture, point 1) Le texte nettoyé (espaces autour retirés) d'une cellule est calculé une
+ * fois par CHAÎNE, pas une fois par cellule : un classeur de 100 000 lignes et 5 colonnes dont les
+ * cellules sont trois chaînes partagées de 32 767 caractères (« a » puis 32 766 espaces, 32 767
+ * espaces, « Total » puis des espaces) → plan (hors lecture du classeur) en moins de 2 s.
+ * Champ en double (3e relecture, point 5) : une correspondance qui associe le même champ à
+ * plusieurs colonnes n'est pas lue en silence (ni la première, ni la dernière) : chaque ligne du
+ * plan (hors lignes ignorées) est en erreur 'champ_en_double' sur ce champ, colonne = la DEUXIÈME
+ * colonne qui le porte ; une erreur par champ en double.
  * Messages : l'extrait de la cellule cité (40 caractères au plus) ne coupe jamais une paire de
  * substitution (émoji…) ; le message non plus.
  * Correspondance dont un champ obligatoire n'est associé à aucune colonne : chaque ligne est en
@@ -367,11 +398,14 @@
  *                                                            // id de choix vide, nom de nouvelle
  *                                                            // valeur vide (espaces seuls compris),
  *                                                            // unité non acceptée
- *                                                            // pour le champ (ou sur une colonne ignorée)
+ *                                                            // pour le champ (ou sur une colonne ignorée),
+ *                                                            // (3e relecture) même champ sur deux colonnes
  *   appliquerModele(modele: ModeleImport, entetes: readonly Cellule[]): Correspondance | null
  * Le modèle retient, par en-tête, le champ et l'unité validés, plus les choix de valeurs. Il
  * s'applique à un fichier de MÊME FORME : mêmes en-têtes normalisés, dans n'importe quel ordre ;
  * sinon null. lireModele(serialiserModele(m)) est égal à m.
+ * (3e relecture) `appliquerModele` en temps linéaire, même avec beaucoup d'en-têtes identiques :
+ * 400 000 colonnes à l'en-tête vide → moins de 1 s.
  *
  * ── Performance ─────────────────────────────────────────────────────────────────────────────
  *
@@ -424,7 +458,7 @@ export interface CsvLu {
   readonly bom: boolean;
   readonly separateur: Separateur;
   readonly lignes: readonly (readonly string[])[];
-  /** Fichier binaire (un .xlsx renommé, octets nuls) ou trop grand (plus de 5 000 000 de cases) : `lignes` vide. */
+  /** Fichier binaire (un .xlsx renommé, octets nuls) ou trop grand (plus de 5 000 000 de cases ou de 1 048 576 lignes) : `lignes` vide. */
   readonly erreur: { readonly code: 'fichier_binaire' | 'fichier_trop_grand'; readonly message: string } | null;
 }
 
@@ -493,7 +527,9 @@ export type CodeErreurImport =
   | 'hors_bornes'
   | 'dates_incoherentes'
   | 'colonnes_en_trop'
-  | 'texte_trop_long';
+  | 'texte_trop_long'
+  /** (3e relecture) Correspondance qui associe le même champ à plusieurs colonnes. */
+  | 'champ_en_double';
 
 export type Lecture<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly code: CodeErreurImport };
 

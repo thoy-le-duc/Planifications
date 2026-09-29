@@ -167,3 +167,52 @@ describe('lireModele : jamais d’exception, null si le texte n’est pas un mod
     expect(m.lireModele(JSON.stringify(series))).toStrictEqual(series);
   });
 });
+
+// ── 3e relecture ─────────────────────────────────────────────────────────────────────────────
+
+describe('lireModele : un champ sur deux colonnes → null (3e relecture, point 5)', () => {
+  it.each([
+    [
+      'deux colonnes sur emplacement',
+      {
+        version: 1,
+        type: 'parcellaire',
+        colonnes: [
+          { entete: 'Zone', champ: 'zone', unite: null },
+          { entete: 'Planche', champ: 'emplacement', unite: null },
+          { entete: 'N° planche', champ: 'emplacement', unite: null },
+        ],
+        choix: [],
+      },
+    ],
+    [
+      'deux colonnes sur la longueur, en unités différentes',
+      {
+        version: 1,
+        type: 'series',
+        colonnes: [
+          { entete: 'Culture', champ: 'espece', unite: null },
+          { entete: 'Longueur (m)', champ: 'longueur_m', unite: 'm' },
+          { entete: 'Longueur (cm)', champ: 'longueur_m', unite: 'cm' },
+        ],
+        choix: [],
+      },
+    ],
+  ])('%s', (_cas, modele) => {
+    expect(m.lireModele(JSON.stringify(modele))).toBeNull();
+  });
+
+  it('plusieurs colonnes ignorées (champ null) restent permises', () => {
+    const modele = {
+      version: 1,
+      type: 'parcellaire',
+      colonnes: [
+        { entete: 'Zone', champ: 'zone', unite: null },
+        { entete: 'Notes', champ: null, unite: null },
+        { entete: 'Id', champ: null, unite: null },
+      ],
+      choix: [],
+    };
+    expect(m.lireModele(JSON.stringify(modele))).toStrictEqual(modele);
+  });
+});

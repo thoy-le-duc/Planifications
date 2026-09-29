@@ -754,3 +754,65 @@ describe('dates en numéros de semaine : « Semis (sem.) » (2e relecture)', () 
     expect(ligne(sans, 2).erreurs.map((e) => [e.code, e.champ])).toStrictEqual([['annee_manquante', 'date_semis']]);
   });
 });
+
+// ── 3e relecture ─────────────────────────────────────────────────────────────────────────────
+
+describe('correspondance qui associe un champ à deux colonnes : erreur explicite (3e relecture, point 5)', () => {
+  const entreeDoublee = (lignes: readonly LigneBrute[], colonnes: Correspondance['colonnes'], type: TypeContenu): EntreeImport => ({
+    lignes,
+    ligneEntete: 0,
+    correspondance: { type, colonnes },
+    bibliotheque: BIBLIOTHEQUE,
+    anneeSaison: 2027,
+  });
+
+  it('emplacement sur deux colonnes : chaque ligne en champ_en_double (colonne = la deuxième), rien de lu en silence', () => {
+    const lignes = csv('Zone;Planche;N° planche;Longueur\nT1;P1;P9;30\nT1;P2;;25\n;;;\nTotal;;;55');
+    const plan = m.preparerImport(
+      entreeDoublee(
+        lignes,
+        [
+          { champ: 'zone', unite: null },
+          { champ: 'emplacement', unite: null },
+          { champ: 'emplacement', unite: null },
+          { champ: 'longueur_m', unite: 'm' },
+        ],
+        'parcellaire',
+      ),
+    );
+    expect(plan.lignes.map((l) => [l.ligne, l.statut, codes(l)])).toStrictEqual([
+      [2, 'erreur', [['champ_en_double', 'emplacement', 2]]],
+      [3, 'erreur', [['champ_en_double', 'emplacement', 2]]],
+    ]);
+    expect(plan.lignes[0]?.erreurs[0]?.message.trim().length).toBeGreaterThan(10);
+    expect(plan.resume).toStrictEqual({ valides: 0, erreurs: 2, aDecider: 0, doublons: 0, ignorees: 2 });
+  });
+
+  it('deux champs doublés (dont un sur trois colonnes) : une erreur par champ, colonne = la deuxième qui le porte', () => {
+    const plan = m.preparerImport(
+      entreeDoublee(
+        [
+          ['Culture', 'Espèce', 'Semis', 'Date de semis', 'Légume'],
+          ['Tomate', 'Tomate', '15/03/2027', '15/03/2027', 'Tomate'],
+        ],
+        [
+          { champ: 'espece', unite: null },
+          { champ: 'espece', unite: null },
+          { champ: 'date_semis', unite: null },
+          { champ: 'date_semis', unite: null },
+          { champ: 'espece', unite: null },
+        ],
+        'series',
+      ),
+    );
+    const erreurs = ligne(plan, 2)
+      .erreurs.filter((e) => e.code === 'champ_en_double')
+      .sort((a, b) => (a.colonne ?? 0) - (b.colonne ?? 0))
+      .map((e) => [e.code, e.champ, e.colonne]);
+    expect(erreurs).toStrictEqual([
+      ['champ_en_double', 'espece', 1],
+      ['champ_en_double', 'date_semis', 3],
+    ]);
+    expect(ligne(plan, 2).statut).toBe('erreur');
+  });
+});

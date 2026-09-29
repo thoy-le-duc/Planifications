@@ -184,3 +184,57 @@ describe('lecteurXlsx.lire : entités XML, échappements OOXML, cellules de plus
     expect(await lecteur.lire(avecChaines(enLigne('_x0041_'.repeat(32_768)), 'ok'))).toMatchObject({ ok: false, code: 'classeur_illisible' });
   });
 });
+
+// ── 3e relecture ─────────────────────────────────────────────────────────────────────────────
+
+describe('lecteurXlsx.lire : toute valeur de cellule de plus de 32 767 caractères → classeur_illisible (3e relecture, point 3)', () => {
+  const unique = (cellule: string) => classeurSimple(`<row r="1">${cellule}</row>`);
+  const TROP = 32_768;
+
+  it.each([
+    ['nombre (sans type)', `<c r="A1"><v>${'1'.repeat(TROP)}</v></c>`],
+    ['nombre t="n"', `<c r="A1" t="n"><v>${'1'.repeat(TROP)}</v></c>`],
+    ['erreur t="e"', `<c r="A1" t="e"><v>#${'N'.repeat(TROP)}</v></c>`],
+    ['date t="d"', `<c r="A1" t="d"><v>${'x'.repeat(TROP)}</v></c>`],
+    ['booléen t="b"', `<c r="A1" t="b"><v>${'1'.repeat(TROP)}</v></c>`],
+    ['texte de formule t="str"', `<c r="A1" t="str"><f>A2</f><v>${'x'.repeat(TROP)}</v></c>`],
+  ])('%s', async (_cas, cellule) => {
+    expect(await lecteur.lire(unique(cellule))).toMatchObject({ ok: false, code: 'classeur_illisible' });
+  });
+
+  it('date t="d" de 32 767 caractères qui n’est pas une date : lue, texte tel quel', async () => {
+    const texte = 'x'.repeat(32_767);
+    const f = feuilles(await lecteur.lire(unique(`<c r="A1" t="d"><v>${texte}</v></c>`)));
+    expect(sansFinFeuille(f[0]?.lignes ?? [])).toStrictEqual([[texte]]);
+  });
+});
+
+describe('lecteurXlsx.lire : références numériques qui ne sont pas des caractères XML → classeur_illisible (3e relecture)', () => {
+  const SST = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const enLigne = (texte: string) => classeurSimple(`<row r="1"><c r="A1" t="inlineStr"><is><t>${texte}</t></is></c></row>`);
+  const partagee = (texte: string) =>
+    classeur({
+      feuilles: [{ nom: 'Feuil1', partie: 'worksheets/sheet1.xml' }],
+      parties: {
+        'worksheets/sheet1.xml': feuilleXml('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'),
+        'sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="${SST}"><si><t>${texte}</t></si></sst>`,
+      },
+    });
+
+  it.each([
+    ['&#0;', 'a&#0;b'],
+    ['&#x0;', 'a&#x0;b'],
+    ['&#xD800; (moitié haute isolée)', 'a&#xD800;b'],
+    ['&#xDFFF; (moitié basse isolée)', 'a&#xDFFF;b'],
+    ['&#55296; (D800 en décimal)', 'a&#55296;b'],
+    ['&#xD83D;&#xDE00; (paire écrite en deux références)', '&#xD83D;&#xDE00;'],
+  ])('%s, en ligne comme partagée', async (_cas, texte) => {
+    expect(await lecteur.lire(enLigne(texte))).toMatchObject({ ok: false, code: 'classeur_illisible' });
+    expect(await lecteur.lire(partagee(texte))).toMatchObject({ ok: false, code: 'classeur_illisible' });
+  });
+
+  it('&#x1F600; (émoji en une seule référence) reste lu', async () => {
+    const f = feuilles(await lecteur.lire(enLigne('a&#x1F600;b')));
+    expect(sansFinFeuille(f[0]?.lignes ?? [])).toStrictEqual([['a😀b']]);
+  });
+});
