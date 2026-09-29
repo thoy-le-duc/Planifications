@@ -54,6 +54,11 @@ describe('evenement.ts délègue les règles au cœur', () => {
     expect(lireEvenement(uuid(1), donnees('recolte', { quantite: 12.5, unite: 'kg', categorie: null })).ok).toBe(true);
   });
 
+  it('un id glissé dans les données est refusé : colonne inconnue', () => {
+    const d = { ...donnees('recolte', { quantite: 12.5, unite: 'kg', categorie: null }), id: uuid(1) };
+    expect(lireEvenement(uuid(1), d)).toEqual({ ok: false, raison: 'colonne inconnue : id' });
+  });
+
   it.each([
     ['récolte de 1e308 kg (plafond du cœur)', 'recolte', { quantite: 1e308, unite: 'kg', categorie: null }],
     ['irrigation de 1e308 minutes (plafond du cœur)', 'irrigation', { secteurIrrigationId: uuid(7), dureeMinutes: 1e308 }],

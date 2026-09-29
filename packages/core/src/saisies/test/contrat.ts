@@ -28,20 +28,30 @@
  *   emplacement_ids, note, photos, remplace_sorte, remplace_evenement_id, detail
  *   + cree_le : tolérée et ignorée (remplie par le serveur).
  *
- * Toute autre colonne → 'colonne_inconnue'. `entree` qui n'est pas un objet → 'entree_invalide'.
+ * Toute autre colonne → 'colonne_inconnue'. `entree` qui n'est pas un objet, ou qu'on ne peut
+ * pas lire (Proxy révoqué, accesseur qui lève) → 'entree_invalide', champ null.
  * Jamais d'exception, quelle que soit l'entrée (JSON illisible, imbriqué sur 100 000 niveaux,
- * clé de 10 000 caractères…) : toujours un résultat.
+ * clé de 1 000 000 de caractères, BigInt, Proxy révoqué…) : toujours un résultat.
+ * Seules les propriétés PROPRES comptent (colonnes, clés du détail, valeur/unite) : une valeur
+ * héritée par prototype est absente.
  *
  * ── Sortie ──────────────────────────────────────────────────────────────────────────────────
  *
  * Saisie acceptée → l'`Evenement` de T01 (camelCase) : ids en minuscules, `horodatage` en
  * `Instant` (ms UTC), `culture` et `remplaceEvenement` regroupés, `note` null si absente,
- * `emplacementIds` et `photos` [] si absents ou null, `detail` = objet lu.
+ * `emplacementIds` et `photos` [] si absents ou null, `detail` = COPIE de l'objet lu (propriétés
+ * propres seulement, objets quantite/dose copiés aussi) : modifier l'entrée après l'appel ne
+ * change pas la saisie rendue.
  *
  * Saisie refusée → `ErreurSaisie` : un `code` stable (ci-dessous), le `champ` en cause
  * (nom de colonne reçu, ou 'detail.<clé>' / 'detail.dose.valeur'… pour le détail), et un
- * `message` en français lisible par le maraîcher, de 200 caractères au plus (un nom de clé
- * reçu de 10 000 caractères est tronqué). La première règle violée suffit.
+ * `message` en français lisible par le maraîcher, de 200 caractères au plus. La première règle
+ * violée suffit.
+ *
+ * Extrait d'un nom reçu (colonne ou clé du détail), dans le `champ` COMME dans le message : un
+ * nom de plus de 40 caractères est réduit à ses 40 premiers caractères suivis de « … » (U+2026).
+ * Colonne 'x' × 1 000 000 → champ 'x' × 40 + '…' ; clé 'k' × 5 000 → 'detail.' + 'k' × 40 + '…' ;
+ * dans quantite → 'detail.quantite.' + extrait. `champ` fait donc toujours 200 caractères au plus.
  *
  * ── Règles (reprises de T10, evenement.ts) ──────────────────────────────────────────────────
  *
@@ -59,25 +69,32 @@
  *                                    jamais l'événement lui-même (casse ignorée)  incoherent
  *   detail                           objet ; ≤ 8 192 octets UTF-8 de JSON.stringify  trop_volumineux ;
  *                                    uniquement les clés du Detail* de T01 du type  cle_inconnue
- *   texte JSON illisible, ou valeur impossible à relire/réécrire (trop imbriquée)  json_illisible
+ *   texte JSON illisible, ou valeur impossible à relire/réécrire (trop imbriquée, BigInt)  json_illisible
+ *                                    (le message dit ce qui ne va pas : « détail illisible » pour
+ *                                    un BigInt, pas « trop imbriqué »)
  *
  * Détail par type (clés autorisées) :
  *   recolte       quantite (> 0), unite (kg | botte | piece | barquette), categorie (texte ou null)
  *   realise       etape (semis_pepiniere | semis_direct | plantation | arrachage), quantiteReelle (nombre ≥ 0 ou null)
  *   intervention  categorie (travail_sol | couverture | fertilisation | amendement | entretien),
  *                 type (texte non vide), outil (texte ou null) ;
- *                 + couverture : dureeOccupationJours (nombre ≥ 0 ou null)
+ *                 + couverture : dureeOccupationJours (entier ≥ 0 ou null ; T01 : jours entiers)
  *                 + fertilisation, amendement : produit (texte non vide), quantite { valeur ≥ 0, unite texte } obligatoires
- *   irrigation    secteurIrrigationId (UUID), dureeMinutes (≥ 0)
+ *   irrigation    secteurIrrigationId (UUID), dureeMinutes (entier ≥ 0 ; T01 : minutes entières)
  *   traitement    produitPhytoId (UUID), dose { valeur ≥ 0, unite texte }, surfaceTraiteeM2 (≥ 0),
  *                 cible (texte), operateur (texte), recolteAutoriseeLe ('AAAA-MM-JJ' existante)
  *   observation   nature (ravageur | maladie | stade | autre), gravite (faible | moyenne | forte | null)
  *   Un objet quantite/dose n'a que les clés valeur et unite. Un nombre est un number fini
- *   (pas de texte « 12 », pas de NaN ni d'Infinity).
+ *   (pas de texte « 12 », pas de NaN ni d'Infinity). 1,5 jour ou 1,5 minute → 'champ_invalide'.
  *
  * NOUVEAU par rapport à T10 (le type Evenement de T01 l'exigeait, ni l'API ni la base ne le
  * vérifiaient) : gravite dans sa liste, cible et operateur en texte, quantite.unite en texte,
- * quantiteReelle / dureeOccupationJours / quantite.valeur d'engrais ≥ 0.
+ * quantiteReelle / dureeOccupationJours / quantite.valeur d'engrais ≥ 0, dureeMinutes et
+ * dureeOccupationJours entiers.
+ *
+ * ── Côté API (apps/api/src/sync/evenement.ts) ───────────────────────────────────────────────
+ *
+ * L'id vient de l'écriture PowerSync ; un `id` glissé dans les données → refus « colonne inconnue : id ».
  *
  * ── Plafonds métier (PROVISOIRES, à valider par Théophane : docs/questions.md) ──────────────
  *
@@ -105,7 +122,7 @@ export type CodeErreurSaisie =
   | 'doublon'
   /** Série ET campagne ; remplacement incomplet ; événement qui se remplace lui-même. */
   | 'incoherent'
-  /** Texte JSON illisible, ou valeur trop imbriquée pour être relue ou réécrite. */
+  /** Texte JSON illisible, ou valeur impossible à relire ou réécrire (trop imbriquée, BigInt). */
   | 'json_illisible'
   /** Détail de plus de 8 192 octets UTF-8. */
   | 'trop_volumineux'
@@ -116,7 +133,10 @@ export type CodeErreurSaisie =
 
 export interface ErreurSaisie {
   readonly code: CodeErreurSaisie;
-  /** Colonne reçue ('date', 'emplacement_ids'…) ou chemin dans le détail ('detail.quantite', 'detail.dose.valeur'). */
+  /**
+   * Colonne reçue ('date', 'emplacement_ids'…) ou chemin dans le détail ('detail.quantite',
+   * 'detail.dose.valeur'). Nom reçu de plus de 40 caractères : son extrait (40 + '…'). ≤ 200 caractères.
+   */
   readonly champ: string | null;
   /** Explication en français, 200 caractères au plus. */
   readonly message: string;

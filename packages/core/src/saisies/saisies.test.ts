@@ -112,9 +112,13 @@ function refuse(entree: unknown, code: CodeErreurSaisie | readonly CodeErreurSai
   const codes: readonly CodeErreurSaisie[] = typeof code === 'string' ? [code] : code;
   expect(codes, `code reçu : ${r.erreur.code} (${r.erreur.message})`).toContain(r.erreur.code);
   if (champ !== undefined) expect(r.erreur.champ).toBe(champ);
+  if (r.erreur.champ !== null) expect(r.erreur.champ.length, 'champ de 200 caractères au plus').toBeLessThanOrEqual(200);
   expect(r.erreur.message.trim().length).toBeGreaterThan(5);
   expect(r.erreur.message.length).toBeLessThanOrEqual(200);
 }
+
+/** Extrait d'un nom reçu (colonne, clé) dans `champ` et dans le message : 40 caractères puis « … ». */
+const extrait = (nom: string): string => (nom.length > 40 ? `${nom.slice(0, 40)}…` : nom);
 
 /** Valeur imbriquée sur `niveaux` niveaux, construite sans récursion. */
 function imbrique(niveaux: number): Detail {
@@ -262,12 +266,23 @@ describe('colonnes', () => {
     refuse(entree, 'entree_invalide', null);
   });
 
+  it('Proxy révoqué comme entrée : entree_invalide, sans lever', () => {
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+    refuse(proxy, 'entree_invalide', null);
+  });
+
   it('colonne inconnue refusée, avec son nom', () => {
     refuse(ligne('recolte', { quantite: 12 }), 'colonne_inconnue', 'quantite');
   });
 
-  it('colonne inconnue de 10 000 caractères : message de 200 caractères au plus', () => {
-    refuse(ligne('recolte', { ['x'.repeat(10_000)]: 1 }), 'colonne_inconnue');
+  it('colonne inconnue de 10 000 caractères : message et champ de 200 caractères au plus', () => {
+    refuse(ligne('recolte', { ['x'.repeat(10_000)]: 1 }), 'colonne_inconnue', extrait('x'.repeat(10_000)));
+  });
+
+  it('colonne inconnue de 1 000 000 de caractères : champ réduit à son extrait', () => {
+    const nom = 'x'.repeat(1_000_000);
+    refuse(ligne('recolte', { [nom]: 1 }), 'colonne_inconnue', `${'x'.repeat(40)}…`);
   });
 
   it.each([
@@ -473,6 +488,13 @@ describe('détail : forme et taille', () => {
     refuse(ligne('recolte', { detail: `${'{"a":'.repeat(100_000)}1${'}'.repeat(100_000)}` }), ['json_illisible', 'trop_volumineux'], 'detail');
   });
 
+  it('BigInt dans le détail (déjà en valeur) : json_illisible, message sans rapport avec l’imbrication', () => {
+    const entree = ligne('recolte', { detail: detail('recolte', { quantite: BigInt(12) }) });
+    refuse(entree, 'json_illisible', 'detail');
+    const r = valider(entree);
+    if (!r.ok) expect(r.erreur.message).not.toMatch(/imbriqu/i);
+  });
+
   it('objet imbriqué sur 100 000 niveaux (déjà en valeur) : refus, sans lever', () => {
     refuse(ligne('recolte', { detail: { quantite: 1, unite: 'kg', categorie: imbrique(100_000) } }), ['json_illisible', 'trop_volumineux', 'champ_invalide']);
   });
@@ -503,8 +525,17 @@ describe('détail : clés autorisées (Detail* de T01)', () => {
     refuse(ligne('traitement', {}, detail('traitement', { dose: { valeur: 2, unite: 'L/ha', x: 1 } })), 'cle_inconnue', 'detail.dose.x');
   });
 
-  it('clé inconnue de 5 000 caractères (détail sous 8 Kio) : message de 200 caractères au plus', () => {
-    refuse(ligne('recolte', {}, detail('recolte', { ['k'.repeat(5_000)]: 1 })), 'cle_inconnue');
+  it('clé inconnue de 5 000 caractères (détail sous 8 Kio) : message et champ de 200 caractères au plus', () => {
+    refuse(ligne('recolte', {}, detail('recolte', { ['k'.repeat(5_000)]: 1 })), 'cle_inconnue', `detail.${'k'.repeat(40)}…`);
+    refuse(
+      ligne('fertilisation', {}, detail('fertilisation', { quantite: { valeur: 50, unite: 'kg', ['q'.repeat(5_000)]: 1 } })),
+      'cle_inconnue',
+      `detail.quantite.${'q'.repeat(40)}…`,
+    );
+  });
+
+  it('clé de détail de 1 000 000 de caractères : refus, champ de 200 caractères au plus', () => {
+    refuse(ligne('recolte', { detail: detail('recolte', { ['k'.repeat(1_000_000)]: 1 }) }), ['cle_inconnue', 'trop_volumineux']);
   });
 });
 
@@ -535,6 +566,8 @@ describe('détail : valeurs par type', () => {
     ['travail_sol', { outil: 3 }, 'champ_invalide', 'detail.outil'],
     ['couverture', { dureeOccupationJours: '60' }, 'champ_invalide', 'detail.dureeOccupationJours'],
     ['couverture', { dureeOccupationJours: -1 }, 'champ_invalide', 'detail.dureeOccupationJours'],
+    // T01 : jours entiers.
+    ['couverture', { dureeOccupationJours: 1.5 }, 'champ_invalide', 'detail.dureeOccupationJours'],
     ['fertilisation', { produit: undefined }, 'champ_manquant', 'detail.produit'],
     ['fertilisation', { produit: '' }, 'champ_manquant', 'detail.produit'],
     ['fertilisation', { quantite: undefined }, 'champ_manquant', 'detail.quantite'],
@@ -550,6 +583,8 @@ describe('détail : valeurs par type', () => {
     ['irrigation', { secteurIrrigationId: 'secteur-3' }, 'champ_invalide', 'detail.secteurIrrigationId'],
     ['irrigation', { dureeMinutes: -1 }, 'champ_invalide', 'detail.dureeMinutes'],
     ['irrigation', { dureeMinutes: '30' }, 'champ_invalide', 'detail.dureeMinutes'],
+    // T01 : minutes entières.
+    ['irrigation', { dureeMinutes: 1.5 }, 'champ_invalide', 'detail.dureeMinutes'],
     ['irrigation', { dureeMinutes: undefined }, 'champ_manquant', 'detail.dureeMinutes'],
     // traitement
     ['traitement', { produitPhytoId: 'bouillie bordelaise' }, 'champ_invalide', 'detail.produitPhytoId'],
@@ -632,11 +667,50 @@ describe('plafonds provisoires (à valider par Théophane, docs/questions.md)', 
     accepte(ligne(exemple, {}, fabriquer(plafond(nom))));
   });
 
+  /** Durées en jours ou minutes entiers (T01) : un demi au-delà serait refusé comme non entier. */
+  const ENTIERS = new Set(['couvertureJours', 'irrigationMinutes']);
+
   it.each(CAS)('%s (%s) : au-delà, plafond_depasse', (nom, exemple, fabriquer, champ) => {
-    refuse(ligne(exemple, {}, fabriquer(plafond(nom) + 0.5)), 'plafond_depasse', champ);
+    refuse(ligne(exemple, {}, fabriquer(plafond(nom) + (ENTIERS.has(nom) ? 1 : 0.5))), 'plafond_depasse', champ);
   });
 
   it.each(CAS)('%s (%s) : 1e308 refusé (accepté par T10)', (_nom, exemple, fabriquer, champ) => {
     refuse(ligne(exemple, {}, fabriquer(1e308)), 'plafond_depasse', champ);
+  });
+});
+
+// ── Détail rendu : copie propre ──────────────────────────────────────────────────────────────
+
+describe('détail rendu : copie des propriétés propres', () => {
+  it('quantite héritée par prototype : champ_manquant', () => {
+    const d = Object.create({ quantite: 12 }) as Detail;
+    d.unite = 'kg';
+    d.categorie = null;
+    refuse(ligne('recolte', { detail: d }), 'champ_manquant', 'detail.quantite');
+  });
+
+  it('valeur d’une quantité héritée par prototype : champ_manquant', () => {
+    const q = Object.create({ valeur: 50 }) as Detail;
+    q.unite = 'kg';
+    refuse(ligne('fertilisation', { detail: detail('fertilisation', { quantite: q }) }), 'champ_manquant', 'detail.quantite.valeur');
+  });
+
+  it('clé héritée par prototype : absente du détail rendu', () => {
+    const d = Object.create({ pirate: 1 }) as Detail;
+    Object.assign(d, DETAILS.recolte);
+    const r = valider(ligne('recolte', { detail: d }));
+    expect(r).toMatchObject({ ok: true, saisie: { detail: DETAILS.recolte } });
+    if (r.ok) expect(Reflect.has(r.saisie.detail, 'pirate')).toBe(false);
+  });
+
+  it('modifier l’entrée après l’appel ne change pas la saisie rendue', () => {
+    const d = detail('fertilisation', { quantite: { valeur: 50, unite: 'kg' } });
+    const entree = ligne('fertilisation', { detail: d });
+    const r = valider(entree);
+    expect(r.ok).toBe(true);
+    d.produit = 'autre';
+    (d.quantite as Detail).valeur = 999;
+    Reflect.deleteProperty(d, 'type');
+    if (r.ok) expect(r.saisie.detail).toEqual(DETAILS.fertilisation);
   });
 });
