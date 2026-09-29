@@ -23,7 +23,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 
 | Fichier | Contenu |
 | --- | --- |
-| `src/schema.ts` | Les 21 tables du modèle v1, les 4 tables de comptes (T09) et `refus_synchro` (T10), clés étrangères, CHECK, index |
+| `src/schema.ts` | Les 21 tables du modèle v1, les 4 tables de comptes (T09), `refus_synchro` (T10) et `securite.demande_ip` (T09b), clés étrangères, CHECK, index |
 | `src/comptes.ts` | `fermesDeLUtilisateur`, `roleDansLaFerme`, `ROLES_MEMBRE`, `ETATS_MEMBRE` (T09) |
 | `src/valeurs.ts` | Valeurs des unions de T01, vérifiées à la compilation contre `@planif/core` |
 | `src/conversions.ts` | `ligneDepuisX` / `xDepuisLigne` pour Serie, Occupation, Emplacement, Evenement |
@@ -36,6 +36,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0005_*.sql` | Migration personnalisée (T09) : `utilisateur` et `membre` ajoutées à la publication `powersync` |
 | `migrations/0006_*.sql` | Généré par drizzle-kit (T09, relecture sécurité) : `membre.etat`, `invite_par`, `invite_le` et leurs CHECK |
 | `migrations/0007_*.sql` | Généré par drizzle-kit (T10) : `refus_synchro` |
+| `migrations/0010_*.sql` | Généré par drizzle-kit (T09b) : `jeton_renouvellement.famille_id`, `connexion_le`, `utilise_le` (rotation), schéma `securite` et table `demande_ip` (limite par IP). Seule retouche : les sessions existantes forment chacune leur famille |
 | `migrations/0008_*.sql` | Migration personnalisée (T10) : `refus_synchro` dans la publication `powersync`, et publication étendue à `truncate` (exigé par PowerSync 1.26, erreur PSYNC_S1142) |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
@@ -53,6 +54,7 @@ Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 - **Remplacement** : une correction ou une annulation vise un événement de la même ferme (clé étrangère composée `(ferme_id, remplace_evenement_id)` → `evenement (ferme_id, id)`, erreur `23503`) et du même type (déclencheur à l'insertion, erreur `23514`).
 - **Index** : `occupation (emplacement_id, prevu_du, prevu_au)` pour la vue 2D ; `serie (ferme_id, prevu_…)` pour le semainier ; plus les clés étrangères les plus lues.
 - **PowerSync** : publication `powersync` (insert, update, delete, truncate depuis T10) sur les 21 tables du modèle, plus `utilisateur` et `membre` (T09) et `refus_synchro` (T10), en liste explicite : pas besoin d'être superutilisateur chez un hébergeur géré, et la table de suivi des migrations n'est pas publiée. Une nouvelle table synchronisée s'ajoute dans sa migration par `ALTER PUBLICATION powersync ADD TABLE …`. Le service PowerSync exige `wal_level=logical` sur le serveur (réglé dans `docker-compose.yml`, et en CI par `docker run … -c wal_level=logical`) ; la création de la publication, elle, n'en a pas besoin. Ce que chaque téléphone reçoit est décidé par `powersync/sync-config.yaml`, pas par la publication.
+- **Schéma `securite`** (T09b) : données du serveur seul, hors de `public` donc hors de la publication. `demande_ip` (adresse IP, action `code` ou `verifier`, instant) sert à la limite par IP de l'API, qui efface les lignes de plus de 24 heures.
 
 ## Synchro (T10)
 

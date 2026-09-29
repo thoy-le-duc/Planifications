@@ -1,5 +1,6 @@
 /**
- * Envoi d'e-mail, injecté : un faux en test, aucun service réel ni secret dans T09.
+ * Envoi d'e-mail, injecté : un faux en test, la console en développement, SMTP sinon
+ * (courriel-smtp.ts, T09b).
  */
 export interface MessageCourriel {
   readonly a: string;
@@ -15,7 +16,7 @@ export interface ExpediteurCourriel {
  * Dernière frontière avant l'en-tête SMTP : un retour chariot ou un saut de ligne dans le
  * destinataire ou le sujet permettrait d'injecter des en-têtes (« Bcc: … »), quelle que soit la
  * route qui compose le message (nom de ferme, adresse…). Tout expéditeur l'appelle avant d'envoyer
- * (expediteurConsole ici, l'expéditeur réel au ticket suivant). Le texte peut tenir sur plusieurs
+ * (expediteurConsole ici, expediteurSmtp dans courriel-smtp.ts). Le texte peut tenir sur plusieurs
  * lignes.
  */
 export function verifierEnTetes(message: MessageCourriel): void {

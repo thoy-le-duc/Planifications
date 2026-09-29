@@ -2,9 +2,9 @@
  * Authentification (T09) : code à 6 chiffres par e-mail (Q9), jetons d'accès JWT RS256 exposés
  * en JWKS pour PowerSync, jetons de renouvellement opaques pour la session hors ligne.
  *
- * Tickets suivants (rien dans T09) : clé d'accès (WebAuthn) ; déconnexion et révocation par
- * l'API ; rôle applicatif limité à INSERT/SELECT sur le journal et contrôle des références
- * entre fermes. Voir apps/api/README.md.
+ * T09b : déconnexion, rotation du jeton de renouvellement, limite par IP, garde qui relit
+ * l'utilisateur, expéditeur SMTP. Tickets suivants : clé d'accès (WebAuthn) ; rôle applicatif
+ * limité à INSERT/SELECT sur le journal. Voir apps/api/README.md.
  */
 export {
   genererCleSignature,

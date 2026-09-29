@@ -18,9 +18,17 @@ COURRIEL_CONSOLE=1 pnpm --filter @planif/api dev
 | `JWT_EMETTEUR`, `JWT_AUDIENCE` | Claims `iss` et `aud` (l'audience est celle configurée dans PowerSync) |
 | `PORT` | 3000 par défaut |
 | `COURRIEL_CONSOLE` | `1` : les e-mails (et donc les codes) s'écrivent dans la console. Développement seulement : refusé si `NODE_ENV=production` |
+| `SMTP_HOTE` | Relais SMTP du fournisseur d'e-mail (T09b). Sans lui ni `COURRIEL_CONSOLE=1`, l'API refuse de démarrer |
+| `SMTP_SECURITE` | `tls` (port 465), `starttls` (défaut, port 587 : STARTTLS obligatoire, rien ne part en clair) ou `aucune` (développement, refusé si `NODE_ENV=production`) |
+| `SMTP_PORT` | Défaut selon `SMTP_SECURITE` |
+| `SMTP_EXPEDITEUR` | En-tête From, ex. `Planifications <connexion@planif.fr>` (obligatoire avec `SMTP_HOTE`) |
+| `SMTP_UTILISATEUR`, `SMTP_MOT_DE_PASSE` | Identifiants du relais, les deux ou aucun ; le mot de passe n'apparaît dans aucun message d'erreur |
+| `PROXY_DE_CONFIANCE` | `1` derrière le proxy de production : l'adresse du client est la **dernière** valeur de `X-Forwarded-For` (celle que le proxy ajoute). Absente ou `0` : adresse de la socket, en-têtes ignorés. Toute autre valeur est refusée |
 | `CORS_ORIGINES` | Origines autorisées à appeler l'API depuis un navigateur, séparées par des virgules (`https://app.planif.fr,http://localhost:4174`). Origines exactes, sans `/` final ; aucune par défaut (même origine seulement) |
 
-Aucune valeur secrète par défaut : une variable obligatoire absente arrête le démarrage. Il n'y a pas encore de service d'envoi d'e-mail réel : sans `COURRIEL_CONSOLE=1`, l'API refuse de démarrer.
+Aucune valeur secrète par défaut : une variable obligatoire absente arrête le démarrage.
+
+**Envoi d'e-mail (T09b)** : relais SMTP générique (nodemailer), que proposent tous les fournisseurs hébergés en UE. Le choix du fournisseur (contrat, DPA, domaine d'envoi avec SPF, DKIM, DMARC) reste à faire par Théophane ; le code ne dépend que des variables `SMTP_*`.
 
 ## Connexion (Q9)
 
@@ -30,16 +38,22 @@ Code à 6 chiffres reçu par e-mail, pas de mot de passe.
 | --- | --- |
 | `POST /auth/code` | Envoie un code (10 min, 5 tentatives, usage unique). Au plus un envoi par minute, cinq par heure et dix par 24 h glissantes par adresse (429 + `Retry-After`). Un nouveau code invalide le précédent. Même réponse que le compte existe ou non |
 | `POST /auth/verifier` | Code → jeton d'accès + jeton de renouvellement. Crée le compte à la première connexion, et vaut acceptation des invitations en attente. À partir de 10 échecs pour une adresse sur 24 h glissantes, tous codes confondus, toute vérification reçoit la même 401 `code_invalide`, même avec le bon code |
-| `POST /auth/renouveler` | Jeton de renouvellement → nouveau jeton d'accès, **sans** jeton d'accès valide : les écritures faites hors ligne partent au retour du réseau |
+| `POST /auth/renouveler` | Jeton de renouvellement → nouveau jeton d'accès **et nouveau jeton de renouvellement** (rotation, T09b), **sans** jeton d'accès valide : les écritures faites hors ligne partent au retour du réseau |
+| `POST /auth/deconnexion` | Jeton de renouvellement → 204. Révoque toute la session (T09b). Sans jeton d'accès. Jeton inconnu, révoqué ou expiré : 204 aussi |
 | `GET /.well-known/jwks.json` | Clés publiques, pour PowerSync |
 | `GET /moi`, `POST /fermes`, `GET`/`PATCH /fermes/:id`, `POST /fermes/:id/membres` | Protégées par `Authorization: Bearer` |
 
 - **Jeton d'accès** : JWT RS256, 1 heure, claims `sub`, `iss`, `aud`, `iat`, `exp` seulement. Jamais la liste des fermes : les droits sont relus en base à chaque requête (`fermesDeLUtilisateur`, `roleDansLaFerme` de `@planif/db`). Un membre retiré perd l'accès tout de suite.
-- **Jeton de renouvellement** : 256 bits aléatoires, opaque. Échéance glissante de 90 jours (la session tient donc au moins 30 jours hors ligne), plafonnée à 365 jours après la connexion. Pas de rotation stricte : le même jeton reste valable après usage, pour qu'une réponse perdue sur un réseau faible ne déconnecte pas.
+- **Jeton de renouvellement** : 256 bits aléatoires, opaque. Échéance glissante de 90 jours (la session tient donc au moins 30 jours hors ligne), plafonnée à 365 jours après la connexion pour toute la session.
+- **Rotation (T09b)** : chaque renouvellement rend un jeton neuf, de la même famille (la connexion). L'ancien reste accepté 2 minutes après son premier usage (réponse perdue au champ ; plusieurs renouvellements simultanés passent). Présenté plus tard, c'est un rejeu (jeton volé ou copié) : refusé, et **toute la famille** est révoquée ; l'utilisateur se reconnecte par code. Les autres sessions du compte ne sont pas touchées. Le téléphone relit la session rangée avant chaque renouvellement, pour qu'un autre onglet qui a fait tourner le jeton ne provoque pas de rejeu.
+- **Déconnexion (T09b)** : révoque toute la famille. Limite acceptée : un jeton d'accès déjà émis reste valable jusqu'à son expiration (1 heure au plus) ; PowerSync et l'API l'acceptent jusque-là. L'appli efface de son côté la session et la base locale, même sans réseau.
+- **Utilisateur supprimé (T09b)** : la garde relit `utilisateur` à chaque requête ; supprimé ou inexistant, toute route protégée répond 401 `non_authentifie`, même avec un jeton d'accès encore valable.
+- **Limite par adresse IP (T09b)** : au plus 30 `POST /auth/code` et 60 `POST /auth/verifier` (réussis ou non) par IP et par heure glissante (429 + `Retry-After`), en plus des limites par adresse e-mail. Comptée en base (plusieurs processus, redémarrage). Adresse : celle de la socket, ou derrière `PROXY_DE_CONFIANCE=1` la dernière valeur de `X-Forwarded-For`. Une adresse IPv6 compte telle quelle (un attaquant qui dispose d'un /64 peut en changer : limite connue, les limites par adresse e-mail restent).
+- **Conservation des adresses IP (données personnelles)** : table `securite.demande_ip` (adresse, action, instant), hors de la publication PowerSync. Les lignes de plus de **24 heures** sont effacées à chaque nouvelle demande enregistrée, sans tâche planifiée : aucune adresse n'est gardée plus d'une journée au-delà de la dernière activité.
 - **Isolement** : pour une ferme dont on n'est pas membre actif (ou inexistante, ou id invalide), toute route `/fermes/:id…` répond 404 `ferme_introuvable` et n'écrit rien. Un utilisateur supprimé n'est membre actif de rien. Le renommage et l'invitation sont réservés au gérant (403 sinon).
 - **Nom de ferme** : refusé (400 `requete_invalide`) s'il contient un caractère de contrôle ou de format (`/[\p{Cc}\p{Cf}]/u`) : il finit dans le sujet des e-mails d'invitation.
 - **Invitation** : réponse `{ email, role }`, sans identifiant, identique que le compte existe ou non. L'invité reste « invité » (`membre.etat = 'invite'`), sans accès à la ferme, jusqu'à sa prochaine connexion réussie ; un membre retiré puis réinvité aussi. Au plus 20 invitations par gérant et par heure glissante, toutes fermes confondues (429 + `Retry-After`).
-- **Courriel** : `verifierEnTetes` refuse un retour à la ligne dans le destinataire ou le sujet ; tout expéditeur l'appelle avant d'envoyer.
+- **Courriel** : `verifierEnTetes` refuse un retour à la ligne dans le destinataire ou le sujet ; tout expéditeur l'appelle avant d'envoyer (`expediteurSmtp` avant même d'ouvrir la connexion).
 
 ### Empreintes des secrets
 
@@ -97,6 +111,9 @@ Puis, une fois connecté dans l'appli : `http://localhost:5173/diagnostic/synchr
 Décision du chef d'équipe, rien de tout ça dans T09 :
 
 - **Clé d'accès (WebAuthn)**, en option pour se connecter par empreinte ou visage (Q9).
-- **Déconnexion et révocation par l'API** : `jeton_renouvellement.revoque_le` est déjà respecté au renouvellement, mais aucune route ne le remplit.
 - **Rôle applicatif** Postgres limité à `INSERT`/`SELECT` sur le journal (`evenement`, `mouvement_stock`), et **contrôle des références entre fermes**.
-- **Service d'envoi d'e-mail réel** (l'interface `ExpediteurCourriel` est prête).
+- **Choix du fournisseur d'e-mail** (Théophane) : l'expéditeur SMTP est prêt (T09b).
+
+## Appli web : CSP (T09b)
+
+`dist/index.html` porte une balise `<meta http-equiv="Content-Security-Policy">` posée au build (`apps/web/scripts/csp.ts`) : `script-src 'self' 'wasm-unsafe-eval'`, aucun script en ligne, `connect-src` limité à l'appli, l'API et PowerSync. Une balise ne peut pas porter `frame-ancestors` : à la mise en production, l'hébergeur devra ajouter l'en-tête HTTP `Content-Security-Policy: frame-ancestors 'none'` (contre l'inclusion de l'appli dans une page piégée).
