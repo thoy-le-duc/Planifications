@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Seule porte d'accès aux données de l'appli web : lecture, écriture, requêtes surveillées, envoi des écritures (T10).",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./export": "./src/export-seul.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
