@@ -17,7 +17,7 @@ COURRIEL_CONSOLE=1 pnpm --filter @planif/api dev
 | `JWT_CLES_PRIVEES` | JWKS de clés privées RS256 ; la première signe, les suivantes vérifient seulement |
 | `JWT_EMETTEUR`, `JWT_AUDIENCE` | Claims `iss` et `aud` (l'audience est celle configurée dans PowerSync) |
 | `PORT` | 3000 par défaut |
-| `COURRIEL_CONSOLE` | `1` : les e-mails (et donc les codes) s'écrivent dans la console. Développement seulement |
+| `COURRIEL_CONSOLE` | `1` : les e-mails (et donc les codes) s'écrivent dans la console. Développement seulement : refusé si `NODE_ENV=production` |
 
 Aucune valeur secrète par défaut : une variable obligatoire absente arrête le démarrage. Il n'y a pas encore de service d'envoi d'e-mail réel : sans `COURRIEL_CONSOLE=1`, l'API refuse de démarrer.
 
