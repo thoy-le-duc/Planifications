@@ -6,7 +6,7 @@ import { serve } from '@hono/node-server';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { creerApp } from './app.ts';
-import { expediteurConsole, trousseauDepuisJwks } from './auth/index.ts';
+import { expediteurConsole, expediteurSmtp, trousseauDepuisJwks } from './auth/index.ts';
 import { lireConfig, type Config } from './config.ts';
 
 let config: Config;
@@ -18,8 +18,9 @@ try {
 }
 
 const cles = await trousseauDepuisJwks(config.jwtClesPrivees);
-// lireConfig n'accepte que COURRIEL_CONSOLE=1 hors production : aucun service réel dans T09.
-const expediteur = expediteurConsole();
+// COURRIEL_CONSOLE=1 (développement, refusé en production par lireConfig) ou relais SMTP.
+const { courriel } = config;
+const expediteur = courriel.type === 'console' ? expediteurConsole() : expediteurSmtp(courriel);
 
 const pool = new pg.Pool({ connectionString: config.databaseUrl });
 const app = creerApp({
@@ -28,6 +29,7 @@ const app = creerApp({
   cles,
   emetteur: config.emetteur,
   audience: config.audience,
+  proxyDeConfiance: config.proxyDeConfiance,
   ...(config.corsOrigines === undefined ? {} : { corsOrigines: config.corsOrigines }),
 });
 
