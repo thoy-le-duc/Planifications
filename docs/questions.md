@@ -108,6 +108,32 @@ Question : ces calculs sont-ils ceux que vous faites ?
 
 Réponse : « il y a de ça, oui ». Validé dans le principe, pas dans le détail. Pour s'adapter à toutes les fermes, T05 couvre maintenant trois façons de compter la densité (écartement, au mètre linéaire, à la volée), les mottes à plusieurs plants, la perte en pépinière et le nombre de plaques. Un cas qui n'entre dans aucune se signalera ici.
 
+### Q8 — Budget de 300 ms avec la base locale (posée le 2026-09-25)
+
+Mesure de T07, détail dans [`mesures/sqlite.md`](mesures/sqlite.md) : ferme simulée de 400 planches, 3 000 séries sur 5 ans et 30 000 événements, CPU ralenti ×4. On mesure le temps pour ouvrir la base puis afficher la vue 2D d'une saison.
+
+| Variante | Base dans un worker (conditions du test) | SQLite ralenti lui aussi (plus proche d'un téléphone) |
+| --- | --- | --- |
+| Tables PowerSync par défaut (JSON) | 340 à 420 ms | 566 ms |
+| Tables brutes (« raw tables ») | 270 à 320 ms | 426 ms |
+
+Ces chiffres sont un minimum : ils ne comptent ni l'affichage des lignes à l'écran ni le chargement de la bibliothèque. Une fois la base ouverte, un écran courant ne paie plus que sa requête : 50 à 160 ms en tables brutes. Le budget n'est donc dépassé qu'au premier écran après un lancement à froid, mais ce cas est fréquent au champ, parce qu'Android ferme souvent l'appli en arrière-plan.
+
+Pistes chiffrées :
+
+1. Tables brutes : environ −90 ms sur la vue 2D. C'est la variante recommandée.
+2. Ouvrir la base dès le lancement, en même temps que l'affichage de l'appli, et la garder ouverte : 300 ms tenus pour tous les écrans suivants.
+3. Stockage OPFS au lieu d'IndexedDB : environ −60 ms, et un fichier SQLite plus léger (500 Kio au lieu de 760 Kio compressés). Reste à valider sur Safari iPhone.
+4. Ne charger que les planches visibles à l'écran : non mesuré.
+
+Question : tu acceptes cette règle ?
+
+- 300 ms pour tout écran courant, base ouverte ;
+- 500 ms au plus pour le premier écran avec données après un lancement à froid, avec un squelette affiché tout de suite.
+
+Sinon, on cherche encore à gagner sur l'ouverture avant de construire la synchro (T10). La mesure sur ton propre téléphone Android trancherait. Elle demande de mettre en ligne une page de test : dis-moi si tu le veux.
+
+Réponse (2026-09-29) : « ok ». Règle retenue : 300 ms pour tout écran courant, base ouverte ; 500 ms au plus pour le premier écran avec données après un lancement à froid, avec un squelette affiché tout de suite. Tables brutes (« raw tables ») retenues ; la base s'ouvre au lancement et reste ouverte (T10).
 ### Q10 — Récoltes, interventions et traitements : tables séparées ou détail de l'événement ? (posée le 2026-09-26)
 
 Pour T08 (schéma PostgreSQL). Le modèle v1 prévoit des tables séparées **Récolte**, **Intervention** et **Traitement**. T01 (PR #1) a choisi autre chose : un seul **événement** du journal, avec un détail qui change selon le type (réalisé, récolte, intervention, irrigation, traitement, observation). Le mouvement de stock d'une récolte pointe alors vers l'événement.
@@ -122,9 +148,23 @@ Ma recommandation : **un événement + détail**, avec des vues SQL « récoltes
 
 Question : on part là-dessus pour T08 ?
 
+Réponse (2026-09-29) : « ok ». Un événement + détail, avec des vues SQL « récoltes », « interventions » et « traitements » pour les exports et le registre phyto. Le modèle v1 est à mettre à jour dans ce sens avec T08.
+
+### Q11 — Semis non saisi avant une plantation réalisée (posée le 2026-09-25, PR #2)
+
+Question : si la plantation est saisie mais pas le semis en pépinière, le semis compte-t-il comme fait ?
+
+Réponse (2026-09-29) : « ok ». Oui : une étape antérieure non saisie compte comme faite dès qu'une étape postérieure est réalisée. C'est la règle déjà codée dans T06.
+
+### Q12 — Tâches en retard dans le semainier (posée le 2026-09-25, PR #6)
+
+Question : faut-il limiter les tâches en retard ? Proposition : une seule ligne en retard par série, celle de la plus ancienne étape non faite.
+
+Réponse (2026-09-29) : « ok ». Une seule ligne en retard par série. Ticket T06b.
+
 ### À suivre
 
-- Q8 — Méthode de connexion (T09) : code par e-mail, lien magique, clé d'accès ou mot de passe.
+- Q9 — Méthode de connexion (T09) : code par e-mail, lien magique, clé d'accès ou mot de passe.
 
 ## Questions ouvertes du brief
 
