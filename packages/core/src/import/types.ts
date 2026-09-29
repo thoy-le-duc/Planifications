@@ -7,9 +7,14 @@
 export type Cellule = string | number | null;
 export type LigneBrute = readonly Cellule[];
 
+/** Système des numéros de série Excel : 1900 (Windows) ou 1904 (anciens classeurs Mac). */
+export type SystemeDates = 1900 | 1904;
+
 export interface Feuille {
   readonly nom: string;
   readonly lignes: readonly LigneBrute[];
+  /** Système de dates du classeur (`<workbookPr date1904>`), pour les numéros de série. */
+  readonly systemeDates: SystemeDates;
 }
 
 export type ResultatClasseur =

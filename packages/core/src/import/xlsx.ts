@@ -9,13 +9,19 @@
  *
  * Ne rejette jamais : tout ce qui n'est pas un classeur lisible → `classeur_illisible`. Protégé
  * contre les archives piégées : au plus 50 Mo décompressés en tout (bombe de décompression),
- * tailles et positions vérifiées contre la longueur réelle des octets.
+ * tailles et positions vérifiées contre la longueur réelle des octets ; au plus 5 millions de
+ * cases créées pour tout le classeur (vérifié avant d'allouer) ; chaque partie lue une fois ;
+ * balises de 64 Kio au plus, lues en un seul passage (temps linéaire).
  */
 import { decoderUtf8 } from './texte.ts';
-import type { Cellule, Feuille, LecteurClasseur, ResultatClasseur } from './types.ts';
+import type { Cellule, Feuille, LecteurClasseur, LigneBrute, ResultatClasseur, SystemeDates } from './types.ts';
 
 /** Plafond des octets décompressés, toutes parties comprises. */
 const PLAFOND_DECOMPRESSE = 50 * 1024 * 1024;
+/** Plafond des cases créées (lignes, y compris de remplissage, et cellules) pour tout le classeur. */
+const PLAFOND_CASES = 5_000_000;
+/** Taille maximale d'une balise, de « < » à « > ». */
+const BALISE_MAX = 64 * 1024;
 /** Limites d'Excel : au-delà, la référence de cellule est fausse. */
 const LIGNES_MAX = 1_048_576;
 const COLONNES_MAX = 16_384;
@@ -98,6 +104,8 @@ const SIGNATURE_LOCALE = 0x04034b50;
 class Archive {
   readonly entrees = new Map<string, EntreeZip>();
   private decompresse = 0;
+  /** Parties déjà lues : une partie ne se lit qu'une fois (pas de feuille démultipliée). */
+  private readonly lues = new Set<string>();
   private readonly octets: Uint8Array;
 
   constructor(octets: Uint8Array) {
@@ -159,6 +167,8 @@ class Archive {
   async lire(nom: string): Promise<Uint8Array> {
     const e = this.entrees.get(nom);
     if (e === undefined) throw new Illisible(`partie absente : ${nom}`);
+    if (this.lues.has(nom)) throw new Illisible(`partie lue deux fois : ${nom}`);
+    this.lues.add(nom);
     if (e.drapeaux & 0x1) throw new Illisible('classeur chiffré');
     if (this.u32(e.positionEnTete) !== SIGNATURE_LOCALE) throw new Illisible('archive abîmée');
     const debut = e.positionEnTete + 30 + this.u16(e.positionEnTete + 26) + this.u16(e.positionEnTete + 28);
@@ -211,7 +221,61 @@ function decoderEntites(t: string): string {
 /** Nom local (sans préfixe d'espace de noms). */
 const local = (nom: string): string => nom.slice(nom.indexOf(':') + 1);
 
-const ATTRIBUT = /([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
+const GUILLEMET = 0x22;
+const APOSTROPHE = 0x27;
+const SUPERIEUR = 0x3e;
+
+/** Espace XML (espace, tabulation, retours à la ligne). */
+const blanc = (code: number): boolean => code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0d;
+
+/**
+ * Fin (position du « > ») de la balise qui commence en `lt`, guillemets respectés ; au-delà de
+ * 64 Kio, ou sans fin, le XML est illisible. Un seul passage, borné par la taille maximale.
+ */
+function finDeBalise(xml: string, lt: number): number {
+  const limite = Math.min(xml.length, lt + BALISE_MAX);
+  let i = lt + 1;
+  while (i < limite) {
+    const c = xml.charCodeAt(i);
+    if (c === SUPERIEUR) return i;
+    if (c === GUILLEMET || c === APOSTROPHE) {
+      const f = xml.indexOf(c === GUILLEMET ? '"' : "'", i + 1);
+      if (f === -1 || f >= limite) break;
+      i = f + 1;
+      continue;
+    }
+    i++;
+  }
+  throw new Illisible(limite < xml.length ? 'balise démesurée' : 'XML abîmé');
+}
+
+/** Attributs d'une balise (`corps` après le nom), lus caractère par caractère. */
+function lireAttributs(corps: string, depuis: number): Map<string, string> {
+  const attributs = new Map<string, string>();
+  const n = corps.length;
+  let i = depuis;
+  for (;;) {
+    while (i < n && blanc(corps.charCodeAt(i))) i++;
+    if (i >= n) return attributs;
+    const debutNom = i;
+    while (i < n) {
+      const c = corps.charCodeAt(i);
+      if (blanc(c) || c === 0x3d) break; // « = »
+      i++;
+    }
+    const nom = corps.slice(debutNom, i);
+    while (i < n && blanc(corps.charCodeAt(i))) i++;
+    if (corps.charCodeAt(i) !== 0x3d) continue; // nom sans valeur : ignoré
+    i++;
+    while (i < n && blanc(corps.charCodeAt(i))) i++;
+    const q = corps.charCodeAt(i);
+    if (q !== GUILLEMET && q !== APOSTROPHE) throw new Illisible('attribut XML sans guillemets');
+    const f = corps.indexOf(q === GUILLEMET ? '"' : "'", i + 1);
+    if (f === -1) throw new Illisible('attribut XML jamais refermé');
+    attributs.set(nom, decoderEntites(corps.slice(i + 1, f)));
+    i = f + 1;
+  }
+}
 
 /** Parcours d'un XML : balises (nom local), attributs (noms tels quels), texte décodé. */
 function parcourir(xml: string, r: Rappels): void {
@@ -237,8 +301,7 @@ function parcourir(xml: string, r: Rappels): void {
       i = f + 3;
       continue;
     }
-    const gt = xml.indexOf('>', lt + 1);
-    if (gt === -1) throw new Illisible('XML abîmé');
+    const gt = finDeBalise(xml, lt);
     const contenu = xml.slice(lt + 1, gt);
     i = gt + 1;
     if (contenu.startsWith('?') || contenu.startsWith('!')) continue;
@@ -248,13 +311,10 @@ function parcourir(xml: string, r: Rappels): void {
     }
     const vide = contenu.endsWith('/');
     const corps = vide ? contenu.slice(0, -1) : contenu;
-    const espace = corps.search(/\s/);
-    const nom = local(espace === -1 ? corps : corps.slice(0, espace));
-    const attributs = new Map<string, string>();
-    if (espace !== -1) {
-      for (const m of corps.slice(espace).matchAll(ATTRIBUT)) attributs.set(m[1] ?? '', decoderEntites(m[2] ?? m[3] ?? ''));
-    }
-    r.ouvrir(nom, attributs, vide);
+    let espace = 0;
+    while (espace < corps.length && !blanc(corps.charCodeAt(espace))) espace++;
+    const nom = local(corps.slice(0, espace));
+    r.ouvrir(nom, lireAttributs(corps, espace), vide);
     if (vide) r.fermer(nom);
   }
 }
@@ -349,9 +409,33 @@ function colonneDe(reference: string): number | null {
   return c - 1;
 }
 
-function lireFeuille(xml: string, chaines: readonly string[]): Cellule[][] {
-  const lignes: Cellule[][] = [];
+/** Cases encore permises pour tout le classeur ; dépenser au-delà rend le classeur illisible. */
+interface Budget {
+  restant: number;
+}
+
+function depenser(budget: Budget, cases: number): void {
+  if (cases <= 0) return;
+  if (cases > budget.restant) throw new Illisible('classeur trop grand (plus de 5 millions de cases)');
+  budget.restant -= cases;
+}
+
+/** Ligne vide de remplissage, partagée (rien n'y est jamais écrit). */
+const LIGNE_VIDE: LigneBrute = Object.freeze([]);
+
+const DATE_ISO = /^\d{4}-\d{2}-\d{2}(?:T|$)/;
+
+function lireFeuille(xml: string, chaines: readonly string[], budget: Budget): LigneBrute[] {
+  const lignes: LigneBrute[] = [];
   let ligne: Cellule[] | null = null;
+  /** Ouvre la ligne `numero` (1 = première) : lignes vides de remplissage, puis la ligne elle-même. */
+  const ouvrirLigne = (numero: number): Cellule[] => {
+    depenser(budget, numero - lignes.length);
+    while (lignes.length < numero - 1) lignes.push(LIGNE_VIDE);
+    const nouvelle: Cellule[] = [];
+    lignes.push(nouvelle);
+    return nouvelle;
+  };
   let numeroLigne = 0;
   let colonne = -1;
   let typeCellule = 'n';
@@ -372,8 +456,11 @@ function lireFeuille(xml: string, chaines: readonly string[]): Cellule[][] {
         return valeur === null ? null : decoderOoxml(valeur);
       case 'b':
         return valeur === null ? null : valeur.trim() === '1' ? 'VRAI' : 'FAUX';
-      case 'e':
       case 'd':
+        // Date ISO « 2027-03-15T00:00:00 » → « 2027-03-15 » ; autre contenu tel quel.
+        if (valeur === null) return null;
+        return DATE_ISO.test(valeur) ? valeur.slice(0, 10) : valeur;
+      case 'e':
         return valeur;
       default: {
         if (valeur === null || valeur.trim() === '') return null;
@@ -390,8 +477,7 @@ function lireFeuille(xml: string, chaines: readonly string[]): Cellule[][] {
           const r = Number.parseInt(a.get('r') ?? '', 10);
           numeroLigne = Number.isInteger(r) && r > numeroLigne && r <= LIGNES_MAX ? r : numeroLigne + 1;
           if (numeroLigne > LIGNES_MAX) throw new Illisible('trop de lignes');
-          while (lignes.length < numeroLigne) lignes.push([]);
-          ligne = lignes[numeroLigne - 1] ?? null;
+          ligne = ouvrirLigne(numeroLigne);
           colonne = -1;
           return;
         }
@@ -437,11 +523,12 @@ function lireFeuille(xml: string, chaines: readonly string[]): Cellule[][] {
         case 'c': {
           if (ligne === null) {
             numeroLigne++;
-            while (lignes.length < numeroLigne) lignes.push([]);
-            ligne = lignes[numeroLigne - 1] ?? null;
+            if (numeroLigne > LIGNES_MAX) throw new Illisible('trop de lignes');
+            ligne = ouvrirLigne(numeroLigne);
           }
           const v = cellule();
-          if (ligne !== null && v !== null) {
+          if (v !== null) {
+            depenser(budget, colonne + 1 - ligne.length);
             while (ligne.length < colonne) ligne.push(null);
             ligne[colonne] = v;
           }
@@ -472,8 +559,14 @@ async function lireClasseur(octets: Uint8Array): Promise<Feuille[]> {
   const liens = await relations(archive, classeur);
 
   const feuillesDeclarees: { readonly nom: string; readonly chemin: string }[] = [];
+  let systemeDates: SystemeDates = 1900;
   parcourir(await archive.lireTexte(classeur), {
     ouvrir(nom, a) {
+      if (nom === 'workbookPr') {
+        const d = (a.get('date1904') ?? '').trim().toLowerCase();
+        if (d === '1' || d === 'true') systemeDates = 1904;
+        return;
+      }
       if (nom !== 'sheet') return;
       const id = attribut(a, 'id');
       const chemin = id === undefined ? undefined : liens.id.get(id);
@@ -483,14 +576,20 @@ async function lireClasseur(octets: Uint8Array): Promise<Feuille[]> {
     texte: ignorer,
   });
   if (feuillesDeclarees.length === 0) throw new Illisible('classeur sans feuille');
+  const parties = new Set<string>();
+  for (const f of feuillesDeclarees) {
+    if (parties.has(f.chemin)) throw new Illisible('deux feuilles sur la même partie');
+    parties.add(f.chemin);
+  }
 
   const cheminChaines = liens.type.get('sharedStrings') ?? resoudre(dossierDe(classeur), 'sharedStrings.xml');
   const chaines = archive.a(cheminChaines) ? lireChainesPartagees(await archive.lireTexte(cheminChaines)) : [];
 
+  const budget: Budget = { restant: PLAFOND_CASES };
   const feuilles: Feuille[] = [];
   for (const f of feuillesDeclarees) {
     if (!archive.a(f.chemin)) throw new Illisible(`feuille absente : ${f.nom}`);
-    feuilles.push({ nom: f.nom, lignes: lireFeuille(await archive.lireTexte(f.chemin), chaines) });
+    feuilles.push({ nom: f.nom, lignes: lireFeuille(await archive.lireTexte(f.chemin), chaines, budget), systemeDates });
   }
   return feuilles;
 }
