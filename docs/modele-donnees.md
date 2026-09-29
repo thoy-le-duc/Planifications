@@ -51,11 +51,9 @@ erDiagram
   EVENEMENT }o--o| CAMPAGNE : "concerne"
   EVENEMENT }o--o{ EMPLACEMENT : "a lieu sur"
   EVENEMENT }o--o| SECTEUR_IRRIGATION : "irrigue"
-  EVENEMENT ||--o| RECOLTE : "détaille"
-  EVENEMENT ||--o| INTERVENTION : "détaille"
-  EVENEMENT ||--o| TRAITEMENT : "détaille"
-  TRAITEMENT }o--|| PRODUIT_PHYTO : "utilise"
-  RECOLTE ||--o| MOUVEMENT_STOCK : "entre en stock"
+  EVENEMENT }o--o| PRODUIT_PHYTO : "traitement : utilise"
+  EVENEMENT ||--o| MOUVEMENT_STOCK : "récolte : entre en stock"
+  EVENEMENT |o--o| EVENEMENT : "corrige ou annule"
   ARTICLE_STOCK ||--o{ MOUVEMENT_STOCK : "cumule"
   PROPOSITION ||--o{ MODIFICATION : "produit une fois validée"
   UTILISATEUR ||--o{ MODIFICATION : "est l'auteur de"
@@ -138,11 +136,13 @@ Toute saisie au champ est un **événement** : quoi, où, combien, quand, par qu
 | Type | Où vont les détails | Champs propres |
 | --- | --- | --- |
 | Réalisé | événement | étape (semis pépinière, semis direct, plantation, arrachage), quantité réelle si différente du prévu |
-| Récolte | table Récolte | quantité, unité, catégorie (facultative) |
-| Intervention | table Intervention | type, outil, produit et quantité pour un amendement ou un engrais, durée d'occupation pour une bâche |
+| Récolte | détail de l'événement (vue `recoltes`) | quantité, unité, catégorie (facultative) |
+| Intervention | détail de l'événement (vue `interventions`) | type, outil, produit et quantité pour un amendement ou un engrais, durée d'occupation pour une bâche |
 | Irrigation | événement | secteur, durée (min) |
-| Traitement phyto | table Traitement | produit, dose, surface traitée (m²), cible, opérateur ; date de récolte autorisée calculée avec le délai avant récolte |
+| Traitement phyto | détail de l'événement (vue `traitements`, registre phyto) | produit, dose, surface traitée (m²), cible, opérateur ; date de récolte autorisée calculée avec le délai avant récolte |
 | Observation | événement | nature (ravageur, maladie, stade, autre), gravité (facultative) |
+
+Réponse à Q10 (2026-09-29) : tous les types sont un seul **événement** du journal, en ajout seul, avec un détail propre au type. Il n'y a pas de tables Récolte, Intervention ni Traitement : les vues SQL `recoltes`, `interventions` et `traitements` les présentent pour les exports et le registre phyto, en ne montrant que la version en vigueur (sans les événements annulés ni ceux remplacés par une correction). Une correction ou une annulation est un nouvel événement de la même ferme et du même type. Détails dans `packages/db/README.md` (T08).
 
 Types d'intervention proposés au départ, modifiables par chaque ferme :
 

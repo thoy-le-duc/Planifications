@@ -1,0 +1,29 @@
+# Base PostgreSQL de développement local (T08). Identifiants de développement seulement,
+# jamais utilisés en production.
+#
+#   docker compose up -d
+#   DATABASE_URL=postgres://planif:planif@localhost:5432/planif pnpm --filter @planif/db migrer
+#   DATABASE_URL=postgres://planif:planif@localhost:5432/planif pnpm test
+#
+# wal_level=logical : réplication logique, nécessaire au service PowerSync (publication
+# « powersync », créée par les migrations).
+services:
+  postgres:
+    image: postgres:17
+    command: postgres -c wal_level=logical
+    environment:
+      POSTGRES_USER: planif
+      POSTGRES_PASSWORD: planif
+      POSTGRES_DB: planif
+    ports:
+      - '5432:5432'
+    volumes:
+      - planif-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U planif -d planif']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  planif-postgres:

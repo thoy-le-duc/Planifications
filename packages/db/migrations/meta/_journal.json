@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1790690054969,
+      "tag": "0000_schema_initial",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1790690059643,
+      "tag": "0001_journal_vues_publication",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790691062543,
+      "tag": "0002_corrections_fonctions_vues",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790691104769,
+      "tag": "0003_corrections_detail_remplacement",
+      "breakpoints": true
+    }
+  ]
+}
