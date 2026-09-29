@@ -1,14 +1,16 @@
 /**
- * Tests d'acceptation T15 — export complet, partie pure (docs/backlog/T15-export.md).
+ * Tests d'acceptation T15 — export complet, partie pure (docs/backlog/T15-export.md) — et T15b
+ * (docs/backlog/T15b-export-leger.md) : formules Excel neutralisées dans les CSV.
  *
  * Contrat (entrée, filtrage par ferme, liste blanche, format du JSON, des CSV et de LISEZMOI.txt,
- * règle des nombres) : ./test/contrat.ts. Le ZIP (`creerZip`) se teste dans
- * packages/sync/src/export.test.ts, qui a Node pour le relire.
+ * règle des nombres, formules) : ./test/contrat.ts. Le ZIP (`creerZip`, `construireArchive`) se
+ * teste dans packages/sync/src/export.test.ts et export-leger.test.ts, qui ont Node pour le relire.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   chargerCoeur,
   chargerExport,
+  DEBUT_FORMULE,
   TABLES_ATTENDUES,
   TABLES_BIBLIOTHEQUE,
   type DescriptionTable,
@@ -205,12 +207,16 @@ function fichier(fichiers: readonly FichierExport[], chemin: string): string {
   return f.contenu;
 }
 
+/** Champ CSV attendu (après relecture RFC 4180), formules neutralisées compris (T15b). */
 function attenduCsv(type: TypeExport, v: ValeurLocale | undefined): string {
   if (v === null || v === undefined) return '';
   if (type === 'booleen' && (v === 0 || v === 1)) return v === 1 ? 'oui' : 'non';
   if ((type === 'entier' || type === 'reel') && typeof v === 'number') return String(v).replace('.', ',');
-  return String(v);
+  return typeof v === 'string' ? neutralise(v) : String(v);
 }
+
+/** Règle T15b : un texte qui commence par = + - @ tabulation ou retour chariot prend une apostrophe. */
+const neutralise = (texte: string): string => (DEBUT_FORMULE.test(texte) ? `'${texte}` : texte);
 
 function attenduJson(type: TypeExport, v: ValeurLocale | undefined): unknown {
   if (v === null || v === undefined) return null;
@@ -258,9 +264,10 @@ const tableDe = (cle: string) => cle.replace(/^bibliotheque\//, '');
 // ── Tests ────────────────────────────────────────────────────────────────────────────────────
 
 describe('T15 : liste blanche des tables et colonnes exportées', () => {
-  it('@planif/core réexporte construireExport, creerZip, nomArchive et TABLES_EXPORTEES', async () => {
+  it('@planif/core réexporte construireExport, construireArchive, creerZip, nomArchive et TABLES_EXPORTEES', async () => {
     const coeur = await chargerCoeur();
     expect(typeof coeur.construireExport).toBe('function');
+    expect(typeof coeur.construireArchive, 'construireArchive (T15b)').toBe('function');
     expect(typeof coeur.creerZip).toBe('function');
     expect(typeof coeur.nomArchive).toBe('function');
     expect(coeur.TABLES_EXPORTEES).toBe(m.TABLES_EXPORTEES);
@@ -394,7 +401,8 @@ describe('T15 : CSV lisibles par Excel en français', () => {
     const d = description('zone');
     const lignes = TEXTES.map((nom, k) => ligne('zone', d, k, { code: 'a000', compteur: 700 + k * 10 }, FERME_A, { nom }));
     const texte = fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: { zone: lignes } }), 'zone.csv');
-    expect(objetsCsv(lireCsv(texte)).map((l) => l.nom)).toEqual([...TEXTES]);
+    // T15b : '=SOMME(A1)' sort neutralisé ('\'=SOMME(A1)'), les autres textes à l'identique.
+    expect(objetsCsv(lireCsv(texte)).map((l) => l.nom)).toEqual(TEXTES.map(neutralise));
     expect(texte).toContain('"Planche nord; côté ""est"""');
   });
 
@@ -533,6 +541,77 @@ describe('T15 : rien d’une autre ferme, aucun secret', () => {
   });
 });
 
+describe('T15b : formules Excel neutralisées dans les CSV, ferme.json fidèle', () => {
+  /** Une zone par nom, relue dans zone.csv et dans ferme.json. */
+  function zones(noms: readonly ValeurLocale[]): { csv: string[]; json: unknown[]; brut: string } {
+    const d = description('zone');
+    const lignes = noms.map((nom, k) => ligne('zone', d, k, { code: 'a000', compteur: 2000 + k * 10 }, FERME_A, { nom }));
+    const fichiers = m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: { zone: lignes } });
+    const brut = fichier(fichiers, 'zone.csv');
+    const json = JSON.parse(fichier(fichiers, 'ferme.json')) as FermeJson;
+    return { csv: objetsCsv(lireCsv(brut)).map((l) => l.nom ?? ''), json: (json.tables.zone ?? []).map((l) => l.nom), brut };
+  }
+
+  it('texte qui commence par = + - @ tabulation ou retour chariot : apostrophe devant, dans le CSV', () => {
+    const noms = ['=SOMME(A1)', '+33 6 12 34 56 78', '-3 plants gelés', '@Théo : voir', '\tcaché', '\r\nsuite', '=HYPERLINK("http://x";"clic")'];
+    const { csv } = zones(noms);
+    expect(csv).toEqual(noms.map((n) => `'${n}`));
+  });
+
+  it('l’apostrophe vient avant la protection RFC 4180 (guillemets autour du tout)', () => {
+    const { brut } = zones(['\r\nsuite', '=A1;B1', '=HYPERLINK("x")']);
+    expect(brut).toContain('"\'\r\nsuite"');
+    expect(brut).toContain('"\'=A1;B1"');
+    expect(brut).toContain('"\'=HYPERLINK(""x"")"');
+  });
+
+  it('textes inoffensifs inchangés : espace devant, signe au milieu, apostrophe déjà là, vide', () => {
+    const noms = [' =1', 'a=b', 'Tunnel -2', "'déjà protégé", '', 'Planche 3'];
+    expect(zones(noms).csv).toEqual(noms);
+  });
+
+  it('ferme.json reste fidèle : aucune apostrophe ajoutée', () => {
+    const noms = ['=SOMME(A1)', '-3 plants gelés', '@Théo', '\tcaché', '+1'];
+    const { json, brut } = zones(noms);
+    expect(json).toEqual(noms);
+    expect(brut).toContain("'=SOMME(A1)");
+  });
+
+  it('nombres négatifs jamais neutralisés : réel, entier, booléen brut restent des nombres pour Excel', () => {
+    const e = description('emplacement');
+    const lignes = [-3.25, -7].map((v, k) =>
+      ligne('emplacement', e, k, { code: 'a000', compteur: 2100 + k * 20 }, FERME_A, { longueur_m: v, nombre_places: v === -7 ? -7 : 0 }),
+    );
+    const lues = objetsCsv(lireCsv(fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: { emplacement: lignes } }), 'emplacement.csv')));
+    expect(lues.map((l) => l.longueur_m)).toEqual(['-3,25', '-7']);
+    expect(lues.map((l) => l.nombre_places)).toEqual(['0', '-7']);
+
+    const s = description('espece');
+    const especes = [-1, '-1'].map((perenne, k) => ligne('espece', s, k, { code: 'a000', compteur: 2200 + k * 20 }, FERME_A, { perenne }));
+    const lus = objetsCsv(lireCsv(fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: { espece: especes } }), 'espece.csv')));
+    // -1 (nombre) reste '-1' ; '-1' stocké en TEXTE dans une colonne oui/non est neutralisé.
+    expect(lus.map((l) => l.perenne)).toEqual(['-1', "'-1"]);
+  });
+
+  it('la règle suit la valeur, pas le type de colonne : JSON illisible, texte dans une colonne entière', () => {
+    const d = description('evenement');
+    const l = ligne('evenement', d, 0, { code: 'a000', compteur: 2300 }, FERME_A, { detail: '=1+1', note: '-2 caisses', emplacement_ids: '["x"]' });
+    const fichiers = m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: { evenement: [l] } });
+    const [lue] = objetsCsv(lireCsv(fichier(fichiers, 'evenement.csv')));
+    expect(lue?.detail).toBe("'=1+1");
+    expect(lue?.note).toBe("'-2 caisses");
+    expect(lue?.emplacement_ids).toBe('["x"]');
+    const json = JSON.parse(fichier(fichiers, 'ferme.json')) as FermeJson;
+    expect(json.tables.evenement?.[0]?.detail).toBe('=1+1');
+    expect(json.tables.evenement?.[0]?.note).toBe('-2 caisses');
+
+    const c = description('campagne');
+    const campagne = ligne('campagne', c, 0, { code: 'a000', compteur: 2400 }, FERME_A, { annee: '-2026' });
+    const [lueC] = objetsCsv(lireCsv(fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: { campagne: [campagne] } }), 'campagne.csv')));
+    expect(lueC?.annee).toBe("'-2026");
+  });
+});
+
 describe('T15 : LISEZMOI.txt', () => {
   function blocs(texte: string): Map<string, string[]> {
     const resultat = new Map<string, string[]>();
@@ -555,6 +634,24 @@ describe('T15 : LISEZMOI.txt', () => {
     expect(texte).toMatch(/point-virgule/i);
     expect(texte).toMatch(/virgule décimale|virgule comme séparateur décimal/i);
     expect(texte).toMatch(/supprim/i);
+  });
+
+  it('T15b : explique l’apostrophe devant les cellules qui ressemblent à une formule, et ferme.json exact', () => {
+    const texte = fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: {} }), 'LISEZMOI.txt');
+    expect(texte).toMatch(/apostrophe/i);
+    expect(texte).toMatch(/formule/i);
+    // Le paragraphe des formules renvoie à ferme.json pour la valeur exacte.
+    const paragraphe = texte.split(/\r?\n\r?\n/).find((p) => /apostrophe/i.test(p)) ?? '';
+    expect(paragraphe).toContain('ferme.json');
+  });
+
+  it('T15b relecture : le LISEZMOI montre l’apostrophe réellement ajoutée, « \' » (U+0027), pas « ’ » (U+2019)', () => {
+    const texte = fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: {} }), 'LISEZMOI.txt');
+    const paragraphe = texte.split(/\r?\n\r?\n/).find((p) => /apostrophe/i.test(p)) ?? '';
+    // Le caractère montré seul (entre parenthèses, guillemets ou espaces) : celui qu'on retrouve dans les CSV.
+    const seul = (c: string) => new RegExp(`(^|[\\s(«"“])${c}([\\s)»"”.,;:]|$)`, 'm');
+    expect(paragraphe, 'apostrophe droite U+0027 montrée').toMatch(seul("'"));
+    expect(paragraphe, 'apostrophe typographique U+2019 montrée à la place').not.toMatch(seul('’'));
   });
 
   it('« Ferme : » donne le nom de la ferme, pas son identifiant', () => {

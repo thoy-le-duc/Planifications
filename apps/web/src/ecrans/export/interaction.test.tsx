@@ -4,10 +4,14 @@
  * Contrat : en-tête de ./export.test.tsx. DOM simulé (happy-dom) : l'écran n'est pas encore
  * atteignable dans l'appli, donc pas d'e2e Playwright ; on rend le vrai composant et on tape.
  *
- *   - pendant l'export : bouton désactivé (un second tap ne relance rien) ;
+ *   - pendant l'export : bouton désactivé (un second tap ne relance rien) et (T15b) une barre
+ *     d'avancement : `<progress>` ou role="progressbar" ;
  *   - à la fin : message qui contient « <N> événements exportés » (N = lignes de evenement.csv) ;
  *   - si la porte lève : message d'échec (role="alert"), bouton de nouveau actif, et l'erreur
- *     est journalisée par `console.error` (sinon un échec au champ ne laisse aucune trace).
+ *     est journalisée par `console.error` (sinon un échec au champ ne laisse aucune trace) ;
+ *   - (relecture T15b) pendant l'export, un bouton « Annuler » d'au moins 48 px ; au tap :
+ *     « Export annulé », bouton d'export de nouveau actif, aucun téléchargement ni alerte, même
+ *     si la base répond ensuite.
  */
 import { act, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -98,9 +102,14 @@ afterEach(() => {
 });
 
 function bouton(): HTMLButtonElement {
-  const b = [...conteneur.querySelectorAll('button')].find((x) => x.type === 'button');
+  const b = [...conteneur.querySelectorAll('button')].find((x) => x.type === 'button' && !/annuler/i.test(x.textContent));
   if (b === undefined) throw new Error('bouton introuvable');
   return b;
+}
+
+/** Bouton « Annuler » (relecture T15b), ou undefined. */
+function boutonAnnuler(): HTMLButtonElement | undefined {
+  return [...conteneur.querySelectorAll('button')].find((x) => /annuler/i.test(x.textContent));
 }
 
 async function rendre(porte: PorteDonnees, telecharger: (nomFichier: string, octets: Uint8Array) => void): Promise<void> {
@@ -137,6 +146,7 @@ describe('T15 : écran d’export au doigt', () => {
       await Promise.resolve();
     });
     expect(bouton().disabled, 'désactivé pendant l’export').toBe(true);
+    expect(conteneur.querySelector('progress, [role="progressbar"]'), 'barre d’avancement pendant l’export (T15b)').not.toBeNull();
     const lecturesApresPremierTap = lectures();
     expect(lecturesApresPremierTap).toBeGreaterThan(0);
     await act(async () => {
@@ -178,5 +188,43 @@ describe('T15 : écran d’export au doigt', () => {
       journal.mock.calls.flat().some((a) => chaineErreur(a).includes('base locale illisible')),
       'console.error reçoit l’erreur levée par la porte',
     ).toBe(true);
+  });
+
+  it('relecture T15b : « Annuler » (≥ 48 px) pendant l’export → « Export annulé », bouton d’export actif, aucun téléchargement', async () => {
+    const journal = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { porte, liberer } = porteControlee('ok');
+    const telecharger = vi.fn<(nomFichier: string, octets: Uint8Array) => void>();
+    await rendre(porte, telecharger);
+    expect(boutonAnnuler(), 'pas de bouton « Annuler » au repos').toBeUndefined();
+
+    await act(async () => {
+      bouton().click();
+      await Promise.resolve();
+    });
+    expect(bouton().disabled).toBe(true);
+    const annuler = boutonAnnuler();
+    expect(annuler, 'bouton « Annuler » pendant l’export').toBeDefined();
+    expect(annuler?.type).toBe('button');
+    expect(annuler?.disabled).toBe(false);
+    expect(Number.parseFloat(annuler?.style.minHeight ?? ''), 'min-height en ligne ≥ 48 px (gants)').toBeGreaterThanOrEqual(48);
+
+    await act(async () => {
+      annuler?.click();
+      await Promise.resolve();
+    });
+    // La lecture de la base n'a toujours pas répondu : l'annulation n'attend pas.
+    await laisserFinir();
+    expect(conteneur.textContent).toMatch(/Export annulé/);
+    expect(bouton().disabled, 'bouton d’export de nouveau actif').toBe(false);
+    expect(conteneur.querySelector('[role="alert"]'), 'une annulation n’est pas un échec').toBeNull();
+
+    // La base répond après coup : rien ne doit repartir.
+    liberer();
+    await laisserFinir();
+    expect(telecharger).not.toHaveBeenCalled();
+    expect(conteneur.textContent).toMatch(/Export annulé/);
+    expect(conteneur.textContent).not.toMatch(/événements exportés/);
+    expect(bouton().disabled).toBe(false);
+    journal.mockRestore();
   });
 });
