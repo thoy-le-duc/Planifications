@@ -1,14 +1,17 @@
 /**
- * Lancement de l'export (T15) : lecture de la base locale par la porte, archive ZIP, téléchargement.
+ * Lancement de l'export (T15, T15b) : lecture de la base locale par la porte, archive ZIP
+ * compressée, téléchargement.
  * Aucun réseau : fonctionne hors ligne.
  */
-import { exporterFerme, type ArchiveExport, type PorteDonnees } from '@planif/sync/export';
+import { exporterFerme, type ArchiveExport, type Avancement, type PorteDonnees } from '@planif/sync/export';
 
 export interface OptionsLancerExport {
   readonly porte: PorteDonnees;
   readonly fermeId: string;
   readonly maintenant: () => Date;
   readonly telecharger: (nomFichier: string, octets: Uint8Array) => void;
+  /** Barre d'avancement (T15b) : transmis à `exporterFerme`. */
+  readonly avancement?: (a: Avancement) => void;
 }
 
 const deux = (n: number): string => String(n).padStart(2, '0');
@@ -21,7 +24,12 @@ export function jourLocal(d: Date): string {
 /** Construit l'archive de la ferme et la donne à `telecharger`, une fois. */
 export async function lancerExport(o: OptionsLancerExport): Promise<ArchiveExport> {
   const quand = o.maintenant();
-  const archive = await exporterFerme(o.porte, { fermeId: o.fermeId, genereLe: quand.toISOString(), jour: jourLocal(quand) });
+  const archive = await exporterFerme(o.porte, {
+    fermeId: o.fermeId,
+    genereLe: quand.toISOString(),
+    jour: jourLocal(quand),
+    ...(o.avancement === undefined ? {} : { avancement: o.avancement }),
+  });
   o.telecharger(archive.nomFichier, archive.octets);
   return archive;
 }
