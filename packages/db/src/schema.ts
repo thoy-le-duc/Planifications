@@ -1,7 +1,8 @@
 /**
  * Schéma PostgreSQL de référence (modèle v1, docs/modele-donnees.md), en Drizzle.
  *
- * - Une table par entité de T01, sauf Utilisateur (comptes : T09). Q10 : pas de tables Récolte,
+ * - Une table par entité de T01, plus les comptes (T09 : utilisateur, membre, codes de connexion,
+ *   jetons de renouvellement, section 8). Q10 : pas de tables Récolte,
  *   Intervention, Traitement : le détail est dans `evenement.detail` (jsonb), et trois vues SQL
  *   (migration personnalisée) les présentent en colonnes.
  * - Clés TypeScript en camelCase, colonnes en snake_case, noms explicites.
@@ -48,11 +49,13 @@ import {
   CATEGORIES_ESPECE,
   CATEGORIES_INTERVENTION,
   ETAPES_REALISEES,
+  ETATS_MEMBRE,
   MODES_ITINERAIRE,
   MOTIFS_MOUVEMENT,
   NATURES_OBSERVATION,
   NATURES_ASSOLEMENT,
   OPERATIONS_LIGNE,
+  ROLES_MEMBRE,
   SORTES_EMPLACEMENT,
   SORTES_REMPLACEMENT,
   SOURCES_PROPOSITION,
@@ -99,6 +102,12 @@ const fermeId = () =>
 
 /** `ferme_id` nul autorisé : bibliothèque de référence partagée (famille, espèce…). */
 const fermeIdBibliotheque = () => idDe<'Ferme'>('ferme_id').references(() => ferme.id);
+
+/** `auteur_id` obligatoire, vers l'utilisateur qui a saisi (T09). */
+const auteurId = () =>
+  idDe<'Utilisateur'>('auteur_id')
+    .notNull()
+    .references(() => utilisateur.id);
 
 /** `colonne IN ('a', 'b', …)`, valeurs écrites en clair dans la contrainte. */
 function parmi(expression: AnyPgColumn | SQL, valeurs: readonly string[]): SQL {
@@ -564,8 +573,7 @@ export const evenement = pgTable(
     type: text('type', { enum: TYPES_EVENEMENT }).notNull(),
     date: jour('date').notNull(),
     horodatage: instant('horodatage').notNull(),
-    /** Pas de clé étrangère avant les comptes (T09). */
-    auteurId: idDe<'Utilisateur'>('auteur_id').notNull(),
+    auteurId: auteurId(),
     source: text('source', { enum: SOURCES_SAISIE }).notNull(),
     /** Culture : au plus une des deux. */
     serieId: idDe<'Serie'>('serie_id').references(() => serie.id),
@@ -735,7 +743,7 @@ export const proposition = pgTable(
     id: idDe<'Proposition'>('id').primaryKey(),
     fermeId: fermeId(),
     source: text('source', { enum: SOURCES_PROPOSITION }).notNull(),
-    auteurId: idDe<'Utilisateur'>('auteur_id').notNull(),
+    auteurId: auteurId(),
     statut: text('statut', { enum: STATUTS_PROPOSITION }).notNull(),
     decideLe: instant('decide_le'),
     changements: jsonb('changements').$type<readonly ChangementPropose[]>().notNull(),
@@ -759,7 +767,7 @@ export const modification = pgTable(
     nomTable: text('nom_table', { enum: TABLES_MODIFIABLES }).notNull(),
     /** Id de la ligne visée, sans clé étrangère (elle dépend de la table). */
     ligneId: uuid('ligne_id').notNull(),
-    auteurId: idDe<'Utilisateur'>('auteur_id').notNull(),
+    auteurId: auteurId(),
     horodatage: instant('horodatage').notNull(),
     operation: text('operation', { enum: OPERATIONS_LIGNE }).notNull(),
     avant: jsonb('avant').$type<ValeursLigne>(),
@@ -773,4 +781,99 @@ export const modification = pgTable(
     index('modification_ligne_idx').on(t.nomTable, t.ligneId),
     index('modification_proposition_idx').on(t.propositionId),
   ],
+);
+
+// ---------------------------------------------------------------------------------------------
+// 8. Comptes (T09)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Personne qui se connecte. Pas de mot de passe (Q9) : code à 6 chiffres par e-mail.
+ * L'e-mail est stocké en minuscules (l'API normalise, la base refuse le reste) : l'unicité ne se
+ * contourne pas par la casse. Publiée vers PowerSync (nom de l'auteur d'une saisie).
+ */
+export const utilisateur = pgTable(
+  'utilisateur',
+  {
+    id: idDe<'Utilisateur'>('id').primaryKey(),
+    email: text('email').notNull().unique(),
+    nom: text('nom'),
+    ...horodatages(),
+  },
+  (t) => [verif('utilisateur', 'email_minuscules', sql`${t.email} = lower(${t.email})`)],
+);
+
+/**
+ * Appartenance d'un utilisateur à une ferme, avec son rôle. Un membre retiré l'est en douceur
+ * (`supprime_le`) : il perd l'accès. Publiée : les règles de synchro PowerSync (T10) la lisent,
+ * et doivent ne retenir que `etat = 'accepte'`.
+ *
+ * Invitation : `etat = 'invite'` jusqu'à la première connexion réussie de l'invité après
+ * `invite_le`, qui le passe à 'accepte'. Par défaut 'accepte' (créateur de la ferme, insertion
+ * directe). `invite_par` et `invite_le` restent après l'acceptation : la limite d'invitations par
+ * gérant se calcule sur eux.
+ */
+export const membre = pgTable(
+  'membre',
+  {
+    id: uuid('id').primaryKey(),
+    utilisateurId: idDe<'Utilisateur'>('utilisateur_id')
+      .notNull()
+      .references(() => utilisateur.id),
+    fermeId: fermeId(),
+    role: text('role', { enum: ROLES_MEMBRE }).notNull(),
+    etat: text('etat', { enum: ETATS_MEMBRE }).notNull().default('accepte'),
+    invitePar: idDe<'Utilisateur'>('invite_par').references(() => utilisateur.id),
+    inviteLe: instant('invite_le'),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('membre', 'role', parmi(t.role, ROLES_MEMBRE)),
+    verif('membre', 'etat', parmi(t.etat, ETATS_MEMBRE)),
+    verif('membre', 'invitation', sql`(${t.invitePar} IS NULL) = (${t.inviteLe} IS NULL)`),
+    verif('membre', 'invite_date', sql`${t.etat} <> 'invite' OR ${t.inviteLe} IS NOT NULL`),
+    unique('membre_utilisateur_ferme_unique').on(t.utilisateurId, t.fermeId),
+    index('membre_ferme_idx').on(t.fermeId),
+    index('membre_invite_par_idx').on(t.invitePar, t.inviteLe),
+  ],
+);
+
+/**
+ * Code de connexion à usage unique, stocké haché (jamais en clair). En base plutôt qu'en mémoire :
+ * plusieurs processus d'API, redémarrage sans perte, limite de fréquence calculée sur ces lignes.
+ * Pas de clé vers `utilisateur` : un code précède la création du compte. NON publiée.
+ */
+export const codeConnexion = pgTable(
+  'code_connexion',
+  {
+    id: uuid('id').primaryKey(),
+    email: text('email').notNull(),
+    codeHache: text('code_hache').notNull(),
+    expireLe: instant('expire_le').notNull(),
+    tentatives: integer('tentatives').notNull().default(0),
+    utiliseLe: instant('utilise_le'),
+    creeLe: creeLe(),
+  },
+  (t) => [
+    verif('code_connexion', 'tentatives', sql`${t.tentatives} >= 0`),
+    index('code_connexion_email_cree_idx').on(t.email, t.creeLe),
+  ],
+);
+
+/**
+ * Jeton de renouvellement (long, opaque), stocké haché : révocable (téléphone perdu). NON publiée.
+ */
+export const jetonRenouvellement = pgTable(
+  'jeton_renouvellement',
+  {
+    id: uuid('id').primaryKey(),
+    utilisateurId: idDe<'Utilisateur'>('utilisateur_id')
+      .notNull()
+      .references(() => utilisateur.id),
+    jetonHache: text('jeton_hache').notNull().unique(),
+    expireLe: instant('expire_le').notNull(),
+    revoqueLe: instant('revoque_le'),
+    creeLe: creeLe(),
+  },
+  (t) => [index('jeton_renouvellement_utilisateur_idx').on(t.utilisateurId)],
 );

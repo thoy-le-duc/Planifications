@@ -29,6 +29,27 @@
       "when": 1790691104769,
       "tag": "0003_corrections_detail_remplacement",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790694239143,
+      "tag": "0004_comptes",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790694243172,
+      "tag": "0005_publication_comptes",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790696140821,
+      "tag": "0006_membre_invitation",
+      "breakpoints": true
     }
   ]
 }

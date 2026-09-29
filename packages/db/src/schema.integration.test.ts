@@ -69,8 +69,8 @@
  *   occupation     emplacement_id ; cible : serie_id | plantation_id | evenement_id (couverture),
  *                  exactement une ; place : longueur_m | nombre_places, exactement une, > 0 ;
  *                  prevu_du, prevu_au
- *   evenement      type, date, horodatage (timestamptz), auteur_id (uuid, sans clé étrangère
- *                  avant T09), source, serie_id | campagne_id (au plus une), note,
+ *   evenement      type, date, horodatage (timestamptz), auteur_id (uuid → utilisateur depuis
+ *                  T09), source, serie_id | campagne_id (au plus une), note,
  *                  remplace_evenement_id, remplace_sorte, detail (jsonb : le Detail* de T01 tel
  *                  quel, clés camelCase)
  *   article_stock  espece_id, unite
@@ -169,6 +169,10 @@ const VUES = ['recoltes', 'interventions', 'traitements'] as const;
 const TABLES_NON_PUBLIEES: readonly string[] = [
   // Suivi des migrations Drizzle, s'il est un jour placé dans public (par défaut : schéma drizzle).
   '__drizzle_migrations',
+  // T09 : données d'authentification (codes à usage unique, jetons de renouvellement), jamais
+  // répliquées vers les téléphones. Voir comptes.integration.test.ts.
+  'code_connexion',
+  'jeton_renouvellement',
 ];
 
 function camel(nom: string): string {
@@ -308,6 +312,8 @@ async function peupler(c: pg.Client): Promise<Base> {
   };
   const familleKiwi = randomUUID();
   await c.query(`INSERT INTO ferme (id, nom, fuseau_horaire) VALUES ($1, 'Ferme de test', 'Europe/Paris')`, [b.ferme]);
+  // T09 : auteur_id référence utilisateur(id).
+  await c.query(`INSERT INTO utilisateur (id, email) VALUES ($1, $2)`, [b.auteur, `auteur-${b.auteur}@ferme.fr`]);
   await c.query(`INSERT INTO zone (id, ferme_id, nom, type_abri) VALUES ($1, $2, 'Tunnel 2', 'tunnel')`, [
     b.zone,
     b.ferme,

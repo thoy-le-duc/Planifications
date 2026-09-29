@@ -20,6 +20,7 @@ decrireAvecBase('vues : version en vigueur des événements', { timeout: 30_000 
   let c: pg.Client;
   const ferme = randomUUID();
   const produit = randomUUID();
+  const auteur = randomUUID();
 
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: URL_BASE });
@@ -31,6 +32,8 @@ decrireAvecBase('vues : version en vigueur des événements', { timeout: 30_000 
     c = new pg.Client({ connectionString: url.toString() });
     await c.connect();
     await c.query(`INSERT INTO ferme (id, nom, fuseau_horaire) VALUES ($1, 'Ferme', 'Europe/Paris')`, [ferme]);
+    // T09 : auteur_id référence utilisateur(id).
+    await c.query(`INSERT INTO utilisateur (id, email) VALUES ($1, 'auteur@ferme.fr')`, [auteur]);
     await c.query(
       `INSERT INTO produit_phyto (id, ferme_id, nom_commercial, numero_amm, substance_active,
                                   delai_avant_recolte_jours, utilisable_en_bio)
@@ -51,7 +54,7 @@ decrireAvecBase('vues : version en vigueur des événements', { timeout: 30_000 
       `INSERT INTO evenement (id, ferme_id, type, date, horodatage, auteur_id, source, detail,
                               remplace_sorte, remplace_evenement_id)
        VALUES ($1, $2, $3, '2027-05-26', now(), $4, 'tap', $5, $6, $7)`,
-      [id, ferme, type, randomUUID(), JSON.stringify(detail), remplace?.[0] ?? null, remplace?.[1] ?? null],
+      [id, ferme, type, auteur, JSON.stringify(detail), remplace?.[0] ?? null, remplace?.[1] ?? null],
     );
     return id;
   }

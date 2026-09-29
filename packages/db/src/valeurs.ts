@@ -96,3 +96,14 @@ export const TABLES_MODIFIABLES = toutes<Modification['table']>()([
   'ProduitPhyto',
   'Proposition',
 ]);
+
+/** Rôle d'un membre dans une ferme (T09). Pas d'union dans T01 : la liste fait foi. */
+export const ROLES_MEMBRE = ['gerant', 'equipier'] as const;
+export type RoleMembre = (typeof ROLES_MEMBRE)[number];
+
+/**
+ * État d'un membre (T09, relecture sécurité) : « invite » tant que l'invité n'a pas réussi une
+ * connexion après son invitation, « accepte » ensuite. Seul un membre accepté est membre actif.
+ */
+export const ETATS_MEMBRE = ['invite', 'accepte'] as const;
+export type EtatMembre = (typeof ETATS_MEMBRE)[number];
