@@ -17,7 +17,7 @@ await appliquerMigrations(process.env.DATABASE_URL); // rejouable : ne fait rien
 | `pnpm --filter @planif/db generer` | Génère la migration après un changement de `src/schema.ts` |
 | `DATABASE_URL=… pnpm test` | Tests, y compris ceux d'intégration contre Postgres |
 
-Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un avertissement) et échouent en CI. La CI vérifie aussi que `drizzle-kit generate` ne produit rien : un schéma modifié sans sa migration fait échouer la CI.
+Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un avertissement) et échouent en CI. La CI vérifie aussi que `drizzle-kit generate` conclut « No schema changes » et ne crée aucun fichier : un schéma modifié sans sa migration, ou un changement qui attend une réponse interactive (renommage de colonne), fait échouer la CI. Un renommage se génère en local, où drizzle-kit pose la question.
 
 ## Fichiers
 
@@ -29,6 +29,8 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `src/migrations.ts` | `appliquerMigrations(url)` |
 | `migrations/0000_*.sql` | Généré par drizzle-kit : tables, contraintes, index |
 | `migrations/0001_*.sql` | Migration personnalisée (`drizzle-kit generate --custom`) : déclencheurs d'ajout seul, vues, publication `powersync` |
+| `migrations/0002_*.sql` | Migration personnalisée : fonction `est_date_calendaire`, déclencheur « remplacement du même type », vue `evenements_en_vigueur` (correction la plus récente) |
+| `migrations/0003_*.sql` | Généré par drizzle-kit : CHECK stricts du détail jsonb, clé étrangère composée du remplacement. Seule retouche : l'UNIQUE posé avant la clé étrangère qui s'y appuie |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 
@@ -41,6 +43,8 @@ Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 - **Clés étrangères** : aucune en cascade. Supprimer physiquement une ligne référencée échoue ; on supprime en douceur (`supprime_le`).
 - **Contraintes** : une seule cible et une seule place par occupation, longueurs et quantités positives, une récolte liée à un mouvement de stock si et seulement si le motif est `recolte`, dates dans l'ordre, etc.
 - **Ajout seul** : un déclencheur refuse `UPDATE`, `DELETE` et `TRUNCATE` sur `evenement` et `mouvement_stock` (erreur `23001`). Un événement se corrige ou s'annule par un nouvel événement qui le désigne.
+  - **Limite** : le propriétaire des tables (et un superutilisateur) peut désactiver ces déclencheurs (`ALTER TABLE … DISABLE TRIGGER`, `session_replication_role = replica`). L'ajout seul n'est donc garanti que si l'application ne se connecte pas en propriétaire : T09 prévoira un rôle applicatif qui n'a que `INSERT` et `SELECT` sur `evenement` et `mouvement_stock`.
+- **Remplacement** : une correction ou une annulation vise un événement de la même ferme (clé étrangère composée `(ferme_id, remplace_evenement_id)` → `evenement (ferme_id, id)`, erreur `23503`) et du même type (déclencheur à l'insertion, erreur `23514`).
 - **Index** : `occupation (emplacement_id, prevu_du, prevu_au)` pour la vue 2D ; `serie (ferme_id, prevu_…)` pour le semainier ; plus les clés étrangères les plus lues.
 - **PowerSync** : publication `powersync` (insert, update, delete) sur les 21 tables, en liste explicite : pas besoin d'être superutilisateur chez un hébergeur géré, et la table de suivi des migrations n'est pas publiée. Une nouvelle table synchronisée s'ajoute dans sa migration par `ALTER PUBLICATION powersync ADD TABLE …`. Le service PowerSync exige `wal_level=logical` sur le serveur (réglé dans `docker-compose.yml`) ; la création de la publication, elle, n'en a pas besoin, ce qui permet de tester en CI avec le service Postgres standard.
 
@@ -54,9 +58,24 @@ Il n'y a pas de tables Récolte, Intervention et Traitement : le détail est dan
 | `interventions` | id, ferme_id, date, serie_id, campagne_id, emplacement_ids, categorie, type_intervention, outil, produit, quantite_valeur, quantite_unite, duree_occupation_jours, note |
 | `traitements` | id, ferme_id, date, serie_id, campagne_id, emplacement_ids, produit_phyto_id, nom_commercial, numero_amm, substance_active, dose_valeur, dose_unite, surface_traitee_m2, cible, operateur, recolte_autorisee_le, note |
 
-**Seule la version en vigueur apparaît** : les vues excluent les annulations, les événements annulés et les événements remplacés par une correction. Une correction apparaît tant qu'elle n'est pas elle-même corrigée ou annulée. Elles s'appuient sur la vue `evenements_en_vigueur`, utilisable directement.
+**Seule la version en vigueur apparaît.** Les vues s'appuient sur `evenements_en_vigueur`, utilisable directement, qui exclut :
 
-Des CHECK vérifient dans le détail ce que les vues lisent et convertissent (quantité de récolte strictement positive et unité, catégorie d'intervention, étape d'un réalisé, identifiant de produit et date d'un traitement) : un détail mal formé ne peut pas casser le registre phyto.
+- les annulations elles-mêmes, et les événements annulés ;
+- les événements corrigés ;
+- d'un événement corrigé plusieurs fois, toutes les corrections sauf la plus récente (`horodatage` le plus grand, puis `id` le plus grand) ;
+- les corrections d'un événement annulé.
+
+Conséquences à connaître :
+
+- **Annuler une correction retire la saisie** : l'événement d'origine reste masqué (il est corrigé) et la correction est annulée. Pour revenir à une valeur, on saisit une nouvelle correction.
+- **Annuler une annulation ne restaure rien** : l'événement annulé reste masqué. Pour le rétablir, on le saisit de nouveau.
+
+Des CHECK contrôlent le détail à l'insertion (erreur `23514`), pour qu'un `SELECT *` sur une vue ne lève jamais : champ obligatoire absent (`… IS TRUE`, un champ absent donnant NULL), date impossible (`est_date_calendaire`, fonction IMMUTABLE qui ne lève jamais), valeur non numérique là où la vue convertit en nombre (`jsonb_typeof`), valeurs des unions de T01.
+
+Limites de maintenance :
+
+- **`SELECT e.*`** : `evenements_en_vigueur` fige la liste des colonnes à sa création. Ajouter une colonne à `evenement` oblige à recréer la vue (`CREATE OR REPLACE VIEW`) dans la même migration, sinon elle ne l'expose pas.
+- **Pas de `security_invoker`** : les vues s'exécutent avec les droits de leur propriétaire, donc elles contourneraient une RLS posée sur `evenement`. À revoir avec la RLS de T09 (`WITH (security_invoker = true)`).
 
 ## Écarts assumés avec le ticket et le modèle v1
 
@@ -67,6 +86,7 @@ Validés par le chef d'équipe le 2026-09-29.
 3. **Tableaux `uuid[]`** pour `emplacement.remplace` et `evenement.emplacement_ids`, plutôt que des tables de liaison : ils se lisent et se synchronisent avec leur ligne. Pas de clé étrangère sur leurs éléments.
 4. **Les identifiants du détail restent dans le jsonb** (`produitPhytoId` d'un traitement, `secteurIrrigationId` d'une irrigation) : pas de clé étrangère. La vue `traitements` joint le produit par une jointure externe.
 5. **Journal des modifications** : l'entité T01 a un champ `table` ; la colonne s'appelle `nom_table` (clé `nomTable`), `table` étant un mot réservé SQL. Elle contient le nom d'entité de T01 (`Serie`, `Emplacement`…).
+6. **`ferme_id` nul dans la bibliothèque de référence** (`famille`, `espece`, `variete`, `itineraire`, `produit_phyto`), alors que T01 type `fermeId` non nul sur ces entités (`LigneDeFerme`). Une ligne partagée n'appartient à aucune ferme ; il n'y a pas encore de conversion pour ces tables, et T01 devra admettre `fermeId: null` (ou une entité de bibliothèque distincte) quand on les écrira.
 
 ## Correspondance entité ↔ ligne
 
