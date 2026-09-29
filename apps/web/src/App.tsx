@@ -11,6 +11,7 @@ import {
   reprendreEffacements,
   retirerEffacementEnAttente,
   stockageNavigateur,
+  surveillerSession,
   urlApi,
   type SessionConnexion,
 } from './connexion/index.ts';
@@ -114,6 +115,22 @@ export function App() {
   useEffect(() => {
     performance.mark(MARQUE_APP_PRETE);
   }, []);
+
+  // Déconnexion, ou autre compte, dans un autre onglet : écran de connexion, sans rechargement.
+  const utilisateurId = session?.utilisateurId;
+  useEffect(() => {
+    if (utilisateurId === undefined) return undefined;
+    return surveillerSession({
+      cible: window,
+      stockage: stockageNavigateur(),
+      utilisateurId,
+      surFin: () => {
+        setConfirmation(null);
+        setDeconnexionEnCours(false);
+        setSession(null);
+      },
+    });
+  }, [utilisateurId]);
 
   // Effacement resté en attente : repris sur l'écran de connexion (au démarrage sans session,
   // après une déconnexion) toutes les 5 s jusqu'à réussite (l'autre onglet fermé, la base

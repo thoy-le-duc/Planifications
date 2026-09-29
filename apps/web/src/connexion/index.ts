@@ -31,5 +31,7 @@ export {
   enregistrerSession,
   lireSession,
   stockageNavigateur,
+  surveillerSession,
+  type OptionsSurveillance,
   type SessionConnexion,
 } from './session.ts';

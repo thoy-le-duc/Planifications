@@ -88,3 +88,32 @@ export function stockageNavigateur(): Pick<Storage, 'getItem' | 'setItem' | 'rem
   }
   return { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
 }
+
+export interface OptionsSurveillance {
+  readonly cible: Pick<Window, 'addEventListener' | 'removeEventListener'>;
+  readonly stockage: Pick<Storage, 'getItem'>;
+  /** L'utilisateur connecté dans cet onglet. */
+  readonly utilisateurId: string;
+  /** Appelé une fois au plus : la session a disparu ou changé d'utilisateur dans un autre onglet. */
+  readonly surFin: () => void;
+}
+
+/**
+ * Surveille la session rangée depuis les autres onglets (l'événement `storage` ne vient que
+ * d'eux) : déconnexion ou autre compte ailleurs → surFin. Des jetons tournés (même utilisateur)
+ * ne changent rien. Rend la fonction qui arrête la surveillance.
+ */
+export function surveillerSession({ cible, stockage, utilisateurId, surFin }: OptionsSurveillance): () => void {
+  const ecouteur = (e: Event): void => {
+    const cle = (e as StorageEvent).key;
+    if ((cle === null || cle === CLE_SESSION) && lireSession(stockage)?.utilisateurId !== utilisateurId) {
+      arreter();
+      surFin();
+    }
+  };
+  const arreter = (): void => {
+    cible.removeEventListener('storage', ecouteur);
+  };
+  cible.addEventListener('storage', ecouteur);
+  return arreter;
+}
