@@ -25,7 +25,8 @@ Toutes les 5 heures, une session Claude Code démarre seule et travaille **en é
 5. **Commits atomiques**, push, PR avec un résumé en français : ce qui est fait, ce qui a été décidé, ce que le relecteur a trouvé et comment c'est corrigé, comment vérifier. Jamais de test modifié pour passer sans le justifier dans la PR.
 6. Statut du ticket passé à « fait » dans `docs/backlog/README.md` (« en revue » s'il ne peut pas être fusionné), trois lignes dans `docs/journal.md`, dans la PR elle-même.
 7. **Fusion** : voir la section « Fusion ».
-8. Trois tickets au plus par session. Mieux vaut trois tickets nets que dix vagues.
+8. **Page de suivi** : en fin de session, le chef d'équipe régénère et republie la page de suivi de Théophane (https://claude.ai/artifact/GmRGZyPSajnNNHCobAgBpM), à partir de `docs/backlog/README.md`, `docs/questions.md` et `docs/journal.md`, avec des captures des écrans qui existent. Même lien à chaque fois.
+9. Trois tickets au plus par session. Mieux vaut trois tickets nets que dix vagues.
 
 ## L'équipe
 
