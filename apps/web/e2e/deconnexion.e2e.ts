@@ -44,6 +44,12 @@ import { surveillerCsp } from './outils.ts';
  *   Les appels à indexedDB.deleteDatabase sont notés par un script d'initialisation (clé
  *   localStorage `e2e.suppressions`, partagée par les pages et gardée au rechargement).
  *
+ * 3e relecture — déconnexion dans un autre onglet (contrat : src/connexion/autre-onglet.test.ts) :
+ *   deux pages du même contexte, connectées au même compte. La page A se déconnecte : la page B,
+ *   sans rechargement, montre l'écran de connexion (champ « Adresse e-mail ») et plus le bouton
+ *   « Se déconnecter » ni l'adresse du compte. Un autre compte rangé par la page A fait de même
+ *   dans la page B ; des jetons tournés (même compte) ne la déconnectent pas.
+ *
  * L'API est simulée (page.route), comme dans connexion.e2e.ts.
  */
 
@@ -412,5 +418,47 @@ test.describe('effacement en attente et reconnexion (2e relecture sécurité, B2
     expect(await temoinPresent(page, nom)).toBe(true);
     expect(await suppressions(page, nom)).toBe(avant);
     expect(JSON.parse((await marqueur(page)) ?? '[]')).not.toContain(SESSION.utilisateurId);
+  });
+});
+
+test.describe('déconnexion dans un autre onglet (3e relecture)', () => {
+  test('la page B bascule sur l’écran de connexion quand la page A se déconnecte', async ({ page, context }) => {
+    await context.route('**/auth/deconnexion', (route) => route.fulfill({ status: 204 }));
+    await ouvrirConnecte(page);
+    const autre = await context.newPage();
+    await autre.goto('/');
+    await expect(autre.getByRole('button', { name: /se déconnecter/i })).toBeVisible();
+
+    // Jetons tournés par la page A (même compte) : la page B reste connectée.
+    await page.evaluate(([cle, valeur]) => {
+      localStorage.setItem(cle, valeur);
+    }, [CLE_SESSION, JSON.stringify({ ...SESSION, jetonAcces: 'xxx.yyy.zzz', jetonRenouvellement: 'n'.repeat(43) })] as const);
+    await autre.waitForTimeout(500);
+    await expect(autre.getByRole('button', { name: /se déconnecter/i })).toBeVisible();
+
+    await page.getByRole('button', { name: /se déconnecter/i }).click();
+    await expect(page.getByLabel(/adresse e-mail/i)).toBeVisible({ timeout: DELAI_EFFACEMENT_MS });
+
+    // Sans rechargement : écran de connexion, plus rien du compte.
+    await expect(autre.getByLabel(/adresse e-mail/i)).toBeVisible({ timeout: 5_000 });
+    await expect(autre.getByRole('button', { name: /se déconnecter/i })).toHaveCount(0);
+    await expect(autre.getByTestId('app')).not.toContainText(SESSION.email);
+    await autre.close();
+  });
+
+  test('un autre compte rangé par la page A : la page B bascule sur l’écran de connexion', async ({ page, context }) => {
+    await ouvrirConnecte(page);
+    const autre = await context.newPage();
+    await autre.goto('/');
+    await expect(autre.getByRole('button', { name: /se déconnecter/i })).toBeVisible();
+
+    await page.evaluate(([cle, valeur]) => {
+      localStorage.setItem(cle, valeur);
+    }, [CLE_SESSION, JSON.stringify({ ...SESSION, utilisateurId: '0192f0c1-0000-7000-8000-000000000002', email: 'autre@ferme.fr' })] as const);
+
+    await expect(autre.getByLabel(/adresse e-mail/i)).toBeVisible({ timeout: 5_000 });
+    await expect(autre.getByRole('button', { name: /se déconnecter/i })).toHaveCount(0);
+    await expect(autre.getByTestId('app')).not.toContainText(SESSION.email);
+    await autre.close();
   });
 });

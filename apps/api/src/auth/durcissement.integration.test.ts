@@ -134,6 +134,14 @@
  *       signe kelvin U+212A (qui devient « k » par NFKC ou par toLowerCase), lettre suivie d'un
  *       accent combinant (U+0301) ;
  *     - point final de domaine refusé : « a@x.fr. ».
+ *
+ *   3e relecture (mêmes réponses, mêmes routes ; détail et exemples sans base : http.test.ts) :
+ *     - le contrôle est REFAIT APRÈS la normalisation (espaces retirés, minuscules) : « İ »
+ *       (U+0130), qui donne « i » + U+0307 (combinant) une fois en minuscules, est refusé ;
+ *     - U+2800 (blanc braille) refusé ;
+ *     - points mal placés refusés : avant « @ » (« theo.@… »), consécutifs (« ferme..fr »,
+ *       « pre..nom@… »), en tête de partie locale ou de domaine ;
+ *     - « é » précomposé reste accepté (« rené@ferme.fr » : forme NFC envoyée par l'appli).
  */
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
@@ -989,6 +997,8 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       // 2e relecture sécurité : format (\p{Cf}) et tout ce que NFKC change.
       '\u200b', '\u202e', '\ufeff', '\u00ad', '\u2060', '\u200d',
       '\uff41', '\uff20', '\uff0e', '\ufb01', '\u00b2', '\u212a', 'e\u0301',
+      // 3e relecture : combinant qui n'apparaît qu'après minuscules (İ → i + U+0307), blanc braille.
+      '\u0130', '\u2800',
     ];
 
     /** Adresses piégées : le caractère dans la partie locale, dans le domaine, et en forme d'attaque. */
@@ -1012,6 +1022,12 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
         `victime-${jeton}@ferme.fr.`.toUpperCase(),
         `ｖｉｃｔｉｍｅ-${jeton}＠ｆｅｒｍｅ．ｆｒ`,
         `victime-${jeton}\u202e@ferme.fr`,
+        // 3e relecture : points mal placés.
+        `victime-${jeton}.@ferme.fr`,
+        `victime-${jeton}@ferme..fr`,
+        `vic..time-${jeton}@ferme.fr`,
+        `.victime-${jeton}@ferme.fr`,
+        `victime-${jeton}@.ferme.fr`,
       ];
     }
 
@@ -1064,10 +1080,15 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       expect(rows[0]?.n).toBe(0);
     });
 
-    it('les adresses ordinaires restent acceptées (apostrophe, +, tiret, points, sous-domaine)', async () => {
+    it('les adresses ordinaires restent acceptées (apostrophe, +, tiret, points, sous-domaine, é précomposé)', async () => {
       const api = creer();
       const jeton = randomUUID().slice(0, 8);
-      for (const email of [`o'neil+recolte-${jeton}@ferme.fr`, `prenom.nom-${jeton}@mail.sous-domaine.ferme.fr`, `  Theo-${jeton}@Ferme.FR  `]) {
+      for (const email of [
+        `o'neil+recolte-${jeton}@ferme.fr`,
+        `prenom.nom-${jeton}@mail.sous-domaine.ferme.fr`,
+        `  Theo-${jeton}@Ferme.FR  `,
+        `René-${jeton}@ferme.fr`,
+      ]) {
         expect((await demanderCode(api, email)).status, email).toBe(202);
         const normalisee = email.trim().toLowerCase();
         expect((await verifier(api, email, api.expediteur.dernierCode(normalisee))).status, email).toBe(200);

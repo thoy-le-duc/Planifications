@@ -63,6 +63,23 @@
  * acceptés) : une valeur aberrante (stockage modifié) ne doit pas faire renouveler à chaque
  * appel ni garder un jeton périmé. La session reste valide, l'écart est alors estimé comme sans
  * valeur rangée.
+ *
+ * ── 3e relecture : délai du renouvellement sous verrou ──────────────────────────────────────
+ *
+ * Un POST /auth/renouveler qui ne répond jamais (réseau du champ : requête partie, réponse
+ * jamais revenue) garderait le verrou `planif-renouvellement` pour toujours : plus aucun onglet
+ * ne pourrait renouveler. Donc :
+ *   export const DELAI_RENOUVELLEMENT_MS  (jeton.ts ; entre 5 000 et 15 000 ms)
+ *   - le fetch de renouvellement reçoit un `signal` (AbortSignal) ; au bout de
+ *     DELAI_RENOUVELLEMENT_MS sans réponse, il est annulé (signal.aborted) et jetonValide()
+ *     REJETTE avec une Error qui n'est PAS SessionExpiree (échec réseau : on n'est pas
+ *     déconnecté), MÊME SI le fetch ignore le signal et ne se termine jamais ;
+ *   - le verrou est alors libéré : un autre onglet qui attendait renouvelle aussitôt ; dans la
+ *     page, le renouvellement en cours est oublié : le jetonValide() suivant relance un fetch ;
+ *   - rien n'est rangé : l'ancien jeton de renouvellement est gardé (en mémoire et dans le
+ *     stockage) et représenté ensuite (réponse perdue, voir « Rotation ») ;
+ *   - le délai est mesuré avec setTimeout (minuteries simulables : vi.useFakeTimers), pas
+ *     AbortSignal.timeout.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CLE_SESSION, lireSession, sessionValide, type SessionConnexion } from '../connexion/session.ts';
@@ -455,5 +472,124 @@ describe('B1 : renouvellement sérialisé entre onglets par navigator.locks (2e 
       expect(JSON.parse(s.valeurs.get(CLE_SESSION) ?? '{}')).toMatchObject({ jetonRenouvellement: 'r1' });
       vi.unstubAllGlobals();
     }
+  });
+});
+
+/** Ajout de la 3e relecture, lu à part : son absence fait échouer ces tests, pas le typage. */
+async function delaiRenouvellement(): Promise<number> {
+  const module: Readonly<Record<string, unknown>> = await import('./jeton.ts');
+  const delai = module.DELAI_RENOUVELLEMENT_MS;
+  if (typeof delai !== 'number') throw new Error('DELAI_RENOUVELLEMENT_MS absente de jeton.ts');
+  return delai;
+}
+
+/** fetch qui ne répond jamais et ignore son signal ; note les signaux et les jetons présentés. */
+function fetchMuet() {
+  const signaux: (AbortSignal | null | undefined)[] = [];
+  const presentes: string[] = [];
+  const f: typeof fetch = (_entree, init) => {
+    signaux.push(init?.signal);
+    const corps = typeof init?.body === 'string' ? (JSON.parse(init.body) as { jetonRenouvellement?: string }) : {};
+    presentes.push(corps.jetonRenouvellement ?? '');
+    return new Promise<Response>(() => undefined);
+  };
+  return { fetch: f, signaux, presentes };
+}
+
+/** Issue d'une promesse sans rejet non géré : 'en attente', ou sa valeur, ou son erreur. */
+function suivre<T>(p: Promise<T>): { issue: () => 'en attente' | { ok: T } | { erreur: unknown } } {
+  let issue: 'en attente' | { ok: T } | { erreur: unknown } = 'en attente';
+  p.then(
+    (ok) => {
+      issue = { ok };
+    },
+    (erreur: unknown) => {
+      issue = { erreur };
+    },
+  );
+  return { issue: () => issue };
+}
+
+describe('3e relecture : renouvellement sous verrou limité dans le temps', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('DELAI_RENOUVELLEMENT_MS : entre 5 et 15 secondes', async () => {
+    const DELAI_RENOUVELLEMENT_MS = await delaiRenouvellement();
+    expect(DELAI_RENOUVELLEMENT_MS).toBeGreaterThanOrEqual(5_000);
+    expect(DELAI_RENOUVELLEMENT_MS).toBeLessThanOrEqual(15_000);
+  });
+
+  it('fetch qui ne répond jamais : échec propre au bout du délai, signal annulé, verrou libéré pour l’autre onglet', async () => {
+    const DELAI_RENOUVELLEMENT_MS = await delaiRenouvellement();
+    vi.useFakeTimers();
+    const v = verrousSimules();
+    vi.stubGlobal('navigator', { locks: v.locks });
+    const perime = session(jwt(S - HEURE, S - MINUTE), 'r0');
+    const s = stockage(perime);
+    const muet = fetchMuet();
+    const repond = fetchSimule({ statut: 200, corps: { jetonAcces: jwt(S, S + HEURE), jetonRenouvellement: 'r1' } });
+    const ongletA = gererJetons(perime, { urlApi: 'https://api', fetch: muet.fetch, stockage: s, maintenant: () => S });
+    const ongletB = gererJetons(perime, { urlApi: 'https://api', fetch: repond.fetch, stockage: s, maintenant: () => S });
+
+    const a = suivre(ongletA.jetonValide());
+    await vi.advanceTimersByTimeAsync(0);
+    const b = suivre(ongletB.jetonValide());
+
+    await vi.advanceTimersByTimeAsync(DELAI_RENOUVELLEMENT_MS - 1);
+    expect(muet.presentes).toEqual(['r0']);
+    expect(a.issue(), 'avant le délai : encore en attente').toBe('en attente');
+    expect(repond.appels, 'l’onglet B attend le verrou').toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    const issueA = a.issue();
+    expect(issueA).not.toBe('en attente');
+    expect(typeof issueA === 'object' && 'erreur' in issueA ? issueA.erreur : null).toBeInstanceOf(Error);
+    expect(typeof issueA === 'object' && 'erreur' in issueA ? issueA.erreur : null).not.toBeInstanceOf(SessionExpiree);
+    expect(muet.signaux[0], 'le fetch reçoit un signal').toBeInstanceOf(AbortSignal);
+    expect(muet.signaux[0]?.aborted, 'signal annulé à l’expiration du délai').toBe(true);
+
+    // Verrou libéré : l'onglet B renouvelle avec l'ancien jeton, toujours rangé.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(b.issue()).toEqual({ ok: jwt(S, S + HEURE) });
+    expect(repond.appels.map((x) => x.corps.jetonRenouvellement)).toEqual(['r0']);
+    expect(lireSession(s)?.jetonRenouvellement).toBe('r1');
+  });
+
+  it('dans la page (sans navigator.locks) : après le délai, rien de rangé, et l’appel suivant relance un fetch avec l’ancien jeton', async () => {
+    const DELAI_RENOUVELLEMENT_MS = await delaiRenouvellement();
+    vi.useFakeTimers();
+    vi.stubGlobal('navigator', {});
+    const perime = session(jwt(S - HEURE, S - MINUTE), 'r0');
+    const s = stockage(perime);
+    const muet = fetchMuet();
+    const repond = fetchSimule({ statut: 200, corps: { jetonAcces: jwt(S, S + HEURE), jetonRenouvellement: 'r1' } });
+    let premier = true;
+    const f: typeof fetch = (entree, init) => {
+      if (premier) {
+        premier = false;
+        return muet.fetch(entree, init);
+      }
+      return repond.fetch(entree, init);
+    };
+    const g = gererJetons(perime, { urlApi: 'https://api', fetch: f, stockage: s, maintenant: () => S });
+
+    const x = suivre(g.jetonValide());
+    const y = suivre(g.jetonValide()); // même renouvellement en cours
+    await vi.advanceTimersByTimeAsync(DELAI_RENOUVELLEMENT_MS);
+    for (const r of [x.issue(), y.issue()]) {
+      expect(typeof r === 'object' && 'erreur' in r ? r.erreur : r).toBeInstanceOf(Error);
+      expect(typeof r === 'object' && 'erreur' in r ? r.erreur : r).not.toBeInstanceOf(SessionExpiree);
+    }
+    expect(muet.signaux[0]?.aborted).toBe(true);
+    expect(g.session().jetonRenouvellement).toBe('r0');
+    expect(lireSession(s)?.jetonRenouvellement).toBe('r0');
+
+    const z = suivre(g.jetonValide());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(z.issue()).toEqual({ ok: jwt(S, S + HEURE) });
+    expect(repond.appels.map((a) => a.corps.jetonRenouvellement)).toEqual(['r0']);
   });
 });
