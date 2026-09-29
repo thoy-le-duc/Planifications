@@ -51,6 +51,11 @@
  *
  * roleDansLaFerme(db, utilisateurId, fermeId): Promise<RoleMembre | null>
  *   Rôle du membre actif, ou null s'il n'est pas membre (ou plus).
+ *
+ * Membre actif (relecture sécurité) : membre.supprime_le nul, ferme.supprime_le nul,
+ * utilisateur.supprime_le nul, et membre accepté (pas seulement invité, voir les tests de l'API).
+ * Une ligne `membre` insérée sans préciser l'état d'invitation est un membre accepté (les tests
+ * ci-dessus insèrent directement).
  */
 import { randomUUID } from 'node:crypto';
 import type { Id } from '@planif/core';
@@ -421,6 +426,17 @@ decrireAvecBase('T09 : comptes, membres et codes de connexion', { timeout: 30_00
       const f = await creerFerme();
       await ajouterMembre(u, f, 'gerant');
       await c.query(`UPDATE ferme SET supprime_le = now() WHERE id = $1`, [f]);
+      expect(await db.fermesDeLUtilisateur(drizzleDb, u as Id<'Utilisateur'>)).toEqual([]);
+      expect(await db.roleDansLaFerme(drizzleDb, u as Id<'Utilisateur'>, f as Id<'Ferme'>)).toBeNull();
+    });
+
+    it('relecture sécurité : un utilisateur supprimé en douceur n’est membre actif de rien', async () => {
+      const drizzleDb = drizzle(c);
+      const u = await creerUtilisateur();
+      const f = await creerFerme();
+      await ajouterMembre(u, f, 'gerant');
+      expect(await db.roleDansLaFerme(drizzleDb, u as Id<'Utilisateur'>, f as Id<'Ferme'>)).toBe('gerant');
+      await c.query(`UPDATE utilisateur SET supprime_le = now() WHERE id = $1`, [u]);
       expect(await db.fermesDeLUtilisateur(drizzleDb, u as Id<'Utilisateur'>)).toEqual([]);
       expect(await db.roleDansLaFerme(drizzleDb, u as Id<'Utilisateur'>, f as Id<'Ferme'>)).toBeNull();
     });

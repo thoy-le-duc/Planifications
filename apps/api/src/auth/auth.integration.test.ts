@@ -44,13 +44,18 @@
  *     10 minutes après `maintenant`, 5 tentatives au plus.
  *     400 { erreur: 'email_invalide' }.
  *     429 { erreur: 'trop_de_demandes' } + en-tête Retry-After (secondes) : au plus un envoi par
- *     minute et cinq par heure pour une même adresse (même réponse pour toute adresse).
+ *     minute, cinq par heure et dix par 24 h glissantes pour une même adresse (même réponse pour
+ *     toute adresse). Un nouveau code invalide le précédent.
  *
  *   POST /auth/verifier    { email, code }
  *     200 { utilisateurId, jetonAcces, jetonRenouvellement }. Crée le compte à la première
  *     connexion. Le code est alors consommé.
  *     401 { erreur: 'code_invalide' } : code faux, expiré, déjà utilisé, ou tentatives épuisées
  *     (même réponse dans tous les cas). Chaque échec compte une tentative.
+ *     Force brute par adresse : les échecs sont comptés par adresse sur 24 h glissantes, tous
+ *     codes confondus. À partir de 10 échecs dans les 24 h, même le bon code d'un code neuf reçoit
+ *     cette même 401 (même statut, même corps), jusqu'à ce que les échecs sortent de la fenêtre.
+ *     Pas de limite par IP dans T09 (reportée).
  *
  *   POST /auth/renouveler  { jetonRenouvellement }
  *     200 { jetonAcces, jetonRenouvellement }. Ne demande PAS de jeton d'accès valide : c'est ce
@@ -72,20 +77,34 @@
  *   POST /fermes  { id?, nom, fuseauHoraire? }
  *     201 { id, nom, fuseauHoraire, role: 'gerant' } ; le créateur devient gérant. id : UUID
  *     fourni par le client (UUID v7 en pratique), sinon généré. fuseauHoraire par défaut
- *     'Europe/Paris'. 400 { erreur: 'requete_invalide' } si nom vide.
+ *     'Europe/Paris'. 400 { erreur: 'requete_invalide' } si nom vide, ou s'il contient un
+ *     caractère de contrôle ou de format (/[\p{Cc}\p{Cf}]/u : \r, \n, \t, \u0000, U+202E…).
  *   GET   /fermes/:id             200 { id, nom, fuseauHoraire, role }
- *   PATCH /fermes/:id  { nom }    200 (même forme) ; gérant seulement, sinon 403.
+ *   PATCH /fermes/:id  { nom }    200 (même forme) ; gérant seulement, sinon 403 ; même règle
+ *     de nom que POST /fermes (400 requete_invalide).
  *   POST  /fermes/:id/membres  { email }
- *     Invitation d'un équipier, gérant seulement (403 pour un équipier). Crée l'utilisateur s'il
- *     n'existe pas, l'ajoute en 'equipier', et lui envoie un message qui nomme la ferme.
- *     201 { utilisateurId, email, role: 'equipier' } ; déjà membre : 200, même forme, rien
- *     de dupliqué. 400 { erreur: 'email_invalide' }.
+ *     Invitation d'un équipier, gérant seulement (403 pour un équipier), et lui envoie un message
+ *     qui nomme la ferme. 201 { email, role: 'equipier' } — SANS utilisateurId ni rien qui
+ *     distingue un compte existant d'un compte neuf (même statut, même forme de corps) ; déjà
+ *     membre : 200, même forme, rien de dupliqué. 400 { erreur: 'email_invalide' }.
+ *     L'invité est d'abord « invité » : tant qu'il n'a pas réussi une vérification de code
+ *     (POST /auth/verifier) APRÈS l'invitation, la ferme n'apparaît ni dans GET /moi, ni dans
+ *     fermesDeLUtilisateur / roleDansLaFerme (@planif/db), et /fermes/:id lui répond 404. Sa
+ *     prochaine connexion réussie vaut acceptation (pas d'écran d'acceptation dans T09) : la
+ *     ferme apparaît alors avec le rôle prévu. Un compte déjà connecté ne la voit donc qu'après
+ *     s'être reconnecté ; un membre retiré puis réinvité aussi.
+ *     Limite : 20 invitations par gérant et par heure glissante, toutes fermes confondues ; la
+ *     21e reçoit 429 { erreur: 'trop_de_demandes' } + Retry-After, sans rien créer ni envoyer.
  *   Isolement : pour une ferme dont l'utilisateur n'est pas membre actif — ou qui n'existe pas,
  *   ou dont l'id n'est pas un UUID — toutes les routes /fermes/:id… répondent 404 { erreur:
- *   'ferme_introuvable' } et n'écrivent rien.
+ *   'ferme_introuvable' } et n'écrivent rien. Un utilisateur supprimé (utilisateur.supprime_le
+ *   non nul) n'est membre actif de rien : 404 partout, même avec un jeton d'accès encore valable.
+ *
+ * Jeton de renouvellement : révoqué (revoque_le non nul) → 401 ; glissant sur 90 jours mais
+ * plafonné à 365 jours après la connexion, même renouvelé régulièrement.
  */
 import { randomUUID } from 'node:crypto';
-import { fermesDeLUtilisateur, appliquerMigrations } from '@planif/db';
+import { fermesDeLUtilisateur, appliquerMigrations, roleDansLaFerme } from '@planif/db';
 import type { Id } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import {
@@ -163,7 +182,6 @@ interface Moi {
 }
 
 interface Invitation {
-  readonly utilisateurId: string;
   readonly email: string;
   readonly role: string;
 }
@@ -696,13 +714,16 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
       const res = await requete(api, 'POST', `/fermes/${ferme.id}/membres`, { email: emailEquipier.toUpperCase() }, gerant.jetonAcces);
       expect(res.status).toBe(201);
       const invitation = await lire<Invitation>(res);
-      expect(invitation).toEqual({ utilisateurId: expect.stringMatching(UUID) as string, email: emailEquipier, role: 'equipier' });
+      // Relecture sécurité : plus d'utilisateurId dans la réponse (il distinguait compte existant et neuf).
+      expect(invitation).toEqual({ email: emailEquipier, role: 'equipier' });
       const messages = api.expediteur.pour(emailEquipier);
       expect(messages).toHaveLength(1);
       expect(messages[0]?.texte).toContain('Jardins de Garonne');
 
       const equipier = await connecter(api, emailEquipier);
-      expect(equipier.utilisateurId).toBe(invitation.utilisateurId);
+      expect(await lignes(`SELECT id::text AS id FROM utilisateur WHERE email = $1`, [emailEquipier])).toEqual([
+        { id: equipier.utilisateurId },
+      ]);
       const moi = await lire<Moi>(await requete(api, 'GET', '/moi', undefined, equipier.jetonAcces));
       expect(moi.fermes).toEqual([{ id: ferme.id, nom: 'Jardins de Garonne', role: 'equipier' }]);
       const lue = await requete(api, 'GET', `/fermes/${ferme.id}`, undefined, equipier.jetonAcces);
@@ -817,6 +838,383 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
         ferme.id,
       ]);
       expect((await requete(api, 'GET', `/fermes/${ferme.id}`, undefined, equipier.jetonAcces)).status).toBe(404);
+    });
+  });
+
+  // --- Relecture sécurité de T09 -----------------------------------------------------------------
+
+  /** Id du compte de cette adresse, s'il existe (l'invitation peut ou non créer le compte). */
+  async function idsDuCompte(email: string): Promise<Id<'Utilisateur'>[]> {
+    const rangs = await lignes(`SELECT id::text AS id FROM utilisateur WHERE email = $1`, [email]);
+    return rangs.map((r) => String(r.id) as Id<'Utilisateur'>);
+  }
+
+  async function inviter(api: Api, fermeId: string, email: string, jeton: string): Promise<Response> {
+    return requete(api, 'POST', `/fermes/${fermeId}/membres`, { email }, jeton);
+  }
+
+  /** `n` vérifications avec un code faux (celui du dernier code reçu, décalé de 1). */
+  async function echouer(api: Api, email: string, n: number): Promise<void> {
+    const code = api.expediteur.dernierCode(email);
+    for (let i = 0; i < n; i++) {
+      expect((await verifier(api, email, codeFaux(code))).status, `échec ${String(i + 1)}`).toBe(401);
+    }
+  }
+
+  describe('relecture sécurité : force brute par adresse', () => {
+    it('après 10 échecs en 24 h, même le bon code d’un code neuf reçoit la 401 habituelle, jusqu’à la fin de la fenêtre', async () => {
+      const api = creer();
+      const email = emailNeuf();
+
+      // Échec « normal », pour comparer la réponse.
+      expect((await demanderCode(api, email)).status).toBe(202);
+      const normal = await verifier(api, email, codeFaux(api.expediteur.dernierCode(email)));
+      expect(normal.status).toBe(401);
+      const corpsNormal = await normal.text();
+      const typeNormal = normal.headers.get('content-type');
+      await echouer(api, email, 4); // 5 échecs sur le premier code
+
+      avancer(61 * SECONDE);
+      expect((await demanderCode(api, email)).status).toBe(202);
+      await echouer(api, email, 5); // 10 échecs sur 24 h, deux codes confondus
+
+      avancer(61 * SECONDE);
+      expect((await demanderCode(api, email)).status).toBe(202);
+      const bloque = await verifier(api, email, api.expediteur.dernierCode(email));
+      expect(bloque.status).toBe(401);
+      expect(await bloque.text()).toBe(corpsNormal);
+      expect(bloque.headers.get('content-type')).toBe(typeNormal);
+      expect(bloque.headers.get('retry-after')).toBeNull();
+
+      // Toujours bloqué juste avant que les premiers échecs aient 24 h.
+      instant = new Date(DEBUT.getTime() + JOUR - MINUTE);
+      expect((await demanderCode(api, email)).status).toBe(202);
+      const encore = await verifier(api, email, api.expediteur.dernierCode(email));
+      expect(encore.status).toBe(401);
+      expect(await encore.text()).toBe(corpsNormal);
+
+      // Les dix échecs sont sortis de la fenêtre : le bon code passe à nouveau.
+      instant = new Date(DEBUT.getTime() + JOUR + 5 * MINUTE);
+      expect((await demanderCode(api, email)).status).toBe(202);
+      expect((await verifier(api, email, api.expediteur.dernierCode(email))).status).toBe(200);
+    });
+
+    it('9 échecs en 24 h ne bloquent pas', async () => {
+      const api = creer();
+      const email = emailNeuf();
+      await demanderCode(api, email);
+      await echouer(api, email, 5);
+      avancer(61 * SECONDE);
+      await demanderCode(api, email);
+      await echouer(api, email, 4);
+      expect((await verifier(api, email, api.expediteur.dernierCode(email))).status).toBe(200);
+    });
+
+    it('les échecs d’une adresse ne bloquent pas une autre adresse', async () => {
+      const api = creer();
+      const attaquee = emailNeuf();
+      await demanderCode(api, attaquee);
+      await echouer(api, attaquee, 5);
+      avancer(61 * SECONDE);
+      await demanderCode(api, attaquee);
+      await echouer(api, attaquee, 5);
+
+      const autre = emailNeuf();
+      await connecter(api, autre);
+    });
+
+    it('au plus 10 envois de code par adresse sur 24 h glissantes : le 11e reçoit le 429 habituel', async () => {
+      const api = creer();
+      const email = emailNeuf();
+      // Un envoi toutes les 2 h : ni la limite par minute, ni celle par heure ne jouent.
+      for (let i = 0; i < 10; i++) {
+        instant = new Date(DEBUT.getTime() + i * 2 * HEURE);
+        expect((await demanderCode(api, email)).status, `envoi ${String(i + 1)}`).toBe(202);
+      }
+      instant = new Date(DEBUT.getTime() + 20 * HEURE);
+      const trop = await demanderCode(api, email);
+      expect(trop.status).toBe(429);
+      expect(await trop.json()).toEqual({ erreur: 'trop_de_demandes' });
+      expect(Number(trop.headers.get('retry-after'))).toBeGreaterThan(0);
+      expect(api.expediteur.pour(email)).toHaveLength(10);
+
+      // 24 h après le premier envoi, une place se libère.
+      instant = new Date(DEBUT.getTime() + JOUR + MINUTE);
+      expect((await demanderCode(api, email)).status).toBe(202);
+      expect(api.expediteur.pour(email)).toHaveLength(11);
+    });
+  });
+
+  describe('relecture sécurité : nom de ferme sans caractère de contrôle ni de format', () => {
+    const NOMS_REFUSES = [
+      'Jardins\r\nBcc: pirate@exemple.fr',
+      'Jardins\nde Garonne',
+      'Jardins\u0000',
+      'Jardins‮de Garonne', // inversion de sens (RLO)
+      'Jardins​de Garonne', // espace sans chasse
+      'Jardins\tde Garonne',
+    ];
+
+    it('POST /fermes refuse en 400, sans rien créer', async () => {
+      const api = creer();
+      const { jetonAcces } = await connecter(api, emailNeuf());
+      for (const nom of NOMS_REFUSES) {
+        const id = randomUUID();
+        const res = await requete(api, 'POST', '/fermes', { id, nom }, jetonAcces);
+        expect(res.status, JSON.stringify(nom)).toBe(400);
+        expect(await res.json()).toEqual({ erreur: 'requete_invalide' });
+        expect(await lignes(`SELECT 1 FROM ferme WHERE id = $1`, [id])).toHaveLength(0);
+      }
+      // Témoin : accents, apostrophe, tiret et emoji restent permis.
+      const res = await requete(api, 'POST', '/fermes', { nom: 'Les Jardins d’Élodie – Bio 🍓' }, jetonAcces);
+      expect(res.status).toBe(201);
+    });
+
+    it('PATCH /fermes/:id refuse en 400, sans renommer', async () => {
+      const api = creer();
+      const { jetonAcces } = await connecter(api, emailNeuf());
+      const ferme = await creerFerme(api, jetonAcces, 'Jardins de Garonne');
+      for (const nom of NOMS_REFUSES) {
+        const res = await requete(api, 'PATCH', `/fermes/${ferme.id}`, { nom }, jetonAcces);
+        expect(res.status, JSON.stringify(nom)).toBe(400);
+        expect(await res.json()).toEqual({ erreur: 'requete_invalide' });
+      }
+      expect(await lignes(`SELECT nom FROM ferme WHERE id = $1`, [ferme.id])).toEqual([{ nom: 'Jardins de Garonne' }]);
+    });
+  });
+
+  describe('relecture sécurité : invitation', () => {
+    it('la réponse ne dit pas si le compte existait : même statut, même forme, aucun identifiant', async () => {
+      const api = creer();
+      const gerant = await connecter(api, emailNeuf());
+      const ferme = await creerFerme(api, gerant.jetonAcces);
+      const existant = emailNeuf();
+      await connecter(api, existant);
+      const neuf = emailNeuf();
+
+      const resExistant = await inviter(api, ferme.id, existant, gerant.jetonAcces);
+      const resNeuf = await inviter(api, ferme.id, neuf, gerant.jetonAcces);
+      expect(resExistant.status).toBe(201);
+      expect(resNeuf.status).toBe(201);
+      expect(await resExistant.json()).toEqual({ email: existant, role: 'equipier' });
+      expect(await resNeuf.json()).toEqual({ email: neuf, role: 'equipier' });
+
+      const encore = await inviter(api, ferme.id, neuf, gerant.jetonAcces);
+      expect(encore.status).toBe(200);
+      expect(await encore.json()).toEqual({ email: neuf, role: 'equipier' });
+    });
+
+    it('un compte déjà connecté et invité ne voit la ferme qu’après s’être reconnecté', async () => {
+      const api = creer();
+      const gerant = await connecter(api, emailNeuf());
+      const ferme = await creerFerme(api, gerant.jetonAcces, 'Jardins de Garonne');
+      const emailInvite = emailNeuf();
+      const invite = await connecter(api, emailInvite);
+      expect((await inviter(api, ferme.id, emailInvite, gerant.jetonAcces)).status).toBe(201);
+
+      // Invité, pas encore membre : rien, avec le jeton d'avant l'invitation.
+      const moi = await lire<Moi>(await requete(api, 'GET', '/moi', undefined, invite.jetonAcces));
+      expect(moi.fermes).toEqual([]);
+      for (const [methode, corps] of [
+        ['GET', undefined],
+        ['PATCH', { nom: 'Autre' }],
+      ] as const) {
+        const res = await requete(api, methode, `/fermes/${ferme.id}`, corps, invite.jetonAcces);
+        expect(res.status, methode).toBe(404);
+        expect(await res.json()).toEqual({ erreur: 'ferme_introuvable' });
+      }
+      expect(await fermesDeLUtilisateur(drizzle(pool), invite.utilisateurId as Id<'Utilisateur'>)).toEqual([]);
+      expect(
+        await roleDansLaFerme(drizzle(pool), invite.utilisateurId as Id<'Utilisateur'>, ferme.id as Id<'Ferme'>),
+      ).toBeNull();
+
+      // Sa prochaine connexion réussie vaut acceptation.
+      avancer(2 * MINUTE);
+      const apres = await connecter(api, emailInvite);
+      const moiApres = await lire<Moi>(await requete(api, 'GET', '/moi', undefined, apres.jetonAcces));
+      expect(moiApres.fermes).toEqual([{ id: ferme.id, nom: 'Jardins de Garonne', role: 'equipier' }]);
+      const lue = await requete(api, 'GET', `/fermes/${ferme.id}`, undefined, apres.jetonAcces);
+      expect(lue.status).toBe(200);
+      expect((await lire<FermeVue>(lue)).role).toBe('equipier');
+    });
+
+    it('un compte neuf invité n’est membre qu’après une vérification réussie (ni la demande de code, ni un échec)', async () => {
+      const api = creer();
+      const gerant = await connecter(api, emailNeuf());
+      const ferme = await creerFerme(api, gerant.jetonAcces);
+      const email = emailNeuf();
+      expect((await inviter(api, ferme.id, email, gerant.jetonAcces)).status).toBe(201);
+
+      const aucuneFerme = async (): Promise<void> => {
+        for (const id of await idsDuCompte(email)) {
+          expect(await fermesDeLUtilisateur(drizzle(pool), id)).toEqual([]);
+          expect(await roleDansLaFerme(drizzle(pool), id, ferme.id as Id<'Ferme'>)).toBeNull();
+        }
+      };
+      await aucuneFerme();
+      expect((await demanderCode(api, email)).status).toBe(202);
+      await aucuneFerme();
+      await echouer(api, email, 1);
+      await aucuneFerme();
+
+      const res = await verifier(api, email, api.expediteur.dernierCode(email));
+      expect(res.status).toBe(200);
+      const { utilisateurId } = await lire<Connexion>(res);
+      expect(await fermesDeLUtilisateur(drizzle(pool), utilisateurId as Id<'Utilisateur'>)).toEqual([ferme.id]);
+      expect(await roleDansLaFerme(drizzle(pool), utilisateurId as Id<'Utilisateur'>, ferme.id as Id<'Ferme'>)).toBe(
+        'equipier',
+      );
+    });
+
+    it('un membre retiré puis réinvité redevient « invité » jusqu’à sa prochaine connexion', async () => {
+      const api = creer();
+      const gerant = await connecter(api, emailNeuf());
+      const ferme = await creerFerme(api, gerant.jetonAcces);
+      const emailEquipier = emailNeuf();
+      await inviter(api, ferme.id, emailEquipier, gerant.jetonAcces);
+      const equipier = await connecter(api, emailEquipier);
+      expect((await requete(api, 'GET', `/fermes/${ferme.id}`, undefined, equipier.jetonAcces)).status).toBe(200);
+
+      await pool.query(`UPDATE membre SET supprime_le = $3 WHERE utilisateur_id = $1 AND ferme_id = $2`, [
+        equipier.utilisateurId,
+        ferme.id,
+        instant,
+      ]);
+      avancer(MINUTE);
+      expect((await inviter(api, ferme.id, emailEquipier, gerant.jetonAcces)).status).toBe(201);
+      expect((await requete(api, 'GET', `/fermes/${ferme.id}`, undefined, equipier.jetonAcces)).status).toBe(404);
+
+      avancer(2 * MINUTE);
+      const reconnecte = await connecter(api, emailEquipier);
+      expect((await requete(api, 'GET', `/fermes/${ferme.id}`, undefined, reconnecte.jetonAcces)).status).toBe(200);
+    });
+
+    it('au plus 20 invitations par gérant et par heure, toutes fermes confondues : la 21e reçoit 429, sans rien créer ni envoyer', async () => {
+      const api = creer();
+      const gerant = await connecter(api, emailNeuf());
+      const fermeA = await creerFerme(api, gerant.jetonAcces, 'A');
+      const fermeB = await creerFerme(api, gerant.jetonAcces, 'B');
+      for (let i = 0; i < 12; i++) {
+        expect((await inviter(api, fermeA.id, emailNeuf(), gerant.jetonAcces)).status, `A ${String(i + 1)}`).toBe(201);
+      }
+      for (let i = 0; i < 8; i++) {
+        expect((await inviter(api, fermeB.id, emailNeuf(), gerant.jetonAcces)).status, `B ${String(i + 1)}`).toBe(201);
+      }
+
+      const cible = emailNeuf();
+      const trop = await inviter(api, fermeB.id, cible, gerant.jetonAcces);
+      expect(trop.status).toBe(429);
+      expect(await trop.json()).toEqual({ erreur: 'trop_de_demandes' });
+      expect(Number(trop.headers.get('retry-after'))).toBeGreaterThan(0);
+      expect(await lignes(`SELECT 1 FROM utilisateur WHERE email = $1`, [cible])).toHaveLength(0);
+      expect(api.expediteur.pour(cible)).toHaveLength(0);
+
+      // Un autre gérant n'est pas concerné.
+      const autre = await connecter(api, emailNeuf());
+      const fermeC = await creerFerme(api, autre.jetonAcces, 'C');
+      expect((await inviter(api, fermeC.id, emailNeuf(), autre.jetonAcces)).status).toBe(201);
+
+      // Une heure plus tard, la fenêtre est libre.
+      avancer(HEURE + SECONDE);
+      expect((await inviter(api, fermeB.id, cible, gerant.jetonAcces)).status).toBe(201);
+    });
+  });
+
+  describe('relecture sécurité : utilisateur supprimé', () => {
+    it('perd immédiatement l’accès à ses fermes, même avec un jeton d’accès encore valable', async () => {
+      const api = creer();
+      const gerant = await connecter(api, emailNeuf());
+      const ferme = await creerFerme(api, gerant.jetonAcces, 'Jardins de Garonne');
+      expect((await requete(api, 'GET', `/fermes/${ferme.id}`, undefined, gerant.jetonAcces)).status).toBe(200);
+
+      await pool.query(`UPDATE utilisateur SET supprime_le = $2 WHERE id = $1`, [gerant.utilisateurId, instant]);
+
+      const cible = emailNeuf();
+      for (const [methode, chemin, corps] of [
+        ['GET', `/fermes/${ferme.id}`, undefined],
+        ['PATCH', `/fermes/${ferme.id}`, { nom: 'Renommée' }],
+        ['POST', `/fermes/${ferme.id}/membres`, { email: cible }],
+      ] as const) {
+        const res = await requete(api, methode, chemin, corps, gerant.jetonAcces);
+        expect(res.status, `${methode} ${chemin}`).toBe(404);
+        expect(await res.json()).toEqual({ erreur: 'ferme_introuvable' });
+      }
+      expect(await lignes(`SELECT nom FROM ferme WHERE id = $1`, [ferme.id])).toEqual([{ nom: 'Jardins de Garonne' }]);
+      expect(await lignes(`SELECT 1 FROM utilisateur WHERE email = $1`, [cible])).toHaveLength(0);
+      expect(api.expediteur.pour(cible)).toHaveLength(0);
+
+      const id = gerant.utilisateurId as Id<'Utilisateur'>;
+      expect(await fermesDeLUtilisateur(drizzle(pool), id)).toEqual([]);
+      expect(await roleDansLaFerme(drizzle(pool), id, ferme.id as Id<'Ferme'>)).toBeNull();
+    });
+  });
+
+  describe('relecture sécurité : cas déjà couverts par le code, désormais testés', () => {
+    it('renouvelé tous les 60 jours, le jeton tient jusqu’à 360 jours, jamais au-delà de 365', async () => {
+      const api = creer();
+      const { jetonRenouvellement } = await connecter(api, emailNeuf());
+      for (let jour = 60; jour <= 360; jour += 60) {
+        instant = new Date(DEBUT.getTime() + jour * JOUR);
+        expect((await renouveler(api, jetonRenouvellement)).status, `jour ${String(jour)}`).toBe(200);
+      }
+      instant = new Date(DEBUT.getTime() + 420 * JOUR);
+      const res = await renouveler(api, jetonRenouvellement);
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ erreur: 'jeton_invalide' });
+    });
+
+    it('un jeton de renouvellement révoqué est refusé', async () => {
+      const api = creer();
+      const { utilisateurId, jetonRenouvellement } = await connecter(api, emailNeuf());
+      expect((await renouveler(api, jetonRenouvellement)).status).toBe(200);
+      await pool.query(`UPDATE jeton_renouvellement SET revoque_le = $2 WHERE utilisateur_id = $1`, [
+        utilisateurId,
+        instant,
+      ]);
+      const res = await renouveler(api, jetonRenouvellement);
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ erreur: 'jeton_invalide' });
+    });
+
+    it('demander un nouveau code invalide l’ancien', async () => {
+      const api = creer();
+      const email = emailNeuf();
+      await demanderCode(api, email);
+      const ancien = api.expediteur.dernierCode(email);
+      avancer(61 * SECONDE);
+      await demanderCode(api, email);
+      const nouveau = api.expediteur.dernierCode(email);
+      expect(nouveau).not.toBe(ancien); // une chance sur un million d'échouer par hasard
+      expect((await verifier(api, email, ancien)).status).toBe(401);
+      expect((await verifier(api, email, nouveau)).status).toBe(200);
+    });
+
+    it('10 demandes de code simultanées pour une adresse : un seul envoi', async () => {
+      const api = creer();
+      const email = emailNeuf();
+      const reponses = await Promise.all(Array.from({ length: 10 }, () => demanderCode(api, email)));
+      const statuts = reponses.map((r) => r.status);
+      expect(statuts.filter((s) => s === 202)).toHaveLength(1);
+      expect(statuts.filter((s) => s === 429)).toHaveLength(9);
+      expect(api.expediteur.pour(email)).toHaveLength(1);
+      expect(await lignes(`SELECT 1 FROM code_connexion WHERE email = $1`, [email])).toHaveLength(1);
+    });
+
+    it('10 vérifications simultanées du bon code : une seule session', async () => {
+      const api = creer();
+      const email = emailNeuf();
+      await demanderCode(api, email);
+      const code = api.expediteur.dernierCode(email);
+      const reponses = await Promise.all(Array.from({ length: 10 }, () => verifier(api, email, code)));
+      const statuts = reponses.map((r) => r.status);
+      expect(statuts.filter((s) => s === 200)).toHaveLength(1);
+      expect(statuts.filter((s) => s === 401)).toHaveLength(9);
+      expect(
+        await lignes(
+          `SELECT 1 FROM jeton_renouvellement j JOIN utilisateur u ON u.id = j.utilisateur_id WHERE u.email = $1`,
+          [email],
+        ),
+      ).toHaveLength(1);
     });
   });
 });
