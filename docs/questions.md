@@ -133,6 +133,8 @@ Question : tu acceptes cette règle ?
 
 Sinon, on cherche encore à gagner sur l'ouverture avant de construire la synchro (T10). La mesure sur ton propre téléphone Android trancherait. Elle demande de mettre en ligne une page de test : dis-moi si tu le veux.
 
+Réponse (2026-09-29) : « ok ». Règle retenue : 300 ms pour tout écran courant, base ouverte ; 500 ms au plus pour le premier écran avec données après un lancement à froid, avec un squelette affiché tout de suite. Tables brutes (« raw tables ») retenues ; la base s'ouvre au lancement et reste ouverte (T10).
+
 ### À suivre
 
 - Q9 — Méthode de connexion (T09) : code par e-mail, lien magique, clé d'accès ou mot de passe.
