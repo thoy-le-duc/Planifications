@@ -358,7 +358,10 @@ export type PlaceOccupee =
   | { readonly unite: 'longueur'; readonly longueurM: Metres }
   | { readonly unite: 'places'; readonly nombrePlaces: number };
 
-/** Intervalle de dates inclusif ; `au` vide tant que la fin n'est pas connue. */
+/**
+ * Intervalle de dates semi-ouvert [du, au[ : `au` est le jour où l'emplacement se libère, il
+ * n'est pas compris dedans. `au` vide tant que la fin n'est pas connue.
+ */
 export interface IntervalleDates {
   readonly du: DateCalendaire;
   readonly au: DateCalendaire | null;

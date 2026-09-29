@@ -12,7 +12,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | --- | --- | --- | --- |
 | [T01](T01-types-et-dates.md) | Types du domaine et dates calendaires | — | en revue |
 | [T02](T02-dates-serie.md) | Dates d'une série, planification à rebours et décalage | T01 | en revue |
-| [T03](T03-occupations-conflits.md) | Occupations et conflits de place | T02 | à faire |
+| [T03](T03-occupations-conflits.md) | Occupations et conflits de place | T02 | en revue |
 | [T04](T04-rotation.md) | Alertes de rotation | T03 | à faire |
 | [T05](T05-besoins-semences.md) | Besoins en semences et en plants | T01 | à faire |
 | [T06](T06-semainier.md) | Semainier | T02 | à faire |
