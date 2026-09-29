@@ -27,7 +27,8 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T12](T12-plan-de-culture.md) | Plan de culture : créer et modifier une série | T04, T05, T11 | à faire |
 | [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10 | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur | T10 | à faire |
-| [T15](T15-export.md) | Export complet JSON + CSV | T10 | à faire |
+| [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
+| [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | à faire |
 
 T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 300 ms avec la base) : la boucle peut le prendre dès le début, en parallèle du moteur.
 
