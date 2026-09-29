@@ -28,6 +28,7 @@ export const FIXTURES = [
   'modele-a.csv',
   'modele-b.csv',
   't15-emplacement.csv',
+  'series-anglais.csv',
 ] as const;
 
 export type NomFixture = (typeof FIXTURES)[number];

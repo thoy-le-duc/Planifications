@@ -7,7 +7,7 @@
  * Excel à ligne de titre, cultures et itinéraires, assolement passé (et l'export T15).
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { chargerImport, chargerXlsx, type Cellule, type CleChamp, type ColonneAssociee, type ModuleImport, type TypeContenu, type UniteMesure } from './test/contrat.ts';
+import { chargerImport, chargerXlsx, type Cellule, type CleChamp, type ColonneAssociee, type ModuleImport, type TypeContenu, type UniteColonne } from './test/contrat.ts';
 import { lireFixture, type NomFixture } from './test/fixtures.ts';
 
 let m: ModuleImport;
@@ -16,7 +16,7 @@ beforeAll(async () => {
   m = await chargerImport();
 });
 
-const col = (champ: CleChamp | null, unite: UniteMesure | null = null): ColonneAssociee => ({ champ, unite });
+const col = (champ: CleChamp | null, unite: UniteColonne | null = null): ColonneAssociee => ({ champ, unite });
 const IGNOREE = col(null);
 
 async function entetesCsv(nom: NomFixture): Promise<readonly Cellule[]> {
@@ -67,6 +67,7 @@ describe('proposerType : ce que contient le fichier, d’après les en-têtes', 
     ['parcellaire-3-niveaux-cp1252.csv', 'parcellaire'],
     ['t15-emplacement.csv', 'parcellaire'],
     ['series-semaines.tsv', 'series'],
+    ['series-anglais.csv', 'series'],
     ['cultures-itineraires.csv', 'cultures'],
     ['assolement-passe.csv', 'assolement'],
   ] as const)('%s → %s', async (nom, type) => {
@@ -147,8 +148,11 @@ describe('proposerCorrespondance : synonymes insensibles à la casse, aux accent
     ]);
   });
 
-  it('unité d’une autre grandeur que le champ → ignorée', () => {
-    expect(m.proposerCorrespondance(['Longueur (kg)'], 'parcellaire').colonnes).toStrictEqual([col('longueur_m', null)]);
+  // Relecture, point 4 : ce test attendait col('longueur_m', null) (unité fausse oubliée, colonne
+  // gardée). Une unité explicite qui ne va pas au champ dit que la colonne n'est pas ce champ :
+  // elle n'est plus proposée, l'utilisateur l'associe lui-même s'il le veut.
+  it('unité d’une autre grandeur que le champ → colonne non proposée', () => {
+    expect(m.proposerCorrespondance(['Longueur (kg)'], 'parcellaire').colonnes).toStrictEqual([IGNOREE]);
   });
 
   it('seuls les champs du type choisi : « Culture » est ignorée dans un parcellaire', () => {
@@ -161,6 +165,68 @@ describe('proposerCorrespondance : synonymes insensibles à la casse, aux accent
 
   it('« Mètres », « Lieu-dit » et « Semaine de plantation » ne sont pas reconnus (modèle d’import)', () => {
     expect(m.proposerCorrespondance(['Mètres', 'Lieu-dit', 'Semaine de plantation'], 'series').colonnes).toStrictEqual([IGNOREE, IGNOREE, IGNOREE]);
+  });
+});
+
+describe('unités explicites dans l’en-tête (relecture, point 4)', () => {
+  it.each([
+    ['Surface (ha)', 'parcellaire', col('surface_m2', 'ha')],
+    ['Surface (m²)', 'parcellaire', col('surface_m2')],
+    ['Surface (m2)', 'parcellaire', col('surface_m2')],
+    ['Superficie en ha', 'parcellaire', col('surface_m2', 'ha')],
+    ['Surface (kg)', 'parcellaire', IGNOREE],
+    ['Longueur (pouces)', 'parcellaire', IGNOREE],
+    ['Largeur (ha)', 'parcellaire', IGNOREE],
+    ['Durée pépinière (semaines)', 'cultures', col('duree_pepiniere_jours', 'semaine')],
+    ['Durée pépinière (sem.)', 'cultures', col('duree_pepiniere_jours', 'semaine')],
+    ['Fenêtre de récolte (semaines)', 'cultures', col('fenetre_recolte_jours', 'semaine')],
+    ['Jours avant récolte (jours)', 'cultures', col('duree_avant_recolte_jours')],
+    ['Durée pépinière (mois)', 'cultures', IGNOREE],
+    ['Écartement (pouces)', 'cultures', IGNOREE],
+    ['PMG (€)', 'cultures', IGNOREE],
+    ['Rangs (m)', 'cultures', IGNOREE],
+    ['Récolte (kg)', 'series', IGNOREE],
+    ['Récolte (€)', 'series', IGNOREE],
+    ['Semis (graines)', 'series', IGNOREE],
+    ['Plantation (nb)', 'series', IGNOREE],
+    ['Plants/m²', 'series', IGNOREE],
+    ['Plants par m²', 'series', IGNOREE],
+    ['Nombre de plants (nb)', 'series', col('nombre_plants')],
+    ['Date de semis (JJ/MM/AAAA)', 'series', col('date_semis')],
+    ['Culture (nom)', 'series', col('espece')],
+    ['Année (%)', 'assolement', IGNOREE],
+  ] as [string, TypeContenu, ColonneAssociee][])('« %s » (%s)', (entete, type, attendu) => {
+    expect(m.proposerCorrespondance([entete], type).colonnes).toStrictEqual([attendu]);
+  });
+
+  it('une colonne non proposée ne compte pas pour le type : « Récolte (kg) » n’est pas une date', () => {
+    expect(m.proposerType(['Culture', 'Planche', 'Récolte (kg)'])).toBeNull();
+    expect(m.proposerType(['Culture', 'Planche', 'Récolte'])).toBe('series');
+  });
+});
+
+describe('en-têtes anglais des dates', () => {
+  it.each([
+    ['Sowing date', 'date_semis'],
+    ['Sowing', 'date_semis'],
+    ['Planting date', 'date_plantation'],
+    ['Planting', 'date_plantation'],
+    ['Harvest start', 'date_debut_recolte'],
+    ['Harvest end', 'date_fin_recolte'],
+  ] as const)('« %s » → %s', (entete, champ) => {
+    expect(m.proposerCorrespondance([entete], 'series').colonnes).toStrictEqual([col(champ)]);
+  });
+});
+
+describe('en-têtes de plus de 200 caractères (relecture, point 3)', () => {
+  it('200 caractères : reconnu ; 201 : jamais reconnu, même s’il se réduit à un synonyme', () => {
+    expect(m.proposerCorrespondance([`Planche${'.'.repeat(193)}`], 'parcellaire').colonnes).toStrictEqual([col('emplacement')]);
+    expect(m.proposerCorrespondance([`Planche${'.'.repeat(194)}`], 'parcellaire').colonnes).toStrictEqual([IGNOREE]);
+    expect(m.proposerType([`Zone${'.'.repeat(197)}`])).toBeNull();
+  });
+
+  it('detecterEntete ne compte pas un en-tête trop long', () => {
+    expect(m.detecterEntete([[`Zone${'.'.repeat(197)}`, `Planche${'.'.repeat(194)}`], ['Parcelle', 'Truc']])).toBe(1);
   });
 });
 
@@ -193,6 +259,11 @@ describe('fichiers du jeu de test qui correspondent entièrement, sans correctio
       ],
     ],
     ['assolement-passe.csv', 'assolement', [IGNOREE, col('annee'), col('famille'), col('emplacement'), col('espece'), IGNOREE, IGNOREE]],
+    [
+      'series-anglais.csv',
+      'series',
+      [col('espece'), col('variete'), col('emplacement'), col('date_semis'), col('date_plantation'), col('date_debut_recolte'), col('date_fin_recolte')],
+    ],
     [
       't15-emplacement.csv',
       'parcellaire',

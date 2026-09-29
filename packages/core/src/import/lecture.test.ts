@@ -46,6 +46,11 @@ describe('decoderTexte : encodage', () => {
     expect(m.decoderTexte(new Uint8Array([0x41, 0x81, 0x8d, 0x8f, 0x90, 0x9d])).texte).toBe('A\u0081\u008d\u008f\u0090\u009d');
   });
 
+  it('BOM UTF-8 suivi d’octets Windows-1252 : décodé en Windows-1252, BOM retiré du texte', () => {
+    const octets = new Uint8Array([0xef, 0xbb, 0xbf, 0x50, 0x72, 0xe9, 0x3b, 0x80]);
+    expect(m.decoderTexte(octets)).toStrictEqual({ texte: 'Pré;€', encodage: 'windows-1252', bom: true });
+  });
+
   it('ASCII pur → utf-8 ; vide → texte vide', () => {
     expect(m.decoderTexte(utf8('a;b')).encodage).toBe('utf-8');
     expect(m.decoderTexte(new Uint8Array(0))).toStrictEqual({ texte: '', encodage: 'utf-8', bom: false });
@@ -140,6 +145,27 @@ describe('lireCsv', () => {
     expect(csv).toMatchObject({ encodage: 'utf-8', bom: true, separateur: ';' });
     expect(csv.lignes[0]?.[0]).toBe('id');
     expect(csv.lignes.every((l) => l.length === 14)).toBe(true);
+  });
+
+  it('fichier texte : pas d’erreur', async () => {
+    expect(m.lireCsv(utf8('a;b\r\nc;d\r\n')).erreur).toBeNull();
+    expect(m.lireCsv(await lireFixture('parcellaire-3-niveaux-cp1252.csv')).erreur).toBeNull();
+    expect(m.lireCsv(new Uint8Array(0)).erreur).toBeNull();
+  });
+
+  it('classeur .xlsx déposé comme CSV (signature ZIP) → fichier_binaire, aucune ligne', async () => {
+    for (const octets of [await lireFixture('series-titre.xlsx'), new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x41, 0x3b, 0x42])]) {
+      const csv = m.lireCsv(octets);
+      expect(csv.erreur?.code).toBe('fichier_binaire');
+      expect(csv.erreur?.message.trim().length).toBeGreaterThan(10);
+      expect(csv.lignes).toStrictEqual([]);
+    }
+  });
+
+  it('octet nul (fichier binaire, UTF-16…) → fichier_binaire, aucune ligne', () => {
+    const csv = m.lireCsv(new Uint8Array([0x5a, 0x6f, 0x6e, 0x65, 0x3b, 0x00, 0x50, 0x0d, 0x0a]));
+    expect(csv.erreur?.code).toBe('fichier_binaire');
+    expect(csv.lignes).toStrictEqual([]);
   });
 
   it('même octets → même résultat ; ne lève jamais sur des octets au hasard', () => {

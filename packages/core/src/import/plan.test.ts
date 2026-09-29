@@ -20,6 +20,7 @@ import {
   type TypeContenu,
   type ValeurImport,
 } from './test/contrat.ts';
+import { classeurSimple } from './test/classeur.ts';
 import { BIBLIOTHEQUE, geler, lireFixture, type NomFixture } from './test/fixtures.ts';
 
 let m: ModuleImport;
@@ -363,8 +364,11 @@ describe('hiérarchie du parcellaire', () => {
 });
 
 describe('lignes ignorées', () => {
-  it('vides (espaces compris) et totaux : « TOTAL général », « Sous-total », « Somme » ; « Totalement » n’est pas un total', () => {
-    const plan = m.preparerImport(entree(csv('Zone;Planche;Longueur\nT1;P1;30\n  ; ;\nTOTAL général;;30\nSous-total;;30\nSomme;;30\nTotalement bio;P2;20'), 'parcellaire'));
+  // Relecture, point 10 : ce test ne voyait « Somme » qu'en total. Il garde ses cas et ajoute
+  // « Somme;P3;30 » : avec une planche, « Somme » est un nom de zone (le département, la
+  // rivière), pas un total ; la ligne est importée.
+  it('vides (espaces compris) et totaux : « TOTAL général », « Sous-total », « Somme » sans planche ; « Totalement » n’est pas un total', () => {
+    const plan = m.preparerImport(entree(csv('Zone;Planche;Longueur\nT1;P1;30\n  ; ;\nTOTAL général;;30\nSous-total;;30\nSomme;;30\nTotalement bio;P2;20\nSomme;P3;30'), 'parcellaire'));
     expect(plan.ignorees).toStrictEqual([
       { ligne: 3, motif: 'vide' },
       { ligne: 4, motif: 'total' },
@@ -374,7 +378,28 @@ describe('lignes ignorées', () => {
     expect(plan.lignes.map((l) => [l.ligne, l.statut])).toStrictEqual([
       [2, 'valide'],
       [7, 'valide'],
+      [8, 'valide'],
     ]);
+    expect(ligne(plan, 8).valeurs).toStrictEqual({ zone: 'Somme', emplacement: 'P3', longueur_m: 30 });
+  });
+
+  it('seule la première cellule non vide des colonnes associées est examinée', () => {
+    // Notes (colonne 3) n'est associée à rien : « Total à revoir » ne fait pas ignorer la ligne.
+    const plan = m.preparerImport(entree(csv('Zone;Planche;Longueur;Notes\nT1;P1;30;Total à revoir\nT1;Total;25;\n;Total;30;\nTotal;;55;'), 'parcellaire'));
+    expect(plan.ignorees).toStrictEqual([
+      { ligne: 4, motif: 'total' },
+      { ligne: 5, motif: 'total' },
+    ]);
+    expect(plan.lignes.map((l) => [l.ligne, l.statut])).toStrictEqual([
+      [2, 'valide'],
+      [3, 'valide'],
+    ]);
+    expect(ligne(plan, 3).valeurs).toStrictEqual({ zone: 'T1', emplacement: 'Total', longueur_m: 25 });
+  });
+
+  it('« Somme » sans colonne emplacement associée : total', () => {
+    const plan = m.preparerImport(entree(csv('Culture;Rangs\nTomate;2\nSomme;2'), 'cultures'));
+    expect(plan.ignorees).toStrictEqual([{ ligne: 3, motif: 'total' }]);
   });
 
   it('les lignes au-dessus de l’en-tête ne sont ni lues ni comptées', () => {
@@ -429,6 +454,204 @@ describe('erreurs de ligne', () => {
     const plan = m.preparerImport({ lignes, ligneEntete: 0, correspondance, bibliotheque: BIBLIOTHEQUE, anneeSaison: null });
     expect(plan.lignes.map((l) => l.erreurs.map((e) => [e.code, e.champ, e.colonne]))).toStrictEqual([[['champ_manquant', 'zone', null]], [['champ_manquant', 'zone', null]]]);
     expect(plan.resume.erreurs).toBe(2);
+  });
+});
+
+// ── Relecture du chef d'équipe ───────────────────────────────────────────────────────────────
+
+const codes = (l: LignePlan) => l.erreurs.map((e) => [e.code, e.champ, e.colonne]);
+
+describe('unités de conversion de l’en-tête (relecture, point 4)', () => {
+  it('Surface (ha) → m², conversion exacte', () => {
+    const plan = m.preparerImport(entree(csv('Parcelle;Surface (ha)\nPré du bas;1,5\nBois;0,25\nJardin;0,0123'), 'parcellaire'));
+    expect(plan.lignes.map((l) => l.valeurs.surface_m2)).toStrictEqual([15_000, 2_500, 123]);
+  });
+
+  it('Durée pépinière (semaines) → jours × 7 ; une demi-semaine n’est pas un nombre entier de jours', () => {
+    const plan = m.preparerImport(entree(csv('Culture;Durée pépinière (semaines);Fenêtre de récolte (sem)\nTomate;4;3\nPoireau;1,5;2'), 'cultures'));
+    expect(ligne(plan, 2).valeurs).toMatchObject({ duree_pepiniere_jours: 28, fenetre_recolte_jours: 21 });
+    expect(codes(ligne(plan, 3))).toStrictEqual([['nombre_invalide', 'duree_pepiniere_jours', 1]]);
+  });
+});
+
+describe('numéros de série Excel hors de la saison (relecture, point 5)', () => {
+  it('une quantité (12, 420) dans une colonne date → date_invalide ; une vraie date de la saison passe', () => {
+    const plan = m.preparerImport(entree([['Culture', 'Plantation'], ['Tomate', 12], ['Chou', 420], ['Radis', 46461]], 'series', { anneeSaison: 2027 }));
+    expect(codes(ligne(plan, 2))).toStrictEqual([['date_invalide', 'date_plantation', 1]]);
+    expect(codes(ligne(plan, 3))).toStrictEqual([['date_invalide', 'date_plantation', 1]]);
+    expect(ligne(plan, 4).valeurs.date_plantation).toBe('2027-03-15');
+  });
+
+  it('numéro d’une autre décennie que la saison → date_invalide', () => {
+    const plan = m.preparerImport(entree([['Culture', 'Plantation'], ['Tomate', 44561], ['Chou', 44562]], 'series', { anneeSaison: 2027 }));
+    expect(codes(ligne(plan, 2))).toStrictEqual([['date_invalide', 'date_plantation', 1]]);
+    expect(ligne(plan, 3).valeurs.date_plantation).toBe('2022-01-01');
+  });
+});
+
+describe('système de dates 1904 (relecture, point 6)', () => {
+  it('EntreeImport.systemeDates = 1904 : 44999 → 2027-03-15 ; défaut 1900', () => {
+    const lignes = [['Culture', 'Plantation'], ['Tomate', 44999]];
+    expect(m.preparerImport({ ...entree(lignes, 'series', { anneeSaison: 2027 }), systemeDates: 1904 }).lignes[0]?.valeurs.date_plantation).toBe('2027-03-15');
+    expect(m.preparerImport(entree(lignes, 'series', { anneeSaison: 2027 })).lignes[0]?.valeurs.date_plantation).toBe('2023-03-14');
+  });
+
+  it('classeur au système 1904 : de la feuille au plan, les dates sont justes', async () => {
+    const { lecteurXlsx } = await chargerXlsx();
+    const xml =
+      '<row r="1"><c r="A1" t="inlineStr"><is><t>Culture</t></is></c><c r="B1" t="inlineStr"><is><t>Plantation</t></is></c></row>' +
+      '<row r="2"><c r="A2" t="inlineStr"><is><t>Tomate</t></is></c><c r="B2"><v>44999</v></c></row>';
+    const r = await lecteurXlsx.lire(classeurSimple(xml, 'date1904="1"'));
+    if (!r.ok) throw new Error(r.message);
+    const feuille = r.feuilles[0];
+    if (feuille === undefined) throw new Error('pas de feuille');
+    const plan = m.preparerImport({ ...entree(feuille.lignes, 'series', { anneeSaison: 2027 }), systemeDates: feuille.systemeDates });
+    expect(plan.lignes).toStrictEqual([valide(2, { espece: existante('esp-tomate'), date_plantation: '2027-03-15' })]);
+  });
+
+  it('cellule date ISO (t="d") d’un classeur : lue comme une date', async () => {
+    const { lecteurXlsx } = await chargerXlsx();
+    const xml =
+      '<row r="1"><c r="A1" t="inlineStr"><is><t>Culture</t></is></c><c r="B1" t="inlineStr"><is><t>Plantation</t></is></c></row>' +
+      '<row r="2"><c r="A2" t="inlineStr"><is><t>Tomate</t></is></c><c r="B2" t="d"><v>2027-05-10T00:00:00</v></c></row>';
+    const r = await lecteurXlsx.lire(classeurSimple(xml));
+    if (!r.ok) throw new Error(r.message);
+    const plan = m.preparerImport(entree(r.feuilles[0]?.lignes ?? [], 'series', { anneeSaison: 2027 }));
+    expect(plan.lignes).toStrictEqual([valide(2, { espece: existante('esp-tomate'), date_plantation: '2027-05-10' })]);
+  });
+});
+
+describe('dates JJ/MM ou MM/JJ, décidé par colonne', () => {
+  it('en-têtes anglais, dates américaines : chaque colonne a une valeur qui tranche → MM/JJ', async () => {
+    const plan = await planFixture('series-anglais.csv', 'series', { anneeSaison: 2027 });
+    expect(plan.lignes).toStrictEqual([
+      valide(2, {
+        espece: existante('esp-radis'),
+        variete: 'Flamboyant 5',
+        emplacement: 'N3',
+        date_semis: '2027-03-15',
+        date_plantation: null,
+        date_debut_recolte: '2027-04-19',
+        date_fin_recolte: '2027-05-10',
+      }),
+      valide(3, {
+        espece: existante('esp-tomate'),
+        variete: 'Coeur de boeuf',
+        emplacement: 'TA2',
+        date_semis: '2027-02-20',
+        date_plantation: '2027-05-10',
+        date_debut_recolte: '2027-07-15',
+        date_fin_recolte: '2027-10-30',
+      }),
+      valide(4, {
+        espece: existante('esp-laitue'),
+        variete: 'Grenobloise',
+        emplacement: 'N1',
+        date_semis: '2027-03-01',
+        date_plantation: '2027-03-29',
+        date_debut_recolte: '2027-05-20',
+        date_fin_recolte: '2027-06-10',
+      }),
+    ]);
+  });
+
+  it('colonne sans valeur qui tranche → JJ/MM (défaut français) ; une colonne ne décide pas pour sa voisine', () => {
+    const plan = m.preparerImport(entree(csv('Culture;Semis;Plantation\nTomate;02/03/2027;04/13/2027\nChou;05/03/2027;05/10/2027'), 'series'));
+    expect(ligne(plan, 2).valeurs).toMatchObject({ date_semis: '2027-03-02', date_plantation: '2027-04-13' });
+    expect(ligne(plan, 3).valeurs).toMatchObject({ date_semis: '2027-03-05', date_plantation: '2027-05-10' });
+  });
+
+  it('colonne qui contient les deux (13/01 et 01/13) → JJ/MM, la valeur impossible est date_invalide', () => {
+    const plan = m.preparerImport(entree(csv('Culture;Plantation\nTomate;13/01/2027\nChou;01/13/2027'), 'series'));
+    expect(ligne(plan, 2).valeurs.date_plantation).toBe('2027-01-13');
+    expect(codes(ligne(plan, 3))).toStrictEqual([['date_invalide', 'date_plantation', 1]]);
+  });
+});
+
+describe('champs à choix : jamais une propriété héritée (relecture, point 7)', () => {
+  it.each(['constructor', '__proto__', 'toString', 'Constructor'])('« %s » → valeur_inconnue', (valeur) => {
+    const parcellaire = m.preparerImport(entree(csv(`Zone;Planche;Abri;Sorte\nT1;P1;${valeur};planche\nT1;P2;tunnel;${valeur}`), 'parcellaire'));
+    expect(codes(ligne(parcellaire, 2))).toStrictEqual([['valeur_inconnue', 'type_abri', 2]]);
+    expect(codes(ligne(parcellaire, 3))).toStrictEqual([['valeur_inconnue', 'sorte', 3]]);
+    const cultures = m.preparerImport(entree(csv(`Culture;Mode\nTomate;${valeur}`), 'cultures'));
+    expect(codes(ligne(cultures, 2))).toStrictEqual([['valeur_inconnue', 'mode', 1]]);
+  });
+});
+
+describe('choix d’un modèle dont l’identifiant n’est plus dans la bibliothèque (relecture, point 8)', () => {
+  it('la ligne repasse « à décider », la décision est redemandée', async () => {
+    const plan = await planFixture('series-semaines.tsv', 'series', {
+      anneeSaison: 2027,
+      choix: [{ champ: 'espece', valeur: 'Batavia blonde', decision: existante('esp-supprimee') }],
+    });
+    expect(ligne(plan, 3)).toMatchObject({ statut: 'a_decider', valeurs: { espece: aDecider('Batavia blonde') } });
+    expect(plan.decisions.map((d) => [d.champ, d.valeur, d.lignes])).toStrictEqual([['espece', 'Batavia blonde', [3]]]);
+    expect(plan.decisions[0]?.propositions[0]?.id).toBe('esp-batavia');
+  });
+
+  it('famille : même règle', () => {
+    const plan = m.preparerImport(
+      entree(csv('Année;Planche;Famille\n2024;N1;Solanacées'), 'assolement', { choix: [{ champ: 'famille', valeur: 'Solanacées', decision: existante('fam-inconnue') }] }),
+    );
+    expect(ligne(plan, 2).valeurs.famille).toStrictEqual(existante('fam-solanacees'));
+  });
+});
+
+describe('dates d’une série dans le désordre (relecture, point 9)', () => {
+  it('plantation avant le semis → dates_incoherentes sur la plantation', () => {
+    const plan = m.preparerImport(entree(csv('Culture;Semis;Plantation;Début récolte;Fin récolte\nTomate;10/04/2027;03/04/2027;01/07/2027;30/09/2027'), 'series'));
+    expect(codes(ligne(plan, 2))).toStrictEqual([['dates_incoherentes', 'date_plantation', 2]]);
+    expect(ligne(plan, 2).statut).toBe('erreur');
+    expect(ligne(plan, 2).erreurs[0]?.message.length).toBeGreaterThan(5);
+  });
+
+  it('fin de récolte avant le début → sur la fin ; dates absentes sautées ; une seule erreur par ligne', () => {
+    const plan = m.preparerImport(
+      entree(csv('Culture;Semis;Plantation;Début récolte;Fin récolte\nTomate;;03/05/2027;01/07/2027;30/06/2027\nChou;10/05/2027;;01/05/2027;\nRadis;10/05/2027;01/05/2027;01/04/2027;01/03/2027'), 'series'),
+    );
+    expect(codes(ligne(plan, 2))).toStrictEqual([['dates_incoherentes', 'date_fin_recolte', 4]]);
+    expect(codes(ligne(plan, 3))).toStrictEqual([['dates_incoherentes', 'date_debut_recolte', 3]]);
+    expect(codes(ligne(plan, 4))).toStrictEqual([['dates_incoherentes', 'date_plantation', 2]]);
+  });
+
+  it('dates égales ou dans l’ordre : valide (semis direct : semis = plantation)', () => {
+    const plan = m.preparerImport(entree(csv('Culture;Semis;Plantation;Début récolte;Fin récolte\nRadis;10/04/2027;10/04/2027;15/05/2027;15/05/2027'), 'series'));
+    expect(ligne(plan, 2).statut).toBe('valide');
+  });
+
+  it('semaines de la saison dans le désordre (récolte en S10 d’une plantation en S40) : erreur, pas de bascule sur l’année suivante', () => {
+    const plan = m.preparerImport(entree(csv('Culture;Plantation;Début récolte\nPoireau;S40;S10'), 'series', { anneeSaison: 2027 }));
+    expect(codes(ligne(plan, 2))).toStrictEqual([['dates_incoherentes', 'date_debut_recolte', 2]]);
+  });
+});
+
+describe('cellules au-delà des colonnes de l’en-tête (relecture, point 11)', () => {
+  it('cellule non vide à droite de l’en-tête → colonnes_en_trop sur la première ; vides ou espaces : rien', () => {
+    const plan = m.preparerImport(entree([['Zone', 'Planche', null], ['T1', 'P1', null, 'oubli', 'autre'], ['T1', 'P2', '', '  '], ['T1', 'P3', 12]], 'parcellaire'));
+    expect(codes(ligne(plan, 2))).toStrictEqual([['colonnes_en_trop', null, 3]]);
+    expect(ligne(plan, 3).statut).toBe('valide');
+    expect(codes(ligne(plan, 4))).toStrictEqual([['colonnes_en_trop', null, 2]]);
+  });
+
+  it('largeur de l’en-tête : jusqu’à sa dernière cellule non vide, même ignorée', () => {
+    const plan = m.preparerImport(entree(csv('Zone;Planche;Notes;;\nT1;P1;à revoir;;\nT1;P2;;x;'), 'parcellaire'));
+    expect(ligne(plan, 2).statut).toBe('valide');
+    expect(codes(ligne(plan, 3))).toStrictEqual([['colonnes_en_trop', null, 3]]);
+  });
+});
+
+describe('messages : l’extrait cité ne coupe jamais une paire de substitution', () => {
+  const orphelin = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+  it('valeur d’abri faite de lettres et d’émojis, coupée à toutes les positions', () => {
+    for (let n = 30; n <= 45; n++) {
+      const valeur = `${'a'.repeat(n)}${'🌱'.repeat(20)}`;
+      const plan = m.preparerImport(entree(csv(`Zone;Planche;Abri\nT1;P1;${valeur}`), 'parcellaire'));
+      const e = ligne(plan, 2).erreurs[0];
+      expect(e?.code).toBe('valeur_inconnue');
+      expect(orphelin.test(e?.message ?? ''), `${String(n)} lettres : ${e?.message ?? ''}`).toBe(false);
+      expect(e?.message.length).toBeLessThanOrEqual(200);
+    }
   });
 });
 

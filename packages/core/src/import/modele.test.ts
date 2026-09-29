@@ -125,7 +125,23 @@ describe('lireModele : jamais d’exception, null si le texte n’est pas un mod
     ['champ d’un autre type', valide.replace('"champ":"zone"', '"champ":"espece"')],
     ['unité inconnue', valide.replace('"unite":null', '"unite":"pouce"')],
     ['imbriqué sur 100 000 niveaux', '['.repeat(100_000)],
+    ['unité sur un champ qui n’est pas une mesure', valide.replace('"unite":null', '"unite":"m"')],
+    ['unité sur une colonne ignorée', valide.replace('"champ":"zone","unite":null', '"champ":null,"unite":"cm"')],
+    ['hectares sur un champ texte', valide.replace('"unite":null', '"unite":"ha"')],
+    ['unité d’une autre grandeur', JSON.stringify({ version: 1, type: 'parcellaire', colonnes: [{ entete: 'Longueur', champ: 'longueur_m', unite: 'kg' }], choix: [] })],
+    ['semaines sur une surface', JSON.stringify({ version: 1, type: 'parcellaire', colonnes: [{ entete: 'Surface', champ: 'surface_m2', unite: 'semaine' }], choix: [] })],
+    [
+      'identifiant de choix vide',
+      JSON.stringify({ version: 1, type: 'series', colonnes: [{ entete: 'Culture', champ: 'espece', unite: null }], choix: [{ champ: 'espece', valeur: 'Salade', decision: { sorte: 'existante', id: '' } }] }),
+    ],
   ])('%s → null', (_cas, texte) => {
     expect(m.lireModele(texte)).toBeNull();
+  });
+
+  it('unités de conversion acceptées sur leur champ : hectares (surface), semaines (durées)', () => {
+    const parcellaire = { version: 1, type: 'parcellaire', colonnes: [{ entete: 'Surface (ha)', champ: 'surface_m2', unite: 'ha' }], choix: [] };
+    const cultures = { version: 1, type: 'cultures', colonnes: [{ entete: 'Durée pépinière (semaines)', champ: 'duree_pepiniere_jours', unite: 'semaine' }], choix: [] };
+    expect(m.lireModele(JSON.stringify(parcellaire))).toStrictEqual(parcellaire);
+    expect(m.lireModele(JSON.stringify(cultures))).toStrictEqual(cultures);
   });
 });

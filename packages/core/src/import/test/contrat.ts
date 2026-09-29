@@ -50,12 +50,29 @@
  * sa dernière valeur calculée, `null` s'il n'y en a pas ; cellule absente ou vide → `null`.
  * Cellules fusionnées : la valeur dans la première, `null` dans les autres. Les `null` en fin de
  * ligne et les lignes vides en fin de feuille peuvent être omis (les tests les ignorent).
+ * Cellule date ISO `t="d"` (« 2027-03-15T00:00:00 », « 2027-03-15 ») → texte 'AAAA-MM-JJ' (heure
+ * ignorée) ; contenu qui n'est pas une date ISO → le texte tel quel (`lireDate` le refusera).
+ * Système de dates (relecture, point 6) : `<workbookPr date1904="1">` (ou "true") → chaque feuille
+ * porte `systemeDates: 1904`, sinon 1900 ; les numéros de série restent tels qu'écrits, c'est
+ * `lireDate` qui applique le système (voir `EntreeImport.systemeDates`).
+ * Limites (relecture, points 1 et 2), toutes → `classeur_illisible`, jamais d'exception, en temps
+ * linéaire et sans allocation démesurée (tas de 512 Mo dans les tests) :
+ *   - au plus 5 000 000 de cases créées pour TOUT le classeur : chaque ligne créée compte pour une
+ *     case (lignes vides de remplissage comprises), chaque cellule aussi (`null` de remplissage
+ *     compris) ; le plafond se vérifie AVANT d'allouer (`<c r="XFD1">` sur 20 000 lignes, ou six
+ *     feuilles réduites à `<row r="1048576">`, échouent en moins de 2 s) ;
+ *   - une même partie ne peut pas être lue deux fois comme feuille (deux feuilles déclarées qui
+ *     visent la même partie → classeur illisible) ;
+ *   - une balise (de « < » à « > ») de plus de 64 Kio, ou dont un attribut n'est jamais refermé →
+ *     illisible, en temps linéaire (1 Mo de « a » dans une balise : moins de 1 s).
  *
  * ── Lecture d'un CSV ────────────────────────────────────────────────────────────────────────
  *
  *   decoderTexte(octets: Uint8Array): TexteDecode
  * UTF-8 si les octets sont de l'UTF-8 valide (BOM EF BB BF retiré du texte, `bom: true`) ;
  * sinon Windows-1252 (exports Excel) : 0xE9 → 'é', 0x80 → '€', 0x92 → '’', 0x9C → 'œ',
+ * (BOM UTF-8 suivi d'octets qui ne sont pas de l'UTF-8 : décodé en Windows-1252, BOM retiré du
+ * texte, `bom: true`) ;
  * 0x8C → 'Œ' ; les cinq octets non définis (0x81, 0x8D, 0x8F, 0x90, 0x9D) → U+0081… comme le
  * WHATWG. ASCII pur → 'utf-8'. Vide → texte '' en 'utf-8'.
  *
@@ -69,14 +86,18 @@
  * (séparateur, guillemets doublés et retours à la ligne gardés), fins de ligne CRLF, LF ou CR ;
  * la dernière fin de ligne ne crée pas de ligne vide ; une ligne `;;;;` donne des champs ''.
  * Guillemet non fermé : le reste du fichier est le dernier champ (pas d'exception).
- * Cellules d'un CSV : toujours des chaînes (vide = '').
+ * Cellules d'un CSV : toujours des chaînes (vide = ''). `erreur: null`.
+ * Fichier binaire déposé comme CSV (octets qui commencent par la signature ZIP `PK\x03\x04` — un
+ * .xlsx renommé —, ou qui contiennent un octet nul) → `erreur: { code: 'fichier_binaire',
+ * message }` (message en français qui dit quoi faire), `lignes: []`. Jamais d'exception.
  *
  * ── Détection ───────────────────────────────────────────────────────────────────────────────
  *
  *   detecterEntete(lignes: readonly LigneBrute[]): number | null
  * Indice (0 = première ligne) de la ligne d'en-tête : parmi les 20 premières lignes, celle qui a
  * le plus de cellules reconnues par le dictionnaire des synonymes (tous types confondus), la
- * première à égalité ; si aucune cellule n'est reconnue, la première ligne qui a au moins deux
+ * première à égalité (une cellule de plus de 200 caractères n'est jamais reconnue, et se traite en
+ * temps linéaire : 100 Kio en moins de 200 ms) ; si aucune cellule n'est reconnue, la première ligne qui a au moins deux
  * cellules texte non vides ; `null` si aucune (feuille vide). Une ligne de titre au-dessus des
  * en-têtes est ainsi sautée (classeur : en-tête en ligne Excel 3 → indice 2).
  *
@@ -102,11 +123,31 @@
  * « longueur m »). Préfixe de numéro ignoré en tête d'en-tête : « N° », « No », « Nº », « N. »,
  * « Num », « Numéro (de) », « # », collé ou non (« N° planche » = « N°planche » = « No. planche »
  * = « Numéro de planche » = « planche »). Texte final entre parenthèses ou crochets retiré avant
- * la comparaison (« Durée pépinière (j) » = « durée pépinière ») ; c'est une UNITÉ s'il vaut m,
- * cm, kg ou g (casse ignorée : « [M] »). Unité aussi reconnue après « en » (« Longueur en cm »)
- * et en suffixe de l'export T15 (« longueur_m », « poids_mille_graines_g »). Une unité qui n'est
- * pas de la grandeur du champ (« Longueur (kg) »), ou un champ qui n'est pas une mesure :
- * unite null. Pas d'unité → null (celle du champ s'appliquera).
+ * la comparaison (« Durée pépinière (j) » = « durée pépinière »). Unité aussi lue après « en »
+ * (« Longueur en cm »), après « / » ou « par » (« Plants/m² ») et en suffixe de l'export T15
+ * (« longueur_m », « poids_mille_graines_g »). En-tête de plus de 200 caractères : jamais reconnu.
+ *
+ * Unités dans l'en-tête (relecture, point 4). Une UNITÉ EXPLICITE est un de ces mots (casse,
+ * accents et points ignorés) : m, cm, mm, km, g, kg, t, ha, a, m², m2, j, jour, jours, sem,
+ * semaine, semaines, mois, an, ans, h, nb, nombre, graines, plants, pieds, pouces, l, €, eur,
+ * euros, %. Une unité explicite ACCEPTÉE pour le champ donne `unite` ; une unité explicite qui
+ * ne l'est pas → la colonne n'est PAS proposée (`{ champ: null, unite: null }`) : « Longueur
+ * (kg) », « Écartement (pouces) », « Récolte (kg) », « Récolte (€) », « Semis (graines) »,
+ * « Plantation (nb) », « Plants/m² » sont ignorées. Un autre texte entre parenthèses (« (nom) »,
+ * « (JJ/MM/AAAA) ») est simplement retiré, `unite` null. Unités acceptées :
+ *   longueur_m, largeur_m, ecartement_cm   m, cm → unite 'm' / 'cm'
+ *   poids_mille_graines_g                  g, kg → unite 'g' / 'kg'
+ *   surface_m2                             m², m2 → unite null (unité du champ) ;
+ *                                          ha → unite 'ha' (décision testeur : courant chez les
+ *                                          maraîchers ; valeur × 10 000, exacte : « 1,5 » → 15 000)
+ *   durées en jours (duree_pepiniere_jours, duree_avant_recolte_jours, fenetre_recolte_jours)
+ *                                          j, jour, jours → unite null (unité du champ) ;
+ *                                          sem, semaine, semaines → unite 'semaine' (décision
+ *                                          testeur : conversion simple, valeur × 7 ; le résultat
+ *                                          doit rester entier : « 1,5 » semaine → 'nombre_invalide')
+ *   nombre_places, nombre_plants, rangs_par_planche
+ *                                          nb, nombre → unite null
+ *   tous les autres champs                 aucune
  *
  * Dictionnaire (au MINIMUM ces synonymes, après normalisation ; en ajouter est libre, sauf
  * « mètres », « lieu dit » et « semaine de … », que les tests du modèle d'import veulent
@@ -130,10 +171,13 @@
  *   rangs_par_planche          rangs, rangs/planche, rangs par planche, nombre de rangs
  *   ecartement_cm              écartement, espacement, spacing
  *   poids_mille_graines_g      pmg, poids de mille graines, poids_mille_graines
- *   date_semis                 semis, date de semis, date semis, prevu_semis_pepiniere
- *   date_plantation            plantation, date de plantation, date plantation, prevu_mise_en_place
- *   date_debut_recolte         début récolte, début de récolte, récolte, prevu_debut_recolte
- *   date_fin_recolte           fin récolte, fin de récolte, prevu_fin_recolte
+ *   date_semis                 semis, date de semis, date semis, prevu_semis_pepiniere,
+ *                              sowing, sowing date
+ *   date_plantation            plantation, date de plantation, date plantation, prevu_mise_en_place,
+ *                              planting, planting date
+ *   date_debut_recolte         début récolte, début de récolte, récolte, prevu_debut_recolte,
+ *                              harvest start
+ *   date_fin_recolte           fin récolte, fin de récolte, prevu_fin_recolte, harvest end
  *   nombre_plants              nombre de plants, nb plants, plants
  *   annee                      année, saison, year
  * Aller-retour avec l'export T15 : les colonnes techniques (id, ferme_id, cree_le, modifie_le,
@@ -160,19 +204,26 @@
  *             Casse, accents et ponctuation ignorés ; au minimum : « plein champ », « open
  *             field », « tunnel », « serre », « greenhouse », « hors sol » ; « planche »,
  *             « rang », « gouttière » ; « semis direct », « plant maison », « plant acheté ».
- *             Autre valeur → 'valeur_inconnue'
+ *             Autre valeur → 'valeur_inconnue' ; jamais une propriété héritée d'objet :
+ *             « constructor », « __proto__ », « toString » → 'valeur_inconnue'
  *   mesure    longueur_m, largeur_m (en m) ; ecartement_cm (en cm) ; poids_mille_graines_g (en g)
  *             → `lireMesure` avec l'unité de l'en-tête par défaut ; ≤ 0 → 'hors_bornes'
- *   nombre    surface_m2 → `lireNombre` ; ≤ 0 → 'hors_bornes'
- *   entier    nombre_places, nombre_plants, rangs_par_planche (≥ 1), durées en jours (≥ 0),
- *             annee (2000 à 2100) → nombre à virgule → 'nombre_invalide', hors bornes → 'hors_bornes'
- *   date      date_* → `lireDate` avec `anneeSaison`
+ *   nombre    surface_m2 → `lireNombre` (× 10 000 si l'unité est 'ha') ; ≤ 0 → 'hors_bornes'
+ *   entier    nombre_places, nombre_plants, rangs_par_planche (≥ 1), durées en jours (≥ 0 ; × 7 si
+ *             l'unité est 'semaine'), annee (2000 à 2100) → nombre à virgule → 'nombre_invalide',
+ *             hors bornes → 'hors_bornes'
+ *   date      date_* → `lireDate` avec `anneeSaison`, `systemeDates` et l'ordre jour/mois de la
+ *             colonne (voir « Plan d'import »)
  *   référence espece → bibliotheque.especes, famille → bibliotheque.familles (`ReferenceImport`)
  * Cellule vide → null (champ facultatif) ; cellule absente (ligne plus courte que l'en-tête, fréquent
  * dans un classeur) = vide ; nombre dans un champ texte → son écriture ('3', '12.5'). Un champ
  * non associé est ABSENT de `valeurs`. Les valeurs d'une ligne en erreur ne sont pas garanties.
  *
  * ── Normalisation ───────────────────────────────────────────────────────────────────────────
+ *
+ * Limite commune (relecture, point 3) : `lireNombre`, `lireMesure` et `lireDate` travaillent en
+ * temps linéaire (cellule de 100 Kio : moins de 200 ms) ; texte de plus de 200 caractères (espaces
+ * autour retirés) → 'nombre_invalide' (nombre, mesure) ou 'date_invalide' (date).
  *
  *   lireNombre(c: Cellule): Lecture<number | null>
  * '' ou espaces ou null → null ; nombre fini tel quel ; texte : signe facultatif, chiffres,
@@ -188,12 +239,18 @@
  * Unité inconnue ou d'une autre grandeur (« 3 kg » vers m) → 'unite_inconnue' ; nombre illisible
  * → 'nombre_invalide'.
  *
- *   lireDate(c: Cellule, anneeSaison: number | null): Lecture<DateCalendaire | null>
- *   - 'JJ/MM/AAAA' (jour et mois sur 1 ou 2 chiffres) → 'AAAA-MM-JJ' ;
+ *   lireDate(c: Cellule, anneeSaison: number | null, options?: OptionsDate): Lecture<DateCalendaire | null>
+ *   - 'JJ/MM/AAAA' (jour et mois sur 1 ou 2 chiffres) → 'AAAA-MM-JJ' ; 'MM/JJ/AAAA' si
+ *     `options.ordre` vaut 'mm_jj' (défaut 'jj_mm') ;
  *   - 'AAAA-MM-JJ' ;
- *   - nombre = date Excel (système 1900) : 1 → 1900-01-01, 59 → 1900-02-28, 60 → le 29/02/1900
- *     qui n'existe pas (bogue de Lotus repris par Excel) → 'date_invalide', 61 → 1900-03-01,
- *     46461 → 2027-03-15 ; partie décimale (heure) ignorée ; < 1 → 'date_invalide' ;
+ *   - nombre = date Excel, système `options.systemeDates` (défaut 1900) :
+ *     1900 : 60 est le 29/02/1900 qui n'existe pas (bogue de Lotus repris par Excel), 61 →
+ *     1900-03-01, 46461 → 2027-03-15 ; 1904 : 0 → 1904-01-01, 44999 → 2027-03-15 ;
+ *     partie décimale (heure) ignorée ; < 1 (1900) ou < 0 (1904) → 'date_invalide' ;
+ *     PLAGE (relecture, point 5) : la date obtenue doit tomber dans les années [anneeSaison − 5,
+ *     anneeSaison + 5] (2027 : du 2022-01-01 au 2032-12-31), ou en 1950 au plus tôt si
+ *     `anneeSaison` est null ; sinon 'date_invalide' (un nombre qui n'est pas une date, une
+ *     quantité dans la mauvaise colonne) ;
  *   - semaine : 'S14', 's14', 'S 14', 'sem 14', 'Sem. 14', 'semaine 14' → LUNDI de la semaine
  *     ISO 14 de `anneeSaison` (2027 → 2027-04-05) ; `anneeSaison` null → 'annee_manquante' ;
  *     semaine qui n'existe pas cette année-là (S53 en 2027, S0) → 'date_invalide' ;
@@ -212,14 +269,29 @@
  *
  *   preparerImport(entree: EntreeImport): PlanImport
  * Lignes lues après `ligneEntete`. Ignorées (`ignorees`, avec le motif) : ligne vide (toutes ses
- * cellules vides ou espaces) → 'vide' ; ligne de total (une cellule texte qui commence par le mot
- * « total », « sous-total » ou « somme », casse et accents ignorés) → 'total'.
+ * cellules vides ou espaces) → 'vide' ; ligne de total → 'total' : seule la PREMIÈRE cellule non
+ * vide parmi les colonnes associées à un champ est examinée ; elle commence par le mot « total »
+ * ou « sous-total » (casse et accents ignorés), ou par « somme » à condition que le champ
+ * emplacement de la ligne soit vide (ou non associé) — « Somme » est aussi un nom de lieu.
+ * « Total à revoir » dans une colonne non associée (Notes) ne fait pas ignorer la ligne.
  * Les autres donnent chacune une `LignePlan`, dans l'ordre, avec `ligne` = son numéro dans le
  * fichier comme on le voit dans le tableur (première ligne = 1 : en-tête en 1 → données dès 2).
  * Hiérarchie du parcellaire (zone, sous_zone) : une cellule vide reprend la valeur de la ligne
  * au-dessus (cellules fusionnées) ; une nouvelle zone efface la sous-zone reprise.
  * `niveaux` (parcellaire seulement, sinon null) : nombre de niveaux associés parmi zone,
  * sous_zone, emplacement (1, 2 ou 3).
+ * Dates JJ/MM ou MM/JJ, décidé PAR COLONNE sur toutes ses lignes de données : si une valeur
+ * « a/b/AAAA » a a > 12 → JJ/MM ; sinon, si une valeur a b > 12 → MM/JJ ; sinon JJ/MM (défaut
+ * français). Les deux à la fois : JJ/MM, et les valeurs impossibles en JJ/MM sont 'date_invalide'.
+ * `systemeDates` (défaut 1900) : celui de la feuille du classeur, pour les numéros de série.
+ * Règles de ligne (relecture) :
+ *   - cellule non vide (hors espaces) au-delà de la largeur de l'en-tête (position de sa dernière
+ *     cellule non vide + 1) → une erreur 'colonnes_en_trop', champ null, colonne = la première
+ *     de ces cellules ;
+ *   - séries : les dates présentes doivent se suivre, semis ≤ plantation ≤ début de récolte ≤ fin
+ *     de récolte (égalité permise ; pas de bascule sur l'année suivante, question à Théophane) ;
+ *     sinon UNE erreur 'dates_incoherentes', sur le premier champ (dans cet ordre) dont la date
+ *     précède celle d'un champ précédent, colonne = la sienne.
  * Statut d'une ligne, par priorité :
  *   'erreur'    au moins une erreur ; `erreurs` les liste TOUTES (code, champ, colonne 0-based,
  *               message en français ≤ 200 caractères). Une ligne en erreur ne bloque pas les autres ;
@@ -234,6 +306,10 @@
  * les numéros de ligne concernés et les propositions de `rapprocher`.
  * `choix` (facultatif) : décisions déjà prises (écran, ou modèle d'import) ; valeur comparée
  * normalisée ; `existante` → `{ sorte: 'existante', id }`, `nouvelle` → `{ sorte: 'nouvelle', nom }`.
+ * Un choix `existante` dont l'identifiant n'est pas (ou plus) dans la bibliothèque est écarté :
+ * la valeur repasse « à décider » (décision demandée comme sans choix).
+ * Messages : l'extrait de la cellule cité (40 caractères au plus) ne coupe jamais une paire de
+ * substitution (émoji…) ; le message non plus.
  * Correspondance dont un champ obligatoire n'est associé à aucune colonne : chaque ligne est en
  * erreur 'champ_manquant' (colonne null).
  *
@@ -241,7 +317,9 @@
  *
  *   creerModele(entetes: readonly Cellule[], correspondance: Correspondance, choix: readonly ChoixValeur[]): ModeleImport
  *   serialiserModele(modele: ModeleImport): string          // JSON
- *   lireModele(texte: string): ModeleImport | null          // null si illisible, version ou champ inconnus
+ *   lireModele(texte: string): ModeleImport | null          // null si illisible, version ou champ inconnus,
+ *                                                            // id de choix vide, unité non acceptée
+ *                                                            // pour le champ (ou sur une colonne ignorée)
  *   appliquerModele(modele: ModeleImport, entetes: readonly Cellule[]): Correspondance | null
  * Le modèle retient, par en-tête, le champ et l'unité validés, plus les choix de valeurs. Il
  * s'applique à un fichier de MÊME FORME : mêmes en-têtes normalisés, dans n'importe quel ordre ;
@@ -267,9 +345,13 @@ export type { DateCalendaire };
 export type Cellule = string | number | null;
 export type LigneBrute = readonly Cellule[];
 
+export type SystemeDates = 1900 | 1904;
+
 export interface Feuille {
   readonly nom: string;
   readonly lignes: readonly LigneBrute[];
+  /** Système de dates du classeur (`<workbookPr date1904>`), pour les numéros de série. */
+  readonly systemeDates: SystemeDates;
 }
 
 export type ResultatClasseur =
@@ -294,6 +376,8 @@ export interface CsvLu {
   readonly bom: boolean;
   readonly separateur: Separateur;
   readonly lignes: readonly (readonly string[])[];
+  /** Fichier binaire (un .xlsx renommé, octets nuls) : `lignes` vide. */
+  readonly erreur: { readonly code: 'fichier_binaire'; readonly message: string } | null;
 }
 
 // ── Champs et correspondance ─────────────────────────────────────────────────────────────────
@@ -328,6 +412,8 @@ export type CleChamp =
   | 'annee';
 
 export type UniteMesure = 'm' | 'cm' | 'kg' | 'g';
+/** Unité lue dans un en-tête : une mesure, ou une conversion (hectares, semaines). */
+export type UniteColonne = UniteMesure | 'ha' | 'semaine';
 
 export interface DefinitionChamp {
   readonly cle: CleChamp;
@@ -338,7 +424,7 @@ export interface DefinitionChamp {
 
 export interface ColonneAssociee {
   readonly champ: CleChamp | null;
-  readonly unite: UniteMesure | null;
+  readonly unite: UniteColonne | null;
 }
 
 export interface Correspondance {
@@ -356,9 +442,18 @@ export type CodeErreurImport =
   | 'annee_manquante'
   | 'champ_manquant'
   | 'valeur_inconnue'
-  | 'hors_bornes';
+  | 'hors_bornes'
+  | 'dates_incoherentes'
+  | 'colonnes_en_trop';
 
 export type Lecture<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly code: CodeErreurImport };
+
+export interface OptionsDate {
+  /** 'JJ/MM/AAAA' (défaut) ou 'MM/JJ/AAAA'. */
+  readonly ordre?: 'jj_mm' | 'mm_jj';
+  /** Système des numéros de série Excel (défaut 1900). */
+  readonly systemeDates?: SystemeDates;
+}
 
 // ── Valeurs ──────────────────────────────────────────────────────────────────────────────────
 
@@ -403,9 +498,11 @@ export interface EntreeImport {
   readonly ligneEntete: number;
   readonly correspondance: Correspondance;
   readonly bibliotheque: Bibliotheque;
-  /** Année de la saison, pour les dates en semaines. */
+  /** Année de la saison, pour les dates en semaines et la plage des numéros de série. */
   readonly anneeSaison: number | null;
   readonly choix?: readonly ChoixValeur[];
+  /** Système de dates de la feuille (classeur) ; défaut 1900. */
+  readonly systemeDates?: SystemeDates;
 }
 
 export type ValeurImport = string | number | ReferenceImport | null;
@@ -456,7 +553,7 @@ export interface ModeleImport {
   readonly version: 1;
   readonly type: TypeContenu;
   /** Par en-tête du fichier (tel qu'écrit), le champ et l'unité validés. */
-  readonly colonnes: readonly { readonly entete: string; readonly champ: CleChamp | null; readonly unite: UniteMesure | null }[];
+  readonly colonnes: readonly { readonly entete: string; readonly champ: CleChamp | null; readonly unite: UniteColonne | null }[];
   readonly choix: readonly ChoixValeur[];
 }
 
@@ -480,7 +577,7 @@ export interface ModuleImport {
   readonly CHAMPS_IMPORT: Readonly<Record<TypeContenu, readonly DefinitionChamp[]>>;
   lireNombre(c: Cellule): Lecture<number | null>;
   lireMesure(c: Cellule, cible: UniteMesure, parDefaut: UniteMesure | null): Lecture<number | null>;
-  lireDate(c: Cellule, anneeSaison: number | null): Lecture<DateCalendaire | null>;
+  lireDate(c: Cellule, anneeSaison: number | null, options?: OptionsDate): Lecture<DateCalendaire | null>;
   rapprocher(valeur: string, references: readonly Reference[]): Rapprochement;
   preparerImport(entree: EntreeImport): PlanImport;
   creerModele(entetes: readonly Cellule[], correspondance: Correspondance, choix: readonly ChoixValeur[]): ModeleImport;
