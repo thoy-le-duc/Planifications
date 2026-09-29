@@ -20,20 +20,28 @@ const MOTIF_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CARACTERES_PIEGES = /[,;:<>()[\]"\\\p{Cc}]/u;
 /**
  * Caractères invisibles de format (espace sans chasse, inversion de sens, trait d'union
- * conditionnel…) et caractères combinants : deux adresses différentes identiques à l'œil.
+ * conditionnel…), blanc braille (U+2800, ni espace ni format) et caractères combinants : deux
+ * adresses différentes identiques à l'œil.
  */
-const CARACTERES_INVISIBLES = /[\p{Cf}\p{M}]/u;
+const CARACTERES_INVISIBLES = /[\p{Cf}\p{M}\u2800]/u;
+/** Points mal placés : consécutifs, en tête de partie locale ou de domaine, juste avant « @ ». */
+const POINTS_MAL_PLACES = /\.\.|^\.|\.@|@\./;
+
+/** Caractère refusé dans `s` (séparateur, contrôle, format, combinant, forme que NFKC change). */
+function caracterePiege(s: string): boolean {
+  return CARACTERES_PIEGES.test(s) || CARACTERES_INVISIBLES.test(s) || s !== s.normalize('NFKC');
+}
 
 /**
- * Vrai si `v` est une chaîne piégée, avant toute normalisation : séparateur d'adresses, caractère
- * de contrôle, de format ou combinant, forme que NFKC change (pleine chasse, ligature, exposant,
- * signe kelvin…), ou point final de domaine.
+ * Vrai si `v` est une chaîne piégée : séparateur d'adresses, caractère de contrôle, de format ou
+ * combinant, forme que NFKC change (pleine chasse, ligature, exposant, signe kelvin…), point
+ * final de domaine ou point mal placé. Le contrôle est fait avant la normalisation ET refait
+ * après : « İ » en minuscules laisse un point combinant (U+0307).
  */
 export function emailPiege(v: unknown): boolean {
-  return (
-    typeof v === 'string' &&
-    (CARACTERES_PIEGES.test(v) || CARACTERES_INVISIBLES.test(v) || v !== v.normalize('NFKC') || v.trim().endsWith('.'))
-  );
+  if (typeof v !== 'string') return false;
+  const normalisee = v.trim().toLowerCase();
+  return caracterePiege(v) || caracterePiege(normalisee) || normalisee.endsWith('.') || POINTS_MAL_PLACES.test(normalisee);
 }
 
 /** Adresse normalisée (espaces retirés, minuscules), ou null si elle n'en est pas une. */
