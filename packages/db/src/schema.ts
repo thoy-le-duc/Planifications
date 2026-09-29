@@ -31,6 +31,7 @@ import {
   type AnyPgColumn,
   boolean,
   check,
+  foreignKey,
   date,
   index,
   integer,
@@ -39,6 +40,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
@@ -48,6 +50,7 @@ import {
   ETAPES_REALISEES,
   MODES_ITINERAIRE,
   MOTIFS_MOUVEMENT,
+  NATURES_OBSERVATION,
   NATURES_ASSOLEMENT,
   OPERATIONS_LIGNE,
   SORTES_EMPLACEMENT,
@@ -108,7 +111,16 @@ function parmi(expression: AnyPgColumn | SQL, valeurs: readonly string[]): SQL {
 }
 
 const MOTIF_UUID = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
-const MOTIF_DATE = '^[0-9]{4}-[0-9]{2}-[0-9]{2}$';
+
+/** Valeur jsonb numérique qui vérifie `comparaison` ; faux (jamais d'erreur) sinon. */
+function nombre(valeur: SQL, comparaison: '> 0' | '>= 0'): SQL {
+  return sql`(CASE WHEN jsonb_typeof(${valeur}) = 'number' THEN (${valeur})::numeric ${sql.raw(comparaison)} ELSE false END)`;
+}
+
+/** Valeur jsonb absente, nulle, ou du type donné. */
+function typeOuNul(valeur: SQL, type: 'string' | 'number'): SQL {
+  return sql`coalesce(jsonb_typeof(${valeur}), 'null') IN ('null', ${sql.raw(`'${type}'`)})`;
+}
 
 /** Nom de contrainte CHECK préfixé par la table. */
 const verif = (table: string, nom: string, condition: SQL) => check(`${table}_${nom}`, condition);
@@ -566,7 +578,8 @@ export const evenement = pgTable(
     note: text('note'),
     photos: text('photos').array().$type<readonly string[]>().notNull().default(sql`'{}'::text[]`),
     remplaceSorte: text('remplace_sorte', { enum: SORTES_REMPLACEMENT }),
-    remplaceEvenementId: idDe<'Evenement'>('remplace_evenement_id').references((): AnyPgColumn => evenement.id),
+    /** Même ferme garantie par la clé étrangère composée ci-dessous ; même type par déclencheur. */
+    remplaceEvenementId: idDe<'Evenement'>('remplace_evenement_id'),
     /** Le Detail* de T01 tel quel (clés camelCase), choisi par `type`. */
     detail: jsonb('detail').$type<Evenement['detail']>().notNull(),
     creeLe: creeLe(),
@@ -584,33 +597,61 @@ export const evenement = pgTable(
     verif('evenement', 'ne_se_remplace_pas', sql`${t.remplaceEvenementId} IS DISTINCT FROM ${t.id}`),
     verif('evenement', 'detail_objet', sql`jsonb_typeof(${t.detail}) = 'object'`),
     // Les CASE garantissent l'ordre d'évaluation : pas de conversion d'une valeur non numérique.
-    // Détail : juste ce que les vues recoltes, interventions et traitements lisent et convertissent.
+    // Détail jsonb : un champ absent, une date impossible ou une valeur non numérique est
+    // refusé (23514). `IS TRUE` : une condition inconnue (champ absent → NULL) refuse aussi.
+    // Les CASE garantissent qu'aucune conversion ne s'applique à une valeur non numérique.
     verif(
       'evenement',
       'detail_recolte',
-      sql`CASE WHEN ${t.type} <> 'recolte' THEN true
-        WHEN jsonb_typeof(${t.detail} -> 'quantite') <> 'number' THEN false
-        ELSE (${t.detail} ->> 'quantite')::numeric > 0 AND ${parmi(sql`${t.detail} ->> 'unite'`, UNITES_RECOLTE)} END`,
+      sql`${t.type} <> 'recolte' OR (${nombre(sql`${t.detail} -> 'quantite'`, '> 0')}
+        AND ${parmi(sql`${t.detail} ->> 'unite'`, UNITES_RECOLTE)}
+        AND ${typeOuNul(sql`${t.detail} -> 'categorie'`, 'string')}) IS TRUE`,
     ),
     verif(
       'evenement',
       'detail_realise',
-      sql`${t.type} <> 'realise' OR ${parmi(sql`${t.detail} ->> 'etape'`, ETAPES_REALISEES)}`,
+      sql`${t.type} <> 'realise' OR (${parmi(sql`${t.detail} ->> 'etape'`, ETAPES_REALISEES)}
+        AND ${typeOuNul(sql`${t.detail} -> 'quantiteReelle'`, 'number')}) IS TRUE`,
     ),
     verif(
       'evenement',
       'detail_intervention',
-      sql`${t.type} <> 'intervention' OR ${parmi(sql`${t.detail} ->> 'categorie'`, CATEGORIES_INTERVENTION)}`,
+      sql`${t.type} <> 'intervention' OR (${parmi(sql`${t.detail} ->> 'categorie'`, CATEGORIES_INTERVENTION)}
+        AND jsonb_typeof(${t.detail} -> 'type') = 'string'
+        AND ${typeOuNul(sql`${t.detail} -> 'outil'`, 'string')}
+        AND ${typeOuNul(sql`${t.detail} -> 'dureeOccupationJours'`, 'number')}
+        AND ${typeOuNul(sql`${t.detail} -> 'quantite' -> 'valeur'`, 'number')}
+        AND (${t.detail} ->> 'categorie' NOT IN ('fertilisation', 'amendement')
+          OR (jsonb_typeof(${t.detail} -> 'quantite' -> 'valeur') = 'number'
+            AND jsonb_typeof(${t.detail} -> 'produit') = 'string'))) IS TRUE`,
+    ),
+    verif(
+      'evenement',
+      'detail_irrigation',
+      sql`${t.type} <> 'irrigation' OR ((${t.detail} ->> 'secteurIrrigationId') ~ ${sql.raw(`'${MOTIF_UUID}'`)}
+        AND ${nombre(sql`${t.detail} -> 'dureeMinutes'`, '>= 0')}) IS TRUE`,
     ),
     verif(
       'evenement',
       'detail_traitement',
-      sql`${t.type} <> 'traitement' OR (
-        (${t.detail} ->> 'produitPhytoId') ~ ${sql.raw(`'${MOTIF_UUID}'`)}
-        AND (${t.detail} ->> 'recolteAutoriseeLe') ~ ${sql.raw(`'${MOTIF_DATE}'`)}
-        AND jsonb_typeof(${t.detail} -> 'dose' -> 'valeur') = 'number'
-        AND jsonb_typeof(${t.detail} -> 'surfaceTraiteeM2') = 'number')`,
+      sql`${t.type} <> 'traitement' OR ((${t.detail} ->> 'produitPhytoId') ~ ${sql.raw(`'${MOTIF_UUID}'`)}
+        AND est_date_calendaire(${t.detail} ->> 'recolteAutoriseeLe')
+        AND ${nombre(sql`${t.detail} -> 'dose' -> 'valeur'`, '>= 0')}
+        AND jsonb_typeof(${t.detail} -> 'dose' -> 'unite') = 'string'
+        AND ${nombre(sql`${t.detail} -> 'surfaceTraiteeM2'`, '>= 0')}) IS TRUE`,
     ),
+    verif(
+      'evenement',
+      'detail_observation',
+      sql`${t.type} <> 'observation' OR (${parmi(sql`${t.detail} ->> 'nature'`, NATURES_OBSERVATION)}) IS TRUE`,
+    ),
+    /** Cible de la clé étrangère composée : un remplacement vise un événement de la même ferme. */
+    unique('evenement_ferme_id_id_unique').on(t.fermeId, t.id),
+    foreignKey({
+      name: 'evenement_remplace_meme_ferme_fk',
+      columns: [t.fermeId, t.remplaceEvenementId],
+      foreignColumns: [t.fermeId, t.id],
+    }),
     index('evenement_ferme_date_idx').on(t.fermeId, t.date),
     index('evenement_serie_idx').on(t.serieId),
     index('evenement_campagne_idx').on(t.campagneId),

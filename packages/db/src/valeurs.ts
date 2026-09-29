@@ -9,6 +9,7 @@ import type {
   CategorieIntervention,
   EtapeRealisee,
   ModeItineraire,
+  NatureObservation,
   Modification,
   MotifMouvementStock,
   NatureAssolement,
@@ -60,6 +61,7 @@ export const TYPES_EVENEMENT = toutes<TypeEvenement>()([
 export const SOURCES_SAISIE = toutes<SourceSaisie>()(['tap', 'voix', 'agent', 'photo', 'import']);
 export const SORTES_REMPLACEMENT = toutes<RemplacementEvenement['sorte']>()(['correction', 'annulation']);
 export const ETAPES_REALISEES = toutes<EtapeRealisee>()(['semis_pepiniere', 'semis_direct', 'plantation', 'arrachage']);
+export const NATURES_OBSERVATION = toutes<NatureObservation>()(['ravageur', 'maladie', 'stade', 'autre']);
 export const CATEGORIES_INTERVENTION = toutes<CategorieIntervention>()([
   'travail_sol',
   'couverture',
