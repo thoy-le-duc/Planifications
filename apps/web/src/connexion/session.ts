@@ -21,8 +21,14 @@ export interface SessionConnexion {
 const CHAMPS = ['utilisateurId', 'email', 'jetonAcces', 'jetonRenouvellement'] as const;
 
 /**
+ * Écart d'horloge plausible au plus (48 h, bornes comprises) : au-delà, la valeur rangée est
+ * aberrante (stockage modifié) et ferait renouveler à chaque appel ou garder un jeton périmé.
+ */
+export const ECART_HORLOGE_MAX_MS = 48 * 60 * 60 * 1000;
+
+/**
  * Session complète (quatre chaînes non vides), ou null. L'écart d'horloge n'est gardé que s'il est
- * un nombre fini : illisible, il est omis sans invalider la session.
+ * un nombre fini d'au plus ±48 h : sinon il est omis sans invalider la session.
  */
 export function sessionValide(v: unknown): SessionConnexion | null {
   if (typeof v !== 'object' || v === null) return null;
@@ -43,7 +49,7 @@ export function sessionValide(v: unknown): SessionConnexion | null {
     email,
     jetonAcces,
     jetonRenouvellement,
-    ...(typeof ecart === 'number' && Number.isFinite(ecart) ? { ecartHorlogeMs: ecart } : {}),
+    ...(typeof ecart === 'number' && Number.isFinite(ecart) && Math.abs(ecart) <= ECART_HORLOGE_MAX_MS ? { ecartHorlogeMs: ecart } : {}),
   };
 }
 

@@ -16,6 +16,12 @@
  * - écart d'horloge : l'heure du serveur est estimée par l'iat des jetons reçus (sans appel
  *   réseau de plus), et c'est elle qui décide du renouvellement. L'écart est rangé avec la
  *   session (`ecartHorlogeMs`) et relu au démarrage.
+ *
+ * 2e relecture sécurité (B1) : l'API révoque toute la session quand on lui présente un jeton déjà
+ * remplacé. Un seul renouvellement à la fois ENTRE ONGLETS, sous le verrou
+ * `navigator.locks.request('planif-renouvellement', …)` : relire la session rangée ; si son jeton
+ * d'accès (renouvelé par un autre onglet) est encore valable, le rendre sans réseau ; sinon
+ * renouveler et ranger. Sans `navigator.locks` : un seul renouvellement à la fois dans la page.
  */
 import { SessionExpiree } from '@planif/sync';
 import { enregistrerSession, lireSession, sessionValide, type SessionConnexion } from '../connexion/session.ts';
@@ -47,6 +53,20 @@ export function expirationJeton(jeton: string): number | null {
 /** Instant d'émission (ms) d'un JWT, à l'heure du serveur ; null si illisible. */
 export function emissionJeton(jeton: string): number | null {
   return claimInstant(jeton, 'iat');
+}
+
+/** Ce dont on se sert de `navigator.locks` : un verrou exclusif par nom. */
+interface Verrous {
+  request<T>(nom: string, rappel: () => Promise<T>): Promise<T>;
+}
+
+/** `navigator.locks`, ou null (navigateur ancien, `navigator` absent). */
+function verrousNavigateur(): Verrous | null {
+  const nav: unknown = typeof navigator === 'undefined' ? undefined : navigator;
+  if (typeof nav !== 'object' || nav === null || !('locks' in nav)) return null;
+  const locks: unknown = nav.locks;
+  if (typeof locks !== 'object' || locks === null || !('request' in locks) || typeof locks.request !== 'function') return null;
+  return locks as Verrous;
 }
 
 export interface OptionsJetons {
@@ -84,13 +104,46 @@ export function gererJetons(depart: SessionConnexion, options: OptionsJetons): G
   const iatDepart = emissionJeton(depart.jetonAcces);
   let ecart = depart.ecartHorlogeMs ?? (iatDepart === null ? 0 : Math.max(0, iatDepart - maintenant()));
 
-  async function renouveler(): Promise<string> {
-    // Une autre page ou un autre onglet a pu faire tourner le jeton : on présente le plus récent.
+  /** Le jeton d'accès en mémoire vaut encore au moins la marge, à l'heure estimée du serveur. */
+  function accesValable(): boolean {
+    const exp = expirationJeton(session.jetonAcces);
+    return !invalide && exp !== null && exp - (maintenant() + ecart) > MARGE_RENOUVELLEMENT_MS;
+  }
+
+  /**
+   * Une autre page ou un autre onglet a pu faire tourner le jeton : on reprend la session rangée
+   * (même utilisateur) si elle diffère. Vrai si on l'a reprise.
+   */
+  function relireRangee(): boolean {
     const stockage = options.stockage;
     const rangee = stockage.getItem === undefined ? null : lireSession({ getItem: (cle) => stockage.getItem?.(cle) ?? null });
-    if (rangee !== null && rangee.utilisateurId === session.utilisateurId && rangee.jetonRenouvellement !== session.jetonRenouvellement) {
-      session = rangee;
+    if (rangee?.utilisateurId !== session.utilisateurId || rangee.jetonRenouvellement === session.jetonRenouvellement) {
+      return false;
     }
+    const nouvelAcces = rangee.jetonAcces !== session.jetonAcces;
+    session = rangee;
+    if (rangee.ecartHorlogeMs !== undefined) ecart = rangee.ecartHorlogeMs;
+    // Un jeton d'accès neuf n'a pas été refusé par le serveur.
+    if (nouvelAcces) invalide = false;
+    return true;
+  }
+
+  /** Sous le verrou entre onglets : jeton rangé encore valable rendu sans réseau, sinon renouvelé. */
+  async function renouvelerSousVerrou(): Promise<string> {
+    if (relireRangee() && accesValable()) return session.jetonAcces;
+    return envoyerRenouvellement();
+  }
+
+  async function renouveler(): Promise<string> {
+    const verrous = verrousNavigateur();
+    if (verrous === null) {
+      relireRangee();
+      return envoyerRenouvellement();
+    }
+    return verrous.request('planif-renouvellement', renouvelerSousVerrou);
+  }
+
+  async function envoyerRenouvellement(): Promise<string> {
     const res = await envoyer(`${options.urlApi}/auth/renouveler`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -115,10 +168,7 @@ export function gererJetons(depart: SessionConnexion, options: OptionsJetons): G
       invalide = true;
     },
     jetonValide() {
-      const exp = expirationJeton(session.jetonAcces);
-      if (!invalide && exp !== null && exp - (maintenant() + ecart) > MARGE_RENOUVELLEMENT_MS) {
-        return Promise.resolve(session.jetonAcces);
-      }
+      if (accesValable()) return Promise.resolve(session.jetonAcces);
       enCours ??= renouveler().finally(() => {
         enCours = null;
       });
