@@ -35,7 +35,7 @@ import { garde, type VariablesAuthentifiees } from '../auth/garde.ts';
 import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
 import { lireCorps } from '../http.ts';
-import { jsonSansErreur, lireEvenement } from './evenement.ts';
+import { lireEvenement } from './evenement.ts';
 import { verifierReferences } from './references.ts';
 
 interface Env {
@@ -122,6 +122,19 @@ function refusParLaBase(erreur: unknown): boolean {
 /** Texte reçu, rangeable dans une colonne text : sans U+0000 (refusé par Postgres), tronqué. */
 function texteRefus(texte: string): string {
   return texte.replaceAll('\u0000', '\uFFFD').slice(0, LONGUEUR_MAX_TEXTE_REFUS);
+}
+
+/**
+ * JSON.stringify qui ne lève jamais (relecture T10, R2) : une valeur imbriquée sur des dizaines
+ * de milliers de niveaux dépasse la pile (RangeError). null si la valeur ne s'écrit pas.
+ */
+function jsonSansErreur(valeur: unknown): string | null {
+  try {
+    const texte: unknown = JSON.stringify(valeur);
+    return typeof texte === 'string' ? texte : null;
+  } catch {
+    return null;
+  }
 }
 
 /** `donnees` conservées dans le refus, ou null si trop grosses ou impossibles à ranger en jsonb. */
