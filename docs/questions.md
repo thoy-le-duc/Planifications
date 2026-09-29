@@ -203,6 +203,12 @@ Question : l'appli envoie le code de connexion par un serveur SMTP générique (
 
 Question : une même adresse IP peut demander au plus 30 codes et en vérifier 60 par heure. Au magasin, tout le monde sort par la même IP : ces seuils suffisent-ils (combien de personnes se connectent par heure au plus) ?
 
+### Q16 — Maquettes de l'identité visuelle (posée le 2026-09-29)
+
+Question : les maquettes (https://claude.ai/artifact/CkYjAD2qX9mxw3FNLT9miP) conviennent-elles : vert forêt pour ce qui se touche, orange pour ce qui presse, typo lisible au soleil, gros boutons ? Première série de 4 écrans, puis 6 de plus à la demande de Théophane (semaine, nouvelle série, dicter, import, ferme, ordinateur).
+
+Réponse (2026-09-29) : « Très sympa ». Style validé ; ticket T16 avant T11 et T13.
+
 ### À suivre
 
 
