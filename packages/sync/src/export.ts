@@ -1,9 +1,12 @@
 /**
- * Export complet de la ferme depuis la base locale du téléphone (T15, principe 5) : hors ligne,
- * lecture seule par la porte, aucun réseau. Le format de l'archive est dans @planif/core.
+ * Export complet de la ferme depuis la base locale du téléphone (T15, principe 5, puis T15b) :
+ * hors ligne, lecture seule par la porte, aucun réseau. Le format de l'archive est dans
+ * @planif/core ; l'archive est construite morceau par morceau et compressée (deflate).
  */
-import { creerZip, nomArchive, preparerExport, TABLES_EXPORTEES, type LigneLocale } from '@planif/core';
+import { construireArchive, nomArchive, TABLES_EXPORTEES, type Avancement, type Compresseur, type LigneLocale } from '@planif/core';
 import type { PorteDonnees } from './types.ts';
+
+export type { Avancement, Compresseur };
 
 export interface OptionsExportFerme {
   readonly fermeId: string;
@@ -11,6 +14,10 @@ export interface OptionsExportFerme {
   readonly genereLe: string;
   /** Jour de l'export, 'AAAA-MM-JJ' : nom du fichier et date des entrées du ZIP. */
   readonly jour: string;
+  /** Deflate brut injecté ; défaut : `CompressionStream('deflate-raw')` s'il existe, sinon archive stockée. */
+  readonly compresseur?: Compresseur;
+  /** Barre d'avancement (appels de `construireArchive`). */
+  readonly avancement?: (a: Avancement) => void;
 }
 
 export interface ArchiveExport {
@@ -21,9 +28,68 @@ export interface ArchiveExport {
   readonly lignes: Readonly<Record<string, number>>;
 }
 
+// ── Compression par défaut : CompressionStream du fil courant ────────────────────────────────
+
+/** Le strict nécessaire des flux web, décrit ici : le code de @planif/sync ne dépend pas des types du DOM. */
+interface Ecrivain {
+  write(morceau: Uint8Array): Promise<void>;
+  close(): Promise<void>;
+  abort(raison?: unknown): Promise<void>;
+}
+interface Lecteur {
+  read(): Promise<{ readonly done: boolean; readonly value?: Uint8Array | undefined }>;
+  cancel(raison?: unknown): Promise<void>;
+}
+interface FluxCompression {
+  readonly writable: { getWriter(): Ecrivain };
+  readonly readable: { getReader(): Lecteur };
+}
+type ConstructeurCompression = new (format: 'deflate-raw') => FluxCompression;
+
+/** Compresseur deflate brut sur `CompressionStream` (navigateur, Node 22), ou undefined s'il n'existe pas. */
+export function compresseurParDefaut(): Compresseur | undefined {
+  const Flux = (globalThis as unknown as { readonly CompressionStream?: ConstructeurCompression }).CompressionStream;
+  if (Flux === undefined) return undefined;
+  return async function* (brut) {
+    const flux = new Flux('deflate-raw');
+    const ecrivain = flux.writable.getWriter();
+    const lecteur = flux.readable.getReader();
+    let echec: { readonly erreur: unknown } | undefined;
+    // Écriture et lecture en parallèle : le flux n'avance que si on le lit.
+    const ecriture = (async () => {
+      try {
+        for await (const morceau of brut) await ecrivain.write(morceau);
+        await ecrivain.close();
+      } catch (erreur: unknown) {
+        echec = { erreur };
+        await ecrivain.abort(erreur).catch(() => undefined);
+      }
+    })();
+    let fini = false;
+    try {
+      for (;;) {
+        const { done, value } = await lecteur.read();
+        if (done) break;
+        if (value !== undefined) yield value;
+      }
+      fini = true;
+    } catch (erreur: unknown) {
+      // Flux interrompu par l'écriture : l'erreur d'origine (celle de la source) prime.
+      await ecriture;
+      throw echec === undefined ? erreur : echec.erreur;
+    } finally {
+      if (!fini) await lecteur.cancel().catch(() => undefined);
+    }
+    await ecriture;
+    if (echec !== undefined) throw echec.erreur;
+  };
+}
+
+// ── Lecture de la base ───────────────────────────────────────────────────────────────────────
+
 /**
  * Lecture d'une table : seulement les colonnes de la liste blanche, et seulement les lignes
- * qui peuvent être de la ferme (ou de la bibliothèque de référence). `preparerExport` refiltre.
+ * qui peuvent être de la ferme (ou de la bibliothèque de référence). `construireArchive` refiltre.
  */
 function requete(table: string, colonnes: readonly string[]): { sql: string; parametres: number } {
   const select = `SELECT ${colonnes.map((c) => `"${c}"`).join(', ')} FROM "${table}"`;
@@ -35,7 +101,7 @@ function requete(table: string, colonnes: readonly string[]): { sql: string; par
 
 /** Construit l'archive ZIP de la ferme, depuis la base locale seulement. */
 export async function exporterFerme(porte: PorteDonnees, options: OptionsExportFerme): Promise<ArchiveExport> {
-  const { fermeId, genereLe, jour } = options;
+  const { fermeId, genereLe, jour, avancement } = options;
   const noms = Object.keys(TABLES_EXPORTEES);
   const lues = await Promise.all(
     noms.map((table) => {
@@ -48,8 +114,16 @@ export async function exporterFerme(porte: PorteDonnees, options: OptionsExportF
     tables[table] = lues[k] ?? [];
   });
 
-  const { fichiers, lignes } = preparerExport({ fermeId, genereLe, tables });
+  const compresseur = options.compresseur ?? compresseurParDefaut();
+  const { octets, lignes } = await construireArchive(
+    { fermeId, genereLe, tables },
+    {
+      date: jour,
+      ...(compresseur === undefined ? {} : { compresseur }),
+      ...(avancement === undefined ? {} : { avancement }),
+    },
+  );
   const ferme = tables.ferme?.find((l) => l.id === fermeId);
   const nom = typeof ferme?.nom === 'string' ? ferme.nom : null;
-  return { nomFichier: nomArchive(nom, jour), octets: creerZip(fichiers, { date: jour }), lignes };
+  return { nomFichier: nomArchive(nom, jour), octets, lignes };
 }
