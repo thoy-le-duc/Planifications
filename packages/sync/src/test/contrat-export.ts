@@ -34,6 +34,12 @@
  * le ralentissement ×4 de Chromium appliqué à l'envers). Lecture SQLite comprise ; elle est
  * plus rapide sous node:sqlite que sous wa-sqlite, d'où une marge qui reste à mesurer sur
  * téléphone quand l'écran sera branché (e2e dans le style de apps/web/e2e/mesure-sqlite.e2e.ts).
+ *
+ * Empaquetage : l'écran d'export importe `exporterFerme` de @planif/sync (point d'entrée ou
+ * sous-chemin dédié, au choix du développeur) ; ce chemin n'entraîne aucun module de
+ * `@powersync/*` dans le morceau de l'écran, même indirectement (le schéma local, schema.ts,
+ * importe `@powersync/common`). Vérifié par
+ * apps/web/src/ecrans/export/empaquetage.test.ts (empaquetage Vite en mémoire).
  */
 import type { PorteDonnees } from './contrat.ts';
 

@@ -17,7 +17,11 @@
  * EcranExport(props: ProprietesEcranExport)
  *   Un bouton (type="button") « Exporter toute ma ferme », cible au doigt : style en ligne
  *   `min-height` ≥ 48 px (gants). Au tap : `lancerExport(...)`, bouton désactivé pendant
- *   l'export, puis message en français (réussite avec le nombre d'événements, ou échec).
+ *   l'export (un second tap ne relance rien), puis message en français : réussite contenant
+ *   « <N> événements exportés » (N = lignes de evenement.csv), ou échec (role="alert"), bouton
+ *   de nouveau actif. En cas d'échec, l'erreur est journalisée par `console.error` (l'erreur
+ *   levée, éventuellement enveloppée dans une autre par `cause`). Testé au doigt dans un DOM
+ *   simulé (happy-dom) : ./interaction.test.tsx.
  *
  * lancerExport(o: { porte; fermeId; maintenant: () => Date; telecharger }): Promise<ArchiveExport>
  *   `exporterFerme(porte, { fermeId, genereLe: maintenant().toISOString(),
@@ -31,7 +35,10 @@
  * depuis le reste de l'appli (App.tsx le branchera par `lazy(() => import('./ecrans/export/index.ts'))`).
  * Le budget (`pnpm budget`, 68,9 Kio sur 90 aujourd'hui) le vérifie ; ce test vérifie la règle
  * dans les sources. L'écran n'importe ni PowerSync ni `src/donnees` (ouverture de la base) :
- * il reçoit la porte.
+ * il reçoit la porte. ./empaquetage.test.ts le vérifie sur l'empaquetage réel (Vite en mémoire,
+ * `src/main.tsx` + import dynamique de l'écran) : le JavaScript de démarrage (entrée et imports
+ * statiques) ne contient pas « Articles de stock » (texte de TABLES_EXPORTEES), et rien de ce que
+ * charge l'écran ne contient de module `@powersync/*`, même indirectement par @planif/sync.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';

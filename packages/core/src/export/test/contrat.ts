@@ -79,7 +79,9 @@
  *   }
  *   Chaque ligne a toutes les colonnes de TABLES_EXPORTEES (null si absente de l'entrée), rien
  *   d'autre. Valeurs selon le type : 'entier' et 'reel' → nombre JSON (point décimal, jamais de
- *   virgule) ; 'booleen' → true / false ; 'json' → la valeur JSON décodée (objet, tableau…),
+ *   virgule) ; 'booleen' → true / false (0 → false, 1 → true ; toute autre
+ *   valeur, 'true' ou 2 par exemple, est rendue brute : texte ou nombre tel quel, jamais
+ *   convertie) ; 'json' → la valeur JSON décodée (objet, tableau…),
  *   ou le texte tel quel s'il n'est pas du JSON valide (jamais d'exception) ; 'texte', 'date',
  *   'instant' → texte tel quel. null reste null.
  *
@@ -97,22 +99,29 @@
  *     « 12.5 » comme du texte (ou une date), « 12,5 » comme un nombre. Le JSON, lui, garde
  *     le point : c'est lui la référence pour une machine. Relecture fidèle :
  *     Number(champ.replace(',', '.')) === valeur d'origine ;
- *   - 'booleen' → 'oui' / 'non' ; 'date' → 'AAAA-MM-JJ' (tel que stocké, Excel le reconnaît) ;
+ *   - 'booleen' → 'oui' (1) / 'non' (0) ; toute autre valeur ('true', 2…) rendue brute
+ *     ('true', '2') : une donnée inattendue se voit, elle n'est pas maquillée en « non » ; 'date' → 'AAAA-MM-JJ' (tel que stocké, Excel le reconnaît) ;
  *     'instant' → ISO tel que stocké ; 'json' → le texte JSON tel que stocké ; 'texte' → tel quel.
  *
- * LISEZMOI.txt (texte, en français) : explique le contenu et les conventions (ferme.json,
+ * LISEZMOI.txt (texte, en français) : une ligne « Ferme : <nom> » donne le NOM de la ferme
+ * (celui de sa ligne `ferme` ; l'identifiant n'est pas sur cette ligne, sauf ferme absente ou
+ * sans nom), puis explique le contenu et les conventions (ferme.json,
  * point-virgule, virgule décimale, dates AAAA-MM-JJ, oui/non, dossier bibliotheque/,
  * lignes supprimées), puis pour CHAQUE fichier CSV un bloc :
  *     ## <chemin du CSV>                       (ex. « ## zone.csv », « ## bibliotheque/famille.csv »)
  *     <une ou plusieurs lignes libres sur la table>
  *     - <colonne> : <description de la colonne>   (une ligne par colonne, toutes les colonnes)
- * Un bloc s'arrête au « ## » suivant ou à la fin du fichier.
+ * Un bloc s'arrête au « ## » suivant ou à la fin du fichier. Le bloc de `utilisateur.csv` dit
+ * « Votre compte (les collègues n'y sont pas encore). » : le téléphone ne connaît que le
+ * compte de l'utilisateur connecté, l'export ne liste donc pas les autres membres.
  *
  *   nomArchive(nomFerme: string | null, jour: string): string
- * → 'planifications-<nom>-<jour>.zip' ; <nom> : nom de la ferme sans accents, en minuscules,
+ * → 'planifications-<nom>-<jour>.zip' ; <nom> : nom de la ferme sans accents, ligatures
+ *   dépliées (Œ/œ → oe, Æ/æ → ae : NFD ne les décompose pas), en minuscules,
  *   toute suite de caractères hors [a-z0-9] remplacée par un seul '-', sans '-' au début ni à
  *   la fin ; nom vide ou null → 'ferme'. <jour> : 'AAAA-MM-JJ' tel que donné.
- *   'Ferme de Benoît', '2026-09-29' → 'planifications-ferme-de-benoit-2026-09-29.zip'.
+ *   'Ferme de Benoît', '2026-09-29' → 'planifications-ferme-de-benoit-2026-09-29.zip' ;
+ *   « Ferme d'Œuvre » → 'planifications-ferme-d-oeuvre-…', « Æ » → 'planifications-ae-…'.
  *
  *   creerZip(fichiers: readonly FichierZip[], options?: { date?: string }): Uint8Array
  * Archive ZIP valide (APPNOTE PKWARE), synchrone et pure : en-têtes locaux, répertoire central,

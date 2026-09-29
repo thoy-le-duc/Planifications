@@ -207,14 +207,14 @@ function fichier(fichiers: readonly FichierExport[], chemin: string): string {
 
 function attenduCsv(type: TypeExport, v: ValeurLocale | undefined): string {
   if (v === null || v === undefined) return '';
-  if (type === 'booleen') return v === 1 ? 'oui' : 'non';
+  if (type === 'booleen' && (v === 0 || v === 1)) return v === 1 ? 'oui' : 'non';
   if ((type === 'entier' || type === 'reel') && typeof v === 'number') return String(v).replace('.', ',');
   return String(v);
 }
 
 function attenduJson(type: TypeExport, v: ValeurLocale | undefined): unknown {
   if (v === null || v === undefined) return null;
-  if (type === 'booleen') return v === 1;
+  if (type === 'booleen' && (v === 0 || v === 1)) return v === 1;
   if (type === 'json' && typeof v === 'string') {
     try {
       return JSON.parse(v) as unknown;
@@ -414,6 +414,13 @@ describe('T15 : CSV lisibles par Excel en français', () => {
     expect(lues.map((l) => l.perenne)).toEqual(['non', 'oui', '']);
     expect(lues.map((l) => l.nom)).toEqual(['', '', '']);
   });
+
+  it('booléen ni 0 ni 1 (« true », 2, « oui ») : rendu brut, jamais converti en oui / non', () => {
+    const d = description('espece');
+    const lignes = ['true', 2, 'oui', -1].map((perenne, k) => ligne('espece', d, k, { code: 'a000', compteur: 1200 + k * 20 }, FERME_A, { perenne }));
+    const lues = objetsCsv(lireCsv(fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: { espece: lignes } }), 'espece.csv')));
+    expect(lues.map((l) => l.perenne)).toEqual(['true', '2', 'oui', '-1']);
+  });
 });
 
 describe('T15 : ferme.json', () => {
@@ -461,6 +468,13 @@ describe('T15 : ferme.json', () => {
     const json = JSON.parse(fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: { evenement: [l] } }), 'ferme.json')) as FermeJson;
     expect(json.tables.evenement?.[0]?.detail).toBe('pas du json{');
     expect(json.tables.evenement?.[0]?.note).toBeNull();
+  });
+
+  it('booléen ni 0 ni 1 (« true », 2) : valeur brute dans le JSON, pas convertie en false', () => {
+    const d = description('espece');
+    const lignes = ['true', 2, 0, 1].map((perenne, k) => ligne('espece', d, k, { code: 'a000', compteur: 1500 + k * 20 }, FERME_A, { perenne }));
+    const json = JSON.parse(fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: { espece: lignes } }), 'ferme.json')) as FermeJson;
+    expect(json.tables.espece?.map((l) => l.perenne)).toEqual(['true', 2, false, true]);
   });
 });
 
@@ -543,6 +557,21 @@ describe('T15 : LISEZMOI.txt', () => {
     expect(texte).toMatch(/supprim/i);
   });
 
+  it('« Ferme : » donne le nom de la ferme, pas son identifiant', () => {
+    const { entree } = construireJeu(m.TABLES_EXPORTEES);
+    const texte = fichier(m.construireExport(entree), 'LISEZMOI.txt');
+    const ligneFerme = texte.split(/\r?\n/).find((l) => /^Ferme\s*:/.test(l));
+    expect(ligneFerme, 'ligne « Ferme : … »').toBeDefined();
+    expect(ligneFerme).toContain('Ferme de Benoît');
+    expect(ligneFerme).not.toContain(FERME_A);
+  });
+
+  it('utilisateur.csv : « Votre compte (les collègues n’y sont pas encore). »', () => {
+    const texte = fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: {} }), 'LISEZMOI.txt');
+    const bloc = (blocs(texte).get('utilisateur.csv') ?? []).join('\n');
+    expect(bloc).toMatch(/Votre compte \(les collègues n['’]y sont pas encore\)\./);
+  });
+
   it('un bloc par CSV, et une ligne « - colonne : description » pour chaque colonne', () => {
     const texte = fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: {} }), 'LISEZMOI.txt');
     const b = blocs(texte);
@@ -568,6 +597,13 @@ describe('T15 : nom de l’archive', () => {
     expect(m.nomArchive('', '2026-09-29')).toBe('planifications-ferme-2026-09-29.zip');
     expect(m.nomArchive('🍓🍓', '2026-09-29')).toBe('planifications-ferme-2026-09-29.zip');
     expect(m.nomArchive(null, '2026-09-29')).toBe('planifications-ferme-2026-09-29.zip');
+  });
+
+  it('ligatures : Œ/œ → oe, Æ/æ → ae (elles ne se décomposent pas en NFD)', () => {
+    expect(m.nomArchive('Ferme d\'Œuvre', '2026-09-29')).toBe('planifications-ferme-d-oeuvre-2026-09-29.zip');
+    expect(m.nomArchive('Ferme d’Œuvre', '2026-09-29')).toBe('planifications-ferme-d-oeuvre-2026-09-29.zip');
+    expect(m.nomArchive('Æ', '2026-09-29')).toBe('planifications-ae-2026-09-29.zip');
+    expect(m.nomArchive('Le Cœur de Cæsar', '2026-09-29')).toBe('planifications-le-coeur-de-caesar-2026-09-29.zip');
   });
 });
 
