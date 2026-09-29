@@ -247,6 +247,16 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
 
   afterAll(async () => {
     await pool.end();
+    // pool.end() rend la main avant la fermeture effective des sockets : sans cette attente,
+    // DROP … WITH (FORCE) coupe une connexion en cours de fermeture (erreur 57P01 non gérée).
+    for (let i = 0; i < 50; i++) {
+      const { rows } = await admin.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = $1`,
+        [nomBase],
+      );
+      if (rows[0]?.n === 0) break;
+      await new Promise((fin) => setTimeout(fin, 100));
+    }
     await admin.query(`DROP DATABASE IF EXISTS ${nomBase} WITH (FORCE)`);
     await admin.end();
   });
@@ -1115,8 +1125,10 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
       expect((await inviter(api, fermeC.id, emailNeuf(), autre.jetonAcces)).status).toBe(201);
 
       // Une heure plus tard, la fenêtre est libre.
+      // Le jeton d'accès (1 h) a expiré entre-temps : on le renouvelle, comme l'appli.
       avancer(HEURE + SECONDE);
-      expect((await inviter(api, fermeB.id, cible, gerant.jetonAcces)).status).toBe(201);
+      const { jetonAcces } = await lire<{ jetonAcces: string }>(await renouveler(api, gerant.jetonRenouvellement));
+      expect((await inviter(api, fermeB.id, cible, jetonAcces)).status).toBe(201);
     });
   });
 
