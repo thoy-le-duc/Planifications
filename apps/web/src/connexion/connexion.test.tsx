@@ -43,9 +43,13 @@
  *   Étape e-mail : un seul champ (type email, autocomplete "email", inputmode "email", libellé
  *   « Adresse e-mail »), un bouton « Recevoir un code ».
  *   Étape code : un seul champ (inputmode "numeric", autocomplete "one-time-code", maxlength 6,
- *   libellé contenant « code »), l'adresse affichée en texte (pas en champ), un bouton
- *   « Valider » ; les 6 chiffres saisis, la vérification part seule. Un bouton « Changer
- *   d'adresse » ramène à l'étape e-mail.
+ *   libellé contenant « code »), l'adresse affichée en texte (pas en champ) dans l'aide exacte
+ *   « Envoyé à <adresse> · valable 10 minutes », un bouton « Se connecter » (T16, maquette
+ *   « Connexion » ; remplace « Valider ») désactivé tant que les 6 chiffres ne sont pas saisis ;
+ *   les 6 chiffres saisis, la vérification part seule. Un bouton « Renvoyer un code » redemande
+ *   un code pour la même adresse (e2e/habillage.e2e.ts) ; un bouton « Changer d'adresse »
+ *   ramène à l'étape e-mail. Curseur data-testid="curseur-code" dans la case du prochain
+ *   chiffre (la première, code vide).
  *   Aucun champ mot de passe. Le module n'importe ni jose ni PowerSync (poids de démarrage).
  *
  * T09b, 3e relecture — normaliserEmail(email: string): string (réexporté par index.ts) :
@@ -93,6 +97,16 @@ function attribut(balise: string, nom: string): string | undefined {
   return new RegExp(`\\s${nom}="([^"]*)"`, 'i').exec(balise)?.[1];
 }
 
+/** Texte d'un fragment HTML : balises retirées, espaces réduits, entités courantes décodées. */
+function texte(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/&#x27;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function rendre(etapeInitiale?: { etape: 'email' } | { etape: 'code'; email: string }): string {
   return renderToString(
     <EcranConnexion
@@ -129,8 +143,23 @@ describe('T09 : écran de connexion', () => {
     expect(attribut(champ, 'type')).not.toBe('email');
     expect(attribut(champ, 'type')).not.toBe('password');
     expect(html).toContain('theophane@ferme.fr');
-    expect(html).toMatch(/Valider/);
     expect(html).toMatch(/Changer d(’|'|&#x27;)adresse/);
+  });
+
+  it('T16 : aide « Envoyé à … · valable 10 minutes », « Se connecter » désactivé, « Renvoyer un code », curseur', () => {
+    const html = rendre({ etape: 'code', email: 'theophane@ferme.fr' });
+    expect(texte(html)).toContain('Envoyé à theophane@ferme.fr · valable 10 minutes');
+    const boutons = [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi)].map((m) => ({ attributs: m[1] ?? '', texte: texte(m[2] ?? '') }));
+    const seConnecter = boutons.filter((b) => b.texte === 'Se connecter');
+    expect(seConnecter, 'un bouton « Se connecter »').toHaveLength(1);
+    expect(seConnecter[0]?.attributs, '« Se connecter » désactivé, code vide').toMatch(/\sdisabled(=""|\s|$)/);
+    expect(boutons.some((b) => b.texte === 'Valider'), '« Valider » remplacé').toBe(false);
+    expect(boutons.filter((b) => b.texte === 'Renvoyer un code'), 'un bouton « Renvoyer un code »').toHaveLength(1);
+    // Curseur : dans la première case (code vide).
+    const cases = html.split(/(?=<[a-z]+\b[^>]*data-testid="case-code")/);
+    expect(cases.length, 'six cases').toBe(7);
+    expect(cases[1], 'curseur dans la première case').toMatch(/data-testid="curseur-code"/);
+    expect(html.match(/data-testid="curseur-code"/g), 'un seul curseur').toHaveLength(1);
   });
 
   it('le module de connexion n’importe ni jose ni PowerSync (poids de démarrage)', () => {

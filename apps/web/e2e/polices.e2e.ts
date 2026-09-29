@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, test, type BrowserContext, type Page, type Request, type Response } from '@playwright/test';
 import { surveillerCsp, tempsAppPrete } from './outils.ts';
 
@@ -13,7 +15,15 @@ import { surveillerCsp, tempsAppPrete } from './outils.ts';
  *   - l'écran de connexion utilise Archivo (titre) et Atkinson Hyperlegible (texte), chargées ;
  *   - hors ligne (réouverture servie par le service worker), les trois familles se chargent
  *     depuis le cache du service worker (précache : les woff2 doivent y être) ;
- *   - aucune violation de la CSP (default-src 'self' couvre les polices).
+ *   - aucune violation de la CSP (default-src 'self' couvre les polices) ;
+ *   - préchargement (relecture, point 3) : le build (dist/index.html) porte, pour les polices de
+ *     l'écran de connexion et elles seules, un
+ *     <link rel="preload" as="font" type="font/woff2" crossorigin href="/polices/….woff2"> :
+ *     le fichier Archivo (archivo*.woff2), Atkinson Hyperlegible 400
+ *     (atkinson-hyperlegible*400*.woff2) et 700 (atkinson-hyperlegible*700*.woff2) ; chaque
+ *     fichier préchargé existe dans dist/, est celui des @font-face (une seule requête par fichier
+ *     à l'écran de connexion : pas de double téléchargement, que provoquerait un crossorigin
+ *     manquant) et se charge.
  */
 
 const FAMILLES = ['Archivo', 'Atkinson Hyperlegible', 'IBM Plex Mono'] as const;
@@ -133,6 +143,58 @@ test.describe('en ligne, connexion (API simulée)', () => {
 
     expect(tierces(requetes, origine)).toEqual([]);
     expect(await violations()).toEqual([]);
+  });
+});
+
+const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
+
+interface Prechargement {
+  readonly balise: string;
+  readonly href: string;
+}
+
+/** Balises <link rel="preload" as="font"> de dist/index.html. */
+function prechargementsDePolices(): Prechargement[] {
+  const html = readFileSync(`${DIST}index.html`, 'utf8');
+  return [...html.matchAll(/<link\b[^>]*>/gi)]
+    .map((m) => m[0])
+    .filter((b) => /\brel=["']?preload\b/i.test(b) && /\bas=["']?font\b/i.test(b))
+    .map((balise) => ({ balise, href: /\bhref=["']?([^"'\s>]+)/i.exec(balise)?.[1] ?? '' }));
+}
+
+test.describe('préchargement des polices de la connexion (build)', () => {
+  test.use({ serviceWorkers: 'block' });
+
+  test('dist/index.html précharge Archivo et Atkinson 400/700, crossorigin, sans double téléchargement', async ({ page }) => {
+    const liens = prechargementsDePolices();
+    const hrefs = liens.map((l) => l.href);
+    for (const { balise, href } of liens) {
+      expect(balise, href).toMatch(/\btype=["']?font\/woff2\b/i);
+      expect(balise, `${href} : crossorigin`).toMatch(/\scrossorigin(\s|=|\/?>)/i);
+      expect(href, balise).toMatch(/^\/polices\/[^/]+\.woff2$/);
+      expect(existsSync(`${DIST}${href.slice(1)}`), `dist${href}`).toBe(true);
+    }
+    const nom = (h: string) => h.replace(/^\/polices\//, '');
+    expect(hrefs.filter((h) => /^archivo[-.a-z0-9]*\.woff2$/.test(nom(h))), 'Archivo préchargée').toHaveLength(1);
+    expect(hrefs.filter((h) => /^atkinson-hyperlegible[-.a-z0-9]*400[-.a-z0-9]*\.woff2$/.test(nom(h))), 'Atkinson 400 préchargée').toHaveLength(1);
+    expect(hrefs.filter((h) => /^atkinson-hyperlegible[-.a-z0-9]*700[-.a-z0-9]*\.woff2$/.test(nom(h))), 'Atkinson 700 préchargée').toHaveLength(1);
+    expect(hrefs, 'rien d’autre de préchargé').toHaveLength(3);
+
+    // Dans le navigateur : chaque fichier préchargé demandé une fois, et chargé.
+    const demandes: string[] = [];
+    page.on('request', (r) => {
+      const chemin = new URL(r.url()).pathname;
+      if (chemin.startsWith('/polices/')) demandes.push(chemin);
+    });
+    await page.goto('/');
+    await tempsAppPrete(page);
+    await expect(page.getByLabel(/adresse e-mail/i)).toBeVisible();
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
+    for (const href of hrefs) expect(demandes.filter((d) => d === href), `${href} : une seule requête`).toHaveLength(1);
+    const chargees = await page.evaluate(() => [...document.fonts].filter((f) => f.status === 'loaded').map((f) => `${f.family.replace(/["']/g, '')} ${f.weight}`));
+    expect(chargees.some((f) => f.startsWith('Archivo')), `Archivo chargée (${chargees.join(', ')})`).toBe(true);
+    expect(chargees, 'Atkinson 400').toContain('Atkinson Hyperlegible 400');
+    expect(chargees, 'Atkinson 700').toContain('Atkinson Hyperlegible 700');
   });
 });
 
