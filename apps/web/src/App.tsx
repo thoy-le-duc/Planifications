@@ -4,16 +4,17 @@ import {
   EcranConnexion,
   MESSAGE_EFFACEMENT_EN_ATTENTE,
   creerClientConnexion,
-  deconnecter,
+  deconnecterAvecConfirmation,
   effacementsEnAttente,
   enregistrerSession,
   lireSession,
   reprendreEffacements,
+  retirerEffacementEnAttente,
   stockageNavigateur,
   urlApi,
   type SessionConnexion,
 } from './connexion/index.ts';
-import { effacerDonneesLocales } from './donnees/effacer.ts';
+import { baseLocaleExiste, effacerDonneesLocales } from './donnees/effacer.ts';
 import { MARQUE_APP_PRETE } from './perf.ts';
 
 // Appel détaché : fetch ne doit pas être invoqué comme méthode d'un autre objet.
@@ -34,6 +35,16 @@ const BOUTON_DECONNEXION: CSSProperties = {
   fontWeight: 600,
 };
 
+/** Boutons de la confirmation : 48 px au moins (gants). */
+const BOUTON_CONFIRMATION: CSSProperties = { ...BOUTON_DECONNEXION, marginRight: 8, marginTop: 8 };
+const BOUTON_CONFIRMATION_PRINCIPAL: CSSProperties = { ...BOUTON_CONFIRMATION, background: '#2f6b3a', color: '#fff' };
+
+/** Confirmation en attente de réponse : son message, et de quoi y répondre. */
+interface Confirmation {
+  readonly message: string;
+  readonly repondre: (quandMeme: boolean) => void;
+}
+
 /**
  * Effacement de la base locale sans PowerSync (quelques lignes, importées directement) :
  * PowerSync reste hors du JavaScript de démarrage, et hors ligne ses fichiers ne sont pas en
@@ -52,14 +63,41 @@ export function App() {
   const [erreur, setErreur] = useState<string | null>(null);
   /** Bases locales qui restent à effacer (base ouverte dans un autre onglet). */
   const [enAttente, setEnAttente] = useState<readonly string[]>(() => effacementsEnAttente(stockageNavigateur()));
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const connecte = session !== null;
+
+  /** Montre la confirmation ; résout à la réponse (vrai : se déconnecter quand même). */
+  function confirmer(message: string): Promise<boolean> {
+    return new Promise((resoudre) => {
+      setConfirmation({
+        message,
+        repondre: (quandMeme) => {
+          setConfirmation(null);
+          resoudre(quandMeme);
+        },
+      });
+    });
+  }
 
   async function seDeconnecter(courante: SessionConnexion): Promise<void> {
     if (deconnexionEnCours) return;
     setDeconnexionEnCours(true);
     setErreur(null);
     try {
-      await deconnecter(courante, { urlApi: urlApi(), fetch: envoyer, stockage: stockageNavigateur(), effacerBaseLocale });
+      // Sans ouvrir PowerSync, on ne sait pas compter la file d'envoi : si la base locale existe,
+      // confirmation générique d'abord (null) ; sans base, rien à perdre (0).
+      const issue = await deconnecterAvecConfirmation(courante, {
+        urlApi: urlApi(),
+        fetch: envoyer,
+        stockage: stockageNavigateur(),
+        effacerBaseLocale,
+        compterEnAttente: async () => ((await baseLocaleExiste(courante.utilisateurId)) ? null : 0),
+        confirmer,
+      });
+      if (issue === 'annule') {
+        setDeconnexionEnCours(false);
+        return;
+      }
     } catch (e) {
       // La session est effacée quand même : on revient à la connexion, en le disant. Effacement
       // noté en attente : repris tout seul (voir plus bas), le message dit quoi faire.
@@ -77,16 +115,18 @@ export function App() {
     performance.mark(MARQUE_APP_PRETE);
   }, []);
 
-  // Effacement resté en attente : repris au démarrage, puis sur l'écran de connexion toutes les
-  // 5 s jusqu'à réussite (l'autre onglet fermé, la base disparaît sans rien toucher).
+  // Effacement resté en attente : repris sur l'écran de connexion (au démarrage sans session,
+  // après une déconnexion) toutes les 5 s jusqu'à réussite (l'autre onglet fermé, la base
+  // disparaît sans rien toucher). Jamais une fois connecté (2e relecture sécurité, B2).
   useEffect(() => {
+    if (connecte) return undefined;
     let actif = true;
     let minuterie: ReturnType<typeof setTimeout> | undefined;
     async function essayer(): Promise<void> {
       const restants = await reprendreEffacements({ stockage: stockageNavigateur(), effacerBaseLocale });
       if (!actif) return;
       setEnAttente(restants);
-      if (restants.length > 0 && !connecte) {
+      if (restants.length > 0) {
         minuterie = setTimeout(() => void essayer(), INTERVALLE_REPRISE_MS);
       }
     }
@@ -111,10 +151,29 @@ export function App() {
           </button>
         </p>
       )}
+      {confirmation !== null && (
+        <div data-testid="confirmation-deconnexion" role="alertdialog" aria-label="Se déconnecter ?">
+          <p>{confirmation.message}</p>
+          <button type="button" style={BOUTON_CONFIRMATION_PRINCIPAL} onClick={() => {
+              confirmation.repondre(true);
+            }}>
+            Se déconnecter quand même
+          </button>
+          <button type="button" style={BOUTON_CONFIRMATION} onClick={() => {
+              confirmation.repondre(false);
+            }}>
+            Annuler
+          </button>
+        </div>
+      )}
       {session === null && (
         <EcranConnexion
           client={clientConnexion}
           surConnexion={(nouvelle) => {
+            // Effacement de cette base resté en attente (déconnexion avec un autre onglet ouvert) :
+            // abandonné, l'utilisateur est de retour (2e relecture sécurité, B2).
+            retirerEffacementEnAttente(stockageNavigateur(), nouvelle.utilisateurId);
+            setEnAttente(effacementsEnAttente(stockageNavigateur()));
             enregistrerSession(stockageNavigateur(), nouvelle);
             setSession(nouvelle);
           }}
