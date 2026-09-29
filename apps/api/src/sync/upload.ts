@@ -10,7 +10,12 @@
  * - Une panne (base injoignable…) lève : 500, PowerSync renverra le lot. Jamais de refus
  *   « ferme_interdite » parce que la base ne répond pas.
  * - Un même lot renvoyé ne crée rien en double : l'id (UUID v7 du téléphone) fait foi, et un
- *   PUT identique à la ligne existante est accepté sans rien écrire.
+ *   PUT identique à la ligne existante est accepté sans rien écrire ; un refus déjà enregistré
+ *   n'est pas recopié (contrainte refus_synchro_sans_doublon).
+ * - Rien de ce que le téléphone envoie ne donne un 500 : textes du refus nettoyés (U+0000) et
+ *   tronqués, données trop grosses non conservées, erreur de données de la base = refus.
+ * - Limites : corps ≤ 5 Mio (413), lot ≤ 500 écritures (400), tailles de l'événement dans
+ *   evenement.ts.
  */
 import type { Id } from '@planif/core';
 import {
@@ -25,11 +30,13 @@ import {
 import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { garde, type VariablesAuthentifiees } from '../auth/garde.ts';
 import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
 import { lireCorps } from '../http.ts';
 import { lireEvenement } from './evenement.ts';
+import { verifierReferences } from './references.ts';
 
 interface Env {
   Variables: VariablesAuthentifiees;
@@ -46,6 +53,15 @@ const MESSAGES: Readonly<Record<MotifRefus, string>> = {
   table_interdite: 'Modification refusée : cette donnée ne se modifie pas depuis le téléphone.',
   ecriture_invalide: 'Saisie non enregistrée, données invalides',
 };
+
+/** Corps HTTP au plus (au-delà : 413, rien d'écrit). */
+export const TAILLE_MAX_CORPS = 5 * 1_048_576;
+/** Écritures par lot au plus (au-delà : 400, rien d'écrit). */
+export const ECRITURES_MAX_PAR_LOT = 500;
+/** Longueur au plus de nom_table, ligne_id et message dans refus_synchro. */
+const LONGUEUR_MAX_TEXTE_REFUS = 200;
+/** `donnees` conservées dans refus_synchro jusqu'à cette taille (octets UTF-8 du JSON). */
+const TAILLE_MAX_DONNEES_REFUS = 16 * 1_024;
 
 /** Tables que le téléphone écrit (T10 : le journal ; les autres suivront avec leurs écrans). */
 const TABLES_ECRITES = new Set(['evenement']);
@@ -93,10 +109,27 @@ function codeSql(erreur: unknown): string | null {
   return null;
 }
 
-/** Données refusées par la base (22 : donnée invalide, 23 : contrainte) : un refus, pas une panne. */
+/**
+ * Données refusées par la base (22 : donnée invalide, 23 : contrainte, 54 : limite dépassée) : un
+ * refus, pas une panne. Le reste (connexion, table absente…) est une panne : 500, PowerSync
+ * renverra le lot, rien n'est perdu.
+ */
 function refusParLaBase(erreur: unknown): boolean {
   const code = codeSql(erreur);
-  return code !== null && (code.startsWith('22') || code.startsWith('23'));
+  return code !== null && (code.startsWith('22') || code.startsWith('23') || code.startsWith('54'));
+}
+
+/** Texte reçu, rangeable dans une colonne text : sans U+0000 (refusé par Postgres), tronqué. */
+function texteRefus(texte: string): string {
+  return texte.replaceAll('\u0000', '\uFFFD').slice(0, LONGUEUR_MAX_TEXTE_REFUS);
+}
+
+/** `donnees` conservées dans le refus, ou null si trop grosses ou impossibles à ranger en jsonb. */
+function donneesRefus(donnees: Readonly<Record<string, unknown>> | null): Readonly<Record<string, unknown>> | null {
+  if (donnees === null) return null;
+  const json = JSON.stringify(donnees);
+  if (json.includes('\\u0000')) return null;
+  return new TextEncoder().encode(json).length > TAILLE_MAX_DONNEES_REFUS ? null : donnees;
 }
 
 /** `colonne = valeur`, ou `colonne IS NULL`. */
@@ -137,17 +170,23 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     return lignes.length === 1;
   }
 
-  /** Écrit l'événement et sa ligne d'historique, dans une transaction. */
+  /**
+   * Écrit l'événement et sa ligne d'historique, dans une transaction qui vérifie d'abord ses
+   * références (B1) et les garde verrouillées jusqu'à l'écriture.
+   */
   async function ecrireEvenement(l: LigneEvenement, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
     const maintenant = ctx.maintenant();
+    let issue: Refus | 'cree' | 'existe';
     try {
-      const cree = await db.transaction(async (tx) => {
+      issue = await db.transaction(async (tx) => {
+        const refusReference = await verifierReferences(tx, l);
+        if (refusReference !== null) return { ...refusReference, fermeId: l.fermeId };
         const [ecrit] = await tx
           .insert(evenement)
           .values({ ...l, creeLe: maintenant })
           .onConflictDoNothing({ target: evenement.id })
           .returning();
-        if (ecrit === undefined) return false;
+        if (ecrit === undefined) return 'existe';
         await tx.insert(modification).values({
           id: ctx.nouvelId(),
           fermeId: l.fermeId,
@@ -163,13 +202,14 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
           creeLe: maintenant,
           modifieLe: maintenant,
         });
-        return true;
+        return 'cree';
       });
-      if (cree) return null;
     } catch (erreur) {
       if (refusParLaBase(erreur)) return { motif: 'ecriture_invalide', precision: 'refusée par une règle de la base', fermeId: l.fermeId };
       throw erreur;
     }
+    if (issue === 'cree') return null;
+    if (issue !== 'existe') return issue;
     // L'id existe déjà : renvoi identique (réponse perdue) ou tentative de réécriture.
     return (await identique(l)) ? null : { motif: 'ajout_seul', fermeId: l.fermeId };
   }
@@ -198,34 +238,50 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     return ecrireEvenement(lecture.valeur, utilisateurId);
   }
 
-  async function enregistrerRefus(e: EcritureRecue, utilisateurId: Id<'Utilisateur'>, refus: Refus): Promise<void> {
+  /** Enregistre le refus (au plus une fois par utilisateur, ligne, opération et motif). */
+  async function enregistrerRefus(
+    e: EcritureRecue,
+    utilisateurId: Id<'Utilisateur'>,
+    fermes: ReadonlySet<string>,
+    refus: Refus,
+  ): Promise<void> {
     const message = refus.precision === undefined ? MESSAGES[refus.motif] : `${MESSAGES[refus.motif]} : ${refus.precision}.`;
+    const fermeVisee = refus.fermeId ?? null;
     const ligne = {
       id: ctx.nouvelId(),
       utilisateurId,
-      fermeId: (refus.fermeId ?? null) as Id<'Ferme'> | null,
-      nomTable: e.table,
-      ligneId: e.id,
+      // M1 : la ligne descend sur le téléphone de l'auteur ; pas d'id d'une ferme qui n'est pas la sienne.
+      fermeId: (fermeVisee !== null && fermes.has(fermeVisee) ? fermeVisee : null) as Id<'Ferme'> | null,
+      nomTable: texteRefus(e.table),
+      ligneId: texteRefus(e.id),
       // Opération illisible : enregistrée comme une création, le motif dit le reste.
       operation: e.op ?? 'PUT',
       motif: refus.motif,
-      message,
-      donnees: e.donnees,
+      message: texteRefus(message),
+      donnees: donneesRefus(e.donnees),
       creeLe: ctx.maintenant(),
     };
     try {
-      await db.insert(refusSynchro).values(ligne);
+      await db.insert(refusSynchro).values(ligne).onConflictDoNothing();
     } catch (erreur) {
-      // Des données que jsonb refuse (caractère nul…) ne doivent pas bloquer la file : on garde le refus sans elles.
+      // Dernier recours : des données que jsonb refuse ne bloquent pas la file, le refus est gardé sans elles.
       if (!refusParLaBase(erreur)) throw erreur;
-      await db.insert(refusSynchro).values({ ...ligne, donnees: null });
+      await db
+        .insert(refusSynchro)
+        .values({ ...ligne, donnees: null })
+        .onConflictDoNothing();
     }
   }
 
-  routes.post('/sync/upload', async (c) => {
+  const limiteCorps = bodyLimit({
+    maxSize: TAILLE_MAX_CORPS,
+    onError: (c) => c.json({ erreur: 'corps_trop_volumineux' }, 413),
+  });
+
+  routes.post('/sync/upload', limiteCorps, async (c) => {
     const corps = await lireCorps(c);
     const brutes = corps?.ecritures;
-    if (!Array.isArray(brutes)) return c.json({ erreur: 'requete_invalide' }, 400);
+    if (!Array.isArray(brutes) || brutes.length > ECRITURES_MAX_PAR_LOT) return c.json({ erreur: 'requete_invalide' }, 400);
 
     const utilisateurId = c.get('utilisateurId');
     // Droits relus en base à chaque lot (un membre retiré perd l'accès tout de suite).
@@ -233,9 +289,16 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     const refus: { table: string; id: string; motif: MotifRefus }[] = [];
     for (const brute of brutes as unknown[]) {
       const e = lireEcriture(brute);
-      const r = await traiter(e, utilisateurId, fermes);
+      let r: Refus | null;
+      try {
+        r = await traiter(e, utilisateurId, fermes);
+      } catch (erreur) {
+        // Dernier recours : une donnée que la base refuse est un refus, jamais un 500.
+        if (!refusParLaBase(erreur)) throw erreur;
+        r = { motif: 'ecriture_invalide', precision: 'refusée par la base' };
+      }
       if (r === null) continue;
-      await enregistrerRefus(e, utilisateurId, r);
+      await enregistrerRefus(e, utilisateurId, fermes, r);
       refus.push({ table: e.table, id: e.id, motif: r.motif });
     }
     return c.json({ refus });

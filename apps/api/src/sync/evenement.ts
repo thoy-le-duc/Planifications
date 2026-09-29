@@ -44,6 +44,42 @@ const COLONNES = new Set([
   'cree_le',
 ]);
 
+/** Limites de taille (relecture T10, C2) : un téléphone ne remplit pas la base avec n'importe quoi. */
+export const LIMITES = {
+  noteCaracteres: 4_000,
+  photos: 20,
+  photoCaracteres: 2_000,
+  /** Octets UTF-8 de JSON.stringify(detail). */
+  detailOctets: 8_192,
+} as const;
+
+/** Dates plausibles (relecture T10, M7) : bornes comprises. */
+const DATE_MIN = '2000-01-01';
+const DATE_MAX = '2100-12-31';
+const INSTANT_MIN = Date.parse('2000-01-01T00:00:00.000Z');
+const INSTANT_MAX = Date.parse('2100-12-31T23:59:59.999Z');
+
+/** Clés de chaque Detail* de T01 : toute autre clé est refusée. */
+const CLES_DETAIL: Readonly<Record<Evenement['type'], readonly string[]>> = {
+  realise: ['etape', 'quantiteReelle'],
+  recolte: ['quantite', 'unite', 'categorie'],
+  intervention: ['categorie', 'type', 'outil', 'dureeOccupationJours', 'produit', 'quantite'],
+  irrigation: ['secteurIrrigationId', 'dureeMinutes'],
+  traitement: ['produitPhytoId', 'dose', 'surfaceTraiteeM2', 'cible', 'operateur', 'recolteAutoriseeLe'],
+  observation: ['nature', 'gravite'],
+};
+
+/** Clés propres à chaque catégorie d'intervention (DetailIntervention de T01). */
+const CLES_INTERVENTION: Readonly<Record<string, readonly string[]>> = {
+  couverture: ['dureeOccupationJours'],
+  fertilisation: ['produit', 'quantite'],
+  amendement: ['produit', 'quantite'],
+};
+
+const CLES_QUANTITE = new Set(['valeur', 'unite']);
+
+const octetsUtf8 = (texte: string): number => new TextEncoder().encode(texte).length;
+
 /** Instant ISO 8601 complet, avec fuseau (Z ou ±hh:mm). */
 const MOTIF_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -81,6 +117,25 @@ const estNombre = (v: unknown): v is number => typeof v === 'number' && Number.i
 const nombreOuNul = (v: unknown): boolean => v === undefined || v === null || estNombre(v);
 const texteOuNul = (v: unknown): boolean => v === undefined || v === null || typeof v === 'string';
 const texteNonVide = (v: unknown): boolean => typeof v === 'string' && v.trim() !== '';
+
+/** Première clé du détail qui n'appartient pas au Detail* du type, ou null. */
+function cleInconnue(type: Evenement['type'], d: Readonly<Record<string, unknown>>): string | null {
+  const communes = type === 'intervention' ? ['categorie', 'type', 'outil'] : CLES_DETAIL[type];
+  const propres = type === 'intervention' && typeof d.categorie === 'string' ? (CLES_INTERVENTION[d.categorie] ?? []) : [];
+  for (const cle of Object.keys(d)) {
+    if (!communes.includes(cle) && !propres.includes(cle)) return cle;
+  }
+  for (const q of [d.dose, d.quantite]) {
+    if (objet(q)) {
+      const cle = Object.keys(q).find((c) => !CLES_QUANTITE.has(c));
+      if (cle !== undefined) return cle;
+    }
+  }
+  return null;
+}
+
+/** Texte court pour un message : un nom de clé reçu peut faire 10 000 caractères. */
+const extrait = (texte: string): string => (texte.length > 40 ? `${texte.slice(0, 40)}…` : texte);
 
 /** Règles du détail selon le type (T01) : ce que la base vérifie aussi, avec un message lisible. */
 function erreurDetail(type: Evenement['type'], d: Readonly<Record<string, unknown>>): string | null {
@@ -128,7 +183,7 @@ function erreurDetail(type: Evenement['type'], d: Readonly<Record<string, unknow
 export function lireEvenement(id: string, donnees: Readonly<Record<string, unknown>>): Lecture<LigneEvenement> {
   if (!estUuid(id)) return refuser("identifiant de l'événement invalide");
   for (const cle of Object.keys(donnees)) {
-    if (!COLONNES.has(cle)) return refuser(`colonne inconnue : ${cle}`);
+    if (!COLONNES.has(cle)) return refuser(`colonne inconnue : ${extrait(cle)}`);
   }
   const d = donnees;
   const fermeId = uuidOuNul(d.ferme_id);
@@ -137,22 +192,31 @@ export function lireEvenement(id: string, donnees: Readonly<Record<string, unkno
   if (!auteurId.ok || auteurId.valeur === null) return refuser('auteur manquant');
   if (!parmi(TYPES_EVENEMENT, d.type)) return refuser("type d'événement inconnu");
   if (typeof d.date !== 'string' || !estDateValide(d.date)) return refuser('date invalide (AAAA-MM-JJ)');
-  if (typeof d.horodatage !== 'string' || !MOTIF_INSTANT.test(d.horodatage) || Number.isNaN(Date.parse(d.horodatage))) {
-    return refuser('horodatage invalide (ISO 8601)');
-  }
+  if (d.date < DATE_MIN || d.date > DATE_MAX) return refuser(`date hors de ${DATE_MIN} … ${DATE_MAX}`);
+  const instant = typeof d.horodatage === 'string' && MOTIF_INSTANT.test(d.horodatage) ? Date.parse(d.horodatage) : Number.NaN;
+  if (Number.isNaN(instant)) return refuser('horodatage invalide (ISO 8601)');
+  if (instant < INSTANT_MIN || instant > INSTANT_MAX) return refuser('horodatage hors de 2000 … 2100');
   if (!parmi(SOURCES_SAISIE, d.source)) return refuser('source de saisie inconnue');
   const serieId = uuidOuNul(d.serie_id);
   const campagneId = uuidOuNul(d.campagne_id);
   if (!serieId.ok || !campagneId.ok) return refuser('série ou campagne invalide');
   if (serieId.valeur !== null && campagneId.valeur !== null) return refuser('une série ou une campagne, pas les deux');
   if (!texteOuNul(d.note)) return refuser('note invalide');
+  if (typeof d.note === 'string' && d.note.length > LIMITES.noteCaracteres) {
+    return refuser(`note trop longue (${String(LIMITES.noteCaracteres)} caractères au plus)`);
+  }
 
   const emplacements = tableau(d.emplacement_ids, 'emplacements');
   if (!emplacements.ok) return emplacements;
   if (!emplacements.valeur.every(estUuid)) return refuser('emplacement invalide');
   const photos = tableau(d.photos, 'photos');
   if (!photos.ok) return photos;
-  if (!photos.valeur.every((p) => typeof p === 'string')) return refuser('photo invalide');
+  const listePhotos = photos.valeur.filter((p): p is string => typeof p === 'string');
+  if (listePhotos.length !== photos.valeur.length) return refuser('photo invalide');
+  if (listePhotos.length > LIMITES.photos) return refuser(`trop de photos (${String(LIMITES.photos)} au plus)`);
+  if (listePhotos.some((p) => p.length > LIMITES.photoCaracteres)) {
+    return refuser(`adresse de photo trop longue (${String(LIMITES.photoCaracteres)} caractères au plus)`);
+  }
 
   const remplaceSorte = d.remplace_sorte ?? null;
   const remplaceId = uuidOuNul(d.remplace_evenement_id);
@@ -164,6 +228,9 @@ export function lireEvenement(id: string, donnees: Readonly<Record<string, unkno
 
   const detail = json(d.detail);
   if (!detail.ok || !objet(detail.valeur)) return refuser('détail manquant ou illisible');
+  if (octetsUtf8(JSON.stringify(detail.valeur)) > LIMITES.detailOctets) return refuser('détail trop volumineux (8 Kio au plus)');
+  const inconnue = cleInconnue(d.type, detail.valeur);
+  if (inconnue !== null) return refuser(`clé inconnue dans le détail : ${extrait(inconnue)}`);
   const erreur = erreurDetail(d.type, detail.valeur);
   if (erreur !== null) return refuser(erreur);
 
@@ -172,14 +239,14 @@ export function lireEvenement(id: string, donnees: Readonly<Record<string, unkno
     fermeId: fermeId.valeur as Id<'Ferme'>,
     type: d.type,
     date: d.date,
-    horodatage: new Date(d.horodatage),
+    horodatage: new Date(instant),
     auteurId: auteurId.valeur as Id<'Utilisateur'>,
     source: d.source,
     serieId: serieId.valeur as Id<'Serie'> | null,
     campagneId: campagneId.valeur as Id<'Campagne'> | null,
     emplacementIds: (emplacements.valeur as string[]).map((e) => e.toLowerCase() as Id<'Emplacement'>),
     note: (d.note ?? null) as string | null,
-    photos: photos.valeur as string[],
+    photos: listePhotos,
     remplaceSorte: remplaceSorte,
     remplaceEvenementId: remplaceId.valeur as Id<'Evenement'> | null,
     // Le détail a la forme de son type (vérifiée ci-dessus) : c'est le Detail* de T01 tel quel.
