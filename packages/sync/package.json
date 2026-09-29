@@ -11,6 +11,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@planif/core": "workspace:*"
+    "@planif/core": "workspace:*",
+    "@powersync/common": "2.3.0"
+  },
+  "devDependencies": {
+    "@planif/db": "workspace:*",
+    "drizzle-orm": "^0.45.3"
   }
 }
