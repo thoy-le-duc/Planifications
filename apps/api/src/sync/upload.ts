@@ -35,7 +35,7 @@ import { garde, type VariablesAuthentifiees } from '../auth/garde.ts';
 import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
 import { lireCorps } from '../http.ts';
-import { lireEvenement } from './evenement.ts';
+import { jsonSansErreur, lireEvenement } from './evenement.ts';
 import { verifierReferences } from './references.ts';
 
 interface Env {
@@ -127,8 +127,8 @@ function texteRefus(texte: string): string {
 /** `donnees` conservées dans le refus, ou null si trop grosses ou impossibles à ranger en jsonb. */
 function donneesRefus(donnees: Readonly<Record<string, unknown>> | null): Readonly<Record<string, unknown>> | null {
   if (donnees === null) return null;
-  const json = JSON.stringify(donnees);
-  if (json.includes('\\u0000')) return null;
+  const json = jsonSansErreur(donnees);
+  if (json === null || json.includes('\\u0000')) return null;
   return new TextEncoder().encode(json).length > TAILLE_MAX_DONNEES_REFUS ? null : donnees;
 }
 

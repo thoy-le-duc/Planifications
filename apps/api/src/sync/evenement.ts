@@ -80,6 +80,19 @@ const CLES_QUANTITE = new Set(['valeur', 'unite']);
 
 const octetsUtf8 = (texte: string): number => new TextEncoder().encode(texte).length;
 
+/**
+ * JSON.stringify qui ne lève jamais (relecture T10, R2) : une valeur imbriquée sur des dizaines
+ * de milliers de niveaux dépasse la pile (RangeError). null si la valeur ne s'écrit pas.
+ */
+export function jsonSansErreur(valeur: unknown): string | null {
+  try {
+    const texte: unknown = JSON.stringify(valeur);
+    return typeof texte === 'string' ? texte : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Instant ISO 8601 complet, avec fuseau (Z ou ±hh:mm). */
 const MOTIF_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/;
 
@@ -228,7 +241,9 @@ export function lireEvenement(id: string, donnees: Readonly<Record<string, unkno
 
   const detail = json(d.detail);
   if (!detail.ok || !objet(detail.valeur)) return refuser('détail manquant ou illisible');
-  if (octetsUtf8(JSON.stringify(detail.valeur)) > LIMITES.detailOctets) return refuser('détail trop volumineux (8 Kio au plus)');
+  const texteDetail = jsonSansErreur(detail.valeur);
+  if (texteDetail === null) return refuser('détail illisible');
+  if (octetsUtf8(texteDetail) > LIMITES.detailOctets) return refuser('détail trop volumineux (8 Kio au plus)');
   const inconnue = cleInconnue(d.type, detail.valeur);
   if (inconnue !== null) return refuser(`clé inconnue dans le détail : ${extrait(inconnue)}`);
   const erreur = erreurDetail(d.type, detail.valeur);
