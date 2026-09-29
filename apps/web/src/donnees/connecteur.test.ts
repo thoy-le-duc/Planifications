@@ -32,7 +32,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionConnexion } from '../connexion/session.ts';
-import { gererJetons, type GestionJetons } from './jeton.ts';
+import { gererJetons, SessionExpiree, type GestionJetons } from './jeton.ts';
 
 // ── Contrat attendu de connecteur.ts (chargé dynamiquement : il n'existe pas encore) ──────────
 
@@ -58,6 +58,8 @@ interface TransactionCrud {
 interface ConnecteurSynchro {
   fetchCredentials(): Promise<{ endpoint: string; token: string } | null>;
   uploadData(base: BaseSynchronisable): Promise<void>;
+  /** 2e relecture : PowerSync l'appelle quand le service refuse le jeton (voir plus bas). */
+  invalidateCredentials?(): void;
 }
 
 /** Sous-ensemble de PowerSyncDatabase utilisé par brancherSynchro. */
@@ -115,6 +117,8 @@ class PowerSyncSimule implements BaseSynchronisable {
   currentStatus: StatutSynchro = { connected: false, hasSynced: false };
   connexions = 0;
   deconnexions = 0;
+  /** Le connecteur reçu par `connect` (celui que PowerSync appellera). */
+  connecteur: ConnecteurSynchro | null = null;
   actif = false;
   readonly terminees: number[] = [];
   private readonly ecouteurs = new Set<(statut: StatutSynchro) => void>();
@@ -150,6 +154,7 @@ class PowerSyncSimule implements BaseSynchronisable {
 
   connect(connecteur: ConnecteurSynchro): Promise<void> {
     this.connexions++;
+    this.connecteur = connecteur;
     this.actif = true;
     void this.boucle(connecteur);
     return Promise.resolve();
@@ -297,5 +302,115 @@ describe('T10 (relecture C4) : session expirée pendant la synchro', () => {
     expect(synchro.etat()).toBe('synchronise');
     expect(etats).not.toContain('session-expiree');
     expect(base.deconnexions).toBe(0);
+  });
+});
+
+/*
+ * 2e relecture T10 — le service PowerSync refuse le jeton (401 sur le flux de synchro).
+ *
+ * ── Contrat ─────────────────────────────────────────────────────────────────────────────────
+ *
+ * Le connecteur passé à `base.connect` par brancherSynchro expose, en plus de fetchCredentials
+ * et uploadData :
+ *
+ *   invalidateCredentials(): void
+ *
+ *   - appelle `jetons.invalider()` (PowerSync l'appelle quand le service refuse le jeton, alors
+ *     que l'horloge du téléphone le croit encore valide) ;
+ *   - le `fetchCredentials()` suivant renouvelle (POST /auth/renouveler) et rend le NOUVEAU jeton ;
+ *   - si ce renouvellement lève SessionExpiree : état 'session-expiree' et `base.disconnect()`,
+ *     comme pour uploadData (C4).
+ */
+describe('T10 (2e relecture) : invalidateCredentials du connecteur', () => {
+  let connecteur: ModuleConnecteur;
+
+  beforeEach(async () => {
+    connecteur = await chargerConnecteur();
+    vi.useFakeTimers({ now: DEPART });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const ANCIEN = jwt(DEPART + 10 * 60_000);
+  const NOUVEAU = jwt(DEPART + 60 * 60_000);
+
+  /** /auth/renouveler répond `statut` (200 : nouvelle session avec le jeton NOUVEAU). */
+  function apiRenouvellement(statut: number) {
+    const appels = { renouveler: 0 };
+    const f: typeof fetch = (entree, init) => {
+      const url = new Request(entree, init).url;
+      if (url === `${URL_API}/auth/renouveler`) {
+        appels.renouveler++;
+        const corps =
+          statut === 200
+            ? { utilisateurId: 'u', email: 'u@ferme.fr', jetonAcces: NOUVEAU, jetonRenouvellement: 'renouvellement-2' }
+            : { erreur: 'jeton_invalide' };
+        return Promise.resolve(new Response(JSON.stringify(corps), { status: statut }));
+      }
+      return Promise.reject(new TypeError(`URL inattendue : ${url}`));
+    };
+    return { fetch: f, appels };
+  }
+
+  async function brancher(statutRenouvellement: number) {
+    const base = new PowerSyncSimule([]);
+    const api = apiRenouvellement(statutRenouvellement);
+    const vraies = gererJetons(session(ANCIEN), { urlApi: URL_API, fetch: api.fetch, stockage: stockage(), maintenant: () => Date.now() });
+    const invalidations = { n: 0 };
+    const jetons: GestionJetons = {
+      jetonValide: () => vraies.jetonValide(),
+      session: () => vraies.session(),
+      invalider: () => {
+        invalidations.n++;
+        vraies.invalider();
+      },
+    };
+    const synchro = connecteur.brancherSynchro(base, {
+      urlApi: URL_API,
+      urlPowerSync: URL_POWERSYNC,
+      jetons,
+      fetch: api.fetch,
+      enLigne: () => true,
+    });
+    // Première connexion : l'ancien jeton paraît valide, pas de renouvellement.
+    await vi.advanceTimersByTimeAsync(100);
+    expect(api.appels.renouveler).toBe(0);
+    const recu = base.connecteur;
+    if (recu === null) throw new Error('base.connect n’a pas été appelé');
+    return { base, api, synchro, invalidations, recu };
+  }
+
+  it('le connecteur passé à PowerSync expose invalidateCredentials, qui appelle jetons.invalider()', async () => {
+    const { recu, invalidations } = await brancher(200);
+    expect(typeof recu.invalidateCredentials).toBe('function');
+    recu.invalidateCredentials?.();
+    expect(invalidations.n).toBe(1);
+  });
+
+  it('après invalidateCredentials, fetchCredentials renouvelle et rend le nouveau jeton, même si l’horloge croit l’ancien valide', async () => {
+    const { recu, api } = await brancher(200);
+    expect((await recu.fetchCredentials())?.token).toBe(ANCIEN);
+    expect(api.appels.renouveler).toBe(0);
+
+    recu.invalidateCredentials?.();
+    const identifiants = await recu.fetchCredentials();
+    expect(api.appels.renouveler).toBe(1);
+    expect(identifiants).toEqual({ endpoint: URL_POWERSYNC, token: NOUVEAU });
+  });
+
+  it('après invalidateCredentials, renouvellement refusé (SessionExpiree) : état session-expiree, base déconnectée', async () => {
+    const { recu, api, synchro, base } = await brancher(401);
+    expect(synchro.etat()).toBe('synchronise');
+
+    recu.invalidateCredentials?.();
+    await expect(recu.fetchCredentials()).rejects.toBeInstanceOf(SessionExpiree);
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(api.appels.renouveler).toBe(1);
+    expect(synchro.etat()).toBe('session-expiree');
+    expect(base.deconnexions).toBeGreaterThanOrEqual(1);
+    expect(base.actif).toBe(false);
   });
 });

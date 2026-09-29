@@ -93,6 +93,21 @@
  *       (utilisateur_id, ligne_id, operation, motif).
  *   M7  `date` hors de [2000-01-01, 2100-12-31] et `horodatage` hors de
  *       [2000-01-01T00:00:00Z, 2100-12-31T23:59:59.999Z] → 'ecriture_invalide' (bornes acceptées).
+ *
+ * ── 2e relecture (T10) ──────────────────────────────────────────────────────────────────────
+ *
+ *   R1  `emplacement_ids` : 200 emplacements au plus (200 acceptés s'ils sont tous valides,
+ *       201 → 'ecriture_invalide'). 70 000 UUID distincts (corps < 5 Mio) → 200 avec un refus
+ *       'ecriture_invalide', jamais 500 ; le même lot renvoyé → 200, sans refus en double.
+ *       Doublons, y compris à la casse près (`[e, E, e]`) → 'ecriture_invalide' (décision du
+ *       chef : on refuse plutôt que de dédupliquer en silence).
+ *   R2  JSON très imbriqué, jamais 500 : `donnees` imbriquées sur 50 000 niveaux (table
+ *       interdite) → 200, refus enregistré avec donnees NULL ; `detail` (texte JSON, comme
+ *       SQLite) imbriqué sur 50 000 niveaux → 200, 'ecriture_invalide'. Le lot sain suivant passe.
+ *   R4  Référence vers une ligne supprimée (`supprime_le` non nul) : série, campagne,
+ *       emplacement, secteur d'irrigation, produit phyto (de la ferme ou de la bibliothèque)
+ *       → 'ecriture_invalide', rien d'écrit. (Ces cinq tables ont une colonne supprime_le ;
+ *       `evenement`, en ajout seul, n'en a pas.)
  */
 import { creerGenerateurId } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -770,6 +785,150 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
       const e = putRecolte(theo.id, ferme, 1, { [champ]: valeur });
       expect(await lot([e], theo.jeton)).toEqual({ refus: [] });
       expect(await evenements(e.id)).toBe(1);
+    });
+  });
+  // --- 2e relecture (voir l'en-tête : R1, R2, R4) ------------------------------------------------
+
+  /** Envoie un corps déjà sérialisé (JSON.stringify ne sait pas écrire 50 000 niveaux). */
+  function envoyerTexte(texte: string, jeton: string): Promise<Response> {
+    return Promise.resolve(
+      app.request('/sync/upload', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${jeton}` },
+        body: texte,
+      }),
+    );
+  }
+
+  describe('R1 : emplacement_ids bornés et sans doublon', () => {
+    /** 201 emplacements de la ferme principale, créés d'un coup. */
+    let emplacements: string[];
+
+    beforeAll(async () => {
+      const zone = nouvelId<'Zone'>();
+      await base.pool.query(`INSERT INTO zone (id, ferme_id, nom, type_abri) VALUES ($1, $2, 'Tunnel R1', 'tunnel')`, [zone, ferme]);
+      emplacements = Array.from({ length: 201 }, () => nouvelId<'Emplacement'>());
+      await base.pool.query(
+        `INSERT INTO emplacement (id, ferme_id, zone_id, code, sorte, longueur_m, actif_du)
+         SELECT e.id, $2, $3, 'R1-' || e.n, 'planche', 30, '2026-01-01'
+         FROM unnest($1::uuid[]) WITH ORDINALITY AS e(id, n)`,
+        [emplacements, ferme, zone],
+      );
+    });
+
+    it('200 emplacements valides : acceptés ; 201 : ecriture_invalide, rien d’écrit', async () => {
+      const deuxCents = putRecolte(theo.id, ferme, 1, { emplacement_ids: JSON.stringify(emplacements.slice(0, 200)) });
+      expect(await lot([deuxCents], theo.jeton)).toEqual({ refus: [] });
+      expect(await evenements(deuxCents.id)).toBe(1);
+
+      const deuxCentUn = putRecolte(theo.id, ferme, 1, { emplacement_ids: JSON.stringify(emplacements) });
+      const reponse = await lot([deuxCentUn], theo.jeton);
+      expect(reponse.refus).toEqual([{ table: 'evenement', id: deuxCentUn.id, motif: 'ecriture_invalide' }]);
+      expect(await evenements(deuxCentUn.id)).toBe(0);
+    });
+
+    it('70 000 UUID distincts (corps < 5 Mio) : 200 avec un refus, jamais 500 ; le lot renvoyé : 200, sans refus en double', async () => {
+      const u = await nouveauMembre();
+      const ids = Array.from({ length: 70_000 }, () => crypto.randomUUID());
+      const piege = putRecolte(u.id, ferme, 1, { emplacement_ids: JSON.stringify(ids) });
+      const bonne = putRecolte(u.id, ferme, 2);
+      const corps = JSON.stringify({ ecritures: [piege, bonne] });
+      expect(new TextEncoder().encode(corps).length).toBeLessThan(5 * 1_048_576);
+      for (let envoi = 0; envoi < 2; envoi++) {
+        const res = await envoyerTexte(corps, u.jeton);
+        expect(res.status, `envoi ${String(envoi + 1)}`).toBe(200);
+        expect(((await res.json()) as ReponseUpload).refus).toEqual([{ table: 'evenement', id: piege.id, motif: 'ecriture_invalide' }]);
+      }
+      expect(await evenements(piege.id)).toBe(0);
+      expect(await evenements(bonne.id)).toBe(1);
+      expect(await refusDeLUtilisateur(u.id)).toBe(1);
+    }, 60_000);
+
+    it.each([
+      ['le même id deux fois', (e: string) => [e, e]],
+      ['le même id à la casse près [e, E, e]', (e: string) => [e, e.toUpperCase(), e]],
+    ])('doublon dans emplacement_ids (%s) : ecriture_invalide, rien d’écrit', async (_cas, liste) => {
+      const e = emplacements[0] ?? '';
+      const doublon = putRecolte(theo.id, ferme, 1, { emplacement_ids: JSON.stringify(liste(e)) });
+      const reponse = await lot([doublon], theo.jeton);
+      expect(reponse.refus).toEqual([{ table: 'evenement', id: doublon.id, motif: 'ecriture_invalide' }]);
+      expect(await evenements(doublon.id)).toBe(0);
+      expect(await modifications(doublon.id)).toBe(0);
+    });
+  });
+
+  describe('R2 : JSON très imbriqué, jamais 500', () => {
+    const NIVEAUX = 50_000;
+    const imbrique = `${'{"a":'.repeat(NIVEAUX)}1${'}'.repeat(NIVEAUX)}`;
+
+    it('donnees imbriquées sur 50 000 niveaux (table interdite) : 200, refus enregistré avec donnees NULL ; le lot sain suivant passe', async () => {
+      const u = await nouveauMembre();
+      const id = nouvelId<'Evenement'>();
+      const corps = `{"ecritures":[{"op":"PUT","table":"membre","id":"${id}","donnees":${imbrique}}]}`;
+      const res = await envoyerTexte(corps, u.jeton);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as ReponseUpload).refus).toEqual([{ table: 'membre', id, motif: 'table_interdite' }]);
+      expect(await refusEnregistre(id)).toMatchObject({ utilisateur_id: u.id, motif: 'table_interdite', donnees: null });
+
+      const saine = putRecolte(u.id, ferme, 3);
+      expect(await lot([saine], u.jeton)).toEqual({ refus: [] });
+      expect(await evenements(saine.id)).toBe(1);
+    });
+
+    it('detail (texte JSON) imbriqué sur 50 000 niveaux : 200, ecriture_invalide ; le lot sain suivant passe', async () => {
+      const u = await nouveauMembre();
+      const piege = putRecolte(u.id, ferme, 1, { detail: imbrique });
+      const res = await envoyer({ ecritures: [piege] }, u.jeton);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as ReponseUpload).refus).toEqual([{ table: 'evenement', id: piege.id, motif: 'ecriture_invalide' }]);
+      expect(await evenements(piege.id)).toBe(0);
+      expect(await refusDeLUtilisateur(u.id)).toBe(1);
+
+      const saine = putRecolte(u.id, ferme, 3);
+      expect(await lot([saine], u.jeton)).toEqual({ refus: [] });
+      expect(await evenements(saine.id)).toBe(1);
+    });
+  });
+
+  describe('R4 : référence vers une ligne supprimée (supprime_le)', () => {
+    /** Lignes de la ferme principale, toutes marquées supprimées. */
+    let supprimees: LignesDeFerme;
+    let phytoBibliothequeSupprime: string;
+
+    beforeAll(async () => {
+      supprimees = await peuplerFerme(base.pool, ferme);
+      phytoBibliothequeSupprime = await creerProduitPhytoBibliotheque(base.pool);
+      const moment = new Date('2026-09-30T10:00:00Z');
+      for (const [table, id] of [
+        ['serie', supprimees.serie],
+        ['campagne', supprimees.campagne],
+        ['emplacement', supprimees.emplacement],
+        ['secteur_irrigation', supprimees.secteurIrrigation],
+        ['produit_phyto', supprimees.produitPhyto],
+        ['produit_phyto', phytoBibliothequeSupprime],
+      ] as const) {
+        await base.pool.query(`UPDATE ${table} SET supprime_le = $2 WHERE id = $1`, [id, moment]);
+      }
+    });
+
+    it.each([
+      ['serie_id', () => ({ serie_id: supprimees.serie })],
+      ['campagne_id', () => ({ campagne_id: supprimees.campagne })],
+      ['un des emplacement_ids', () => ({ emplacement_ids: JSON.stringify([supprimees.emplacement]) })],
+      ['detail.secteurIrrigationId', () => ({ type: 'irrigation', detail: JSON.stringify(irrigation(supprimees.secteurIrrigation)) })],
+      ['detail.produitPhytoId (produit de la ferme)', () => ({ type: 'traitement', detail: JSON.stringify(traitement(supprimees.produitPhyto)) })],
+      [
+        'detail.produitPhytoId (produit de la bibliothèque)',
+        () => ({ type: 'traitement', detail: JSON.stringify(traitement(phytoBibliothequeSupprime)) }),
+      ],
+    ])('%s supprimé : ecriture_invalide, rien d’écrit, 200, le reste du lot passe', async (_cas, champs) => {
+      const mauvaise = putRecolte(theo.id, ferme, 1, champs());
+      const bonne = putRecolte(theo.id, ferme, 2);
+      const reponse = await lot([mauvaise, bonne], theo.jeton);
+      expect(reponse.refus).toEqual([{ table: 'evenement', id: mauvaise.id, motif: 'ecriture_invalide' }]);
+      expect(await evenements(mauvaise.id)).toBe(0);
+      expect(await modifications(mauvaise.id)).toBe(0);
+      expect(await evenements(bonne.id)).toBe(1);
     });
   });
 });
