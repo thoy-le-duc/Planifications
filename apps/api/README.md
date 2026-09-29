@@ -1,6 +1,6 @@
 # @planif/api
 
-API Hono sur Node. Depuis T09 : comptes, fermes et jetons. Le contrat exact est l'en-tête de `src/auth/auth.integration.test.ts`.
+API Hono sur Node. Depuis T09 : comptes, fermes et jetons (contrat : en-tête de `src/auth/auth.integration.test.ts`). Depuis T10 : réception des écritures faites hors ligne, `POST /sync/upload` (contrat : en-tête de `src/sync/upload.integration.test.ts`).
 
 ## Démarrer
 
@@ -18,6 +18,7 @@ COURRIEL_CONSOLE=1 pnpm --filter @planif/api dev
 | `JWT_EMETTEUR`, `JWT_AUDIENCE` | Claims `iss` et `aud` (l'audience est celle configurée dans PowerSync) |
 | `PORT` | 3000 par défaut |
 | `COURRIEL_CONSOLE` | `1` : les e-mails (et donc les codes) s'écrivent dans la console. Développement seulement : refusé si `NODE_ENV=production` |
+| `CORS_ORIGINES` | Origines autorisées à appeler l'API depuis un navigateur, séparées par des virgules (`https://app.planif.fr,http://localhost:4174`). Origines exactes, sans `/` final ; aucune par défaut (même origine seulement) |
 
 Aucune valeur secrète par défaut : une variable obligatoire absente arrête le démarrage. Il n'y a pas encore de service d'envoi d'e-mail réel : sans `COURRIEL_CONSOLE=1`, l'API refuse de démarrer.
 
@@ -52,6 +53,44 @@ La base ne contient jamais un code ni un jeton en clair.
 
 1. `pnpm --filter @planif/api cles cle-2027-01` génère une clé ; la placer **en tête** de `JWT_CLES_PRIVEES`, redéployer. Elle signe, l'ancienne vérifie encore.
 2. Une heure plus tard (durée de vie d'un jeton d'accès), retirer l'ancienne clé. Les sessions ne tombent pas : le jeton de renouvellement ne dépend pas des clés.
+
+## Synchro (T10)
+
+Le téléphone écrit dans sa base locale (PowerSync), puis sa file d'écritures part à `POST /sync/upload` au retour du réseau. Architecture : `docs/choix-synchro.md` ; règles de ce que chaque téléphone reçoit : `powersync/sync-config.yaml`.
+
+| Réponse | Quand |
+| --- | --- |
+| 200 `{ refus: [{ table, id, motif }] }` | Lot traité : chaque écriture est acceptée ou refusée **à part** (un refus ne bloque ni les autres, ni la file du téléphone) |
+| 400 `requete_invalide` | Corps sans tableau `ecritures` |
+| 401 `non_authentifie` | Jeton absent ou invalide (garde de T09) |
+| 5xx | Panne passagère (base injoignable) : PowerSync renverra le lot |
+
+Règles appliquées à chaque écriture (T10 : la table `evenement`, les autres tables suivront avec leurs écrans) :
+
+| Motif | Règle |
+| --- | --- |
+| `table_interdite` | Le téléphone n'écrit que `evenement` : ni `membre`, ni `utilisateur`, ni l'historique, ni les secrets |
+| `ferme_interdite` | L'utilisateur doit être membre actif de la ferme de l'écriture (`fermesDeLUtilisateur`, relu à chaque lot) |
+| `auteur_invalide` | `auteur_id` = utilisateur du jeton |
+| `ajout_seul` | Ni PATCH ni DELETE sur un événement ; un PUT sur un id existant n'est accepté que s'il est identique (renvoi d'un lot dont la réponse s'est perdue : rien n'est écrit deux fois) |
+| `ecriture_invalide` | Données relues contre le modèle (`src/sync/evenement.ts`), puis par les CHECK et clés de la base |
+
+Une création acceptée écrit l'événement **et** sa ligne `modification` (`apres` = la ligne en JSON) dans une seule transaction. Un refus s'enregistre dans `refus_synchro` avec un message en français, qui redescend sur le téléphone de son seul auteur.
+
+### Lancer la synchro en local
+
+```sh
+docker compose up -d --wait postgres
+export DATABASE_URL=postgres://planif:planif@localhost:5432/planif
+pnpm --filter @planif/db migrer
+export JWT_CLES_PRIVEES="$(pnpm --silent --filter @planif/api cles)"
+export JWT_EMETTEUR=http://localhost:3000 JWT_AUDIENCE=powersync-planif CORS_ORIGINES=http://localhost:5173
+COURRIEL_CONSOLE=1 pnpm --filter @planif/api dev          # dans un autre terminal
+docker compose up -d --wait powersync                    # lit le JWKS de l'API sur host.docker.internal:3000
+VITE_API_URL=http://localhost:3000 VITE_POWERSYNC_URL=http://localhost:8080 pnpm --filter @planif/web dev
+```
+
+Puis, une fois connecté dans l'appli : `http://localhost:5173/diagnostic/synchro.html?ferme=<id de la ferme>`. Le test de bout en bout fait tout cela seul : `pnpm e2e:synchro` (racine).
 
 ## Tickets suivants
 

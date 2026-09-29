@@ -23,7 +23,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 
 | Fichier | Contenu |
 | --- | --- |
-| `src/schema.ts` | Les 21 tables du modèle v1 et les 4 tables de comptes (T09), clés étrangères, CHECK, index |
+| `src/schema.ts` | Les 21 tables du modèle v1, les 4 tables de comptes (T09) et `refus_synchro` (T10), clés étrangères, CHECK, index |
 | `src/comptes.ts` | `fermesDeLUtilisateur`, `roleDansLaFerme`, `ROLES_MEMBRE`, `ETATS_MEMBRE` (T09) |
 | `src/valeurs.ts` | Valeurs des unions de T01, vérifiées à la compilation contre `@planif/core` |
 | `src/conversions.ts` | `ligneDepuisX` / `xDepuisLigne` pour Serie, Occupation, Emplacement, Evenement |
@@ -35,6 +35,8 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0004_*.sql` | Généré par drizzle-kit (T09) : `utilisateur`, `membre`, `code_connexion`, `jeton_renouvellement`, clés `auteur_id` → `utilisateur` |
 | `migrations/0005_*.sql` | Migration personnalisée (T09) : `utilisateur` et `membre` ajoutées à la publication `powersync` |
 | `migrations/0006_*.sql` | Généré par drizzle-kit (T09, relecture sécurité) : `membre.etat`, `invite_par`, `invite_le` et leurs CHECK |
+| `migrations/0007_*.sql` | Généré par drizzle-kit (T10) : `refus_synchro` |
+| `migrations/0008_*.sql` | Migration personnalisée (T10) : `refus_synchro` dans la publication `powersync`, et publication étendue à `truncate` (exigé par PowerSync 1.26, erreur PSYNC_S1142) |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 
@@ -50,7 +52,15 @@ Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
   - **Limite** : le propriétaire des tables (et un superutilisateur) peut désactiver ces déclencheurs (`ALTER TABLE … DISABLE TRIGGER`, `session_replication_role = replica`). L'ajout seul n'est donc garanti que si l'application ne se connecte pas en propriétaire : un rôle applicatif qui n'a que `INSERT` et `SELECT` sur `evenement` et `mouvement_stock` est prévu dans un ticket suivant (voir « Comptes »).
 - **Remplacement** : une correction ou une annulation vise un événement de la même ferme (clé étrangère composée `(ferme_id, remplace_evenement_id)` → `evenement (ferme_id, id)`, erreur `23503`) et du même type (déclencheur à l'insertion, erreur `23514`).
 - **Index** : `occupation (emplacement_id, prevu_du, prevu_au)` pour la vue 2D ; `serie (ferme_id, prevu_…)` pour le semainier ; plus les clés étrangères les plus lues.
-- **PowerSync** : publication `powersync` (insert, update, delete) sur les 21 tables du modèle, plus `utilisateur` et `membre` (T09), en liste explicite : pas besoin d'être superutilisateur chez un hébergeur géré, et la table de suivi des migrations n'est pas publiée. Une nouvelle table synchronisée s'ajoute dans sa migration par `ALTER PUBLICATION powersync ADD TABLE …`. Le service PowerSync exige `wal_level=logical` sur le serveur (réglé dans `docker-compose.yml`) ; la création de la publication, elle, n'en a pas besoin, ce qui permet de tester en CI avec le service Postgres standard.
+- **PowerSync** : publication `powersync` (insert, update, delete, truncate depuis T10) sur les 21 tables du modèle, plus `utilisateur` et `membre` (T09) et `refus_synchro` (T10), en liste explicite : pas besoin d'être superutilisateur chez un hébergeur géré, et la table de suivi des migrations n'est pas publiée. Une nouvelle table synchronisée s'ajoute dans sa migration par `ALTER PUBLICATION powersync ADD TABLE …`. Le service PowerSync exige `wal_level=logical` sur le serveur (réglé dans `docker-compose.yml`, et en CI par `docker run … -c wal_level=logical`) ; la création de la publication, elle, n'en a pas besoin. Ce que chaque téléphone reçoit est décidé par `powersync/sync-config.yaml`, pas par la publication.
+
+## Synchro (T10)
+
+| Table | Rôle | Publiée |
+| --- | --- | --- |
+| `refus_synchro` | Écriture reçue par `POST /sync/upload` et refusée : `utilisateur_id` (auteur), `ferme_id` visée si connue (sans clé étrangère), `nom_table`, `ligne_id` (texte : l'id reçu n'est pas forcément un UUID), `operation` (`PUT`, `PATCH`, `DELETE`), `motif` (code stable), `message` (français, affiché sur le téléphone), `donnees` (ce qui a été reçu), `cree_le`. Écrite par le serveur seulement | oui, vers son seul auteur, sans `donnees` |
+
+Service PowerSync en local : voir `apps/api/README.md`, « Lancer la synchro en local ».
 
 ## Comptes (T09)
 
@@ -63,9 +73,9 @@ Connexion par code à 6 chiffres reçu par e-mail, sans mot de passe (Q9). Le co
 | `code_connexion` | Code à usage unique, haché, expiration, tentatives. Pas de clé vers `utilisateur` : le code précède le compte. Ses lignes servent aussi aux limites : envois par adresse, et échecs par adresse sur 24 h (somme des `tentatives` des codes créés dans la fenêtre) | **non** |
 | `jeton_renouvellement` | Jeton long et opaque, haché, expiration, révocation | **non** |
 
-Règle de découpage : `fermesDeLUtilisateur(db, utilisateurId)` rend les fermes dont l'utilisateur est membre actif (membre accepté, et membre, ferme et utilisateur non supprimés), triées par id ; `roleDansLaFerme(db, utilisateurId, fermeId)` rend le rôle ou `null`. L'API les relit à chaque requête, les règles de synchro PowerSync (T10) reprendront la même règle.
+Règle de découpage : `fermesDeLUtilisateur(db, utilisateurId)` rend les fermes dont l'utilisateur est membre actif (membre accepté, et membre, ferme et utilisateur non supprimés), triées par id ; `roleDansLaFerme(db, utilisateurId, fermeId)` rend le rôle ou `null`. L'API les relit à chaque requête, les règles de synchro PowerSync (`powersync/sync-config.yaml`, T10) reprennent la même règle.
 
-**À retenir pour T10** : `membre` est publiée avec ses lignes « invité ». Les règles de synchro doivent filtrer `etat = 'accepte'` (en plus de `supprime_le` nul sur le membre, la ferme et l'utilisateur), sinon un invité recevrait les données de la ferme avant d'avoir accepté. `db` est ce que rend `drizzle(client)` de `drizzle-orm/node-postgres`.
+**Appliqué par T10** : `membre` est publiée avec ses lignes « invité ». Les règles de synchro filtrent `etat = 'accepte'` (en plus de `supprime_le` nul sur le membre, la ferme et l'utilisateur), sinon un invité recevrait les données de la ferme avant d'avoir accepté. `db` est ce que rend `drizzle(client)` de `drizzle-orm/node-postgres`.
 
 Tickets suivants (décision du chef d'équipe, rien dans T09) :
 
