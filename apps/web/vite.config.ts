@@ -136,6 +136,10 @@ export default defineConfig(({ mode }) => {
       cspEnBalise({ urlApi: env.VITE_API_URL, urlPowerSync: env.VITE_POWERSYNC_URL }),
     ],
     build: {
+      // modulepreload est natif sur les navigateurs visés (Chrome Android, Safari 17+) ; ailleurs,
+      // les mêmes fichiers se chargent sans préchargement. Le polyfill n'était que du JavaScript de
+      // démarrage en plus (T16, budget de poids).
+      modulePreload: { polyfill: false },
       rollupOptions: {
         input: {
           index: fileURLToPath(new URL('index.html', import.meta.url)),
