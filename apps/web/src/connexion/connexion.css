@@ -20,18 +20,21 @@
 
 .connexion-titre {
   position: relative;
-  padding: clamp(96px, 30dvh, 250px) var(--espace-xl) var(--espace-xl);
+  padding: clamp(96px, 30dvh, 250px) clamp(16px, 6.2vw, 24px) var(--espace-xl);
   display: flex;
   flex-direction: column;
   gap: var(--espace-s);
   color: var(--couleur-sur-foret);
 }
 
+/* 38 px sur un téléphone (maquette) ; plus petit sur un écran étroit ou zoomé, et coupé plutôt
+   que de déborder. */
 .connexion-titre h1 {
   font-family: var(--police-titre);
   font-weight: 800;
-  font-size: 38px;
+  font-size: clamp(21px, 9.75vw, 38px);
   line-height: 1;
+  overflow-wrap: anywhere;
 }
 
 .connexion-titre p {
@@ -93,16 +96,16 @@
   border-radius: var(--rayon-case);
 }
 
+/* Focus : le contour commun (src/ui/base.css), et le bord passe en forêt. */
 .champ:focus {
-  outline: none;
-  border: 3px solid var(--couleur-foret);
+  border-color: var(--couleur-foret);
 }
 
 /* Code : un seul vrai champ, posé sur les six cases qui montrent les chiffres saisis. */
 .saisie-code {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--espace-s);
 }
 
@@ -116,11 +119,24 @@
   box-shadow: var(--ombre-carte);
   font-family: var(--police-titre);
   font-weight: 800;
-  font-size: 30px;
+  font-size: clamp(18px, 7.7vw, 30px);
 }
 
+/* Le champ, invisible, montre son focus par le bord de la case du prochain chiffre, et le
+   curseur de la maquette. */
 .saisie-code:focus-within .case-code-active {
   border: 3px solid var(--couleur-foret);
+}
+
+.curseur-code {
+  width: 2px;
+  height: 30px;
+  background: var(--couleur-foret);
+  visibility: hidden;
+}
+
+.saisie-code:focus-within .curseur-code {
+  visibility: visible;
 }
 
 .saisie-code input {
@@ -131,6 +147,20 @@
   opacity: 0;
   border: 0;
   font-size: 16px;
+}
+
+/* « Renvoyer un code » : lien de la maquette, cible de 48 px. */
+.lien-connexion {
+  align-self: center;
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 var(--espace-l);
+  border: 0;
+  background: none;
+  color: var(--couleur-foret);
+  font-size: 15px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .message-connexion {

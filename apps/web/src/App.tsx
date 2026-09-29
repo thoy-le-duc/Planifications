@@ -96,13 +96,16 @@ function jourAffiche(): string {
   return new Date().toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' }).toUpperCase();
 }
 
-/** Pousses du motif de l'écran de connexion : centre (x, y) en px. */
-const POUSSES: readonly (readonly [number, number])[] = [
-  [80, 66],
-  [140, 54],
-  [200, 50],
-  [260, 54],
-  [320, 66],
+/** Pousses du motif de l'écran de connexion (maquette) : centre (x, y), rayon, opacité. */
+const POUSSES: readonly (readonly [number, number, number, number])[] = [
+  [80, 66, 6, 1],
+  [140, 54, 6, 1],
+  [200, 50, 6, 1],
+  [260, 54, 6, 1],
+  [320, 66, 6, 1],
+  [110, 120, 5, 0.6],
+  [230, 112, 5, 0.6],
+  [290, 120, 5, 0.6],
 ];
 
 export function App() {
@@ -152,8 +155,8 @@ export function App() {
             style={{ stroke: 'var(--couleur-foret-clair)' }}
           />
           <g style={{ fill: 'var(--couleur-pousse)' }}>
-            {POUSSES.map(([x, y]) => (
-              <circle key={x} cx={x} cy={y} r="6" />
+            {POUSSES.map(([x, y, r, opacite]) => (
+              <circle key={`${String(x)}-${String(y)}`} cx={x} cy={y} r={r} opacity={opacite} />
             ))}
           </g>
         </svg>

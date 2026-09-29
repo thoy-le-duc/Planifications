@@ -52,6 +52,18 @@ export function EcranConnexion({ client, surConnexion, etapeInitiale = { etape: 
     setMessage(MESSAGES[r.raison]);
   }
 
+  /** Nouveau code pour la même adresse : on reste sur la saisie du code. */
+  async function renvoyer(adresse: string) {
+    if (enCours) return;
+    setEnCours(true);
+    setMessage(null);
+    const r = await client.demanderCode(adresse);
+    setEnCours(false);
+    setCode('');
+    champCode.current?.focus();
+    if (!r.ok) setMessage(MESSAGES[r.raison]);
+  }
+
   async function verifier(adresse: string, saisi: string) {
     if (enCours || saisi.length !== LONGUEUR_CODE) return;
     setEnCours(true);
@@ -107,6 +119,7 @@ export function EcranConnexion({ client, surConnexion, etapeInitiale = { etape: 
     );
   } else {
     const adresse = etape.email;
+    const complet = code.length === LONGUEUR_CODE;
     formulaire = (
       <form
         key="code"
@@ -117,13 +130,11 @@ export function EcranConnexion({ client, surConnexion, etapeInitiale = { etape: 
       >
         <label className="champ-libelle">
           <span className="carte-connexion-titre">Entre le code reçu</span>
-          <span className="carte-connexion-aide">
-            6 chiffres, envoyés à <strong>{adresse}</strong>
-          </span>
+          <span className="carte-connexion-aide">Envoyé à {adresse} · valable 10 minutes</span>
           <span className="saisie-code">
             {Array.from({ length: LONGUEUR_CODE }, (_, i) => (
               <span key={i} data-testid="case-code" aria-hidden="true" className={i === code.length ? 'case-code case-code-active' : 'case-code'}>
-                {code[i]}
+                {i === code.length ? <i data-testid="curseur-code" className="curseur-code" /> : code[i]}
               </span>
             ))}
             <input
@@ -146,8 +157,8 @@ export function EcranConnexion({ client, surConnexion, etapeInitiale = { etape: 
           </span>
         </label>
         {alerte}
-        <BoutonPrincipal type="submit" disabled={enCours}>
-          Valider
+        <BoutonPrincipal type="submit" disabled={enCours || !complet}>
+          Se connecter
         </BoutonPrincipal>
         <BoutonSecondaire
           onClick={() => {
@@ -157,6 +168,9 @@ export function EcranConnexion({ client, surConnexion, etapeInitiale = { etape: 
         >
           Changer d’adresse
         </BoutonSecondaire>
+        <button type="button" className="lien-connexion" disabled={enCours} onClick={() => void renvoyer(adresse)}>
+          Renvoyer un code
+        </button>
       </form>
     );
   }
