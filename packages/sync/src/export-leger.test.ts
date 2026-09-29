@@ -1,0 +1,88 @@
+/**
+ * Tests d'acceptation T15b — export léger (docs/backlog/T15b-export-leger.md) : mémoire au pic
+ * et fil principal jamais gelé, sur la ferme de T07. Contrat : « Archive légère » dans
+ * packages/core/src/export/test/contrat.ts, et « Mémoire » dans ./test/contrat-export.ts.
+ *
+ * Les mesures tournent dans un processus Node isolé (./test/mesure-export.ts, `--expose-gc`) :
+ * la mémoire d'un fil de vitest mêle celle des autres tests. Seuils :
+ *   - mémoire : règle du ticket (au pic, pas plus de 2 × la taille de l'archive finale) + 8 Mio
+ *     de marge. La marge couvre les tampons de travail (un morceau de CSV en cours, zlib) et le
+ *     bruit de la mesure (± 1 à 3 Mio d'une exécution à l'autre, mesuré) : avec une archive de
+ *     2 à 5 Mo, 2 × la taille seule serait sous le bruit. Pour mémoire, T15 ajoutait ≈ 210 Mo ;
+ *   - tâches : 25 ms sous Node ≈ 100 ms sur le fil principal d'un téléphone (CPU ralenti ×4, même
+ *     règle que le temps d'export de T15). Le meilleur de trois exports : une préemption du
+ *     processus par le système (autres tests en parallèle) peut allonger un tour de boucle, un
+ *     vrai calcul trop long se voit à chaque export ;
+ *   - la lecture de la base n'est pas dans la mesure des tâches : sous Node, node:sqlite lit de
+ *     façon synchrone (≈ 0,5 s pour les 30 000 événements), alors que PowerSync lit hors du fil
+ *     principal. Elle est dans la mesure de mémoire d'exporterFerme (lignes lues déduites).
+ */
+import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { beforeAll, describe, expect, it } from 'vitest';
+import type { ResultatMesures } from './test/mesure-export.ts';
+
+const SCRIPT = fileURLToPath(new URL('./test/mesure-export.ts', import.meta.url));
+const MIO = 1_048_576;
+const MARGE = 8 * MIO;
+/** 100 ms de fil principal, CPU ralenti ×4. */
+const TACHE_MAX_MS = 25;
+
+let r: ResultatMesures;
+
+beforeAll(async () => {
+  const sortie = await new Promise<string>((ok, ko) => {
+    execFile(
+      process.execPath,
+      ['--expose-gc', '--no-warnings', SCRIPT],
+      { encoding: 'utf8', timeout: 170_000, maxBuffer: 1024 * 1024 },
+      (erreur, stdout, stderr) => {
+        if (erreur !== null) ko(new Error(`mesure-export.ts a échoué : ${erreur.message}\n${stderr}`));
+        else ok(stdout);
+      },
+    );
+  });
+  r = JSON.parse(sortie.trim().split('\n').at(-1) ?? '{}') as ResultatMesures;
+  console.info(`T15b : mesures ${JSON.stringify(r)}`);
+}, 180_000);
+
+const mio = (n: number) => `${(n / MIO).toFixed(1)} Mio`;
+
+describe('T15b : export léger, ferme de T07 (processus isolé)', () => {
+  it('les mesures ont pu se faire (construireArchive et exporterFerme existent)', () => {
+    expect(r.erreur).toBeUndefined();
+    expect(r.archive).toBeDefined();
+    expect(r.ferme).toBeDefined();
+  });
+
+  it('mémoire de construireArchive au pic : au plus 2 × l’archive finale + 8 Mio (T15 : ≈ 210 Mio)', () => {
+    const a = r.archive;
+    expect(a, r.erreur).toBeDefined();
+    if (a === undefined) return;
+    expect(a.appels, 'relevés pendant l’export (appels d’avancement)').toBeGreaterThanOrEqual(20);
+    expect(a.taille).toBeLessThan(8_000_000);
+    expect(a.pic, `pic ${mio(a.pic)} pour une archive de ${mio(a.taille)}`).toBeLessThanOrEqual(2 * a.taille + MARGE);
+  });
+
+  it('mémoire d’exporterFerme au pic : lignes lues + 2 × l’archive finale + 8 Mio', () => {
+    const f = r.ferme;
+    expect(f, r.erreur).toBeDefined();
+    if (f === undefined) return;
+    expect(f.lignesLues, 'témoin : les lignes de T07 pèsent des dizaines de Mio').toBeGreaterThan(20 * MIO);
+    expect(f.appels).toBeGreaterThanOrEqual(20);
+    expect(f.taille).toBeLessThan(8_000_000);
+    expect(f.pic, `pic ${mio(f.pic)}, lignes lues ${mio(f.lignesLues)}, archive ${mio(f.taille)}`).toBeLessThanOrEqual(f.lignesLues + 2 * f.taille + MARGE);
+  });
+
+  it(`fil jamais gelé : aucune tâche de plus de ${String(TACHE_MAX_MS)} ms pendant construireArchive (≈ 100 ms CPU ralenti ×4)`, () => {
+    const t = r.taches ?? [];
+    expect(t, r.erreur).toHaveLength(3);
+    const meilleure = Math.min(...t.map((x) => x.plusLongue));
+    expect(meilleure, `plus longues tâches : ${t.map((x) => `${x.plusLongue.toFixed(1)} ms`).join(', ')}`).toBeLessThan(TACHE_MAX_MS);
+  });
+
+  it('temps : construireArchive de T07 (sans lecture) sous 2,5 s, même en rendant la main', () => {
+    for (const x of r.taches ?? []) expect(x.duree).toBeLessThan(2500);
+    expect(r.taches?.length).toBe(3);
+  });
+});

@@ -4,7 +4,8 @@
  * Contrat : en-tête de ./export.test.tsx. DOM simulé (happy-dom) : l'écran n'est pas encore
  * atteignable dans l'appli, donc pas d'e2e Playwright ; on rend le vrai composant et on tape.
  *
- *   - pendant l'export : bouton désactivé (un second tap ne relance rien) ;
+ *   - pendant l'export : bouton désactivé (un second tap ne relance rien) et (T15b) une barre
+ *     d'avancement : `<progress>` ou role="progressbar" ;
  *   - à la fin : message qui contient « <N> événements exportés » (N = lignes de evenement.csv) ;
  *   - si la porte lève : message d'échec (role="alert"), bouton de nouveau actif, et l'erreur
  *     est journalisée par `console.error` (sinon un échec au champ ne laisse aucune trace).
@@ -137,6 +138,7 @@ describe('T15 : écran d’export au doigt', () => {
       await Promise.resolve();
     });
     expect(bouton().disabled, 'désactivé pendant l’export').toBe(true);
+    expect(conteneur.querySelector('progress, [role="progressbar"]'), 'barre d’avancement pendant l’export (T15b)').not.toBeNull();
     const lecturesApresPremierTap = lectures();
     expect(lecturesApresPremierTap).toBeGreaterThan(0);
     await act(async () => {

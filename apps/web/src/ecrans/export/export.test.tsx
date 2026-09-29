@@ -23,10 +23,25 @@
  *   levée, éventuellement enveloppée dans une autre par `cause`). Testé au doigt dans un DOM
  *   simulé (happy-dom) : ./interaction.test.tsx.
  *
- * lancerExport(o: { porte; fermeId; maintenant: () => Date; telecharger }): Promise<ArchiveExport>
+ * lancerExport(o: { porte; fermeId; maintenant: () => Date; telecharger; avancement? }): Promise<ArchiveExport>
  *   `exporterFerme(porte, { fermeId, genereLe: maintenant().toISOString(),
- *   jour: jourLocal(maintenant()) })` de @planif/sync, puis `telecharger(nomFichier, octets)`
+ *   jour: jourLocal(maintenant()), avancement })` de @planif/sync, puis `telecharger(nomFichier, octets)`
  *   UNE fois ; rend l'archive. Aucun réseau : tout vient de la base locale (hors ligne).
+ *
+ * T15b (docs/backlog/T15b-export-leger.md) :
+ *   - `o.avancement?: (a: { fait: number; total: number }) => void` est transmis à
+ *     `exporterFerme` (règles : packages/core/src/export/test/contrat.ts, « Avancement ») ;
+ *   - l'archive est compressée (deflate) : `exporterFerme` prend par défaut
+ *     `CompressionStream('deflate-raw')`, que le navigateur et Node 22 ont ;
+ *   - pendant l'export, l'écran montre une BARRE D'AVANCEMENT : un élément `<progress>` (ou
+ *     role="progressbar"), nourri par `avancement`, en plus du bouton désactivé
+ *     (./interaction.test.tsx) ;
+ *   - écran jamais gelé : le calcul lourd (`construireArchive` de @planif/core) rend la main
+ *     assez souvent pour qu'aucune tâche ne dépasse 25 ms sous Node (≈ 100 ms CPU ralenti ×4) ;
+ *     mesuré dans packages/sync/src/export-leger.test.ts. Web Worker non exigé (décision
+ *     testeur : la porte vit sur le fil principal, envoyer les lignes à un Worker serait une
+ *     copie de plus). S'il y en a un, il reste hors du JavaScript de démarrage, comme l'écran
+ *     (./empaquetage.test.ts) ; le budget de démarrage ne bouge pas (70,9 Kio sur main).
  *
  * jourLocal(d: Date): string → 'AAAA-MM-JJ' à l'heure du téléphone (getFullYear, getMonth,
  *   getDate), pas en UTC : un export à 23 h 30 porte la date du jour.
@@ -70,6 +85,7 @@ interface ModuleEcranExport {
     readonly fermeId: string;
     readonly maintenant: () => Date;
     readonly telecharger: (nomFichier: string, octets: Uint8Array) => void;
+    readonly avancement?: (a: { readonly fait: number; readonly total: number }) => void;
   }): Promise<ArchiveExport>;
   jourLocal(d: Date): string;
 }
@@ -171,6 +187,27 @@ describe('T15 : écran d’export', () => {
     await m.lancerExport({ porte, fermeId: FERME, maintenant: () => MAINTENANT, telecharger: () => undefined });
     expect(reseau).not.toHaveBeenCalled();
     expect(requetes.length).toBeGreaterThan(0);
+  });
+
+  it('T15b : archive compressée (deflate) et avancement transmis jusqu’au bout', async () => {
+    const { porte } = porteFactice();
+    const appels: { fait: number; total: number }[] = [];
+    const archive = await m.lancerExport({
+      porte,
+      fermeId: FERME,
+      maintenant: () => MAINTENANT,
+      telecharger: () => undefined,
+      avancement: (a) => appels.push({ fait: a.fait, total: a.total }),
+    });
+    const entrees = lireZip(archive.octets);
+    for (const e of entrees) expect(e.methode, e.chemin).toBe(8);
+    expect(appels.length).toBeGreaterThan(0);
+    const dernier = appels.at(-1);
+    expect(dernier?.total).toBeGreaterThan(0);
+    expect(dernier?.fait).toBe(dernier?.total);
+    for (let k = 1; k < appels.length; k++) expect(appels[k]?.fait ?? 0).toBeGreaterThanOrEqual(appels[k - 1]?.fait ?? 0);
+    // Formules neutralisées dans les CSV (règle de @planif/core) : « Îlot « nord » ; bas » inchangé.
+    expect(lireCsv(texteZip(entrees, 'zone.csv')).lignes.map((l) => l[2])).toEqual(['Tunnel 1', 'Îlot « nord » ; bas']);
   });
 
   it('jourLocal : la date du téléphone, pas celle de UTC', () => {

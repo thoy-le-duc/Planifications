@@ -74,6 +74,11 @@ const NOTES = [
   'Récolte « extra », calibre 2',
   'Arrosage coupé\npar l’orage',
   'Voir "note" du tunnel',
+  // T15b : des notes qu'Excel prendrait pour des formules (neutralisées dans les CSV).
+  '=SOMME(A1:A3)',
+  '-3 plants gelés',
+  '+2 caisses',
+  '@Théo : à voir',
 ];
 
 /** Remplit `base` (créée depuis SCHEMA_LOCAL) : ferme principale au volume de T07, ferme voisine réduite. */

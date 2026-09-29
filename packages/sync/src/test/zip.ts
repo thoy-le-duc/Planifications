@@ -1,14 +1,27 @@
 /**
- * Relecture d'une archive ZIP pour les tests de T15, indépendante du code de production :
- * répertoire central, en-têtes locaux, CRC-32 et décompression par `node:zlib`, et contrôle
- * croisé par l'outil `unzip` d'Info-ZIP (présent sur ubuntu-latest et dans le conteneur).
- * Aucune dépendance ajoutée.
+ * Relecture d'une archive ZIP pour les tests de T15 et T15b, indépendante du code de production :
+ * répertoire central, en-têtes locaux, CRC-32 et décompression par `node:zlib`, et contrôles
+ * croisés par l'outil `unzip` d'Info-ZIP et par le module `zipfile` de Python (présents sur
+ * ubuntu-latest et dans le conteneur). Aucune dépendance ajoutée.
+ *
+ * Aussi `compresseurNode` (T15b) : le `Compresseur` que les tests injectent dans `creerZip` et
+ * `construireArchive` (deflate brut en flux par node:zlib), comme l'appli injecte
+ * `CompressionStream('deflate-raw')`.
  */
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { crc32, inflateRawSync } from 'node:zlib';
+import { Readable } from 'node:stream';
+import { crc32, createDeflateRaw, inflateRawSync } from 'node:zlib';
+import type { Compresseur } from '../../../core/src/export/test/contrat.ts';
+
+/** Deflate brut (RFC 1951) en flux, par node:zlib : octets bruts d'une entrée → octets compressés. */
+export const compresseurNode: Compresseur = async function* (brut) {
+  for await (const morceau of Readable.from(brut).pipe(createDeflateRaw()) as AsyncIterable<Buffer>) {
+    yield new Uint8Array(morceau.buffer, morceau.byteOffset, morceau.byteLength);
+  }
+};
 
 export interface EntreeZip {
   readonly chemin: string;
@@ -110,6 +123,30 @@ export function verifierAvecUnzip(octets: Uint8Array): string[] {
     execFileSync('unzip', ['-tq', fichier], { stdio: 'pipe' });
     const liste = execFileSync('unzip', ['-Z1', fichier], { encoding: 'utf8', stdio: 'pipe' });
     return liste.split('\n').filter((l) => l !== '');
+  } finally {
+    rmSync(dossier, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Contrôle croisé par Python : `zipfile.ZipFile(...).testzip()` (relit et vérifie le CRC de
+ * chaque entrée). Rend la liste des noms vue par Python ; lève une erreur si une entrée est
+ * mauvaise.
+ */
+export function verifierAvecPython(octets: Uint8Array): string[] {
+  const dossier = mkdtempSync(join(tmpdir(), 'planif-t15b-zip-'));
+  try {
+    const fichier = join(dossier, 'archive.zip');
+    writeFileSync(fichier, octets);
+    const script = [
+      'import json, sys, zipfile',
+      'with zipfile.ZipFile(sys.argv[1]) as z:',
+      '    mauvais = z.testzip()',
+      '    if mauvais is not None: sys.exit("entrée corrompue : " + mauvais)',
+      '    print(json.dumps(z.namelist()))',
+    ].join('\n');
+    const sortie = execFileSync('python3', ['-c', script, fichier], { encoding: 'utf8', stdio: 'pipe' });
+    return JSON.parse(sortie) as string[];
   } finally {
     rmSync(dossier, { recursive: true, force: true });
   }
