@@ -1,0 +1,5 @@
+Field,Bed,Length (m),Width (m),Cover
+North field,N1,30,0.8,open field
+North field,N2,30,0.8,open field
+Tunnel A,TA1,25.5,1.2,tunnel
+Tunnel A,TA2,25.5,1.2,tunnel

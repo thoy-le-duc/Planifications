@@ -209,6 +209,35 @@ Question : les maquettes (https://claude.ai/artifact/CkYjAD2qX9mxw3FNLT9miP) con
 
 Réponse (2026-09-29) : « Très sympa ». Style validé ; ticket T16 avant T11 et T13.
 
+### Q17 — Délais de retour par famille botanique (posée le 2026-09-29, T14)
+
+Question : valeurs par défaut des alertes de rotation (délai minimal / conseillé, en années), dans `FAMILLES_PAR_DEFAUT` de `packages/core/src/import`, modifiables ensuite par ferme :
+
+| Famille | Délais | Exemples |
+| --- | --- | --- |
+| Alliacées | 4 / 5 | ail, oignon, poireau |
+| Amaranthacées | 3 / 4 | betterave, épinard, blette |
+| Apiacées | 3 / 4 | carotte, céleri, fenouil |
+| Asparagacées | 8 / 10 | asperge |
+| Astéracées | 2 / 3 | laitues, chicorées |
+| Brassicacées | 4 / 6 | choux (règle de Q4) |
+| Convolvulacées | 3 / 4 | patate douce |
+| Cucurbitacées | 3 / 4 | courgette, courges, melon |
+| Fabacées | 3 / 5 | pois, haricot |
+| Lamiacées | 2 / 3 | basilic |
+| Paeoniacées | 5 / 8 | pivoine (peu sûr) |
+| Poacées | 1 / 2 | maïs doux |
+| Polygonacées | 3 / 4 | rhubarbe |
+| Rosacées | 4 / 5 | fraisier |
+| Solanacées | 3 / 4 | tomate, aubergine, poivron |
+| Valérianacées | 2 / 3 | mâche |
+
+Les kiwis sont exclus (liane pérenne). La rotation a-t-elle un sens pour la fraise hors-sol ?
+
+### Q18 — Saison à cheval sur deux années (posée le 2026-09-29, T14)
+
+Question : dans un tableur, une série semée en S40 et plantée en S2 : faut-il comprendre que la plantation est l'année suivante ? Pour l'instant, ces lignes sont signalées en erreur (`dates_incoherentes`) plutôt que devinées.
+
 ### À suivre
 
 

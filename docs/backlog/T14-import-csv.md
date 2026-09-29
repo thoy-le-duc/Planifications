@@ -2,6 +2,8 @@
 
 **Objectif** : qu'une ferme soit opérationnelle en moins d'une heure en important ses propres fichiers, quelle que soit leur forme : l'appli s'adapte au tableur de la ferme, pas l'inverse.
 
+**Découpage (2026-09-29)** : cette branche ne fait que le moteur pur dans `packages/core/src/import/**`. Les écrans, l'écriture en base, l'annulation et `docs/import/` sont dans T14b ; les derniers écarts de relecture dans T14c.
+
 **Dépend de** : T10
 **Périmètre** : `packages/core/src/import/**` (lecture, correspondance, normalisation, validation : pur et testé), `apps/web/src/ecrans/import/**`, `docs/import/`
 
