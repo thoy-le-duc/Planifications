@@ -7,15 +7,15 @@
  * suite dans la police de repli, jamais de page blanche.
  */
 
-/* Archivo variable (axes graisse et largeur) : une seule face, déclarée à 112 % de largeur, que le
-   navigateur applique à tous les titres sans font-stretch à écrire ailleurs. */
+/* Archivo : largeur figée à 112 % dans le fichier (plus d'axe wdth), graisse variable de 600 à 800 ;
+   rien à écrire ailleurs pour la largeur. Fabrication : public/polices/LISEZMOI.md. Préchargée
+   par index.html, avec Atkinson 400 et 700 (polices de l'écran de connexion). */
 @font-face {
   font-family: 'Archivo';
   font-style: normal;
   font-display: swap;
   font-weight: 600 800;
-  font-stretch: 112%;
-  src: url(/polices/archivo-latin-wdth-wght.woff2) format('woff2');
+  src: url(/polices/archivo-latin-112-wght.woff2) format('woff2');
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
