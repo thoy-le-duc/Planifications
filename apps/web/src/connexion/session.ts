@@ -10,11 +10,20 @@ export interface SessionConnexion {
   readonly email: string;
   readonly jetonAcces: string;
   readonly jetonRenouvellement: string;
+  /**
+   * Heure du serveur − heure du téléphone (ms), mesurée au dernier jeton reçu ; négative si le
+   * téléphone avance (T09b). Rangée avec la session et relue au démarrage : l'iat du jeton rangé
+   * ne prouve plus tout le retard une fois l'appli relancée.
+   */
+  readonly ecartHorlogeMs?: number;
 }
 
 const CHAMPS = ['utilisateurId', 'email', 'jetonAcces', 'jetonRenouvellement'] as const;
 
-/** Session complète (quatre chaînes non vides), ou null. */
+/**
+ * Session complète (quatre chaînes non vides), ou null. L'écart d'horloge n'est gardé que s'il est
+ * un nombre fini : illisible, il est omis sans invalider la session.
+ */
 export function sessionValide(v: unknown): SessionConnexion | null {
   if (typeof v !== 'object' || v === null) return null;
   const o = v as Record<string, unknown>;
@@ -28,7 +37,14 @@ export function sessionValide(v: unknown): SessionConnexion | null {
   ) {
     return null;
   }
-  return { utilisateurId, email, jetonAcces, jetonRenouvellement };
+  const ecart = o.ecartHorlogeMs;
+  return {
+    utilisateurId,
+    email,
+    jetonAcces,
+    jetonRenouvellement,
+    ...(typeof ecart === 'number' && Number.isFinite(ecart) ? { ecartHorlogeMs: ecart } : {}),
+  };
 }
 
 export function lireSession(stockage: Pick<Storage, 'getItem'>): SessionConnexion | null {

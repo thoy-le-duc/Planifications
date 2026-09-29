@@ -10,10 +10,12 @@
  * T09b :
  * - rotation : chaque renouvellement rend un jeton de renouvellement neuf, rangé aussitôt ;
  *   avant de renouveler, on relit la session rangée (une autre page a pu le faire tourner :
- *   représenter l'ancien après 2 minutes révoquerait toute la session). Réponse perdue : on
- *   garde l'ancien, que le serveur accepte encore 2 minutes ;
+ *   représenter l'ancien une fois son successeur utilisé révoquerait toute la session). Réponse
+ *   perdue : on garde l'ancien, que le serveur accepte tant que le successeur perdu n'a pas
+ *   servi (7 jours au plus) ;
  * - écart d'horloge : l'heure du serveur est estimée par l'iat des jetons reçus (sans appel
- *   réseau de plus), et c'est elle qui décide du renouvellement.
+ *   réseau de plus), et c'est elle qui décide du renouvellement. L'écart est rangé avec la
+ *   session (`ecartHorlogeMs`) et relu au démarrage.
  */
 import { SessionExpiree } from '@planif/sync';
 import { enregistrerSession, lireSession, sessionValide, type SessionConnexion } from '../connexion/session.ts';
@@ -75,11 +77,12 @@ export function gererJetons(depart: SessionConnexion, options: OptionsJetons): G
   /** Jeton refusé par le serveur : à renouveler même s'il paraît valide. */
   let invalide = false;
   /**
-   * Heure du serveur − heure du téléphone (ms). Au départ, seul un iat dans le futur prouve un
-   * retard du téléphone (un iat passé ne dit rien : le jeton a pu être rangé la veille).
+   * Heure du serveur − heure du téléphone (ms). Au départ, l'écart rangé avec la session ; à
+   * défaut, seul un iat dans le futur prouve un retard du téléphone (un iat passé ne dit rien :
+   * le jeton a pu être rangé la veille).
    */
   const iatDepart = emissionJeton(depart.jetonAcces);
-  let ecart = iatDepart === null ? 0 : Math.max(0, iatDepart - maintenant());
+  let ecart = depart.ecartHorlogeMs ?? (iatDepart === null ? 0 : Math.max(0, iatDepart - maintenant()));
 
   async function renouveler(): Promise<string> {
     // Une autre page ou un autre onglet a pu faire tourner le jeton : on présente le plus récent.
@@ -98,10 +101,10 @@ export function gererJetons(depart: SessionConnexion, options: OptionsJetons): G
     const corps: unknown = await res.json();
     const nouvelle = sessionValide({ ...session, ...(typeof corps === 'object' && corps !== null ? corps : {}) });
     if (nouvelle === null) throw new Error('renouvellement du jeton : réponse illisible');
-    session = nouvelle;
     invalide = false;
     const iat = emissionJeton(nouvelle.jetonAcces);
     if (iat !== null) ecart = iat - maintenant();
+    session = { ...nouvelle, ecartHorlogeMs: ecart };
     enregistrerSession(options.stockage, session);
     return session.jetonAcces;
   }
