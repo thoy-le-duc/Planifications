@@ -36,7 +36,7 @@ services:
       retries: 30
 
   powersync:
-    image: ${POWERSYNC_IMAGE:-journeyapps/powersync-service:latest}
+    image: ${POWERSYNC_IMAGE:-journeyapps/powersync-service:1.26.1}
     command: ['start', '-r', 'unified']
     depends_on:
       postgres:

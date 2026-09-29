@@ -10,18 +10,31 @@
  *   5. playwright -c playwright.synchro.config.ts, qui construit la page avec VITE_API_URL et
  *      VITE_POWERSYNC_URL (figées au build) et la sert sur le port 4174.
  *
- * Variables facultatives : POSTGRES_IMAGE, POWERSYNC_IMAGE (miroir si Docker Hub est limité),
- * CHROMIUM_PATH (Chromium déjà installé), JWT_CLES_PRIVEES (sinon une clé est générée).
+ * Variables facultatives : POSTGRES_IMAGE, POWERSYNC_IMAGE (miroir si Docker Hub est limité ;
+ * l'image de PowerSync est figée en 1.26.1 dans docker-compose.yml), CHROMIUM_PATH (Chromium
+ * déjà installé), JWT_CLES_PRIVEES (sinon une clé est générée), et les ports si ceux par défaut
+ * sont pris : E2E_PORT_POSTGRES (55432), E2E_PORT_POWERSYNC (58080), E2E_PORT_API (3100).
+ * La page est servie par playwright.synchro.config.ts (port 4174, ou SYNCHRO_BASE_URL).
  */
 import { spawn, spawnSync, type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const RACINE = fileURLToPath(new URL('..', import.meta.url));
 const PROJET = 'planif-e2e-synchro';
-const PORT_POSTGRES = 55432;
-const PORT_POWERSYNC = 58080;
-const PORT_API = 3100;
-const ORIGINE_PAGE = 'http://localhost:4174';
+
+/** Port lu dans l'environnement, sinon celui par défaut. */
+function port(variable: string, defaut: number): number {
+  const valeur = process.env[variable];
+  if (valeur === undefined || valeur === '') return defaut;
+  const n = Number(valeur);
+  if (!Number.isInteger(n) || n < 1 || n > 65_535) throw new Error(`${variable} : port invalide (${valeur})`);
+  return n;
+}
+
+const PORT_POSTGRES = port('E2E_PORT_POSTGRES', 55432);
+const PORT_POWERSYNC = port('E2E_PORT_POWERSYNC', 58080);
+const PORT_API = port('E2E_PORT_API', 3100);
+const ORIGINE_PAGE = new URL(process.env.SYNCHRO_BASE_URL ?? 'http://localhost:4174').origin;
 const AUDIENCE = 'powersync-planif';
 const EMETTEUR = `http://localhost:${String(PORT_API)}`;
 

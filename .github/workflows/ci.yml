@@ -19,6 +19,9 @@ jobs:
     env:
       # Tests d'intégration de @planif/db (T08) : sans cette URL, ils échouent en CI.
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      # Version figée : une nouvelle version du service se teste et s'adopte par une PR, pas en silence.
+      # Lue par les tests des règles de synchro et par docker compose (pnpm e2e:synchro).
+      POWERSYNC_IMAGE: journeyapps/powersync-service:1.26.1
     steps:
       - name: Postgres 17 en wal_level=logical
         run: |
@@ -29,7 +32,7 @@ jobs:
           timeout 90 sh -c 'until [ "$(docker inspect -f "{{.State.Health.Status}}" postgres)" = healthy ]; do sleep 1; done'
       - name: Image du service PowerSync
         # Tirée d'avance : les tests des règles de synchro (T10) démarrent le service eux-mêmes.
-        run: docker pull journeyapps/powersync-service:latest
+        run: docker pull "$POWERSYNC_IMAGE"
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
