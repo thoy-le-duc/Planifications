@@ -11,6 +11,7 @@
 import type { DateCalendaire, Id } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { urlApi } from '../connexion/client.ts';
+import { deconnecter } from '../connexion/deconnexion.ts';
 import { lireSession, stockageNavigateur } from '../connexion/session.ts';
 import { ouvrirDonnees } from '../donnees/index.ts';
 
@@ -214,6 +215,20 @@ function demarrer(): void {
     etat.textContent = LIBELLES[e];
   });
   brancher(donnees.porte, fermeId, session.utilisateurId);
+
+  // T09b : déconnexion (jeton révoqué, session et base locale effacées), même hors ligne.
+  const bouton = element('deconnexion', HTMLButtonElement);
+  bouton.addEventListener('click', () => {
+    bouton.disabled = true;
+    const envoyer: typeof fetch = (...args) => fetch(...args);
+    deconnecter(session, { urlApi: urlApi(), fetch: envoyer, stockage: stockageNavigateur(), effacerBaseLocale: () => donnees.effacer() })
+      .then(() => {
+        element('deconnecte', HTMLElement).hidden = false;
+      })
+      .catch((erreur: unknown) => {
+        afficherErreur(`Déconnexion : ${String(erreur)}`);
+      });
+  });
 }
 
 demarrer();

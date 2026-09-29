@@ -10,6 +10,7 @@ import {
   urlApi,
   type SessionConnexion,
 } from './connexion/index.ts';
+import { effacerDonneesLocales } from './donnees/effacer.ts';
 import { MARQUE_APP_PRETE } from './perf.ts';
 
 // Appel détaché : fetch ne doit pas être invoqué comme méthode d'un autre objet.
@@ -31,13 +32,12 @@ const BOUTON_DECONNEXION: CSSProperties = {
 };
 
 /**
- * Efface la base locale sans charger PowerSync (chargé à la demande, hors du JavaScript de
- * démarrage ; hors ligne, ses fichiers ne sont pas en cache).
+ * Effacement de la base locale sans PowerSync (quelques lignes, importées directement) :
+ * PowerSync reste hors du JavaScript de démarrage, et hors ligne ses fichiers ne sont pas en
+ * cache. Un import dynamique ferait charger le point d'entrée de l'appli par la page de
+ * diagnostic (aide d'espace de noms rangée dans index-*.js par le bundler).
  */
-async function effacerBaseLocale(utilisateurId: string): Promise<void> {
-  const { effacerDonneesLocales } = await import('./donnees/effacer.ts');
-  await effacerDonneesLocales(utilisateurId);
-}
+const effacerBaseLocale = effacerDonneesLocales;
 
 export function App() {
   // Session gardée sur le téléphone : lue une fois, sans réseau.
