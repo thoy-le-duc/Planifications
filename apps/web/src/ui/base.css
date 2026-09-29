@@ -1,0 +1,124 @@
+/*
+ * Polices et base de l'appli (T16). Aucune couleur ici : tout passe par les variables des jetons
+ * (src/ui/jetons.ts, règle :root générée au build).
+ *
+ * Polices hébergées avec l'appli (public/polices/, sous-ensemble latin de Fontsource, licence
+ * SIL OFL jointe), mises en cache par le service worker ; `swap` : le texte s'affiche tout de
+ * suite dans la police de repli, jamais de page blanche.
+ */
+
+/* Archivo variable (axes graisse et largeur) : une seule face, déclarée à 112 % de largeur, que le
+   navigateur applique à tous les titres sans font-stretch à écrire ailleurs. */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600 800;
+  font-stretch: 112%;
+  src: url(/polices/archivo-latin-wdth-wght.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url(/polices/atkinson-hyperlegible-latin-400.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url(/polices/atkinson-hyperlegible-latin-700.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url(/polices/ibm-plex-mono-latin-500.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 600;
+  src: url(/polices/ibm-plex-mono-latin-600.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  font-family: var(--police-texte);
+  font-size: 100%;
+  line-height: 1.35;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+/* Coquille : en-tête, contenu, barre de navigation collée au bas de l'écran. */
+.coquille {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.coquille-contenu {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+  padding: var(--espace-l) 14px;
+}
+
+.coquille > nav {
+  position: sticky;
+  bottom: 0;
+}
+
+/* Écran d'attente (« Bientôt : … »). */
+.attente {
+  margin: var(--espace-xl) var(--espace-s) 0;
+  font-size: 18px;
+  color: var(--couleur-secondaire);
+}

@@ -117,6 +117,8 @@ export default defineConfig(({ mode }) => {
           icons: [{ src: 'icone.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
         },
         workbox: {
+          // Polices (T16) comprises : l'appli hors ligne garde ses polices.
+          globPatterns: ['**/*.{js,wasm,css,html,woff2}'],
           // Pages de mesure et de diagnostic, et base locale (PowerSync, workers, WASM) hors du
           // précache : l'installation de l'appli ne s'alourdit pas tant que l'appli ne s'en sert pas.
           globIgnores: [
