@@ -2,10 +2,13 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { VERSION_MODELE_DONNEES } from '@planif/core';
 import {
   EcranConnexion,
+  MESSAGE_EFFACEMENT_EN_ATTENTE,
   creerClientConnexion,
   deconnecter,
+  effacementsEnAttente,
   enregistrerSession,
   lireSession,
+  reprendreEffacements,
   stockageNavigateur,
   urlApi,
   type SessionConnexion,
@@ -39,11 +42,17 @@ const BOUTON_DECONNEXION: CSSProperties = {
  */
 const effacerBaseLocale = effacerDonneesLocales;
 
+/** Écran de connexion : intervalle entre deux essais d'un effacement resté en attente. */
+const INTERVALLE_REPRISE_MS = 5_000;
+
 export function App() {
   // Session gardée sur le téléphone : lue une fois, sans réseau.
   const [session, setSession] = useState<SessionConnexion | null>(() => lireSession(stockageNavigateur()));
   const [deconnexionEnCours, setDeconnexionEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  /** Bases locales qui restent à effacer (base ouverte dans un autre onglet). */
+  const [enAttente, setEnAttente] = useState<readonly string[]>(() => effacementsEnAttente(stockageNavigateur()));
+  const connecte = session !== null;
 
   async function seDeconnecter(courante: SessionConnexion): Promise<void> {
     if (deconnexionEnCours) return;
@@ -52,8 +61,13 @@ export function App() {
     try {
       await deconnecter(courante, { urlApi: urlApi(), fetch: envoyer, stockage: stockageNavigateur(), effacerBaseLocale });
     } catch (e) {
-      // La session est effacée quand même : on revient à la connexion, en le disant.
-      setErreur(`Données de ce téléphone non effacées : ${e instanceof Error ? e.message : String(e)}`);
+      // La session est effacée quand même : on revient à la connexion, en le disant. Effacement
+      // noté en attente : repris tout seul (voir plus bas), le message dit quoi faire.
+      const attente = effacementsEnAttente(stockageNavigateur());
+      setEnAttente(attente);
+      if (!attente.includes(courante.utilisateurId)) {
+        setErreur(`Données de ce téléphone non effacées : ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
     setDeconnexionEnCours(false);
     setSession(null);
@@ -63,11 +77,32 @@ export function App() {
     performance.mark(MARQUE_APP_PRETE);
   }, []);
 
+  // Effacement resté en attente : repris au démarrage, puis sur l'écran de connexion toutes les
+  // 5 s jusqu'à réussite (l'autre onglet fermé, la base disparaît sans rien toucher).
+  useEffect(() => {
+    let actif = true;
+    let minuterie: ReturnType<typeof setTimeout> | undefined;
+    async function essayer(): Promise<void> {
+      const restants = await reprendreEffacements({ stockage: stockageNavigateur(), effacerBaseLocale });
+      if (!actif) return;
+      setEnAttente(restants);
+      if (restants.length > 0 && !connecte) {
+        minuterie = setTimeout(() => void essayer(), INTERVALLE_REPRISE_MS);
+      }
+    }
+    if (effacementsEnAttente(stockageNavigateur()).length > 0) void essayer();
+    return () => {
+      actif = false;
+      clearTimeout(minuterie);
+    };
+  }, [connecte]);
+
   return (
     <main data-testid="app">
       <h1>Planifications</h1>
       <p>Squelette technique — modèle de données v{VERSION_MODELE_DONNEES}</p>
       {erreur !== null && <p role="alert">{erreur}</p>}
+      {enAttente.length > 0 && <p role="alert">{MESSAGE_EFFACEMENT_EN_ATTENTE}</p>}
       {session !== null && (
         <p>
           Connecté : {session.email}{' '}

@@ -11,7 +11,18 @@ export {
   type ResultatDemande,
   type ResultatVerification,
 } from './client.ts';
-export { DELAI_DECONNEXION_MS, deconnecter, type OptionsDeconnexion } from './deconnexion.ts';
+export {
+  CLE_EFFACEMENT_EN_ATTENTE,
+  DELAI_DECONNEXION_MS,
+  MESSAGE_EFFACEMENT_EN_ATTENTE,
+  deconnecter,
+  deconnecterAvecConfirmation,
+  effacementsEnAttente,
+  messagePerteSaisies,
+  reprendreEffacements,
+  type OptionsConfirmation,
+  type OptionsDeconnexion,
+} from './deconnexion.ts';
 export { EcranConnexion, type EtapeConnexion, type ProprietesEcranConnexion } from './EcranConnexion.tsx';
 export {
   CLE_SESSION,

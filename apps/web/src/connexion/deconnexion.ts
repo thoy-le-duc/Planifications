@@ -8,7 +8,8 @@ import { effacerSession, type SessionConnexion } from './session.ts';
 export interface OptionsDeconnexion {
   readonly urlApi: string;
   readonly fetch: typeof fetch;
-  readonly stockage: Pick<Storage, 'removeItem'>;
+  /** Session (effacée) et marqueur d'effacement en attente (lu et réécrit). */
+  readonly stockage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
   /** Efface la base locale de cet utilisateur (données et écritures en attente). */
   readonly effacerBaseLocale: (utilisateurId: string) => Promise<void>;
   /** Attente maximale de la réponse de l'API ; 5 s par défaut. */
@@ -16,6 +17,79 @@ export interface OptionsDeconnexion {
 }
 
 export const DELAI_DECONNEXION_MS = 5_000;
+
+/**
+ * Marqueur des bases locales qui restent à effacer (tableau JSON d'utilisateurId, sans doublon) :
+ * l'effacement a échoué, en général parce qu'un autre onglet garde la base ouverte. L'appli le
+ * reprend au démarrage et sur l'écran de connexion jusqu'à réussite.
+ */
+export const CLE_EFFACEMENT_EN_ATTENTE = 'planif.effacement-en-attente';
+export const MESSAGE_EFFACEMENT_EN_ATTENTE = 'Fermez les autres onglets de Planifications ; l’effacement se terminera tout seul.';
+
+/** Marqueur lu : absent ou illisible → [] (seules les chaînes non vides comptent). */
+export function effacementsEnAttente(stockage: Pick<Storage, 'getItem'>): readonly string[] {
+  try {
+    const brut = stockage.getItem(CLE_EFFACEMENT_EN_ATTENTE);
+    const lu: unknown = brut === null ? [] : JSON.parse(brut);
+    if (!Array.isArray(lu)) return [];
+    return [...new Set(lu.filter((id): id is string => typeof id === 'string' && id !== ''))];
+  } catch {
+    return [];
+  }
+}
+
+/** Range le marqueur ; clé retirée quand plus rien n'attend. Un stockage indisponible est ignoré. */
+function rangerEnAttente(stockage: Pick<Storage, 'setItem' | 'removeItem'>, ids: readonly string[]): void {
+  try {
+    if (ids.length === 0) stockage.removeItem(CLE_EFFACEMENT_EN_ATTENTE);
+    else stockage.setItem(CLE_EFFACEMENT_EN_ATTENTE, JSON.stringify(ids));
+  } catch {
+    // Rien de mieux à faire : l'écran dit déjà que l'effacement a échoué.
+  }
+}
+
+/** Efface la base de `utilisateurId` et tient le marqueur à jour ; rejette si l'effacement échoue. */
+async function effacerEtMarquer(
+  utilisateurId: string,
+  o: { readonly stockage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>; readonly effacerBaseLocale: (id: string) => Promise<void> },
+): Promise<void> {
+  try {
+    await o.effacerBaseLocale(utilisateurId);
+  } catch (erreur) {
+    const attente = effacementsEnAttente(o.stockage);
+    if (!attente.includes(utilisateurId)) rangerEnAttente(o.stockage, [...attente, utilisateurId]);
+    throw erreur;
+  }
+  const attente = effacementsEnAttente(o.stockage);
+  if (attente.includes(utilisateurId)) rangerEnAttente(o.stockage, attente.filter((id) => id !== utilisateurId));
+}
+
+/**
+ * Retente chaque effacement en attente, l'un après l'autre ; rend les utilisateurId qui attendent
+ * encore. Ne rejette jamais. Marqueur illisible : clé retirée.
+ */
+export async function reprendreEffacements(o: {
+  readonly stockage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+  readonly effacerBaseLocale: (utilisateurId: string) => Promise<void>;
+}): Promise<readonly string[]> {
+  const attente = effacementsEnAttente(o.stockage);
+  const restants: string[] = [];
+  for (const id of attente) {
+    try {
+      await o.effacerBaseLocale(id);
+    } catch {
+      restants.push(id);
+    }
+  }
+  let brut: string | null = null;
+  try {
+    brut = o.stockage.getItem(CLE_EFFACEMENT_EN_ATTENTE);
+  } catch {
+    // Stockage indisponible : rien à retirer.
+  }
+  if (brut !== null) rangerEnAttente(o.stockage, restants);
+  return restants;
+}
 
 /** Demande à l'API de révoquer la session ; n'échoue jamais (hors ligne, erreur, délai). */
 async function revoquer(session: SessionConnexion, options: OptionsDeconnexion): Promise<void> {
@@ -56,5 +130,43 @@ export async function deconnecter(session: SessionConnexion, options: OptionsDec
   } finally {
     effacerSession(options.stockage);
   }
-  await options.effacerBaseLocale(session.utilisateurId);
+  // Échec (base ouverte dans un autre onglet) : l'utilisateur rejoint le marqueur, repris ensuite.
+  await effacerEtMarquer(session.utilisateurId, options);
+}
+
+/** « 1 saisie pas encore envoyée sera perdue », « 3 saisies pas encore envoyées seront perdues ». */
+export function messagePerteSaisies(n: number): string {
+  return n === 1 ? '1 saisie pas encore envoyée sera perdue' : `${String(n)} saisies pas encore envoyées seront perdues`;
+}
+
+export interface OptionsConfirmation extends OptionsDeconnexion {
+  /** Nombre de saisies encore dans la file d'envoi. */
+  readonly compterEnAttente: () => Promise<number>;
+  /** Écran de confirmation en un tap : vrai pour se déconnecter quand même. */
+  readonly confirmer: (message: string) => Promise<boolean>;
+}
+
+/**
+ * Déconnexion qui ne perd jamais une saisie en silence : file d'envoi non vide (ou illisible),
+ * confirmation d'abord ; annulée, rien n'est fait (ni réseau, ni session, ni base).
+ */
+export async function deconnecterAvecConfirmation(
+  session: SessionConnexion,
+  options: OptionsConfirmation,
+): Promise<'deconnecte' | 'annule'> {
+  let enAttente: number | null;
+  try {
+    enAttente = await options.compterEnAttente();
+  } catch {
+    enAttente = null; // File illisible : on demande quand même.
+  }
+  if (enAttente !== 0) {
+    const message =
+      enAttente === null
+        ? 'Des saisies pas encore envoyées pourraient être perdues. Se déconnecter quand même ?'
+        : `${messagePerteSaisies(enAttente)}. Se déconnecter quand même ?`;
+    if (!(await options.confirmer(message))) return 'annule';
+  }
+  await deconnecter(session, options);
+  return 'deconnecte';
 }

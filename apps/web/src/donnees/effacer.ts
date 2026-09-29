@@ -6,7 +6,8 @@
  * La base locale vit dans IndexedDB : PowerSync web (2.4) range SQLite par le VFS
  * IDBBatchAtomicVFS, son défaut, dans une base IndexedDB qui porte le nom du fichier
  * (`dbFilename` d'ouvrir.ts). Si un jour ouvrir.ts choisit un VFS OPFS, cet effacement devra
- * suivre (le test de bout en bout e2e-synchro/deconnexion.e2e.ts le verrait).
+ * suivre. Aucun test ne le verrait : e2e/deconnexion.e2e.ts crée lui-même la base IndexedDB à
+ * effacer, et e2e-synchro/deconnexion.e2e.ts efface par PowerSync (DonneesLocales.effacer).
  */
 
 /** Nom du fichier SQLite (et de la base IndexedDB) de l'utilisateur : une base par compte. */
