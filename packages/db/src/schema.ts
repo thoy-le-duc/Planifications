@@ -868,8 +868,8 @@ export const codeConnexion = pgTable(
  * id du premier jeton de la connexion), dont `parent_id` désigne le jeton présenté ; l'ancien note
  * son premier usage (`utilise_le`). Il reste acceptable 7 jours au plus tant qu'aucun de ses
  * successeurs n'a servi (réponse perdue) : ses successeurs inutilisés sont alors remplacés
- * (`remplace_le`, refusés sans révoquer la famille). Déconnexion et rejeu révoquent toute la
- * famille (`revoque_le`). `connexion_le` porte l'instant de la connexion, pour le plafond de
+ * (`remplace_le`). Présenter un jeton remplacé, déconnexion et rejeu révoquent toute la famille
+ * (`revoque_le`). `connexion_le` porte l'instant de la connexion, pour le plafond de
  * 365 jours de toute la famille. Lignes expirées ou révoquées depuis plus de 90 jours : effacées.
  * Colonnes facultatives pour les lignes écrites hors API : NULL vaut `id` (famille d'un seul
  * jeton) et `cree_le` (connexion) ; l'API les remplit toujours.
