@@ -1,20 +1,19 @@
 /**
  * Ouverture de la base locale synchronisée (T10) : PowerSync (wa-sqlite dans un worker), schéma
- * de @planif/sync, connecteur vers l'API et le service PowerSync. Rend la porte de @planif/sync :
- * les écrans ne voient jamais PowerSync.
+ * de @planif/sync, connecteur vers l'API et le service PowerSync (brancherSynchro). Rend la
+ * porte de @planif/sync : les écrans ne voient jamais PowerSync.
  *
  * Chargé à la demande (import dynamique) : PowerSync et son WASM restent hors du JavaScript de
  * démarrage de l'appli.
  */
 import type { Id } from '@planif/core';
 import { creerPorte, SCHEMA_LOCAL, type PorteDonnees } from '@planif/sync';
-import { PowerSyncDatabase, SyncStreamConnectionMethod, type SyncStatus } from '@powersync/web';
+import { PowerSyncDatabase, SyncStreamConnectionMethod } from '@powersync/web';
 import type { SessionConnexion } from '../connexion/session.ts';
-import { creerConnecteur } from './connecteur.ts';
+import { brancherSynchro, type EtatSynchro } from './connecteur.ts';
 import { gererJetons } from './jeton.ts';
 
-/** État de la synchro montré à l'écran. */
-export type EtatSynchro = 'connexion' | 'synchronise' | 'hors-ligne';
+export { etatDepuisStatut, type EtatSynchro } from './connecteur.ts';
 
 export interface OptionsOuverture {
   readonly session: SessionConnexion;
@@ -31,12 +30,6 @@ export interface DonneesLocales {
   fermer(): Promise<void>;
 }
 
-export function etatDepuisStatut(statut: Pick<SyncStatus, 'connected' | 'hasSynced'>, enLigne: boolean): EtatSynchro {
-  if (!enLigne) return 'hors-ligne';
-  if (statut.connected && statut.hasSynced === true) return 'synchronise';
-  return statut.hasSynced === true ? 'hors-ligne' : 'connexion';
-}
-
 export function ouvrirDonnees(o: OptionsOuverture): DonneesLocales {
   const base = new PowerSyncDatabase({
     schema: SCHEMA_LOCAL,
@@ -51,12 +44,13 @@ export function ouvrirDonnees(o: OptionsOuverture): DonneesLocales {
   // Appel détaché : window.fetch appelé comme méthode d'un autre objet lèverait « Illegal invocation ».
   const envoyer: typeof fetch = (...args) => fetch(...args);
   const jetons = gererJetons(o.session, { urlApi: o.urlApi, fetch: envoyer, stockage: o.stockage });
-  const connecteur = creerConnecteur({ urlApi: o.urlApi, urlPowerSync: o.urlPowerSync, jetons, fetch: envoyer });
-  void base.connect(connecteur, {
-    connectionMethod: SyncStreamConnectionMethod.HTTP,
-    // Au retour du réseau, la file repart vite : c'est ce que le maraîcher attend.
-    retryDelayMs: 1000,
-    crudUploadThrottleMs: 200,
+  const synchro = brancherSynchro(base, {
+    urlApi: o.urlApi,
+    urlPowerSync: o.urlPowerSync,
+    jetons,
+    fetch: envoyer,
+    enLigne: () => navigator.onLine,
+    connexion: { connectionMethod: SyncStreamConnectionMethod.HTTP },
   });
 
   const porte = creerPorte(base, { utilisateurId: o.session.utilisateurId as Id<'Utilisateur'>, fermeId: o.fermeId });
@@ -64,11 +58,11 @@ export function ouvrirDonnees(o: OptionsOuverture): DonneesLocales {
   return {
     porte,
     surveillerEtat(rappel) {
+      const arreter = synchro.surveillerEtat(rappel);
+      // Le réseau change avant que le statut de PowerSync ne bouge.
       const signaler = () => {
-        rappel(etatDepuisStatut(base.currentStatus, navigator.onLine));
+        rappel(synchro.etat());
       };
-      signaler();
-      const arreter = base.registerListener({ statusChanged: signaler });
       addEventListener('online', signaler);
       addEventListener('offline', signaler);
       return () => {
