@@ -106,7 +106,9 @@ export type CodeErreurImport =
   | 'annee_manquante'
   | 'champ_manquant'
   | 'valeur_inconnue'
-  | 'hors_bornes';
+  | 'hors_bornes'
+  | 'dates_incoherentes'
+  | 'colonnes_en_trop';
 
 export type Lecture<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly code: CodeErreurImport };
 
@@ -161,9 +163,11 @@ export interface EntreeImport {
   readonly ligneEntete: number;
   readonly correspondance: Correspondance;
   readonly bibliotheque: Bibliotheque;
-  /** Année de la saison, pour les dates en semaines. */
+  /** Année de la saison, pour les dates en semaines et la plage des numéros de série. */
   readonly anneeSaison: number | null;
   readonly choix?: readonly ChoixValeur[];
+  /** Système de dates de la feuille (classeur) ; défaut 1900. */
+  readonly systemeDates?: SystemeDates;
 }
 
 export type ValeurImport = string | number | ReferenceImport | null;

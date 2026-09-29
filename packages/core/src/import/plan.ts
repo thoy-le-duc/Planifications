@@ -4,7 +4,7 @@
  * vides et de total ignorées ; hiérarchie du parcellaire reprise des cellules fusionnées.
  */
 import { CHAMPS_IMPORT } from './champs.ts';
-import { cle, lireDate, lireMesure, lireNombre, multiplierPuissanceDix, texteCellule } from './normalisation.ts';
+import { cle, lireDate, lireMesure, lireNombre, multiplierPuissanceDix, premiersNombresDate, texteCellule } from './normalisation.ts';
 import { rapprocher } from './rapprochement.ts';
 import type {
   Bibliotheque,
@@ -22,7 +22,9 @@ import type {
   PlanImport,
   PropositionValeur,
   ReferenceImport,
+  OptionsDate,
   StatutLigne,
+  SystemeDates,
   UniteColonne,
   UniteMesure,
   ValeurImport,
@@ -110,9 +112,17 @@ const CLES_DOUBLON: Readonly<Record<PlanImport['type'], readonly CleChamp[] | nu
 
 // ── Messages ─────────────────────────────────────────────────────────────────────────────────
 
+/** `t` coupé à `n` caractères au plus (points de suspension compris), sans couper de paire de substitution. */
+function couper(t: string, n: number): string {
+  if (t.length <= n) return t;
+  let fin = n - 1;
+  const derniere = t.charCodeAt(fin - 1);
+  if (derniere >= 0xd800 && derniere <= 0xdbff) fin--;
+  return `${t.slice(0, fin)}…`;
+}
+
 function extrait(c: Cellule | undefined): string {
-  const t = c === null || c === undefined ? '' : String(c).trim();
-  return t.length > 40 ? `${t.slice(0, 39)}…` : t;
+  return couper(c === null || c === undefined ? '' : String(c).trim(), 40);
 }
 
 function libelle(type: PlanImport['type'], c: CleChamp | null): string {
@@ -138,9 +148,25 @@ function message(code: CodeErreurImport, nomChamp: string, cellule: Cellule | un
         return `${nomChamp} : ${v} n’est pas une valeur reconnue${detail}.`;
       case 'hors_bornes':
         return `${nomChamp} : ${v} est hors des limites${detail}.`;
+      case 'dates_incoherentes':
+        return `${nomChamp} : ${v} précède ${detail} ; les dates d’une série doivent se suivre (semis, plantation, début puis fin de récolte).`;
+      case 'colonnes_en_trop':
+        return `Cellule ${v} hors des colonnes de l’en-tête (colonne ${detail}) : ajoutez-lui un en-tête ou effacez-la.`;
     }
   })();
-  return m.length > 200 ? `${m.slice(0, 199)}…` : m;
+  return couper(m, 200);
+}
+
+/** Lettre de colonne du tableur : 0 → A, 26 → AA. */
+function lettreColonne(i: number): string {
+  let n = i + 1;
+  let t = '';
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    t = String.fromCharCode(65 + r) + t;
+    n = Math.floor((n - 1) / 26);
+  }
+  return t;
 }
 
 // ── Lecture d'une cellule ────────────────────────────────────────────────────────────────────
@@ -150,6 +176,7 @@ type Lu = { readonly ok: true; readonly valeur: ValeurImport } | { readonly ok: 
 interface Contexte {
   readonly anneeSaison: number | null;
   readonly unite: UniteColonne | null;
+  readonly optionsDate: OptionsDate;
   readonly referencer: (champ: ChampReference, texte: string) => ReferenceImport;
 }
 
@@ -160,7 +187,9 @@ function lireCellule(nature: Nature, c: Cellule, ctx: Contexte): Lu {
     case 'choix': {
       const t = texteCellule(c);
       if (t === null) return { ok: true, valeur: null };
-      const v = nature.valeurs[cle(t)];
+      const k = cle(t);
+      // Jamais une propriété héritée (« constructor », « __proto__ »…).
+      const v = Object.hasOwn(nature.valeurs, k) ? nature.valeurs[k] : undefined;
       return v === undefined ? { ok: false, code: 'valeur_inconnue', detail: ` (attendu : ${nature.attendus})` } : { ok: true, valeur: v };
     }
     case 'mesure': {
@@ -191,7 +220,7 @@ function lireCellule(nature: Nature, c: Cellule, ctx: Contexte): Lu {
       return r;
     }
     case 'date':
-      return lireDate(c, ctx.anneeSaison);
+      return lireDate(c, ctx.anneeSaison, ctx.optionsDate);
     case 'reference': {
       const t = texteCellule(c);
       return { ok: true, valeur: t === null ? null : ctx.referencer(nature.champ, t) };
@@ -205,21 +234,52 @@ function uniteMesure(u: UniteColonne | null): UniteMesure | null {
 
 // ── Lignes ignorées ──────────────────────────────────────────────────────────────────────────
 
-const TOTAL = /^(?:total|sous total|somme)(?: |$)/;
+const TOTAL = /^(?:total|sous total)(?: |$)/;
+const SOMME = /^somme(?: |$)/;
 
-function motifIgnoree(ligne: LigneBrute): 'vide' | 'total' | null {
-  let vide = true;
-  for (const c of ligne) {
-    if (c === null) continue;
-    if (typeof c === 'number') {
-      vide = false;
-      continue;
-    }
-    if (c.trim() === '') continue;
-    vide = false;
-    if (TOTAL.test(cle(c))) return 'total';
+const celluleVide = (c: Cellule | undefined): boolean => c === null || c === undefined || (typeof c === 'string' && c.trim() === '');
+
+/**
+ * 'vide' : toutes les cellules vides ; 'total' : la première cellule non vide des colonnes
+ * associées commence par « total » ou « sous-total », ou par « somme » si l'emplacement est vide
+ * (« Somme » est aussi un nom de lieu).
+ */
+function motifIgnoree(ligne: LigneBrute, associees: readonly number[], colEmplacement: number | undefined): 'vide' | 'total' | null {
+  if (ligne.every(celluleVide)) return 'vide';
+  for (const i of associees) {
+    const t = texteCellule(ligne[i]);
+    if (t === null) continue;
+    if (typeof ligne[i] === 'number') return null;
+    const k = cle(t.length > 200 ? t.slice(0, 200) : t);
+    if (TOTAL.test(k)) return 'total';
+    if (SOMME.test(k) && (colEmplacement === undefined || texteCellule(ligne[colEmplacement]) === null)) return 'total';
+    return null;
   }
-  return vide ? 'vide' : null;
+  return null;
+}
+
+// ── Ordre des dates ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * JJ/MM ou MM/JJ, décidé par colonne sur toutes ses lignes : une valeur « a/b/AAAA » avec a > 12
+ * → JJ/MM ; sinon une avec b > 12 → MM/JJ ; sinon JJ/MM (défaut français).
+ */
+function ordreColonne(lignes: readonly LigneBrute[], debut: number, colonne: number): 'jj_mm' | 'mm_jj' {
+  let mmJj = false;
+  for (let i = debut; i < lignes.length; i++) {
+    const n = premiersNombresDate(lignes[i]?.[colonne]);
+    if (n === null) continue;
+    if (n[0] > 12) return 'jj_mm';
+    if (n[1] > 12) mmJj = true;
+  }
+  return mmJj ? 'mm_jj' : 'jj_mm';
+}
+
+/** Largeur de l'en-tête : position de sa dernière cellule non vide + 1 ; `null` sans en-tête. */
+function largeurEntete(entete: LigneBrute | undefined): number | null {
+  if (entete === undefined) return null;
+  for (let i = entete.length - 1; i >= 0; i--) if (!celluleVide(entete[i])) return i + 1;
+  return 0;
 }
 
 // ── Doublons ─────────────────────────────────────────────────────────────────────────────────
@@ -247,6 +307,23 @@ interface DecisionEnCours {
   readonly propositions: readonly PropositionValeur[];
 }
 
+/**
+ * Premier champ date (semis, plantation, début, fin de récolte) qui précède la date d'un champ
+ * précédent ; `null` si les dates présentes se suivent (égalité permise).
+ */
+function datesDansLeDesordre(
+  valeurs: Partial<Record<CleChamp, ValeurImport>>,
+): { readonly champ: CleChamp; readonly date: string; readonly precedent: CleChamp; readonly datePrecedente: string } | null {
+  let plusTard: { readonly champ: CleChamp; readonly date: string } | null = null;
+  for (const c of DATES) {
+    const v = valeurs[c];
+    if (typeof v !== 'string') continue;
+    if (plusTard !== null && v < plusTard.date) return { champ: c, date: v, precedent: plusTard.champ, datePrecedente: plusTard.date };
+    if (plusTard === null || v > plusTard.date) plusTard = { champ: c, date: v };
+  }
+  return null;
+}
+
 function entierBorne(n: number, defaut: number): number {
   return Number.isFinite(n) ? Math.max(-1, Math.floor(n)) : defaut;
 }
@@ -254,6 +331,7 @@ function entierBorne(n: number, defaut: number): number {
 /** Prépare l'import : ce qui SERAIT importé, ligne par ligne. Pur, ne lève pas, n'écrit rien. */
 export function preparerImport(entree: EntreeImport): PlanImport {
   const { correspondance, bibliotheque, anneeSaison } = entree;
+  const systemeDates: SystemeDates = entree.systemeDates === 1904 ? 1904 : 1900;
   const type = correspondance.type;
   const definitions = CHAMPS_IMPORT[type];
   const permis = new Set<CleChamp>(definitions.map((d) => d.cle));
@@ -270,12 +348,21 @@ export function preparerImport(entree: EntreeImport): PlanImport {
   const nonAssocies = obligatoires.filter((c) => !colonneDe.has(c));
 
   // Décisions déjà prises, et rapprochements mis en cache par valeur normalisée.
+  // Un choix `existante` dont l'identifiant n'est plus dans la bibliothèque est écarté : la valeur
+  // repasse « à décider ».
+  const references = (champ: ChampReference): Bibliotheque[keyof Bibliotheque] => (champ === 'espece' ? bibliotheque.especes : bibliotheque.familles);
+  const ids: Readonly<Record<ChampReference, ReadonlySet<string>>> = {
+    espece: new Set(bibliotheque.especes.map((e) => e.id)),
+    famille: new Set(bibliotheque.familles.map((f) => f.id)),
+  };
   const choix = new Map<string, DecisionPrise>();
   for (const ch of entree.choix ?? []) {
     const k = `${ch.champ}\u0001${cle(ch.valeur)}`;
-    if (!choix.has(k)) choix.set(k, ch.decision.sorte === 'existante' ? { sorte: 'existante', id: ch.decision.id } : { sorte: 'nouvelle', nom: ch.decision.nom });
+    if (choix.has(k)) continue;
+    if (ch.decision.sorte === 'existante') {
+      if (ids[ch.champ].has(ch.decision.id)) choix.set(k, { sorte: 'existante', id: ch.decision.id });
+    } else choix.set(k, { sorte: 'nouvelle', nom: ch.decision.nom });
   }
-  const references = (champ: ChampReference): Bibliotheque[keyof Bibliotheque] => (champ === 'espece' ? bibliotheque.especes : bibliotheque.familles);
   const cache = new Map<string, ReferenceImport | { readonly aDecider: true; readonly propositions: readonly PropositionValeur[] }>();
   const decisions = new Map<string, DecisionEnCours>();
   let numeroCourant = 0;
@@ -312,11 +399,21 @@ export function preparerImport(entree: EntreeImport): PlanImport {
   let zoneReprise: string | null = null;
   let sousZoneReprise: string | null = null;
 
-  const debut = entierBorne(entree.ligneEntete, -1) + 1;
-  for (let i = Math.max(0, debut); i < entree.lignes.length; i++) {
+  const ligneEntete = entierBorne(entree.ligneEntete, -1);
+  const debut = Math.max(0, ligneEntete + 1);
+  const largeur = ligneEntete >= 0 ? largeurEntete(entree.lignes[ligneEntete]) : null;
+  const associees = colonnes.map((c) => c.indice).sort((a, b) => a - b);
+  const colEmplacement = colonneDe.get('emplacement');
+  const optionsDates = new Map<number, OptionsDate>();
+  for (const col of colonnes) {
+    if (NATURES[col.champ].sorte === 'date') optionsDates.set(col.indice, { ordre: ordreColonne(entree.lignes, debut, col.indice), systemeDates });
+  }
+  const optionsParDefaut: OptionsDate = { systemeDates };
+
+  for (let i = debut; i < entree.lignes.length; i++) {
     const brute = entree.lignes[i] ?? [];
     const numero = i + 1;
-    const motif = motifIgnoree(brute);
+    const motif = motifIgnoree(brute, associees, colEmplacement);
     if (motif !== null) {
       ignorees.push({ ligne: numero, motif });
       continue;
@@ -349,7 +446,7 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     const ctxBase = { anneeSaison, referencer };
     for (const col of colonnes) {
       const cellule = remplacees.get(col.indice) ?? brute[col.indice] ?? null;
-      const lu = lireCellule(NATURES[col.champ], cellule, { ...ctxBase, unite: col.unite });
+      const lu = lireCellule(NATURES[col.champ], cellule, { ...ctxBase, unite: col.unite, optionsDate: optionsDates.get(col.indice) ?? optionsParDefaut });
       const nom = libelle(type, col.champ);
       if (!lu.ok) {
         erreurs.push({ code: lu.code, champ: col.champ, colonne: col.indice, message: message(lu.code, nom, cellule, lu.detail) });
@@ -361,10 +458,24 @@ export function preparerImport(entree: EntreeImport): PlanImport {
       }
     }
 
-    // Règles de ligne : une date au moins pour une série ; un lieu et une culture pour l'assolement.
+    // Règles de ligne : une date au moins pour une série, dans l'ordre ; un lieu et une culture
+    // pour l'assolement ; rien au-delà des colonnes de l'en-tête.
     const vide = (c: CleChamp) => (valeurs[c] ?? null) === null && !erreurs.some((e) => e.champ === c);
     if (type === 'series' && DATES.every(vide)) {
       erreurs.push({ code: 'champ_manquant', champ: null, colonne: null, message: 'Il faut au moins une date : semis, plantation, début ou fin de récolte.' });
+    }
+    if (type === 'series') {
+      const desordre = datesDansLeDesordre(valeurs);
+      if (desordre !== null) {
+        const colonne = colonneDe.get(desordre.champ) ?? null;
+        const detail = `${libelle(type, desordre.precedent).toLowerCase()} (${desordre.datePrecedente})`;
+        erreurs.push({
+          code: 'dates_incoherentes',
+          champ: desordre.champ,
+          colonne,
+          message: message('dates_incoherentes', libelle(type, desordre.champ), desordre.date, detail),
+        });
+      }
     }
     if (type === 'assolement') {
       if (vide('zone') && vide('emplacement')) {
@@ -372,6 +483,14 @@ export function preparerImport(entree: EntreeImport): PlanImport {
       }
       if (vide('famille') && vide('espece')) {
         erreurs.push({ code: 'champ_manquant', champ: null, colonne: null, message: 'Il faut une famille ou une culture.' });
+      }
+    }
+
+    if (largeur !== null) {
+      for (let j = largeur; j < brute.length; j++) {
+        if (celluleVide(brute[j])) continue;
+        erreurs.push({ code: 'colonnes_en_trop', champ: null, colonne: j, message: message('colonnes_en_trop', '', brute[j], lettreColonne(j)) });
+        break;
       }
     }
 
