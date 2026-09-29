@@ -3,12 +3,13 @@
  * Contrat : auth.integration.test.ts.
  */
 import { utilisateur, codeConnexion, jetonRenouvellement, membre } from '@planif/db';
-import { and, asc, desc, eq, gt, isNull, lte, sql } from 'drizzle-orm';
-import { Hono } from 'hono';
+import { and, asc, desc, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
+import { Hono, type Context } from 'hono';
 import type { Contexte } from '../dependances.ts';
 import { lireCorps, normaliserEmail } from '../http.ts';
 import { libreSelonFenetre, secondesAvant } from '../limites.ts';
 import { jwksPublic } from './cles.ts';
+import { adresseClient, enregistrerDemandeIp, type ActionLimitee } from './limite-ip.ts';
 import { emettreJetonAcces } from './jetons.ts';
 import { codeCorrespond, empreinteCode, empreinteJeton, tirerCode, tirerJetonRenouvellement } from './secrets.ts';
 
@@ -34,6 +35,12 @@ export const ECHECS_PAR_JOUR = 10;
  */
 export const DUREE_RENOUVELLEMENT_MS = 90 * JOUR;
 export const DUREE_MAX_SESSION_MS = 365 * JOUR;
+/**
+ * Rotation (T09b) : un jeton de renouvellement déjà utilisé reste accepté DELAI_GRACE_MS après son
+ * premier usage (réponse perdue au champ) ; présenté plus tard, c'est un rejeu : toute sa famille
+ * est révoquée.
+ */
+export const DELAI_GRACE_MS = 2 * MINUTE;
 
 type Refus = { readonly erreur: 'trop_de_demandes'; readonly apresS: number } | null;
 
@@ -46,7 +53,19 @@ export function routesAuth(ctx: Contexte): Hono {
     return c.json(await jwksPublic(ctx.cles));
   });
 
+  /** 429 si l'adresse IP du client a atteint sa limite ; null sinon (demande enregistrée). */
+  async function limiteIp(c: Context, action: ActionLimitee): Promise<Response | null> {
+    const ip = adresseClient(c, ctx.proxyDeConfiance);
+    if (ip === null) return null;
+    const apresS = await enregistrerDemandeIp(ctx, action, ip);
+    if (apresS === null) return null;
+    c.header('retry-after', String(apresS));
+    return c.json({ erreur: 'trop_de_demandes' }, 429);
+  }
+
   routes.post('/auth/code', async (c) => {
+    const tropParIp = await limiteIp(c, 'code');
+    if (tropParIp !== null) return tropParIp;
     const email = normaliserEmail((await lireCorps(c))?.email);
     if (email === null) return c.json({ erreur: 'email_invalide' }, 400);
 
@@ -95,6 +114,9 @@ export function routesAuth(ctx: Contexte): Hono {
   });
 
   routes.post('/auth/verifier', async (c) => {
+    // Avant toute lecture du code : une vérification refusée ici ne compte pas de tentative.
+    const tropParIp = await limiteIp(c, 'verifier');
+    if (tropParIp !== null) return tropParIp;
     const corps = await lireCorps(c);
     const email = normaliserEmail(corps?.email);
     const code = corps?.code;
@@ -163,12 +185,16 @@ export function routesAuth(ctx: Contexte): Hono {
         );
 
       // Dans la même transaction : un code n'est consommé que si la session est bien créée.
+      // Premier jeton d'une nouvelle famille (la connexion) : famille_id = son propre id.
+      const idJeton = ctx.nouvelId();
       await tx.insert(jetonRenouvellement).values({
-        id: ctx.nouvelId(),
+        id: idJeton,
         utilisateurId: compte.id,
         jetonHache: empreinteJeton(jetonRenouvellementNeuf),
         expireLe: new Date(maintenant.getTime() + DUREE_RENOUVELLEMENT_MS),
         creeLe: maintenant,
+        familleId: idJeton,
+        connexionLe: maintenant,
       });
       return compte.id;
     });
@@ -181,6 +207,19 @@ export function routesAuth(ctx: Contexte): Hono {
     });
   });
 
+  /** Révoque toute la famille (même connexion) : `famille_id`, ou l'id pour une ligne écrite hors API. */
+  async function revoquerFamille(executeur: Pick<typeof db, 'update'>, famille: string, maintenant: Date): Promise<void> {
+    await executeur
+      .update(jetonRenouvellement)
+      .set({ revoqueLe: maintenant })
+      .where(
+        and(
+          or(eq(jetonRenouvellement.familleId, famille), eq(jetonRenouvellement.id, famille)),
+          isNull(jetonRenouvellement.revoqueLe),
+        ),
+      );
+  }
+
   // Ne demande PAS de jeton d'accès valide : c'est ce qui permet aux écritures faites hors
   // ligne de partir au retour du réseau, même après expiration du jeton d'accès.
   routes.post('/auth/renouveler', async (c) => {
@@ -189,39 +228,83 @@ export function routesAuth(ctx: Contexte): Hono {
     if (typeof jeton !== 'string' || jeton === '') return refuse();
 
     const maintenant = ctx.maintenant();
+    const t = maintenant.getTime();
+    const jetonNeuf = tirerJetonRenouvellement();
+    const utilisateurId = await db.transaction(async (tx) => {
+      // Verrouillé : des renouvellements simultanés du même jeton passent l'un après l'autre.
+      const [ligne] = await tx
+        .select({
+          id: jetonRenouvellement.id,
+          utilisateurId: jetonRenouvellement.utilisateurId,
+          expireLe: jetonRenouvellement.expireLe,
+          revoqueLe: jetonRenouvellement.revoqueLe,
+          creeLe: jetonRenouvellement.creeLe,
+          familleId: jetonRenouvellement.familleId,
+          connexionLe: jetonRenouvellement.connexionLe,
+          utiliseLe: jetonRenouvellement.utiliseLe,
+          supprimeLe: utilisateur.supprimeLe,
+        })
+        .from(jetonRenouvellement)
+        .innerJoin(utilisateur, eq(utilisateur.id, jetonRenouvellement.utilisateurId))
+        .where(eq(jetonRenouvellement.jetonHache, empreinteJeton(jeton)))
+        .limit(1)
+        .for('update', { of: jetonRenouvellement });
+      if (ligne?.revoqueLe !== null || ligne.supprimeLe !== null || ligne.expireLe.getTime() <= t) return null;
+
+      const famille = ligne.familleId ?? ligne.id;
+      if (ligne.utiliseLe !== null && t - ligne.utiliseLe.getTime() > DELAI_GRACE_MS) {
+        // Rejeu d'un jeton déjà remplacé : volé, ou copié sur un autre téléphone. On ne sait pas
+        // lequel est légitime : toute la session tombe, l'utilisateur se reconnecte par code.
+        await revoquerFamille(tx, famille, maintenant);
+        return null;
+      }
+      if (ligne.utiliseLe === null) {
+        await tx.update(jetonRenouvellement).set({ utiliseLe: maintenant }).where(eq(jetonRenouvellement.id, ligne.id));
+      }
+
+      // Jeton neuf de la même famille ; échéance glissante, plafonnée à 365 jours après la connexion.
+      const connexionLe = ligne.connexionLe ?? ligne.creeLe;
+      await tx.insert(jetonRenouvellement).values({
+        id: ctx.nouvelId(),
+        utilisateurId: ligne.utilisateurId,
+        jetonHache: empreinteJeton(jetonNeuf),
+        expireLe: new Date(Math.min(t + DUREE_RENOUVELLEMENT_MS, connexionLe.getTime() + DUREE_MAX_SESSION_MS)),
+        creeLe: maintenant,
+        familleId: famille,
+        connexionLe,
+      });
+      return ligne.utilisateurId;
+    });
+    if (utilisateurId === null) return refuse();
+
+    return c.json({
+      jetonAcces: await emettreJetonAcces(ctx, utilisateurId, maintenant),
+      jetonRenouvellement: jetonNeuf,
+    });
+  });
+
+  // Déconnexion : sans jeton d'accès (il a pu expirer). Révoque toute la famille du jeton
+  // présenté ; un jeton d'accès déjà émis reste valable jusqu'à son exp (1 h au plus).
+  routes.post('/auth/deconnexion', async (c) => {
+    const jeton = (await lireCorps(c))?.jetonRenouvellement;
+    if (typeof jeton !== 'string' || jeton === '') return c.json({ erreur: 'requete_invalide' }, 400);
+
+    const maintenant = ctx.maintenant();
     const [ligne] = await db
       .select({
         id: jetonRenouvellement.id,
-        utilisateurId: jetonRenouvellement.utilisateurId,
-        creeLe: jetonRenouvellement.creeLe,
+        familleId: jetonRenouvellement.familleId,
+        revoqueLe: jetonRenouvellement.revoqueLe,
+        expireLe: jetonRenouvellement.expireLe,
       })
       .from(jetonRenouvellement)
-      .innerJoin(utilisateur, eq(utilisateur.id, jetonRenouvellement.utilisateurId))
-      .where(
-        and(
-          eq(jetonRenouvellement.jetonHache, empreinteJeton(jeton)),
-          isNull(jetonRenouvellement.revoqueLe),
-          gt(jetonRenouvellement.expireLe, maintenant),
-          isNull(utilisateur.supprimeLe),
-        ),
-      )
+      .where(eq(jetonRenouvellement.jetonHache, empreinteJeton(jeton)))
       .limit(1);
-    if (ligne === undefined) return refuse();
-
-    // Pas de rotation stricte : une réponse perdue sur un réseau faible ne déconnecte pas.
-    // Le même jeton reste valable, son échéance glisse (plafonnée à DUREE_MAX_SESSION_MS).
-    const expireLe = Math.min(
-      maintenant.getTime() + DUREE_RENOUVELLEMENT_MS,
-      ligne.creeLe.getTime() + DUREE_MAX_SESSION_MS,
-    );
-    await db
-      .update(jetonRenouvellement)
-      .set({ expireLe: new Date(expireLe) })
-      .where(eq(jetonRenouvellement.id, ligne.id));
-    return c.json({
-      jetonAcces: await emettreJetonAcces(ctx, ligne.utilisateurId, maintenant),
-      jetonRenouvellement: jeton,
-    });
+    // Inconnu, déjà révoqué ou expiré : même réponse, rien ne change (rejouer est sans risque).
+    if (ligne?.revoqueLe === null && ligne.expireLe.getTime() > maintenant.getTime()) {
+      await revoquerFamille(db, ligne.familleId ?? ligne.id, maintenant);
+    }
+    return c.body(null, 204);
   });
 
   return routes;
