@@ -55,7 +55,7 @@
  *     Force brute par adresse : les échecs sont comptés par adresse sur 24 h glissantes, tous
  *     codes confondus. À partir de 10 échecs dans les 24 h, même le bon code d'un code neuf reçoit
  *     cette même 401 (même statut, même corps), jusqu'à ce que les échecs sortent de la fenêtre.
- *     Pas de limite par IP dans T09 (reportée).
+ *     Pas de limite par IP dans T09 (reportée) ; T09b l'ajoute : durcissement.integration.test.ts.
  *
  *   POST /auth/renouveler  { jetonRenouvellement }
  *     200 { jetonAcces, jetonRenouvellement }. Ne demande PAS de jeton d'accès valide : c'est ce
@@ -63,6 +63,9 @@
  *     renouvellement vit au moins 30 jours (session hors ligne) et moins de 400 jours. Il reste
  *     valable après usage (pas de rotation stricte : une réponse perdue sur un réseau faible ne
  *     doit pas déconnecter) ; la réponse peut en fournir un nouveau.
+ *     T09b REMPLACE cette règle par une rotation avec délai de grâce de 2 minutes (contrat :
+ *     durcissement.integration.test.ts) ; les tests ci-dessous qui réutilisaient le même jeton
+ *     sont adaptés (commentaire « T09b » sur chacun).
  *     401 { erreur: 'jeton_invalide' }.
  *
  *   GET /.well-known/jwks.json   { keys: [...] } (jwksPublic du trousseau).
@@ -99,6 +102,8 @@
  *   ou dont l'id n'est pas un UUID — toutes les routes /fermes/:id… répondent 404 { erreur:
  *   'ferme_introuvable' } et n'écrivent rien. Un utilisateur supprimé (utilisateur.supprime_le
  *   non nul) n'est membre actif de rien : 404 partout, même avec un jeton d'accès encore valable.
+ *   T09b : la garde relit l'utilisateur, un utilisateur supprimé reçoit désormais 401
+ *   non_authentifie avant même la ferme (test adapté plus bas).
  *
  * Jeton de renouvellement : révoqué (revoque_le non nul) → 401 ; glissant sur 90 jours mais
  * plafonné à 365 jours après la connexion, même renouvelé régulièrement.
@@ -567,11 +572,13 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
       expect((await requete(api, 'GET', '/moi', undefined, jetonAcces)).status).toBe(200);
     });
 
-    it('le jeton de renouvellement reste valable après usage (réponse perdue sur réseau faible)', async () => {
+    // T09b : rotation. L'ancien jeton ne reste valable que 2 minutes après usage (délai de grâce) ;
+    // avant T09b ce test attendait encore une heure plus tard.
+    it('le jeton de renouvellement reste valable juste après usage (réponse perdue sur réseau faible)', async () => {
       const api = creer();
       const { jetonRenouvellement } = await connecter(api, emailNeuf());
       expect((await renouveler(api, jetonRenouvellement)).status).toBe(200);
-      avancer(HEURE);
+      avancer(MINUTE);
       expect((await renouveler(api, jetonRenouvellement)).status).toBe(200);
     });
 
@@ -1133,6 +1140,7 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
   });
 
   describe('relecture sécurité : utilisateur supprimé', () => {
+    // T09b : la garde relit utilisateur.supprime_le ; 401 non_authentifie remplace le 404 ferme_introuvable.
     it('perd immédiatement l’accès à ses fermes, même avec un jeton d’accès encore valable', async () => {
       const api = creer();
       const gerant = await connecter(api, emailNeuf());
@@ -1148,8 +1156,8 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
         ['POST', `/fermes/${ferme.id}/membres`, { email: cible }],
       ] as const) {
         const res = await requete(api, methode, chemin, corps, gerant.jetonAcces);
-        expect(res.status, `${methode} ${chemin}`).toBe(404);
-        expect(await res.json()).toEqual({ erreur: 'ferme_introuvable' });
+        expect(res.status, `${methode} ${chemin}`).toBe(401);
+        expect(await res.json()).toEqual({ erreur: 'non_authentifie' });
       }
       expect(await lignes(`SELECT nom FROM ferme WHERE id = $1`, [ferme.id])).toEqual([{ nom: 'Jardins de Garonne' }]);
       expect(await lignes(`SELECT 1 FROM utilisateur WHERE email = $1`, [cible])).toHaveLength(0);
@@ -1162,12 +1170,16 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
   });
 
   describe('relecture sécurité : cas déjà couverts par le code, désormais testés', () => {
+    // T09b : rotation. Chaque renouvellement rend le jeton suivant, que le téléphone garde ;
+    // avant T09b ce test représentait le même jeton tous les 60 jours.
     it('renouvelé tous les 60 jours, le jeton tient jusqu’à 360 jours, jamais au-delà de 365', async () => {
       const api = creer();
-      const { jetonRenouvellement } = await connecter(api, emailNeuf());
+      let { jetonRenouvellement } = await connecter(api, emailNeuf());
       for (let jour = 60; jour <= 360; jour += 60) {
         instant = new Date(DEBUT.getTime() + jour * JOUR);
-        expect((await renouveler(api, jetonRenouvellement)).status, `jour ${String(jour)}`).toBe(200);
+        const r = await renouveler(api, jetonRenouvellement);
+        expect(r.status, `jour ${String(jour)}`).toBe(200);
+        jetonRenouvellement = (await lire<Renouvellement>(r)).jetonRenouvellement;
       }
       instant = new Date(DEBUT.getTime() + 420 * JOUR);
       const res = await renouveler(api, jetonRenouvellement);

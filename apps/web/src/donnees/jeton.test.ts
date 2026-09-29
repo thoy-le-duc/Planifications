@@ -36,9 +36,10 @@ function fetchSimule(statut: number, corps: unknown) {
   return { fetch: f, appels };
 }
 
+// T09b : gererJetons relit aussi le stockage (getItem) avant de renouveler (jeton.durcissement.test.ts).
 function stockage() {
   const valeurs = new Map<string, string>();
-  return { valeurs, setItem: (c: string, v: string) => void valeurs.set(c, v) };
+  return { valeurs, setItem: (c: string, v: string) => void valeurs.set(c, v), getItem: (c: string) => valeurs.get(c) ?? null };
 }
 
 describe('expirationJeton', () => {
