@@ -2,7 +2,7 @@
  * Lancement de l'export (T15) : lecture de la base locale par la porte, archive ZIP, téléchargement.
  * Aucun réseau : fonctionne hors ligne.
  */
-import { exporterFerme, type ArchiveExport, type PorteDonnees } from '@planif/sync';
+import { exporterFerme, type ArchiveExport, type PorteDonnees } from '@planif/sync/export';
 
 export interface OptionsLancerExport {
   readonly porte: PorteDonnees;

@@ -4,7 +4,7 @@
  * Chargé par import dynamique seulement : hors du JavaScript de démarrage.
  */
 import { useState, type CSSProperties } from 'react';
-import type { PorteDonnees } from '@planif/sync';
+import type { PorteDonnees } from '@planif/sync/export';
 import { lancerExport, telechargerDansLeNavigateur } from './lancer.ts';
 
 export interface ProprietesEcranExport {
@@ -43,7 +43,8 @@ export function EcranExport({ porte, fermeId, maintenant = () => new Date(), tel
       const archive = await lancerExport({ porte, fermeId, maintenant, telecharger });
       const evenements = archive.lignes.evenement ?? 0;
       setEtat({ etape: 'fini', message: `Archive ${archive.nomFichier} prête : ${nombre.format(evenements)} événements exportés.` });
-    } catch {
+    } catch (erreur: unknown) {
+      console.error('Export de la ferme impossible', erreur);
       setEtat({ etape: 'echec' });
     }
   }

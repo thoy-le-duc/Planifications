@@ -40,11 +40,11 @@ const A_PROTEGER = /[;"\r\n]/;
 
 // ── Valeurs ──────────────────────────────────────────────────────────────────────────────────
 
-/** Champ CSV : virgule décimale, oui/non, texte protégé selon RFC 4180 si besoin. */
+/** Champ CSV : virgule décimale, oui/non (0/1 seulement, toute autre valeur rendue brute), texte protégé selon RFC 4180 si besoin. */
 function champCsv(type: TypeExport, v: ValeurLocale | undefined): string {
   if (v === null || v === undefined) return '';
   let s: string;
-  if (type === 'booleen') s = v === 1 ? 'oui' : 'non';
+  if (type === 'booleen' && (v === 0 || v === 1)) s = v === 1 ? 'oui' : 'non';
   else if (typeof v === 'number') {
     s = String(v);
     if (type === 'entier' || type === 'reel') s = s.replace('.', ',');
@@ -55,7 +55,7 @@ function champCsv(type: TypeExport, v: ValeurLocale | undefined): string {
 /** Valeur de ferme.json : nombres tels quels (point décimal), booléens, JSON décodé. */
 function valeurJson(type: TypeExport, v: ValeurLocale | undefined): unknown {
   if (v === null || v === undefined) return null;
-  if (type === 'booleen') return v === 1;
+  if (type === 'booleen' && (v === 0 || v === 1)) return v === 1;
   if (type === 'json' && typeof v === 'string') {
     try {
       return JSON.parse(v) as unknown;
@@ -112,11 +112,12 @@ function convertir(d: DescriptionTable, lignes: readonly LigneLocale[]): { csv: 
   return { csv: morceaux.join(''), json };
 }
 
-function lisezmoi(fermeId: string, genereLe: string): string {
+/** `nomFerme` : nom de la ligne `ferme` ; l'identifiant sert seulement si la ferme est absente ou sans nom. */
+function lisezmoi(nomFerme: string, genereLe: string): string {
   const l: string[] = [
     'Export complet de votre ferme — Planifications',
     '',
-    `Ferme : ${fermeId}`,
+    `Ferme : ${nomFerme}`,
     `Généré le : ${genereLe} (UTC)`,
     '',
     'Cette archive contient toutes les données de votre ferme, telles qu’elles sont sur le téléphone.',
@@ -154,7 +155,12 @@ function lisezmoi(fermeId: string, genereLe: string): string {
   };
   const biblio: [string, DescriptionTable][] = [];
   for (const [nom, d] of Object.entries(TABLES_EXPORTEES)) {
-    bloc(`${nom}.csv`, d, d.bibliotheque ? 'Fiches propres à la ferme ; la référence commune est dans bibliotheque/.' : null);
+    const remarque = d.bibliotheque
+      ? 'Fiches propres à la ferme ; la référence commune est dans bibliotheque/.'
+      : nom === 'utilisateur'
+        ? 'Votre compte (les collègues n’y sont pas encore).'
+        : null;
+    bloc(`${nom}.csv`, d, remarque);
     if (d.bibliotheque) biblio.push([nom, d]);
   }
   for (const [nom, d] of biblio) bloc(`bibliotheque/${nom}.csv`, d, 'Bibliothèque de référence commune (ferme_id vide).');
@@ -187,9 +193,11 @@ export function preparerExport(entree: EntreeExport): ExportPrepare {
     }
   }
 
+  const nomFerme = entree.tables.ferme?.find((l) => l.id === fermeId)?.nom;
+  const titre = typeof nomFerme === 'string' && nomFerme.trim() !== '' ? nomFerme : fermeId;
   const json = JSON.stringify({ format: 'planifications-export', version: 1, ferme_id: fermeId, genere_le: genereLe, tables, bibliotheque });
   return {
-    fichiers: [{ chemin: 'ferme.json', contenu: json }, { chemin: 'LISEZMOI.txt', contenu: lisezmoi(fermeId, genereLe) }, ...csv, ...csvBiblio],
+    fichiers: [{ chemin: 'ferme.json', contenu: json }, { chemin: 'LISEZMOI.txt', contenu: lisezmoi(titre, genereLe) }, ...csv, ...csvBiblio],
     lignes,
   };
 }
@@ -202,6 +210,10 @@ export function construireExport(entree: EntreeExport): FichierExport[] {
 /** 'planifications-<nom de la ferme sans accents>-<AAAA-MM-JJ>.zip'. */
 export function nomArchive(nomFerme: string | null, jour: string): string {
   const nom = (nomFerme ?? '')
+    .replace(/Œ/g, 'OE')
+    .replace(/œ/g, 'oe')
+    .replace(/Æ/g, 'AE')
+    .replace(/æ/g, 'ae')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
