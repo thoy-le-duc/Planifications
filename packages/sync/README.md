@@ -21,7 +21,8 @@ Dans l'appli, `ouvrirDonnees` (`apps/web/src/donnees`) ouvre la base, branche le
 | Export | Rôle |
 | --- | --- |
 | `creerPorte(base, options)` | `lire`, `ecrire` (transaction locale, part dans la file d'envoi), `surveiller` (résultat tout de suite, puis à chaque écriture sur les tables données, locale ou reçue ; `convertir` facultatif par ligne), `saisirEvenement` (UUID v7, ferme, auteur, horodatage complétés ; toujours un INSERT), `surveillerRefus` |
-| `envoyerEcritures(file, options)` | Cœur de `uploadData` du connecteur : une transaction de la file = un `POST /sync/upload`. 200 → `complete()` ; autre réponse ou panne → erreur, la transaction reste et PowerSync réessaie. Un refus métier arrive en 200 : il ne bloque jamais la file |
+| `envoyerEcritures(file, options)` | Cœur de `uploadData` du connecteur : une transaction de la file = un `POST /sync/upload`. 200 → `complete()` ; autre réponse ou panne → erreur, la transaction reste et PowerSync réessaie. 401 → `invaliderJeton()`, jeton neuf et un seul nouvel essai ; second 401 → `SessionExpiree`. Un refus métier arrive en 200 : il ne bloque jamais la file |
+| `SessionExpiree` | Erreur « reconnexion nécessaire », la seule de l'appli (réexportée par `apps/web/src/donnees/jeton.ts`) |
 | `SCHEMA_LOCAL`, `TABLES_LOCALES` | Schéma PowerSync : les tables synchronisées, noms et colonnes de Postgres, sans e-mail ni secrets. `schema.test.ts` le compare au schéma de `@planif/db` |
 
 ## Format des lignes locales

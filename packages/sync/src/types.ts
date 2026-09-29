@@ -104,4 +104,9 @@ export interface OptionsEnvoi {
   readonly fetch: typeof fetch;
   /** Jeton d'accès à jour (renouvelé par l'appelant si besoin). */
   readonly jetonAcces: () => Promise<string>;
+  /**
+   * Oublie le jeton en cours : le prochain `jetonAcces()` en demande un neuf au serveur, même
+   * si l'horloge locale le croit encore valide. Appelée quand /sync/upload répond 401.
+   */
+  readonly invaliderJeton: () => void;
 }
