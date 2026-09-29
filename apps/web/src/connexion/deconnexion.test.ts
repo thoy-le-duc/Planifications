@@ -76,6 +76,34 @@
  *   (transactions locales) encore dans la file d'envoi. La page de diagnostic l'utilise
  *   (e2e-synchro/deconnexion.e2e.ts) ; un écran sans base ouverte ne demande rien.
  *
+ * ── 2e relecture sécurité (B2) : l'effacement en attente ne touche JAMAIS la base de
+ *    l'utilisateur connecté ───────────────────────────────────────────────────────────────────
+ *
+ * Scénario : déconnexion avec un autre onglet ouvert (l'effacement attend), reconnexion du même
+ * compte, saisie, fermeture de l'autre onglet : la base et la saisie doivent rester.
+ *   - retirerEffacementEnAttente(stockage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
+ *       utilisateurId: string): void — retire l'id du marqueur (les autres restent ; clé retirée
+ *     quand il est vide) ; ne lève jamais (stockage indisponible ou marqueur illisible). L'appli
+ *     l'appelle à la connexion (surConnexion d'App.tsx), avant de ranger la session ;
+ *     réexportée par connexion/index.ts ;
+ *   - reprendreEffacements relit la session rangée (clé `planif.session`, dans o.stockage) à
+ *     chaque appel : l'utilisateur de cette session n'est JAMAIS effacé (effacerBaseLocale n'est
+ *     pas appelé pour lui), il quitte le marqueur et n'est pas dans les ids rendus. Les autres
+ *     ids sont repris comme avant ;
+ *   - App.tsx : au démarrage, reprise seulement si aucune session n'est rangée (e2e) ;
+ *   - un deleteDatabase abandonné (délai dépassé) reste en file dans IndexedDB et s'exécutera à
+ *     la fermeture de l'autre onglet : on ne peut pas l'annuler. D'où : aucune NOUVELLE demande
+ *     pour l'utilisateur connecté (ci-dessus), et pas de nouvelle demande pour une base tant
+ *     qu'une précédente est en file (src/donnees/effacer.test.ts).
+ *
+ * ── 2e relecture sécurité (À corriger 1) : confirmation dans l'appli ──────────────────────
+ *
+ *   Le bouton « Se déconnecter » d'App.tsx passe par deconnecterAvecConfirmation. Sans ouvrir
+ *   PowerSync, on ne sait pas compter la file d'envoi : si une base locale de l'utilisateur
+ *   existe (baseLocaleExiste, src/donnees/effacer.ts : indexedDB.databases()), la confirmation
+ *   montre le message générique « Des saisies pas encore envoyées pourraient être perdues. » ;
+ *   sinon, pas de confirmation (e2e/deconnexion.e2e.ts).
+ *
  * Le module est chargé par un chemin dynamique pour que ce test type avant que deconnexion.ts
  * n'existe ; il échoue alors à l'import.
  */
@@ -297,9 +325,12 @@ describe('effacement en attente : base ouverte dans un autre onglet (relecture s
     }
   });
 
+  // Adapté (2e relecture sécurité, B2) : sans session rangée (écran de connexion). Avec la session
+  // de SESSION rangée, son utilisateur ne serait plus repris (voir « B2 » plus bas).
   it('reprendreEffacements : retente chaque utilisateur, garde ceux qui échouent encore, ne rejette jamais', async () => {
     const m = await relecture();
     const s = stockage();
+    s.valeurs.delete(CLE_SESSION);
     s.valeurs.set(m.CLE_EFFACEMENT_EN_ATTENTE, JSON.stringify([SESSION.utilisateurId, AUTRE]));
     const appels: string[] = [];
     let autreBloque = true;
@@ -413,5 +444,123 @@ describe('saisies non envoyées : confirmation avant de se déconnecter (relectu
     expect(o.questions).toHaveLength(1);
     expect(o.appels).toEqual([]);
     expect(o.s.valeurs.has(CLE_SESSION)).toBe(true);
+  });
+});
+
+/** Ajout de la 2e relecture sécurité, lu à part : son absence fait échouer ces tests seulement. */
+async function relectureB2(): Promise<{
+  retirerEffacementEnAttente(stockage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>, utilisateurId: string): void;
+}> {
+  const module = (await import(CHEMIN)) as { retirerEffacementEnAttente?: unknown };
+  if (typeof module.retirerEffacementEnAttente !== 'function') throw new Error('retirerEffacementEnAttente absente de deconnexion.ts');
+  return module as { retirerEffacementEnAttente(stockage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>, utilisateurId: string): void };
+}
+
+describe('B2 : l’effacement en attente ne touche jamais l’utilisateur connecté (2e relecture sécurité)', () => {
+  it('reprendreEffacements : l’utilisateur de la session rangée n’est pas effacé, il quitte le marqueur', async () => {
+    const m = await relecture();
+    const s = stockage(); // session de SESSION rangée : reconnecté
+    s.valeurs.set(m.CLE_EFFACEMENT_EN_ATTENTE, JSON.stringify([SESSION.utilisateurId, AUTRE]));
+    const appels: string[] = [];
+    const effacerBaseLocale = (id: string) => {
+      appels.push(id);
+      return Promise.resolve();
+    };
+    expect(await m.reprendreEffacements({ stockage: s, effacerBaseLocale })).toEqual([]);
+    expect(appels).toEqual([AUTRE]);
+    expect(m.effacementsEnAttente(s)).toEqual([]);
+    expect(s.valeurs.has(CLE_SESSION)).toBe(true);
+  });
+
+  it('reprendreEffacements : seul l’utilisateur connecté attend → aucun appel, ni rien de rendu', async () => {
+    const m = await relecture();
+    const s = stockage();
+    s.valeurs.set(m.CLE_EFFACEMENT_EN_ATTENTE, JSON.stringify([SESSION.utilisateurId]));
+    const appels: string[] = [];
+    const effacerBaseLocale = (id: string) => {
+      appels.push(id);
+      return Promise.reject(new Error('base ouverte ailleurs'));
+    };
+    expect(await m.reprendreEffacements({ stockage: s, effacerBaseLocale })).toEqual([]);
+    expect(appels).toEqual([]);
+    expect(s.valeurs.has(m.CLE_EFFACEMENT_EN_ATTENTE)).toBe(false);
+  });
+
+  it('reprendreEffacements relit la session à chaque appel : connecté entre deux essais, l’utilisateur n’est plus repris', async () => {
+    const m = await relecture();
+    const s = stockage();
+    const rangee = s.valeurs.get(CLE_SESSION) ?? '';
+    s.valeurs.delete(CLE_SESSION); // écran de connexion
+    s.valeurs.set(m.CLE_EFFACEMENT_EN_ATTENTE, JSON.stringify([SESSION.utilisateurId]));
+    const appels: string[] = [];
+    const effacerBaseLocale = (id: string) => {
+      appels.push(id);
+      return Promise.reject(new Error('base ouverte ailleurs'));
+    };
+    expect(await m.reprendreEffacements({ stockage: s, effacerBaseLocale })).toEqual([SESSION.utilisateurId]);
+    expect(appels).toEqual([SESSION.utilisateurId]);
+
+    s.valeurs.set(CLE_SESSION, rangee); // reconnecté (même compte), par un autre chemin que surConnexion
+    expect(await m.reprendreEffacements({ stockage: s, effacerBaseLocale })).toEqual([]);
+    expect(appels).toEqual([SESSION.utilisateurId]);
+    expect(m.effacementsEnAttente(s)).toEqual([]);
+  });
+
+  it('reprendreEffacements : session d’un autre utilisateur rangée → SESSION reste repris', async () => {
+    const m = await relecture();
+    const s = stockage();
+    s.valeurs.set(CLE_SESSION, JSON.stringify({ ...SESSION, utilisateurId: AUTRE }));
+    s.valeurs.set(m.CLE_EFFACEMENT_EN_ATTENTE, JSON.stringify([SESSION.utilisateurId]));
+    const appels: string[] = [];
+    const effacerBaseLocale = (id: string) => {
+      appels.push(id);
+      return Promise.resolve();
+    };
+    expect(await m.reprendreEffacements({ stockage: s, effacerBaseLocale })).toEqual([]);
+    expect(appels).toEqual([SESSION.utilisateurId]);
+  });
+
+  it('retirerEffacementEnAttente : retire l’utilisateur, garde les autres, clé retirée quand vide', async () => {
+    const m = await relecture();
+    const b2 = await relectureB2();
+    const s = stockage();
+    s.valeurs.set(m.CLE_EFFACEMENT_EN_ATTENTE, JSON.stringify([AUTRE, SESSION.utilisateurId]));
+    b2.retirerEffacementEnAttente(s, SESSION.utilisateurId);
+    expect(m.effacementsEnAttente(s)).toEqual([AUTRE]);
+    b2.retirerEffacementEnAttente(s, SESSION.utilisateurId);
+    expect(m.effacementsEnAttente(s)).toEqual([AUTRE]);
+    b2.retirerEffacementEnAttente(s, AUTRE);
+    expect(s.valeurs.has(m.CLE_EFFACEMENT_EN_ATTENTE)).toBe(false);
+  });
+
+  it('retirerEffacementEnAttente : marqueur absent, illisible ou stockage indisponible → jamais d’exception', async () => {
+    const m = await relecture();
+    const b2 = await relectureB2();
+    const s = stockage();
+    b2.retirerEffacementEnAttente(s, SESSION.utilisateurId);
+    expect(s.valeurs.has(m.CLE_EFFACEMENT_EN_ATTENTE)).toBe(false);
+    s.valeurs.set(m.CLE_EFFACEMENT_EN_ATTENTE, '{pas du json');
+    expect(() => {
+      b2.retirerEffacementEnAttente(s, SESSION.utilisateurId);
+    }).not.toThrow();
+    const casse = {
+      getItem: (): string | null => {
+        throw new Error('stockage indisponible');
+      },
+      setItem: (): void => {
+        throw new Error('stockage indisponible');
+      },
+      removeItem: (): void => {
+        throw new Error('stockage indisponible');
+      },
+    };
+    expect(() => {
+      b2.retirerEffacementEnAttente(casse, SESSION.utilisateurId);
+    }).not.toThrow();
+  });
+
+  it('retirerEffacementEnAttente est réexportée par connexion/index.ts', async () => {
+    const module: Readonly<Record<string, unknown>> = await import('./index.ts');
+    expect(typeof module.retirerEffacementEnAttente).toBe('function');
   });
 });

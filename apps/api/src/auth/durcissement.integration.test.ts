@@ -30,21 +30,34 @@
  *   2 minutes) : un jeton déjà utilisé T reste acceptable jusqu'à REJEU_MAX = 7 jours après son
  *   premier usage TANT QU'AUCUN DE SES SUCCESSEURS (jetons émis en le présentant) N'A SERVI.
  *   Présenté dans ce cas (réponse perdue au champ), il rend 200 et un jeton neuf, et ses
- *   successeurs inutilisés sont remplacés : ils ne valent plus rien (401), sans que la famille
- *   soit révoquée pour autant (les présenter ne coupe pas la session de celui qui a le dernier).
+ *   successeurs inutilisés sont remplacés (remplace_le) : ils ne valent plus rien.
+ *     - 2e relecture sécurité (B1) : PRÉSENTER UN JETON REMPLACÉ prouve qu'il y a deux
+ *       détenteurs (le téléphone et un voleur qui a rejoué l'ancien) : 401 { erreur:
+ *       'jeton_invalide' } ET toute la famille est révoquée, le dernier jeton rendu compris.
+ *       Vol de T0 ; le téléphone renouvelle (T1) ; le voleur rejoue T0 (T1' émis, T1 remplacé) ;
+ *       le téléphone présente T1 → 401 et famille révoquée → T1' du voleur → 401. Quel que soit
+ *       l'ordre des passages du voleur et du téléphone, la famille finit révoquée au premier
+ *       retour de celui qui n'a pas le dernier jeton. La réponse perdue reste tolérée : le
+ *       téléphone rejoue T0, personne ne présente le T1 perdu ;
+ *     - 2e relecture sécurité (À corriger 2) : un jeton marqué utilisé (utilise_le) qui n'a
+ *       AUCUN enfant (aucune ligne dont parent_id le désigne : sessions ouvertes avant 0011, où
+ *       les successeurs n'avaient pas de parent_id) et qui est présenté de nouveau est un rejeu :
+ *       401, famille révoquée.
  *     - dès qu'un successeur de T a servi, présenter T est un rejeu (vol, copie) : 401
  *       { erreur: 'jeton_invalide' } et TOUTE la famille est révoquée, le dernier jeton rendu
  *       aussi ; les autres sessions du compte ne sont pas touchées ;
  *     - au-delà de 7 jours après son premier usage, présenter T est un rejeu : même chose
  *       (401, famille révoquée), successeur utilisé ou non ;
- *     - renouvellements simultanés avec le même jeton : tous répondent 200 ; au moins un des
- *       jetons rendus renouvelle ensuite, et présenter un jeton remplacé ne révoque pas la
- *       famille ;
+ *     - renouvellements simultanés avec le même jeton : tous répondent 200 ; un seul des jetons
+ *       rendus n'est pas remplacé et renouvelle ensuite ; présenter un jeton remplacé révoque la
+ *       famille (B1 : c'est au téléphone de ne jamais présenter deux fois le même jeton, voir
+ *       apps/web/src/donnees/jeton.durcissement.test.ts, verrou entre onglets) ;
  *     - famille révoquée (rejeu, déconnexion) : aucun de ses jetons n'est plus accepté, Y COMPRIS
  *       un jeton émis par un renouvellement lancé en même temps que le rejeu (course : la
  *       vérification et l'émission se font sous un verrou de famille, ou équivalent). Un jeton
- *       révoqué est refusé (401). Le remplacement d'un successeur inutilisé n'est pas une
- *       révocation de la famille.
+ *       révoqué est refusé (401). Le remplacement d'un successeur inutilisé n'est pas, à lui
+ *       seul, une révocation de la famille : c'est le fait de PRÉSENTER ce jeton remplacé qui la
+ *       révoque (B1).
  *   Purge : à chaque renouvellement, les lignes de jeton_renouvellement expirées (expire_le) ou
  *   révoquées (revoque_le) depuis plus de 90 jours sont effacées (tous comptes confondus) ; les
  *   plus récentes restent.
@@ -110,6 +123,17 @@
  *   pirate@y.fr », « Nom <pirate@y.fr> ») : une seule adresse doit partir, celle saisie.
  *   Les adresses ordinaires restent acceptées (apostrophe, +, tiret, point, sous-domaines).
  *   L'expéditeur SMTP, lui, passe l'adresse sans l'analyser (courriel-smtp.test.ts).
+ *
+ *   2e relecture sécurité (mineurs), mêmes réponses, mêmes routes, avant toute normalisation
+ *   (espaces retirés, minuscules) :
+ *     - caractères de format \p{Cf} refusés (U+200B espace sans chasse, U+202E inversion de
+ *       sens, U+FEFF, U+00AD trait d'union conditionnel, U+2060…) : ils rendent deux adresses
+ *       différentes identiques à l'œil ;
+ *     - toute adresse que la normalisation NFKC change est refusée (s !== s.normalize('NFKC')) :
+ *       caractères pleine chasse (« ａ », « ＠ », « ．fr »), ligatures (« ﬁ »), exposants,
+ *       signe kelvin U+212A (qui devient « k » par NFKC ou par toLowerCase), lettre suivie d'un
+ *       accent combinant (U+0301) ;
+ *     - point final de domaine refusé : « a@x.fr. ».
  */
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
@@ -120,6 +144,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { creerApp, type DependancesApp } from '../app.ts';
 import { creerBaseJetable, decrireAvecBase, type BaseJetable } from '../sync/test/base-jetable.ts';
 import { genererCleSignature, type CleSignature, type ExpediteurCourriel, type MessageCourriel } from './index.ts';
+import { empreinteJeton } from './secrets.ts';
 
 const decrire = decrireAvecBase('T09b');
 
@@ -380,12 +405,104 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       const { jetonRenouvellement: t1ter } = await renouvele(api, t0);
       expect(new Set([t0, t1, t1bis, t1ter]).size).toBe(4);
 
-      // Les successeurs remplacés ne valent plus rien, mais les présenter ne coupe pas la session.
-      await refuse(await renouveler(api, t1));
-      await refuse(await renouveler(api, t1bis));
+      // Adapté (2e relecture sécurité, B1) : personne ne présente les successeurs perdus (T1,
+      // T1bis) ; ils sont remplacés, sans que la famille soit révoquée. Les présenter la révoque
+      // (test suivant) ; ce test attendait jusqu'ici un simple 401 sans révocation.
+      const { rows } = await base.pool.query<{ remplace: boolean; revoque: boolean }>(
+        `SELECT remplace_le IS NOT NULL AS remplace, revoque_le IS NOT NULL AS revoque
+           FROM jeton_renouvellement WHERE jeton_hache = ANY($1)`,
+        [[empreinteJeton(t1), empreinteJeton(t1bis)]],
+      );
+      expect(rows).toEqual([
+        { remplace: true, revoque: false },
+        { remplace: true, revoque: false },
+      ]);
       avancer(HEURE);
       const { jetonRenouvellement: t2 } = await renouvele(api, t1ter);
       expect((await renouveler(api, t2)).status).toBe(200);
+    });
+
+    it('B1 : présenter un jeton remplacé → 401, et toute la famille est révoquée (le dernier jeton rendu compris)', async () => {
+      const api = creer();
+      const email = emailNeuf();
+      const { jetonRenouvellement: t0 } = await connecter(api, email);
+      avancer(61 * SECONDE);
+      const autreSession = await connecter(api, email);
+      const { jetonRenouvellement: t1 } = await renouvele(api, t0); // réponse perdue
+      avancer(MINUTE);
+      const { jetonRenouvellement: t1bis } = await renouvele(api, t0); // T1 remplacé
+      avancer(MINUTE);
+      await refuse(await renouveler(api, t1));
+      await refuse(await renouveler(api, t1bis));
+      await refuse(await renouveler(api, t0));
+      // L'autre session du même compte n'est pas touchée.
+      expect((await renouveler(api, autreSession.jetonRenouvellement)).status).toBe(200);
+    });
+
+    it('B1, vol de T0 : le téléphone renouvelle (T1), le voleur rejoue T0 (T1′), le téléphone présente T1 → 401, famille révoquée, T1′ du voleur refusé', async () => {
+      const api = creer();
+      const { jetonRenouvellement: t0 } = await connecter(api);
+      const { jetonRenouvellement: t1 } = await renouvele(api, t0); // téléphone
+      avancer(20 * SECONDE);
+      const { jetonRenouvellement: t1Voleur } = await renouvele(api, t0); // voleur : T1 remplacé
+      avancer(20 * SECONDE);
+      await refuse(await renouveler(api, t1)); // retour du téléphone
+      await refuse(await renouveler(api, t1Voleur));
+      await refuse(await renouveler(api, t0));
+    });
+
+    it('B1, le voleur passe le premier (T0 → V1), puis le téléphone (T0 → P1) : V1 présenté → 401, famille révoquée, P1 refusé', async () => {
+      const api = creer();
+      const { jetonRenouvellement: t0 } = await connecter(api);
+      const { jetonRenouvellement: v1 } = await renouvele(api, t0); // voleur
+      avancer(20 * SECONDE);
+      const { jetonRenouvellement: p1 } = await renouvele(api, t0); // téléphone : V1 remplacé
+      avancer(20 * SECONDE);
+      await refuse(await renouveler(api, v1));
+      await refuse(await renouveler(api, p1));
+    });
+
+    it('B1, alternance : T0 → T1 (téléphone), T0 → V1 (voleur), V1 → V2 (voleur) ; au retour du téléphone (T1), la famille tombe', async () => {
+      const api = creer();
+      const { jetonRenouvellement: t0 } = await connecter(api);
+      const { jetonRenouvellement: t1 } = await renouvele(api, t0);
+      avancer(10 * SECONDE);
+      const { jetonRenouvellement: v1 } = await renouvele(api, t0);
+      avancer(10 * SECONDE);
+      const { jetonRenouvellement: v2 } = await renouvele(api, v1);
+      avancer(10 * SECONDE);
+      await refuse(await renouveler(api, t1));
+      await refuse(await renouveler(api, v2));
+      await refuse(await renouveler(api, v1));
+    });
+
+    it('À corriger 2 : jeton utilisé sans aucun enfant (session d’avant 0011), présenté de nouveau → 401, famille révoquée', async () => {
+      const api = creer();
+      const { utilisateurId, jetonRenouvellement: t0 } = await connecter(api);
+      const { jetonRenouvellement: t1 } = await renouvele(api, t0);
+      // Avant 0011, le successeur n'avait pas de parent_id.
+      await base.pool.query(`UPDATE jeton_renouvellement SET parent_id = NULL WHERE utilisateur_id = $1`, [utilisateurId]);
+      avancer(10 * SECONDE);
+      await refuse(await renouveler(api, t0));
+      await refuse(await renouveler(api, t1));
+      const { rows } = await base.pool.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM jeton_renouvellement WHERE utilisateur_id = $1 AND revoque_le IS NULL`,
+        [utilisateurId],
+      );
+      expect(rows[0]?.n).toBe(0);
+    });
+
+    it('À corriger 2 : jeton marqué utilisé dont le successeur a disparu (aucune ligne enfant) → 401, famille révoquée', async () => {
+      const api = creer();
+      const { utilisateurId, jetonRenouvellement: t0 } = await connecter(api);
+      await base.pool.query(`UPDATE jeton_renouvellement SET utilise_le = $2 WHERE utilisateur_id = $1`, [utilisateurId, instant]);
+      avancer(10 * SECONDE);
+      await refuse(await renouveler(api, t0));
+      const { rows } = await base.pool.query<{ revoque: boolean }>(
+        `SELECT revoque_le IS NOT NULL AS revoque FROM jeton_renouvellement WHERE utilisateur_id = $1`,
+        [utilisateurId],
+      );
+      expect(rows).toEqual([{ revoque: true }]);
     });
 
     it('réponse perdue : T0 encore accepté 7 jours − 1 s après son premier usage', async () => {
@@ -442,25 +559,32 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       await refuse(await renouveler(api, t3));
     });
 
-    // Adapté : avec la règle « successeur jamais utilisé », un renouvellement simultané remplace le
-    // successeur rendu à l'autre ; T09b attendait que chaque jeton rendu renouvelle.
-    it('deux renouvellements simultanés avec le même jeton : les deux réussissent, la session continue', async () => {
+    // Adapté (2e relecture sécurité, B1) : présenter le jeton remplacé révoque désormais la
+    // famille. On vérifie qu'un seul des deux jetons rendus reste valable, qu'il renouvelle, puis
+    // que présenter l'autre (remplacé) fait tomber la session. Le téléphone, lui, sérialise ses
+    // renouvellements entre onglets (jeton.durcissement.test.ts) et ne présente jamais deux fois
+    // le même jeton.
+    it('deux renouvellements simultanés avec le même jeton : les deux réussissent ; un seul jeton rendu reste valable ; présenter l’autre révoque la famille', async () => {
       const api = creer();
       const { jetonRenouvellement: t0 } = await connecter(api);
       const reponses = await Promise.all([renouveler(api, t0), renouveler(api, t0)]);
       expect(reponses.map((r) => r.status)).toEqual([200, 200]);
-      const rendus = await Promise.all(reponses.map((r) => lire<Renouvellement>(r)));
-      for (const r of rendus) expect(r.jetonRenouvellement).not.toBe(t0);
+      const rendus = (await Promise.all(reponses.map((r) => lire<Renouvellement>(r)))).map((r) => r.jetonRenouvellement);
+      for (const r of rendus) expect(r).not.toBe(t0);
+      const { rows } = await base.pool.query<{ jeton_hache: string; remplace: boolean }>(
+        `SELECT jeton_hache, remplace_le IS NOT NULL AS remplace FROM jeton_renouvellement WHERE jeton_hache = ANY($1)`,
+        [rendus.map((r) => empreinteJeton(r))],
+      );
+      const remplace = (jeton: string) => rows.find((r) => r.jeton_hache === empreinteJeton(jeton))?.remplace;
+      const valables = rendus.filter((r) => remplace(r) === false);
+      const remplaces = rendus.filter((r) => remplace(r) === true);
+      expect(valables).toHaveLength(1);
+      expect(remplaces).toHaveLength(1);
+
       avancer(30 * SECONDE);
-      const suivants: string[] = [];
-      for (const r of rendus) {
-        const res = await renouveler(api, r.jetonRenouvellement);
-        if (res.status === 200) suivants.push((await lire<Renouvellement>(res)).jetonRenouvellement);
-        else expect(res.status).toBe(401);
-      }
-      expect(suivants.length).toBeGreaterThanOrEqual(1);
-      // Présenter le jeton remplacé n'a pas révoqué la famille.
-      for (const j of suivants) expect((await renouveler(api, j)).status).toBe(200);
+      const { jetonRenouvellement: suivant } = await renouvele(api, valables[0] ?? '');
+      await refuse(await renouveler(api, remplaces[0] ?? ''));
+      await refuse(await renouveler(api, suivant));
     });
 
     it('cinq renouvellements simultanés avec le même jeton : tous réussissent (synchro et envoi en même temps)', async () => {
@@ -860,7 +984,12 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
   // --- 5. Adresses e-mail -----------------------------------------------------------------------
 
   describe('adresses e-mail : séparateurs et caractères de contrôle refusés', () => {
-    const INTERDITS = [',', ';', ':', '<', '>', '(', ')', '[', ']', '"', '\\', '\u0000', '\u0007', '\u001b', '\u007f', '\u0085'];
+    const INTERDITS = [
+      ',', ';', ':', '<', '>', '(', ')', '[', ']', '"', '\\', '\u0000', '\u0007', '\u001b', '\u007f', '\u0085',
+      // 2e relecture sécurité : format (\p{Cf}) et tout ce que NFKC change.
+      '\u200b', '\u202e', '\ufeff', '\u00ad', '\u2060', '\u200d',
+      '\uff41', '\uff20', '\uff0e', '\ufb01', '\u00b2', '\u212a', 'e\u0301',
+    ];
 
     /** Adresses piégées : le caractère dans la partie locale, dans le domaine, et en forme d'attaque. */
     /** Formes normalisées, sans U+0000 (qu'un texte Postgres ne peut pas contenir) : pour relire la base. */
@@ -878,6 +1007,11 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
         `"victime-${jeton}"@ferme.fr`,
         `victime-${jeton}@[127.0.0.1]`,
         `victime-${jeton}(commentaire)@ferme.fr`,
+        // 2e relecture sécurité : point final de domaine, adresse entière en pleine chasse.
+        `victime-${jeton}@ferme.fr.`,
+        `victime-${jeton}@ferme.fr.`.toUpperCase(),
+        `ｖｉｃｔｉｍｅ-${jeton}＠ｆｅｒｍｅ．ｆｒ`,
+        `victime-${jeton}\u202e@ferme.fr`,
       ];
     }
 

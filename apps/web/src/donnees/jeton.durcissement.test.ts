@@ -42,8 +42,29 @@
  *     max(0, iat − maintenant()) comme avant.
  *
  * Aucun appel réseau pour mesurer l'écart : seul l'iat des jetons reçus sert.
+ *
+ * ── 2e relecture sécurité ───────────────────────────────────────────────────────────────────
+ *
+ * B1 — un seul renouvellement à la fois ENTRE ONGLETS : l'API révoque toute la session quand on
+ * lui présente un jeton déjà remplacé (deux détenteurs). Deux onglets (ou la page et la page de
+ * diagnostic) qui renouvellent en même temps avec le même jeton la feraient tomber.
+ *   - si `navigator.locks` existe, gererJetons fait « relire la session rangée, renouveler si
+ *     nécessaire, ranger la session neuve » sous `navigator.locks.request('planif-renouvellement',
+ *     rappel)` (verrou exclusif, par défaut). Sous le verrou, la session relue du stockage (même
+ *     utilisateur) remplace celle en mémoire ; si son jeton d'accès est encore valable (même
+ *     règle de marge et d'écart), il est rendu sans appel réseau ;
+ *   - conséquence vérifiée ici : deux GestionJetons partageant le même stockage, qui renouvellent
+ *     en même temps, ne présentent JAMAIS deux fois le même jeton de renouvellement ;
+ *   - sans `navigator.locks` (navigateur ancien, `navigator` absent) : comportement d'avant
+ *     (un seul renouvellement à la fois dans la page, relecture du stockage avant de renouveler).
+ *
+ * Mineur — écart d'horloge relu du stockage : lireSession et sessionValide OMETTENT un
+ * `ecartHorlogeMs` dont la valeur absolue dépasse 48 h (172 800 000 ms ; ±48 h pile restent
+ * acceptés) : une valeur aberrante (stockage modifié) ne doit pas faire renouveler à chaque
+ * appel ni garder un jeton périmé. La session reste valide, l'écart est alors estimé comme sans
+ * valeur rangée.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CLE_SESSION, lireSession, sessionValide, type SessionConnexion } from '../connexion/session.ts';
 import { gererJetons, SessionExpiree } from './jeton.ts';
 
@@ -304,5 +325,135 @@ describe('écart d’horloge rangé avec la session (relecture sécurité)', () 
     const g = gererJetons(rangee, { urlApi: 'https://api', fetch, stockage: stockage(rangee), maintenant: h.maintenant });
     await g.jetonValide();
     expect(appels).toHaveLength(1);
+  });
+});
+
+const ECART_MAX_MS = 48 * HEURE;
+
+describe('écart d’horloge relu : ignoré au-delà de ±48 h (2e relecture sécurité)', () => {
+  const lueAvec = (ecart: number) =>
+    lireSession({ getItem: () => JSON.stringify({ ...session('a.b.c'), ecartHorlogeMs: ecart }) });
+
+  it('±48 h pile : gardé ; au-delà : omis, la session reste valide', () => {
+    expect(ecartDe(lueAvec(ECART_MAX_MS))).toBe(ECART_MAX_MS);
+    expect(ecartDe(lueAvec(-ECART_MAX_MS))).toBe(-ECART_MAX_MS);
+    for (const ecart of [ECART_MAX_MS + 1, -ECART_MAX_MS - 1, 72 * HEURE, -30 * 24 * HEURE, Number.MAX_SAFE_INTEGER]) {
+      const lue = lueAvec(ecart);
+      expect(lue, String(ecart)).not.toBeNull();
+      expect(ecartDe(lue), String(ecart)).toBeUndefined();
+      expect(ecartDe(sessionValide({ ...session('a.b.c'), ecartHorlogeMs: ecart })), String(ecart)).toBeUndefined();
+    }
+  });
+
+  it('écart rangé de +72 h (aberrant), téléphone à l’heure : pas de renouvellement à chaque appel', async () => {
+    const { fetch, appels } = fetchSimule({ statut: 200, corps: { jetonAcces: jwt(S, S + HEURE), jetonRenouvellement: 'r1' } });
+    const rangee: SessionAvecEcart = { ...session(jwt(S - 10 * MINUTE, S + 50 * MINUTE)), ecartHorlogeMs: 72 * HEURE };
+    const s = stockage(rangee);
+    const relue = lireSession(s);
+    expect(relue).not.toBeNull();
+    const g = gererJetons(relue ?? session('x'), { urlApi: 'https://api', fetch, stockage: s, maintenant: () => S });
+    expect(await g.jetonValide()).toBe(rangee.jetonAcces);
+    expect(appels).toHaveLength(0);
+  });
+});
+
+/** Double de navigator.locks : verrou exclusif par nom, file d'attente dans l'ordre des demandes. */
+function verrousSimules() {
+  const demandes: string[] = [];
+  const files = new Map<string, Promise<unknown>>();
+  function request(nom: string, ...args: readonly unknown[]): Promise<unknown> {
+    const rappel = args.at(-1);
+    if (typeof rappel !== 'function') throw new TypeError('rappel manquant');
+    demandes.push(nom);
+    const precedente = files.get(nom) ?? Promise.resolve();
+    const resultat = precedente.then(() => (rappel as (verrou: unknown) => unknown)({ name: nom, mode: 'exclusive' }));
+    files.set(
+      nom,
+      resultat.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return resultat;
+  }
+  return { demandes, locks: { request } };
+}
+
+/**
+ * Serveur simulé : chaque jeton de renouvellement rend un jeton neuf (r1, r2…) et un jeton
+ * d'accès valable 1 h ; répond après quelques millisecondes (les deux onglets se chevauchent).
+ */
+function serveurSimule(maintenant: () => number) {
+  const presentes: string[] = [];
+  const acces: string[] = [];
+  let n = 0;
+  const f: typeof fetch = async (entree, init) => {
+    const requete = new Request(entree, init);
+    const corps = JSON.parse(await requete.text()) as { jetonRenouvellement: string };
+    presentes.push(corps.jetonRenouvellement);
+    await new Promise((fin) => setTimeout(fin, 5));
+    n += 1;
+    const jetonAcces = jwt(maintenant(), maintenant() + HEURE).replace('signature', `signature${String(n)}`);
+    acces.push(jetonAcces);
+    return new Response(JSON.stringify({ jetonAcces, jetonRenouvellement: `r${String(n)}` }), { status: 200 });
+  };
+  return { fetch: f, presentes, acces };
+}
+
+describe('B1 : renouvellement sérialisé entre onglets par navigator.locks (2e relecture sécurité)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('deux onglets (deux GestionJetons, même stockage) renouvellent en même temps : jamais deux fois le même jeton présenté', async () => {
+    const v = verrousSimules();
+    vi.stubGlobal('navigator', { locks: v.locks });
+    const serveur = serveurSimule(() => S);
+    const perime = session(jwt(S - HEURE, S - MINUTE), 'r0');
+    const s = stockage(perime);
+    const options = { urlApi: 'https://api', fetch: serveur.fetch, stockage: s, maintenant: () => S };
+    const ongletA = gererJetons(perime, options);
+    const ongletB = gererJetons(perime, options);
+
+    const [a, b] = await Promise.all([ongletA.jetonValide(), ongletB.jetonValide()]);
+
+    expect(serveur.presentes.length).toBeGreaterThanOrEqual(1);
+    expect(new Set(serveur.presentes).size, `présentés : ${serveur.presentes.join(', ')}`).toBe(serveur.presentes.length);
+    expect(v.demandes).toContain('planif-renouvellement');
+    // Chaque onglet a un jeton d'accès émis par le serveur, et le stockage porte le dernier jeton rendu.
+    expect(serveur.acces).toContain(a);
+    expect(serveur.acces).toContain(b);
+    expect(lireSession(s)?.jetonRenouvellement).toBe(`r${String(serveur.presentes.length)}`);
+  });
+
+  it('trois onglets, deux vagues de renouvellement : toujours aucun jeton présenté deux fois', async () => {
+    const v = verrousSimules();
+    vi.stubGlobal('navigator', { locks: v.locks });
+    const h = horloge(S);
+    const serveur = serveurSimule(h.maintenant);
+    const perime = session(jwt(S - HEURE, S - MINUTE), 'r0');
+    const s = stockage(perime);
+    const options = { urlApi: 'https://api', fetch: serveur.fetch, stockage: s, maintenant: h.maintenant };
+    const onglets = [gererJetons(perime, options), gererJetons(perime, options), gererJetons(perime, options)];
+
+    await Promise.all(onglets.map((g) => g.jetonValide()));
+    h.regler(S + HEURE); // tous les jetons d'accès arrivent à expiration
+    await Promise.all(onglets.map((g) => g.jetonValide()));
+
+    expect(new Set(serveur.presentes).size, `présentés : ${serveur.presentes.join(', ')}`).toBe(serveur.presentes.length);
+  });
+
+  it('sans navigator.locks (ou sans navigator) : le renouvellement marche comme avant', async () => {
+    for (const nav of [{}, undefined]) {
+      vi.stubGlobal('navigator', nav);
+      const { fetch, appels } = fetchSimule({ statut: 200, corps: { jetonAcces: jwt(S, S + HEURE), jetonRenouvellement: 'r1' } });
+      const s = stockage();
+      const g = gererJetons(session(jwt(S - HEURE, S - MINUTE), 'r0'), { urlApi: 'https://api', fetch, stockage: s, maintenant: () => S });
+      const [x, y] = await Promise.all([g.jetonValide(), g.jetonValide()]);
+      expect(x).toBe(y);
+      expect(appels.map((a) => a.corps.jetonRenouvellement)).toEqual(['r0']);
+      expect(JSON.parse(s.valeurs.get(CLE_SESSION) ?? '{}')).toMatchObject({ jetonRenouvellement: 'r1' });
+      vi.unstubAllGlobals();
+    }
   });
 });
