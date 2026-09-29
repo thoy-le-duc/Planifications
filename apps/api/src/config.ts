@@ -14,7 +14,8 @@
  *                      sur SMTP_* hors production.
  *   SMTP_HOTE          relais SMTP du fournisseur d'e-mail (T09b) ; sans lui ni COURRIEL_CONSOLE,
  *                      l'API ne démarre pas
- *   SMTP_SECURITE      tls | starttls | aucune, défaut starttls ; « aucune » refusée en production
+ *   SMTP_SECURITE      tls | starttls | aucune, défaut starttls ; « aucune » refusée sauf
+ *                      NODE_ENV=development exactement
  *   SMTP_PORT          défaut 465 (tls), 587 (starttls), 25 (aucune)
  *   SMTP_EXPEDITEUR    en-tête From (obligatoire avec SMTP_HOTE)
  *   SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE   identifiants du relais : les deux ou aucun
@@ -145,8 +146,11 @@ function lireCourriel(env: Environnement): ConfigCourriel {
   if (!estSecuriteSmtp(securiteBrute)) {
     throw new Error(`SMTP_SECURITE invalide : « ${securiteBrute} » (tls, starttls ou aucune).`);
   }
-  if (securiteBrute === 'aucune' && production) {
-    throw new Error('SMTP_SECURITE=aucune refusé en production : identifiants et codes passeraient en clair sur le réseau.');
+  // Liste blanche : NODE_ENV=development exactement. Absente, vide, « test », « staging »… : refus.
+  if (securiteBrute === 'aucune' && env.NODE_ENV !== 'development') {
+    throw new Error(
+      'SMTP_SECURITE=aucune refusé hors NODE_ENV=development : identifiants et codes passeraient en clair sur le réseau.',
+    );
   }
 
   const portBrut = facultative(env, 'SMTP_PORT');
