@@ -162,9 +162,23 @@ Question : faut-il limiter les tâches en retard ? Proposition : une seule ligne
 
 Réponse (2026-09-29) : « ok ». Une seule ligne en retard par série. Ticket T06b.
 
+### Q9 — Méthode de connexion (posée le 2026-09-29)
+
+Pour T09 (comptes). On se connecte une fois par téléphone, puis la session tient au moins 30 jours, même hors ligne.
+
+| Méthode | Au champ, avec des gants | Pour un saisonnier | Inconvénient |
+| --- | --- | --- | --- |
+| **Code à 6 chiffres reçu par e-mail** | taper 6 chiffres, une fois par mois | marche avec n'importe quelle adresse | il faut ouvrir sa messagerie |
+| Lien magique par e-mail | un tap sur le lien | pareil | le lien s'ouvre souvent dans le mauvais navigateur, et l'appli installée ne récupère pas la session |
+| Clé d'accès (empreinte ou visage) | la plus rapide, aucun mot de passe | dépend du téléphone de chacun | pas tous les téléphones, et perdue si le téléphone change |
+| Mot de passe | à taper, à retenir, à réinitialiser | à gérer pour chaque saisonnier | le plus pénible et le moins sûr |
+
+Ma recommandation : **code à 6 chiffres par e-mail** pour commencer, puis **clé d'accès en option** pour ceux qui veulent (empreinte au lieu du code). Pas de mot de passe.
+
+Question : on part là-dessus ?
+
 ### À suivre
 
-- Q9 — Méthode de connexion (T09) : code par e-mail, lien magique, clé d'accès ou mot de passe.
 
 ## Questions ouvertes du brief
 
