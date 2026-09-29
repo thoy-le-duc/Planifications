@@ -23,6 +23,8 @@ export interface DependancesApp {
    * par now() SQL ni Date.now().
    */
   readonly maintenant?: () => Date;
+  /** Origines autorisées à appeler l'API depuis un navigateur (CORS) ; aucune par défaut. */
+  readonly corsOrigines?: readonly string[];
 }
 
 /** Dépendances complétées, partagées par les routes. */
@@ -37,5 +39,5 @@ export function completer(deps: DependancesApp): Contexte {
     horloge: () => maintenant().getTime(),
     aleatoire: (n) => new Uint8Array(randomBytes(n)),
   });
-  return { ...deps, maintenant, nouvelId };
+  return { ...deps, maintenant, nouvelId, corsOrigines: deps.corsOrigines ?? [] };
 }

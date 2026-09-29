@@ -12,6 +12,9 @@
  *   COURRIEL_CONSOLE   « 1 » pour écrire les e-mails dans la console (développement seulement :
  *                      les codes y apparaissent en clair, refusé si NODE_ENV=production). Aucun
  *                      service d'envoi réel dans T09 : sans cette variable, l'API ne démarre pas.
+ *   CORS_ORIGINES      origines autorisées à appeler l'API depuis un navigateur, séparées par des
+ *                      virgules (ex. https://app.planif.fr,http://localhost:4174). Liste blanche
+ *                      exacte, aucune par défaut : sans elle, seule la même origine fonctionne.
  */
 
 export interface Config {
@@ -22,6 +25,8 @@ export interface Config {
   readonly audience: string;
   readonly port: number;
   readonly courrielConsole: boolean;
+  /** Origines CORS autorisées ; absent si CORS_ORIGINES est vide. */
+  readonly corsOrigines?: readonly string[];
 }
 
 type Environnement = Readonly<Record<string, string | undefined>>;
@@ -44,12 +49,35 @@ function lirePort(env: Environnement): number {
   return port;
 }
 
+/** Origine exacte (schéma, hôte, port), sans chemin : « https://app.planif.fr ». */
+function lireOrigine(brut: string): string {
+  let url: URL;
+  try {
+    url = new URL(brut);
+  } catch {
+    throw new Error(`CORS_ORIGINES : « ${brut} » n'est pas une origine.`);
+  }
+  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || url.origin !== brut) {
+    throw new Error(`CORS_ORIGINES : « ${brut} » n'est pas une origine exacte (https://hote[:port], sans / final).`);
+  }
+  return url.origin;
+}
+
+export function lireCorsOrigines(env: Environnement): readonly string[] {
+  return (env.CORS_ORIGINES ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter((o) => o !== '')
+    .map(lireOrigine);
+}
+
 export function lireConfig(env: Environnement): Config {
   const databaseUrl = obligatoire(env, 'DATABASE_URL');
   const jwtClesPrivees = obligatoire(env, 'JWT_CLES_PRIVEES');
   const emetteur = obligatoire(env, 'JWT_EMETTEUR');
   const audience = obligatoire(env, 'JWT_AUDIENCE');
   const port = lirePort(env);
+  const corsOrigines = lireCorsOrigines(env);
 
   if (env.COURRIEL_CONSOLE !== '1') {
     throw new Error(
@@ -61,5 +89,13 @@ export function lireConfig(env: Environnement): Config {
       'COURRIEL_CONSOLE=1 refusé en production : les codes de connexion apparaîtraient en clair dans les journaux.',
     );
   }
-  return { databaseUrl, jwtClesPrivees, emetteur, audience, port, courrielConsole: true };
+  return {
+    databaseUrl,
+    jwtClesPrivees,
+    emetteur,
+    audience,
+    port,
+    courrielConsole: true,
+    ...(corsOrigines.length > 0 ? { corsOrigines } : {}),
+  };
 }
