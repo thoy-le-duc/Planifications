@@ -34,6 +34,9 @@ sync_config:
 client_auth:
   # Jetons d'accès de l'API (T09) : JWT RS256, `sub` = utilisateur. Les droits sur les fermes
   # ne sont pas dans le jeton : les règles de synchro les relisent dans `membre`.
+  # L'émetteur (`iss`) n'est PAS vérifié par PowerSync : la sécurité repose sur les clés de
+  # l'API (seules les clés de ce JWKS signent un jeton accepté) et sur l'audience
+  # `powersync-planif`, propre aux jetons destinés à la synchro.
   jwks_uri: !env PS_JWKS_URI
   audience: [!env PS_JWT_AUDIENCE]
 
