@@ -131,6 +131,15 @@ describe('lireModele : jamais d’exception, null si le texte n’est pas un mod
     ['unité d’une autre grandeur', JSON.stringify({ version: 1, type: 'parcellaire', colonnes: [{ entete: 'Longueur', champ: 'longueur_m', unite: 'kg' }], choix: [] })],
     ['semaines sur une surface', JSON.stringify({ version: 1, type: 'parcellaire', colonnes: [{ entete: 'Surface', champ: 'surface_m2', unite: 'semaine' }], choix: [] })],
     [
+      'nouvelle culture au nom vide (2e relecture)',
+      JSON.stringify({ version: 1, type: 'series', colonnes: [{ entete: 'Culture', champ: 'espece', unite: null }], choix: [{ champ: 'espece', valeur: 'Salade', decision: { sorte: 'nouvelle', nom: '' } }] }),
+    ],
+    [
+      'nouvelle famille au nom fait d’espaces (2e relecture)',
+      JSON.stringify({ version: 1, type: 'cultures', colonnes: [{ entete: 'Famille', champ: 'famille', unite: null }], choix: [{ champ: 'famille', valeur: 'Solanées', decision: { sorte: 'nouvelle', nom: '   ' } }] }),
+    ],
+    ['semaines sur une longueur', JSON.stringify({ version: 1, type: 'parcellaire', colonnes: [{ entete: 'Longueur', champ: 'longueur_m', unite: 'semaine' }], choix: [] })],
+    [
       'identifiant de choix vide',
       JSON.stringify({ version: 1, type: 'series', colonnes: [{ entete: 'Culture', champ: 'espece', unite: null }], choix: [{ champ: 'espece', valeur: 'Salade', decision: { sorte: 'existante', id: '' } }] }),
     ],
@@ -143,5 +152,18 @@ describe('lireModele : jamais d’exception, null si le texte n’est pas un mod
     const cultures = { version: 1, type: 'cultures', colonnes: [{ entete: 'Durée pépinière (semaines)', champ: 'duree_pepiniere_jours', unite: 'semaine' }], choix: [] };
     expect(m.lireModele(JSON.stringify(parcellaire))).toStrictEqual(parcellaire);
     expect(m.lireModele(JSON.stringify(cultures))).toStrictEqual(cultures);
+  });
+
+  it('semaines acceptées sur une date (« Semis (sem.) », 2e relecture) ; nouvelle valeur au nom non vide acceptée', () => {
+    const series = {
+      version: 1,
+      type: 'series',
+      colonnes: [
+        { entete: 'Culture', champ: 'espece', unite: null },
+        { entete: 'Semis (sem.)', champ: 'date_semis', unite: 'semaine' },
+      ],
+      choix: [{ champ: 'espece', valeur: 'Salade', decision: { sorte: 'nouvelle', nom: 'Salade' } }],
+    };
+    expect(m.lireModele(JSON.stringify(series))).toStrictEqual(series);
   });
 });

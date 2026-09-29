@@ -45,7 +45,8 @@ export interface OptionsIsole {
   readonly memoireMo?: number;
 }
 
-const MODULES = { import: '../index.ts', xlsx: '../xlsx.ts' } as const;
+/** `scenarios` : enchaînements du moteur construits DANS le fil (./scenarios.ts), pour ne pas cloner d'énormes entrées ou sorties. */
+const MODULES = { import: '../index.ts', xlsx: '../xlsx.ts', scenarios: './scenarios.ts' } as const;
 
 /**
  * Appelle `module.chemin[0].chemin[1]…(...args)` dans un fil à part. Les arguments et le résultat

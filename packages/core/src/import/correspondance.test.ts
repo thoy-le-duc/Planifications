@@ -205,6 +205,48 @@ describe('unités explicites dans l’en-tête (relecture, point 4)', () => {
   });
 });
 
+describe('unités anglaises et « (en cm) » (2e relecture, point 4)', () => {
+  it.each([
+    ['Longueur (en cm)', 'parcellaire', col('longueur_m', 'cm')],
+    ['Largeur (en m)', 'parcellaire', col('largeur_m', 'm')],
+    ['Length (ft)', 'parcellaire', IGNOREE],
+    ['Length (feet)', 'parcellaire', IGNOREE],
+    ['Length (yd)', 'parcellaire', IGNOREE],
+    ['Width (in)', 'parcellaire', IGNOREE],
+    ['Width (inch)', 'parcellaire', IGNOREE],
+    ['Spacing (inches)', 'cultures', IGNOREE],
+    ['Spacing (in.)', 'cultures', IGNOREE],
+    ['PMG (lb)', 'cultures', IGNOREE],
+    ['PMG (lbs)', 'cultures', IGNOREE],
+    ['PMG (oz)', 'cultures', IGNOREE],
+    ['Surface (ac)', 'parcellaire', IGNOREE],
+    ['Surface (acre)', 'parcellaire', IGNOREE],
+    ['Surface (acres)', 'parcellaire', IGNOREE],
+    ['length_ft', 'parcellaire', IGNOREE],
+    ['Days to maturity (days)', 'cultures', col('duree_avant_recolte_jours')],
+    ['Durée pépinière (day)', 'cultures', col('duree_pepiniere_jours')],
+    ['Harvest window (weeks)', 'cultures', col('fenetre_recolte_jours', 'semaine')],
+    ['Harvest window (week)', 'cultures', col('fenetre_recolte_jours', 'semaine')],
+    ['Durée pépinière (wk)', 'cultures', col('duree_pepiniere_jours', 'semaine')],
+    ['Durée pépinière (month)', 'cultures', IGNOREE],
+    ['Days to maturity (months)', 'cultures', IGNOREE],
+    ['Rangs (ft)', 'cultures', IGNOREE],
+    ['Semis (sem.)', 'series', col('date_semis', 'semaine')],
+    ['Plantation (semaine)', 'series', col('date_plantation', 'semaine')],
+    ['Sowing (weeks)', 'series', col('date_semis', 'semaine')],
+    ['Harvest start (wk)', 'series', col('date_debut_recolte', 'semaine')],
+    ['Semis (days)', 'series', IGNOREE],
+    ['Semis (j)', 'series', IGNOREE],
+    ['Plantation (months)', 'series', IGNOREE],
+  ] as [string, TypeContenu, ColonneAssociee][])('« %s » (%s)', (entete, type, attendu) => {
+    expect(m.proposerCorrespondance([entete], type).colonnes).toStrictEqual([attendu]);
+  });
+
+  it('« Semis (sem.) » compte comme une date pour le type', () => {
+    expect(m.proposerType(['Culture', 'Planche', 'Semis (sem.)'])).toBe('series');
+  });
+});
+
 describe('en-têtes anglais des dates', () => {
   it.each([
     ['Sowing date', 'date_semis'],

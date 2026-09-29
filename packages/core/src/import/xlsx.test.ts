@@ -138,3 +138,49 @@ describe('lecteurXlsx.lire : une partie n’est lue qu’une fois (relecture, po
     ]);
   });
 });
+
+describe('lecteurXlsx.lire : entités XML, échappements OOXML, cellules de plus de 32 767 caractères (2e relecture, point 1)', () => {
+  const SST = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const enLigne = (texte: string) => `<c r="A1" t="inlineStr"><is><t>${texte}</t></is></c>`;
+
+  /** Première cellule d'un classeur dont A1 est une chaîne en ligne, B1 la chaîne partagée 0. */
+  function avecChaines(ligne: string, chaine: string): Uint8Array {
+    return classeur({
+      feuilles: [{ nom: 'Feuil1', partie: 'worksheets/sheet1.xml' }],
+      parties: {
+        'worksheets/sheet1.xml': feuilleXml(`<row r="1">${ligne}</row>`),
+        'sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="${SST}"><si><t>${chaine}</t></si></sst>`,
+      },
+    });
+  }
+
+  it('entités nommées et numériques (décimales, hexadécimales), dans une chaîne en ligne et une chaîne partagée', async () => {
+    const texte = 'Pois &amp; f&#232;ves &#xE9;t&#xe9; &lt;b&gt; &quot;x&quot; &apos;y&apos; &#x1F331;';
+    const f = feuilles(await lecteur.lire(avecChaines(`${enLigne(texte)}<c r="B1" t="s"><v>0</v></c>`, texte)));
+    const attendu = 'Pois & fèves été <b> "x" \'y\' 🌱';
+    expect(sansFinFeuille(f[0]?.lignes ?? [])).toStrictEqual([[attendu, attendu]]);
+  });
+
+  it('échappements OOXML : « _x0041_ » → « A », « _x000D_ » → retour chariot, « _x005F_x0041_ » → « _x0041_ »', async () => {
+    const texte = 'Planche_x0020_B_x0041__x000D_ fin _x005F_x0041_';
+    const f = feuilles(await lecteur.lire(avecChaines(`${enLigne(texte)}<c r="B1" t="s"><v>0</v></c>`, texte)));
+    const attendu = 'Planche BA\r fin _x0041_';
+    expect(sansFinFeuille(f[0]?.lignes ?? [])).toStrictEqual([[attendu, attendu]]);
+  });
+
+  it('32 767 caractères (la limite d’Excel) : lu ; 32 768 : classeur_illisible, en ligne comme partagée', async () => {
+    const limite = 'a'.repeat(32_767);
+    const f = feuilles(await lecteur.lire(avecChaines(`${enLigne(limite)}<c r="B1" t="s"><v>0</v></c>`, limite)));
+    expect(sansFinFeuille(f[0]?.lignes ?? [])).toStrictEqual([[limite, limite]]);
+    const trop = `${limite}a`;
+    expect(await lecteur.lire(avecChaines(enLigne(trop), 'ok'))).toMatchObject({ ok: false, code: 'classeur_illisible' });
+    expect(await lecteur.lire(avecChaines('<c r="B1" t="s"><v>0</v></c>', trop))).toMatchObject({ ok: false, code: 'classeur_illisible' });
+  });
+
+  it('la limite porte sur le texte décodé : 32 767 « &amp; » passent (« & » × 32 767), 32 768 non', async () => {
+    const f = feuilles(await lecteur.lire(avecChaines(enLigne('&amp;'.repeat(32_767)), 'ok')));
+    expect(sansFinFeuille(f[0]?.lignes ?? [])).toStrictEqual([['&'.repeat(32_767)]]);
+    expect(await lecteur.lire(avecChaines(enLigne('&amp;'.repeat(32_768)), 'ok'))).toMatchObject({ ok: false, code: 'classeur_illisible' });
+    expect(await lecteur.lire(avecChaines(enLigne('_x0041_'.repeat(32_768)), 'ok'))).toMatchObject({ ok: false, code: 'classeur_illisible' });
+  });
+});

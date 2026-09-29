@@ -91,9 +91,9 @@ describe('parcellaire à trois niveaux (Windows-1252, cellules fusionnées, lign
 
   it('lignes vides et ligne de total ignorées, avec le motif', () => {
     expect(plan.ignorees).toStrictEqual([
-      { ligne: 6, motif: 'vide' },
-      { ligne: 8, motif: 'vide' },
-      { ligne: 9, motif: 'total' },
+      { debut: 6, fin: 6, motif: 'vide' },
+      { debut: 8, fin: 8, motif: 'vide' },
+      { debut: 9, fin: 9, motif: 'total' },
     ]);
     expect(plan.resume).toStrictEqual({ valides: 5, erreurs: 0, aDecider: 0, doublons: 0, ignorees: 3 });
     expect(plan.decisions).toStrictEqual([]);
@@ -327,8 +327,8 @@ describe('classeur Excel à ligne de titre', () => {
       }),
     ]);
     expect(plan.ignorees).toStrictEqual([
-      { ligne: 7, motif: 'vide' },
-      { ligne: 8, motif: 'total' },
+      { debut: 7, fin: 7, motif: 'vide' },
+      { debut: 8, fin: 8, motif: 'total' },
     ]);
   });
 });
@@ -364,17 +364,19 @@ describe('hiérarchie du parcellaire', () => {
 });
 
 describe('lignes ignorées', () => {
+  // 2e relecture, point 3 : les lignes ignorées sont regroupées en plages ({ debut, fin, motif }
+  // au lieu de { ligne, motif }), pour qu'un million de lignes vides ne fasse pas un million
+  // d'entrées. Les cas sont inchangés ; les totaux 4 à 6, qui se suivent, forment une plage.
   // Relecture, point 10 : ce test ne voyait « Somme » qu'en total. Il garde ses cas et ajoute
   // « Somme;P3;30 » : avec une planche, « Somme » est un nom de zone (le département, la
   // rivière), pas un total ; la ligne est importée.
   it('vides (espaces compris) et totaux : « TOTAL général », « Sous-total », « Somme » sans planche ; « Totalement » n’est pas un total', () => {
     const plan = m.preparerImport(entree(csv('Zone;Planche;Longueur\nT1;P1;30\n  ; ;\nTOTAL général;;30\nSous-total;;30\nSomme;;30\nTotalement bio;P2;20\nSomme;P3;30'), 'parcellaire'));
     expect(plan.ignorees).toStrictEqual([
-      { ligne: 3, motif: 'vide' },
-      { ligne: 4, motif: 'total' },
-      { ligne: 5, motif: 'total' },
-      { ligne: 6, motif: 'total' },
+      { debut: 3, fin: 3, motif: 'vide' },
+      { debut: 4, fin: 6, motif: 'total' },
     ]);
+    expect(plan.resume.ignorees).toBe(4);
     expect(plan.lignes.map((l) => [l.ligne, l.statut])).toStrictEqual([
       [2, 'valide'],
       [7, 'valide'],
@@ -386,10 +388,7 @@ describe('lignes ignorées', () => {
   it('seule la première cellule non vide des colonnes associées est examinée', () => {
     // Notes (colonne 3) n'est associée à rien : « Total à revoir » ne fait pas ignorer la ligne.
     const plan = m.preparerImport(entree(csv('Zone;Planche;Longueur;Notes\nT1;P1;30;Total à revoir\nT1;Total;25;\n;Total;30;\nTotal;;55;'), 'parcellaire'));
-    expect(plan.ignorees).toStrictEqual([
-      { ligne: 4, motif: 'total' },
-      { ligne: 5, motif: 'total' },
-    ]);
+    expect(plan.ignorees).toStrictEqual([{ debut: 4, fin: 5, motif: 'total' }]);
     expect(plan.lignes.map((l) => [l.ligne, l.statut])).toStrictEqual([
       [2, 'valide'],
       [3, 'valide'],
@@ -399,7 +398,18 @@ describe('lignes ignorées', () => {
 
   it('« Somme » sans colonne emplacement associée : total', () => {
     const plan = m.preparerImport(entree(csv('Culture;Rangs\nTomate;2\nSomme;2'), 'cultures'));
-    expect(plan.ignorees).toStrictEqual([{ ligne: 3, motif: 'total' }]);
+    expect(plan.ignorees).toStrictEqual([{ debut: 3, fin: 3, motif: 'total' }]);
+  });
+
+  it('plages : lignes qui se suivent avec le même motif ; une ligne gardée ou un autre motif coupe la plage (2e relecture)', () => {
+    const plan = m.preparerImport(entree(csv('Zone;Planche\n;\n;\n;\nT1;P1\n;\nTotal;\nTotal;\n;\n;'), 'parcellaire'));
+    expect(plan.ignorees).toStrictEqual([
+      { debut: 2, fin: 4, motif: 'vide' },
+      { debut: 6, fin: 6, motif: 'vide' },
+      { debut: 7, fin: 8, motif: 'total' },
+      { debut: 9, fin: 10, motif: 'vide' },
+    ]);
+    expect(plan.resume.ignorees).toBe(8);
   });
 
   it('les lignes au-dessus de l’en-tête ne sont ni lues ni comptées', () => {
@@ -674,5 +684,73 @@ describe('rien n’est écrit : fonction pure', () => {
       ],
     };
     expect(() => m.preparerImport({ lignes, ligneEntete: 0, correspondance, bibliotheque: BIBLIOTHEQUE, anneeSaison: null })).not.toThrow();
+  });
+});
+
+describe('textes, choix et références de plus de 200 caractères (2e relecture, point 2)', () => {
+  const a200 = 'a'.repeat(200);
+  const a201 = 'a'.repeat(201);
+  const codes = (l: LignePlan) => l.erreurs.map((e) => [e.code, e.champ, e.colonne]);
+
+  it('texte : 200 caractères (espaces autour retirés) passent, 201 → texte_trop_long', () => {
+    const plan = m.preparerImport(entree([['Zone', 'Planche'], [`  ${a200}  `, 'P1'], ['T1', a201]], 'parcellaire'));
+    expect(ligne(plan, 2)).toStrictEqual(valide(2, { zone: a200, emplacement: 'P1' }));
+    expect(ligne(plan, 3).statut).toBe('erreur');
+    expect(codes(ligne(plan, 3))).toStrictEqual([['texte_trop_long', 'emplacement', 1]]);
+  });
+
+  it('choix de plus de 200 caractères → texte_trop_long, pas valeur_inconnue', () => {
+    const plan = m.preparerImport(entree([['Zone', 'Abri', 'Sorte'], ['T1', `tunnel ${a201}`, 'planche'], ['T2', 'tunnel', `planche${a201}`]], 'parcellaire'));
+    expect(codes(ligne(plan, 2))).toStrictEqual([['texte_trop_long', 'type_abri', 1]]);
+    expect(codes(ligne(plan, 3))).toStrictEqual([['texte_trop_long', 'sorte', 2]]);
+  });
+
+  it('référence de plus de 200 caractères → texte_trop_long, aucune décision demandée', () => {
+    const plan = m.preparerImport(entree([['Culture', 'Famille', 'Variété'], [`Tomate ${a201}`, 'Solanacées', 'Cœur de bœuf'], ['Tomate', a201, `Noire ${a201}`]], 'cultures'));
+    expect(codes(ligne(plan, 2))).toStrictEqual([['texte_trop_long', 'espece', 0]]);
+    expect(ligne(plan, 3).erreurs.map((e) => [e.code, e.champ, e.colonne]).sort()).toStrictEqual([
+      ['texte_trop_long', 'famille', 1],
+      ['texte_trop_long', 'variete', 2],
+    ]);
+    expect(plan.decisions).toStrictEqual([]);
+    expect(plan.resume).toMatchObject({ erreurs: 2, aDecider: 0 });
+  });
+
+  it('les messages restent courts (200 caractères au plus)', () => {
+    const plan = m.preparerImport(entree([['Zone', 'Planche'], ['a'.repeat(5_000), 'b'.repeat(5_000)]], 'parcellaire'));
+    const erreurs = ligne(plan, 2).erreurs;
+    expect(erreurs.length).toBeGreaterThan(0);
+    for (const e of erreurs) expect(e.message.length).toBeLessThanOrEqual(200);
+  });
+});
+
+describe('dates en numéros de semaine : « Semis (sem.) » (2e relecture)', () => {
+  const entetes = ['Culture', 'Semis (sem.)', 'Plantation (semaine)', 'Harvest start (week)'];
+
+  it('un entier de 1 à 53 est le lundi de la semaine ISO de la saison ; « S12 » et « 15/03/2027 » se lisent comme d’habitude', () => {
+    const plan = m.preparerImport(
+      entree(
+        [
+          entetes,
+          ['Tomate', '10', 14, '28'],
+          ['Laitue', 'S12', '15/04/2027', 20],
+        ],
+        'series',
+        { anneeSaison: 2027 },
+      ),
+    );
+    expect(ligne(plan, 2)).toStrictEqual(valide(2, { espece: existante('esp-tomate'), date_semis: '2027-03-08', date_plantation: '2027-04-05', date_debut_recolte: '2027-07-12' }));
+    expect(ligne(plan, 3)).toStrictEqual(valide(3, { espece: existante('esp-laitue'), date_semis: '2027-03-22', date_plantation: '2027-04-15', date_debut_recolte: '2027-05-17' }));
+  });
+
+  it('semaine à virgule, qui n’existe pas (53 en 2027, 0) → date_invalide ; sans saison → annee_manquante', () => {
+    const plan = m.preparerImport(entree([entetes, ['Tomate', '10,5', '53', '0']], 'series', { anneeSaison: 2027 }));
+    expect(ligne(plan, 2).erreurs.map((e) => [e.code, e.champ]).sort()).toStrictEqual([
+      ['date_invalide', 'date_debut_recolte'],
+      ['date_invalide', 'date_plantation'],
+      ['date_invalide', 'date_semis'],
+    ]);
+    const sans = m.preparerImport(entree([entetes, ['Tomate', '10', '', '']], 'series'));
+    expect(ligne(sans, 2).erreurs.map((e) => [e.code, e.champ])).toStrictEqual([['annee_manquante', 'date_semis']]);
   });
 });

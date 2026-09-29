@@ -4,7 +4,7 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { chargerCoeur, chargerImport, type ModuleImport } from './test/contrat.ts';
-import { cp1252, lireFixture, utf8 } from './test/fixtures.ts';
+import { cp1252, lireFixture, utf16, utf8 } from './test/fixtures.ts';
 
 let m: ModuleImport;
 
@@ -64,6 +64,34 @@ describe('decoderTexte : encodage', () => {
   });
 });
 
+describe('decoderTexte et lireCsv : UTF-16 avec BOM, l’export « Texte Unicode » d’Excel (2e relecture)', () => {
+  const TEXTE = 'Zone\tPlanche\tNote\r\nPré-Clos\tP1\tsemis 🌱\r\nŒillets\tP2\t\r\n';
+
+  it.each([
+    ['le', 'utf-16le'],
+    ['be', 'utf-16be'],
+  ] as const)('UTF-16 %s : décodé, paires de substitution comprises, BOM retiré', (ordre, encodage) => {
+    expect(m.decoderTexte(utf16(TEXTE, ordre))).toStrictEqual({ texte: TEXTE, encodage, bom: true });
+  });
+
+  it.each([
+    ['le', 'utf-16le'],
+    ['be', 'utf-16be'],
+  ] as const)('lireCsv en UTF-16 %s : tabulations, pas un fichier binaire malgré les octets nuls', (ordre, encodage) => {
+    expect(m.lireCsv(utf16(TEXTE, ordre))).toStrictEqual({
+      encodage,
+      bom: true,
+      separateur: '\t',
+      lignes: [
+        ['Zone', 'Planche', 'Note'],
+        ['Pré-Clos', 'P1', 'semis 🌱'],
+        ['Œillets', 'P2', ''],
+      ],
+      erreur: null,
+    });
+  });
+});
+
 describe('detecterSeparateur', () => {
   it('point-virgule, même avec des virgules décimales partout', () => {
     expect(m.detecterSeparateur('Zone;Long. (m);Larg. (m)\r\nA;32,5;0,8\r\nB;12,25;1,2\r\n')).toBe(';');
@@ -101,6 +129,11 @@ describe('lireCsv', () => {
 
   it('une ligne « ;;; » donne des champs vides, gardée (c’est le plan qui l’ignore)', () => {
     expect(m.lireCsv(utf8('a;b;c\r\n;;\r\nd;e;f\r\n')).lignes).toStrictEqual([['a', 'b', 'c'], ['', '', ''], ['d', 'e', 'f']]);
+  });
+
+  it('lignes vides en fin de fichier (champs vides ou espaces) : ni créées ni rendues (2e relecture, point 3)', () => {
+    expect(m.lireCsv(utf8('a;b;c\r\n;;\r\nd;e;f\r\n;;\r\n  ; ;\r\n\r\n;;')).lignes).toStrictEqual([['a', 'b', 'c'], ['', '', ''], ['d', 'e', 'f']]);
+    expect(m.lireCsv(utf8('\n\n\n')).lignes).toStrictEqual([]);
   });
 
   it('guillemet jamais fermé : pas d’exception, le reste est le dernier champ', () => {

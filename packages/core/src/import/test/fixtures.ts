@@ -52,6 +52,19 @@ export function utf8(texte: string): Uint8Array {
   return new TextEncoder().encode(texte);
 }
 
+/** UTF-16 avec BOM (FF FE en petit-boutiste, FE FF en gros-boutiste), comme l'export « Texte Unicode » d'Excel. */
+export function utf16(texte: string, ordre: 'le' | 'be'): Uint8Array {
+  const octets = new Uint8Array(2 + texte.length * 2);
+  octets[0] = ordre === 'le' ? 0xff : 0xfe;
+  octets[1] = ordre === 'le' ? 0xfe : 0xff;
+  for (let i = 0; i < texte.length; i++) {
+    const u = texte.charCodeAt(i);
+    octets[2 + 2 * i] = ordre === 'le' ? u & 0xff : u >>> 8;
+    octets[3 + 2 * i] = ordre === 'le' ? u >>> 8 : u & 0xff;
+  }
+  return octets;
+}
+
 /** Octets Windows-1252 propres à la plage 0x80–0x9F (le reste de Latin-1 est identique). */
 const CP1252: Readonly<Record<string, number>> = {
   '€': 0x80,

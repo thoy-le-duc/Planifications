@@ -1,6 +1,7 @@
 /**
  * Tests d'acceptation T14 — robustesse face aux fichiers piégés (relecture du chef d'équipe,
- * points bloquants 1 à 3). Contrat : ./test/contrat.ts, « Lecteur Excel » et « Limites ».
+ * points bloquants 1 à 3 ; 2e relecture, points bloquants 1 à 3 et chaînes partagées).
+ * Contrat : ./test/contrat.ts, « Lecteur Excel », « Lecture d'un CSV », « Plan d'import ».
  *
  * Chaque appel tourne dans un fil d'exécution à part (./test/isole.ts), tas plafonné à 512 Mo et
  * arrêté au-delà du délai : une implémentation fautive fait échouer le test (« delai »,
@@ -9,6 +10,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { classeur, classeurSimple, feuilleXml } from './test/classeur.ts';
+import { utf8 } from './test/fixtures.ts';
 import { executerIsole, type Issue } from './test/isole.ts';
 
 /** Marge pour démarrer le fil et charger le module (hors durée mesurée). */
@@ -156,6 +158,243 @@ describe('temps linéaire sur une cellule de 100 Kio (moins de 200 ms par appel)
         type: 'parcellaire',
         colonnes: [{ champ: null, unite: null }],
       });
+    },
+    DELAI_TEST_MS,
+  );
+});
+
+// ── 2e relecture ─────────────────────────────────────────────────────────────────────────────
+
+/** Durée de l'appel mesurée dans le fil, sous le budget. */
+function attendreDuree(r: Issue, budgetMs: number): void {
+  if (r.issue === 'resultat') expect(r.dureeMs, `appel en ${String(Math.round(r.dureeMs))} ms`).toBeLessThan(budgetMs);
+}
+
+describe('lecteurXlsx : entités XML et échappements OOXML décodés en temps et mémoire linéaires (2e relecture, point 1)', () => {
+  const chaineEnLigne = (texte: string) => classeurSimple(`<row r="1"><c r="A1" t="inlineStr"><is><t>${texte}</t></is></c></row>`);
+
+  it(
+    'chaîne en ligne de 5 millions de « &amp; » (plus de 32 767 caractères) → classeur_illisible, < 2 s, tas de 512 Mo',
+    async () => {
+      attendreIllisible(await lireIsole(chaineEnLigne('&amp;'.repeat(5_000_000)), 2_000), 2_000);
+    },
+    DELAI_TEST_MS,
+  );
+
+  it(
+    'chaîne en ligne de 7 millions de « _x0041_ » → classeur_illisible, < 2 s, tas de 512 Mo',
+    async () => {
+      attendreIllisible(await lireIsole(chaineEnLigne('_x0041_'.repeat(7_000_000)), 2_000), 2_000);
+    },
+    DELAI_TEST_MS,
+  );
+
+  it(
+    'chaîne partagée de 5 millions de « &#233; » → classeur_illisible, < 2 s',
+    async () => {
+      const octets = classeur({
+        feuilles: [{ nom: 'Feuil1', partie: 'worksheets/sheet1.xml' }],
+        parties: {
+          'worksheets/sheet1.xml': feuilleXml('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'),
+          'sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>${'&#233;'.repeat(5_000_000)}</t></si></sst>`,
+        },
+      });
+      attendreIllisible(await lireIsole(octets, 2_000), 2_000);
+    },
+    DELAI_TEST_MS,
+  );
+});
+
+describe('lecteurXlsx : les chaînes partagées comptent dans le plafond de 5 millions de cases (2e relecture)', () => {
+  it(
+    '9 millions de <si/> pour une feuille d’une case → classeur_illisible, < 2 s',
+    async () => {
+      const octets = classeur({
+        feuilles: [{ nom: 'Feuil1', partie: 'worksheets/sheet1.xml' }],
+        parties: {
+          'worksheets/sheet1.xml': feuilleXml('<row r="1"><c r="A1"><v>1</v></c></row>'),
+          'sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${'<si/>'.repeat(9_000_000)}</sst>`,
+        },
+      });
+      attendreIllisible(await lireIsole(octets, 2_000), 2_000);
+    },
+    DELAI_TEST_MS,
+  );
+});
+
+describe('plan d’import en temps linéaire : une même chaîne de 1 Mo dans 3 000 lignes (2e relecture, point 2)', () => {
+  const MO = 1024 * 1024;
+  const trop = (champ: string, colonne: number) => ['texte_trop_long', champ, colonne] as const;
+  const nombre = (champ: string, colonne: number) => ['nombre_invalide', champ, colonne] as const;
+  const date = (champ: string, colonne: number) => ['date_invalide', champ, colonne] as const;
+
+  it.each([
+    [
+      'parcellaire',
+      ['Zone', 'Chapelle', 'Planche', 'Sorte', 'Longueur', 'Largeur', 'Abri', 'Surface', 'Nombre de places'],
+      [trop('zone', 0), trop('sous_zone', 1), trop('emplacement', 2), trop('sorte', 3), nombre('longueur_m', 4), nombre('largeur_m', 5), trop('type_abri', 6), nombre('surface_m2', 7), nombre('nombre_places', 8)],
+    ],
+    [
+      'cultures',
+      ['Culture', 'Variété', 'Famille', 'Mode', 'Durée pépinière', 'Jours avant récolte', 'Fenêtre de récolte', 'Rangs', 'Écartement', 'PMG'],
+      [
+        trop('espece', 0),
+        trop('variete', 1),
+        trop('famille', 2),
+        trop('mode', 3),
+        nombre('duree_pepiniere_jours', 4),
+        nombre('duree_avant_recolte_jours', 5),
+        nombre('fenetre_recolte_jours', 6),
+        nombre('rangs_par_planche', 7),
+        nombre('ecartement_cm', 8),
+        nombre('poids_mille_graines_g', 9),
+      ],
+    ],
+    [
+      'series',
+      ['Culture', 'Variété', 'Planche', 'Semis', 'Plantation', 'Début récolte', 'Fin récolte', 'Longueur', 'Nombre de plants'],
+      [
+        trop('espece', 0),
+        trop('variete', 1),
+        trop('emplacement', 2),
+        date('date_semis', 3),
+        date('date_plantation', 4),
+        date('date_debut_recolte', 5),
+        date('date_fin_recolte', 6),
+        nombre('longueur_m', 7),
+        nombre('nombre_plants', 8),
+      ],
+    ],
+    ['assolement', ['Année', 'Zone', 'Planche', 'Famille', 'Culture'], [nombre('annee', 0), trop('zone', 1), trop('emplacement', 2), trop('famille', 3), trop('espece', 4)]],
+  ] as const)(
+    '%s : chaque ligne en erreur, texte_trop_long sur les textes, choix et références, aucune décision, < 2 s',
+    async (type, entetes, erreurs) => {
+      const r = await executerIsole('scenarios', ['planChaineLongue'], [type, entetes, MO, 3_000], { arretMs: 2_000 + CHARGEMENT_MS, memoireMo: 512 });
+      expect(r).toMatchObject({ issue: 'resultat' });
+      if (r.issue !== 'resultat') return;
+      expect(r.valeur).toMatchObject({
+        nombreLignes: 3_000,
+        resume: { valides: 0, erreurs: 3_000, aDecider: 0, doublons: 0, ignorees: 0 },
+        nombreDecisions: 0,
+        erreursPremiere: erreurs,
+        erreursDerniere: erreurs,
+      });
+      expect((r.valeur as { messageLePlusLong: number }).messageLePlusLong).toBeLessThanOrEqual(200);
+      attendreDuree(r, 2_000);
+    },
+    DELAI_TEST_MS,
+  );
+
+  it(
+    'classeur : chaîne partagée de 32 767 caractères (la limite d’Excel) dans 3 000 lignes → lue, puis plan en erreur, < 2 s en tout',
+    async () => {
+      const lignes = ['<row r="1"><c r="A1" t="inlineStr"><is><t>Zone</t></is></c><c r="B1" t="inlineStr"><is><t>Planche</t></is></c></row>'];
+      for (let i = 2; i <= 3_001; i++) lignes.push(`<row r="${String(i)}"><c r="A${String(i)}" t="s"><v>0</v></c><c r="B${String(i)}" t="s"><v>0</v></c></row>`);
+      const octets = classeur({
+        feuilles: [{ nom: 'Feuil1', partie: 'worksheets/sheet1.xml' }],
+        parties: {
+          'worksheets/sheet1.xml': feuilleXml(lignes.join('')),
+          'sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>${'a'.repeat(32_767)}</t></si></sst>`,
+        },
+      });
+      const r = await executerIsole('scenarios', ['planClasseur'], [octets, 'parcellaire'], { arretMs: 2_000 + CHARGEMENT_MS, memoireMo: 512 });
+      expect(r).toMatchObject({
+        issue: 'resultat',
+        valeur: { nombreLignes: 3_000, resume: { erreurs: 3_000 }, erreursPremiere: [trop('zone', 0), trop('emplacement', 1)], erreursDerniere: [trop('zone', 0), trop('emplacement', 1)] },
+      });
+      attendreDuree(r, 2_000);
+    },
+    DELAI_TEST_MS,
+  );
+});
+
+describe('lignes ignorées regroupées en plages (2e relecture, point 3)', () => {
+  it(
+    '1 000 000 de lignes vides entre deux planches → une seule plage, < 2 s ; les totaux qui se suivent → une plage',
+    async () => {
+      const r = await executerIsole('scenarios', ['planLignesVides'], [1_000_000], { arretMs: 2_000 + CHARGEMENT_MS, memoireMo: 512 });
+      expect(r).toMatchObject({
+        issue: 'resultat',
+        valeur: {
+          ignorees: [
+            { debut: 3, fin: 1_000_002, motif: 'vide' },
+            { debut: 1_000_004, fin: 1_000_005, motif: 'total' },
+          ],
+          resume: { valides: 2, erreurs: 0, aDecider: 0, doublons: 0, ignorees: 1_000_002 },
+          lignes: [2, 1_000_003],
+        },
+      });
+      attendreDuree(r, 2_000);
+    },
+    DELAI_TEST_MS,
+  );
+});
+
+describe('lireCsv : plafond de 5 millions de cases, lignes vides de fin non créées (2e relecture, point 3)', () => {
+  const MO = 1024 * 1024;
+
+  async function lireCsvIsole(texte: string): Promise<Issue> {
+    return executerIsole('scenarios', ['resumerCsv'], [utf8(texte)], { arretMs: 2_000 + CHARGEMENT_MS, memoireMo: 512 });
+  }
+
+  function attendreCsv(r: Issue, valeur: unknown): void {
+    expect(r).toMatchObject({ issue: 'resultat', valeur });
+    attendreDuree(r, 2_000);
+  }
+
+  it(
+    '5 Mo de « \\n » seuls → aucune ligne, pas d’erreur',
+    async () => {
+      attendreCsv(await lireCsvIsole('\n'.repeat(5 * MO)), { erreur: null, nombreLignes: 0 });
+    },
+    DELAI_TEST_MS,
+  );
+
+  it(
+    '20 Mo de « ; » seuls (une ligne vide) → aucune ligne, pas d’erreur',
+    async () => {
+      attendreCsv(await lireCsvIsole(';'.repeat(20 * MO)), { erreur: null, nombreLignes: 0 });
+    },
+    DELAI_TEST_MS,
+  );
+
+  it(
+    '5 Mo de « \\n » puis une ligne utile (plus de 5 millions de cases) → fichier_trop_grand',
+    async () => {
+      attendreCsv(await lireCsvIsole(`${'\n'.repeat(5 * MO)}Zone;Planche\nT1;P1\n`), { erreur: 'fichier_trop_grand', nombreLignes: 0 });
+    },
+    DELAI_TEST_MS,
+  );
+
+  it(
+    'une ligne de 20 Mo de « ; » suivie d’une ligne utile → fichier_trop_grand',
+    async () => {
+      attendreCsv(await lireCsvIsole(`Zone;Planche\n${';'.repeat(20 * MO)}\nT1;P1\n`), { erreur: 'fichier_trop_grand', nombreLignes: 0 });
+    },
+    DELAI_TEST_MS,
+  );
+
+  it(
+    '1 000 000 de lignes « ;;;;;; » à la fin d’un vrai fichier → les lignes utiles, rien d’autre',
+    async () => {
+      const texte = `Zone;Chapelle;Planche;Longueur;Largeur;Abri;Notes\r\nT1;C1;P1;30;0,8;tunnel;\r\nT1;C1;P2;30;0,8;tunnel;ok\r\n${';;;;;;\r\n'.repeat(1_000_000)}`;
+      attendreCsv(await lireCsvIsole(texte), {
+        erreur: null,
+        nombreLignes: 3,
+        debut: [
+          ['Zone', 'Chapelle', 'Planche', 'Longueur', 'Largeur', 'Abri', 'Notes'],
+          ['T1', 'C1', 'P1', '30', '0,8', 'tunnel', ''],
+          ['T1', 'C1', 'P2', '30', '0,8', 'tunnel', 'ok'],
+        ],
+      });
+    },
+    DELAI_TEST_MS,
+  );
+
+  it(
+    '1 000 000 de lignes « a;b » (3 millions de cases) → lues',
+    async () => {
+      attendreCsv(await lireCsvIsole('a;b\n'.repeat(1_000_000)), { erreur: null, nombreLignes: 1_000_000 });
     },
     DELAI_TEST_MS,
   );

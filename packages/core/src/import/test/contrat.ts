@@ -64,11 +64,23 @@
  *   - une même partie ne peut pas être lue deux fois comme feuille (deux feuilles déclarées qui
  *     visent la même partie → classeur illisible) ;
  *   - une balise (de « < » à « > ») de plus de 64 Kio, ou dont un attribut n'est jamais refermé →
- *     illisible, en temps linéaire (1 Mo de « a » dans une balise : moins de 1 s).
+ *     illisible, en temps linéaire (1 Mo de « a » dans une balise : moins de 1 s) ;
+ *   - (2e relecture) chaque chaîne partagée (`<si>` de xl/sharedStrings.xml, `<si/>` compris) compte
+ *     aussi pour une case dans le plafond de 5 000 000 (9 millions de `<si/>` → illisible, < 2 s) ;
+ *   - (2e relecture) une cellule de plus de 32 767 caractères une fois décodée (la limite d'Excel),
+ *     chaîne partagée ou en ligne → illisible ; 32 767 passe.
+ * Entités XML (`&amp;` `&lt;` `&gt;` `&quot;` `&apos;`, `&#233;`, `&#xE9;`) et échappements OOXML
+ * (`_x0041_` → 'A', `_x005F_x0041_` → '_x0041_' : `_x005F_` échappe le soulignement) décodés dans
+ * les textes et les attributs, en temps et en mémoire LINÉAIRES : une chaîne en ligne de 5 millions
+ * de `&amp;` ou de 7 millions de `_x0041_` est refusée (plus de 32 767 caractères) en moins de 2 s,
+ * tas de 512 Mo, sans exception.
  *
  * ── Lecture d'un CSV ────────────────────────────────────────────────────────────────────────
  *
  *   decoderTexte(octets: Uint8Array): TexteDecode
+ * (2e relecture) BOM UTF-16 en tête (FF FE → 'utf-16le', FE FF → 'utf-16be' : export « Texte
+ * Unicode » d'Excel) : décodé en UTF-16 (paires de substitution comprises), BOM retiré, `bom: true`.
+ * Sans BOM, des octets nuls restent un fichier binaire (voir lireCsv).
  * UTF-8 si les octets sont de l'UTF-8 valide (BOM EF BB BF retiré du texte, `bom: true`) ;
  * sinon Windows-1252 (exports Excel) : 0xE9 → 'é', 0x80 → '€', 0x92 → '’', 0x9C → 'œ',
  * (BOM UTF-8 suivi d'octets qui ne sont pas de l'UTF-8 : décodé en Windows-1252, BOM retiré du
@@ -88,8 +100,20 @@
  * Guillemet non fermé : le reste du fichier est le dernier champ (pas d'exception).
  * Cellules d'un CSV : toujours des chaînes (vide = ''). `erreur: null`.
  * Fichier binaire déposé comme CSV (octets qui commencent par la signature ZIP `PK\x03\x04` — un
- * .xlsx renommé —, ou qui contiennent un octet nul) → `erreur: { code: 'fichier_binaire',
- * message }` (message en français qui dit quoi faire), `lignes: []`. Jamais d'exception.
+ * .xlsx renommé —, ou qui contiennent un octet nul hors UTF-16 avec BOM) → `erreur: { code:
+ * 'fichier_binaire', message }` (message en français qui dit quoi faire), `lignes: []`. Jamais
+ * d'exception.
+ * Limites (2e relecture, point 3), tas de 512 Mo dans les tests :
+ *   - lignes vides de FIN de fichier (tous leurs champs vides ou faits d'espaces) : ni créées ni
+ *     comptées. 5 Mo de « \n » seuls → `lignes: []`, `erreur: null` ; 20 Mo de « ; » seuls (une
+ *     ligne vide) → de même ; 1 000 000 de lignes « ;;;;;; » après un vrai fichier → les lignes
+ *     utiles avant sont rendues, rien d'autre. Une ligne vide AVANT une ligne utile reste (elle
+ *     garde les numéros de ligne ; « ;; » y donne des champs '') ;
+ *   - même plafond que le .xlsx : au plus 5 000 000 de cases, chaque ligne rendue compte pour une
+ *     case et chacun de ses champs aussi ; au-delà → `erreur: { code: 'fichier_trop_grand',
+ *     message }` (en français, dit de découper le fichier), `lignes: []`, en moins de 2 s et sans
+ *     tout allouer (5 Mo de « \n » puis une ligne utile ; une ligne de 20 Mo de « ; » suivie d'une
+ *     ligne utile). 1 000 000 de lignes « a;b » (3 millions de cases) passent.
  *
  * ── Détection ───────────────────────────────────────────────────────────────────────────────
  *
@@ -130,10 +154,13 @@
  * Unités dans l'en-tête (relecture, point 4). Une UNITÉ EXPLICITE est un de ces mots (casse,
  * accents et points ignorés) : m, cm, mm, km, g, kg, t, ha, a, m², m2, j, jour, jours, sem,
  * semaine, semaines, mois, an, ans, h, nb, nombre, graines, plants, pieds, pouces, l, €, eur,
- * euros, %. Une unité explicite ACCEPTÉE pour le champ donne `unite` ; une unité explicite qui
+ * euros, % ; et (2e relecture) les unités anglaises ft, feet, in, inch, inches, yd, lb, lbs, oz,
+ * ac, acre, acres, week, weeks, wk, day, days, month, months. Une unité explicite ACCEPTÉE pour le champ donne `unite` ; une unité explicite qui
  * ne l'est pas → la colonne n'est PAS proposée (`{ champ: null, unite: null }`) : « Longueur
  * (kg) », « Écartement (pouces) », « Récolte (kg) », « Récolte (€) », « Semis (graines) »,
- * « Plantation (nb) », « Plants/m² » sont ignorées. Un autre texte entre parenthèses (« (nom) »,
+ * « Plantation (nb) », « Plants/m² », « Length (ft) », « Spacing (in) », « PMG (oz) », « Surface
+ * (acres) », « Durée pépinière (months) » sont ignorées : jamais lues dans la mauvaise unité.
+ * « en » devant l'unité entre parenthèses est permis : « Longueur (en cm) » → cm. Un autre texte entre parenthèses (« (nom) »,
  * « (JJ/MM/AAAA) ») est simplement retiré, `unite` null. Unités acceptées :
  *   longueur_m, largeur_m, ecartement_cm   m, cm → unite 'm' / 'cm'
  *   poids_mille_graines_g                  g, kg → unite 'g' / 'kg'
@@ -141,10 +168,21 @@
  *                                          ha → unite 'ha' (décision testeur : courant chez les
  *                                          maraîchers ; valeur × 10 000, exacte : « 1,5 » → 15 000)
  *   durées en jours (duree_pepiniere_jours, duree_avant_recolte_jours, fenetre_recolte_jours)
- *                                          j, jour, jours → unite null (unité du champ) ;
- *                                          sem, semaine, semaines → unite 'semaine' (décision
- *                                          testeur : conversion simple, valeur × 7 ; le résultat
- *                                          doit rester entier : « 1,5 » semaine → 'nombre_invalide')
+ *                                          j, jour, jours, day, days → unite null (unité du champ) ;
+ *                                          sem, semaine, semaines, week, weeks, wk → unite
+ *                                          'semaine' (décision testeur : conversion simple,
+ *                                          valeur × 7 ; le résultat doit rester entier : « 1,5 »
+ *                                          semaine → 'nombre_invalide')
+ *   dates (date_semis, date_plantation, date_debut_recolte, date_fin_recolte)
+ *                                          (2e relecture) sem, semaine, semaines, week, weeks, wk
+ *                                          → unite 'semaine' : « Semis (sem.) » est une date de
+ *                                          semis donnée en numéros de semaine. Dans une telle
+ *                                          colonne, un entier de 1 à 53 (nombre ou texte, « 14 »)
+ *                                          est le numéro de semaine ISO de `anneeSaison` (lundi,
+ *                                          comme « S14 ») ; un nombre à virgule ou une semaine qui
+ *                                          n'existe pas → 'date_invalide' ; sans saison →
+ *                                          'annee_manquante' ; les autres écritures (« S14 »,
+ *                                          « 15/03/2027 ») se lisent comme d'habitude
  *   nombre_places, nombre_plants, rangs_par_planche
  *                                          nb, nombre → unite null
  *   tous les autres champs                 aucune
@@ -213,8 +251,11 @@
  *             l'unité est 'semaine'), annee (2000 à 2100) → nombre à virgule → 'nombre_invalide',
  *             hors bornes → 'hors_bornes'
  *   date      date_* → `lireDate` avec `anneeSaison`, `systemeDates` et l'ordre jour/mois de la
- *             colonne (voir « Plan d'import »)
+ *             colonne (voir « Plan d'import »); unite 'semaine' : numéros de semaine (voir « Unités »)
  *   référence espece → bibliotheque.especes, famille → bibliotheque.familles (`ReferenceImport`)
+ * Longueur (2e relecture, point 2) : un texte, un choix ou une référence de plus de 200 caractères
+ * (espaces autour retirés ; 200 passe) → erreur 'texte_trop_long' sur ce champ (comme
+ * 'nombre_invalide' pour les nombres), pas de décision demandée pour cette valeur.
  * Cellule vide → null (champ facultatif) ; cellule absente (ligne plus courte que l'en-tête, fréquent
  * dans un classeur) = vide ; nombre dans un champ texte → son écriture ('3', '12.5'). Un champ
  * non associé est ABSENT de `valeurs`. Les valeurs d'une ligne en erreur ne sont pas garanties.
@@ -268,7 +309,10 @@
  * ── Plan d'import (validation et aperçu) ────────────────────────────────────────────────────
  *
  *   preparerImport(entree: EntreeImport): PlanImport
- * Lignes lues après `ligneEntete`. Ignorées (`ignorees`, avec le motif) : ligne vide (toutes ses
+ * Lignes lues après `ligneEntete`. Ignorées (`ignorees`, avec le motif, REGROUPÉES EN PLAGES
+ * (2e relecture, point 3) : des lignes qui se suivent avec le même motif forment une seule entrée
+ * `{ debut, fin, motif }`, numéros comme `LignePlan.ligne`, `debut` = `fin` pour une ligne seule ;
+ * `resume.ignorees` compte les LIGNES ; 1 000 000 de lignes vides → une entrée, en moins de 2 s) : ligne vide (toutes ses
  * cellules vides ou espaces) → 'vide' ; ligne de total → 'total' : seule la PREMIÈRE cellule non
  * vide parmi les colonnes associées à un champ est examinée ; elle commence par le mot « total »
  * ou « sous-total » (casse et accents ignorés), ou par « somme » à condition que le champ
@@ -308,6 +352,8 @@
  * normalisée ; `existante` → `{ sorte: 'existante', id }`, `nouvelle` → `{ sorte: 'nouvelle', nom }`.
  * Un choix `existante` dont l'identifiant n'est pas (ou plus) dans la bibliothèque est écarté :
  * la valeur repasse « à décider » (décision demandée comme sans choix).
+ * Temps linéaire (2e relecture, point 2) : une même chaîne de 1 Mo (chaîne partagée d'un classeur)
+ * dans toutes les colonnes de 3 000 lignes → plan en moins de 2 s, tas de 512 Mo.
  * Messages : l'extrait de la cellule cité (40 caractères au plus) ne coupe jamais une paire de
  * substitution (émoji…) ; le message non plus.
  * Correspondance dont un champ obligatoire n'est associé à aucune colonne : chaque ligne est en
@@ -318,7 +364,9 @@
  *   creerModele(entetes: readonly Cellule[], correspondance: Correspondance, choix: readonly ChoixValeur[]): ModeleImport
  *   serialiserModele(modele: ModeleImport): string          // JSON
  *   lireModele(texte: string): ModeleImport | null          // null si illisible, version ou champ inconnus,
- *                                                            // id de choix vide, unité non acceptée
+ *                                                            // id de choix vide, nom de nouvelle
+ *                                                            // valeur vide (espaces seuls compris),
+ *                                                            // unité non acceptée
  *                                                            // pour le champ (ou sur une colonne ignorée)
  *   appliquerModele(modele: ModeleImport, entetes: readonly Cellule[]): Correspondance | null
  * Le modèle retient, par en-tête, le champ et l'unité validés, plus les choix de valeurs. Il
@@ -362,7 +410,7 @@ export interface LecteurClasseur {
   lire(octets: Uint8Array): Promise<ResultatClasseur>;
 }
 
-export type Encodage = 'utf-8' | 'windows-1252';
+export type Encodage = 'utf-8' | 'windows-1252' | 'utf-16le' | 'utf-16be';
 export type Separateur = ';' | ',' | '\t';
 
 export interface TexteDecode {
@@ -376,8 +424,8 @@ export interface CsvLu {
   readonly bom: boolean;
   readonly separateur: Separateur;
   readonly lignes: readonly (readonly string[])[];
-  /** Fichier binaire (un .xlsx renommé, octets nuls) : `lignes` vide. */
-  readonly erreur: { readonly code: 'fichier_binaire'; readonly message: string } | null;
+  /** Fichier binaire (un .xlsx renommé, octets nuls) ou trop grand (plus de 5 000 000 de cases) : `lignes` vide. */
+  readonly erreur: { readonly code: 'fichier_binaire' | 'fichier_trop_grand'; readonly message: string } | null;
 }
 
 // ── Champs et correspondance ─────────────────────────────────────────────────────────────────
@@ -444,7 +492,8 @@ export type CodeErreurImport =
   | 'valeur_inconnue'
   | 'hors_bornes'
   | 'dates_incoherentes'
-  | 'colonnes_en_trop';
+  | 'colonnes_en_trop'
+  | 'texte_trop_long';
 
 export type Lecture<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly code: CodeErreurImport };
 
@@ -535,7 +584,8 @@ export interface DecisionValeur {
 export interface PlanImport {
   readonly type: TypeContenu;
   readonly lignes: readonly LignePlan[];
-  readonly ignorees: readonly { readonly ligne: number; readonly motif: 'vide' | 'total' }[];
+  /** Plages de lignes ignorées qui se suivent avec le même motif (`debut` ≤ `fin`, bornes comprises). */
+  readonly ignorees: readonly { readonly debut: number; readonly fin: number; readonly motif: 'vide' | 'total' }[];
   readonly decisions: readonly DecisionValeur[];
   readonly niveaux: 1 | 2 | 3 | null;
   readonly resume: {
