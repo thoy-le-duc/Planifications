@@ -13,6 +13,23 @@ jobs:
     name: Typage, lint, tests, build, budgets
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Tests d'intégration de @planif/db (T08) : sans cette URL, ils échouent en CI.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -25,7 +42,15 @@ jobs:
         run: pnpm typecheck
       - name: Lint (aucun any)
         run: pnpm lint
-      - name: Tests unitaires
+      - name: Schéma et migrations synchronisés
+        run: |
+          pnpm --filter @planif/db exec drizzle-kit generate
+          if [ -n "$(git status --porcelain -- packages/db/migrations)" ]; then
+            echo "::error::Le schéma Drizzle a changé sans migration : lancer pnpm --filter @planif/db generer et versionner le résultat."
+            git status --porcelain -- packages/db/migrations
+            exit 1
+          fi
+      - name: Tests unitaires et d'intégration
         run: pnpm test
       - name: Build
         run: pnpm build
