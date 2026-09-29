@@ -179,6 +179,22 @@ Question : on part là-dessus ?
 
 Réponse (2026-09-29) : « ok ». Code à 6 chiffres par e-mail ; clé d'accès (empreinte ou visage) en option ; pas de mot de passe.
 
+### Q13 — Plafonds des quantités par saisie (posée le 2026-09-29, T10b)
+
+Question : jusqu'ici, n'importe quelle quantité passait (même 10³⁰⁸ kg). Valeurs provisoires, dans `PLAFONDS_PROVISOIRES` de `packages/core/src/saisies` :
+
+| Saisie | Plafond | Raison |
+| --- | --- | --- |
+| Récolte | 100 000 (kg, bottes ou pièces) | Bien au-delà d'une journée sur 4 ha |
+| Semis ou plantation réalisés | 10 000 000 | Carottes en semis direct sur 4 ha : environ 4 millions de graines |
+| Apport (compost, fumier) | 1 000 000 kg | 40 t/ha sur 4 ha = 160 t |
+| Occupation d'une planche | 1 095 jours | Une bâche reste rarement plus de 3 ans |
+| Irrigation | 1 440 minutes | Une saisie couvre au plus une journée |
+| Traitement : dose | 100 000 (unité libre) | Marge pour les g ou les mL |
+| Traitement : surface | 100 000 m² | 2,5 fois la ferme |
+
+Tant que Théophane n'a pas répondu, ces valeurs s'appliquent ; une saisie au-dessus est refusée avec le motif « plafond dépassé ».
+
 ### À suivre
 
 
