@@ -11,6 +11,7 @@ export {
   type ResultatDemande,
   type ResultatVerification,
 } from './client.ts';
+export { DELAI_DECONNEXION_MS, deconnecter, type OptionsDeconnexion } from './deconnexion.ts';
 export { EcranConnexion, type EtapeConnexion, type ProprietesEcranConnexion } from './EcranConnexion.tsx';
 export {
   CLE_SESSION,
