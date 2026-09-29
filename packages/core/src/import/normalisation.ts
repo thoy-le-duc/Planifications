@@ -3,7 +3,7 @@
  * mesures avec unité, dates (JJ/MM/AAAA, AAAA-MM-JJ, date Excel, semaine). Rien ne lève.
  */
 import { analyserDate, dateDepuisJourAbsolu, jourAbsolu, lundiDeSemaine, nombreSemainesIso, type DateCalendaire } from '../dates/index.ts';
-import type { Cellule, Lecture, UniteMesure } from './types.ts';
+import type { Cellule, Lecture, OptionsDate, UniteMesure } from './types.ts';
 
 const MARQUES = /[̀-ͯ]/g;
 const HORS_MOT = /[^a-z0-9]+/g;
@@ -31,6 +31,13 @@ export function texteCellule(c: Cellule | undefined): string | null {
   return t === '' ? null : t;
 }
 
+/**
+ * Longueur au-delà de laquelle une cellule (espaces autour retirés) n'est ni un nombre, ni une
+ * mesure, ni une date : rien d'utile ne s'écrit sur plus de 200 caractères, et la borne garantit
+ * un temps de lecture linéaire quoi qu'il y ait dans la cellule.
+ */
+export const LONGUEUR_MAX_CELLULE = 200;
+
 const ok = <T>(valeur: T): Lecture<T> => ({ ok: true, valeur });
 const ko = <T>(code: 'nombre_invalide' | 'unite_inconnue' | 'date_invalide' | 'annee_manquante'): Lecture<T> => ({ ok: false, code });
 
@@ -51,8 +58,10 @@ const sansMoinsZero = (n: number): number => (n === 0 ? 0 : n);
 export function lireNombre(c: Cellule): Lecture<number | null> {
   if (c === null) return ok(null);
   if (typeof c === 'number') return Number.isFinite(c) ? ok(sansMoinsZero(c)) : ko('nombre_invalide');
-  if (c.trim() === '') return ok(null);
-  const d = decimal(c);
+  const t = c.trim();
+  if (t === '') return ok(null);
+  if (t.length > LONGUEUR_MAX_CELLULE) return ko('nombre_invalide');
+  const d = decimal(t);
   if (d === null) return ko('nombre_invalide');
   const n = Number(d);
   return Number.isFinite(n) ? ok(sansMoinsZero(n)) : ko('nombre_invalide');
@@ -87,7 +96,15 @@ function decaler(ecriture: string, decalage: number): number {
   return Number(`${ecriture.slice(0, e)}e${String(Number(ecriture.slice(e + 1)) + decalage)}`);
 }
 
-const UNITE_FINALE = /^(.*?)\s*([a-zà-ÿµ]+)$/i;
+/** Lettre d'une unité écrite dans une cellule : a-z, A-Z, lettres latines accentuées, µ. */
+function lettreUnite(code: number): boolean {
+  return (code >= 97 && code <= 122) || (code >= 65 && code <= 90) || (code >= 0xc0 && code <= 0xff) || code === 0xb5;
+}
+
+/** Espaces (ceux de `trim`, les plus courants) entre le nombre et l'unité. */
+function espace(code: number): boolean {
+  return code === 0x20 || code === 0x09 || code === 0xa0 || code === 0x202f || code === 0x2009 || code === 0x0a || code === 0x0d;
+}
 
 /**
  * Nombre suivi facultativement d'une unité, converti exactement vers `cible` ; sans unité dans
@@ -103,12 +120,17 @@ export function lireMesure(c: Cellule, cible: UniteMesure, parDefaut: UniteMesur
   } else {
     const t = c.trim();
     if (t === '') return ok(null);
-    const morceaux = UNITE_FINALE.exec(t);
+    if (t.length > LONGUEUR_MAX_CELLULE) return ko('nombre_invalide');
+    // Unité balayée depuis la fin : lettres, puis espaces ; le reste est le nombre.
+    let fin = t.length;
+    while (fin > 0 && lettreUnite(t.charCodeAt(fin - 1))) fin--;
     let nombre = t;
-    if (morceaux !== null) {
-      nombre = morceaux[1] ?? '';
-      unite = (morceaux[2] ?? '').toLowerCase();
-      if (nombre.trim() === '') return ko('nombre_invalide');
+    if (fin < t.length) {
+      unite = t.slice(fin).toLowerCase();
+      let k = fin;
+      while (k > 0 && espace(t.charCodeAt(k - 1))) k--;
+      nombre = t.slice(0, k);
+      if (nombre === '') return ko('nombre_invalide');
     }
     const d = decimal(nombre);
     if (d === null) return ko('nombre_invalide');
@@ -122,26 +144,63 @@ export function lireMesure(c: Cellule, cible: UniteMesure, parDefaut: UniteMesur
   return Number.isFinite(n) ? ok(sansMoinsZero(n)) : ko('nombre_invalide');
 }
 
+/** `n` × 10^`exposant`, exact en décimal (« 0,0123 » ha → 123 m², sans flottant intermédiaire). */
+export function multiplierPuissanceDix(n: number, exposant: number): number {
+  return sansMoinsZero(decaler(String(n), exposant));
+}
+
 // ── Dates ────────────────────────────────────────────────────────────────────────────────────
 
 const JOUR_MOIS_ANNEE = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/;
 const ANNEE_MOIS_JOUR = /^\d{4}-\d{2}-\d{2}$/;
 const SEMAINE = /^(?:s|sem|semaine)\.?\s*(\d{1,2})$/i;
-/** 9999-12-31 en numéro de série Excel : au-delà, ce n'est pas une date. */
+/** 9999-12-31 en numéro de série Excel (système 1900) : au-delà, ce n'est pas une date. */
 const SERIE_MAX = 2_958_465;
+/** Écart entre les deux systèmes : 1904-01-01 est le 1462 du système 1900. */
+const DECALAGE_1904 = 1462;
+/** Sans année de saison, un numéro de série d'avant 1950 est une quantité, pas une date. */
+const ANNEE_MIN_SANS_SAISON = 1950;
+/** Plage autour de l'année de la saison (en années). */
+const ECART_SAISON = 5;
 
 let jour1900: number | undefined;
 
-/** Numéro de série Excel (système 1900) → date ; 60 est le 29/02/1900 qui n'existe pas. */
-function dateExcel(n: number): Lecture<DateCalendaire | null> {
+/**
+ * Numéro de série Excel → date. Système 1900 : 60 est le 29/02/1900 qui n'existe pas (bogue de
+ * Lotus repris par Excel) ; système 1904 : 0 est le 1904-01-01. Partie décimale (heure) ignorée.
+ */
+function dateExcel(n: number, systeme: 1900 | 1904): Lecture<DateCalendaire | null> {
   if (!Number.isFinite(n)) return ko('date_invalide');
   const serie = Math.floor(n);
-  if (serie < 1 || serie === 60 || serie > SERIE_MAX) return ko('date_invalide');
   jour1900 ??= jourAbsolu('1899-12-31' as DateCalendaire);
+  if (systeme === 1904) {
+    if (serie < 0 || serie > SERIE_MAX - DECALAGE_1904) return ko('date_invalide');
+    return ok(dateDepuisJourAbsolu(jour1900 + serie + DECALAGE_1904 - 1));
+  }
+  if (serie < 1 || serie === 60 || serie > SERIE_MAX) return ko('date_invalide');
   return ok(dateDepuisJourAbsolu(jour1900 + (serie < 60 ? serie : serie - 1)));
 }
 
+/** La date d'un numéro de série doit tomber près de la saison (ou après 1950 sans saison). */
+function dansLaPlage(date: DateCalendaire, anneeSaison: number | null): boolean {
+  const annee = Number(date.slice(0, 4));
+  if (anneeSaison === null) return annee >= ANNEE_MIN_SANS_SAISON;
+  return annee >= anneeSaison - ECART_SAISON && annee <= anneeSaison + ECART_SAISON;
+}
+
 const deux = (s: string): string => s.padStart(2, '0');
+
+/**
+ * Les deux premiers nombres d'une date « a/b/AAAA » (sans décider lequel est le jour), ou `null`
+ * si la cellule n'est pas écrite ainsi. Sert à choisir l'ordre JJ/MM ou MM/JJ d'une colonne.
+ */
+export function premiersNombresDate(c: Cellule | undefined): readonly [number, number] | null {
+  if (typeof c !== 'string') return null;
+  const t = c.trim();
+  if (t.length > LONGUEUR_MAX_CELLULE) return null;
+  const m = JOUR_MOIS_ANNEE.exec(t);
+  return m === null ? null : [Number(m[1]), Number(m[2])];
+}
 
 function dateTexte(saisie: string): Lecture<DateCalendaire | null> {
   const r = analyserDate(saisie);
@@ -149,16 +208,25 @@ function dateTexte(saisie: string): Lecture<DateCalendaire | null> {
 }
 
 /**
- * Date d'une cellule : 'JJ/MM/AAAA', 'AAAA-MM-JJ', numéro de série Excel, ou semaine ('S14',
- * 'sem 14', 'Semaine 14') → lundi de la semaine ISO de `anneeSaison`.
+ * Date d'une cellule : 'JJ/MM/AAAA' (ou 'MM/JJ/AAAA' selon `options.ordre`), 'AAAA-MM-JJ',
+ * numéro de série Excel (système `options.systemeDates`, dans la plage de la saison), ou semaine
+ * ('S14', 'sem 14', 'Semaine 14') → lundi de la semaine ISO de `anneeSaison`.
  */
-export function lireDate(c: Cellule, anneeSaison: number | null): Lecture<DateCalendaire | null> {
+export function lireDate(c: Cellule, anneeSaison: number | null, options: OptionsDate = {}): Lecture<DateCalendaire | null> {
   if (c === null) return ok(null);
-  if (typeof c === 'number') return dateExcel(c);
+  if (typeof c === 'number') {
+    const r = dateExcel(c, options.systemeDates ?? 1900);
+    if (!r.ok || r.valeur === null) return r;
+    return dansLaPlage(r.valeur, anneeSaison) ? r : ko('date_invalide');
+  }
   const t = c.trim();
   if (t === '') return ok(null);
+  if (t.length > LONGUEUR_MAX_CELLULE) return ko('date_invalide');
   const jma = JOUR_MOIS_ANNEE.exec(t);
-  if (jma !== null) return dateTexte(`${jma[3] ?? ''}-${deux(jma[2] ?? '')}-${deux(jma[1] ?? '')}`);
+  if (jma !== null) {
+    const [a, b] = options.ordre === 'mm_jj' ? [jma[2], jma[1]] : [jma[1], jma[2]];
+    return dateTexte(`${jma[3] ?? ''}-${deux(b ?? '')}-${deux(a ?? '')}`);
+  }
   if (ANNEE_MOIS_JOUR.test(t)) return dateTexte(t);
   const semaine = SEMAINE.exec(t);
   if (semaine !== null) {

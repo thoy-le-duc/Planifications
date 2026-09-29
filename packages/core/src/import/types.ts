@@ -108,6 +108,13 @@ export type CodeErreurImport =
 
 export type Lecture<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly code: CodeErreurImport };
 
+export interface OptionsDate {
+  /** 'JJ/MM/AAAA' (défaut) ou 'MM/JJ/AAAA'. */
+  readonly ordre?: 'jj_mm' | 'mm_jj';
+  /** Système des numéros de série Excel (défaut 1900). */
+  readonly systemeDates?: SystemeDates;
+}
+
 // ── Valeurs ──────────────────────────────────────────────────────────────────────────────────
 
 export interface Reference {
