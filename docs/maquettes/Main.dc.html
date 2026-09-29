@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Aujourd'hui</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,700;112,800;100,600&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;family=IBM+Plex+Mono:wght@500;600&amp;display=swap">
+<style>
+body{margin:0;background:#EEF1E8;font-family:"Atkinson Hyperlegible",system-ui,sans-serif;color:#15201A}
+a{color:#1F4D3A}a:hover{color:#153828}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #EEF1E8; display: flex; flex-direction: column; overflow: hidden">
+  <div style="background: #1F4D3A; color: #F4F7EF; padding: 22px 20px 20px; display: flex; flex-direction: column; gap: 14px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <span style="font-family: 'IBM Plex Mono', monospace; font-size: 13px; letter-spacing: .06em; color: #B9D3C2">LUN. 19 AVRIL · SEMAINE 16</span>
+      <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #B9D3C2">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9FE0B4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+        À jour
+      </span>
+    </div>
+    <h1 style="margin: 0; font-family: 'Archivo', sans-serif; font-stretch: 112%; font-weight: 800; font-size: 34px; line-height: 1.02; letter-spacing: -.01em">Aujourd'hui</h1>
+    <div style="display: flex; gap: 8px">
+      <span style="background: #E0701F; color: #1B0F05; font-weight: 700; font-size: 14px; padding: 7px 12px; border-radius: 999px">1 en retard</span>
+      <span style="background: #2C6450; color: #F4F7EF; font-weight: 700; font-size: 14px; padding: 7px 12px; border-radius: 999px">3 cette semaine</span>
+      <span style="background: #2C6450; color: #F4F7EF; font-weight: 700; font-size: 14px; padding: 7px 12px; border-radius: 999px">2 récoltes</span>
+    </div>
+  </div>
+
+  <div style="flex-grow: 1; padding: 16px 14px; display: flex; flex-direction: column; gap: 12px; overflow: hidden">
+    <span style="font-family: 'Archivo', sans-serif; font-stretch: 100%; font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #9A4A0F; padding: 0 6px">En retard</span>
+    <div style="background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: stretch; overflow: hidden">
+      <div style="width: 8px; background: #E0701F"></div>
+      <div style="flex-grow: 1; padding: 14px 12px 14px 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 20px; font-weight: 700; line-height: 1.2">Planter le chou pointu</span>
+        <span style="font-size: 15px; color: #4B5A50">Filderkraut · 30 m · prévu le 12 avril</span>
+        <span style="display: flex; gap: 8px; align-items: center; margin-top: 4px">
+          <span style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; background: #EEF1E8; padding: 4px 8px; border-radius: 6px">T2-P03</span>
+          <span style="font-size: 14px; font-weight: 700; color: #9A4A0F">7 jours de retard</span>
+        </span>
+      </div>
+      <button type="button" aria-label="Marquer fait : planter le chou pointu" style="width: 76px; border: 0; background: #1F4D3A; color: #F4F7EF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-family: inherit; font-weight: 700; font-size: 13px">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+        Fait
+      </button>
+    </div>
+
+    <span style="font-family: 'Archivo', sans-serif; font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: #4B5A50; padding: 6px 6px 0">Cette semaine</span>
+    <div style="background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: stretch; overflow: hidden">
+      <div style="width: 8px; background: #2A78D6"></div>
+      <div style="flex-grow: 1; padding: 14px 12px 14px 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 20px; font-weight: 700; line-height: 1.2">Planter la batavia</span>
+        <span style="font-size: 15px; color: #4B5A50">Grenobloise · 15 m · aujourd'hui</span>
+        <span style="display: flex; gap: 8px; margin-top: 4px"><span style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; background: #EEF1E8; padding: 4px 8px; border-radius: 6px">T2-P01 · 15–30 m</span></span>
+      </div>
+      <button type="button" aria-label="Marquer fait : planter la batavia" style="width: 76px; border: 0; background: #1F4D3A; color: #F4F7EF; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-family: inherit; font-weight: 700; font-size: 13px">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+        Fait
+      </button>
+    </div>
+    <div style="background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: stretch; overflow: hidden">
+      <div style="width: 8px; background: #1BAF7A"></div>
+      <div style="flex-grow: 1; padding: 14px 12px 14px 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 20px; font-weight: 700; line-height: 1.2">Récolter les radis</span>
+        <span style="font-size: 15px; color: #4B5A50">Flamboyant · fin de récolte jeudi</span>
+        <span style="display: flex; gap: 8px; margin-top: 4px"><span style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 14px; background: #EEF1E8; padding: 4px 8px; border-radius: 6px">T2-P01</span></span>
+      </div>
+      <a href="Saisie.dc.html" aria-label="Saisir une récolte de radis" style="width: 76px; background: #E7F3EA; color: #1F4D3A; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-weight: 700; font-size: 13px; text-decoration: none">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16l-1.5 11a2 2 0 0 1-2 1.7H7.5a2 2 0 0 1-2-1.7L4 7Z"></path><path d="M9 7V5a3 3 0 0 1 6 0v2"></path></svg>
+        Peser
+      </a>
+    </div>
+    <div style="background: #FFFFFF; border-radius: 16px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: stretch; overflow: hidden; opacity: .75">
+      <div style="width: 8px; background: #EDA100"></div>
+      <div style="flex-grow: 1; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="font-size: 20px; font-weight: 700; line-height: 1.2">Semer les carottes</span>
+        <span style="font-size: 15px; color: #4B5A50">Nantaise · 30 m · jeudi 22</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="background: #FFFFFF; border-top: 1px solid #D6DDD0; display: flex; justify-content: space-around; padding: 10px 8px 26px">
+    <a href="Main.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: #1F4D3A; text-decoration: none; min-width: 72px">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"></path><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"></path></svg>
+      Aujourd'hui
+    </a>
+    <a href="Plan.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: #6B786F; text-decoration: none; min-width: 72px">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="4" rx="1"></rect><rect x="3" y="10" width="18" height="4" rx="1"></rect><rect x="3" y="16" width="18" height="4" rx="1"></rect></svg>
+      Planches
+    </a>
+    <span style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: #6B786F; min-width: 72px">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg>
+      Dicter
+    </span>
+    <span style="display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: #6B786F; min-width: 72px">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3"></path></svg>
+      Ferme
+    </span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

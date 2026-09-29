@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Saisie d'une récolte</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,700;112,800;100,600&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;family=IBM+Plex+Mono:wght@500;600&amp;display=swap">
+<style>
+body{margin:0;background:#EEF1E8;font-family:"Atkinson Hyperlegible",system-ui,sans-serif;color:#15201A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #EEF1E8; display: flex; flex-direction: column; overflow: hidden">
+  <div style="padding: 20px 16px 12px; display: flex; align-items: center; gap: 12px">
+    <a href="Main.dc.html" aria-label="Retour" style="width: 48px; height: 48px; border-radius: 14px; background: #FFFFFF; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; color: #15201A">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+    </a>
+    <div style="display: flex; flex-direction: column">
+      <span style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 13px; color: #4B5A50">T2-P01 · RADIS FLAMBOYANT</span>
+      <span style="font-family: 'Archivo', sans-serif; font-stretch: 112%; font-weight: 800; font-size: 26px; line-height: 1.05">Récolte</span>
+    </div>
+  </div>
+
+  <div style="margin: 4px 14px 0; background: #FFFFFF; border-radius: 20px; box-shadow: 0 1px 0 #D6DDD0; padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 12px">
+    <div style="display: flex; background: #EEF1E8; border-radius: 12px; padding: 4px">
+      <span style="flex: 1; text-align: center; padding: 10px 0; border-radius: 9px; background: #1F4D3A; color: #F4F7EF; font-weight: 700; font-size: 16px">Bottes</span>
+      <span style="flex: 1; text-align: center; padding: 10px 0; font-weight: 700; font-size: 16px; color: #4B5A50">kg</span>
+      <span style="flex: 1; text-align: center; padding: 10px 0; font-weight: 700; font-size: 16px; color: #4B5A50">Caisses</span>
+    </div>
+    <div style="display: flex; align-items: baseline; justify-content: center; gap: 10px; padding: 6px 0">
+      <span style="font-family: 'Archivo', sans-serif; font-stretch: 112%; font-weight: 800; font-size: 84px; line-height: 1; font-variant-numeric: tabular-nums">48</span>
+      <span style="font-size: 22px; font-weight: 700; color: #4B5A50">bottes</span>
+    </div>
+    <span style="text-align: center; font-size: 15px; color: #4B5A50">La semaine dernière : 52 bottes · prévu 50</span>
+  </div>
+
+  <div style="flex-grow: 1; padding: 14px 14px 0; display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 8px">
+    <span style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 30px">1</span>
+    <span style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 30px">2</span>
+    <span style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 30px">3</span>
+    <span style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 30px">4</span>
+    <span style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 30px">5</span>
+    <span style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 30px">6</span>
+    <span style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 30px">7</span>
+    <span style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 30px">8</span>
+    <span style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 30px">9</span>
+    <span style="background: #DDE4D6; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #15201A">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0 0 14 0"></path><path d="M12 18v3"></path></svg>
+    </span>
+    <span style="background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 0 #D6DDD0; display: flex; align-items: center; justify-content: center; font-family: 'Archivo', sans-serif; font-weight: 700; font-size: 30px">0</span>
+    <span style="background: #DDE4D6; border-radius: 14px; display: flex; align-items: center; justify-content: center; color: #15201A">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1Z"></path><path d="m16 9-5 6M11 9l5 6"></path></svg>
+    </span>
+  </div>
+
+  <div style="padding: 14px 14px 28px">
+    <a href="Main.dc.html" style="height: 68px; border-radius: 18px; background: #1F4D3A; color: #F4F7EF; display: flex; align-items: center; justify-content: center; gap: 10px; font-family: 'Archivo', sans-serif; font-stretch: 112%; font-weight: 800; font-size: 20px; text-decoration: none; box-shadow: 0 4px 0 #143426">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+      Valider 48 bottes
+    </a>
+    <span style="display: block; text-align: center; margin-top: 10px; font-size: 14px; color: #4B5A50">Enregistré sur le téléphone, envoyé dès que le réseau revient. Annulable 10 secondes.</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
