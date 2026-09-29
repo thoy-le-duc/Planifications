@@ -36,9 +36,14 @@ function nomMorceau(morceau: { name: string; isEntry: boolean; moduleIds: readon
   return 'assets/[name]-[hash].js';
 }
 
-/** Le WASM de SQLite rejoint `assets/sqlite/`. */
-function nomFichierAnnexe(fichier: { names: readonly string[] }): string {
-  return fichier.names.some((n) => n.endsWith('.wasm')) ? nomSortie('sqlite') : 'assets/[name]-[hash][extname]';
+/**
+ * Le WASM de SQLite rejoint `assets/sqlite/`, la feuille de style de la page de diagnostic
+ * `assets/diagnostic/` (hors précache, comme la page).
+ */
+function nomFichierAnnexe(fichier: { names: readonly string[]; originalFileNames?: readonly string[] }): string {
+  if (fichier.names.some((n) => n.endsWith('.wasm'))) return nomSortie('sqlite');
+  if ((fichier.originalFileNames ?? []).some((n) => n.startsWith('diagnostic/'))) return nomSortie('diagnostic');
+  return 'assets/[name]-[hash][extname]';
 }
 
 /**
@@ -48,53 +53,52 @@ function nomFichierAnnexe(fichier: { names: readonly string[] }): string {
  */
 function pagesHorsAppliSansServiceWorker(): Plugin {
   return {
-      name: 'planif:pages-hors-appli-sans-sw',
-      apply: 'build',
-      enforce: 'post',
-      transformIndexHtml: {
-        order: 'post',
-        handler(html, contexte) {
-          if (!PREFIXES_PAGES_HORS_APPLI.some((p) => contexte.path.startsWith(p))) return html;
-          let resultat = html;
-          for (const motif of [/<link rel="manifest"[^>]*>/g, /<script id="vite-plugin-pwa:register-sw"[^>]*><\/script>/g]) {
-            // Échec franc si vite-plugin-pwa change sa façon d'injecter : sinon le SW reviendrait sans bruit.
-            if (!motif.test(resultat)) throw new Error(`${contexte.path} : balise du service worker introuvable (${motif.source})`);
-            motif.lastIndex = 0;
-            resultat = resultat.replace(motif, '');
-          }
-          return resultat;
-        },
+    name: 'planif:pages-hors-appli-sans-sw',
+    apply: 'build',
+    enforce: 'post',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, contexte) {
+        if (!PREFIXES_PAGES_HORS_APPLI.some((p) => contexte.path.startsWith(p))) return html;
+        let resultat = html;
+        for (const motif of [/<link rel="manifest"[^>]*>/g, /<script id="vite-plugin-pwa:register-sw"[^>]*><\/script>/g]) {
+          // Échec franc si vite-plugin-pwa change sa façon d'injecter : sinon le SW reviendrait sans bruit.
+          if (!motif.test(resultat)) throw new Error(`${contexte.path} : balise du service worker introuvable (${motif.source})`);
+          motif.lastIndex = 0;
+          resultat = resultat.replace(motif, '');
+        }
+        return resultat;
       },
-    };
-  }
+    },
+  };
+}
 
-  /**
-   * CSP stricte (T09b, voir scripts/csp.ts) : balise <meta> en tête du <head> de l'appli, avant
-   * tout <script> et tout <link>. Au build seulement (le serveur de développement injecte un script
-   * en ligne pour le rechargement à chaud), et dans index.html seulement (pages de mesure et de
-   * diagnostic hors appli).
-   */
-  function cspEnBalise(options: OptionsCsp): Plugin {
-    return {
-      name: 'planif:csp',
-      apply: 'build',
-      enforce: 'post',
-      transformIndexHtml: {
-        order: 'post',
-        handler(html, contexte) {
-          if (contexte.path !== '/index.html') return html;
-          const tete = /<head[^>]*>/i.exec(html);
-          if (tete === null) throw new Error('index.html : <head> introuvable, CSP non posée');
-          const fin = tete.index + tete[0].length;
-          return `${html.slice(0, fin)}\n    ${baliseCsp(options)}${html.slice(fin)}`;
-        },
+/**
+ * CSP stricte (T09b, voir scripts/csp.ts) : balise <meta> en tête du <head>, avant tout <script>
+ * et tout <link>, dans chaque page du build : l'appli, et aussi les pages de diagnostic (qui
+ * manipule la session) et de mesure (relecture sécurité). Au build seulement (le serveur de
+ * développement injecte un script en ligne pour le rechargement à chaud).
+ */
+function cspEnBalise(options: OptionsCsp): Plugin {
+  return {
+    name: 'planif:csp',
+    apply: 'build',
+    enforce: 'post',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, contexte) {
+        const tete = /<head[^>]*>/i.exec(html);
+        if (tete === null) throw new Error(`${contexte.path} : <head> introuvable, CSP non posée`);
+        const fin = tete.index + tete[0].length;
+        return `${html.slice(0, fin)}\n    ${baliseCsp(options)}${html.slice(fin)}`;
       },
-    };
-  }
+    },
+  };
+}
 
-  export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, import.meta.dirname, 'VITE_');
-    return {
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, import.meta.dirname, 'VITE_');
+  return {
     plugins: [
       react(),
       // Hors-ligne d'abord : le service worker met toute l'appli en cache dès la première visite.
