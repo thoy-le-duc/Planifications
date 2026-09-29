@@ -195,6 +195,14 @@ Question : jusqu'ici, n'importe quelle quantité passait (même 10³⁰⁸ kg). 
 
 Tant que Théophane n'a pas répondu, ces valeurs s'appliquent ; une saisie au-dessus est refusée avec le motif « plafond dépassé ».
 
+### Q14 — Service d'envoi des e-mails de connexion (posée le 2026-09-29, T09b)
+
+Question : l'appli envoie le code de connexion par un serveur SMTP générique (variables `SMTP_*`). Il faut choisir un fournisseur hébergé en UE (par exemple Brevo, Scaleway Transactional Email, Mailjet), signer le contrat de sous-traitance, et choisir le domaine d'envoi (enregistrements SPF, DKIM, DMARC). À faire avant la mise en service. Tant que rien n'est choisi, seul le mode console de développement fonctionne.
+
+### Q15 — Limite de connexions par adresse IP au magasin (posée le 2026-09-29, T09b)
+
+Question : une même adresse IP peut demander au plus 30 codes et en vérifier 60 par heure. Au magasin, tout le monde sort par la même IP : ces seuils suffisent-ils (combien de personnes se connectent par heure au plus) ?
+
 ### À suivre
 
 

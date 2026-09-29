@@ -3,5 +3,5 @@
  * `ouvrirDonnees` charge PowerSync : à importer dynamiquement depuis un écran, jamais dans le
  * JavaScript de démarrage.
  */
-export { ouvrirDonnees, etatDepuisStatut, type DonneesLocales, type EtatSynchro, type OptionsOuverture } from './ouvrir.ts';
+export { effacerDonneesLocales, ouvrirDonnees, etatDepuisStatut, type DonneesLocales, type EtatSynchro, type OptionsOuverture } from './ouvrir.ts';
 export { SessionExpiree } from './jeton.ts';

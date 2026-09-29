@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Schéma PostgreSQL de référence (Drizzle), migrations et conversions ligne ↔ entité.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./securite": "./src/securite.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

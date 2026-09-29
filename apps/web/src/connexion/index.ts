@@ -11,6 +11,19 @@ export {
   type ResultatDemande,
   type ResultatVerification,
 } from './client.ts';
+export {
+  CLE_EFFACEMENT_EN_ATTENTE,
+  DELAI_DECONNEXION_MS,
+  MESSAGE_EFFACEMENT_EN_ATTENTE,
+  deconnecter,
+  deconnecterAvecConfirmation,
+  effacementsEnAttente,
+  messagePerteSaisies,
+  reprendreEffacements,
+  retirerEffacementEnAttente,
+  type OptionsConfirmation,
+  type OptionsDeconnexion,
+} from './deconnexion.ts';
 export { EcranConnexion, type EtapeConnexion, type ProprietesEcranConnexion } from './EcranConnexion.tsx';
 export {
   CLE_SESSION,
@@ -18,5 +31,7 @@ export {
   enregistrerSession,
   lireSession,
   stockageNavigateur,
+  surveillerSession,
+  type OptionsSurveillance,
   type SessionConnexion,
 } from './session.ts';

@@ -25,6 +25,12 @@ export interface DependancesApp {
   readonly maintenant?: () => Date;
   /** Origines autorisées à appeler l'API depuis un navigateur (CORS) ; aucune par défaut. */
   readonly corsOrigines?: readonly string[];
+  /**
+   * Derrière le proxy de production (PROXY_DE_CONFIANCE=1) : l'adresse du client, pour la limite
+   * par IP, est la dernière valeur de X-Forwarded-For. Faux par défaut : adresse de la socket,
+   * en-têtes ignorés (un client les falsifie).
+   */
+  readonly proxyDeConfiance?: boolean;
 }
 
 /** Dépendances complétées, partagées par les routes. */
@@ -39,5 +45,5 @@ export function completer(deps: DependancesApp): Contexte {
     horloge: () => maintenant().getTime(),
     aleatoire: (n) => new Uint8Array(randomBytes(n)),
   });
-  return { ...deps, maintenant, nouvelId, corsOrigines: deps.corsOrigines ?? [] };
+  return { ...deps, maintenant, nouvelId, corsOrigines: deps.corsOrigines ?? [], proxyDeConfiance: deps.proxyDeConfiance ?? false };
 }

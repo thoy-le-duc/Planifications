@@ -1,0 +1,13 @@
+/* Page de diagnostic : styles hors du HTML, la CSP (style-src 'self') refuse un <style> en ligne. */
+body { font-family: system-ui, sans-serif; margin: 1rem; background: #f4efe3; color: #1d2a1f; }
+h1 { font-size: 1.2rem; }
+[data-etat='synchronise'] { color: #2f6b3a; }
+[data-etat='hors-ligne'] { color: #8a5a00; }
+[data-etat='session-expiree'] { color: #9b1c1c; }
+form { display: flex; gap: 0.5rem; align-items: end; flex-wrap: wrap; margin: 1rem 0; }
+label { display: flex; flex-direction: column; gap: 0.25rem; }
+input, button { font-size: 1.1rem; padding: 0.6rem; min-height: 48px; }
+ul { padding-left: 1.2rem; }
+.refus { color: #9b1c1c; }
+[hidden] { display: none !important; }
+#confirmation-deconnexion { border: 2px solid #9b1c1c; border-radius: 8px; padding: 0.75rem; margin: 1rem 0; }

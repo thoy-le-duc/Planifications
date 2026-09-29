@@ -10,11 +10,26 @@ export interface SessionConnexion {
   readonly email: string;
   readonly jetonAcces: string;
   readonly jetonRenouvellement: string;
+  /**
+   * Heure du serveur − heure du téléphone (ms), mesurée au dernier jeton reçu ; négative si le
+   * téléphone avance (T09b). Rangée avec la session et relue au démarrage : l'iat du jeton rangé
+   * ne prouve plus tout le retard une fois l'appli relancée.
+   */
+  readonly ecartHorlogeMs?: number;
 }
 
 const CHAMPS = ['utilisateurId', 'email', 'jetonAcces', 'jetonRenouvellement'] as const;
 
-/** Session complète (quatre chaînes non vides), ou null. */
+/**
+ * Écart d'horloge plausible au plus (48 h, bornes comprises) : au-delà, la valeur rangée est
+ * aberrante (stockage modifié) et ferait renouveler à chaque appel ou garder un jeton périmé.
+ */
+export const ECART_HORLOGE_MAX_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * Session complète (quatre chaînes non vides), ou null. L'écart d'horloge n'est gardé que s'il est
+ * un nombre fini d'au plus ±48 h : sinon il est omis sans invalider la session.
+ */
 export function sessionValide(v: unknown): SessionConnexion | null {
   if (typeof v !== 'object' || v === null) return null;
   const o = v as Record<string, unknown>;
@@ -28,7 +43,14 @@ export function sessionValide(v: unknown): SessionConnexion | null {
   ) {
     return null;
   }
-  return { utilisateurId, email, jetonAcces, jetonRenouvellement };
+  const ecart = o.ecartHorlogeMs;
+  return {
+    utilisateurId,
+    email,
+    jetonAcces,
+    jetonRenouvellement,
+    ...(typeof ecart === 'number' && Number.isFinite(ecart) && Math.abs(ecart) <= ECART_HORLOGE_MAX_MS ? { ecartHorlogeMs: ecart } : {}),
+  };
 }
 
 export function lireSession(stockage: Pick<Storage, 'getItem'>): SessionConnexion | null {
@@ -65,4 +87,33 @@ export function stockageNavigateur(): Pick<Storage, 'getItem' | 'setItem' | 'rem
     // Accès refusé (certains modes privés).
   }
   return { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+}
+
+export interface OptionsSurveillance {
+  readonly cible: Pick<Window, 'addEventListener' | 'removeEventListener'>;
+  readonly stockage: Pick<Storage, 'getItem'>;
+  /** L'utilisateur connecté dans cet onglet. */
+  readonly utilisateurId: string;
+  /** Appelé une fois au plus : la session a disparu ou changé d'utilisateur dans un autre onglet. */
+  readonly surFin: () => void;
+}
+
+/**
+ * Surveille la session rangée depuis les autres onglets (l'événement `storage` ne vient que
+ * d'eux) : déconnexion ou autre compte ailleurs → surFin. Des jetons tournés (même utilisateur)
+ * ne changent rien. Rend la fonction qui arrête la surveillance.
+ */
+export function surveillerSession({ cible, stockage, utilisateurId, surFin }: OptionsSurveillance): () => void {
+  const ecouteur = (e: Event): void => {
+    const cle = (e as StorageEvent).key;
+    if ((cle === null || cle === CLE_SESSION) && lireSession(stockage)?.utilisateurId !== utilisateurId) {
+      arreter();
+      surFin();
+    }
+  };
+  const arreter = (): void => {
+    cible.removeEventListener('storage', ecouteur);
+  };
+  cible.addEventListener('storage', ecouteur);
+  return arreter;
 }
