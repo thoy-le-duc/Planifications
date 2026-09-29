@@ -3,7 +3,7 @@
  * Contrat : auth.integration.test.ts.
  */
 import { utilisateur, codeConnexion, jetonRenouvellement, membre } from '@planif/db';
-import { and, asc, desc, eq, gt, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { Hono, type Context } from 'hono';
 import type { Contexte } from '../dependances.ts';
 import { emailPiege, lireCorps, normaliserEmail } from '../http.ts';
@@ -280,22 +280,27 @@ export function routesAuth(ctx: Contexte): Hono {
       if (ligne === undefined) return null;
       // Famille révoquée (rejeu, déconnexion), ou utilisateur supprimé, ou jeton expiré : refus.
       if (ligne.revoqueLe !== null || ligne.supprimeLe !== null || ligne.expireLe.getTime() <= t) return null;
-      // Successeur remplacé (réponse perdue, puis ancien jeton présenté de nouveau) : il ne vaut
-      // plus rien, mais le présenter ne coupe pas la session de celui qui a le dernier jeton.
-      if (ligne.remplaceLe !== null) return null;
+      // Jeton remplacé (réponse perdue, puis ancien jeton présenté de nouveau) : personne ne
+      // présente un jeton perdu. Le présenter prouve deux détenteurs (le téléphone et un voleur
+      // qui a rejoué l'ancien) : on ne sait pas lequel est légitime, toute la famille tombe.
+      if (ligne.remplaceLe !== null) {
+        await revoquerFamille(tx, famille, maintenant);
+        return null;
+      }
 
       if (ligne.utiliseLe === null) {
         await tx.update(jetonRenouvellement).set({ utiliseLe: maintenant }).where(eq(jetonRenouvellement.id, ligne.id));
       } else {
-        const [successeurUtilise] = await tx
-          .select({ id: jetonRenouvellement.id })
+        const enfants = await tx
+          .select({ utiliseLe: jetonRenouvellement.utiliseLe })
           .from(jetonRenouvellement)
-          .where(and(eq(jetonRenouvellement.parentId, ligne.id), isNotNull(jetonRenouvellement.utiliseLe)))
-          .limit(1);
-        if (successeurUtilise !== undefined || t - ligne.utiliseLe.getTime() > REJEU_MAX_MS) {
-          // Rejeu d'un jeton dont le successeur a servi, ou trop ancien : volé, ou copié sur un
-          // autre téléphone. On ne sait pas lequel est légitime : toute la session tombe,
-          // l'utilisateur se reconnecte par code.
+          .where(eq(jetonRenouvellement.parentId, ligne.id));
+        const successeurUtilise = enfants.some((e) => e.utiliseLe !== null);
+        if (enfants.length === 0 || successeurUtilise || t - ligne.utiliseLe.getTime() > REJEU_MAX_MS) {
+          // Rejeu d'un jeton dont le successeur a servi, ou trop ancien, ou sans aucun successeur
+          // connu (session d'avant 0011, successeur disparu) : volé, ou copié sur un autre
+          // téléphone. On ne sait pas lequel est légitime : toute la session tombe, l'utilisateur
+          // se reconnecte par code.
           await revoquerFamille(tx, famille, maintenant);
           return null;
         }
