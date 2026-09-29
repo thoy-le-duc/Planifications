@@ -13,6 +13,7 @@
     "build": "pnpm -r build",
     "budget": "pnpm --filter @planif/web budget",
     "e2e": "pnpm --filter @planif/web e2e",
+    "e2e:synchro": "node scripts/e2e-synchro.ts",
     "verif": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm budget && pnpm e2e"
   },
   "devDependencies": {
