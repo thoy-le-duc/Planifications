@@ -18,10 +18,22 @@ const MOTIF_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * contrôle : une seule adresse doit partir, celle saisie.
  */
 const CARACTERES_PIEGES = /[,;:<>()[\]"\\\p{Cc}]/u;
+/**
+ * Caractères invisibles de format (espace sans chasse, inversion de sens, trait d'union
+ * conditionnel…) et caractères combinants : deux adresses différentes identiques à l'œil.
+ */
+const CARACTERES_INVISIBLES = /[\p{Cf}\p{M}]/u;
 
-/** Vrai si `v` est une chaîne qui contient un séparateur d'adresses ou un caractère de contrôle. */
+/**
+ * Vrai si `v` est une chaîne piégée, avant toute normalisation : séparateur d'adresses, caractère
+ * de contrôle, de format ou combinant, forme que NFKC change (pleine chasse, ligature, exposant,
+ * signe kelvin…), ou point final de domaine.
+ */
 export function emailPiege(v: unknown): boolean {
-  return typeof v === 'string' && CARACTERES_PIEGES.test(v);
+  return (
+    typeof v === 'string' &&
+    (CARACTERES_PIEGES.test(v) || CARACTERES_INVISIBLES.test(v) || v !== v.normalize('NFKC') || v.trim().endsWith('.'))
+  );
 }
 
 /** Adresse normalisée (espaces retirés, minuscules), ou null si elle n'en est pas une. */
