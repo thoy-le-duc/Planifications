@@ -49,6 +49,7 @@ import {
   CATEGORIES_ESPECE,
   CATEGORIES_INTERVENTION,
   ETAPES_REALISEES,
+  ETATS_MEMBRE,
   MODES_ITINERAIRE,
   MOTIFS_MOUVEMENT,
   NATURES_OBSERVATION,
@@ -804,7 +805,13 @@ export const utilisateur = pgTable(
 
 /**
  * Appartenance d'un utilisateur à une ferme, avec son rôle. Un membre retiré l'est en douceur
- * (`supprime_le`) : il perd l'accès. Publiée : les règles de synchro PowerSync (T10) la lisent.
+ * (`supprime_le`) : il perd l'accès. Publiée : les règles de synchro PowerSync (T10) la lisent,
+ * et doivent ne retenir que `etat = 'accepte'`.
+ *
+ * Invitation : `etat = 'invite'` jusqu'à la première connexion réussie de l'invité après
+ * `invite_le`, qui le passe à 'accepte'. Par défaut 'accepte' (créateur de la ferme, insertion
+ * directe). `invite_par` et `invite_le` restent après l'acceptation : la limite d'invitations par
+ * gérant se calcule sur eux.
  */
 export const membre = pgTable(
   'membre',
@@ -815,12 +822,19 @@ export const membre = pgTable(
       .references(() => utilisateur.id),
     fermeId: fermeId(),
     role: text('role', { enum: ROLES_MEMBRE }).notNull(),
+    etat: text('etat', { enum: ETATS_MEMBRE }).notNull().default('accepte'),
+    invitePar: idDe<'Utilisateur'>('invite_par').references(() => utilisateur.id),
+    inviteLe: instant('invite_le'),
     ...horodatages(),
   },
   (t) => [
     verif('membre', 'role', parmi(t.role, ROLES_MEMBRE)),
+    verif('membre', 'etat', parmi(t.etat, ETATS_MEMBRE)),
+    verif('membre', 'invitation', sql`(${t.invitePar} IS NULL) = (${t.inviteLe} IS NULL)`),
+    verif('membre', 'invite_date', sql`${t.etat} <> 'invite' OR ${t.inviteLe} IS NOT NULL`),
     unique('membre_utilisateur_ferme_unique').on(t.utilisateurId, t.fermeId),
     index('membre_ferme_idx').on(t.fermeId),
+    index('membre_invite_par_idx').on(t.invitePar, t.inviteLe),
   ],
 );
 

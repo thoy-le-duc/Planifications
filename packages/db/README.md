@@ -24,7 +24,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | Fichier | Contenu |
 | --- | --- |
 | `src/schema.ts` | Les 21 tables du modèle v1 et les 4 tables de comptes (T09), clés étrangères, CHECK, index |
-| `src/comptes.ts` | `fermesDeLUtilisateur`, `roleDansLaFerme`, `ROLES_MEMBRE` (T09) |
+| `src/comptes.ts` | `fermesDeLUtilisateur`, `roleDansLaFerme`, `ROLES_MEMBRE`, `ETATS_MEMBRE` (T09) |
 | `src/valeurs.ts` | Valeurs des unions de T01, vérifiées à la compilation contre `@planif/core` |
 | `src/conversions.ts` | `ligneDepuisX` / `xDepuisLigne` pour Serie, Occupation, Emplacement, Evenement |
 | `src/migrations.ts` | `appliquerMigrations(url)` |
@@ -34,6 +34,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0003_*.sql` | Généré par drizzle-kit : CHECK stricts du détail jsonb, clé étrangère composée du remplacement. Seule retouche : l'UNIQUE posé avant la clé étrangère qui s'y appuie |
 | `migrations/0004_*.sql` | Généré par drizzle-kit (T09) : `utilisateur`, `membre`, `code_connexion`, `jeton_renouvellement`, clés `auteur_id` → `utilisateur` |
 | `migrations/0005_*.sql` | Migration personnalisée (T09) : `utilisateur` et `membre` ajoutées à la publication `powersync` |
+| `migrations/0006_*.sql` | Généré par drizzle-kit (T09, relecture sécurité) : `membre.etat`, `invite_par`, `invite_le` et leurs CHECK |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 
@@ -58,11 +59,13 @@ Connexion par code à 6 chiffres reçu par e-mail, sans mot de passe (Q9). Le co
 | Table | Rôle | Publiée |
 | --- | --- | --- |
 | `utilisateur` | Personne qui se connecte. `email` unique, toujours en minuscules (CHECK `email = lower(email)`) | oui |
-| `membre` | Utilisateur × ferme, rôle `gerant` ou `equipier`, unique par couple, retrait en douceur (`supprime_le`) | oui |
-| `code_connexion` | Code à usage unique, haché, expiration, tentatives. Pas de clé vers `utilisateur` : le code précède le compte | **non** |
+| `membre` | Utilisateur × ferme, rôle `gerant` ou `equipier`, unique par couple, retrait en douceur (`supprime_le`). `etat` : `invite` jusqu'à la prochaine connexion réussie de l'invité, puis `accepte` (valeur par défaut) ; `invite_par` et `invite_le` gardent la trace de l'invitation | oui |
+| `code_connexion` | Code à usage unique, haché, expiration, tentatives. Pas de clé vers `utilisateur` : le code précède le compte. Ses lignes servent aussi aux limites : envois par adresse, et échecs par adresse sur 24 h (somme des `tentatives` des codes créés dans la fenêtre) | **non** |
 | `jeton_renouvellement` | Jeton long et opaque, haché, expiration, révocation | **non** |
 
-Règle de découpage : `fermesDeLUtilisateur(db, utilisateurId)` rend les fermes dont l'utilisateur est membre actif (membre et ferme non supprimés), triées par id ; `roleDansLaFerme(db, utilisateurId, fermeId)` rend le rôle ou `null`. L'API les relit à chaque requête, les règles de synchro PowerSync (T10) reprendront la même règle. `db` est ce que rend `drizzle(client)` de `drizzle-orm/node-postgres`.
+Règle de découpage : `fermesDeLUtilisateur(db, utilisateurId)` rend les fermes dont l'utilisateur est membre actif (membre accepté, et membre, ferme et utilisateur non supprimés), triées par id ; `roleDansLaFerme(db, utilisateurId, fermeId)` rend le rôle ou `null`. L'API les relit à chaque requête, les règles de synchro PowerSync (T10) reprendront la même règle.
+
+**À retenir pour T10** : `membre` est publiée avec ses lignes « invité ». Les règles de synchro doivent filtrer `etat = 'accepte'` (en plus de `supprime_le` nul sur le membre, la ferme et l'utilisateur), sinon un invité recevrait les données de la ferme avant d'avoir accepté. `db` est ce que rend `drizzle(client)` de `drizzle-orm/node-postgres`.
 
 Tickets suivants (décision du chef d'équipe, rien dans T09) :
 
@@ -103,7 +106,7 @@ Limites de maintenance :
 
 Validés par le chef d'équipe le 2026-09-29.
 
-1. **Pas de table `utilisateur` avant T09.** Résolu par T09 : `evenement.auteur_id`, `proposition.auteur_id` et `modification.auteur_id` référencent `utilisateur(id)`, sans cascade. La migration 0004 échouerait sur une base qui contient des saisies d'auteurs inconnus : il n'y en a pas encore en production.
+1. **Pas de table `utilisateur` avant T09.** Résolu par T09 : `evenement.auteur_id`, `proposition.auteur_id` et `modification.auteur_id` référencent `utilisateur(id)`, sans cascade. La migration 0004 échoue sur une base qui contient déjà des événements (ou propositions, modifications) d'auteurs inconnus : la clé étrangère ne se pose pas. Aucune base en production aujourd'hui ; une base de développement dans ce cas se recrée (relevé par la relecture sécurité de T09).
 2. **`evenement` et `mouvement_stock` sans `modifie_le` ni `supprime_le`.** Ils sont en ajout seul : une ligne n'est jamais modifiée ni supprimée. (L'entité `MouvementStock` de T01 porte un `supprimeLe` : il n'a pas de colonne.)
 3. **Tableaux `uuid[]`** pour `emplacement.remplace` et `evenement.emplacement_ids`, plutôt que des tables de liaison : ils se lisent et se synchronisent avec leur ligne. Pas de clé étrangère sur leurs éléments.
 4. **Les identifiants du détail restent dans le jsonb** (`produitPhytoId` d'un traitement, `secteurIrrigationId` d'une irrigation) : pas de clé étrangère. La vue `traitements` joint le produit par une jointure externe.
