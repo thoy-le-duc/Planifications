@@ -1,6 +1,7 @@
 /**
- * Données du serveur seul (T09b), hors du schéma `public` : jamais publiées vers PowerSync (la
- * publication couvre `public`), jamais sur un téléphone. Hors du point d'entrée de @planif/db
+ * Données du serveur seul (T09b), dans le schéma `securite` : jamais publiées vers PowerSync (la
+ * publication `powersync` est une liste explicite de tables, qui n'en contient aucune de ce
+ * schéma), jamais sur un téléphone. Hors du point d'entrée de @planif/db
  * (qui décrit le modèle et les comptes, et dont @planif/sync dérive le schéma local) :
  * `import { demandeIp } from '@planif/db/securite'`. Migrations : drizzle.config.ts lit aussi
  * ce fichier.

@@ -78,6 +78,13 @@
       "when": 1790705164325,
       "tag": "0010_durcissement_connexion",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790708458257,
+      "tag": "0011_rotation_successeurs",
+      "breakpoints": true
     }
   ]
 }
