@@ -34,7 +34,17 @@ export interface OptionsConnecteur {
 /** Délai entre deux essais (connexion au service, envoi de la file) après une erreur : celui du SDK. */
 export const DELAI_ESSAI_MS = 5_000;
 
-export function creerConnecteur(o: OptionsConnecteur): PowerSyncBackendConnector {
+/**
+ * Connecteur complet : `invalidateCredentials` est appelé par les versions de PowerSync qui
+ * le connaissent quand le service refuse le jeton (401) ; @powersync/common 2.3.0 ne le déclare
+ * pas encore, d'où l'intersection.
+ */
+export type ConnecteurPlanif = PowerSyncBackendConnector & {
+  /** Le service a refusé le jeton : le prochain `fetchCredentials()` le renouvelle. */
+  invalidateCredentials(): void;
+};
+
+export function creerConnecteur(o: OptionsConnecteur): ConnecteurPlanif {
   const jetonAcces = () => o.jetons.jetonValide();
   const invaliderJeton = () => {
     o.jetons.invalider();
@@ -46,6 +56,7 @@ export function creerConnecteur(o: OptionsConnecteur): PowerSyncBackendConnector
     async uploadData(base: CommonPowerSyncDatabase): Promise<void> {
       await envoyerEcritures(base, { urlApi: o.urlApi, fetch: o.fetch, jetonAcces, invaliderJeton });
     },
+    invalidateCredentials: invaliderJeton,
   };
 }
 
@@ -92,9 +103,12 @@ export function brancherSynchro(base: BaseSynchronisable, options: OptionsBranch
   }
 
   const connecteur = creerConnecteur(options);
-  const surveille: PowerSyncBackendConnector = {
+  const surveille: ConnecteurPlanif = {
     fetchCredentials: () => surveillerExpiration(() => connecteur.fetchCredentials()),
     uploadData: (b) => surveillerExpiration(() => connecteur.uploadData(b)),
+    invalidateCredentials: () => {
+      connecteur.invalidateCredentials();
+    },
   };
   base.registerListener({ statusChanged: signaler });
   void base.connect(surveille, {
