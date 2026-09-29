@@ -22,6 +22,10 @@
  * `navigator.locks.request('planif-renouvellement', …)` : relire la session rangée ; si son jeton
  * d'accès (renouvelé par un autre onglet) est encore valable, le rendre sans réseau ; sinon
  * renouveler et ranger. Sans `navigator.locks` : un seul renouvellement à la fois dans la page.
+ *
+ * 3e relecture : une requête de renouvellement sans réponse est annulée au bout de
+ * DELAI_RENOUVELLEMENT_MS (échec réseau, pas SessionExpiree) : le verrou est libéré, rien n'est
+ * rangé, l'ancien jeton de renouvellement est gardé.
  */
 import { SessionExpiree } from '@planif/sync';
 import { enregistrerSession, lireSession, sessionValide, type SessionConnexion } from '../connexion/session.ts';
@@ -31,6 +35,9 @@ export { SessionExpiree };
 
 /** On renouvelle un peu avant l'expiration : le jeton doit rester valide le temps de la requête. */
 export const MARGE_RENOUVELLEMENT_MS = 60_000;
+
+/** Au-delà, le renouvellement sans réponse est abandonné : il ne garde pas le verrou entre onglets. */
+export const DELAI_RENOUVELLEMENT_MS = 10_000;
 
 /** Claim numérique (en secondes) d'un JWT, en ms, lu sans vérifier la signature ; null si illisible. */
 function claimInstant(jeton: string, nom: 'exp' | 'iat'): number | null {
@@ -143,15 +150,35 @@ export function gererJetons(depart: SessionConnexion, options: OptionsJetons): G
     return verrous.request('planif-renouvellement', renouvelerSousVerrou);
   }
 
+  /** Renouvellement limité à DELAI_RENOUVELLEMENT_MS (setTimeout : le fetch peut ignorer le signal). */
   async function envoyerRenouvellement(): Promise<string> {
+    const controleur = new AbortController();
+    let minuterie: ReturnType<typeof setTimeout> | undefined;
+    const delai = new Promise<never>((_, rejeter) => {
+      minuterie = setTimeout(() => {
+        controleur.abort();
+        rejeter(new Error('renouvellement du jeton : pas de réponse'));
+      }, DELAI_RENOUVELLEMENT_MS);
+    });
+    try {
+      return await Promise.race([echanger(controleur.signal), delai]);
+    } finally {
+      clearTimeout(minuterie);
+    }
+  }
+
+  async function echanger(signal: AbortSignal): Promise<string> {
     const res = await envoyer(`${options.urlApi}/auth/renouveler`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ jetonRenouvellement: session.jetonRenouvellement }),
+      signal,
     });
     if (res.status === 401) throw new SessionExpiree();
     if (res.status !== 200) throw new Error(`renouvellement du jeton : réponse ${String(res.status)}`);
     const corps: unknown = await res.json();
+    // Réponse arrivée après l'abandon : rien n'est rangé (l'appel suivant représente l'ancien jeton).
+    if (signal.aborted) throw new Error('renouvellement du jeton : abandonné');
     const nouvelle = sessionValide({ ...session, ...(typeof corps === 'object' && corps !== null ? corps : {}) });
     if (nouvelle === null) throw new Error('renouvellement du jeton : réponse illisible');
     invalide = false;
