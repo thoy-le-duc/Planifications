@@ -193,7 +193,7 @@ function ajouterSerie(serie: SerieSemainier, realises: RealisesSerie | undefined
   const prevues = serie.datesPrevues;
   const coherents = realises === undefined ? undefined : realisesCoherents(prevues, realises);
   const dates = coherents === undefined ? prevues : appliquerRealises(prevues, coherents);
-  // Décision provisoire (PR #2) : une étape réalisée vaut pour toutes les étapes antérieures.
+  // Q11 : une étape réalisée vaut pour toutes les étapes antérieures.
   let dernierRealise = -1;
   if (coherents !== undefined) {
     for (const [index, etape] of ETAPES_SERIE.entries()) {
@@ -203,6 +203,8 @@ function ajouterSerie(serie: SerieSemainier, realises: RealisesSerie | undefined
     }
   }
   let emplacements: readonly EmplacementConcerne[] | null = null;
+  // Q12 : une seule ligne en retard par série, la première rencontrée (étapes en ordre chronologique).
+  let retardListe = false;
   for (const [index, etape] of ETAPES_SERIE.entries()) {
     const date = dates[etape];
     if (index <= dernierRealise || date === undefined) {
@@ -210,9 +212,10 @@ function ajouterSerie(serie: SerieSemainier, realises: RealisesSerie | undefined
     }
     const jour = jourAbsolu(date);
     const retard = retardSiDansLaSemaine(jour, fenetre);
-    if (retard === null) {
+    if (retard === null || (retard > 0 && retardListe)) {
       continue;
     }
+    retardListe ||= retard > 0;
     emplacements ??= trierEmplacements(serie.emplacements);
     sortie.push({
       jour,
@@ -273,6 +276,8 @@ function ajouterCampagne(campagne: CampagneSemainier, fenetre: Fenetre, sortie: 
  * - Campagne : plus listée une fois sa fin de récolte prévue passée.
  * - Une tâche en retard (date prévue avant la date du jour) d'avant la semaine y est reprise,
  *   sans limite dans le temps.
+ * - Une seule tâche en retard par série (Q12) : la plus ancienne étape non faite. Les tâches de
+ *   la semaine pas encore en retard restent listées.
  * - RangeError si la semaine n'existe pas (S53 d'une année qui n'en a que 52).
  */
 export function semainier(
