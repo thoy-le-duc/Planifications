@@ -123,3 +123,104 @@ export async function ajouterMembre(pool: pg.Pool, utilisateurId: string, fermeI
     ],
   );
 }
+
+/** Lignes d'une ferme que les événements désignent (série, campagne, emplacement, vanne, produit phyto). */
+export interface LignesDeFerme {
+  readonly serie: string;
+  readonly campagne: string;
+  readonly emplacement: string;
+  readonly secteurIrrigation: string;
+  readonly produitPhyto: string;
+}
+
+const PARAMETRES_ITINERAIRE = {
+  mode: 'plant_maison',
+  densite: { facon: 'ecartement', rangsParPlanche: 3, ecartementSurRangCm: 30 },
+  dureePepiniereJours: 28,
+  grainesParMotte: 1,
+  plantsParMotte: 1,
+  pertePepiniere: 10,
+  alveolesParPlaque: 77,
+  periodeUsage: null,
+  typeAbri: 'tunnel',
+  dureeAvantRecolteJours: 50,
+  fenetreRecolteJours: 14,
+  margeSecurite: 10,
+  rendementAttendu: null,
+  perenne: null,
+};
+
+/** Crée dans `fermeId` une série, une campagne, un emplacement, une vanne et un produit phyto (T10, B1). */
+export async function peuplerFerme(pool: pg.Pool, fermeId: string): Promise<LignesDeFerme> {
+  const [zone, famille, espece, kiwi, itineraire, saison, plantation] = Array.from({ length: 7 }, () => randomUUID());
+  const l: LignesDeFerme = {
+    serie: randomUUID(),
+    campagne: randomUUID(),
+    emplacement: randomUUID(),
+    secteurIrrigation: randomUUID(),
+    produitPhyto: randomUUID(),
+  };
+  await pool.query(`INSERT INTO zone (id, ferme_id, nom, type_abri) VALUES ($1, $2, 'Tunnel 2', 'tunnel')`, [zone, fermeId]);
+  await pool.query(
+    `INSERT INTO emplacement (id, ferme_id, zone_id, code, sorte, longueur_m, actif_du)
+     VALUES ($1, $2, $3, 'T2-P03', 'planche', 30, '2026-01-01')`,
+    [l.emplacement, fermeId, zone],
+  );
+  await pool.query(
+    `INSERT INTO secteur_irrigation (id, ferme_id, numero_vanne, nom) VALUES ($1, $2, 12, 'Vanne 12')`,
+    [l.secteurIrrigation, fermeId],
+  );
+  await pool.query(
+    `INSERT INTO famille (id, ferme_id, nom, delai_retour_minimal_ans, delai_retour_conseille_ans)
+     VALUES ($1, $2, 'Astéracées', 2, 3)`,
+    [famille, fermeId],
+  );
+  await pool.query(
+    `INSERT INTO espece (id, ferme_id, famille_id, nom, categorie, perenne, unite_recolte)
+     VALUES ($1, $3, $4, 'Laitue', 'legume', false, 'piece'), ($2, $3, $4, 'Kiwi', 'fruit', true, 'kg')`,
+    [espece, kiwi, fermeId, famille],
+  );
+  await pool.query(
+    `INSERT INTO itineraire (id, ferme_id, espece_id, nom, mode, parametres)
+     VALUES ($1, $2, $3, 'Batavia de printemps', 'plant_maison', $4)`,
+    [itineraire, fermeId, espece, JSON.stringify(PARAMETRES_ITINERAIRE)],
+  );
+  await pool.query(`INSERT INTO saison (id, ferme_id, nom, debut, fin) VALUES ($1, $2, '2026', '2026-01-01', '2026-12-31')`, [
+    saison,
+    fermeId,
+  ]);
+  await pool.query(
+    `INSERT INTO serie (id, ferme_id, saison_id, espece_id, itineraire_id, parametres,
+                        ancre_type, ancre_date, prevu_semis_pepiniere, prevu_mise_en_place,
+                        prevu_debut_recolte, prevu_fin_recolte, longueur_m, statut)
+     VALUES ($1, $2, $3, $4, $5, $6, 'plantation', '2026-08-05', '2026-07-08', '2026-08-05',
+             '2026-09-25', '2026-10-08', 30, 'en_cours')`,
+    [l.serie, fermeId, saison, espece, itineraire, JSON.stringify(PARAMETRES_ITINERAIRE)],
+  );
+  await pool.query(
+    `INSERT INTO plantation (id, ferme_id, espece_id, date_plantation, nombre_plants) VALUES ($1, $2, $3, '2019-03-15', 120)`,
+    [plantation, fermeId, kiwi],
+  );
+  await pool.query(`INSERT INTO campagne (id, ferme_id, plantation_id, annee) VALUES ($1, $2, $3, 2026)`, [
+    l.campagne,
+    fermeId,
+    plantation,
+  ]);
+  await pool.query(
+    `INSERT INTO produit_phyto (id, ferme_id, nom_commercial, numero_amm, substance_active, delai_avant_recolte_jours, utilisable_en_bio)
+     VALUES ($1, $2, 'Bouillie bordelaise', '2010427', 'cuivre', 21, true)`,
+    [l.produitPhyto, fermeId],
+  );
+  return l;
+}
+
+/** Produit phyto de la bibliothèque partagée (`ferme_id` nul). */
+export async function creerProduitPhytoBibliotheque(pool: pg.Pool): Promise<string> {
+  const id = randomUUID();
+  await pool.query(
+    `INSERT INTO produit_phyto (id, ferme_id, nom_commercial, numero_amm, substance_active, delai_avant_recolte_jours, utilisable_en_bio)
+     VALUES ($1, NULL, 'Soufre mouillable', '2000123', 'soufre', 3, true)`,
+    [id],
+  );
+  return id;
+}

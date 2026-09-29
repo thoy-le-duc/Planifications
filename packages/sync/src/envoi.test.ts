@@ -68,7 +68,7 @@ function fetchSimule(reponses: readonly (number | 'reseau')[]): { fetch: typeof 
 }
 
 function options(f: typeof fetch): OptionsEnvoi {
-  return { urlApi: URL_API, fetch: f, jetonAcces: () => Promise.resolve(JETON) };
+  return { urlApi: URL_API, fetch: f, jetonAcces: () => Promise.resolve(JETON), invaliderJeton: () => undefined };
 }
 
 const PUT_RECOLTE: EcritureCrud = {
@@ -140,7 +140,9 @@ describe('T10 : envoi des écritures (envoyerEcritures)', () => {
     expect(file.terminees).toEqual([0]);
   });
 
-  it.each([500, 502, 503, 401])('réponse %i : lève sans retirer la transaction', async (statut) => {
+  // Relecture T10 (C3) : 401 retiré de cette liste ; il déclenche désormais un renouvellement
+  // forcé et un nouvel essai (bloc « 401 sur l'envoi » plus bas), donc deux appels et non un.
+  it.each([500, 502, 503])('réponse %i : lève sans retirer la transaction', async (statut) => {
     const file = new FileSimulee([[PUT_RECOLTE], [PATCH_NOTE]]);
     const { fetch, appels } = fetchSimule([statut]);
     await expect(sync.envoyerEcritures(file, options(fetch))).rejects.toThrow();
@@ -159,5 +161,74 @@ describe('T10 : envoi des écritures (envoyerEcritures)', () => {
     await sync.envoyerEcritures(file, options(f));
     expect(appels).toHaveLength(2);
     expect(file.terminees).toEqual([0, 1]);
+  });
+
+  describe('401 sur l’envoi (relecture T10, C3)', () => {
+    /** Jetons simulés : `invaliderJeton()` fait passer au jeton suivant au prochain `jetonAcces()`. */
+    function jetons(suite: readonly string[], echec?: Error) {
+      const suivi = { demandes: 0, invalidations: 0 };
+      let courant = 0;
+      let invalide = false;
+      return {
+        suivi,
+        jetonAcces: () => {
+          suivi.demandes++;
+          if (invalide) {
+            invalide = false;
+            if (echec !== undefined) return Promise.reject(echec);
+            courant = Math.min(courant + 1, suite.length - 1);
+          }
+          return Promise.resolve(suite[courant] ?? '');
+        },
+        invaliderJeton: () => {
+          suivi.invalidations++;
+          invalide = true;
+        },
+      };
+    }
+
+    it('401 puis 200 : invalide le jeton, en demande un neuf, renvoie la même transaction une fois, puis vide la file', async () => {
+      const file = new FileSimulee([[PUT_RECOLTE], [PATCH_NOTE]]);
+      const { fetch, appels } = fetchSimule([401, 200]);
+      const j = jetons(['jeton.perime', 'jeton.neuf']);
+      await sync.envoyerEcritures(file, { urlApi: URL_API, fetch, jetonAcces: j.jetonAcces, invaliderJeton: j.invaliderJeton });
+
+      expect(j.suivi.invalidations).toBe(1);
+      expect(appels.map((a) => a.entetes.get('authorization'))).toEqual(['Bearer jeton.perime', 'Bearer jeton.neuf', 'Bearer jeton.neuf']);
+      expect(appels[1]?.corps).toEqual(appels[0]?.corps);
+      expect(file.terminees).toEqual([0, 1]);
+    });
+
+    it('401 deux fois de suite : lève SessionExpiree après un seul nouvel essai, sans retirer la transaction', async () => {
+      const file = new FileSimulee([[PUT_RECOLTE]]);
+      const { fetch, appels } = fetchSimule([401, 401, 200]);
+      const j = jetons(['jeton.perime', 'jeton.neuf']);
+      const envoi = sync.envoyerEcritures(file, { urlApi: URL_API, fetch, jetonAcces: j.jetonAcces, invaliderJeton: j.invaliderJeton });
+      await expect(envoi).rejects.toBeInstanceOf(sync.SessionExpiree);
+      await expect(envoi).rejects.toMatchObject({ name: 'SessionExpiree' });
+      expect(appels).toHaveLength(2);
+      expect(file.terminees).toEqual([]);
+    });
+
+    it('renouvellement refusé après un 401 : SessionExpiree remonte telle quelle, sans nouvel envoi', async () => {
+      const file = new FileSimulee([[PUT_RECOLTE]]);
+      const { fetch, appels } = fetchSimule([401, 200]);
+      const refus = new sync.SessionExpiree();
+      const j = jetons(['jeton.perime'], refus);
+      const envoi = sync.envoyerEcritures(file, { urlApi: URL_API, fetch, jetonAcces: j.jetonAcces, invaliderJeton: j.invaliderJeton });
+      await expect(envoi).rejects.toBe(refus);
+      expect(appels).toHaveLength(1);
+      expect(file.terminees).toEqual([]);
+    });
+
+    it('une panne (503) n’invalide pas le jeton', async () => {
+      const file = new FileSimulee([[PUT_RECOLTE]]);
+      const { fetch } = fetchSimule([503]);
+      const j = jetons(['jeton']);
+      await expect(
+        sync.envoyerEcritures(file, { urlApi: URL_API, fetch, jetonAcces: j.jetonAcces, invaliderJeton: j.invaliderJeton }),
+      ).rejects.toThrow();
+      expect(j.suivi.invalidations).toBe(0);
+    });
   });
 });

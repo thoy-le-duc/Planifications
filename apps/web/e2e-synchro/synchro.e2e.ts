@@ -46,6 +46,26 @@
  *       serveur doit refuser
  *   [data-testid="refus"][data-motif=<motif>] : un par refus (porte.surveillerRefus), texte =
  *       message du serveur
+ *
+ * Ajouts de la relecture T10 (M5) :
+ *
+ *   [data-testid="recolte"] porte aussi data-note = colonne `note` de la ligne locale (chaîne
+ *       vide si NULL). Une récolte saisie par la page a une note NULL (data-note="").
+ *   bouton « Saisir une récolte pour une autre ferme » : porte.ecrire(INSERT INTO evenement …)
+ *       d'une récolte valide en tout point (99 kg, date du jour, horodatage ISO, auteur = la
+ *       session, source 'tap', emplacement_ids '[]', photos '[]', note NULL) mais dont ferme_id
+ *       est un UUID neuf (crypto.randomUUID()) : une ferme dont l'utilisateur n'est pas membre,
+ *       que le serveur refuse ('ferme_interdite'). Son id (UUID) est affiché dans
+ *       [data-testid="put-interdit"][data-id=<id>] (vide et sans data-id avant le clic).
+ *   [data-testid="evenement-local"][data-id=<id>] : une par ligne de la table locale
+ *       `evenement`, TOUTES FERMES CONFONDUES (porte.surveiller, SELECT id FROM evenement,
+ *       tables ['evenement']), dans une liste « Événements en base locale ».
+ *
+ *   Attendu (M5) : une écriture refusée ne reste pas sur le téléphone. Après la synchro qui suit
+ *   le refus, la ligne locale revient à la valeur du serveur (modification refusée) ou
+ *   disparaît (création refusée). C'est le comportement de PowerSync quand la file est vide et
+ *   que le point de contrôle du serveur arrive (vérifié par le testeur avec une maquette de la
+ *   page : ces tests passent dès que les éléments ci-dessus existent).
  */
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -144,10 +164,19 @@ test.describe('T10 : synchro de bout en bout', () => {
       await expect(recolte(b.page, '3')).toHaveCount(1, { timeout: DELAI_SYNCHRO_MS });
 
       // Un événement ne se modifie pas après coup : le serveur refuse (200 + refus enregistré).
+      // Hors ligne d'abord, pour voir la modification locale avant qu'elle parte.
+      await expect(recolte(a.page, '3')).toHaveAttribute('data-note', '');
+      await a.contexte.setOffline(true);
       await a.page.getByRole('button', { name: 'Modifier la dernière récolte sur place' }).click();
+      await expect(recolte(a.page, '3')).toHaveAttribute('data-note', 'modifiée sur place', { timeout: 2_000 });
+      await a.contexte.setOffline(false);
       const refus = a.page.locator('[data-testid="refus"][data-motif="ajout_seul"]');
       await expect(refus).toHaveCount(1, { timeout: DELAI_SYNCHRO_MS });
       await expect(refus).toHaveText(/\p{L}{3,}.*\p{L}{3,}/u);
+
+      // M5 (relecture) : la valeur affichée revient à celle du serveur, chez l'auteur comme chez l'autre.
+      await expect(recolte(a.page, '3')).toHaveAttribute('data-note', '', { timeout: DELAI_SYNCHRO_MS });
+      await expect(recolte(b.page, '3')).toHaveAttribute('data-note', '');
 
       // La file n'est pas bloquée : la saisie suivante arrive chez l'autre.
       await saisirRecolte(a.page, '4');
@@ -155,6 +184,31 @@ test.describe('T10 : synchro de bout en bout', () => {
 
       // Le refus ne concerne que son auteur.
       await expect(b.page.getByTestId('refus')).toHaveCount(0);
+    } finally {
+      await a.contexte.close();
+      await b.contexte.close();
+    }
+  });
+
+  test('création refusée (ferme interdite) : la ligne disparaît de la base locale après la synchro (relecture M5)', async ({ browser }) => {
+    const [a, b] = await deuxTelephones(browser);
+    try {
+      await a.page.getByRole('button', { name: 'Saisir une récolte pour une autre ferme' }).click({ timeout: 5_000 });
+      const temoin = a.page.getByTestId('put-interdit');
+      await expect(temoin).toHaveAttribute('data-id', /^[0-9a-f-]{36}$/, { timeout: 2_000 });
+      const id = (await temoin.getAttribute('data-id')) ?? '';
+      const locale = a.page.locator(`[data-testid="evenement-local"][data-id="${id}"]`);
+
+      // Le refus redescend chez l'auteur, puis la ligne refusée quitte sa base locale.
+      await expect(a.page.locator('[data-testid="refus"][data-motif="ferme_interdite"]')).toHaveCount(1, {
+        timeout: DELAI_SYNCHRO_MS,
+      });
+      await expect(locale).toHaveCount(0, { timeout: DELAI_SYNCHRO_MS });
+
+      // La file n'est pas bloquée, et l'autre téléphone n'a jamais vu la ligne.
+      await saisirRecolte(a.page, '5');
+      await expect(recolte(b.page, '5')).toHaveCount(1, { timeout: DELAI_SYNCHRO_MS });
+      await expect(b.page.locator(`[data-testid="evenement-local"][data-id="${id}"]`)).toHaveCount(0);
     } finally {
       await a.contexte.close();
       await b.contexte.close();

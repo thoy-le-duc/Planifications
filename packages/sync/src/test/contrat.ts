@@ -132,6 +132,12 @@ export interface OptionsEnvoi {
   readonly fetch: typeof fetch;
   /** Jeton d'accès à jour (la porte le renouvelle si besoin). */
   readonly jetonAcces: () => Promise<string>;
+  /**
+   * Relecture T10 (C3) : oublie le jeton en cours ; le prochain `jetonAcces()` doit en demander
+   * un neuf au serveur (/auth/renouveler), même si l'horloge locale le croit encore valide
+   * (téléphone en retard). Appelée par l'envoi quand /sync/upload répond 401.
+   */
+  readonly invaliderJeton: () => void;
 }
 
 // ── Module ───────────────────────────────────────────────────────────────────────────────────
@@ -146,8 +152,19 @@ export interface ModuleSync {
    * `donnees` = `opData`, absent pour DELETE). 200 → `complete()` puis transaction suivante,
    * jusqu'à `null`. Toute autre réponse, ou une panne réseau → lève une erreur SANS `complete()` :
    * PowerSync réessaiera. Le refus métier n'est jamais une erreur ici (il arrive en 200).
+   *
+   * Relecture T10 (C3) — 401 : `invaliderJeton()`, puis `jetonAcces()` (jeton neuf) et UN seul
+   * nouvel essai de la même transaction. Deuxième 401 → lève `SessionExpiree` (sans
+   * `complete()`). Si `jetonAcces()` lève `SessionExpiree` (renouvellement refusé), elle remonte
+   * telle quelle.
    */
   envoyerEcritures(file: FileEcritures, options: OptionsEnvoi): Promise<void>;
+  /**
+   * Relecture T10 (C3) : erreur « session expirée, reconnexion nécessaire » (name
+   * 'SessionExpiree'). C'est LA classe de l'appli : apps/web/src/donnees/jeton.ts la réexporte
+   * (même constructeur), pour qu'un seul `instanceof` suffise partout.
+   */
+  readonly SessionExpiree: new () => Error;
 }
 
 /** Chemin tenu dans une variable : TypeScript ne résout pas le module avant qu'il existe. */

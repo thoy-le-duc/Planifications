@@ -62,6 +62,37 @@
  *     message text NOT NULL (explication en français pour le téléphone), donnees jsonb (ce qui
  *     a été reçu), cree_le timestamptz NOT NULL (= maintenant()).
  *     Elle descend par la synchro vers l'auteur seulement (flux filtré sur utilisateur_id).
+ *
+ * ── Corrections de la relecture (T10) ───────────────────────────────────────────────────────
+ *
+ *   B1  Références : un PUT d'événement de la ferme A est refusé si un identifiant qu'il porte
+ *       désigne une ligne d'une autre ferme → 'ferme_interdite' ; une ligne inexistante →
+ *       'ecriture_invalide'. Rien d'écrit, 200, les autres écritures du lot passent.
+ *       Identifiants vérifiés : serie_id (serie), campagne_id (campagne), chaque élément de
+ *       emplacement_ids (emplacement), remplace_evenement_id (evenement), et dans `detail` :
+ *       secteurIrrigationId (secteur_irrigation, type 'irrigation'), produitPhytoId
+ *       (produit_phyto, type 'traitement'). Seuls ces deux identifiants existent dans les
+ *       Detail* de T01. Produit phyto : accepté s'il est de la ferme A OU de la bibliothèque
+ *       (ferme_id nul) ; autre ferme → 'ferme_interdite' ; inexistant → 'ecriture_invalide'.
+ *   C1  Jamais de 500 à cause de ce que le téléphone envoie : un caractère nul (U+0000) dans
+ *       `table`, `id` (PUT ou DELETE) ou un nom de colonne de `donnees` → 200 avec un refus
+ *       (enregistré dans refus_synchro), et le même lot renvoyé passe encore en 200.
+ *       Textes du refus tronqués : nom_table, ligne_id et message font au plus 200 caractères
+ *       dans refus_synchro, même si l'écriture reçue portait 10 000 caractères.
+ *   C2  Limites : note > 4 000 caractères, plus de 20 photos, une photo > 2 000 caractères,
+ *       `detail` > 8 Kio (8 192 octets UTF-8 de JSON.stringify du détail lu), clé inconnue dans
+ *       `detail` (hors des clés du Detail* de T01 pour ce type) → 'ecriture_invalide'.
+ *       Les bornes elles-mêmes (4 000, 20, 2 000) sont acceptées.
+ *       Plus de 500 écritures dans un lot → 400 { erreur: 'requete_invalide' }, rien d'écrit
+ *       (500 passent). Corps HTTP > 5 Mio (5 × 1 048 576 octets) → 413, rien d'écrit.
+ *       `donnees` dont le JSON dépasse 16 Kio : le refus est enregistré, colonne donnees nulle.
+ *   M1  Refus 'ferme_interdite' d'un utilisateur qui n'est pas membre actif de la ferme visée :
+ *       ferme_id NUL dans refus_synchro (la ligne descend sur son téléphone : elle ne doit pas
+ *       lui apprendre l'id d'une ferme qui n'est pas la sienne).
+ *   M2  Un même lot renvoyé ne crée pas de refus en double : au plus une ligne refus_synchro par
+ *       (utilisateur_id, ligne_id, operation, motif).
+ *   M7  `date` hors de [2000-01-01, 2100-12-31] et `horodatage` hors de
+ *       [2000-01-01T00:00:00Z, 2100-12-31T23:59:59.999Z] → 'ecriture_invalide' (bornes acceptées).
  */
 import { creerGenerateurId } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -73,9 +104,12 @@ import {
   ajouterMembre,
   creerBaseJetable,
   creerFerme,
+  creerProduitPhytoBibliotheque,
   creerUtilisateur,
   decrireAvecBase,
+  peuplerFerme,
   type BaseJetable,
+  type LignesDeFerme,
 } from './test/base-jetable.ts';
 
 const EMETTEUR = 'https://api.planif.test';
@@ -310,9 +344,10 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
       expect(await modifications(e.id)).toBe(0);
 
       const refus = await refusEnregistre(e.id);
+      // M1 (relecture) : ferme_id nul, l'utilisateur n'est pas membre actif de cette ferme.
       expect(refus).toMatchObject({
         utilisateur_id: u.id,
-        ferme_id: ferme,
+        ferme_id: null,
         nom_table: 'evenement',
         ligne_id: e.id,
         operation: 'PUT',
@@ -457,6 +492,284 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
       } finally {
         await injoignable.end();
       }
+    });
+  });
+
+  // --- Corrections de la relecture (voir l'en-tête : B1, C1, C2, M1, M2, M7) ---------------------
+
+  /** Nouveau membre actif (gérant) de `fermeId`, avec son jeton : ses refus se comptent à part. */
+  async function nouveauMembre(fermeId: string = ferme): Promise<{ id: string; jeton: string }> {
+    const u = await creerUtilisateur(base.pool);
+    await ajouterMembre(base.pool, u.id, fermeId, { role: 'gerant' });
+    return { id: u.id, jeton: await jetonPour(u.id) };
+  }
+
+  const refusDeLUtilisateur = (utilisateurId: string) => compter(`SELECT 1 FROM refus_synchro WHERE utilisateur_id = $1`, [utilisateurId]);
+
+  /** Un événement de `type` tel que le téléphone l'envoie, avec son détail. */
+  function putEvenement(
+    auteurId: string,
+    fermeId: string,
+    type: string,
+    detail: Record<string, unknown>,
+    autres: Record<string, unknown> = {},
+  ): EcritureEnvoyee {
+    return putRecolte(auteurId, fermeId, 1, { type, detail: JSON.stringify(detail), ...autres });
+  }
+
+  const irrigation = (secteur: string) => ({ secteurIrrigationId: secteur, dureeMinutes: 30 });
+  const traitement = (produit: string) => ({
+    produitPhytoId: produit,
+    dose: { valeur: 2, unite: 'L/ha' },
+    surfaceTraiteeM2: 100,
+    cible: 'mildiou',
+    operateur: 'Théo',
+    recolteAutoriseeLe: '2026-10-22',
+  });
+
+  describe('B1 : références vers une autre ferme', () => {
+    let a: LignesDeFerme;
+    let b: LignesDeFerme;
+    let phytoBibliotheque: string;
+    /** Un événement déjà écrit dans la ferme B (par le voisin). */
+    let evenementB: string;
+
+    beforeAll(async () => {
+      a = await peuplerFerme(base.pool, ferme);
+      b = await peuplerFerme(base.pool, autreFerme);
+      phytoBibliotheque = await creerProduitPhytoBibliotheque(base.pool);
+      const e = putRecolte(voisin.id, autreFerme, 2);
+      expect(await lot([e], voisin.jeton)).toEqual({ refus: [] });
+      evenementB = e.id;
+    });
+
+    const inexistant = () => nouvelId<'Serie'>();
+
+    it('toutes les références dans la ferme A (produit phyto de la ferme ou de la bibliothèque) : acceptées', async () => {
+      const ecritures = [
+        putRecolte(theo.id, ferme, 1, { serie_id: a.serie, emplacement_ids: JSON.stringify([a.emplacement]) }),
+        putRecolte(theo.id, ferme, 1, { campagne_id: a.campagne }),
+        putEvenement(theo.id, ferme, 'irrigation', irrigation(a.secteurIrrigation), { emplacement_ids: JSON.stringify([a.emplacement]) }),
+        putEvenement(theo.id, ferme, 'traitement', traitement(a.produitPhyto)),
+        putEvenement(theo.id, ferme, 'traitement', traitement(phytoBibliotheque)),
+      ];
+      expect(await lot(ecritures, theo.jeton)).toEqual({ refus: [] });
+      for (const e of ecritures) expect(await evenements(e.id)).toBe(1);
+    });
+
+    it.each([
+      ['serie_id', () => ({ serie_id: b.serie })],
+      ['campagne_id', () => ({ campagne_id: b.campagne })],
+      ['un des emplacement_ids', () => ({ emplacement_ids: JSON.stringify([a.emplacement, b.emplacement]) })],
+      ['remplace_evenement_id', () => ({ remplace_sorte: 'correction', remplace_evenement_id: evenementB })],
+      ['detail.secteurIrrigationId', () => ({ type: 'irrigation', detail: JSON.stringify(irrigation(b.secteurIrrigation)) })],
+      ['detail.produitPhytoId', () => ({ type: 'traitement', detail: JSON.stringify(traitement(b.produitPhyto)) })],
+    ])('%s d’une autre ferme : ferme_interdite, rien d’écrit, 200, le reste du lot passe', async (_cas, champs) => {
+      const mauvaise = putRecolte(theo.id, ferme, 1, champs());
+      const bonne = putRecolte(theo.id, ferme, 2);
+      const reponse = await lot([mauvaise, bonne], theo.jeton);
+      expect(reponse.refus).toEqual([{ table: 'evenement', id: mauvaise.id, motif: 'ferme_interdite' }]);
+      expect(await evenements(mauvaise.id)).toBe(0);
+      expect(await modifications(mauvaise.id)).toBe(0);
+      expect(await evenements(bonne.id)).toBe(1);
+      expect(await refusEnregistre(mauvaise.id)).toMatchObject({ utilisateur_id: theo.id, motif: 'ferme_interdite' });
+    });
+
+    it.each([
+      ['serie_id', () => ({ serie_id: inexistant() })],
+      ['campagne_id', () => ({ campagne_id: inexistant() })],
+      ['un des emplacement_ids', () => ({ emplacement_ids: JSON.stringify([a.emplacement, inexistant()]) })],
+      ['remplace_evenement_id', () => ({ remplace_sorte: 'correction', remplace_evenement_id: inexistant() })],
+      ['detail.secteurIrrigationId', () => ({ type: 'irrigation', detail: JSON.stringify(irrigation(inexistant())) })],
+      ['detail.produitPhytoId', () => ({ type: 'traitement', detail: JSON.stringify(traitement(inexistant())) })],
+    ])('%s inexistant : ecriture_invalide, rien d’écrit, 200, le reste du lot passe', async (_cas, champs) => {
+      const mauvaise = putRecolte(theo.id, ferme, 1, champs());
+      const bonne = putRecolte(theo.id, ferme, 2);
+      const reponse = await lot([mauvaise, bonne], theo.jeton);
+      expect(reponse.refus).toEqual([{ table: 'evenement', id: mauvaise.id, motif: 'ecriture_invalide' }]);
+      expect(await evenements(mauvaise.id)).toBe(0);
+      expect(await evenements(bonne.id)).toBe(1);
+    });
+  });
+
+  describe('C1 : jamais de 500 à cause des données reçues', () => {
+    const NUL = '\u0000';
+    const MOTIFS = ['ferme_interdite', 'auteur_invalide', 'ajout_seul', 'table_interdite', 'ecriture_invalide'];
+
+    it.each([
+      ['table', (u: string) => ({ ...putRecolte(u, ferme), table: `evenement${NUL}` })],
+      ['id d’un PUT', (u: string) => ({ ...putRecolte(u, ferme), id: `${nouvelId<'Evenement'>()}${NUL}` })],
+      ['id d’un DELETE', () => ({ op: 'DELETE' as const, table: 'evenement', id: `${NUL}${nouvelId<'Evenement'>()}` })],
+      ['nom de colonne', (u: string) => putRecolte(u, ferme, 1, { [`note${NUL}`]: 'x' })],
+    ])('caractère nul dans %s : 200 avec un refus enregistré, et le lot renvoyé passe encore', async (_cas, fabriquer) => {
+      const u = await nouveauMembre();
+      const piege = fabriquer(u.id);
+      const bonne = putRecolte(u.id, ferme, 6);
+      for (let envoi = 0; envoi < 2; envoi++) {
+        const res = await envoyer({ ecritures: [piege, bonne] }, u.jeton);
+        expect(res.status, `envoi ${String(envoi + 1)}`).toBe(200);
+        const reponse = (await res.json()) as ReponseUpload;
+        expect(reponse.refus).toHaveLength(1);
+        expect(MOTIFS).toContain(reponse.refus[0]?.motif);
+      }
+      expect(await evenements(bonne.id)).toBe(1);
+      expect(await refusDeLUtilisateur(u.id)).toBe(1);
+    });
+
+    it.each([
+      ['table', (u: string) => ({ ...putRecolte(u, ferme), table: 't'.repeat(10_000) })],
+      ['id', (u: string) => ({ ...putRecolte(u, ferme), id: 'i'.repeat(10_000) })],
+      ['nom de colonne', (u: string) => putRecolte(u, ferme, 1, { ['c'.repeat(10_000)]: 'x' })],
+    ])('%s de 10 000 caractères : 200, refus enregistré avec nom_table, ligne_id et message de 200 caractères au plus', async (_cas, fabriquer) => {
+      const u = await nouveauMembre();
+      const res = await envoyer({ ecritures: [fabriquer(u.id)] }, u.jeton);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as ReponseUpload).refus).toHaveLength(1);
+      const r = await base.pool.query<{ nom_table: string; ligne_id: string; message: string }>(
+        `SELECT nom_table, ligne_id, message FROM refus_synchro WHERE utilisateur_id = $1`,
+        [u.id],
+      );
+      expect(r.rows).toHaveLength(1);
+      const ligne = r.rows[0];
+      expect(ligne?.nom_table.length).toBeLessThanOrEqual(200);
+      expect(ligne?.ligne_id.length).toBeLessThanOrEqual(200);
+      expect(ligne?.message.length).toBeLessThanOrEqual(200);
+    });
+  });
+
+  describe('C2 : limites de taille', () => {
+    async function refuse(e: EcritureEnvoyee): Promise<void> {
+      const reponse = await lot([e], theo.jeton);
+      expect(reponse.refus).toEqual([{ table: 'evenement', id: e.id, motif: 'ecriture_invalide' }]);
+      expect(await evenements(e.id)).toBe(0);
+    }
+
+    async function accepte(e: EcritureEnvoyee): Promise<void> {
+      expect(await lot([e], theo.jeton)).toEqual({ refus: [] });
+      expect(await evenements(e.id)).toBe(1);
+    }
+
+    it('note : 4 000 caractères acceptés, 4 001 refusés', async () => {
+      await accepte(putRecolte(theo.id, ferme, 1, { note: 'n'.repeat(4_000) }));
+      await refuse(putRecolte(theo.id, ferme, 1, { note: 'n'.repeat(4_001) }));
+    });
+
+    it('photos : 20 acceptées, 21 refusées ; une photo de 2 000 caractères acceptée, de 2 001 refusée', async () => {
+      const photo = (i: number) => `https://photos.planif.test/${String(i)}.jpg`;
+      await accepte(putRecolte(theo.id, ferme, 1, { photos: JSON.stringify(Array.from({ length: 20 }, (_, i) => photo(i))) }));
+      await refuse(putRecolte(theo.id, ferme, 1, { photos: JSON.stringify(Array.from({ length: 21 }, (_, i) => photo(i))) }));
+      await accepte(putRecolte(theo.id, ferme, 1, { photos: JSON.stringify(['p'.repeat(2_000)]) }));
+      await refuse(putRecolte(theo.id, ferme, 1, { photos: JSON.stringify(['p'.repeat(2_001)]) }));
+    });
+
+    it('detail : sous 8 Kio accepté, au-delà de 8 Kio refusé', async () => {
+      await accepte(putEvenement(theo.id, ferme, 'recolte', { quantite: 1, unite: 'kg', categorie: 'c'.repeat(8_000) }));
+      await refuse(putEvenement(theo.id, ferme, 'recolte', { quantite: 1, unite: 'kg', categorie: 'c'.repeat(8_300) }));
+    });
+
+    it.each([
+      ['recolte', { quantite: 1, unite: 'kg', categorie: null, pirate: 1 }],
+      ['observation', { nature: 'ravageur', gravite: null, serieId: '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b50' }],
+      ['irrigation', { secteurIrrigationId: '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b50', dureeMinutes: 30, commentaire: 'x' }],
+    ])('clé inconnue dans le détail d’un événement %s : ecriture_invalide', async (type, detail) => {
+      await refuse(putEvenement(theo.id, ferme, type, detail));
+    });
+
+    it('lot de 500 écritures : traité ; de 501 : 400 requete_invalide, rien d’écrit', async () => {
+      const u = await nouveauMembre();
+      const cinqCents = Array.from({ length: 500 }, () => putRecolte(u.id, ferme, 1));
+      const res500 = await envoyer({ ecritures: cinqCents }, u.jeton);
+      expect(res500.status).toBe(200);
+
+      const cinqCentUn = Array.from({ length: 501 }, () => putRecolte(u.id, ferme, 1));
+      const res501 = await envoyer({ ecritures: cinqCentUn }, u.jeton);
+      expect(res501.status).toBe(400);
+      expect(await res501.json()).toEqual({ erreur: 'requete_invalide' });
+      const ids = cinqCentUn.map((e) => e.id);
+      expect(await compter(`SELECT 1 FROM evenement WHERE id = ANY($1::uuid[])`, [ids])).toBe(0);
+      expect(await refusDeLUtilisateur(u.id)).toBe(0);
+    }, 60_000);
+
+    it('corps de plus de 5 Mio : 413, rien d’écrit', async () => {
+      const u = await nouveauMembre();
+      const e = putRecolte(u.id, ferme, 1, { note: 'x'.repeat(5 * 1_048_576 + 1_000) });
+      const res = await envoyer({ ecritures: [e] }, u.jeton);
+      expect(res.status).toBe(413);
+      expect(await evenements(e.id)).toBe(0);
+      expect(await refusDeLUtilisateur(u.id)).toBe(0);
+    });
+
+    it('donnees de plus de 16 Kio : refus enregistré sans elles (donnees nulle) ; en dessous, gardées', async () => {
+      const u = await nouveauMembre();
+      const petit: EcritureEnvoyee = { op: 'PUT', table: 'membre', id: nouvelId<'Evenement'>(), donnees: { role: 'gerant' } };
+      const gros: EcritureEnvoyee = { op: 'PUT', table: 'membre', id: nouvelId<'Evenement'>(), donnees: { role: 'g'.repeat(17_000) } };
+      const reponse = await lot([petit, gros], u.jeton);
+      expect(reponse.refus.map((r) => r.motif)).toEqual(['table_interdite', 'table_interdite']);
+      expect(await refusEnregistre(petit.id)).toMatchObject({ donnees: { role: 'gerant' } });
+      expect(await refusEnregistre(gros.id)).toMatchObject({ motif: 'table_interdite', donnees: null });
+    });
+  });
+
+  describe('M1 : refus ferme_interdite d’un non-membre', () => {
+    it('DELETE par un non-membre d’un événement d’une autre ferme : ferme_id nul dans le refus', async () => {
+      const e = putRecolte(theo.id, ferme, 9);
+      expect(await lot([e], theo.jeton)).toEqual({ refus: [] });
+      const reponse = await lot([{ op: 'DELETE', table: 'evenement', id: e.id }], voisin.jeton);
+      expect(reponse.refus).toEqual([{ table: 'evenement', id: e.id, motif: 'ferme_interdite' }]);
+      const r = await base.pool.query<{ ferme_id: string | null }>(
+        `SELECT ferme_id FROM refus_synchro WHERE ligne_id = $1 AND utilisateur_id = $2`,
+        [e.id, voisin.id],
+      );
+      expect(r.rows).toEqual([{ ferme_id: null }]);
+    });
+  });
+
+  describe('M2 : pas de refus en double', () => {
+    it('le même lot avec des écritures refusées, envoyé deux fois : une seule ligne refus_synchro par (utilisateur, ligne, opération, motif)', async () => {
+      const u = await nouveauMembre();
+      const origine = putRecolte(u.id, ferme, 4);
+      expect(await lot([origine], u.jeton)).toEqual({ refus: [] });
+      const ecritures: EcritureEnvoyee[] = [
+        { op: 'PATCH', table: 'evenement', id: origine.id, donnees: { note: 'modifiée' } },
+        { op: 'DELETE', table: 'evenement', id: origine.id },
+        putRecolte(u.id, ferme, -1),
+        { op: 'PUT', table: 'membre', id: nouvelId<'Evenement'>(), donnees: { role: 'gerant' } },
+      ];
+      const premier = await lot(ecritures, u.jeton);
+      const second = await lot(ecritures, u.jeton);
+      expect(premier.refus).toHaveLength(4);
+      expect(second.refus).toEqual(premier.refus);
+      expect(await refusDeLUtilisateur(u.id)).toBe(4);
+      const doublons = await compter(
+        `SELECT 1 FROM refus_synchro WHERE utilisateur_id = $1 GROUP BY ligne_id, operation, motif HAVING count(*) > 1`,
+        [u.id],
+      );
+      expect(doublons).toBe(0);
+    });
+  });
+
+  describe('M7 : dates plausibles', () => {
+    it.each([
+      ['date', '1999-12-31'],
+      ['date', '2101-01-01'],
+      ['horodatage', '1999-12-31T23:59:59.999Z'],
+      ['horodatage', '2101-01-01T00:00:00.000Z'],
+    ])('%s %s : ecriture_invalide', async (champ, valeur) => {
+      const e = putRecolte(theo.id, ferme, 1, { [champ]: valeur });
+      const reponse = await lot([e], theo.jeton);
+      expect(reponse.refus).toEqual([{ table: 'evenement', id: e.id, motif: 'ecriture_invalide' }]);
+      expect(await evenements(e.id)).toBe(0);
+    });
+
+    it.each([
+      ['date', '2000-01-01'],
+      ['date', '2100-12-31'],
+      ['horodatage', '2000-01-01T00:00:00.000Z'],
+      ['horodatage', '2100-12-31T23:59:59.999Z'],
+    ])('%s %s (borne) : acceptée', async (champ, valeur) => {
+      const e = putRecolte(theo.id, ferme, 1, { [champ]: valeur });
+      expect(await lot([e], theo.jeton)).toEqual({ refus: [] });
+      expect(await evenements(e.id)).toBe(1);
     });
   });
 });
