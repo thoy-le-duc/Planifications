@@ -44,7 +44,9 @@ function decodeurNatif(etiquette: 'utf-8' | 'windows-1252' | 'utf-16le' | 'utf-1
   const C = (globalThis as { readonly TextDecoder?: ConstructeurDecodeur }).TextDecoder;
   if (C !== undefined) {
     try {
-      d = new C(etiquette, { fatal: etiquette === 'utf-8', ignoreBOM: true });
+      // `ignoreBOM` pour les seules étiquettes UTF (le BOM est retiré ici) : sur Windows-1252,
+      // certains moteurs prennent 0xFF en tête pour un BOM et perdent le « ÿ ».
+      d = new C(etiquette, { fatal: etiquette === 'utf-8', ignoreBOM: etiquette !== 'windows-1252' });
     } catch {
       d = null;
     }
@@ -129,17 +131,33 @@ function decoderCp1252(octets: Uint8Array, debut: number): string {
   return texteDepuisUnites(unites, n);
 }
 
-/** UTF-16 (petit- ou gros-boutiste) à partir de `debut` ; un octet final isolé → U+FFFD. */
+/**
+ * UTF-16 (petit- ou gros-boutiste) à partir de `debut` ; une moitié de paire de substitution
+ * isolée ou un octet final impair → U+FFFD (comme `TextDecoder`).
+ */
 function decoderUtf16(octets: Uint8Array, debut: number, petit: boolean): string {
   const natif = decoderNatif(petit ? 'utf-16le' : 'utf-16be', octets.subarray(debut));
   if (typeof natif === 'string') return natif;
   const n = Math.max(0, octets.length - debut);
   const paires = n >> 1;
   const unites = new Uint16Array(paires + (n & 1));
-  for (let i = 0; i < paires; i++) {
+  const unite = (i: number): number => {
     const a = octets[debut + 2 * i] ?? 0;
     const b = octets[debut + 2 * i + 1] ?? 0;
-    unites[i] = petit ? a | (b << 8) : (a << 8) | b;
+    return petit ? a | (b << 8) : (a << 8) | b;
+  };
+  for (let i = 0; i < paires; i++) {
+    const u = unite(i);
+    if (u >= 0xd800 && u <= 0xdbff && i + 1 < paires) {
+      const v = unite(i + 1);
+      if (v >= 0xdc00 && v <= 0xdfff) {
+        unites[i] = u;
+        unites[i + 1] = v;
+        i++;
+        continue;
+      }
+    }
+    unites[i] = u >= 0xd800 && u <= 0xdfff ? 0xfffd : u;
   }
   if (n & 1) unites[paires] = 0xfffd;
   return texteDepuisUnites(unites, unites.length);
@@ -203,15 +221,23 @@ interface LigneLue {
  */
 function lireLigne(texte: string, depart: number, sep: number, garder: number): LigneLue {
   const n = texte.length;
-  let champs: string[] | null = [];
+  // Premier champ gardé à part : une ligne d'un seul champ devient `[valeur]`, tableau à la
+  // taille exacte ; au-delà, le tableau est recopié à sa taille exacte en fin de ligne.
+  let premier = '';
+  let champs = null as string[] | null;
   let nombre = 0;
   let vide = true;
+  let trop = false as boolean;
   let i = depart;
   const ajouter = (valeur: string): void => {
     nombre++;
     if (vide && valeur.trim() !== '') vide = false;
-    if (champs === null) return;
-    if (nombre > garder) champs = null;
+    if (trop) return;
+    if (nombre > garder) {
+      trop = true;
+      champs = null;
+    } else if (nombre === 1) premier = valeur;
+    else if (champs === null) champs = [premier, valeur];
     else champs.push(valeur);
   };
   for (;;) {
@@ -258,7 +284,8 @@ function lireLigne(texte: string, depart: number, sep: number, garder: number): 
     i += c === CR && texte.charCodeAt(i + 1) === LF ? 2 : 1;
     break;
   }
-  return { fin: i, nombre, vide, champs };
+  const gardes = trop ? null : champs === null ? [premier] : champs.slice();
+  return { fin: i, nombre, vide, champs: gardes };
 }
 
 const SEPARATEURS: readonly Separateur[] = [';', ',', '\t'];
@@ -311,10 +338,14 @@ export function detecterSeparateur(texte: string): Separateur {
   return choisi?.separateur ?? ';';
 }
 
-/** Signature ZIP (un .xlsx renommé en .csv) ou octet nul (fichier binaire). */
+/** Signature ZIP (un .xlsx renommé en .csv) à partir de `debut`. */
+function estZip(octets: Uint8Array, debut: number): boolean {
+  return octets[debut] === 0x50 && octets[debut + 1] === 0x4b && octets[debut + 2] === 0x03 && octets[debut + 3] === 0x04;
+}
+
+/** Signature ZIP ou octet nul (fichier binaire). */
 function estBinaire(octets: Uint8Array): boolean {
-  if (octets.length >= 4 && octets[0] === 0x50 && octets[1] === 0x4b && octets[2] === 0x03 && octets[3] === 0x04) return true;
-  return octets.includes(0);
+  return estZip(octets, 0) || octets.includes(0);
 }
 
 const refus = (code: 'fichier_binaire' | 'fichier_trop_grand', message: string, lu?: TexteDecode, separateur?: Separateur): CsvLu => ({
@@ -327,20 +358,26 @@ const refus = (code: 'fichier_binaire' | 'fichier_trop_grand', message: string, 
 
 const MESSAGE_BINAIRE =
   'Ce fichier n’est pas un texte CSV (c’est peut-être un classeur Excel renommé) : déposez le fichier .xlsx tel quel, ou enregistrez-le en CSV depuis le tableur.';
-const MESSAGE_TROP_GRAND = 'Ce fichier est trop grand (plus de 5 millions de cases) : découpez-le en plusieurs fichiers plus petits et importez-les l’un après l’autre.';
+const MESSAGE_TROP_GRAND =
+  'Ce fichier est trop grand (plus de 5 millions de cases ou de 1 048 576 lignes) : découpez-le en plusieurs fichiers plus petits et importez-les l’un après l’autre.';
 
 /** Plafond des cases d'un CSV (même que le .xlsx) : chaque ligne rendue compte pour une case, chacun de ses champs aussi. */
 const PLAFOND_CASES = 5_000_000;
+/** Plafond des lignes rendues (comme une feuille Excel), lignes vides d'avant une ligne utile comprises. */
+const PLAFOND_LIGNES = 1_048_576;
 
 /**
  * Octets d'un CSV → lignes de chaînes (vide = ''), avec l'encodage et le séparateur détectés.
  * Les lignes vides (champs vides ou espaces) de fin de fichier ne sont ni créées ni comptées ;
  * celles d'avant une ligne utile restent (elles gardent les numéros de ligne). Au-delà de
- * 5 000 000 de cases → `fichier_trop_grand`, sans tout allouer.
+ * 5 000 000 de cases ou de 1 048 576 lignes → `fichier_trop_grand`, sans tout allouer.
  */
 export function lireCsv(octets: Uint8Array): CsvLu {
-  if (bomUtf16(octets) === null && estBinaire(octets)) return refus('fichier_binaire', MESSAGE_BINAIRE);
+  const utf16 = bomUtf16(octets) !== null;
+  if (utf16 ? estZip(octets, 2) : estBinaire(octets)) return refus('fichier_binaire', MESSAGE_BINAIRE);
   const lu = decoderTexte(octets);
+  // Avec un BOM UTF-16, un caractère nul décodé trahit un contenu binaire.
+  if (utf16 && lu.texte.includes('\u0000')) return refus('fichier_binaire', MESSAGE_BINAIRE);
   const { texte, encodage, bom } = lu;
   const separateur = detecterSeparateur(texte);
   const sep = separateur.charCodeAt(0);
@@ -349,6 +386,7 @@ export function lireCsv(octets: Uint8Array): CsvLu {
   // Lignes vides en attente : rendues seulement si une ligne utile les suit (relues alors).
   let attenteDebut = -1;
   let attenteCases = 0;
+  let attenteLignes = 0;
   let i = 0;
   while (i < texte.length) {
     const debut = i;
@@ -357,9 +395,10 @@ export function lireCsv(octets: Uint8Array): CsvLu {
     if (l.vide) {
       if (attenteDebut < 0) attenteDebut = debut;
       attenteCases += 1 + l.nombre;
+      attenteLignes++;
       continue;
     }
-    if (l.champs === null || cases + attenteCases + 1 + l.nombre > PLAFOND_CASES) return refus('fichier_trop_grand', MESSAGE_TROP_GRAND, lu, separateur);
+    if (l.champs === null || cases + attenteCases + 1 + l.nombre > PLAFOND_CASES || lignes.length + attenteLignes + 1 > PLAFOND_LIGNES) return refus('fichier_trop_grand', MESSAGE_TROP_GRAND, lu, separateur);
     for (let j = attenteDebut; attenteDebut >= 0 && j < debut; ) {
       const v = lireLigne(texte, j, sep, Number.POSITIVE_INFINITY);
       j = v.fin;
@@ -368,6 +407,7 @@ export function lireCsv(octets: Uint8Array): CsvLu {
     cases += attenteCases + 1 + l.nombre;
     attenteDebut = -1;
     attenteCases = 0;
+    attenteLignes = 0;
     lignes.push(l.champs);
   }
   return { encodage, bom, separateur, lignes, erreur: null };
