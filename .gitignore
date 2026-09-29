@@ -1,5 +1,6 @@
 node_modules/
 dist/
+dist-synchro/
 dev-dist/
 coverage/
 playwright-report/

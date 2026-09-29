@@ -1,0 +1,16 @@
+{
+  "name": "@planif/sync",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Seule porte d'accès aux données de l'appli web : lecture, écriture, requêtes surveillées, envoi des écritures (T10).",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@planif/core": "workspace:*"
+  }
+}
