@@ -43,6 +43,15 @@
  *     copie de plus). S'il y en a un, il reste hors du JavaScript de démarrage, comme l'écran
  *     (./empaquetage.test.ts) ; le budget de démarrage ne bouge pas (70,9 Kio sur main).
  *
+ * Relecture T15b — export annulable :
+ *   - `lancerExport` accepte `o.signal?: AbortSignal`, transmis à `exporterFerme` : annulé,
+ *     la promesse est rejetée (AbortError) et `telecharger` n'est jamais appelé ;
+ *   - pendant l'export, l'écran montre un bouton « Annuler » (type="button", `min-height` ≥ 48 px
+ *     en style en ligne). Au tap : l'export s'arrête, le bouton « Exporter toute ma ferme » est
+ *     de nouveau actif et l'écran affiche « Export annulé » (pas le message d'échec role="alert",
+ *     et aucun téléchargement, même si la lecture de la base répond après coup). Testé au doigt :
+ *     ./interaction.test.tsx.
+ *
  * jourLocal(d: Date): string → 'AAAA-MM-JJ' à l'heure du téléphone (getFullYear, getMonth,
  *   getDate), pas en UTC : un export à 23 h 30 porte la date du jour.
  *
@@ -86,6 +95,7 @@ interface ModuleEcranExport {
     readonly maintenant: () => Date;
     readonly telecharger: (nomFichier: string, octets: Uint8Array) => void;
     readonly avancement?: (a: { readonly fait: number; readonly total: number }) => void;
+    readonly signal?: AbortSignal;
   }): Promise<ArchiveExport>;
   jourLocal(d: Date): string;
 }
@@ -208,6 +218,19 @@ describe('T15 : écran d’export', () => {
     for (let k = 1; k < appels.length; k++) expect(appels[k]?.fait ?? 0).toBeGreaterThanOrEqual(appels[k - 1]?.fait ?? 0);
     // Formules neutralisées dans les CSV (règle de @planif/core) : « Îlot « nord » ; bas » inchangé.
     expect(lireCsv(texteZip(entrees, 'zone.csv')).lignes.map((l) => l[2])).toEqual(['Tunnel 1', 'Îlot « nord » ; bas']);
+  });
+
+  it('T15b relecture : lancerExport avec un signal annulé → rejet AbortError, aucun téléchargement', async () => {
+    const { porte } = porteFactice();
+    const telecharger = vi.fn<(nomFichier: string, octets: Uint8Array) => void>();
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const nom = await m.lancerExport({ porte, fermeId: FERME, maintenant: () => MAINTENANT, telecharger, signal: ctrl.signal }).then(
+      () => 'export terminé malgré l’annulation',
+      (e: unknown) => (e instanceof Error || e instanceof DOMException ? e.name : typeof e),
+    );
+    expect(nom).toBe('AbortError');
+    expect(telecharger).not.toHaveBeenCalled();
   });
 
   it('jourLocal : la date du téléphone, pas celle de UTC', () => {

@@ -10,9 +10,14 @@
  *     bruit de la mesure (± 1 à 3 Mio d'une exécution à l'autre, mesuré) : avec une archive de
  *     2 à 5 Mo, 2 × la taille seule serait sous le bruit. Pour mémoire, T15 ajoutait ≈ 210 Mo ;
  *   - tâches : 25 ms sous Node ≈ 100 ms sur le fil principal d'un téléphone (CPU ralenti ×4, même
- *     règle que le temps d'export de T15). Le meilleur de trois exports : une préemption du
- *     processus par le système (autres tests en parallèle) peut allonger un tour de boucle, un
- *     vrai calcul trop long se voit à chaque export ;
+ *     règle que le temps d'export de T15). Relecture T15b : mesurées en TEMPS CPU du fil principal
+ *     (borné par le temps mural), plus en temps mural seul. L'ancienne mesure (meilleur de trois
+ *     écarts muraux) échouait sur une machine chargée : la préemption du processus par le
+ *     système comptait comme un calcul (mesuré : 32 à 39 ms murales contre 13 à 16 ms de CPU avec
+ *     8 processus en boucle à côté). Le critère n'est pas affaibli, il est durci : les TROIS
+ *     exports doivent rester sous 25 ms, plus seulement le meilleur ;
+ *   - longue chaîne : un texte de 40 Mio en un seul morceau ne coûte pas plus de mémoire que le
+ *     même texte en morceaux, à 8 Mio près (T15b : ≈ 56 Mio contre ≈ 13 Mio) ;
  *   - la lecture de la base n'est pas dans la mesure des tâches : sous Node, node:sqlite lit de
  *     façon synchrone (≈ 0,5 s pour les 30 000 événements), alors que PowerSync lit hors du fil
  *     principal. Elle est dans la mesure de mémoire d'exporterFerme (lignes lues déduites).
@@ -74,11 +79,24 @@ describe('T15b : export léger, ferme de T07 (processus isolé)', () => {
     expect(f.pic, `pic ${mio(f.pic)}, lignes lues ${mio(f.lignesLues)}, archive ${mio(f.taille)}`).toBeLessThanOrEqual(f.lignesLues + 2 * f.taille + MARGE);
   });
 
-  it(`fil jamais gelé : aucune tâche de plus de ${String(TACHE_MAX_MS)} ms pendant construireArchive (≈ 100 ms CPU ralenti ×4)`, () => {
+  it(`fil jamais gelé : aucun calcul de plus de ${String(TACHE_MAX_MS)} ms (CPU du fil) pendant construireArchive, sur chacun des trois exports`, () => {
     const t = r.taches ?? [];
     expect(t, r.erreur).toHaveLength(3);
-    const meilleure = Math.min(...t.map((x) => x.plusLongue));
-    expect(meilleure, `plus longues tâches : ${t.map((x) => `${x.plusLongue.toFixed(1)} ms`).join(', ')}`).toBeLessThan(TACHE_MAX_MS);
+    const detail = t.map((x) => `${x.plusLongue.toFixed(1)} ms CPU (${x.plusLongueMurale.toFixed(1)} ms murales)`).join(', ');
+    const pire = Math.max(...t.map((x) => x.plusLongue));
+    expect(pire, `plus longues tâches : ${detail}`).toBeLessThan(TACHE_MAX_MS);
+    // Témoin : la mesure voit bien les tranches de calcul (une mesure cassée rendrait 0).
+    for (const x of t) expect(x.plusLongue, detail).toBeGreaterThan(0.5);
+  });
+
+  it('longue chaîne en un morceau (40 Mio) : mémoire au pic ≤ celle du même texte en morceaux + 8 Mio', () => {
+    const c = r.chaine;
+    expect(c, r.erreurChaine).toBeDefined();
+    if (c === undefined) return;
+    expect(c.morceaux.appels, 'relevés pendant la compression').toBeGreaterThanOrEqual(10);
+    expect(c.unMorceau.appels).toBeGreaterThanOrEqual(10);
+    expect(c.unMorceau.taille, 'même archive').toBe(c.morceaux.taille);
+    expect(c.unMorceau.pic, `un morceau ${mio(c.unMorceau.pic)}, en morceaux ${mio(c.morceaux.pic)}`).toBeLessThanOrEqual(c.morceaux.pic + MARGE);
   });
 
   it('temps : construireArchive de T07 (sans lecture) sous 2,5 s, même en rendant la main', () => {

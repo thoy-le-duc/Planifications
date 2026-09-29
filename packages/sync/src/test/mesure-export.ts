@@ -15,12 +15,19 @@
  *   - relevée à CHAQUE appel d'`avancement` et à la fin (archive tenue) ; pic = plus grand
  *     relevé − relevé d'avant l'appel. Les appels d'avancement sont les points de passage entre
  *     deux morceaux : un texte ou des octets gardés d'un morceau à l'autre s'y voient ;
- *   - plus longue tâche = plus grand écart entre deux tours d'une minuterie de 1 ms pendant
- *     l'export (aucun `gc()` forcé dans ces tours-là), sur trois exports de suite.
+ *   - plus longue tâche (relecture T15b) = plus grand min(temps mural, temps CPU du fil
+ *     principal) entre deux tours d'une minuterie de 1 ms pendant l'export (aucun `gc()` forcé
+ *     dans ces tours-là), sur trois exports de suite. Le temps CPU (`process.threadCpuUsage`, à
+ *     défaut `process.cpuUsage`) ne compte pas le temps où le système a préempté le processus :
+ *     une machine chargée n'allonge plus la mesure, un vrai calcul trop long, si. Le temps mural
+ *     seul est gardé pour information (`plusLongueMurale`) ;
+ *   - longue chaîne (relecture T15b) : `creerZip` d'un texte de 40 Mio de caractères, donné en
+ *     un seul morceau puis en morceaux de ≈ 16 000 caractères ; mémoire relevée par un
+ *     compresseur espion (node:zlib) tous les 16 blocs reçus, et à la fin.
  */
 import { SCHEMA_LOCAL } from '../schema.ts';
 import { creerPorte } from '../porte.ts';
-import type { EntreeExport, LigneLocale, ModuleExport } from '../../../core/src/export/test/contrat.ts';
+import type { Compresseur, EntreeExport, LigneLocale, ModuleExport } from '../../../core/src/export/test/contrat.ts';
 import { creerBaseMemoire } from './base-memoire.ts';
 import { exigerExporterFerme } from './contrat-export.ts';
 import { remplirJeuT07 } from './jeu-t07.ts';
@@ -37,14 +44,19 @@ export interface MesureMemoire {
 }
 
 export interface MesureTache {
-  /** Plus long écart entre deux tours de la boucle d'événements, en ms. */
+  /** Plus long calcul entre deux tours de la boucle d'événements : max de min(mural, CPU du fil), en ms. */
   readonly plusLongue: number;
+  /** Plus long écart MURAL entre deux tours (préemption par le système comprise), en ms ; pour information. */
+  readonly plusLongueMurale: number;
   /** Durée de l'export, en ms. */
   readonly duree: number;
 }
 
 export interface ResultatMesures {
   readonly erreur?: string;
+  /** Relecture T15b : `creerZip` d'un texte de 40 Mio, en un morceau puis en morceaux (compresseurNode). */
+  readonly chaine?: { readonly unMorceau: MesureMemoire; readonly morceaux: MesureMemoire };
+  readonly erreurChaine?: string;
   /** `construireArchive` sur l'entrée de T07 déjà en mémoire (compresseurNode). */
   readonly archive?: MesureMemoire;
   /** Trois exports de suite par `construireArchive`, sans relevé de mémoire. */
@@ -79,23 +91,98 @@ const pause = (ms: number) =>
     setTimeout(r, ms);
   });
 
-/** Plus long écart entre deux tours d'une minuterie de 1 ms pendant `f`. */
+/** Temps CPU en ms : du fil principal seul si Node le sait (≥ 22.19 / 23.9), sinon du processus. */
+const cpuMs: () => number = (() => {
+  const p = process as { threadCpuUsage?: () => NodeJS.CpuUsage };
+  const lire = p.threadCpuUsage?.bind(process) ?? (() => process.cpuUsage());
+  return () => {
+    const u = lire();
+    return (u.user + u.system) / 1000;
+  };
+})();
+
+/**
+ * Plus long calcul entre deux tours d'une minuterie de 1 ms pendant `f` : pour chaque intervalle,
+ * min(temps mural, temps CPU). Préempté par le système : mural long, CPU court → ne compte pas.
+ * Calcul synchrone long : mural et CPU longs tous les deux → compte.
+ */
 async function plusLongueTache(f: () => Promise<unknown>): Promise<MesureTache> {
   let dernier = performance.now();
+  let dernierCpu = cpuMs();
   let plusLongue = 0;
-  const minuterie = setInterval(() => {
+  let plusLongueMurale = 0;
+  const releve = () => {
     const t = performance.now();
-    plusLongue = Math.max(plusLongue, t - dernier);
+    const c = cpuMs();
+    plusLongue = Math.max(plusLongue, Math.min(t - dernier, c - dernierCpu));
+    plusLongueMurale = Math.max(plusLongueMurale, t - dernier);
     dernier = t;
-  }, 1);
+    dernierCpu = c;
+  };
+  const minuterie = setInterval(releve, 1);
   const debut = performance.now();
   try {
     await f();
   } finally {
     clearInterval(minuterie);
   }
-  const fin = performance.now();
-  return { plusLongue: Math.max(plusLongue, fin - dernier), duree: fin - debut };
+  releve();
+  return { plusLongue, plusLongueMurale, duree: performance.now() - debut };
+}
+
+/** 40 Mio de caractères de CSV, en morceaux d'environ 16 000 caractères (des lignes entières). */
+function texteLongEnMorceaux(): string[] {
+  const cible = 40 * 1_048_576;
+  const morceaux: string[] = [];
+  let courant: string[] = [];
+  let tailleCourant = 0;
+  let total = 0;
+  for (let i = 0; total < cible; i++) {
+    const l = `${String(i)};${String((i * 7919) % 100_003)};note « ${String(i % 97)} »\r\n`;
+    courant.push(l);
+    tailleCourant += l.length;
+    total += l.length;
+    if (tailleCourant >= 16_000) {
+      morceaux.push(courant.join(''));
+      courant = [];
+      tailleCourant = 0;
+    }
+  }
+  if (courant.length > 0) morceaux.push(courant.join(''));
+  return morceaux;
+}
+
+/** Mémoire ajoutée au pic par `creerZip` d'une seule entrée (relevés par un compresseur espion). */
+async function memoireZip(creerZip: ModuleExport['creerZip'], contenu: string | readonly string[]): Promise<MesureMemoire> {
+  await pause(50);
+  const avant = vivante();
+  let pic = 0;
+  let appels = 0;
+  let blocs = 0;
+  const espion: Compresseur = (brut) =>
+    compresseurNode(
+      (async function* () {
+        for await (const b of brut) {
+          if (blocs++ % 16 === 0) {
+            appels++;
+            pic = Math.max(pic, vivante());
+          }
+          yield b;
+        }
+      })(),
+    );
+  const zip = await creerZip([{ chemin: 'long.csv', contenu }], { compresseur: espion });
+  pic = Math.max(pic, vivante());
+  return { taille: zip.length, pic: pic - avant, appels };
+}
+
+/** Longue chaîne : en morceaux d'abord (référence), puis la même en un seul morceau. */
+async function mesurerChaine(creerZip: ModuleExport['creerZip']): Promise<NonNullable<ResultatMesures['chaine']>> {
+  const morceaux = texteLongEnMorceaux();
+  await creerZip([{ chemin: 'echauffement.csv', contenu: morceaux.slice(0, 50) }], { compresseur: compresseurNode });
+  const enMorceaux = await memoireZip(creerZip, morceaux);
+  const unMorceau = await memoireZip(creerZip, morceaux.join(''));
+  return { unMorceau, morceaux: enMorceaux };
 }
 
 type ConstruireArchive = ModuleExport['construireArchive'];
@@ -137,10 +224,18 @@ async function mesurerArchive(construireArchive: ConstruireArchive, entree: Entr
 
 async function mesurer(): Promise<ResultatMesures> {
   const coeur = (await import(/* @vite-ignore */ NOM_COEUR)) as Partial<ModuleExport>;
+  // Longue chaîne d'abord, avant que la ferme de T07 n'occupe le tas ; son échec n'empêche pas le reste.
+  let chaine: Pick<ResultatMesures, 'chaine' | 'erreurChaine'>;
+  try {
+    if (typeof coeur.creerZip !== 'function') throw new Error('@planif/core n’exporte pas creerZip');
+    chaine = { chaine: await mesurerChaine(coeur.creerZip) };
+  } catch (e: unknown) {
+    chaine = { erreurChaine: e instanceof Error ? `${e.name} : ${e.message}` : String(e) };
+  }
   const construireArchive = coeur.construireArchive;
   const tablesExportees = coeur.TABLES_EXPORTEES;
   if (typeof construireArchive !== 'function' || tablesExportees === undefined) {
-    return { erreur: '@planif/core n’exporte pas encore construireArchive (T15b)' };
+    return { ...chaine, erreur: '@planif/core n’exporte pas encore construireArchive (T15b)' };
   }
   const exporterFerme = await exigerExporterFerme();
 
@@ -162,7 +257,7 @@ async function mesurer(): Promise<ResultatMesures> {
     const lignesLues = memoireDe(lireEntree);
 
     const porte = creerPorte(base, { utilisateurId: jeu.utilisateurId as Id<'Utilisateur'>, fermeId: fermeId as Id<'Ferme'> });
-    return { archive, taches, ferme: await mesurerFerme(exporterFerme, porte, fermeId, lignesLues) };
+    return { ...chaine, archive, taches, ferme: await mesurerFerme(exporterFerme, porte, fermeId, lignesLues) };
   } finally {
     base.fermer();
   }

@@ -645,6 +645,15 @@ describe('T15 : LISEZMOI.txt', () => {
     expect(paragraphe).toContain('ferme.json');
   });
 
+  it('T15b relecture : le LISEZMOI montre l’apostrophe réellement ajoutée, « \' » (U+0027), pas « ’ » (U+2019)', () => {
+    const texte = fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: {} }), 'LISEZMOI.txt');
+    const paragraphe = texte.split(/\r?\n\r?\n/).find((p) => /apostrophe/i.test(p)) ?? '';
+    // Le caractère montré seul (entre parenthèses, guillemets ou espaces) : celui qu'on retrouve dans les CSV.
+    const seul = (c: string) => new RegExp(`(^|[\\s(«"“])${c}([\\s)»"”.,;:]|$)`, 'm');
+    expect(paragraphe, 'apostrophe droite U+0027 montrée').toMatch(seul("'"));
+    expect(paragraphe, 'apostrophe typographique U+2019 montrée à la place').not.toMatch(seul('’'));
+  });
+
   it('« Ferme : » donne le nom de la ferme, pas son identifiant', () => {
     const { entree } = construireJeu(m.TABLES_EXPORTEES);
     const texte = fichier(m.construireExport(entree), 'LISEZMOI.txt');

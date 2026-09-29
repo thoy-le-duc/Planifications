@@ -191,11 +191,47 @@
  * Web Worker non exigé (décision testeur) : la porte (base locale) vit sur le fil principal,
  * et envoyer 40 000 lignes à un Worker coûterait une copie de plus, elle-même longue.
  *
+ * Mesure (relecture T15b, décision testeur) : la « tâche » est le TEMPS CPU du fil principal
+ * entre deux tours d'une minuterie de 1 ms (`process.threadCpuUsage`, à défaut
+ * `process.cpuUsage`), borné par le temps mural du même intervalle : min(mural, CPU). Une
+ * préemption du processus par le système (machine chargée, autres tests en parallèle) allonge
+ * le temps mural mais pas le temps CPU : elle ne compte plus. Un vrai calcul trop long, lui,
+ * consomme du CPU et se voit à CHAQUE export : les trois exports mesurés restent tous sous 25 ms.
+ *
  * Avancement : `options.avancement({ fait, total })` est appelé pendant la construction :
  * entiers, 0 ≤ fait ≤ total, `total` constant pendant un export et > 0, `fait` jamais en recul,
  * dernier appel avec fait === total, au moins un appel par fichier de l'archive et assez
  * souvent pour une barre qui avance (au moins 20 appels pour la ferme de T07). L'unité est
  * libre (lignes, octets…). Un `avancement` qui lève fait échouer l'export.
+ *
+ * ── Relecture T15b : annulation, source lue en entier, longue chaîne ────────────────────────
+ *
+ * Annulation (`options.signal`, dans `OptionsZip` ET `OptionsArchive`) : le maraîcher peut
+ * arrêter un export qui dure. Type `SignalAnnulation` ci-dessous (le cœur n'a pas les types du
+ * DOM ; un `AbortSignal` du navigateur ou de Node s'y range tel quel).
+ *   - Signal déjà annulé à l'appel, ou annulé pendant : la promesse est REJETÉE, au plus tard
+ *     200 ms après l'annulation, MÊME SI le compresseur ne rend plus jamais la main (flux
+ *     CompressionStream bloqué, par exemple) et même si une source attend. Jamais d'archive
+ *     rendue après une annulation.
+ *   - Erreur de rejet : `signal.reason` (celle d'`AbortController.abort()` sans argument est
+ *     une DOMException de nom 'AbortError') ; si `reason` est absente, une Error de nom
+ *     'AbortError'. Les tests vérifient `erreur.name === 'AbortError'`.
+ *   - Après l'annulation, plus aucun calcul de l'export : le cœur arrête de produire et de lire
+ *     les sources (ce qui est déjà parti au compresseur peut finir ou non, c'est égal).
+ *
+ * Source lue en entier (`creerZip`) : si le compresseur s'arrête (fin de son flux de sortie)
+ * sans avoir lu toute la source de l'entrée, l'archive n'est PAS écrite : promesse rejetée par
+ * une Error dont le message contient « source non lue en entier » (et le chemin de l'entrée).
+ * Sinon le CRC et la taille ne couvriraient qu'un début de fichier : archive valide mais
+ * tronquée, sans que personne le voie.
+ *
+ * Longue chaîne en un morceau (`creerZip`) : un contenu texte d'un seul tenant (40 Mio de
+ * caractères, par exemple) est découpé en interne en tranches d'environ 16 000 caractères,
+ * chacune encodée puis passée au compresseur avant la suivante : jamais tous ses octets UTF-8
+ * encodés d'un coup. Une coupure ne tombe jamais au milieu d'une paire de substitution (un
+ * emoji reste un emoji, jamais deux U+FFFD). Mémoire vivante ajoutée au pic : au plus celle du
+ * même texte donné en morceaux + 8 Mio. Mesuré dans un processus isolé :
+ * packages/sync/src/export-leger.test.ts.
  */
 export type TypeExport = 'texte' | 'entier' | 'reel' | 'booleen' | 'date' | 'instant' | 'json';
 
@@ -241,11 +277,24 @@ export interface FichierZip {
 /** Deflate brut (RFC 1951) en flux : octets bruts d'une entrée → octets compressés. */
 export type Compresseur = (brut: AsyncIterable<Uint8Array>) => AsyncIterable<Uint8Array>;
 
+/**
+ * Signal d'annulation (relecture T15b) : le strict nécessaire d'un `AbortSignal`, que le cœur
+ * (sans types du DOM ni de Node) décrit lui-même. Un `AbortSignal` s'y range tel quel.
+ */
+export interface SignalAnnulation {
+  readonly aborted: boolean;
+  readonly reason?: unknown;
+  addEventListener(type: 'abort', ecouteur: () => void, options?: { readonly once?: boolean }): void;
+  removeEventListener(type: 'abort', ecouteur: () => void): void;
+}
+
 export interface OptionsZip {
   /** 'AAAA-MM-JJ' : date DOS de chaque entrée, à 00:00 ; 1980-01-01 par défaut. */
   readonly date?: string;
   /** Absent : entrées stockées (méthode 0). Présent : toutes en deflate (méthode 8). */
   readonly compresseur?: Compresseur;
+  /** Relecture T15b : annulation ; promesse rejetée (AbortError) dans les 200 ms. */
+  readonly signal?: SignalAnnulation;
 }
 
 export interface Avancement {
@@ -257,6 +306,8 @@ export interface OptionsArchive {
   readonly date: string;
   readonly compresseur?: Compresseur;
   readonly avancement?: (a: Avancement) => void;
+  /** Relecture T15b : annulation ; promesse rejetée (AbortError) dans les 200 ms. */
+  readonly signal?: SignalAnnulation;
 }
 
 export interface ArchiveConstruite {

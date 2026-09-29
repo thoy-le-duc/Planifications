@@ -38,6 +38,12 @@
  *     l'appel reste sous (taille des lignes lues) + 2 × taille de l'archive + 8 Mio : les
  *     lignes lues sont l'entrée, inévitables ; tout le reste suit la règle de `construireArchive`.
  *     Mesuré dans un processus isolé : src/export-leger.test.ts.
+ *   - Annulation (relecture T15b) : `options.signal` (AbortSignal). Déjà annulé à l'appel, ou
+ *     annulé pendant la lecture de la base ou la construction : promesse rejetée au plus tard
+ *     200 ms après l'annulation, même si une lecture de la porte n'a pas encore répondu ou si
+ *     le compresseur ne rend plus la main ; erreur de nom 'AbortError' (`signal.reason`). Le
+ *     signal est transmis à `construireArchive` (règles : packages/core/src/export/test/contrat.ts).
+ *     Tests : src/export-robustesse.test.ts.
  *   - `nomFichier` = `nomArchive(<nom de la ligne ferme exportée>, options.jour)` ; ferme absente
  *     de la base → nom null → 'planifications-ferme-<jour>.zip'.
  *   - `lignes` : pour chaque CSV de l'archive, son chemin sans « .csv » ('zone',
@@ -73,6 +79,8 @@ export interface OptionsExportFerme {
   readonly compresseur?: Compresseur;
   /** T15b : barre d'avancement. */
   readonly avancement?: (a: Avancement) => void;
+  /** Relecture T15b : annulation (bouton « Annuler » de l'écran). */
+  readonly signal?: AbortSignal;
 }
 
 export interface ArchiveExport {
