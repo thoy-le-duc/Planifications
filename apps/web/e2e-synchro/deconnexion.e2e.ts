@@ -5,9 +5,16 @@
  *
  * ── Page de diagnostic : ajouts attendus ────────────────────────────────────────────────────
  *
- *   bouton « Se déconnecter » : deconnecter(session, { urlApi, fetch, stockage,
- *       effacerBaseLocale: () => donnees.effacer() }) (contrat : src/connexion/deconnexion.test.ts),
+ *   bouton « Se déconnecter » : deconnecterAvecConfirmation(session, { urlApi, fetch, stockage,
+ *       effacerBaseLocale: () => donnees.effacer(), compterEnAttente: () =>
+ *       donnees.ecrituresEnAttente(), confirmer }) (contrat : src/connexion/deconnexion.test.ts),
  *       puis affiche [data-testid="deconnecte"] ; en cas d'échec, le message dans #erreur.
+ *   relecture sécurité — confirmation : si la file d'envoi n'est pas vide, `confirmer` montre
+ *       [data-testid="confirmation-deconnexion"], qui contient messagePerteSaisies(n) (« 3 saisies
+ *       pas encore envoyées seront perdues ») et deux boutons (cibles d'au moins 48 px) :
+ *       « Se déconnecter quand même » (un tap : déconnexion) et « Annuler » (confirmation
+ *       masquée, rien ne change : session, saisies et bouton « Se déconnecter » intacts).
+ *       File vide : pas de confirmation.
  *   (le reste de la page est inchangé : voir synchro.e2e.ts)
  *
  * ── Attendu ─────────────────────────────────────────────────────────────────────────────────
@@ -15,8 +22,10 @@
  * 1. Déconnexion en ligne : jeton de renouvellement révoqué par l'API (renouveler → 401),
  *    session effacée, base locale vidée : rouverte pour le même utilisateur (sans synchro
  *    possible), elle ne contient plus rien du compte, pas même ce qui était déjà synchronisé.
- * 2. Déconnexion hors ligne : session et base locale effacées, écritures en attente comprises
- *    (téléphone partagé : rien du compte précédent ne reste lisible).
+ * 2. Déconnexion hors ligne avec 3 saisies en attente : confirmation qui les compte ; annuler ne
+ *    déconnecte pas ; confirmer efface session et base locale, écritures en attente comprises
+ *    (téléphone partagé : rien du compte précédent ne reste lisible). Adapté (relecture
+ *    sécurité) : avant, la déconnexion effaçait les écritures en attente sans rien demander.
  * 3. Critère du ticket : renouvellement impossible (réseau coupé vers l'API) puis possible, avec
  *    rotation du jeton de renouvellement : l'écriture faite entre-temps arrive chez l'autre, une
  *    seule fois, et le jeton rangé sur le téléphone est le nouveau.
@@ -96,9 +105,13 @@ test.describe('T09b : déconnexion et rotation de bout en bout', () => {
   const recolte = (page: Page, quantite: string) => page.locator(`[data-testid="recolte"][data-quantite="${quantite}"]`);
   const evenementsLocaux = (page: Page) => page.getByTestId('evenement-local');
 
+  const confirmation = (page: Page) => page.getByTestId('confirmation-deconnexion');
+
+  /** File d'envoi vide : un tap, aucune confirmation. */
   async function seDeconnecter(page: Page): Promise<void> {
-    await page.getByRole('button', { name: 'Se déconnecter' }).click();
+    await page.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
     await expect(page.getByTestId('deconnecte')).toBeVisible({ timeout: DELAI_SYNCHRO_MS });
+    await expect(confirmation(page)).toBeHidden();
   }
 
   /** Rouvre la base locale du même utilisateur, synchro impossible, et y saisit un témoin (99,5 kg). */
@@ -144,20 +157,45 @@ test.describe('T09b : déconnexion et rotation de bout en bout', () => {
     }
   });
 
-  test('déconnexion hors ligne : session et base locale effacées, écritures en attente comprises', async ({ browser }) => {
+  test('déconnexion hors ligne avec 3 saisies en attente : confirmation, annuler garde tout, confirmer efface tout', async ({ browser }) => {
     const [, sessionB] = amorcage.sessions;
     const b = await ouvrir(browser, sessionB);
     try {
       await b.contexte.setOffline(true);
-      await saisirRecolte(b.page, '8');
-      await expect(recolte(b.page, '8')).toHaveCount(1, { timeout: 2_000 });
+      for (const quantite of ['8', '8.25', '8.5']) {
+        await saisirRecolte(b.page, quantite);
+        await expect(recolte(b.page, quantite)).toHaveCount(1, { timeout: 2_000 });
+      }
 
-      await seDeconnecter(b.page);
+      // Un tap sur « Se déconnecter » : la confirmation compte les saisies qui seraient perdues.
+      await b.page.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
+      await expect(confirmation(b.page)).toBeVisible();
+      await expect(confirmation(b.page)).toContainText('3 saisies pas encore envoyées seront perdues');
+      const quandMeme = confirmation(b.page).getByRole('button', { name: 'Se déconnecter quand même' });
+      const annuler = confirmation(b.page).getByRole('button', { name: 'Annuler' });
+      for (const bouton of [quandMeme, annuler]) {
+        const boite = await bouton.boundingBox();
+        expect(boite?.height ?? 0).toBeGreaterThanOrEqual(48);
+      }
+
+      // Annuler : rien ne change.
+      await annuler.click();
+      await expect(confirmation(b.page)).toBeHidden();
+      await expect(b.page.getByTestId('deconnecte')).toBeHidden();
+      expect(await sessionRangee(b.page)).not.toBeNull();
+      await expect(recolte(b.page, '8.5')).toHaveCount(1);
+      await expect(b.page.getByRole('button', { name: 'Se déconnecter', exact: true })).toBeEnabled();
+
+      // Confirmer en un tap : déconnecté, tout effacé.
+      await b.page.getByRole('button', { name: 'Se déconnecter', exact: true }).click();
+      await expect(confirmation(b.page)).toContainText('3 saisies pas encore envoyées seront perdues');
+      await confirmation(b.page).getByRole('button', { name: 'Se déconnecter quand même' }).click();
+      await expect(b.page.getByTestId('deconnecte')).toBeVisible({ timeout: DELAI_SYNCHRO_MS });
       expect(await sessionRangee(b.page)).toBeNull();
 
       await b.contexte.setOffline(false);
       await rouvrirSansSynchro(b.page, sessionB);
-      await expect(recolte(b.page, '8')).toHaveCount(0);
+      for (const quantite of ['8', '8.25', '8.5']) await expect(recolte(b.page, quantite)).toHaveCount(0);
       await expect(evenementsLocaux(b.page)).toHaveCount(1);
     } finally {
       await b.contexte.close();

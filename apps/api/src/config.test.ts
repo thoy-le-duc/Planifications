@@ -44,8 +44,9 @@
  *                              comme avant). Prime sur SMTP_* si les deux sont posés.
  *   sinon SMTP_HOTE posé     → { type: 'smtp', … } avec :
  *     SMTP_SECURITE          'tls' | 'starttls' | 'aucune', défaut 'starttls' ; toute autre valeur
- *                            refusée ; 'aucune' refusée si NODE_ENV=production (mot de passe et
- *                            codes en clair sur le réseau)
+ *                            refusée ; 'aucune' (mot de passe et codes en clair sur le réseau)
+ *                            refusée SAUF si NODE_ENV=development exactement (relecture
+ *                            sécurité : NODE_ENV absente, vide, 'test', 'staging'… → refus)
  *     SMTP_PORT              défaut 465 ('tls'), 587 ('starttls'), 25 ('aucune') ; entier 1–65535
  *     SMTP_EXPEDITEUR        obligatoire (en-tête From) ; refusé s'il contient CR ou LF
  *     SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE   les deux ou aucun ; vides = absents
@@ -192,6 +193,18 @@ describe('lireConfig : expéditeur SMTP (T09b)', () => {
 
   it('SMTP_SECURITE=aucune refusée en production', async () => {
     await expect(lireConfig({ ...ENV_SMTP, SMTP_SECURITE: 'aucune' })).rejects.toThrow(/SMTP_SECURITE/);
+  });
+
+  it.each([undefined, '', 'test', 'staging', 'Development', 'dev'])(
+    'SMTP_SECURITE=aucune refusée hors NODE_ENV=development (NODE_ENV %j)',
+    async (nodeEnv) => {
+      await expect(lireConfig({ ...ENV_SMTP, NODE_ENV: nodeEnv, SMTP_SECURITE: 'aucune' })).rejects.toThrow(/SMTP_SECURITE/);
+    },
+  );
+
+  it('SMTP_SECURITE=aucune acceptée en développement', async () => {
+    const config = await lireConfig({ ...ENV_SMTP, NODE_ENV: 'development', SMTP_SECURITE: 'aucune' });
+    expect(config.courriel).toMatchObject({ type: 'smtp', securite: 'aucune' });
   });
 
   it.each(['TLS', 'ssl', 'oui', 'none'])('SMTP_SECURITE « %s » refusée', async (valeur) => {

@@ -24,15 +24,30 @@
  *   POST /auth/renouveler  { jetonRenouvellement }  →  200 { jetonAcces, jetonRenouvellement }
  *     - le jeton rendu est NEUF (différent de celui présenté), stocké haché, de la même famille
  *       (même connexion : le plafond de 365 jours après la connexion vaut pour toute la
- *       famille) ;
- *     - l'ancien reste accepté pendant DELAI_GRACE = 2 minutes après son PREMIER usage (réponse
- *       perdue au champ) : il rend alors un jeton valable (neuf ou le même successeur, au choix
- *       de l'implémentation) ;
- *     - présenté après ce délai (rejeu), il est refusé (401 { erreur: 'jeton_invalide' }) et
- *       TOUTE la famille est révoquée : le dernier jeton rendu aussi. Les autres sessions du
- *       compte ne sont pas touchées ;
- *     - deux renouvellements simultanés avec le même jeton (dans le délai de grâce) réussissent
- *       tous les deux, et chaque jeton rendu renouvelle à son tour.
+ *       famille). Le jeton présenté devient « utilisé » (premier usage noté).
+ *
+ *   Règle « successeur jamais utilisé » (relecture sécurité, REMPLACE le délai de grâce fixe de
+ *   2 minutes) : un jeton déjà utilisé T reste acceptable jusqu'à REJEU_MAX = 7 jours après son
+ *   premier usage TANT QU'AUCUN DE SES SUCCESSEURS (jetons émis en le présentant) N'A SERVI.
+ *   Présenté dans ce cas (réponse perdue au champ), il rend 200 et un jeton neuf, et ses
+ *   successeurs inutilisés sont remplacés : ils ne valent plus rien (401), sans que la famille
+ *   soit révoquée pour autant (les présenter ne coupe pas la session de celui qui a le dernier).
+ *     - dès qu'un successeur de T a servi, présenter T est un rejeu (vol, copie) : 401
+ *       { erreur: 'jeton_invalide' } et TOUTE la famille est révoquée, le dernier jeton rendu
+ *       aussi ; les autres sessions du compte ne sont pas touchées ;
+ *     - au-delà de 7 jours après son premier usage, présenter T est un rejeu : même chose
+ *       (401, famille révoquée), successeur utilisé ou non ;
+ *     - renouvellements simultanés avec le même jeton : tous répondent 200 ; au moins un des
+ *       jetons rendus renouvelle ensuite, et présenter un jeton remplacé ne révoque pas la
+ *       famille ;
+ *     - famille révoquée (rejeu, déconnexion) : aucun de ses jetons n'est plus accepté, Y COMPRIS
+ *       un jeton émis par un renouvellement lancé en même temps que le rejeu (course : la
+ *       vérification et l'émission se font sous un verrou de famille, ou équivalent). Un jeton
+ *       révoqué est refusé (401). Le remplacement d'un successeur inutilisé n'est pas une
+ *       révocation de la famille.
+ *   Purge : à chaque renouvellement, les lignes de jeton_renouvellement expirées (expire_le) ou
+ *   révoquées (revoque_le) depuis plus de 90 jours sont effacées (tous comptes confondus) ; les
+ *   plus récentes restent.
  *   Le contrat de T09 « le même jeton reste valable après usage » est remplacé par ces règles
  *   (tests de auth.integration.test.ts adaptés, voir leurs commentaires).
  *
@@ -58,7 +73,16 @@
  *       proxy ; les précédentes viennent du client et se falsifient), espaces retirés ; en-tête
  *       absent ou vide → adresse de la socket ;
  *     - adresse inconnue (pas de socket : app.request() sans env, comme dans les tests de T09)
- *       → pas de limite par IP, et surtout pas d'exception.
+ *       → pas de limite par IP, et surtout pas d'exception ;
+ *     - relecture sécurité : derrière le proxy de confiance, une dernière valeur de
+ *       X-Forwarded-For qui n'est pas une adresse IP valide (« inconnu », « 999.0.0.1 »,
+ *       « 2001:db8::zz »…) est IGNORÉE : c'est l'adresse de la socket qui compte (jamais la
+ *       valeur précédente de l'en-tête, falsifiable) ;
+ *     - IPv6 : toutes les adresses d'un même préfixe /64 comptent ensemble (un client en a des
+ *       milliards), quelle que soit leur écriture (majuscules, zéros, forme compressée).
+ *       ::ffff:a.b.c.d compte comme a.b.c.d. Même règle pour la valeur de X-Forwarded-For.
+ *   Conservation : les demandes de plus de 24 heures sont effacées à chaque demande, qu'elle
+ *   soit enregistrée ou refusée (429).
  *
  *   DependancesApp gagne `readonly proxyDeConfiance?: boolean` (false par défaut) ; index.ts
  *   le passe depuis lireConfig. Dans ces tests, l'adresse de socket est fournie par le 3e
@@ -72,6 +96,20 @@
  *   protégée répond 401 { erreur: 'non_authentifie' } et n'écrit rien (GET /moi, POST /fermes,
  *   /fermes/:id…, POST /sync/upload). Remplace le 404 ferme_introuvable attendu par T09 dans ce
  *   cas (test adapté dans auth.integration.test.ts).
+ *
+ * ── 5. Adresses e-mail (relecture sécurité) ────────────────────────────────────────────────
+ *
+ *   Une adresse qui contient l'un de  , ; : < > ( ) [ ] " \  ou un caractère de contrôle
+ *   (\p{Cc} : U+0000–U+001F, U+007F–U+009F), où que ce soit, est refusée avant tout envoi, toute
+ *   écriture et toute tentative comptée :
+ *     POST /auth/code             400 { erreur: 'email_invalide' }  (le corps de T09 pour une
+ *                                 adresse invalide, inchangé)
+ *     POST /auth/verifier         400 { erreur: 'requete_invalide' }
+ *     POST /fermes/:id/membres    400 { erreur: 'email_invalide' }  (idem T09)
+ *   Ces caractères séparent ou décorent des adresses pour un analyseur d'en-têtes (« a@x.fr,
+ *   pirate@y.fr », « Nom <pirate@y.fr> ») : une seule adresse doit partir, celle saisie.
+ *   Les adresses ordinaires restent acceptées (apostrophe, +, tiret, point, sous-domaines).
+ *   L'expéditeur SMTP, lui, passe l'adresse sans l'analyser (courriel-smtp.test.ts).
  */
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
@@ -93,7 +131,10 @@ const MINUTE = 60 * SECONDE;
 const HEURE = 60 * MINUTE;
 const JOUR = 24 * HEURE;
 
-const DELAI_GRACE_MS = 2 * MINUTE;
+/** Règle « successeur jamais utilisé » : un jeton utilisé reste acceptable 7 jours au plus. */
+const REJEU_MAX_MS = 7 * JOUR;
+const PURGE_JETONS_MS = 90 * JOUR;
+const CONSERVATION_IP_MS = 24 * HEURE;
 const CODES_PAR_IP_PAR_HEURE = 30;
 const VERIFICATIONS_PAR_IP_PAR_HEURE = 60;
 
@@ -142,6 +183,13 @@ function emailNeuf(): string {
 }
 
 /** Adresse IPv4 de documentation neuve (198.18.0.0/15, réservée aux tests), une par test. */
+/** Préfixe IPv6 /64 de documentation neuf (2001:db8::/32), quatre groupes : « 2001:db8:x:y ». */
+function prefixe64Neuf(): string {
+  const g = new Uint16Array(2);
+  crypto.getRandomValues(g);
+  return `2001:db8:${(g[0] ?? 0).toString(16)}:${(g[1] ?? 0).toString(16)}`;
+}
+
 function ipNeuve(): string {
   const octets = new Uint8Array(3);
   crypto.getRandomValues(octets);
@@ -193,7 +241,8 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
     const entetes: Record<string, string> = { ...o.entetes };
     if (corps !== undefined) entetes['content-type'] = 'application/json';
     if (o.jeton !== undefined) entetes.authorization = `Bearer ${o.jeton}`;
-    const env = o.ip === undefined ? undefined : { incoming: { socket: { remoteAddress: o.ip, remotePort: 50_000, remoteFamily: 'IPv4' } } };
+    const famille = o.ip?.includes(':') === true ? 'IPv6' : 'IPv4';
+    const env = o.ip === undefined ? undefined : { incoming: { socket: { remoteAddress: o.ip, remotePort: 50_000, remoteFamily: famille } } };
     return Promise.resolve(
       api.app.request(
         chemin,
@@ -265,7 +314,7 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       expect((await renouveler(api, telephoneB.jetonRenouvellement)).status).toBe(200);
     });
 
-    it('révoque toute la famille : un ancien jeton encore dans son délai de grâce ne rouvre pas la session', async () => {
+    it('révoque toute la famille : un ancien jeton encore acceptable (successeur jamais utilisé) ne rouvre pas la session', async () => {
       const api = creer();
       const { jetonRenouvellement: t0 } = await connecter(api);
       const { jetonRenouvellement: t1 } = await renouvele(api, t0);
@@ -275,7 +324,7 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       await refuse(await renouveler(api, t1));
     });
 
-    it('présenter l’ancien jeton (délai de grâce) déconnecte aussi le successeur', async () => {
+    it('présenter l’ancien jeton (encore acceptable) déconnecte aussi le successeur', async () => {
       const api = creer();
       const { jetonRenouvellement: t0 } = await connecter(api);
       const { jetonRenouvellement: t1 } = await renouvele(api, t0);
@@ -321,17 +370,49 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       for (const r of rows) for (const jeton of [t0, t1, t2]) expect(r.brut).not.toContain(jeton);
     });
 
-    it('réponse perdue au champ : l’ancien jeton reste accepté 2 minutes, et ce qu’il rend est valable', async () => {
+    it('réponse perdue (T1 jamais utilisé) : T0 rejoué 3 minutes puis 3 jours après → 200, et ce qu’il rend est valable', async () => {
       const api = creer();
       const { jetonRenouvellement: t0 } = await connecter(api);
-      await renouvele(api, t0); // réponse perdue : le téléphone garde t0
-      avancer(DELAI_GRACE_MS - SECONDE);
-      const { jetonRenouvellement: t1bis } = await renouvele(api, t0);
+      const { jetonRenouvellement: t1 } = await renouvele(api, t0); // réponse perdue : le téléphone garde t0
+      avancer(3 * MINUTE);
+      const { jetonRenouvellement: t1bis } = await renouvele(api, t0); // perdue encore
+      avancer(3 * JOUR);
+      const { jetonRenouvellement: t1ter } = await renouvele(api, t0);
+      expect(new Set([t0, t1, t1bis, t1ter]).size).toBe(4);
+
+      // Les successeurs remplacés ne valent plus rien, mais les présenter ne coupe pas la session.
+      await refuse(await renouveler(api, t1));
+      await refuse(await renouveler(api, t1bis));
       avancer(HEURE);
+      const { jetonRenouvellement: t2 } = await renouvele(api, t1ter);
+      expect((await renouveler(api, t2)).status).toBe(200);
+    });
+
+    it('réponse perdue : T0 encore accepté 7 jours − 1 s après son premier usage', async () => {
+      const api = creer();
+      const { jetonRenouvellement: t0 } = await connecter(api);
+      await renouvele(api, t0);
+      avancer(REJEU_MAX_MS - SECONDE);
+      const { jetonRenouvellement: t1bis } = await renouvele(api, t0);
       expect((await renouveler(api, t1bis)).status).toBe(200);
     });
 
-    it('rejeu après le délai de grâce : refusé, et toute la famille est révoquée', async () => {
+    it('au-delà de 7 jours (7 j + 1 s) : rejeu, 401, et toute la famille est révoquée, successeur inutilisé compris', async () => {
+      const api = creer();
+      const email = emailNeuf();
+      const { jetonRenouvellement: t0 } = await connecter(api, email);
+      avancer(61 * SECONDE);
+      const autreSession = await connecter(api, email);
+      const { jetonRenouvellement: t1 } = await renouvele(api, t0);
+      avancer(REJEU_MAX_MS + SECONDE);
+      await refuse(await renouveler(api, t0));
+      await refuse(await renouveler(api, t1));
+      expect((await renouveler(api, autreSession.jetonRenouvellement)).status).toBe(200);
+    });
+
+    // Remplace « rejeu après le délai de grâce » (2 min) : c'est l'usage du successeur qui trahit
+    // le rejeu, plus le temps écoulé.
+    it('vol : T1 a servi, puis T0 est rejoué (10 s plus tard) → 401, et toute la famille est révoquée', async () => {
       const api = creer();
       const email = emailNeuf();
       const { jetonRenouvellement: t0 } = await connecter(api, email);
@@ -339,9 +420,9 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       const autreSession = await connecter(api, email);
 
       const { jetonRenouvellement: t1 } = await renouvele(api, t0);
-      avancer(10 * SECONDE);
+      avancer(5 * SECONDE);
       const { jetonRenouvellement: t2 } = await renouvele(api, t1);
-      avancer(DELAI_GRACE_MS); // t0 a servi il y a 2 min 10 s
+      avancer(5 * SECONDE);
 
       await refuse(await renouveler(api, t0));
       // Le voleur ou le téléphone légitime : on ne sait pas lequel, toute la famille tombe.
@@ -351,16 +432,19 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       expect((await renouveler(api, autreSession.jetonRenouvellement)).status).toBe(200);
     });
 
-    it('rejeu juste après le délai de grâce (2 min + 1 s) : refusé', async () => {
+    it('vol plus ancien : T2 a servi (petit-fils de T0), T0 rejoué → 401 et famille révoquée', async () => {
       const api = creer();
       const { jetonRenouvellement: t0 } = await connecter(api);
       const { jetonRenouvellement: t1 } = await renouvele(api, t0);
-      avancer(DELAI_GRACE_MS + SECONDE);
+      const { jetonRenouvellement: t2 } = await renouvele(api, t1);
+      const { jetonRenouvellement: t3 } = await renouvele(api, t2);
       await refuse(await renouveler(api, t0));
-      await refuse(await renouveler(api, t1));
+      await refuse(await renouveler(api, t3));
     });
 
-    it('deux renouvellements simultanés avec le même jeton : les deux réussissent, chaque jeton rendu renouvelle', async () => {
+    // Adapté : avec la règle « successeur jamais utilisé », un renouvellement simultané remplace le
+    // successeur rendu à l'autre ; T09b attendait que chaque jeton rendu renouvelle.
+    it('deux renouvellements simultanés avec le même jeton : les deux réussissent, la session continue', async () => {
       const api = creer();
       const { jetonRenouvellement: t0 } = await connecter(api);
       const reponses = await Promise.all([renouveler(api, t0), renouveler(api, t0)]);
@@ -368,7 +452,15 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       const rendus = await Promise.all(reponses.map((r) => lire<Renouvellement>(r)));
       for (const r of rendus) expect(r.jetonRenouvellement).not.toBe(t0);
       avancer(30 * SECONDE);
-      for (const r of rendus) expect((await renouveler(api, r.jetonRenouvellement)).status).toBe(200);
+      const suivants: string[] = [];
+      for (const r of rendus) {
+        const res = await renouveler(api, r.jetonRenouvellement);
+        if (res.status === 200) suivants.push((await lire<Renouvellement>(res)).jetonRenouvellement);
+        else expect(res.status).toBe(401);
+      }
+      expect(suivants.length).toBeGreaterThanOrEqual(1);
+      // Présenter le jeton remplacé n'a pas révoqué la famille.
+      for (const j of suivants) expect((await renouveler(api, j)).status).toBe(200);
     });
 
     it('cinq renouvellements simultanés avec le même jeton : tous réussissent (synchro et envoi en même temps)', async () => {
@@ -395,6 +487,77 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       const { jetonRenouvellement: t1 } = await renouvele(api, t0);
       await base.pool.query(`UPDATE jeton_renouvellement SET revoque_le = $2 WHERE utilisateur_id = $1`, [utilisateurId, instant]);
       await refuse(await renouveler(api, t1));
+    });
+
+    /** Tous les jetons connus sont refusés (aucun n'est utilisable, ni n'en rend un autre). */
+    async function toutRefuse(api: Api, jetons: readonly string[], essai: number): Promise<void> {
+      for (const [i, jeton] of jetons.entries()) {
+        const res = await renouveler(api, jeton);
+        expect(res.status, `essai ${String(essai + 1)}, jeton ${String(i)} encore utilisable`).toBe(401);
+      }
+    }
+
+    it('course : rejeu hors délai (7 j + 1 s) et renouvellement du successeur lancés ensemble, 20 fois : aucun jeton de la famille ne reste utilisable', async () => {
+      const api = creer();
+      for (let essai = 0; essai < 20; essai++) {
+        const { jetonRenouvellement: t0 } = await connecter(api);
+        const { jetonRenouvellement: t1 } = await renouvele(api, t0);
+        avancer(REJEU_MAX_MS + SECONDE);
+        const [rejeu, suivant] = await Promise.all([renouveler(api, t0), renouveler(api, t1)]);
+        expect(rejeu.status, `essai ${String(essai + 1)} : rejeu`).toBe(401);
+        const connus = [t0, t1];
+        if (suivant.status === 200) connus.push((await lire<Renouvellement>(suivant)).jetonRenouvellement);
+        else expect(suivant.status).toBe(401);
+        await toutRefuse(api, connus, essai);
+      }
+    });
+
+    it('course : rejeu après usage du successeur et renouvellement du dernier jeton lancés ensemble, 20 fois : aucun jeton de la famille ne reste utilisable', async () => {
+      const api = creer();
+      for (let essai = 0; essai < 20; essai++) {
+        const { jetonRenouvellement: t0 } = await connecter(api);
+        const { jetonRenouvellement: t1 } = await renouvele(api, t0);
+        const { jetonRenouvellement: t2 } = await renouvele(api, t1);
+        avancer(3 * MINUTE);
+        const [rejeu, suivant] = await Promise.all([renouveler(api, t0), renouveler(api, t2)]);
+        expect(rejeu.status, `essai ${String(essai + 1)} : rejeu`).toBe(401);
+        const connus = [t0, t1, t2];
+        if (suivant.status === 200) connus.push((await lire<Renouvellement>(suivant)).jetonRenouvellement);
+        else expect(suivant.status).toBe(401);
+        await toutRefuse(api, connus, essai);
+      }
+    });
+
+    it('purge à chaque renouvellement : jetons expirés ou révoqués depuis plus de 90 jours effacés, les plus récents gardés', async () => {
+      const api = creer();
+      const [vieuxExpire, vieuxRevoque, recentExpire, recentRevoque] = [
+        await connecter(api),
+        await connecter(api),
+        await connecter(api),
+        await connecter(api),
+      ];
+      const ilYa = (ms: number) => new Date(instant.getTime() - ms);
+      const maj = (colonne: 'expire_le' | 'revoque_le', c: Connexion, quand: Date) =>
+        base.pool.query(`UPDATE jeton_renouvellement SET ${colonne} = $2 WHERE utilisateur_id = $1`, [c.utilisateurId, quand]);
+      await maj('expire_le', vieuxExpire, ilYa(PURGE_JETONS_MS + JOUR));
+      await maj('revoque_le', vieuxRevoque, ilYa(PURGE_JETONS_MS + JOUR));
+      await maj('expire_le', recentExpire, ilYa(PURGE_JETONS_MS - JOUR));
+      await maj('revoque_le', recentRevoque, ilYa(PURGE_JETONS_MS - JOUR));
+
+      const actif = await connecter(api);
+      await renouvele(api, actif.jetonRenouvellement);
+
+      const nombre = async (c: Connexion) =>
+        (
+          await base.pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM jeton_renouvellement WHERE utilisateur_id = $1`, [
+            c.utilisateurId,
+          ])
+        ).rows[0]?.n;
+      expect(await nombre(vieuxExpire), 'expiré depuis 91 jours').toBe(0);
+      expect(await nombre(vieuxRevoque), 'révoqué depuis 91 jours').toBe(0);
+      expect(await nombre(recentExpire), 'expiré depuis 89 jours').toBe(1);
+      expect(await nombre(recentRevoque), 'révoqué depuis 89 jours').toBe(1);
+      expect(await nombre(actif)).toBe(2);
     });
   });
 
@@ -562,6 +725,80 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       }
     });
 
+    it('proxy de confiance : une valeur de X-Forwarded-For qui n’est pas une IP est ignorée, l’adresse de la socket compte', async () => {
+      const api = creer({ proxyDeConfiance: true });
+      const socket = ipNeuve();
+      const invalides = (i: number): string =>
+        [
+          `inconnu-${String(i)}`,
+          `999.0.0.${String(i)}`,
+          `198.18.0.${String(i)}.7`,
+          `2001:db8::zz${String(i)}`,
+          `${ipNeuve()}, pas-une-ip-${String(i)}`,
+          `unknown${String(i)}`,
+        ][i % 6] ?? '';
+      await epuiserCodes(api, (i) => ({ ip: socket, entetes: { 'x-forwarded-for': invalides(i) } }));
+      await trop(await demanderCode(api, emailNeuf(), { ip: socket, entetes: { 'x-forwarded-for': 'encore-autre-chose' } }));
+      await trop(await demanderCode(api, emailNeuf(), { ip: socket }));
+      // Une vraie adresse derrière le même proxy : un autre client, qui passe.
+      expect((await demanderCode(api, emailNeuf(), { ip: socket, entetes: { 'x-forwarded-for': ipNeuve() } })).status).toBe(202);
+    });
+
+    it('IPv6 : les adresses d’un même /64 comptent ensemble, quelle que soit leur écriture', async () => {
+      const api = creer();
+      const p = prefixe64Neuf();
+      await epuiserCodes(api, (i) => ({ ip: `${p}:${(i + 1).toString(16)}:0:0:${(i * 7 + 3).toString(16)}` }));
+      await trop(await demanderCode(api, emailNeuf(), { ip: `${p}::1` }));
+      await trop(await demanderCode(api, emailNeuf(), { ip: `${p.toUpperCase()}:FFFF:FFFF:FFFF:FFFF` }));
+      const [a = '', b = '', c = '', d = ''] = p.split(':');
+      const developpe = [a, b, c, d].map((g) => g.padStart(4, '0')).join(':');
+      await trop(await demanderCode(api, emailNeuf(), { ip: `${developpe}:0000:0000:0000:0042` }));
+      // Le /64 voisin et un autre préfixe : pas concernés.
+      const voisin = `${a}:${b}:${c}:${((Number.parseInt(d, 16) + 1) % 0x10000).toString(16)}`;
+      expect((await demanderCode(api, emailNeuf(), { ip: `${voisin}::1` })).status).toBe(202);
+      expect((await demanderCode(api, emailNeuf(), { ip: `${prefixe64Neuf()}::1` })).status).toBe(202);
+    });
+
+    it('IPv6 derrière le proxy de confiance : même règle pour la valeur de X-Forwarded-For', async () => {
+      const api = creer({ proxyDeConfiance: true });
+      const socket = ipNeuve();
+      const p = prefixe64Neuf();
+      await epuiserCodes(api, (i) => ({ ip: socket, entetes: { 'x-forwarded-for': `${p}::${(i + 1).toString(16)}` } }));
+      await trop(await demanderCode(api, emailNeuf(), { ip: socket, entetes: { 'x-forwarded-for': `${ipNeuve()}, ${p}:1:2:3:4` } }));
+    });
+
+    it('IPv4 vue par une socket IPv6 (::ffff:a.b.c.d) compte comme a.b.c.d', async () => {
+      const api = creer();
+      const ip = ipNeuve();
+      await epuiserCodes(api, (i) => ({ ip: i % 2 === 0 ? ip : `::ffff:${ip}` }));
+      await trop(await demanderCode(api, emailNeuf(), { ip }));
+      await trop(await demanderCode(api, emailNeuf(), { ip: `::FFFF:${ip}` }));
+    });
+
+    it('conservation : une demande refusée (429) efface aussi les adresses de plus de 24 heures', async () => {
+      const api = creer();
+      const ancienne = ipNeuve();
+      expect((await demanderCode(api, emailNeuf(), { ip: ancienne })).status).toBe(202);
+
+      // 23 h 30 plus tard, une autre adresse atteint sa limite (ses 30 demandes n'effacent que
+      // ce qui a plus de 24 h à cet instant : l'ancienne reste).
+      avancer(23 * HEURE + 30 * MINUTE);
+      const ip = ipNeuve();
+      await epuiserCodes(api, () => ({ ip }));
+      const nombreAnciennes = async () =>
+        (
+          await base.pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM securite.demande_ip WHERE cree_le < $1`, [
+            new Date(instant.getTime() - CONSERVATION_IP_MS),
+          ])
+        ).rows[0]?.n;
+
+      // 40 min plus tard : l'ancienne a plus de 24 h ; la seule demande reçue est refusée.
+      avancer(40 * MINUTE);
+      expect(await nombreAnciennes(), 'témoin : une adresse de plus de 24 h est en base').toBeGreaterThan(0);
+      await trop(await demanderCode(api, emailNeuf(), { ip }));
+      expect(await nombreAnciennes()).toBe(0);
+    });
+
     it('sans adresse connue (app.request sans socket) : pas de limite par IP, pas d’erreur', async () => {
       const api = creer();
       for (let i = 0; i < CODES_PAR_IP_PAR_HEURE + 1; i++) {
@@ -617,6 +854,90 @@ decrire('T09b : durcissement de la connexion (API)', { timeout: 60_000 }, () => 
       const res = await requete(api, 'GET', '/moi', undefined, { jeton });
       expect(res.status).toBe(401);
       expect(await res.json()).toEqual({ erreur: 'non_authentifie' });
+    });
+  });
+
+  // --- 5. Adresses e-mail -----------------------------------------------------------------------
+
+  describe('adresses e-mail : séparateurs et caractères de contrôle refusés', () => {
+    const INTERDITS = [',', ';', ':', '<', '>', '(', ')', '[', ']', '"', '\\', '\u0000', '\u0007', '\u001b', '\u007f', '\u0085'];
+
+    /** Adresses piégées : le caractère dans la partie locale, dans le domaine, et en forme d'attaque. */
+    /** Formes normalisées, sans U+0000 (qu'un texte Postgres ne peut pas contenir) : pour relire la base. */
+    function enBase(emails: readonly string[]): string[] {
+      return emails.filter((e) => !e.includes('\u0000')).map((e) => e.trim().toLowerCase());
+    }
+
+    function piegees(): string[] {
+      const jeton = randomUUID().slice(0, 8);
+      return [
+        ...INTERDITS.flatMap((c) => [`vic${c}time-${jeton}@ferme.fr`, `victime-${jeton}@fer${c}me.fr`]),
+        `victime-${jeton}@ferme.fr,pirate@ailleurs.fr`,
+        `victime-${jeton}@ferme.fr;pirate@ailleurs.fr`,
+        `Pirate <pirate-${jeton}@ailleurs.fr>`,
+        `"victime-${jeton}"@ferme.fr`,
+        `victime-${jeton}@[127.0.0.1]`,
+        `victime-${jeton}(commentaire)@ferme.fr`,
+      ];
+    }
+
+    it('POST /auth/code : 400 email_invalide, rien d’envoyé ni d’écrit', async () => {
+      const api = creer();
+      const emails = piegees();
+      for (const email of emails) {
+        const res = await demanderCode(api, email);
+        expect(res.status, JSON.stringify(email)).toBe(400);
+        expect(await res.json()).toEqual({ erreur: 'email_invalide' });
+      }
+      expect(api.expediteur.messages).toHaveLength(0);
+      const { rows } = await base.pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM code_connexion WHERE email = ANY($1)`, [
+        enBase(emails),
+      ]);
+      expect(rows[0]?.n).toBe(0);
+    });
+
+    it('POST /auth/verifier : 400 requete_invalide, aucun compte créé', async () => {
+      const api = creer();
+      const emails = piegees();
+      for (const email of emails) {
+        const res = await verifier(api, email, '123456');
+        expect(res.status, JSON.stringify(email)).toBe(400);
+        expect(await res.json()).toEqual({ erreur: 'requete_invalide' });
+      }
+      const { rows } = await base.pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM utilisateur WHERE email = ANY($1)`, [
+        enBase(emails),
+      ]);
+      expect(rows[0]?.n).toBe(0);
+    });
+
+    it('POST /fermes/:id/membres : 400 email_invalide, rien d’envoyé ni d’écrit', async () => {
+      const api = creer();
+      const gerant = await connecter(api);
+      const fermeRes = await requete(api, 'POST', '/fermes', { id: randomUUID(), nom: 'Ferme des Aulnes' }, { jeton: gerant.jetonAcces });
+      expect(fermeRes.status).toBe(201);
+      const ferme = await lire<{ id: string }>(fermeRes);
+      const avant = api.expediteur.messages.length;
+      for (const email of piegees()) {
+        const res = await requete(api, 'POST', `/fermes/${ferme.id}/membres`, { email }, { jeton: gerant.jetonAcces });
+        expect(res.status, JSON.stringify(email)).toBe(400);
+        expect(await res.json()).toEqual({ erreur: 'email_invalide' });
+      }
+      expect(api.expediteur.messages).toHaveLength(avant);
+      const { rows } = await base.pool.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM membre WHERE ferme_id = $1 AND utilisateur_id <> $2`,
+        [ferme.id, gerant.utilisateurId],
+      );
+      expect(rows[0]?.n).toBe(0);
+    });
+
+    it('les adresses ordinaires restent acceptées (apostrophe, +, tiret, points, sous-domaine)', async () => {
+      const api = creer();
+      const jeton = randomUUID().slice(0, 8);
+      for (const email of [`o'neil+recolte-${jeton}@ferme.fr`, `prenom.nom-${jeton}@mail.sous-domaine.ferme.fr`, `  Theo-${jeton}@Ferme.FR  `]) {
+        expect((await demanderCode(api, email)).status, email).toBe(202);
+        const normalisee = email.trim().toLowerCase();
+        expect((await verifier(api, email, api.expediteur.dernierCode(normalisee))).status, email).toBe(200);
+      }
     });
   });
 });

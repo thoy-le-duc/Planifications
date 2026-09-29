@@ -63,7 +63,8 @@
  *     renouvellement vit au moins 30 jours (session hors ligne) et moins de 400 jours. Il reste
  *     valable après usage (pas de rotation stricte : une réponse perdue sur un réseau faible ne
  *     doit pas déconnecter) ; la réponse peut en fournir un nouveau.
- *     T09b REMPLACE cette règle par une rotation avec délai de grâce de 2 minutes (contrat :
+ *     T09b REMPLACE cette règle par une rotation : un jeton déjà utilisé reste acceptable
+ *     jusqu'à 7 jours tant qu'aucun de ses successeurs n'a servi (contrat :
  *     durcissement.integration.test.ts) ; les tests ci-dessous qui réutilisaient le même jeton
  *     sont adaptés (commentaire « T09b » sur chacun).
  *     401 { erreur: 'jeton_invalide' }.
@@ -572,8 +573,8 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
       expect((await requete(api, 'GET', '/moi', undefined, jetonAcces)).status).toBe(200);
     });
 
-    // T09b : rotation. L'ancien jeton ne reste valable que 2 minutes après usage (délai de grâce) ;
-    // avant T09b ce test attendait encore une heure plus tard.
+    // T09b : rotation. L'ancien jeton reste acceptable tant que son successeur n'a pas servi
+    // (7 jours au plus) ; avant T09b ce test attendait encore une heure plus tard.
     it('le jeton de renouvellement reste valable juste après usage (réponse perdue sur réseau faible)', async () => {
       const api = creer();
       const { jetonRenouvellement } = await connecter(api, emailNeuf());

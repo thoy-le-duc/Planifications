@@ -6,8 +6,9 @@
  *
  * OptionsJetons.stockage devient Pick<Storage, 'getItem' | 'setItem'>.
  *
- * Rotation (l'API rend un jeton de renouvellement NEUF à chaque renouvellement ; l'ancien ne
- * vaut plus que 2 minutes, et son rejeu plus tard révoque toute la session) :
+ * Rotation (l'API rend un jeton de renouvellement NEUF à chaque renouvellement ; l'ancien reste
+ * acceptable tant que ce successeur n'a pas servi, 7 jours au plus ; présenté après, il révoque
+ * toute la session) :
  *   - le jeton de renouvellement reçu remplace l'ancien, en mémoire et dans le stockage ;
  *     le renouvellement suivant présente le neuf ;
  *   - avant chaque renouvellement, gererJetons relit la session du stockage (`planif.session`) :
@@ -15,7 +16,7 @@
  *     ou un autre onglet l'a fait tourner), c'est celui-là qui est présenté. Stockage vide,
  *     illisible ou d'un autre utilisateur : on garde celui en mémoire ;
  *   - un renouvellement qui échoue sur le réseau (réponse perdue) garde l'ancien jeton : le
- *     suivant le représente (le serveur l'accepte encore pendant le délai de grâce).
+ *     suivant le représente (le serveur l'accepte tant que le successeur perdu n'a pas servi).
  *
  * Écart d'horloge (téléphone à la mauvaise heure) :
  *   - gererJetons estime l'heure du serveur : écart = iat (du jeton d'accès, en ms) −
@@ -28,10 +29,22 @@
  *     un téléphone en avance de 2 h ne renouvelle pas à chaque appel.
  * Un jeton sans iat lisible : écart inchangé (0 par défaut), comportement de T10.
  *
+ * Écart persistant (relecture sécurité) : l'écart est RANGÉ AVEC LA SESSION et relu au
+ * démarrage, sinon un téléphone en retard de 2 h, appli relancée, rendrait un jeton périmé pour
+ * le serveur (l'iat du jeton rangé ne prouve alors plus tout le retard).
+ *   - SessionConnexion gagne `readonly ecartHorlogeMs?: number` (heure du serveur − heure du
+ *     téléphone, en ms, mesuré au dernier jeton reçu ; négatif si le téléphone avance) ;
+ *   - enregistrerSession le range avec le reste (clé `planif.session`), lireSession et
+ *     sessionValide le rendent s'il est un nombre fini, l'omettent sinon (session toujours
+ *     valide : une valeur illisible ne déconnecte pas) ;
+ *   - gererJetons : la session rangée après chaque renouvellement porte l'écart mesuré ; au
+ *     départ, l'écart vaut `depart.ecartHorlogeMs` s'il est présent (même négatif), sinon
+ *     max(0, iat − maintenant()) comme avant.
+ *
  * Aucun appel réseau pour mesurer l'écart : seul l'iat des jetons reçus sert.
  */
 import { describe, expect, it } from 'vitest';
-import { CLE_SESSION, type SessionConnexion } from '../connexion/session.ts';
+import { CLE_SESSION, lireSession, sessionValide, type SessionConnexion } from '../connexion/session.ts';
 import { gererJetons, SessionExpiree } from './jeton.ts';
 
 const S = Date.parse('2026-10-01T06:00:00Z'); // heure du serveur au départ
@@ -210,6 +223,85 @@ describe('écart d’horloge (T09b)', () => {
     h.regler(S + 25 * MINUTE);
     expect(await g.jetonValide()).toBe(depart);
     h.regler(S + 29 * MINUTE + 30_000);
+    await g.jetonValide();
+    expect(appels).toHaveLength(1);
+  });
+});
+
+/** SessionConnexion avec l'écart rangé (champ ajouté par la relecture sécurité). */
+type SessionAvecEcart = SessionConnexion & { readonly ecartHorlogeMs?: number };
+
+/** Champ `ecartHorlogeMs` d'une session lue, s'il y est (sans supposer le type à jour). */
+function ecartDe(lue: object | null): unknown {
+  return lue !== null && 'ecartHorlogeMs' in lue ? lue.ecartHorlogeMs : undefined;
+}
+
+function ecartRange(s: { readonly valeurs: Map<string, string> }): unknown {
+  return (JSON.parse(s.valeurs.get(CLE_SESSION) ?? '{}') as Record<string, unknown>).ecartHorlogeMs;
+}
+
+describe('écart d’horloge rangé avec la session (relecture sécurité)', () => {
+  it('lireSession et sessionValide gardent un écart numérique, omettent un écart illisible', () => {
+    const base = session('a.b.c');
+    const avec = (ecart: unknown) => ({ getItem: () => JSON.stringify({ ...base, ecartHorlogeMs: ecart }) });
+    expect(ecartDe(lireSession(avec(7_200_000)))).toBe(7_200_000);
+    expect(ecartDe(lireSession(avec(-7_200_000)))).toBe(-7_200_000);
+    expect(ecartDe(sessionValide({ ...base, ecartHorlogeMs: 0 }))).toBe(0);
+    for (const illisible of ['2h', null, Number.NaN, {}]) {
+      const lue = lireSession(avec(illisible));
+      expect(lue, JSON.stringify(illisible)).not.toBeNull();
+      expect(ecartDe(lue), JSON.stringify(illisible)).toBeUndefined();
+    }
+  });
+
+  it('téléphone en retard de 2 h, appli relancée : l’écart relu fait renouveler avant de rendre un jeton périmé pour le serveur', async () => {
+    const local = S - 2 * HEURE;
+    const h = horloge(local);
+    const neuf = jwt(S, S + HEURE);
+    const suivant = jwt(S + HEURE, S + 2 * HEURE);
+    const { fetch, appels } = fetchSimule(
+      { statut: 200, corps: { jetonAcces: neuf, jetonRenouvellement: 'r1' } },
+      { statut: 200, corps: { jetonAcces: suivant, jetonRenouvellement: 'r2' } },
+    );
+    const s = stockage();
+    const premiere = gererJetons(session(jwt(local - 26 * HEURE, local - 25 * HEURE)), {
+      urlApi: 'https://api',
+      fetch,
+      stockage: s,
+      maintenant: h.maintenant,
+    });
+    expect(await premiere.jetonValide()).toBe(neuf);
+    expect(ecartRange(s)).toBe(2 * HEURE);
+
+    // Appli fermée, rouverte 59 min 30 s plus tard (serveur : 30 s avant exp).
+    h.regler(local + 59 * MINUTE + 30_000);
+    const rangee = lireSession(s);
+    expect(rangee).not.toBeNull();
+    const relancee = gererJetons(rangee ?? session('x'), { urlApi: 'https://api', fetch, stockage: s, maintenant: h.maintenant });
+    expect(await relancee.jetonValide()).toBe(suivant);
+    expect(appels).toHaveLength(2);
+    expect(ecartRange(s)).toBe(2 * HEURE - (59 * MINUTE + 30_000) + HEURE);
+  });
+
+  it('téléphone en avance de 2 h, appli relancée : l’écart négatif relu évite de renouveler à chaque appel', async () => {
+    const local = S + 2 * HEURE;
+    const h = horloge(local + 10 * MINUTE);
+    const { fetch, appels } = fetchSimule({ statut: 200, corps: { jetonAcces: jwt(S + HEURE, S + 2 * HEURE), jetonRenouvellement: 'r1' } });
+    const rangee: SessionAvecEcart = { ...session(jwt(S, S + HEURE)), ecartHorlogeMs: -2 * HEURE };
+    const g = gererJetons(rangee, { urlApi: 'https://api', fetch, stockage: stockage(rangee), maintenant: h.maintenant });
+    expect(await g.jetonValide()).toBe(rangee.jetonAcces);
+    h.regler(local + 50 * MINUTE);
+    expect(await g.jetonValide()).toBe(rangee.jetonAcces);
+    expect(appels).toHaveLength(0);
+  });
+
+  it('l’écart rangé prime sur l’estimation par l’iat du jeton rangé', async () => {
+    // Retard mesuré de 2 h ; le jeton rangé, émis il y a 1 h 50 (heure du serveur), ne
+    // prouverait plus qu'un retard de 10 min.
+    const h = horloge(S - 2 * HEURE + 50 * MINUTE);
+    const { fetch, appels } = fetchSimule({ statut: 200, corps: { jetonAcces: jwt(S + 50 * MINUTE, S + 110 * MINUTE), jetonRenouvellement: 'r1' } });
+    const rangee: SessionAvecEcart = { ...session(jwt(S - HEURE, S)), ecartHorlogeMs: 2 * HEURE };
+    const g = gererJetons(rangee, { urlApi: 'https://api', fetch, stockage: stockage(rangee), maintenant: h.maintenant });
     await g.jetonValide();
     expect(appels).toHaveLength(1);
   });

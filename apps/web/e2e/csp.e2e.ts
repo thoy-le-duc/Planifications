@@ -13,6 +13,12 @@ import { scriptEnLigneExecute, surveillerCsp, tempsAppPrete } from './outils.ts'
  *   - l'appli fonctionne sous cette politique : aucune violation (événement
  *     securitypolicyviolation ni message de console) au démarrage, à la réouverture hors ligne
  *     et pendant la connexion.
+ *
+ * Relecture sécurité : la même balise (même politique) est posée aussi dans les pages de
+ * diagnostic (diagnostic/synchro.html, qui manipule la session) et de mesure
+ * (mesures/sqlite.html) du build, avec les mêmes exigences ; ces pages fonctionnent sous la
+ * politique, sans violation, et un script en ligne y est bloqué. (La page de diagnostic avec
+ * PowerSync réel tourne sous CSP dans e2e-synchro/.)
  */
 
 const SCRIPT_SRC_PERMIS = new Set(["'self'", "'wasm-unsafe-eval'"]);
@@ -40,11 +46,8 @@ function directives(csp: string): Map<string, string[]> {
   return resultat;
 }
 
-test('index.html servi : une balise CSP stricte, en tête, et aucun script en ligne', async ({ request }) => {
-  const res = await request.get('/');
-  expect(res.ok()).toBe(true);
-  const html = await res.text();
-
+/** Une balise CSP stricte, avant tout <script> et <link>, et aucun script en ligne ni attribut on…=. */
+function verifierHtml(html: string): void {
   const balises = balisesCsp(html);
   expect(balises, 'une seule balise CSP').toHaveLength(1);
   const [balise] = balises;
@@ -64,6 +67,42 @@ test('index.html servi : une balise CSP stricte, en tête, et aucun script en li
     expect((script[2] ?? '').trim(), 'script avec du code en ligne').toBe('');
   }
   expect(html).not.toMatch(/<[^>]+\son[a-z]+\s*=/i);
+}
+
+test('index.html servi : une balise CSP stricte, en tête, et aucun script en ligne', async ({ request }) => {
+  const res = await request.get('/');
+  expect(res.ok()).toBe(true);
+  verifierHtml(await res.text());
+});
+
+for (const chemin of ['/diagnostic/synchro.html', '/mesures/sqlite.html']) {
+  test(`${chemin} servi : la même balise CSP stricte, en tête, et aucun script en ligne`, async ({ request }) => {
+    const res = await request.get(chemin);
+    expect(res.ok()).toBe(true);
+    verifierHtml(await res.text());
+  });
+}
+
+test('page de diagnostic : aucune violation au chargement, un script injecté en ligne est bloqué', async ({ page }) => {
+  const violations = await surveillerCsp(page);
+  await page.goto('/diagnostic/synchro.html');
+  // Sans session (et sans VITE_POWERSYNC_URL dans ce build), la page le dit : son script a tourné.
+  await expect(page.locator('#erreur')).toBeVisible();
+  expect(await violations()).toEqual([]);
+  expect(await scriptEnLigneExecute(page)).toBe(false);
+});
+
+test('page de mesure : elle fonctionne sous la CSP (SQLite, WASM, worker), sans violation', async ({ page }) => {
+  test.setTimeout(90_000);
+  const violations = await surveillerCsp(page);
+  await page.goto('/mesures/sqlite.html?variante=json');
+  const poignee = await page.waitForFunction(() => (window as unknown as { __mesuresSqlite?: unknown }).__mesuresSqlite, undefined, {
+    timeout: 80_000,
+  });
+  const resultat = (await poignee.jsonValue()) as { erreur?: unknown };
+  expect(resultat.erreur).toBeUndefined();
+  expect(await violations()).toEqual([]);
+  expect(await scriptEnLigneExecute(page)).toBe(false);
 });
 
 test('démarrage : aucune violation de la CSP, et un script injecté en ligne est bloqué', async ({ page }) => {

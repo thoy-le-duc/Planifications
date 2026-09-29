@@ -37,6 +37,12 @@
  *     `a`, en-têtes From, To, Subject (mots encodés RFC 2047 si non ASCII), Date, Message-ID ;
  *     le texte arrive intact (accents, lignes qui commencent par un point) ;
  *   - rejette si le serveur refuse (4xx/5xx), est injoignable, ou ne répond pas dans `delaiMs`.
+ *   - relecture sécurité : `a` est UNE adresse, passée sans analyse (avec nodemailer :
+ *     `to: { name: '', address: a }` et une enveloppe explicite `envelope: { from, to: [{ name:
+ *     '', address: a }] }`) : un seul RCPT TO par message, exactement `a` pour une adresse
+ *     ordinaire ; une liste (« a@x.fr,pirate@y.fr ») ou un nom d'affichage (« Nom <pirate@y.fr> »)
+ *     glissé dans `a` n'est jamais décomposé en plusieurs destinataires ni réduit à l'adresse
+ *     entre chevrons (l'API refuse déjà ces adresses : durcissement.integration.test.ts, 5).
  *
  * Implémentation libre (nodemailer, qui fait tout cela, ou client maison). index.ts construit
  * l'expéditeur choisi par lireConfig (config.test.ts : `courriel.type === 'smtp'`).
@@ -149,6 +155,33 @@ describe('expediteurSmtp (T09b)', () => {
     expect(smtp.authentifications).toEqual([{ utilisateur: 'relais-planif', motDePasse: 'secret-de-test' }]);
     expect(smtp.commandes.indexOf('AUTH')).toBeLessThan(smtp.commandes.indexOf('MAIL'));
     expect(smtp.messages).toHaveLength(1);
+  });
+
+  it('RCPT TO est exactement l’adresse donnée (adresses ordinaires, même inhabituelles)', async () => {
+    const smtp = await serveur();
+    const expediteur = await expediteurSmtp(options(smtp.port));
+    const adresses = ["o'neil+recolte@ferme.fr", 'prenom.nom-2@mail.sous-domaine.ferme.fr', '{equipe}@ferme.fr', 'a=b!c@ferme.fr'];
+    for (const a of adresses) await envoyer(expediteur, { ...MESSAGE, a });
+    expect(smtp.messages.map((m) => m.rcptTo)).toEqual(adresses.map((a) => [a]));
+  });
+
+  it.each([
+    'victime@ferme.fr,pirate@ailleurs.fr',
+    'victime@ferme.fr, pirate@ailleurs.fr',
+    'victime@ferme.fr;pirate@ailleurs.fr',
+    'Pirate <pirate@ailleurs.fr>',
+    'victime@ferme.fr <pirate@ailleurs.fr>',
+  ])('adresse jamais décomposée : « %s » ne fait partir qu’un seul RCPT TO, jamais vers pirate@ailleurs.fr', async (a) => {
+    const smtp = await serveur();
+    const expediteur = await expediteurSmtp(options(smtp.port));
+    // Refuser sans rien envoyer est permis aussi ; décomposer, jamais.
+    await envoyer(expediteur, { ...MESSAGE, a }).catch(() => undefined);
+    for (const m of smtp.messages) {
+      expect(m.rcptTo).toHaveLength(1);
+      expect(m.rcptTo).not.toContain('pirate@ailleurs.fr');
+      expect(m.rcptTo).not.toContain('victime@ferme.fr');
+    }
+    expect(smtp.commandes.filter((c) => c === 'RCPT').length).toBeLessThanOrEqual(1);
   });
 
   const refuses: readonly (readonly [string, MessageCourriel])[] = [
