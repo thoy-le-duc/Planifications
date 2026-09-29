@@ -889,8 +889,10 @@ export const jetonRenouvellement = pgTable(
  * vers PowerSync, où les règles de synchro ne la font descendre qu'à `utilisateur_id` : le
  * maraîcher voit sur son téléphone pourquoi sa saisie n'est pas passée.
  *
- * `ferme_id` : ferme visée si elle est connue, sans clé étrangère (elle peut être inexistante ou
- * interdite). `ligne_id` en texte : l'id reçu n'est pas forcément un UUID.
+ * `ferme_id` : ferme visée si l'auteur en est membre actif, sinon NULL (la ligne descend sur son
+ * téléphone : elle ne doit pas lui apprendre l'id d'une autre ferme) ; sans clé étrangère.
+ * `ligne_id` en texte : l'id reçu n'est pas forcément un UUID. Un lot renvoyé ne crée pas de
+ * doublon : au plus un refus par (utilisateur_id, ligne_id, operation, motif).
  */
 export const refusSynchro = pgTable(
   'refus_synchro',
@@ -914,5 +916,6 @@ export const refusSynchro = pgTable(
   (t) => [
     verif('refus_synchro', 'operation', parmi(t.operation, OPERATIONS_SYNCHRO)),
     index('refus_synchro_utilisateur_idx').on(t.utilisateurId, t.creeLe),
+    unique('refus_synchro_sans_doublon').on(t.utilisateurId, t.ligneId, t.operation, t.motif),
   ],
 );

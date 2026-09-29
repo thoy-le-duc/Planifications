@@ -64,6 +64,13 @@
       "when": 1790698305532,
       "tag": "0008_publication_refus_synchro",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790701410244,
+      "tag": "0009_refus_synchro_sans_doublon",
+      "breakpoints": true
     }
   ]
 }
