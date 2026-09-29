@@ -6,7 +6,7 @@
  * Donnée personnelle : une adresse IP n'est gardée que 24 heures (CONSERVATION_IP_MS), effacée à
  * chaque nouvelle demande enregistrée, sans tâche planifiée.
  */
-import { demandeIp, type ACTIONS_LIMITEES_IP } from '@planif/db';
+import { demandeIp, type ACTIONS_LIMITEES_IP } from '@planif/db/securite';
 import { and, asc, eq, gt, lt, sql } from 'drizzle-orm';
 import { getConnInfo } from '@hono/node-server/conninfo';
 import type { Context } from 'hono';

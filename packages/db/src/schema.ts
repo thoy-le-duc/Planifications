@@ -38,7 +38,6 @@ import {
   integer,
   jsonb,
   numeric,
-  pgSchema,
   pgTable,
   text,
   timestamp,
@@ -890,35 +889,6 @@ export const jetonRenouvellement = pgTable(
   (t) => [
     index('jeton_renouvellement_utilisateur_idx').on(t.utilisateurId),
     index('jeton_renouvellement_famille_idx').on(t.familleId),
-  ],
-);
-
-/**
- * Données du serveur seul (T09b), hors du schéma `public` : jamais publiées vers PowerSync (la
- * publication couvre `public`), jamais sur un téléphone.
- */
-export const securite = pgSchema('securite');
-
-/** Actions limitées par adresse IP. */
-export const ACTIONS_LIMITEES_IP = ['code', 'verifier'] as const;
-
-/**
- * Demande reçue d'une adresse IP sur /auth/code ou /auth/verifier (limite par IP, fenêtre
- * glissante d'une heure). Donnée personnelle : l'API efface les lignes de plus de 24 heures à
- * chaque insertion.
- */
-export const demandeIp = securite.table(
-  'demande_ip',
-  {
-    id: uuid('id').primaryKey(),
-    ip: text('ip').notNull(),
-    action: text('action', { enum: ACTIONS_LIMITEES_IP }).notNull(),
-    creeLe: creeLe(),
-  },
-  (t) => [
-    verif('demande_ip', 'action', parmi(t.action, ACTIONS_LIMITEES_IP)),
-    index('demande_ip_action_ip_cree_idx').on(t.action, t.ip, t.creeLe),
-    index('demande_ip_cree_idx').on(t.creeLe),
   ],
 );
 

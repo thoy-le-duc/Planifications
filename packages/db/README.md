@@ -23,7 +23,8 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 
 | Fichier | Contenu |
 | --- | --- |
-| `src/schema.ts` | Les 21 tables du modèle v1, les 4 tables de comptes (T09), `refus_synchro` (T10) et `securite.demande_ip` (T09b), clés étrangères, CHECK, index |
+| `src/schema.ts` | Les 21 tables du modèle v1, les 4 tables de comptes (T09) et `refus_synchro` (T10), clés étrangères, CHECK, index |
+| `src/securite.ts` | Schéma `securite` (T09b), données du serveur seul : `demande_ip`. Hors du point d’entrée (`@planif/db/securite`), pour que `@planif/sync` n’en dérive rien |
 | `src/comptes.ts` | `fermesDeLUtilisateur`, `roleDansLaFerme`, `ROLES_MEMBRE`, `ETATS_MEMBRE` (T09) |
 | `src/valeurs.ts` | Valeurs des unions de T01, vérifiées à la compilation contre `@planif/core` |
 | `src/conversions.ts` | `ligneDepuisX` / `xDepuisLigne` pour Serie, Occupation, Emplacement, Evenement |
