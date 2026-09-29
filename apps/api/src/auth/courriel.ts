@@ -12,12 +12,35 @@ export interface ExpediteurCourriel {
 }
 
 /**
+ * Dernière frontière avant l'en-tête SMTP : un retour chariot ou un saut de ligne dans le
+ * destinataire ou le sujet permettrait d'injecter des en-têtes (« Bcc: … »), quelle que soit la
+ * route qui compose le message (nom de ferme, adresse…). Tout expéditeur l'appelle avant d'envoyer
+ * (expediteurConsole ici, l'expéditeur réel au ticket suivant). Le texte peut tenir sur plusieurs
+ * lignes.
+ */
+export function verifierEnTetes(message: MessageCourriel): void {
+  for (const [champ, valeur] of [
+    ['a', message.a],
+    ['sujet', message.sujet],
+  ] as const) {
+    if (/[\r\n]/.test(valeur)) {
+      throw new Error(`Courriel refusé : retour à la ligne dans « ${champ} ».`);
+    }
+  }
+}
+
+/**
  * Expéditeur de développement : écrit le message dans la console. Le code de connexion y
  * apparaît en clair : jamais en production (index.ts ne l'active que sur demande explicite).
  */
 export function expediteurConsole(ecrire: (ligne: string) => void = console.log): ExpediteurCourriel {
   return {
     envoyer(message) {
+      try {
+        verifierEnTetes(message);
+      } catch (erreur) {
+        return Promise.reject(erreur instanceof Error ? erreur : new Error(String(erreur)));
+      }
       ecrire(`[courriel] à ${message.a} — ${message.sujet}\n${message.texte}`);
       return Promise.resolve();
     },
