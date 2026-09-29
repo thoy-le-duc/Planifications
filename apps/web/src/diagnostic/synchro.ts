@@ -11,7 +11,7 @@
 import type { DateCalendaire, Id } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { urlApi } from '../connexion/client.ts';
-import { deconnecter } from '../connexion/deconnexion.ts';
+import { deconnecterAvecConfirmation } from '../connexion/deconnexion.ts';
 import { lireSession, stockageNavigateur } from '../connexion/session.ts';
 import { ouvrirDonnees } from '../donnees/index.ts';
 
@@ -216,18 +216,48 @@ function demarrer(): void {
   });
   brancher(donnees.porte, fermeId, session.utilisateurId);
 
-  // T09b : déconnexion (jeton révoqué, session et base locale effacées), même hors ligne.
+  // T09b : déconnexion (jeton révoqué, session et base locale effacées), même hors ligne ;
+  // confirmation d'abord si des saisies n'ont pas encore été envoyées.
   const bouton = element('deconnexion', HTMLButtonElement);
   bouton.addEventListener('click', () => {
     bouton.disabled = true;
     const envoyer: typeof fetch = (...args) => fetch(...args);
-    deconnecter(session, { urlApi: urlApi(), fetch: envoyer, stockage: stockageNavigateur(), effacerBaseLocale: () => donnees.effacer() })
-      .then(() => {
-        element('deconnecte', HTMLElement).hidden = false;
+    deconnecterAvecConfirmation(session, {
+      urlApi: urlApi(),
+      fetch: envoyer,
+      stockage: stockageNavigateur(),
+      effacerBaseLocale: () => donnees.effacer(),
+      compterEnAttente: () => donnees.ecrituresEnAttente(),
+      confirmer,
+    })
+      .then((resultat) => {
+        if (resultat === 'deconnecte') element('deconnecte', HTMLElement).hidden = false;
+        else bouton.disabled = false;
       })
       .catch((erreur: unknown) => {
         afficherErreur(`Déconnexion : ${String(erreur)}`);
       });
+  });
+}
+
+/** Écran de confirmation en un tap : vrai pour « Se déconnecter quand même », faux pour « Annuler ». */
+function confirmer(message: string): Promise<boolean> {
+  const boite = element('confirmation-deconnexion', HTMLDivElement);
+  const oui = element('deconnexion-confirmee', HTMLButtonElement);
+  const non = element('deconnexion-annulee', HTMLButtonElement);
+  element('question-deconnexion', HTMLParagraphElement).textContent = message;
+  boite.hidden = false;
+  return new Promise<boolean>((repondre) => {
+    const choisir = (choix: boolean) => () => {
+      oui.removeEventListener('click', siOui);
+      non.removeEventListener('click', siNon);
+      boite.hidden = true;
+      repondre(choix);
+    };
+    const siOui = choisir(true);
+    const siNon = choisir(false);
+    oui.addEventListener('click', siOui);
+    non.addEventListener('click', siNon);
   });
 }
 

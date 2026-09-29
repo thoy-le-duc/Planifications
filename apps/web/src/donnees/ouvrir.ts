@@ -35,6 +35,11 @@ export interface DonneesLocales {
    * d'écritures en attente, puis ferme la base.
    */
   effacer(): Promise<void>;
+  /**
+   * Nombre de saisies (transactions locales) encore dans la file d'envoi (T09b) : la déconnexion
+   * demande confirmation avant de les perdre.
+   */
+  ecrituresEnAttente(): Promise<number>;
 }
 
 export function ouvrirDonnees(o: OptionsOuverture): DonneesLocales {
@@ -79,6 +84,13 @@ export function ouvrirDonnees(o: OptionsOuverture): DonneesLocales {
       };
     },
     fermer: () => base.close(),
+    async ecrituresEnAttente() {
+      // File d'envoi de PowerSync : une ligne par écriture, regroupées par transaction (tx_id).
+      const ligne = await base.get<{ n: number }>(
+        'SELECT (SELECT count(DISTINCT tx_id) FROM ps_crud) + (SELECT count(*) FROM ps_crud WHERE tx_id IS NULL) AS n',
+      );
+      return ligne.n;
+    },
     async effacer() {
       await base.disconnectAndClear({ clearLocal: true, soft: false });
       await base.close();
