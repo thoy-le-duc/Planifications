@@ -4,7 +4,7 @@
  * vides et de total ignorées ; hiérarchie du parcellaire reprise des cellules fusionnées.
  */
 import { CHAMPS_IMPORT } from './champs.ts';
-import { LONGUEUR_MAX_CELLULE, cle, lireDate, lireMesure, lireNombre, multiplierPuissanceDix, premiersNombresDate, texteCellule } from './normalisation.ts';
+import { LONGUEUR_MAX_CELLULE, cle, lireDate, lireDateSemaine, lireMesure, lireNombre, multiplierPuissanceDix, premiersNombresDate, texteCellule } from './normalisation.ts';
 import { rapprocher } from './rapprochement.ts';
 import type {
   Bibliotheque,
@@ -228,7 +228,7 @@ function lireCellule(nature: Nature, c: Cellule, ctx: Contexte): Lu {
       return r;
     }
     case 'date':
-      return lireDate(c, ctx.anneeSaison, ctx.optionsDate);
+      return ctx.unite === 'semaine' ? lireDateSemaine(c, ctx.anneeSaison, ctx.optionsDate) : lireDate(c, ctx.anneeSaison, ctx.optionsDate);
     case 'reference': {
       const t = texteCellule(c);
       if (tropLong(t)) return TROP_LONG;

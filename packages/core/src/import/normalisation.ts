@@ -238,3 +238,20 @@ export function lireDate(c: Cellule, anneeSaison: number | null, options: Option
   }
   return ko('date_invalide');
 }
+
+/**
+ * Date d'une colonne en numéros de semaine (« Semis (sem.) ») : un entier de 1 à 53 (nombre ou
+ * texte, « 14 ») est le lundi de la semaine ISO de `anneeSaison`, comme « S14 » ; un nombre à
+ * virgule ou une semaine qui n'existe pas → 'date_invalide' ; sans saison → 'annee_manquante'.
+ * Toute autre écriture (« S14 », « 15/03/2027 ») se lit comme d'habitude (`lireDate`).
+ */
+export function lireDateSemaine(c: Cellule, anneeSaison: number | null, options: OptionsDate = {}): Lecture<DateCalendaire | null> {
+  const n = lireNombre(c);
+  if (!n.ok) return lireDate(c, anneeSaison, options);
+  if (n.valeur === null) return ok(null);
+  if (!Number.isInteger(n.valeur)) return ko('date_invalide');
+  if (anneeSaison === null) return ko('annee_manquante');
+  if (!Number.isInteger(anneeSaison) || anneeSaison < 1 || anneeSaison > 9999) return ko('date_invalide');
+  if (n.valeur < 1 || n.valeur > nombreSemainesIso(anneeSaison)) return ko('date_invalide');
+  return ok(lundiDeSemaine(anneeSaison, n.valeur));
+}

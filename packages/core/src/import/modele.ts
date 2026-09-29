@@ -53,7 +53,7 @@ function lireChoix(v: unknown): ChoixValeur | null {
   if (!estObjet(v) || (v.champ !== 'espece' && v.champ !== 'famille') || typeof v.valeur !== 'string' || !estObjet(v.decision)) return null;
   const d = v.decision;
   if (d.sorte === 'existante' && typeof d.id === 'string' && d.id !== '') return { champ: v.champ, valeur: v.valeur, decision: { sorte: 'existante', id: d.id } };
-  if (d.sorte === 'nouvelle' && typeof d.nom === 'string') return { champ: v.champ, valeur: v.valeur, decision: { sorte: 'nouvelle', nom: d.nom } };
+  if (d.sorte === 'nouvelle' && typeof d.nom === 'string' && d.nom.trim() !== '') return { champ: v.champ, valeur: v.valeur, decision: { sorte: 'nouvelle', nom: d.nom } };
   return null;
 }
 

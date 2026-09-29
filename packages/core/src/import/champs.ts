@@ -123,6 +123,27 @@ const UNITES_CONNUES: ReadonlyMap<string, string> = /* @__PURE__ */ new Map([
   ['eur', 'eur'],
   ['euros', 'eur'],
   ['%', '%'],
+  // Unités anglaises (2e relecture) : les durées en jours ou semaines sont lues ; les autres
+  // (pieds, pouces, livres, onces, acres, mois) font ignorer la colonne, jamais mal convertie.
+  ['day', 'jour'],
+  ['days', 'jour'],
+  ['week', 'semaine'],
+  ['weeks', 'semaine'],
+  ['wk', 'semaine'],
+  ['month', 'mois'],
+  ['months', 'mois'],
+  ['ft', 'ft'],
+  ['feet', 'ft'],
+  ['in', 'in'],
+  ['inch', 'in'],
+  ['inches', 'in'],
+  ['yd', 'yd'],
+  ['lb', 'lb'],
+  ['lbs', 'lb'],
+  ['oz', 'oz'],
+  ['ac', 'acre'],
+  ['acre', 'acre'],
+  ['acres', 'acre'],
 ]);
 
 /** Unités qu'un simple espace suffit à détacher du nom (« Longueur m ») : les seules sans ambiguïté. */
@@ -134,6 +155,15 @@ const MARQUES = /[\u0300-\u036f]/g;
 function uniteConnue(texte: string): string | null {
   const u = texte.normalize('NFD').replace(MARQUES, '').toLowerCase().replaceAll('.', '').trim();
   return UNITES_CONNUES.get(u) ?? null;
+}
+
+/** Unité entre parenthèses, « en » permis devant : « (cm) », « (en cm) ». */
+function uniteEntreParentheses(dedans: string): string | null {
+  const directe = uniteConnue(dedans);
+  if (directe !== null) return directe;
+  const t = dedans.trimStart();
+  const debut = t.slice(0, 3).toLowerCase();
+  return debut === 'en ' || debut === 'en\t' ? uniteConnue(t.slice(3)) : null;
 }
 
 /** Unités acceptées par champ : unité canonique → unité rendue (`null` : celle du champ). */
@@ -153,6 +183,8 @@ const DUREE: ReadonlyMap<string, UniteColonne | null> = /* @__PURE__ */ new Map(
   ['jour', null],
   ['semaine', 'semaine'],
 ]);
+/** Dates données en numéros de semaine (« Semis (sem.) »). */
+const DATE_SEMAINE: ReadonlyMap<string, UniteColonne | null> = /* @__PURE__ */ new Map([['semaine', 'semaine']]);
 const COMPTAGE: ReadonlyMap<string, UniteColonne | null> = /* @__PURE__ */ new Map([['nb', null]]);
 
 const UNITES_CHAMP: Partial<Record<CleChamp, ReadonlyMap<string, UniteColonne | null>>> = {
@@ -167,6 +199,10 @@ const UNITES_CHAMP: Partial<Record<CleChamp, ReadonlyMap<string, UniteColonne | 
   nombre_places: COMPTAGE,
   nombre_plants: COMPTAGE,
   rangs_par_planche: COMPTAGE,
+  date_semis: DATE_SEMAINE,
+  date_plantation: DATE_SEMAINE,
+  date_debut_recolte: DATE_SEMAINE,
+  date_fin_recolte: DATE_SEMAINE,
 };
 
 /** Une unité de colonne (modèle d'import, correspondance) est-elle acceptée pour ce champ ? */
@@ -262,7 +298,7 @@ export function reconnaitreEntete(entete: Cellule | undefined): EnteteReconnu | 
   const parentheses = parenthesesFinales(texte);
   if (parentheses !== null) {
     texte = parentheses.avant;
-    explicite = uniteConnue(parentheses.dedans);
+    explicite = uniteEntreParentheses(parentheses.dedans);
   }
   let c = chercher(cle(texte));
   if (c === undefined && explicite === null) {
