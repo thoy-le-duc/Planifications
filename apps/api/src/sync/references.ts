@@ -6,6 +6,9 @@
  * Vérifié dans la transaction de l'insertion, lignes verrouillées (FOR SHARE) jusqu'à la fin :
  * pas de fenêtre où la ligne visée changerait de ferme ou disparaîtrait entre la vérification
  * et l'écriture.
+ *
+ * Une requête par table, avec un seul paramètre tableau (`= ANY($1::uuid[])`) quel que soit le
+ * nombre d'identifiants (relecture T10, R1).
  */
 import type { LigneEvenement } from '@planif/db';
 import { sql } from 'drizzle-orm';
@@ -56,12 +59,10 @@ function references(l: LigneEvenement): Reference[] {
 /** null si toutes les références sont dans la ferme de l'événement ; sinon le refus. */
 export async function verifierReferences(tx: TransactionDb, l: LigneEvenement): Promise<RefusReference | null> {
   for (const r of references(l)) {
-    const ids = sql.join(
-      r.ids.map((id) => sql`${id}::uuid`),
-      sql`, `,
-    );
+    // sql.param : le tableau part en UN paramètre (sinon Drizzle le déplie, un paramètre par id).
     const lignes = await tx.execute<{ id: string; ferme_id: string | null }>(
-      sql`SELECT id::text AS id, ferme_id::text AS ferme_id FROM ${sql.identifier(r.table)} WHERE id IN (${ids}) FOR SHARE`,
+      sql`SELECT id::text AS id, ferme_id::text AS ferme_id
+          FROM ${sql.identifier(r.table)} WHERE id = ANY(${sql.param([...r.ids])}::uuid[]) FOR SHARE`,
     );
     const fermes = new Map(lignes.rows.map((x) => [x.id, x.ferme_id]));
     for (const id of r.ids) {

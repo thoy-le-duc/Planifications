@@ -49,6 +49,8 @@ export const LIMITES = {
   noteCaracteres: 4_000,
   photos: 20,
   photoCaracteres: 2_000,
+  /** Emplacements d'un même événement (relecture T10, R1). */
+  emplacements: 200,
   /** Octets UTF-8 de JSON.stringify(detail). */
   detailOctets: 8_192,
 } as const;
@@ -221,7 +223,12 @@ export function lireEvenement(id: string, donnees: Readonly<Record<string, unkno
 
   const emplacements = tableau(d.emplacement_ids, 'emplacements');
   if (!emplacements.ok) return emplacements;
+  if (emplacements.valeur.length > LIMITES.emplacements) {
+    return refuser(`trop d'emplacements (${String(LIMITES.emplacements)} au plus)`);
+  }
   if (!emplacements.valeur.every(estUuid)) return refuser('emplacement invalide');
+  const listeEmplacements = emplacements.valeur.map((e) => e.toLowerCase() as Id<'Emplacement'>);
+  if (new Set(listeEmplacements).size !== listeEmplacements.length) return refuser('emplacement en double');
   const photos = tableau(d.photos, 'photos');
   if (!photos.ok) return photos;
   const listePhotos = photos.valeur.filter((p): p is string => typeof p === 'string');
@@ -259,7 +266,7 @@ export function lireEvenement(id: string, donnees: Readonly<Record<string, unkno
     source: d.source,
     serieId: serieId.valeur as Id<'Serie'> | null,
     campagneId: campagneId.valeur as Id<'Campagne'> | null,
-    emplacementIds: (emplacements.valeur as string[]).map((e) => e.toLowerCase() as Id<'Emplacement'>),
+    emplacementIds: listeEmplacements,
     note: (d.note ?? null) as string | null,
     photos: listePhotos,
     remplaceSorte: remplaceSorte,
