@@ -177,6 +177,8 @@ Ma recommandation : **code à 6 chiffres par e-mail** pour commencer, puis **cl�
 
 Question : on part là-dessus ?
 
+Réponse (2026-09-29) : « ok ». Code à 6 chiffres par e-mail ; clé d'accès (empreinte ou visage) en option ; pas de mot de passe.
+
 ### À suivre
 
 

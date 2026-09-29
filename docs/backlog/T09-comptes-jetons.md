@@ -5,7 +5,7 @@
 **Dépend de** : T08
 **Périmètre** : `apps/api/src/auth/**`, `packages/db` (tables `utilisateur`, `membre`), `apps/web/src/connexion/**`
 
-**Statut : à préciser.** Méthode de connexion à choisir avec Théophane (voir `docs/questions.md`) : code reçu par e-mail, lien magique, clé d'accès (passkey) ou mot de passe. Ne pas coder avant la réponse.
+**Méthode de connexion (Q9, validée le 2026-09-29)** : code à 6 chiffres reçu par e-mail ; clé d'accès (passkey) en option ; pas de mot de passe. L'envoi d'e-mail passe par une interface injectable (aucun service réel ni secret dans ce ticket).
 
 ## Règles
 
