@@ -3,7 +3,7 @@
 **Objectif** : fermer les écarts non bloquants trouvés par les relectures de sécurité de T10c.
 
 **Dépend de** : T10c
-**Périmètre** : `apps/api/src/sync/**`, `packages/core/src/saisies/**`
+**Périmètre** : `apps/api/src/sync/**`, `packages/core/src/saisies/**`, `packages/db` (migration, `schema.ts`), `packages/sync/src/types.ts` (motif `lot_trop_gros`)
 
 ## Règles
 
@@ -15,6 +15,13 @@
 - **Ferme vérifiée dans la même requête que le verrou `FOR SHARE`**, ici et dans `references.ts` (T10). Plus aucun indice de l'existence d'une ligne d'une autre ferme.
 - **Lot trop gros** : l'API répond 200 avec des refus au lieu de 400 ou 413, pour que la file PowerSync ne se bloque jamais. La porte compte des ordres, pas des lignes : un ordre sur plusieurs lignes peut encore dépasser la limite.
 - **Échelle `numeric(12,6)`** pour `mouvement_stock.quantite` (migration).
+
+## Décisions du chef (2026-09-30, après les tests)
+
+- **Lot trop gros** : au-delà de 500 écritures, ou d'un corps de 5 Mio, le serveur répond 200 avec `lot_trop_gros` pour chaque écriture. Rien n'est écrit, et ce motif passe avant toute autre règle. Au-delà d'une limite dure de 32 Mio, il répond 413 et ne lit pas le corps.
+- **Correction** : limitée aux récoltes. Corriger une récolte saisie sur la mauvaise série ou dans la mauvaise unité devient impossible : on l'annule puis on la ressaisit. À dire à Théophane.
+- **Plus aucun indice d'existence** : un PATCH ou un DELETE sur une ligne existante d'une autre ferme répond exactement comme sur un id inexistant. Le test M1 de T10 est adapté en conséquence. Un `ferme_id` étranger déclaré par l'écriture elle-même garde `ferme_interdite`.
+- **Tests existants adaptés** (T10, T10c) : les références étrangères passent de `ferme_interdite` à `ecriture_invalide`, et un lot trop gros reçoit 200 avec des refus au lieu de 400 ou 413.
 
 ## Critères d'acceptation
 
