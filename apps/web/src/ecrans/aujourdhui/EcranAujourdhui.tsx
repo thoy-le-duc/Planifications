@@ -484,7 +484,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     const travail = tache.travail;
     void ecrire(async () => {
       const ctx = contexte();
-      const id = await marquerTravailFait(ctx, t.culture, travail);
+      const id = await marquerTravailFait(ctx, t.culture, travail, tache.datePrevue);
       const detail = { type: 'intervention' as const, categorie: travail.categorie, libelle: travail.type };
       montrerAnnulable(evenementEcrit(id, t.culture, ctx.aujourdhui, detail), t.culture, `Fait · ${capitale(travail.type)}`, nomCulture(t.culture));
     }).then((ok) => {
