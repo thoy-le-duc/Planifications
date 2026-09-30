@@ -737,7 +737,11 @@ decrireAvecBase('T10e')('T10e : POST /sync/upload accepte les séries des télé
       await refuseEnEntier([etrangere], etrangere, 'ecriture_invalide');
       expect(await ligne(table, id)).toEqual(avant);
       expect(await modifications(id)).toBe(0);
-      const r = await base.pool.query<{ ferme_id: string | null }>(`SELECT ferme_id::text AS ferme_id FROM refus_synchro WHERE ligne_id = $1`, [id]);
+      // Refus de CE PATCH seulement : le test du PUT sur le même id (plus haut) laisse le sien.
+      const r = await base.pool.query<{ ferme_id: string | null }>(
+        `SELECT ferme_id::text AS ferme_id FROM refus_synchro WHERE ligne_id = $1 AND operation = 'PATCH'`,
+        [id],
+      );
       expect(r.rows.map((x) => x.ferme_id)).toEqual([null]);
     });
 
