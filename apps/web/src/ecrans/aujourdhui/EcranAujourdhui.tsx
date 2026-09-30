@@ -8,17 +8,22 @@
  * saisie arrivée d'un autre téléphone s'y voit.
  */
 import { useCallback, useDeferredValue, useEffect, useId, useRef, useState } from 'react';
-import type { EtapeRealisee, UniteRecolte } from '@planif/core';
+import { chargeSemaine, type EtapeRealisee, type TacheTravail, type UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import './aujourdhui.css';
 import { journeeEnCache, suivreJournee } from './cache.ts';
 import {
+  capitale,
   codesEmplacements,
   dateCourte,
   ETAPES_FAITES,
+  LIBELLES_CATEGORIES,
+  nombreFrancais,
   nomCulture,
   quand,
   quantiteAvecUnite,
+  texteCharge,
+  texteDuree,
   VERBES,
   type Culture,
   type EntreeHistorique,
@@ -27,7 +32,7 @@ import {
   type TacheJour,
 } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
-import { annulerSaisie, changerDate, marquerFait, noterRecolte, type ContexteEcriture } from './ecritures.ts';
+import { annulerSaisie, changerDate, marquerFait, marquerTravailFait, noterRecolte, type ContexteEcriture } from './ecritures.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
 
 export interface ProprietesEcranAujourdhui {
@@ -84,20 +89,36 @@ type Dialogue =
 
 /** Libellé de l'étape faite, pour le bandeau et l'historique. */
 function libelleEvenement(e: EvenementLu): string {
-  return e.detail.type === 'realise' ? ETAPES_FAITES[e.detail.etape] : `Récolte · ${quantiteAvecUnite(e.detail.quantite, e.detail.unite)}`;
+  const d = e.detail;
+  switch (d.type) {
+    case 'realise':
+      return ETAPES_FAITES[d.etape];
+    case 'recolte':
+      return `Récolte · ${quantiteAvecUnite(d.quantite, d.unite)}`;
+    case 'intervention':
+      return capitale(d.libelle);
+  }
 }
 
 /** Ce que nomme une saisie : « Récolte 12 kg, Tomate Cœur de bœuf, aujourd'hui ». */
 function nomSaisie(h: EntreeHistorique, aujourdhui: string): string {
   const e = h.evenement;
-  const quoi = e.detail.type === 'realise' ? ETAPES_FAITES[e.detail.etape] : `Récolte ${quantiteAvecUnite(e.detail.quantite, e.detail.unite)}`;
+  const quoi = e.detail.type === 'recolte' ? `Récolte ${quantiteAvecUnite(e.detail.quantite, e.detail.unite)}` : libelleEvenement(e);
   return `${quoi}, ${h.culture === null ? 'culture retirée' : nomCulture(h.culture)}, ${quand(e.date, aujourdhui)}`;
 }
 
 function detailTache(t: TacheJour, aujourdhui: string): string {
-  const { tache } = t;
+  const { tache, culture } = t;
   const morceaux: string[] = [];
-  if (tache.variete !== null) morceaux.push(tache.variete);
+  if (tache.etape === 'travail') {
+    // Un travail se lit par son libellé : la culture vient ensuite, avec le produit à épandre.
+    morceaux.push(nomCulture(culture));
+    const produit = tache.travail.produit;
+    if (produit !== null) {
+      const dose = `${nombreFrancais(produit.quantite.valeur)} ${produit.quantite.unite}`;
+      morceaux.push(produit.nom.toLocaleLowerCase('fr') === tache.travail.type.toLocaleLowerCase('fr') ? dose : `${produit.nom} ${dose}`);
+    }
+  } else if (tache.variete !== null) morceaux.push(tache.variete);
   if (tache.taille.unite === 'longueur') morceaux.push(`${String(tache.taille.longueurM).replace('.', ',')} m`);
   else if (tache.taille.nombrePlants > 0) morceaux.push(`${String(tache.taille.nombrePlants)} plants`);
   morceaux.push(tache.enRetard ? `prévu le ${dateCourte(tache.datePrevue)}` : quand(tache.datePrevue, aujourdhui));
@@ -117,23 +138,44 @@ interface ProprietesCarte {
   readonly surPeser: (t: TacheJour) => void;
 }
 
+/** Petite horloge du temps estimé et de la charge de la semaine. */
+function IconeHorloge() {
+  return (
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
 function CarteTache({ tache: t, aujourdhui, surFait, surPeser }: ProprietesCarte) {
   const { tache, culture } = t;
-  const verbe = VERBES[tache.etape];
+  const travail = tache.etape === 'travail' ? tache : null;
+  const surtitre = tache.etape === 'travail' ? LIBELLES_CATEGORIES[tache.travail.categorie] : VERBES[tache.etape];
+  const titre = travail === null ? culture.espece : capitale(travail.travail.type);
   const codes = codesEmplacements(tache.emplacements);
-  const bande = tache.enRetard ? 'retard' : (culture.famille ?? 'neutre');
+  const bande = tache.enRetard ? 'retard' : travail !== null ? 'travail' : (culture.famille ?? 'neutre');
   const recolte = tache.etape === 'debut_recolte';
-  const phrase = `${verbe.toLowerCase()} ${culture.espece.toLowerCase()}`;
+  const phrase = travail === null ? `${surtitre.toLowerCase()} ${culture.espece.toLowerCase()}` : `${travail.travail.type} ${culture.espece.toLowerCase()}`;
+  const temps = travail?.tempsEstimeMinutes ?? null;
   return (
-    <li data-testid="tache" data-cle={t.cle} data-retard={tache.enRetard ? 'oui' : 'non'} className="auj-tache">
+    <li data-testid="tache" data-cle={t.cle} data-retard={tache.enRetard ? 'oui' : 'non'} className={travail === null ? 'auj-tache' : 'auj-tache auj-tache-travail'}>
       <span data-testid="bande-famille" aria-hidden="true" className={`auj-bande auj-bande-${bande}`} />
       <div className="auj-tache-corps">
-        <span className="auj-tache-verbe">{verbe}</span>
-        <span className="auj-tache-titre">{culture.espece}</span>
+        <span data-testid="surtitre" className="auj-tache-verbe">
+          {surtitre}
+        </span>
+        <span className="auj-tache-titre">{titre}</span>
         <span className="auj-tache-detail">{detailTache(t, aujourdhui)}</span>
-        {(codes !== null || tache.enRetard) && (
+        {(codes !== null || tache.enRetard || temps !== null) && (
           <span className="auj-tache-pied">
             {codes !== null && <span className="auj-code">{codes}</span>}
+            {temps !== null && (
+              <span className="auj-temps">
+                <IconeHorloge />
+                <span data-testid="temps-estime">{texteDuree(temps)}</span>
+              </span>
+            )}
             {tache.enRetard && <span className="auj-retard">{texteRetard(tache.joursDeRetard)}</span>}
           </span>
         )}
@@ -437,10 +479,28 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     });
   }
 
+  /** « Fait » sur un travail prévu (T22) : l'intervention du même type sur la série. */
+  function surTravailFait(t: TacheJour, tache: TacheTravail): void {
+    const travail = tache.travail;
+    void ecrire(async () => {
+      const ctx = contexte();
+      const id = await marquerTravailFait(ctx, t.culture, travail);
+      const detail = { type: 'intervention' as const, categorie: travail.categorie, libelle: travail.type };
+      montrerAnnulable(evenementEcrit(id, t.culture, ctx.aujourdhui, detail), t.culture, `Fait · ${capitale(travail.type)}`, nomCulture(t.culture));
+    }).then((ok) => {
+      masquer(t.cle, ok ? journeeActuelle.current : undefined);
+    });
+  }
+
   function surFait(t: TacheJour): void {
-    const etape = t.tache.etape;
-    if (etape === 'debut_recolte' || masquees.has(t.cle) || occupe.current) return;
+    const tache = t.tache;
+    if (tache.etape === 'debut_recolte' || masquees.has(t.cle) || occupe.current) return;
     masquer(t.cle, 'attente');
+    if (tache.etape === 'travail') {
+      surTravailFait(t, tache);
+      return;
+    }
+    const etape = tache.etape;
     void ecrire(async () => {
       const ctx = contexte();
       const id = await marquerFait(ctx, t.culture, etape);
@@ -494,6 +554,8 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
   const enRetard = taches.filter((t) => t.tache.enRetard);
   const semaine = taches.filter((t) => !t.tache.enRetard);
   const recoltes = journee?.recoltesEnCours ?? [];
+  // Charge de la semaine (T22) : le cœur additionne les temps estimés des tâches affichées.
+  const charge = chargeSemaine(taches.map((t) => t.tache));
   const peser = (x: TacheJour) => {
     setDialogue({ sorte: 'recolte', culture: x.culture });
   };
@@ -510,6 +572,12 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
           <span className="auj-pastille">
             {recoltes.length} {recoltes.length > 1 ? 'récoltes' : 'récolte'} en cours
           </span>
+          {charge > 0 && (
+            <span className="auj-pastille auj-pastille-charge">
+              <IconeHorloge />
+              <span data-testid="charge-semaine">{texteCharge(charge)}</span>
+            </span>
+          )}
         </div>
       )}
 

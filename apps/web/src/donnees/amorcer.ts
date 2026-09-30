@@ -5,7 +5,8 @@
  *
  * T13 — `?jeu=aujourdhui&date=AAAA-MM-JJ` : la ferme du jour à la place (src/ecrans/aujourdhui/
  * test/ferme-du-jour.ts, datée relativement à `date`), dans la base de SON utilisateur de test ;
- * contrat : src/ecrans/aujourdhui/test/contrat.ts, « Amorçage ». Hors navigation, hors service worker et hors
+ * contrat : src/ecrans/aujourdhui/test/contrat.ts, « Amorçage ». T22 — `?jeu=aujourdhui-travaux` : la
+ * même ferme, avec des travaux prévus (fermeDuJour(date, { travaux: true })). Hors navigation, hors service worker et hors
  * précache, jamais liée depuis l'appli, comme /diagnostic/synchro.html.
  *
  * Garde-fous : seule la base de l'utilisateur du jeu (identifiant de test, jamais un vrai compte)
@@ -62,11 +63,15 @@ async function amorcerT07(): Promise<Amorcage> {
   return { utilisateurId: jeu.utilisateurId, fermeId: jeu.principale.fermeId, lignes };
 }
 
-/** T13 : la ferme du jour, datée relativement à `date` ('AAAA-MM-JJ'). */
-async function amorcerAujourdhui(date: string): Promise<Amorcage> {
+/**
+ * T13 : la ferme du jour, datée relativement à `date` ('AAAA-MM-JJ'). T22 : `travaux`, la même
+ * ferme avec des travaux prévus dans les itinéraires et les séries (?jeu=aujourdhui-travaux).
+ */
+async function amorcerAujourdhui(date: string, travaux: boolean): Promise<Amorcage> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`date invalide : « ${date} » (AAAA-MM-JJ attendu)`);
-  const ferme = fermeDuJour(date);
-  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermeDuJour(base, date));
+  const options = { travaux };
+  const ferme = fermeDuJour(date, options);
+  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermeDuJour(base, date, options));
   return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
 }
 
@@ -74,7 +79,8 @@ function amorcer(): Promise<Amorcage> {
   const parametres = new URLSearchParams(location.search);
   const jeu = parametres.get('jeu');
   if (jeu === null) return amorcerT07();
-  if (jeu === 'aujourdhui') return amorcerAujourdhui(parametres.get('date') ?? '');
+  if (jeu === 'aujourdhui') return amorcerAujourdhui(parametres.get('date') ?? '', false);
+  if (jeu === 'aujourdhui-travaux') return amorcerAujourdhui(parametres.get('date') ?? '', true);
   return Promise.reject(new Error(`jeu inconnu : « ${jeu} »`));
 }
 

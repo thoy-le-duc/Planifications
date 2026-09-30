@@ -44,6 +44,17 @@
   border-radius: var(--rayon-pastille);
 }
 
+/* T22 : charge de la semaine, la somme des temps estimés des travaux. */
+.auj-pastille-charge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  box-shadow: none;
+  font-variant-numeric: tabular-nums;
+}
+
 .auj-pastille-urgente {
   background: var(--couleur-orange);
   color: var(--couleur-sur-orange);
@@ -183,6 +194,11 @@
   background: var(--couleur-orange);
 }
 
+/* T22 : un travail prévu (travail du sol, entretien…) se distingue des cultures par la forêt. */
+.auj-bande-travail {
+  background: var(--couleur-foret-clair);
+}
+
 .auj-bande-salades {
   background: var(--famille-salades);
 }
@@ -246,6 +262,21 @@
   color: var(--couleur-encre);
   padding: 4px 8px;
   border-radius: var(--rayon-etiquette);
+}
+
+/* T22 : temps estimé d'un travail, à côté des planches. */
+.auj-temps {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--couleur-foret);
+  background: var(--couleur-fond);
+  padding: 4px 9px 4px 7px;
+  border-radius: var(--rayon-pastille);
+  font-variant-numeric: tabular-nums;
 }
 
 .auj-retard {

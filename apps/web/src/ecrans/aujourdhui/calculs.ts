@@ -12,7 +12,9 @@ import {
   appliquerRealises,
   semaineIso,
   semainier,
+  validerTravauxPrevus,
   type CampagneSemainier,
+  type CategorieIntervention,
   type CultureConcernee,
   type DateCalendaire,
   type DatesPrevuesSerie,
@@ -20,12 +22,14 @@ import {
   type EtapeRealisee,
   type EtapeSerie,
   type Id,
+  type InterventionRealisee,
   type ModeItineraire,
   type RealisesSerie,
   type SerieSemainier,
   type StatutSerie,
   type TacheSemainier,
   type TailleSerie,
+  type TravailPrevu,
   type UniteRecolte,
 } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
@@ -52,9 +56,11 @@ export interface Culture {
 
 export type DetailLu =
   | { readonly type: 'realise'; readonly etape: EtapeRealisee; readonly quantiteReelle: number | null }
-  | { readonly type: 'recolte'; readonly quantite: number; readonly unite: UniteRecolte; readonly categorie: string | null };
+  | { readonly type: 'recolte'; readonly quantite: number; readonly unite: UniteRecolte; readonly categorie: string | null }
+  /** T22 : intervention (travail du sol, entretien…) ; le détail complet est relu pour l'annuler. */
+  | { readonly type: 'intervention'; readonly categorie: CategorieIntervention; readonly libelle: string };
 
-/** Événement du journal (réalisé ou récolte), lu tel quel. */
+/** Événement du journal (réalisé, récolte ou intervention), lu tel quel. */
 export interface EvenementLu {
   readonly id: string;
   readonly date: string;
@@ -67,7 +73,7 @@ export interface EvenementLu {
 }
 
 export interface TacheJour {
-  /** `<id de la série ou campagne>:<étape>`. */
+  /** `<id de la série ou campagne>:<étape>`, ou `<id de la série>:travail:<indice>` (T22). */
   readonly cle: string;
   readonly tache: TacheSemainier;
   readonly culture: Culture;
@@ -116,6 +122,12 @@ const nombreOuNul = (v: Valeur): number | null => (v === null || v === undefined
 const UNITES: readonly UniteRecolte[] = ['kg', 'botte', 'piece', 'barquette'];
 const MODES: readonly ModeItineraire[] = ['semis_direct', 'plant_maison', 'plant_achete'];
 const ETAPES: readonly EtapeRealisee[] = ['semis_pepiniere', 'semis_direct', 'plantation', 'arrachage'];
+const CATEGORIES: readonly CategorieIntervention[] = ['travail_sol', 'couverture', 'fertilisation', 'amendement', 'entretien'];
+
+function categorie(v: Valeur): CategorieIntervention | null {
+  const c = texte(v);
+  return (CATEGORIES as readonly string[]).includes(c) ? (c as CategorieIntervention) : null;
+}
 
 function unite(v: Valeur): UniteRecolte {
   const u = texte(v);
@@ -150,6 +162,12 @@ function detailLu(l: Ligne): DetailLu | null {
   if (l.type === 'recolte') {
     if (typeof l.quantite !== 'number') return null;
     return { type: 'recolte', quantite: l.quantite, unite: unite(l.unite), categorie: texteOuNul(l.categorie) };
+  }
+  if (l.type === 'intervention') {
+    const c = categorie(l.categorie);
+    const libelle = texte(l.type_intervention);
+    if (c === null || libelle.trim() === '') return null;
+    return { type: 'intervention', categorie: c, libelle };
   }
   return null;
 }
@@ -207,7 +225,8 @@ const CAMPAGNES_ACTIVES = `SELECT id FROM campagne WHERE ferme_id = ? AND suppri
 const marques = (n: number) => Array.from({ length: n }, () => '?').join(', ');
 
 /** Séries jointes à l'espèce, la famille et la variété ; `filtre` sur l'alias `s`. */
-const sqlSeries = (filtre: string) => `SELECT s.id, s.statut, json_extract(s.parametres, '$.mode') AS mode, s.prevu_semis_pepiniere,
+const sqlSeries = (filtre: string) => `SELECT s.id, s.statut, json_extract(s.parametres, '$.mode') AS mode,
+    json_extract(s.parametres, '$.travauxPrevus') AS travaux, s.prevu_semis_pepiniere,
     s.prevu_mise_en_place, s.prevu_debut_recolte, s.prevu_fin_recolte, s.longueur_m, s.nombre_plants, s.espece_id, s.variete_id,
     e.nom AS espece, e.unite_recolte, f.nom AS famille, v.nom AS variete
   FROM serie s
@@ -269,13 +288,23 @@ const SQL_REALISES = `SELECT e.serie_id, e.campagne_id, e.type, json_extract(e.d
     AND ${EN_VIGUEUR}
   GROUP BY e.serie_id, e.campagne_id, e.type, etape`;
 
+/**
+ * T22 : interventions en vigueur des séries actives (ni annulées, ni remplacées par une
+ * correction, ni les annulations elles-mêmes) : elles soldent les travaux prévus du semainier.
+ */
+const SQL_INTERVENTIONS = `SELECT e.serie_id, e.date, json_extract(e.detail, '$.categorie') AS categorie,
+    json_extract(e.detail, '$.type') AS type_intervention
+  FROM evenement e
+  WHERE e.ferme_id = ? AND e.type = 'intervention' AND e.serie_id IN (${SERIES_ACTIVES})
+    AND ${EN_VIGUEUR}`;
+
 /** Saisies récentes (historique, dernières récoltes), en vigueur ou non : la règle s'applique ici. */
 const SQL_RECENTS = `SELECT id, type, date, horodatage, serie_id, campagne_id, remplace_sorte, remplace_evenement_id,
     json_extract(detail, '$.etape') AS etape, json_extract(detail, '$.quantiteReelle') AS quantite_reelle,
     json_extract(detail, '$.quantite') AS quantite, json_extract(detail, '$.unite') AS unite,
-    json_extract(detail, '$.categorie') AS categorie
+    json_extract(detail, '$.categorie') AS categorie, json_extract(detail, '$.type') AS type_intervention
   FROM evenement
-  WHERE ferme_id = ? AND type IN ('realise', 'recolte') AND (date >= ? OR horodatage >= ?)`;
+  WHERE ferme_id = ? AND type IN ('realise', 'recolte', 'intervention') AND (date >= ? OR horodatage >= ?)`;
 
 export interface LignesJournee {
   readonly series: readonly Ligne[];
@@ -283,6 +312,8 @@ export interface LignesJournee {
   readonly occupations: readonly Ligne[];
   /** Première date par culture, type et étape, parmi les événements en vigueur. */
   readonly realises: readonly Ligne[];
+  /** T22 : interventions en vigueur des séries actives (série, date, catégorie, type). */
+  readonly interventions: readonly Ligne[];
   /** Événements récents (bornesHistorique), tels quels. */
   readonly recents: readonly Ligne[];
 }
@@ -320,12 +351,13 @@ export async function lireJournee(
   const campagnes = await lire(SQL_CAMPAGNES, [fermeId, aujourdhui]);
   const occupations = await lire(SQL_OCCUPATIONS, [fermeId, fermeId, fermeId, aujourdhui, aujourdhui, aujourdhui]);
   const realises = await lire(SQL_REALISES, [fermeId, fermeId, fermeId, aujourdhui, fermeId, fermeId, fermeId]);
+  const interventions = await lire(SQL_INTERVENTIONS, [fermeId, fermeId, fermeId, fermeId, fermeId]);
   const recents = await lire(SQL_RECENTS, [fermeId, depuis, horodatageDepuis]);
   // Historique : les cultures terminées ou passées qu'il nomme, lues en plus (rarement).
   const connues = new Set([...series, ...campagnes].map((l) => texte(l.id)));
   const autresSeries = [...new Set(recents.map((l) => texte(l.serie_id)).filter((x) => x !== '' && !connues.has(x)))];
   const autresCampagnes = [...new Set(recents.map((l) => texte(l.campagne_id)).filter((x) => x !== '' && !connues.has(x)))];
-  if (autresSeries.length === 0 && autresCampagnes.length === 0) return { series, campagnes, occupations, realises, recents };
+  if (autresSeries.length === 0 && autresCampagnes.length === 0) return { series, campagnes, occupations, realises, interventions, recents };
   const [s2, c2] = await Promise.all([
     autresSeries.length === 0 ? [] : lire(sqlSeries(`s.id IN (${marques(autresSeries.length)})`), [fermeId, ...autresSeries]),
     autresCampagnes.length === 0 ? [] : lire(sqlCampagnes(`c.id IN (${marques(autresCampagnes.length)})`), [fermeId, ...autresCampagnes]),
@@ -335,7 +367,7 @@ export async function lireJournee(
     sqlOccupations(`(o.serie_id IN (${marques(autresSeries.length)}) OR o.plantation_id IN (${marques(plantations.length)}))`),
     [fermeId, ...autresSeries, ...plantations, aujourdhui, aujourdhui],
   );
-  return { series: [...series, ...s2], campagnes: [...campagnes, ...c2], occupations: [...occupations, ...o2], realises, recents };
+  return { series: [...series, ...s2], campagnes: [...campagnes, ...c2], occupations: [...occupations, ...o2], realises, interventions, recents };
 }
 
 // ── Calcul de la journée ─────────────────────────────────────────────────────────────────────
@@ -377,6 +409,27 @@ interface SerieLue {
 
 function modeDe(mode: Valeur): ModeItineraire | null {
   return typeof mode === 'string' && (MODES as readonly string[]).includes(mode) ? (mode as ModeItineraire) : null;
+}
+
+const AUCUN_TRAVAIL: readonly TravailPrevu[] = [];
+
+/** Travaux déjà lus, par texte JSON et mode : relire la journée ne revalide pas chaque instantané. */
+const travauxLus = new Map<string, readonly TravailPrevu[]>();
+
+/**
+ * Travaux prévus de l'instantané d'une série (texte JSON), validés par le cœur. Un instantané
+ * illisible ne fait pas tomber l'écran : la série n'a alors aucun travail affiché.
+ */
+function travauxDe(v: Valeur, mode: ModeItineraire): readonly TravailPrevu[] {
+  if (typeof v !== 'string' || v === '' || v === '[]') return AUCUN_TRAVAIL;
+  const cle = `${mode}|${v}`;
+  const connus = travauxLus.get(cle);
+  if (connus !== undefined) return connus;
+  const r = validerTravauxPrevus(jsonOuNul(v), { mode });
+  const travaux = r.ok ? r.valeur : AUCUN_TRAVAIL;
+  if (travauxLus.size >= 2_000) travauxLus.clear();
+  travauxLus.set(cle, travaux);
+  return travaux;
 }
 
 /** Calcule la journée depuis les lignes lues. Pure. */
@@ -429,6 +482,7 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
       };
       const longueur = nombreOuNul(s.longueur_m);
       const taille: TailleSerie = longueur !== null ? { unite: 'longueur', longueurM: longueur } : { unite: 'plants', nombrePlants: nombreOuNul(s.nombre_plants) ?? 0 };
+      const travauxPrevus = travauxDe(s.travaux, mode);
       pourSemainier = {
         id: id as Id<'Serie'>,
         statut,
@@ -438,6 +492,7 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
         datesPrevues,
         taille,
         emplacements,
+        ...(travauxPrevus.length > 0 ? { travauxPrevus } : {}),
       };
     }
     series.set(id, { semainier: pourSemainier, active, finPrevue: finRecolte });
@@ -494,7 +549,20 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
       realisesCampagnes.set(campagneId as Id<'Campagne'>, plusTot(realisesCampagnes.get(campagneId as Id<'Campagne'>), date));
     }
   }
-  const realises = { series: realisesSeries as ReadonlyMap<Id<'Serie'>, RealisesSerie>, campagnes: realisesCampagnes };
+  // T22 : interventions en vigueur, par série (elles soldent les travaux prévus).
+  const interventions = new Map<Id<'Serie'>, InterventionRealisee[]>();
+  for (const l of lignes.interventions) {
+    const serieId = texteOuNul(l.serie_id);
+    const c = categorie(l.categorie);
+    const date = texte(l.date);
+    if (serieId === null || c === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    ajouterA(interventions, serieId as Id<'Serie'>, { date: date as DateCalendaire, categorie: c, type: texte(l.type_intervention) });
+  }
+  const realises = {
+    series: realisesSeries as ReadonlyMap<Id<'Serie'>, RealisesSerie>,
+    campagnes: realisesCampagnes,
+    interventions: interventions as ReadonlyMap<Id<'Serie'>, readonly InterventionRealisee[]>,
+  };
 
   // Saisies récentes en vigueur : historique et dernières récoltes.
   const lus: EvenementLu[] = [];
@@ -526,7 +594,9 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
   for (const t of brutes) {
     const cibleId = t.cible.sorte === 'serie' ? t.cible.serieId : t.cible.campagneId;
     const culture = cultures.get(cibleId);
-    if (culture !== undefined) taches.push({ cle: `${cibleId}:${t.etape}`, tache: t, culture });
+    if (culture === undefined) continue;
+    const cle = t.etape === 'travail' ? `${cibleId}:travail:${String(t.travail.indice)}` : `${cibleId}:${t.etape}`;
+    taches.push({ cle, tache: t, culture });
   }
 
   // Récoltes en cours : la fenêtre de récolte contient aujourd'hui.
@@ -606,8 +676,35 @@ export function quand(date: string, aujourdhui: string): string {
   return `le ${dateCourte(date)}`;
 }
 
+/** Durée en minutes : « 6 min », « 1 h », « 1 h 05 ». */
+export function texteDuree(minutes: number): string {
+  if (minutes < 60) return `${String(minutes)} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m === 0 ? `${String(h)} h` : `${String(h)} h ${String(m).padStart(2, '0')}`;
+}
+
+/** Pastille de charge de la semaine : « 1 h 24 de travail ». */
+export function texteCharge(minutes: number): string {
+  return `${texteDuree(minutes)} de travail`;
+}
+
+/** Catégorie d'intervention, en surtitre d'une tâche de travail (T22). */
+export const LIBELLES_CATEGORIES: Readonly<Record<CategorieIntervention, string>> = {
+  travail_sol: 'Travail du sol',
+  couverture: 'Couverture',
+  fertilisation: 'Fertilisation',
+  amendement: 'Amendement',
+  entretien: 'Entretien',
+};
+
+/** « grelinette » → « Grelinette » (le libellé de la ferme, première lettre en capitale). */
+export function capitale(t: string): string {
+  return t === '' ? t : `${t.charAt(0).toLocaleUpperCase('fr')}${t.slice(1)}`;
+}
+
 /** Verbe de l'étape, pour la carte : « Planter », « Semer »… */
-export const VERBES: Readonly<Record<TacheSemainier['etape'], string>> = {
+export const VERBES: Readonly<Record<Exclude<TacheSemainier['etape'], 'travail'>, string>> = {
   semis_pepiniere: 'Semer en pépinière',
   semis_direct: 'Semer',
   plantation: 'Planter',
