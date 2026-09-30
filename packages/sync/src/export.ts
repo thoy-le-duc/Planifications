@@ -90,34 +90,86 @@ export function compresseurParDefaut(): Compresseur | undefined {
 // ── Lecture de la base ───────────────────────────────────────────────────────────────────────
 
 /**
+ * Lecture par pages (T16b). Dans le navigateur, PowerSync lit dans un worker et renvoie chaque
+ * résultat en un seul message, désérialisé d'un bloc sur le fil principal : les 30 000
+ * événements de la ferme de T07 lus d'un coup (et les 20 autres tables en même temps), c'était
+ * une tâche de 190 à 260 ms, CPU ×4 : l'écran gelait. Par pages de `PAGE` lignes, table après
+ * table, chaque message reste petit (mesuré : aucune tâche de plus de 50 ms), et le fil
+ * principal reprend la main entre deux pages, le temps que le worker lise la suivante.
+ * Mesuré aussi : lire par pages ne coûte pas plus cher que d'un bloc ; la lecture elle-même
+ * (IndexedDB, dans le worker) domine.
+ */
+const PAGE = 2_000;
+
+interface LectureTable {
+  /** Première page (ou la seule : table ferme). */
+  readonly premiere: string;
+  /** Pages suivantes : un paramètre de plus, le dernier id lu ; null si une seule lecture. */
+  readonly suivante: string | null;
+  readonly parametres: readonly string[];
+}
+
+/**
  * Lecture d'une table : seulement les colonnes de la liste blanche, et seulement les lignes
  * qui peuvent être de la ferme (ou de la bibliothèque de référence). `construireArchive` refiltre.
+ * Pagination par clé (`id > dernier id lu`, `ORDER BY id`) : mêmes lignes, dans le même ordre,
+ * qu'une lecture d'un seul tenant, sans le coût croissant d'un OFFSET.
+ *
+ * Filtre de ferme écrit `coalesce(ferme_id, ?) = ?` (même sens que `ferme_id = ? OR ferme_id
+ * IS NULL`) : il ne peut pas prendre l'index (ferme_id, date) des événements, et SQLite suit la
+ * clé, page après page. Avec l'index, chaque page triait de nouveau tous les événements de la
+ * ferme (mesuré : 2,4 s la première page, 150 à 500 ms les suivantes).
  */
-function requete(table: string, colonnes: readonly string[]): { sql: string; parametres: number } {
+function lectureTable(table: string, colonnes: readonly string[], fermeId: string): LectureTable {
   const select = `SELECT ${colonnes.map((c) => `"${c}"`).join(', ')} FROM "${table}"`;
-  if (table === 'ferme') return { sql: `${select} WHERE id = ?`, parametres: 1 };
-  if (table === 'utilisateur') return { sql: `${select} WHERE id IN (SELECT utilisateur_id FROM "membre" WHERE ferme_id = ?) ORDER BY id`, parametres: 1 };
-  if (colonnes.includes('ferme_id')) return { sql: `${select} WHERE ferme_id = ? OR ferme_id IS NULL ORDER BY id`, parametres: 1 };
-  return { sql: `${select} ORDER BY id`, parametres: 0 };
+  if (table === 'ferme') return { premiere: `${select} WHERE id = ?`, suivante: null, parametres: [fermeId] };
+  const filtre =
+    table === 'utilisateur'
+      ? { condition: 'id IN (SELECT utilisateur_id FROM "membre" WHERE ferme_id = ?)', parametres: [fermeId] }
+      : colonnes.includes('ferme_id')
+        ? { condition: 'coalesce(ferme_id, ?) = ?', parametres: [fermeId, fermeId] }
+        : { condition: null, parametres: [] };
+  const ou = (conditions: readonly (string | null)[]) => {
+    const c = conditions.filter((x): x is string => x !== null);
+    return c.length === 0 ? '' : ` WHERE ${c.join(' AND ')}`;
+  };
+  return {
+    premiere: `${select}${ou([filtre.condition])} ORDER BY id LIMIT ${String(PAGE)}`,
+    suivante: `${select}${ou([filtre.condition, 'id > ?'])} ORDER BY id LIMIT ${String(PAGE)}`,
+    parametres: filtre.parametres,
+  };
+}
+
+/** Toutes les lignes d'une table, page par page ; s'arrête (AbortError) entre deux pages si l'export est annulé. */
+async function lireTable(porte: PorteDonnees, table: string, fermeId: string, signal: AbortSignal | undefined): Promise<LigneLocale[]> {
+  const { premiere, suivante, parametres } = lectureTable(table, Object.keys(TABLES_EXPORTEES[table]?.colonnes ?? {}), fermeId);
+  const lignes: LigneLocale[] = [];
+  let sql = premiere;
+  let valeurs: readonly unknown[] = parametres;
+  for (;;) {
+    signal?.throwIfAborted();
+    const page = await porte.lire<LigneLocale>(sql, valeurs);
+    for (const l of page) lignes.push(l);
+    const dernier = page.at(-1)?.id;
+    if (suivante === null || page.length < PAGE || typeof dernier !== 'string') return lignes;
+    sql = suivante;
+    valeurs = [...parametres, dernier];
+  }
+}
+
+/** Lit les tables l'une après l'autre (une seule lecture à la fois dans le worker). */
+async function lireTables(porte: PorteDonnees, noms: readonly string[], fermeId: string, signal: AbortSignal | undefined): Promise<Record<string, readonly LigneLocale[]>> {
+  const tables: Record<string, readonly LigneLocale[]> = {};
+  for (const table of noms) tables[table] = await lireTable(porte, table, fermeId, signal);
+  return tables;
 }
 
 /** Construit l'archive ZIP de la ferme, depuis la base locale seulement. */
 export async function exporterFerme(porte: PorteDonnees, options: OptionsExportFerme): Promise<ArchiveExport> {
   const { fermeId, genereLe, jour, avancement, signal } = options;
   const noms = Object.keys(TABLES_EXPORTEES);
-  // Annulé pendant la lecture : rejet immédiat, sans attendre la base.
-  const lues = await annulable(signal, () =>
-    Promise.all(
-      noms.map((table) => {
-        const { sql, parametres } = requete(table, Object.keys(TABLES_EXPORTEES[table]?.colonnes ?? {}));
-        return porte.lire<LigneLocale>(sql, parametres === 1 ? [fermeId] : []);
-      }),
-    ),
-  );
-  const tables: Record<string, readonly LigneLocale[]> = {};
-  noms.forEach((table, k) => {
-    tables[table] = lues[k] ?? [];
-  });
+  // Annulé pendant la lecture : rejet immédiat, sans attendre la base ; plus aucune page lue ensuite.
+  const tables = await annulable(signal, () => lireTables(porte, noms, fermeId, signal));
 
   const compresseur = options.compresseur ?? compresseurParDefaut();
   const { octets, lignes } = await construireArchive(
