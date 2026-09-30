@@ -293,7 +293,8 @@ const SQL_REALISES = `SELECT e.serie_id, e.campagne_id, e.type, json_extract(e.d
  * correction, ni les annulations elles-mêmes) : elles soldent les travaux prévus du semainier.
  */
 const SQL_INTERVENTIONS = `SELECT e.serie_id, e.date, json_extract(e.detail, '$.categorie') AS categorie,
-    json_extract(e.detail, '$.type') AS type_intervention
+    json_extract(e.detail, '$.type') AS type_intervention,
+    json_extract(e.detail, '$.occurrenceVisee') AS occurrence_visee
   FROM evenement e
   WHERE e.ferme_id = ? AND e.type = 'intervention' AND e.serie_id IN (${SERIES_ACTIVES})
     AND ${EN_VIGUEUR}`;
@@ -312,7 +313,7 @@ export interface LignesJournee {
   readonly occupations: readonly Ligne[];
   /** Première date par culture, type et étape, parmi les événements en vigueur. */
   readonly realises: readonly Ligne[];
-  /** T22 : interventions en vigueur des séries actives (série, date, catégorie, type). */
+  /** T22 : interventions en vigueur des séries actives (série, date, catégorie, type, occurrence visée T22b). */
   readonly interventions: readonly Ligne[];
   /** Événements récents (bornesHistorique), tels quels. */
   readonly recents: readonly Ligne[];
@@ -556,7 +557,10 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
     const c = categorie(l.categorie);
     const date = texte(l.date);
     if (serieId === null || c === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-    ajouterA(interventions, serieId as Id<'Serie'>, { date: date as DateCalendaire, categorie: c, type: texte(l.type_intervention) });
+    // T22b : l'occurrence visée par « Fait » (null si absente ou illisible : saisie libre).
+    const visee = texteOuNul(l.occurrence_visee);
+    const occurrenceVisee = visee !== null && /^\d{4}-\d{2}-\d{2}$/.test(visee) ? (visee as DateCalendaire) : null;
+    ajouterA(interventions, serieId as Id<'Serie'>, { date: date as DateCalendaire, categorie: c, type: texte(l.type_intervention), occurrenceVisee });
   }
   const realises = {
     series: realisesSeries as ReadonlyMap<Id<'Serie'>, RealisesSerie>,

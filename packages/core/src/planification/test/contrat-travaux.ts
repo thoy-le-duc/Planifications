@@ -165,6 +165,36 @@
  *     de travaux ne comptent pas dans « une ligne en retard par série » des étapes ;
  *   - tempsEstimeMinutes = tempsEstimeMinutes(travail.tempsEstime, série).
  *
+ * ── T22b : « Fait » sur une occurrence en retard (Q24) ──────────────────────────────────────
+ *
+ *   Réponse de Théophane (Q24) : « Fait » sur une carte en retard solde cette occurrence et les
+ *   précédentes ; la suivante reste à faire. Tests : ../fait-en-retard.test.ts,
+ *   ../../saisies/occurrence-visee.test.ts.
+ *
+ *   Nom du champ (décision du testeur) : `occurrenceVisee`, date 'AAAA-MM-JJ' ou null.
+ *   - DetailIntervention (T01, InterventionCommune) gagne `occurrenceVisee` FACULTATIF : absent
+ *     ou null = saisie libre (voix, agent, anciennes saisies) ; « Fait » sur une tâche de travail
+ *     l'écrit = la `datePrevue` de la tâche touchée. `date` de l'événement reste la date réelle.
+ *   - validerSaisie : clé permise dans le détail d'une intervention, quelle que soit la
+ *     catégorie (et seulement là : ailleurs, 'cle_inconnue') ; absente ou null → acceptée ;
+ *     sinon une date 'AAAA-MM-JJ' existante (texte) → 'champ_invalide' sinon, et dans les mêmes
+ *     bornes que `date` [2000-01-01, 2100-12-31] → 'hors_bornes' sinon. Champ
+ *     'detail.occurrenceVisee'. Acceptée : gardée telle quelle dans `saisie.detail`.
+ *   - InterventionRealisee (semainier) gagne `occurrenceVisee?: DateCalendaire | null`, lue du
+ *     détail par l'appelant (l'écran Aujourd'hui la tire de `detail.occurrenceVisee`).
+ *
+ *   Règle de solde d'une intervention du même type sur la même série :
+ *   - SANS occurrence visée (absente ou null) : inchangée (T22, Q11) — l'occurrence la plus
+ *     proche de la DATE de l'intervention (à égalité, la plus ancienne) et toutes les précédentes ;
+ *   - AVEC occurrence visée : l'occurrence la plus proche de `occurrenceVisee` (à égalité, la plus
+ *     ancienne) et toutes les précédentes ; JAMAIS une occurrence postérieure, quelle que soit la
+ *     date réelle de l'intervention. D'ordinaire `occurrenceVisee` tombe pile sur une occurrence.
+ *     « La plus proche » plutôt que « ≤ occurrenceVisee » (décision du testeur, à trancher) : si
+ *     les dates de la série sont recalées ensuite par un réalisé (plantation saisie avec deux
+ *     jours de retard), la carte touchée reste soldée au lieu de revenir.
+ *   - plusieurs interventions : chacune solde sa part, comme avant (la plus avancée l'emporte).
+ *   - la caducité (Q23) et « une ligne en retard par travail » ne changent pas.
+ *
  * ── Temps : tempsEstimeMinutes(temps, { taille, nombreEmplacements }) ───────────────────────
  *
  *   null → null. 'cent_metres' : minutes × longueurM / 100, arrondi à la minute la plus proche
@@ -250,6 +280,8 @@ export interface InterventionRealisee {
   readonly date: string;
   readonly categorie: string;
   readonly type: string;
+  /** T22b : occurrence visée par « Fait » ('AAAA-MM-JJ') ; absente ou null = saisie libre. */
+  readonly occurrenceVisee?: string | null;
 }
 
 export interface RealisesLus {

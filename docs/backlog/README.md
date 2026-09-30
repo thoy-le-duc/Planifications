@@ -14,6 +14,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T02](T02-dates-serie.md) | Dates d'une série, planification à rebours et décalage | T01 | fait |
 | [T03](T03-occupations-conflits.md) | Occupations et conflits de place | T02 | fait |
 | [T04](T04-rotation.md) | Alertes de rotation | T03 | fait |
+| [T04b](T04b-rotation-hors-sol.md) | Pas d'alerte de rotation sur le hors-sol (Q17) | T04 | à faire |
 | [T05](T05-besoins-semences.md) | Besoins en semences et en plants | T01 | fait |
 | [T06](T06-semainier.md) | Semainier | T02 | fait |
 | [T06b](T06b-retards-semainier.md) | Semainier : une seule ligne en retard par série | T06 | fait |
@@ -21,11 +22,13 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T08](T08-schema-postgres.md) | Schéma PostgreSQL et migrations | T01 | fait |
 | [T09](T09-comptes-jetons.md) | Comptes, fermes et jetons | T08 | fait |
 | [T09b](T09b-durcissement-connexion.md) | Connexion : durcissement avant la mise en production | T09 | fait |
+| [T09c](T09c-envoi-brevo.md) | Envoi des codes de connexion par Brevo (Q14) | T09b | à faire |
 | [T10](T10-synchro.md) | Synchro de bout en bout | T07, T08, T09 | fait |
 | [T10b](T10b-regles-saisies-coeur.md) | Règles des saisies dans le cœur | T10 | fait |
 | [T10c](T10c-stock-synchro.md) | Synchro : le serveur accepte les saisies de stock des téléphones | T10, T10b | fait |
 | [T10d](T10d-stock-suites.md) | Stock synchronisé : suites des relectures | T10c | fait |
 | [T10f](T10f-synchro-debit.md) | Synchro : débit, délais et envois trop lourds | T10d | à faire |
+| [T10g](T10g-recoltes-annulees.md) | Récoltes annulées et plafonds définitifs (Q20, Q13) | T10d | à faire |
 | [T10e](T10e-series-synchro.md) | Synchro : le serveur accepte les séries des téléphones | T10, T10b, T10c | fait |
 | [T16](T16-design.md) | Identité visuelle : système de design et habillage | T09b | fait |
 | [T16b](T16b-brancher-export.md) | Brancher l'export dans l'onglet Ferme | T11 | fait |
@@ -34,6 +37,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T12](T12-plan-de-culture.md) | Plan de culture : créer et modifier une série | T04, T05, T10e, T11 | fait |
 | [T12b](T12b-serie-suites.md) | Formulaire de série : sélecteur de semaine maison et suites de relecture | T12 | à faire |
 | [T22](T22-travaux-itineraire.md) | Itinéraires : les travaux prévus (cœur) | T02, T06, T13 | fait |
+| [T22b](T22b-fait-en-retard.md) | « Fait » sur un travail répété en retard (Q24) | T22 | fait |
 | [T23](T23-itineraires-synchro.md) | Synchro : le serveur accepte les itinéraires et les types d'intervention | T10e, T22 | en cours |
 | [T24](T24-ecran-itineraires.md) | Écran : mes itinéraires et mes types d'intervention | T22, T23 | à faire |
 | [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T10c, T11, T16 | fait |
@@ -41,6 +45,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16 | à faire |
 | [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | fait |
+| [T14d](T14d-import-annee-suivante.md) | Import : saison à cheval sur deux années (Q18) | T14 | à faire |
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
 | [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | fait |
 | [T15c](T15c-export-rapide.md) | Export : sous 10 secondes sur un téléphone moyen | T16b | à faire |

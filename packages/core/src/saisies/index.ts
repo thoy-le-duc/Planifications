@@ -121,7 +121,7 @@ const COLONNES = new Set([
 const CLES_DETAIL: Readonly<Record<TypeEvenement, readonly string[]>> = {
   realise: ['etape', 'quantiteReelle'],
   recolte: ['quantite', 'unite', 'categorie'],
-  intervention: ['categorie', 'type', 'outil'],
+  intervention: ['categorie', 'type', 'outil', 'occurrenceVisee'],
   irrigation: ['secteurIrrigationId', 'dureeMinutes'],
   traitement: ['produitPhytoId', 'dose', 'surfaceTraiteeM2', 'cible', 'operateur', 'recolteAutoriseeLe'],
   observation: ['nature', 'gravite'],
@@ -296,7 +296,8 @@ function verifDetail(type: TypeEvenement, d: Objet): Verif {
       const commun =
         verifParmi(d.categorie, CATEGORIES_INTERVENTION, 'detail.categorie', "catégorie d'intervention", true) ??
         verifTexte(d.type, 'detail.type', "type d'intervention", { obligatoire: true, nonVide: true }) ??
-        verifTexte(d.outil, 'detail.outil', 'outil', { obligatoire: false });
+        verifTexte(d.outil, 'detail.outil', 'outil', { obligatoire: false }) ??
+        verifOccurrenceVisee(d.occurrenceVisee);
       if (commun !== null) return commun;
       if (d.categorie === 'couverture') {
         return verifNombre(d.dureeOccupationJours, 'detail.dureeOccupationJours', {
@@ -339,6 +340,15 @@ function verifDetail(type: TypeEvenement, d: Objet): Verif {
         verifParmi(d.gravite, GRAVITES, 'detail.gravite', 'gravité', false)
       );
   }
+}
+
+/** T22b : date prévue de la carte touchée par « Fait » ; facultative, bornée comme `date`. */
+function verifOccurrenceVisee(v: unknown): Verif {
+  const champ = 'detail.occurrenceVisee';
+  if (absent(v)) return null;
+  if (typeof v !== 'string' || !estDateValide(v)) return erreur('champ_invalide', champ, 'occurrence visée invalide (AAAA-MM-JJ)');
+  if (v < DATE_MIN || v > DATE_MAX) return erreur('hors_bornes', champ, `occurrence visée hors de ${DATE_MIN} … ${DATE_MAX}`);
+  return null;
 }
 
 function verifDateDetail(v: unknown): Verif {

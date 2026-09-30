@@ -556,6 +556,11 @@ interface InterventionCommune {
   /** Libellé du type ('grelinette', 'compost'…), modifiable par la ferme. */
   readonly type: string;
   readonly outil: string | null;
+  /**
+   * T22b (Q24) : date prévue de la carte touchée par « Fait » ; l'intervention solde cette
+   * occurrence et les précédentes. Absente ou null : saisie libre (voix, agent, anciennes saisies).
+   */
+  readonly occurrenceVisee?: DateCalendaire | null;
 }
 
 export type DetailIntervention =

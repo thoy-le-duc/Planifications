@@ -27,6 +27,7 @@ Mesure simulée (node:sqlite, index de `SCHEMA_LOCAL`) :
   - `SQL_RECENTS` découpée en deux requêtes indexées, réunies par UNION ;
   - `SQL_REALISES` restreinte aux séries actives par une jointure.
 - **Relecture incrémentale** : après une saisie, ne recalculer que ce qui a changé.
+- **Robustesse (relecture T22b)** : un `detail` d'événement qui n'est pas du JSON fait lever `json_extract` et échouer toute la lecture de la journée. Filtrer par `json_valid(e.detail)` et tester avec une ligne corrompue. Lire `occurrenceVisee` avec `estDateValide` plutôt qu'une regex.
 - **Au lancement**, Aujourd'hui (écran d'accueil) ne doit plus attendre le préchargement de Planches.
 - **Un jeu d'essai avec des itinéraires valides** (des milliers de tâches) et une mesure e2e de l'écran sur ce jeu.
 - **Question de conflit** : deux téléphones qui annulent la même récolte hors ligne. Le second lot est refusé par le serveur (T10c). Accepter une annulation redondante sans mouvement ? À voir avec Q20.

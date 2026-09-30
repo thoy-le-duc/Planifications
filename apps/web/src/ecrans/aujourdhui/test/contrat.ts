@@ -190,9 +190,15 @@
  *   = aujourd'hui, source 'tap', serie_id de la tâche, campagne_id nul, emplacement_ids = ceux de
  *   la tâche (règle B2), remplace_* nuls, detail = { categorie, type (le libellé), outil (ou
  *   null) }, plus { produit: produit.nom, quantite: produit.quantite } en fertilisation /
- *   amendement ; accepté par validerSaisie. La tâche quitte la liste (le semainier la solde).
+ *   amendement, et (T22b, Q24) occurrenceVisee = la date prévue de la carte touchée
+ *   ('AAAA-MM-JJ', `datePrevue` de la tâche, celle de la clé) ; accepté par validerSaisie. La
+ *   tâche quitte la liste (le semainier la solde : l'occurrence visée et les précédentes,
+ *   jamais la suivante). Les interventions passées au semainier portent `occurrenceVisee` lue
+ *   dans detail.occurrenceVisee (null si absente).
  *   Bandeau « Annuler » 10 s comme T13 (texte : le libellé et la culture) ; annulation =
- *   événement 'intervention' d'annulation, même détail ; la tâche revient. Historique : entrée
+ *   événement 'intervention' d'annulation, même détail (occurrence visée comprise) ; la tâche
+ *   revient. T22b : tests à la fin de ../travaux.test.tsx (ferme du jour { travaux: true,
+ *   faitEnRetard: true } : désherbage de la batavia, carte du J−13 en retard et J+1). Historique : entrée
  *   data-type="intervention", texte avec le libellé et la culture, bouton « Annuler » (nom
  *   accessible « Annuler : <libellé>, <culture> » ou tout nom commençant par « Annuler »).
  * Pastille de charge de la semaine : data-testid="charge-semaine", texte texteCharge(minutes)

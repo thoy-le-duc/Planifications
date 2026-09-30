@@ -130,10 +130,12 @@ export async function marquerFait(ctx: ContexteEcriture, culture: Culture, etape
 
 /**
  * Détail de l'intervention qui solde un travail prévu (T22) : même catégorie, même libellé,
- * l'outil ; le produit et sa quantité en fertilisation et amendement (validerSaisie les exige).
+ * l'outil ; le produit et sa quantité en fertilisation et amendement (validerSaisie les exige) ;
+ * l'occurrence visée, date prévue de la carte touchée (T22b, Q24 : elle solde cette occurrence
+ * et les précédentes, jamais la suivante).
  */
-export function detailDuTravail(travail: TravailPrevu): DetailIntervention {
-  const commun = { type: travail.type, outil: travail.outil };
+export function detailDuTravail(travail: TravailPrevu, occurrenceVisee: DateCalendaire): DetailIntervention {
+  const commun = { type: travail.type, outil: travail.outil, occurrenceVisee };
   switch (travail.categorie) {
     case 'fertilisation':
     case 'amendement': {
@@ -149,8 +151,16 @@ export function detailDuTravail(travail: TravailPrevu): DetailIntervention {
   }
 }
 
-/** « Fait » sur un travail prévu (T22) : l'intervention du même type, à la date du jour. */
-export async function marquerTravailFait(ctx: ContexteEcriture, culture: Culture, travail: TravailPrevu): Promise<Id<'Evenement'>> {
+/**
+ * « Fait » sur un travail prévu (T22) : l'intervention du même type, à la date du jour, qui porte
+ * l'occurrence visée `datePrevue` (la date de la carte touchée, T22b).
+ */
+export async function marquerTravailFait(
+  ctx: ContexteEcriture,
+  culture: Culture,
+  travail: TravailPrevu,
+  datePrevue: DateCalendaire,
+): Promise<Id<'Evenement'>> {
   const e = evenement(ctx.porte, {
     type: 'intervention',
     date: ctx.aujourdhui as DateCalendaire,
@@ -160,7 +170,7 @@ export async function marquerTravailFait(ctx: ContexteEcriture, culture: Culture
     note: null,
     photos: [],
     remplaceEvenement: null,
-    detail: detailDuTravail(travail),
+    detail: detailDuTravail(travail, datePrevue),
   });
   await ctx.porte.ecrireEnsemble([e.ordre]);
   return e.id;
