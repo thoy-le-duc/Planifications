@@ -147,6 +147,7 @@ function porteFactice(): { porte: PorteDonnees; requetes: string[] } {
     ecrire: interdit('ecrire'),
     surveiller: interdit('surveiller'),
     saisirEvenement: interdit('saisirEvenement'),
+    ecrireEnsemble: interdit('ecrireEnsemble'),
     surveillerRefus: interdit('surveillerRefus'),
   };
   return { porte, requetes };

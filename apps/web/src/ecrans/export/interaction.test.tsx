@@ -78,6 +78,7 @@ function porteControlee(mode: 'ok' | 'echec'): { porte: PorteDonnees; liberer: (
     ecrire: interdit('ecrire'),
     surveiller: interdit('surveiller'),
     saisirEvenement: interdit('saisirEvenement'),
+    ecrireEnsemble: interdit('ecrireEnsemble'),
     surveillerRefus: interdit('surveillerRefus'),
   };
   return { porte, liberer: ouvrir, lectures: () => n };

@@ -8,19 +8,29 @@
  *   3. le service PowerSync (configuration powersync/), qui réplique cette base ;
  *   4. l'API (apps/api) avec une clé de signature jetable et CORS pour la page de diagnostic ;
  *   5. playwright -c playwright.synchro.config.ts, qui construit la page avec VITE_API_URL et
- *      VITE_POWERSYNC_URL (figées au build) et la sert sur le port 4174.
+ *      VITE_POWERSYNC_URL (figées au build) et la sert sur le port E2E_PORT_PAGE (4174).
  *
  * Variables facultatives : POSTGRES_IMAGE, POWERSYNC_IMAGE (miroir si Docker Hub est limité ;
  * l'image de PowerSync est figée en 1.26.1 dans docker-compose.yml), CHROMIUM_PATH (Chromium
  * déjà installé), JWT_CLES_PRIVEES (sinon une clé est générée), et les ports si ceux par défaut
- * sont pris : E2E_PORT_POSTGRES (55432), E2E_PORT_POWERSYNC (58080), E2E_PORT_API (3100).
- * La page est servie par playwright.synchro.config.ts (port 4174, ou SYNCHRO_BASE_URL).
+ * sont pris : E2E_PORT_POSTGRES (55432), E2E_PORT_POWERSYNC (58080), E2E_PORT_API (3100),
+ * E2E_PORT_PAGE (4174). La page est servie par playwright.synchro.config.ts (port
+ * E2E_PORT_PAGE, ou SYNCHRO_BASE_URL). T10c : E2E_PROJET_COMPOSE (défaut planif-e2e-synchro)
+ * nomme le projet docker compose, pour que deux bancs tournent en même temps sans se croiser
+ * (conteneurs, volumes et `down -v` de l'arrêt ne touchent que ce projet).
  */
 import { spawn, spawnSync, type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const RACINE = fileURLToPath(new URL('..', import.meta.url));
-const PROJET = 'planif-e2e-synchro';
+const PROJET = projetCompose(process.env.E2E_PROJET_COMPOSE);
+
+/** Nom de projet docker compose : minuscules, chiffres, « - » et « _ », commençant par une lettre ou un chiffre. */
+function projetCompose(valeur: string | undefined): string {
+  if (valeur === undefined || valeur === '') return 'planif-e2e-synchro';
+  if (!/^[a-z0-9][a-z0-9_-]*$/.test(valeur)) throw new Error(`E2E_PROJET_COMPOSE : nom de projet invalide (${valeur})`);
+  return valeur;
+}
 
 /** Port lu dans l'environnement, sinon celui par défaut. */
 function port(variable: string, defaut: number): number {
@@ -34,7 +44,8 @@ function port(variable: string, defaut: number): number {
 const PORT_POSTGRES = port('E2E_PORT_POSTGRES', 55432);
 const PORT_POWERSYNC = port('E2E_PORT_POWERSYNC', 58080);
 const PORT_API = port('E2E_PORT_API', 3100);
-const ORIGINE_PAGE = new URL(process.env.SYNCHRO_BASE_URL ?? 'http://localhost:4174').origin;
+const PORT_PAGE = port('E2E_PORT_PAGE', 4174);
+const ORIGINE_PAGE = new URL(process.env.SYNCHRO_BASE_URL ?? `http://localhost:${String(PORT_PAGE)}`).origin;
 const AUDIENCE = 'powersync-planif';
 const EMETTEUR = `http://localhost:${String(PORT_API)}`;
 

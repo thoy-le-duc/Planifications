@@ -244,6 +244,10 @@ Question : si tu ouvres l'appli et tapes tout de suite sur Planches, l'écran me
 
 Réponse (2026-09-30) : « ok pour l'instant ». La correction reste dans T11b, sans priorité.
 
+### Q20 — Corriger une récolte déjà annulée (posée le 2026-09-30, T10c)
+
+Question : quand une récolte a été annulée, peut-on encore la corriger, par exemple pour dire « finalement c'était 40 kg » ? Aujourd'hui c'est accepté et le stock revient à la quantité corrigée. L'autre choix est de refuser : pour rétablir, on saisit une nouvelle récolte. Même question quand deux téléphones corrigent la même récolte hors ligne : faut-il garder la correction la plus récente (heure du téléphone) ou la dernière arrivée ?
+
 ### À suivre
 
 

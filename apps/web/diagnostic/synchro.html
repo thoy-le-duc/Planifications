@@ -29,6 +29,22 @@
     <ul id="recoltes"></ul>
     <h2>Événements en base locale</h2>
     <ul id="evenements-locaux"></ul>
+    <section id="section-serie" hidden>
+      <h2>Récolte d'une série</h2>
+      <form id="saisie-serie">
+        <label for="quantite-serie">Récolte de la série (kg)</label>
+        <input id="quantite-serie" name="quantite-serie" type="number" inputmode="decimal" step="any" min="0" required />
+        <button type="submit">Enregistrer la récolte de la série</button>
+      </form>
+      <button id="annuler-serie" type="button">Annuler la dernière récolte de la série</button>
+      <h3>Événements de la série</h3>
+      <ul id="evenements-serie"></ul>
+      <h3>Mouvements de stock</h3>
+      <ul id="mouvements"></ul>
+      <h3>Stock</h3>
+      <ul id="stocks"></ul>
+    </section>
+    <p>Saisies en attente d'envoi : <strong id="en-attente" data-testid="en-attente" data-nombre="0">0</strong></p>
     <h2>Refus du serveur</h2>
     <ul id="refus" class="refus"></ul>
     <script type="module" src="/src/diagnostic/synchro.ts"></script>
