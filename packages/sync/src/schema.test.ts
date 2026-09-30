@@ -2,6 +2,7 @@
  * Le schéma local (T10) suit le schéma Postgres de @planif/db : mêmes tables synchronisées, mêmes
  * colonnes, sauf ce qui ne doit jamais descendre sur un téléphone.
  */
+import { readFileSync } from 'node:fs';
 import * as db from '@planif/db';
 import { getTableConfig, PgTable } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
@@ -41,5 +42,27 @@ describe('schéma local', () => {
     expect(colonne?.notNull).toBe(false);
     const serieLocale: Readonly<Record<string, string>> = TABLES_LOCALES.serie;
     expect(serieLocale.rotation_acceptee).toBe('texte');
+  });
+
+  it('T23 : type_intervention descend sur le téléphone (masque en entier 0 / 1, comme les autres booléens)', () => {
+    const locale: Readonly<Record<string, string>> | undefined = (TABLES_LOCALES as Readonly<Record<string, Readonly<Record<string, string>>>>)
+      .type_intervention;
+    expect(locale).toEqual({
+      ferme_id: 'texte',
+      categorie: 'texte',
+      libelle: 'texte',
+      masque: 'entier',
+      cree_le: 'texte',
+      modifie_le: 'texte',
+      supprime_le: 'texte',
+    });
+  });
+
+  it('T23 : les règles de synchro servent les types de la ferme et la liste de départ (ferme_id nul)', () => {
+    const regles = readFileSync(new URL('../../../powersync/sync-config.yaml', import.meta.url), 'utf8');
+    const requetes = [...regles.matchAll(/query:\s*(SELECT[^\n]*FROM type_intervention[^\n]*)/g)].map((r) => (r[1] ?? '').trim());
+    expect(requetes).toContain('SELECT * FROM type_intervention WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)');
+    expect(requetes).toContain('SELECT * FROM type_intervention WHERE ferme_id IS NULL');
+    expect(requetes).toHaveLength(2);
   });
 });
