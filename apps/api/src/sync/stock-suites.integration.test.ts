@@ -41,6 +41,16 @@
  *    rien n'est écrit (ni événement, ni stock, ni historique) ; chaque refus est enregistré dans
  *    refus_synchro (il redescend sur le téléphone). Le lot suivant, de taille normale, passe.
  *    Un lot d'exactement ECRITURES_MAX_PAR_LOT écritures valides est accepté en entier.
+ *    Limite dure (décision du chef) : corps de plus de TAILLE_MAX_CORPS_DURE = 32 Mio (exporté
+ *    par upload.ts) → 413, rien d'écrit, aucun refus enregistré ; le serveur refuse dès l'en-tête
+ *    Content-Length s'il est déclaré, et cesse de lire un flux sans Content-Length au-delà de
+ *    la limite (jamais tout le corps en mémoire).
+ *
+ * 6. PATCH ou DELETE d'un membre de la ferme B sur l'id EXISTANT d'une ligne de la ferme A
+ *    (evenement, article_stock, mouvement_stock) : exactement la même réponse que sur un id
+ *    inexistant (même motif, même message, ferme_id nul dans refus_synchro) ; la ligne ne
+ *    change pas. Aucun indice de son existence. Inchangé : un PUT dont le ferme_id déclaré
+ *    n'est pas une ferme de l'utilisateur → 'ferme_interdite'.
  *
  * 5. mouvement_stock.quantite est numeric(12,6) : une nouvelle migration de packages/db (après
  *    0011) change la colonne ; information_schema dit précision 12, échelle 6 ; une quantité à
@@ -63,6 +73,7 @@ import {
   type BaseJetable,
   type LignesDeFerme,
 } from './test/base-jetable.ts';
+import * as upload from './upload.ts';
 import { TAILLE_MAX_CORPS } from './upload.ts';
 
 const EMETTEUR = 'https://api.planif.test';
@@ -70,6 +81,8 @@ const AUDIENCE = 'powersync-planif';
 const MAINTENANT = new Date('2026-10-01T06:00:00Z');
 /** Au-delà, la requête du membre est jugée bloquée par le verrou d'une autre connexion. */
 const ATTENTE_MAX_MS = 3_000;
+/** Limite dure du corps (décision du chef) : au-delà, 413 et le serveur ne lit pas plus. */
+const TAILLE_MAX_CORPS_DURE = 32 * 1_048_576;
 const DOSSIER_MIGRATIONS = new URL('../../../../packages/db/migrations/', import.meta.url);
 
 interface EcritureEnvoyee {
@@ -667,6 +680,121 @@ decrireAvecBase('T10d')('T10d : suites de la sécurité du stock', { timeout: 60
       const autres = Array.from({ length: ECRITURES_MAX_PAR_LOT - 3 }, () => putRecolte(1, {}, u.id));
       expect(await lot([recolte, article, mouvement, ...autres], u.jeton)).toEqual({ refus: [] });
       expect(await stock(article.id)).toBe(4);
+    });
+  });
+
+  describe('4 bis. limite dure du corps : 413 sans tout lire', () => {
+    it('TAILLE_MAX_CORPS_DURE est exportée par upload.ts et vaut 32 Mio', () => {
+      expect((upload as unknown as Record<string, unknown>).TAILLE_MAX_CORPS_DURE).toBe(TAILLE_MAX_CORPS_DURE);
+    });
+
+    it('Content-Length déclaré au-delà de 32 Mio : 413 tout de suite, rien d’écrit, aucun refus', async () => {
+      const u = await nouveauMembre();
+      const e = putRecolte(1, {}, u.id);
+      const res = await Promise.resolve(
+        app.request('/sync/upload', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${u.jeton}`,
+            'content-length': String(TAILLE_MAX_CORPS_DURE + 1),
+          },
+          body: JSON.stringify({ ecritures: [e] }),
+        }),
+      );
+      expect(res.status).toBe(413);
+      expect(await ecrites(e)).toBe(0);
+      expect(await refusDeLUtilisateur(u.id)).toBe(0);
+    });
+
+    it('flux sans Content-Length de 64 Mio : 413, et le serveur cesse de lire après 32 Mio', async () => {
+      const u = await nouveauMembre();
+      const morceau = new Uint8Array(1_048_576).fill(0x20);
+      let lus = 0;
+      const flux = new ReadableStream<Uint8Array>({
+        pull(controleur) {
+          if (lus >= 64 * 1_048_576) {
+            controleur.close();
+            return;
+          }
+          lus += morceau.length;
+          controleur.enqueue(morceau);
+        },
+      });
+      const requete = new Request('http://localhost/sync/upload', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${u.jeton}` },
+        body: flux,
+        duplex: 'half',
+      });
+      expect(requete.headers.has('content-length')).toBe(false);
+      const res = await Promise.resolve(app.request(requete));
+      expect(res.status).toBe(413);
+      expect(lus, 'octets tirés du flux').toBeLessThanOrEqual(TAILLE_MAX_CORPS_DURE + 2 * 1_048_576);
+      expect(await refusDeLUtilisateur(u.id)).toBe(0);
+    });
+  });
+
+  // ── 6. PATCH et DELETE sur une ligne d'une autre ferme ───────────────────────────────────────
+
+  describe('6. PATCH ou DELETE sur une ligne d’une autre ferme : comme sur un id inexistant', () => {
+    /** Mouvement de la ferme A. */
+    let mouvementA: string;
+
+    beforeAll(async () => {
+      mouvementA = (await recolteAcceptee(7)).mouvement.id;
+    });
+
+    async function refusDeVoisin(id: string, operation: string): Promise<{ motif: string; message: string; ferme_id: string | null }[]> {
+      const r = await base.pool.query<{ motif: string; message: string; ferme_id: string | null }>(
+        `SELECT motif, message, ferme_id FROM refus_synchro WHERE ligne_id = $1 AND operation = $2 AND utilisateur_id = $3`,
+        [id, operation, voisin.id],
+      );
+      return r.rows;
+    }
+
+    async function empreinte(table: string, id: string): Promise<unknown> {
+      const r = await base.pool.query(`SELECT to_jsonb(l) AS l FROM ${TABLE_DE[table] ?? 'evenement'} l WHERE id = $1`, [id]);
+      return r.rows[0];
+    }
+
+    const LIGNES: readonly (readonly [string, () => string, Record<string, unknown>])[] = [
+      ['evenement', () => recolteA, { note: 'piratée' }],
+      ['article_stock', () => articleA, { categorie: 'extra' }],
+      ['mouvement_stock', () => mouvementA, { quantite: 1000 }],
+    ];
+    const CAS_MODIF = LIGNES.flatMap(([table, id, donnees]) =>
+      (['PATCH', 'DELETE'] as const).map((op) => [`${op} ${table}`, table, op, id, donnees] as const),
+    );
+
+    it.each(CAS_MODIF)('%s : même motif et même message qu’un id inexistant, ferme_id nul, la ligne ne change pas', async (_cas, table, op, id, donnees) => {
+      const idA = id();
+      const avant = await empreinte(table, idA);
+      expect(avant, 'la ligne de la ferme A existe').toBeDefined();
+      const inexistant = randomUUID();
+      const ecriture = (cible: string): EcritureEnvoyee => (op === 'PATCH' ? { op, table, id: cible, donnees } : { op, table, id: cible });
+      const versA = await lot([ecriture(idA)], voisin.jeton);
+      const versRien = await lot([ecriture(inexistant)], voisin.jeton);
+      expect(versA.refus).toHaveLength(1);
+      expect(versRien.refus).toHaveLength(1);
+      expect(versA.refus[0]?.motif, 'même motif').toBe(versRien.refus[0]?.motif);
+      expect(versA.refus[0]?.motif).not.toBe('ferme_interdite');
+      const refusA = await refusDeVoisin(idA, op);
+      const refusRien = await refusDeVoisin(inexistant, op);
+      expect(refusA).toHaveLength(1);
+      expect(refusA, 'même motif, même message, ferme_id nul').toEqual(refusRien);
+      expect(refusA[0]?.ferme_id).toBeNull();
+      expect(await empreinte(table, idA)).toEqual(avant);
+    });
+
+    it.each([
+      ['evenement', () => putRecolte(1, {}, voisin.id, fermeA)],
+      ['article_stock', () => putArticle({}, fermeA)],
+      ['mouvement_stock', () => putMouvement(articleA, 1, recolteA, fermeA)],
+    ])('inchangé : PUT %s dont le ferme_id déclaré est la ferme A → ferme_interdite', async (_table, fabriquer) => {
+      const e = fabriquer();
+      expect(await lot([e], voisin.jeton)).toEqual(refusSeul(e, 'ferme_interdite'));
+      expect(await ecrites(e)).toBe(0);
     });
   });
 

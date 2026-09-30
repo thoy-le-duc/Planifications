@@ -91,6 +91,9 @@
  *   M1  Refus 'ferme_interdite' d'un utilisateur qui n'est pas membre actif de la ferme visée :
  *       ferme_id NUL dans refus_synchro (la ligne descend sur son téléphone : elle ne doit pas
  *       lui apprendre l'id d'une ferme qui n'est pas la sienne).
+ *       T10d : un PATCH ou DELETE sur l'id existant d'une ligne d'une autre ferme répond comme
+ *       sur un id inexistant (même motif, même message, ferme_id nul) : plus 'ferme_interdite',
+ *       qui révélait l'existence de la ligne.
  *   M2  Un même lot renvoyé ne crée pas de refus en double : au plus une ligne refus_synchro par
  *       (utilisateur_id, ligne_id, operation, motif).
  *   M7  `date` hors de [2000-01-01, 2100-12-31] et `horodatage` hors de
@@ -731,16 +734,25 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
   });
 
   describe('M1 : refus ferme_interdite d’un non-membre', () => {
-    it('DELETE par un non-membre d’un événement d’une autre ferme : ferme_id nul dans le refus', async () => {
+    it('DELETE par un non-membre d’un événement d’une autre ferme : comme un id inexistant (T10d), ferme_id nul dans le refus', async () => {
       const e = putRecolte(theo.id, ferme, 9);
       expect(await lot([e], theo.jeton)).toEqual({ refus: [] });
+      const inexistant = nouvelId<'Evenement'>();
       const reponse = await lot([{ op: 'DELETE', table: 'evenement', id: e.id }], voisin.jeton);
-      expect(reponse.refus).toEqual([{ table: 'evenement', id: e.id, motif: 'ferme_interdite' }]);
-      const r = await base.pool.query<{ ferme_id: string | null }>(
-        `SELECT ferme_id FROM refus_synchro WHERE ligne_id = $1 AND utilisateur_id = $2`,
-        [e.id, voisin.id],
-      );
-      expect(r.rows).toEqual([{ ferme_id: null }]);
+      const reponseRien = await lot([{ op: 'DELETE', table: 'evenement', id: inexistant }], voisin.jeton);
+      expect(reponse.refus).toEqual([{ table: 'evenement', id: e.id, motif: reponseRien.refus[0]?.motif }]);
+      expect(reponse.refus[0]?.motif).not.toBe('ferme_interdite');
+      const lire = async (id: string) =>
+        (
+          await base.pool.query<{ ferme_id: string | null; motif: string; message: string }>(
+            `SELECT ferme_id, motif, message FROM refus_synchro WHERE ligne_id = $1 AND utilisateur_id = $2`,
+            [id, voisin.id],
+          )
+        ).rows;
+      const refus = await lire(e.id);
+      expect(refus).toEqual(await lire(inexistant));
+      expect(refus.map((l) => l.ferme_id)).toEqual([null]);
+      expect(await evenements(e.id)).toBe(1);
     });
   });
 

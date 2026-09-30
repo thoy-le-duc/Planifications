@@ -23,8 +23,8 @@
  *                    → 'ecriture_invalide'.
  *
  * Règles de `mouvement_stock` (ajout seul) :
- *   - PATCH ou DELETE → 'ajout_seul' (ferme de la ligne existante d'un autre : 'ferme_interdite',
- *     ferme_id nul dans le refus, comme M1). La ligne ne change pas.
+ *   - PATCH ou DELETE → 'ajout_seul' (ligne existante d'une autre ferme : même réponse qu'un id
+ *     inexistant, ferme_id nul dans le refus, T10d). La ligne ne change pas.
  *   - PUT identique à la ligne existante (renvoi) : accepté, rien d'écrit en plus (ni ligne, ni
  *     historique). Même id, autres valeurs → 'ajout_seul', la ligne ne change pas.
  *   - `ferme_id` d'une ferme dont l'utilisateur n'est pas membre actif → 'ferme_interdite'.
@@ -614,10 +614,10 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       ]);
     });
 
-    it('DELETE par un membre d’une autre ferme : ferme_interdite, ferme_id nul dans le refus', async () => {
+    it('DELETE par un membre d’une autre ferme : ajout_seul comme un id inexistant (T10d), ferme_id nul dans le refus', async () => {
       const { mouvement } = await recolteAcceptee(12);
       const suppression: EcritureEnvoyee = { op: 'DELETE', table: 'mouvement_stock', id: mouvement.id };
-      expect((await lot([suppression], voisin.jeton)).refus).toEqual([{ table: 'mouvement_stock', id: mouvement.id, motif: 'ferme_interdite' }]);
+      expect((await lot([suppression], voisin.jeton)).refus).toEqual([{ table: 'mouvement_stock', id: mouvement.id, motif: 'ajout_seul' }]);
       expect(await mouvements(mouvement.id)).toBe(1);
       const refus = await base.pool.query<{ ferme_id: string | null }>(`SELECT ferme_id FROM refus_synchro WHERE ligne_id = $1`, [mouvement.id]);
       expect(refus.rows).toEqual([{ ferme_id: null }]);
