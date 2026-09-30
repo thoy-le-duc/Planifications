@@ -1,6 +1,6 @@
 {
-  "maj": "30 septembre 2026, 17 h UTC",
-  "resume": "Cette fenêtre : **les travaux prévus des itinéraires (T22)**, fusionnés : grelinette, compost, désherbage répété… apparaissent dans Aujourd'hui avec leur temps estimé et la charge de la semaine. **Le plan de culture (T12)**, fusionné aussi : on crée et modifie une série depuis Planches par un appui long, dates et besoins calculés en direct. Prochains : **le serveur des itinéraires (T23)**, puis **l'écran « Mes itinéraires » (T24)** et les suites du formulaire (T12b, dont un sélecteur de semaine pour iPhone).",
+  "maj": "30 septembre 2026, 19 h UTC",
+  "resume": "Fusionnés aujourd'hui en fin de journée : **le plan de culture (T12)**, **les travaux prévus des itinéraires (T22)**, **« Fait » sur un travail en retard qui solde la bonne occurrence (T22b, ta réponse Q24)** et **le serveur qui accepte itinéraires et types d'intervention de la ferme (T23)**, avec une relecture de sécurité (pas de fuite entre fermes, pas de doublon de type par espaces ou majuscules). Prochain : **l'écran « Mes itinéraires » (T24)**, puis T12b (sélecteur de semaine iPhone), T10g et T04b.",
   "en_cours": {},
   "attente": "Rien de bloquant côté questions : Théophane a répondu le 30 septembre à Q13, Q14, Q15, Q17, Q18, Q20, Q23 et Q24 (tickets T04b, T09c, T10g, T14d, T22b). À faire de son côté pour la mise en ligne : créer le compte Brevo et choisir le domaine d'envoi (T09c).",
   "visuels": [
@@ -29,7 +29,7 @@
     {
       "titre": "Itinéraires et travaux de culture",
       "etat": "en cours",
-      "texte": "T22 fait : chaque itinéraire porte ses travaux prévus (travail du sol, amendement, désherbage, palissage…), à X jours d'une étape, répétables, avec un temps estimé facultatif. Ils apparaissent dans Aujourd'hui avec « Fait » en un geste et la charge de la semaine (« 1 h 24 de travail »). À venir : T23 (serveur, types d'intervention de la ferme) et T24 (écran « Mes itinéraires »).",
+      "texte": "T22, T22b et T23 faits : chaque itinéraire porte ses travaux prévus (travail du sol, amendement, désherbage, palissage…), répétables, avec un temps estimé ; ils apparaissent dans Aujourd'hui avec « Fait » en un geste et la charge de la semaine. Le serveur accepte les itinéraires et les types d'intervention propres à la ferme (liste de départ de 20 types). Reste l'écran « Mes itinéraires » (T24).",
       "images": [
         "aujourdhui-travaux.png"
       ],
