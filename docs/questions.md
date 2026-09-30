@@ -195,13 +195,19 @@ Question : jusqu'ici, n'importe quelle quantité passait (même 10³⁰⁸ kg). 
 
 Tant que Théophane n'a pas répondu, ces valeurs s'appliquent ; une saisie au-dessus est refusée avec le motif « plafond dépassé ».
 
+Réponse (2026-09-30) : « oui, on garde ces valeurs ». Les plafonds provisoires deviennent définitifs (T10g : renommer `PLAFONDS_PROVISOIRES`).
+
 ### Q14 — Service d'envoi des e-mails de connexion (posée le 2026-09-29, T09b)
 
 Question : l'appli envoie le code de connexion par un serveur SMTP générique (variables `SMTP_*`). Il faut choisir un fournisseur hébergé en UE (par exemple Brevo, Scaleway Transactional Email, Mailjet), signer le contrat de sous-traitance, et choisir le domaine d'envoi (enregistrements SPF, DKIM, DMARC). À faire avant la mise en service. Tant que rien n'est choisi, seul le mode console de développement fonctionne.
 
+Réponse (2026-09-30) : **Brevo**. Théophane crée le compte et choisit le domaine d'envoi ; le branchement (SPF, DKIM, DMARC, variables `SMTP_*`) est dans T09c.
+
 ### Q15 — Limite de connexions par adresse IP au magasin (posée le 2026-09-29, T09b)
 
 Question : une même adresse IP peut demander au plus 30 codes et en vérifier 60 par heure. Au magasin, tout le monde sort par la même IP : ces seuils suffisent-ils (combien de personnes se connectent par heure au plus) ?
+
+Réponse (2026-09-30) : « moins de 10 personnes par heure » : on garde 30 demandes et 60 vérifications par heure et par IP.
 
 ### Q16 — Maquettes de l'identité visuelle (posée le 2026-09-29)
 
@@ -234,9 +240,13 @@ Question : valeurs par défaut des alertes de rotation (délai minimal / conseil
 
 Les kiwis sont exclus (liane pérenne). La rotation a-t-elle un sens pour la fraise hors-sol ?
 
+Réponse (2026-09-30) : pas d'alerte de rotation sur le hors-sol (abri `hors_sol` ou gouttière) ; les délais par famille proposés restent, modifiables par ferme. Ticket T04b.
+
 ### Q18 — Saison à cheval sur deux années (posée le 2026-09-29, T14)
 
 Question : dans un tableur, une série semée en S40 et plantée en S2 : faut-il comprendre que la plantation est l'année suivante ? Pour l'instant, ces lignes sont signalées en erreur (`dates_incoherentes`) plutôt que devinées.
+
+Réponse (2026-09-30) : « oui, année suivante ». Quand une date retombe avant la précédente, l'import passe à l'année suivante et le signale dans l'aperçu. Ticket T14d.
 
 ### Q19 — Premier tap juste après l'ouverture de l'appli (posée le 2026-09-30, T11)
 
@@ -248,9 +258,13 @@ Réponse (2026-09-30) : « ok pour l'instant ». La correction reste dans T11b, 
 
 Question : désherbage prévu tous les 14 jours, le 17 et le 31. Tu le fais en retard le 25 et tu tapes « Fait ». Aujourd'hui, l'intervention solde l'occurrence la plus proche, donc celle du 31, qui disparaît, tandis que celle du 17 reste affichée en retard. Proposition : « Fait » sur une carte en retard solde cette occurrence et les précédentes, et laisse la suivante (le 31) à faire. D'accord ?
 
+Réponse (2026-09-30) : « Fait » sur une carte en retard solde cette occurrence et les précédentes ; la suivante reste à faire. Ticket T22b.
+
 ### Q23 — Travail prévu jamais saisi (posée le 2026-09-30, T22)
 
 Question : une grelinette prévue 10 jours avant la plantation n'a pas été saisie. Une fois la plantation faite, doit-elle disparaître de la liste (proposition retenue pour l'instant) ou rester en retard jusqu'à ce qu'on la coche ?
+
+Réponse (2026-09-30) : « elle disparaît ». Comportement de T22 confirmé.
 
 ### Q22 — Itinéraires et travaux de culture (posée le 2026-09-30, demande de Théophane)
 
@@ -273,6 +287,8 @@ Réponse (2026-09-30) : « ok pour 10 000 m et 1 000 000 plants ».
 ### Q20 — Corriger une récolte déjà annulée (posée le 2026-09-30, T10c)
 
 Question : quand une récolte a été annulée, peut-on encore la corriger, par exemple pour dire « finalement c'était 40 kg » ? Aujourd'hui c'est accepté et le stock revient à la quantité corrigée. L'autre choix est de refuser : pour rétablir, on saisit une nouvelle récolte. Même question quand deux téléphones corrigent la même récolte hors ligne : faut-il garder la correction la plus récente (heure du téléphone) ou la dernière arrivée ?
+
+Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
 ### À suivre
 
