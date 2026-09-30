@@ -9,6 +9,9 @@
  *   est UNE saisie : il s'écrit en une seule transaction, tout ou rien. Si une écriture est
  *   refusée, rien n'est écrit, et chaque écriture du lot figure dans les refus (la fautive avec
  *   son motif) : rien ne disparaît du téléphone en silence. Contrat : stock.integration.test.ts.
+ * - T10e : une série et ses occupations (serie.ts) se créent (PUT) et se modifient (PATCH, la
+ *   suppression douce comprise) ; un lot qui en contient est tout ou rien comme le stock, et la
+ *   cohérence série ↔ occupations se vérifie en fin de lot. Contrat : serie.integration.test.ts.
  * - Un refus métier répond 200 (une 4xx bloquerait la file de PowerSync) et s'enregistre dans
  *   `refus_synchro`, qui redescend sur le téléphone de son auteur par la synchro.
  * - Une panne (base injoignable…) lève : 500, PowerSync renverra le lot. Jamais de refus
@@ -47,6 +50,7 @@ import type { Contexte } from '../dependances.ts';
 import { lireEvenement } from './evenement.ts';
 import type { MotifRefus, Refus } from './motifs.ts';
 import { verifierCorrection, verifierReferences, type TransactionDb } from './references.ts';
+import { ecrireSerie, fermesDesLignesVisees, TABLES_SERIE, verifierFinDeLot, type SeriesTouchees } from './serie.ts';
 import { ecrireArticle, ecrireMouvement } from './stock.ts';
 
 export type { MotifRefus } from './motifs.ts';
@@ -88,8 +92,13 @@ const REFUS_PAR_REQUETE = 100;
 
 /** Tables du stock (T10c) : un lot qui en écrit une est accepté ou refusé en entier. */
 const TABLES_STOCK = new Set(['article_stock', 'mouvement_stock']);
-/** Tables que le téléphone écrit (T10 : le journal ; T10c : le stock ; les autres suivront avec leurs écrans). */
-const TABLES_ECRITES = new Set(['evenement', ...TABLES_STOCK]);
+/**
+ * Tables d'une saisie tout ou rien (T10c : le stock ; T10e : une série et ses occupations) : un
+ * lot qui en écrit une est accepté ou refusé en entier, sous le verrou de chaque ferme touchée.
+ */
+const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE]);
+/** Tables que le téléphone écrit (T10 : le journal ; T10c : le stock ; T10e : les séries ; les autres suivront avec leurs écrans). */
+const TABLES_ECRITES = new Set(['evenement', ...TABLES_TOUT_OU_RIEN]);
 /** Tables en ajout seul : ni modification ni suppression (sinon : création seule, 'table_interdite'). */
 const TABLES_AJOUT_SEUL = new Set(['evenement', 'mouvement_stock']);
 
@@ -338,13 +347,27 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     return { motif: TABLES_AJOUT_SEUL.has(e.table) ? 'ajout_seul' : 'table_interdite', fermeId: existant?.ferme_id ?? null };
   }
 
-  /** Une écriture, dans la transaction `tx` : null si acceptée, sinon le refus. */
-  async function traiter(tx: TransactionDb, e: EcritureRecue, utilisateurId: Id<'Utilisateur'>, fermes: ReadonlySet<string>): Promise<Refus | null> {
+  /**
+   * Une écriture, dans la transaction `tx` : null si acceptée, sinon le refus. `touchees` : séries
+   * touchées par le lot (T10e), vérifiées en fin de lot ; `index` : rang de l'écriture dans le lot.
+   */
+  async function traiter(
+    tx: TransactionDb,
+    e: EcritureRecue,
+    utilisateurId: Id<'Utilisateur'>,
+    fermes: ReadonlySet<string>,
+    touchees: SeriesTouchees,
+    index: number,
+  ): Promise<Refus | null> {
     const fermeDonnee = fermeDesDonnees(e);
     // e.table est lue ensuite comme nom de table SQL : seulement l'une de ces constantes.
     if (!TABLES_ECRITES.has(e.table)) return { motif: 'table_interdite', fermeId: fermeDonnee };
     if (e.op === null || e.id === '' || e.donneesIllisibles) {
       return { motif: 'ecriture_invalide', precision: 'écriture mal formée', fermeId: fermeDonnee };
+    }
+    if (e.op === 'PATCH' && (e.table === 'serie' || e.table === 'occupation')) {
+      // T10e : une série et ses occupations se modifient (suppression douce comprise).
+      return ecrireSerie(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, utilisateurId, touchees, index);
     }
     if (e.op !== 'PUT') return modificationRefusee(tx, e, fermes);
 
@@ -356,6 +379,9 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       const lecture = lireEvenement(e.id, donnees);
       if (!lecture.ok) return { motif: 'ecriture_invalide', precision: lecture.raison, fermeId: fermeDonnee };
       return ecrireEvenement(tx, lecture.valeur, utilisateurId);
+    }
+    if (e.table === 'serie' || e.table === 'occupation') {
+      return ecrireSerie(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId, touchees, index);
     }
     // Stock : la ferme, validée par le cœur, est forcément celle de fermeDonnee (UUID de la ferme du jeton).
     const ferme = fermeDonnee ?? '';
@@ -374,21 +400,26 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     fermes: ReadonlySet<string>,
   ): Promise<{ readonly index: number; readonly refus: Refus } | null> {
     let courante = 0;
-    // Verrou du stock de chaque ferme visée (relecture T10c) : un seul verrou par ferme, pris
-    // avant toute écriture, fermes triées. Deux lots qui touchent le stock d'une même ferme
-    // passent l'un après l'autre (le second voit les mouvements du premier), sans interblocage.
-    // Seulement les fermes de l'utilisateur : personne ne bloque le stock d'une autre ferme.
-    const verrous = [
-      ...new Set(ecritures.filter((e) => TABLES_STOCK.has(e.table)).map(fermeDesDonnees).filter((f): f is string => f !== null && fermes.has(f))),
-    ].sort();
+    const touchees: SeriesTouchees = new Map();
     try {
       await db.transaction(async (tx) => {
-        for (const ferme of verrous) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`stock:${ferme}`}, 0))`);
+        // Un seul verrou par ferme visée (relecture T10c, T10e), pris avant toute écriture, fermes
+        // triées : deux lots qui touchent le stock ou les séries d'une même ferme passent l'un
+        // après l'autre (le second voit les écritures du premier), sans interblocage. Seulement
+        // les fermes de l'utilisateur : personne ne bloque une autre ferme. La ferme d'un PATCH
+        // est celle de la ligne existante (ses données ne la portent pas forcément).
+        const tout = ecritures.filter((e) => TABLES_TOUT_OU_RIEN.has(e.table));
+        const declarees = tout.map(fermeDesDonnees).filter((f): f is string => f !== null && fermes.has(f));
+        const verrous = [...new Set([...declarees, ...(await fermesDesLignesVisees(tx, tout, fermes))])].sort();
+        for (const ferme of verrous) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`ferme:${ferme}`}, 0))`);
         for (const [i, e] of ecritures.entries()) {
           courante = i;
-          const refus = await traiter(tx, e, utilisateurId, fermes);
+          const refus = await traiter(tx, e, utilisateurId, fermes, touchees, i);
           if (refus !== null) throw new RefusDansLot(i, refus);
         }
+        // T10e, décision 1 : la cohérence série ↔ occupations se vérifie une fois tout le lot écrit.
+        const incoherence = await verifierFinDeLot(tx, touchees, fermes);
+        if (incoherence !== null) throw new RefusDansLot(incoherence.index, incoherence.refus);
       });
       return null;
     } catch (erreur) {
@@ -481,8 +512,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       return c.json({ refus });
     }
 
-    if (ecritures.some((e) => TABLES_STOCK.has(e.table))) {
-      // T10c : une saisie de stock, tout ou rien. Chaque écriture d'un lot refusé a son refus.
+    if (ecritures.some((e) => TABLES_TOUT_OU_RIEN.has(e.table))) {
+      // T10c, T10e : une saisie de stock ou une série, tout ou rien. Chaque écriture d'un lot refusé a son refus.
       const echec = await ecrireEnsemble(ecritures, utilisateurId, fermes);
       if (echec !== null) {
         await refuser(
