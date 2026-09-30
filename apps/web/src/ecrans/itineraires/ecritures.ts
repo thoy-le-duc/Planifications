@@ -262,7 +262,8 @@ export function messageModifieAilleurs(n: number): string {
  * une ligne n'est ramenée que si chaque colonne que nous avions changée vaut encore ce que nous
  * avions écrit, et que personne ne l'a supprimée ; ramenée, seules ces colonnes reprennent leur
  * valeur d'avant (ce qu'un autre téléphone a changé ailleurs reste). Sinon la ligne est laissée
- * telle quelle (et les occupations d'une série laissée aussi). Une ligne que notre écriture n'a
+ * telle quelle (et les occupations d’une série laissée aussi) ; une série n’est pas ramenée non
+ * plus si une planche ajoutée ailleurs ne collerait plus à ses dates. Une ligne que notre écriture n’a
  * finalement pas touchée (revérification, décision 11) est ignorée. Rend le message à montrer
  * si des lignes ont été laissées, sinon null.
  */
@@ -273,6 +274,19 @@ export async function ramener(ctx: ContexteEcriture, etat: EtatAvant, types: rea
   const laissees = new Set<string>();
   const seriesRamenees = new Map<string, Serie>();
   let refusees = 0;
+  // Occupations actives des séries écrites : une planche ajoutée ailleurs doit rester cohérente
+  // avec la série ramenée, sinon la série n'est pas ramenée.
+  const ecrites = new Set(etat.lignes.map((l) => l.id));
+  const seriesIds = etat.lignes.filter((l) => l.table === 'serie').map((l) => l.id);
+  const autresOccupations =
+    seriesIds.length === 0
+      ? []
+      : (
+          await ctx.porte.lire<Ligne>(
+            `SELECT * FROM occupation WHERE serie_id IN (${seriesIds.map(() => '?').join(', ')}) AND supprime_le IS NULL`,
+            seriesIds,
+          )
+        ).filter((o) => !ecrites.has(String(o.id)));
   const vaut = (c: Ligne, valeurs: Readonly<Record<string, Valeur>>) => Object.keys(valeurs).every((k) => (c[k] ?? null) === (valeurs[k] ?? null));
   const ordreTables: readonly Table[] = ['itineraire', 'serie', 'occupation', 'type_intervention'];
   for (const table of ordreTables) {
@@ -288,8 +302,9 @@ export async function ramener(ctx: ContexteEcriture, etat: EtatAvant, types: rea
         else if (table === 'type_intervention') valide = validerTypeIntervention({ ...ramenee }).ok;
         else if (table === 'serie') {
           const r = validerSerie({ ...ramenee });
-          valide = r.ok;
-          if (r.ok) seriesRamenees.set(l.id, r.valeur);
+          const serie = r.ok ? r.valeur : null;
+          valide = serie !== null && autresOccupations.every((o) => o.serie_id !== l.id || validerOccupation({ ...o }, serie, { datesDeLaSerie: true }).ok);
+          if (serie !== null && valide) seriesRamenees.set(l.id, serie);
         } else {
           const serie = l.serieId === null ? undefined : seriesRamenees.get(l.serieId);
           valide = serie === undefined || ramenee.supprime_le !== null || validerOccupation({ ...ramenee }, serie, { datesDeLaSerie: true }).ok;
