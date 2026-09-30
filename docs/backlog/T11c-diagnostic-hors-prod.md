@@ -28,3 +28,16 @@
 - [ ] Un test sur le build de production : aucune page ni aucun morceau `mesures`/`diagnostic`, aucune chaîne propre au code de test.
 - [ ] `pnpm e2e` et `pnpm e2e:synchro` passent sur le build des essais.
 - [ ] L'entrée de l'appli est identique (même empreinte) dans les deux builds.
+
+## Décisions du chef
+
+1. Le budget JS reste mesuré sur `dist/`, puisque l'appli est identique octet pour octet dans les deux builds.
+2. Enchaînement des builds :
+   - `pnpm verif` et la CI construisent `dist/` (production) puis `dist-essais/`, avant `pnpm e2e` ;
+   - `playwright.config.ts` sert `dist-essais/` ;
+   - `pnpm e2e` lancé seul suppose les deux builds faits (documenté dans `CLAUDE.md`) ;
+   - tableau des commandes de `CLAUDE.md` et `.github/workflows/ci.yml` mis à jour.
+3. `e2e:synchro` suit la même recette « essais » dans son propre dossier (`dist-synchro/`, avec ses URL et sa CSP), sans toucher à `dist-essais/`.
+4. `.gitignore` (racine) entre dans le périmètre : `dist-essais/` y est ajouté.
+5. Effet de bord accepté : `pnpm test` réécrit `apps/web/dist/` (le test lance les deux builds).
+6. Les motifs `/mesures/` et `/diagnostic/` peuvent rester dans `navigateFallbackDenylist` de `sw.js`.
