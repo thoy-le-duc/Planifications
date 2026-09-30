@@ -223,6 +223,39 @@ export interface ParametresPerenne {
 
 export type ModeItineraire = 'semis_direct' | 'plant_maison' | 'plant_achete';
 
+/** Repère d'un travail prévu : une étape de la série (T22). */
+export type RepereTravail = 'semis_pepiniere' | 'mise_en_place' | 'debut_recolte' | 'fin_recolte';
+
+/** Temps de travail estimé d'un travail prévu : minutes par 100 m de planche ou par planche. */
+export interface TempsEstime {
+  readonly minutes: Minutes;
+  readonly par: 'cent_metres' | 'planche';
+}
+
+/** Produit d'un travail de fertilisation ou d'amendement, et sa quantité. */
+export interface ProduitTravail {
+  readonly nom: string;
+  readonly quantite: Quantite;
+}
+
+/**
+ * Travail prévu d'un itinéraire (T22) : « grelinette 10 jours avant la mise en place » vaut
+ * repère `mise_en_place`, décalage −10. Répété tous les N jours jusqu'au repère de fin
+ * (compris) quand `repetition` est donnée. Le produit est obligatoire en fertilisation et en
+ * amendement, absent ailleurs (comme `DetailIntervention`).
+ */
+export interface TravailPrevu {
+  readonly categorie: CategorieIntervention;
+  /** Libellé du type d'intervention de la ferme, le même texte que `DetailIntervention.type`. */
+  readonly type: string;
+  readonly repere: RepereTravail;
+  readonly decalageJours: number;
+  readonly repetition: { readonly tousLesJours: Jours; readonly repereFin: RepereTravail } | null;
+  readonly outil: string | null;
+  readonly produit: ProduitTravail | null;
+  readonly tempsEstime: TempsEstime | null;
+}
+
 /** Paramètres copiés tels quels dans l'instantané d'une série. */
 interface ParametresCommuns {
   readonly periodeUsage: PeriodeSemaines | null;
@@ -233,6 +266,8 @@ interface ParametresCommuns {
   readonly margeSecurite: Pourcentage;
   readonly rendementAttendu: RendementAttendu | null;
   readonly perenne: ParametresPerenne | null;
+  /** Travaux prévus (T22) ; absente dans les itinéraires et séries d'avant T22 : aucun travail. */
+  readonly travauxPrevus?: readonly TravailPrevu[];
 }
 
 /** Semis direct : toutes les façons de compter la densité sont possibles. */

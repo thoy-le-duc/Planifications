@@ -22,10 +22,28 @@ export {
   type CampagneSemainier,
   type EmplacementConcerne,
   type EtapeTache,
+  type InterventionRealisee,
   type RealisesSemainier,
   type SerieSemainier,
+  type TacheEtape,
   type TacheSemainier,
+  type TacheTravail,
+  type TravailDeTache,
 } from './planification/semainier.ts';
+
+// Travaux prévus des itinéraires (T22) : dates, temps estimé, charge de la semaine, instantané
+// d'une série (planification/travaux.ts) et leurs règles d'écriture (saisies/travaux.ts), pour
+// le serveur (T23), l'écran des itinéraires (T24) et l'écran Aujourd'hui.
+export { chargeSemaine, datesTravailPrevu, instantaneItineraire, tempsEstimeMinutes } from './planification/travaux.ts';
+export {
+  CATEGORIES_AVEC_PRODUIT,
+  PLAFONDS_TRAVAUX,
+  REPERES_TRAVAIL,
+  validerTravailPrevu,
+  validerTravauxPrevus,
+  type OptionsTravaux,
+  type ResultatTravaux,
+} from './saisies/travaux.ts';
 export {
   appliquerRealises,
   calculerDatesSerie,

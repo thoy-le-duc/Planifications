@@ -15,6 +15,7 @@
   - pour les séries à venir, l'appli propose « appliquer aux N séries à venir ? » avec la liste des séries, et une confirmation explicite ;
   - tout s'écrit en une transaction, annulable.
 - **Types d'intervention de la ferme** : ajouter, renommer ou masquer. Un type déjà utilisé ne se supprime pas, il se masque.
+- **Travail qui ne tombe jamais** : un travail valide peut n'avoir aucune date (par exemple +60 j après la mise en place, répété jusqu'au début de récolte à +49 j). L'écran le signale au lieu de l'enregistrer en silence (relecture T22).
 - **Au champ** : cibles d'au moins 56 px, et l'écran marche hors ligne.
 
 ## Critères d'acceptation

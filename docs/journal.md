@@ -16,6 +16,18 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
   - Une entrée d'historique illisible ne s'annule pas.
   - Planches seulement pour l'instant, sans gouttières.
 - **Bloquant** : rien. Suites dans T12b : sélecteur de semaine sur iPhone, décision de rotation périmée, bandeau face à un autre téléphone.
+## 2026-09-30 — T22 : les travaux prévus des itinéraires
+
+- **Fait** :
+  - Le cœur calcule les travaux prévus d'un itinéraire : travail du sol, amendement, désherbage, palissage… Chacun est placé à X jours d'une étape repère.
+  - Un travail peut se répéter (tous les N jours jusqu'à un repère) et porter un temps estimé facultatif.
+  - Les travaux s'affichent dans Aujourd'hui, mêlés aux étapes. « Marquer fait » écrit une intervention en un geste, annulable 10 s, et une pastille montre la charge de la semaine (« 1 h 24 de travail »).
+- **Décidé** :
+  - Un travail prévu avant son repère, jamais saisi, disparaît dès que le repère est fait (Q23, par défaut).
+  - Le produit est obligatoire en fertilisation et en amendement.
+  - Plafonds : 12 travaux par itinéraire (instantané de 8 Kio, revérifié après normalisation) et 1 000 dates par travail.
+  - La table des types d'intervention part dans T23.
+- **Bloquant** : rien. À trancher : Q23 (confirmer), Q24 (« Fait » sur un travail en retard).
 
 ## 2026-09-30 — T10e : le serveur accepte les séries des téléphones
 
