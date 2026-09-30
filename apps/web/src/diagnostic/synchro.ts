@@ -1,6 +1,7 @@
 /**
  * T10 — page de diagnostic de la synchro (hors navigation, hors service worker) :
- * `/diagnostic/synchro.html?ferme=<id>`. Sert au test de bout en bout (e2e-synchro/) et à
+ * `/diagnostic/synchro.html?ferme=<id>` (T10c : `&serie=<id>` ; T10e :
+ * `&plan=<itineraireId>&saison=<saisonId>&planches=<id>,<id>`). Sert au test de bout en bout (e2e-synchro/) et à
  * vérifier la synchro sur un vrai téléphone.
  *
  * Tout passe par la porte de @planif/sync, ouverte par src/donnees : la page n'importe jamais
@@ -14,6 +15,7 @@ import { urlApi } from '../connexion/client.ts';
 import { deconnecterAvecConfirmation } from '../connexion/deconnexion.ts';
 import { lireSession, stockageNavigateur } from '../connexion/session.ts';
 import { ouvrirDonnees } from '../donnees/index.ts';
+import { brancherSectionPlanSerie } from './plan-serie.ts';
 import { brancherSectionSerie } from './stock-serie.ts';
 
 const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -221,8 +223,24 @@ function demarrer(): void {
     etat.dataset.etat = e;
     etat.textContent = LIBELLES[e];
   });
-  const serie = new URLSearchParams(location.search).get('serie') ?? '';
+  const parametres = new URLSearchParams(location.search);
+  const serie = parametres.get('serie') ?? '';
   brancher(donnees.porte, fermeId, session.utilisateurId, MOTIF_UUID.test(serie) ? serie.toLowerCase() : null);
+
+  // T10e : section « Série de batavias », inerte (cachée) sans paramètres plan, saison et planches valides.
+  const plan = parametres.get('plan') ?? '';
+  const saison = parametres.get('saison') ?? '';
+  const planches = (parametres.get('planches') ?? '').split(',').filter((p) => p !== '');
+  if (MOTIF_UUID.test(plan) && MOTIF_UUID.test(saison) && planches.length > 0 && planches.every((p) => MOTIF_UUID.test(p))) {
+    brancherSectionPlanSerie({
+      porte: donnees.porte,
+      fermeId,
+      itineraireId: plan.toLowerCase(),
+      saisonId: saison.toLowerCase(),
+      planches: planches.map((p) => p.toLowerCase()),
+      afficherErreur,
+    });
+  }
 
   // Transactions pas encore envoyées au serveur (T10c).
   const enAttente = element('en-attente', HTMLElement);

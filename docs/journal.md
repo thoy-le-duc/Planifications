@@ -2,6 +2,20 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T10e : le serveur accepte les séries des téléphones
+
+- **Fait** : une série et ses occupations, créées, modifiées, supprimées ou rétablies au téléphone, même hors ligne, arrivent au serveur.
+  - Le serveur recalcule lui-même les dates, et une série est acceptée ou refusée avec ses occupations.
+  - Il écrit l'historique (avant et après exacts).
+  - Il garde la décision prise sur une alerte de rotation rouge (`rotation_acceptee`).
+  - Plafonds : 10 000 m et 1 000 000 de plants (Q21).
+- **Décidé** :
+  - la variété et l'itinéraire doivent être de l'espèce de la série ;
+  - une série ne peut pas être créée déjà supprimée ;
+  - une mise en place hors saison ou une longueur plus grande que la planche restent acceptées : ce sont des alertes affichées, pas des refus ;
+  - les occupations de plantation pérenne ne se modifient pas depuis le téléphone, tant que les pérennes n'ont pas leur ticket.
+- **Bloquant** : aucun. La relecture de sécurité a trouvé un bloquant, corrigé : un PATCH pouvait transformer l'occupation d'une plantation en occupation de série. T12 (le plan de culture) est débloqué.
+
 ## 2026-09-30 — T10d : suites de la sécurité du stock
 
 - **Fait** :

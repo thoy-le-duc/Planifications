@@ -2,8 +2,8 @@
 
 **Objectif** : planifier une série en quelques gestes, en voyant tout de suite ses dates, les conflits de place et les alertes de rotation.
 
-**Dépend de** : T04, T05, T11
-**Périmètre** : `apps/web/src/ecrans/serie/**`, `apps/web/e2e/serie.e2e.ts`
+**Dépend de** : T04, T05, T10e (le serveur accepte les séries), T11
+**Périmètre** : `apps/web/src/ecrans/serie/**`, `apps/web/e2e/serie.e2e.ts`, et (décision du chef) `apps/web/src/ecrans/plan/**` (appui long), `apps/web/src/App.tsx`, `apps/web/src/donnees/amorcer.ts` (jeu d'amorçage)
 
 ## Règles
 
@@ -12,6 +12,21 @@
 - Une alerte rouge n'empêche pas d'enregistrer, mais demande une confirmation explicite ; la décision est gardée dans l'historique.
 - Modifier une série crée une ligne de MODIFICATION ; annulation possible depuis l'historique.
 - Création rapide depuis la vue 2D : appui long sur une case vide pré-remplit emplacement et semaine.
+
+## Décisions du chef (2026-09-30, après l'étude du testeur)
+
+- **Prérequis serveur** : T10e ouvre `serie` et `occupation` au téléphone. L'historique (`modification`) est écrit par le serveur seul.
+- **Annulation** (la voie la plus simple et la plus robuste) :
+  - comme dans T13, un bandeau « Annuler » (10 s) défait la dernière action, même hors ligne ;
+  - l'historique complet vient du serveur ; une fois synchronisée, chaque ligne s'annule depuis l'historique ;
+  - annuler une modification = un PATCH qui rétablit les valeurs de `modification.avant` ;
+  - annuler une création = une suppression douce de la série et de ses occupations ;
+  - annuler une annulation = une nouvelle modification.
+- **Alerte rouge acceptée** : gardée dans `serie.rotation_acceptee` (T10e), donc visible dans l'historique.
+- **Plusieurs planches** : une occupation par planche, chacune avec sa longueur (par défaut la longueur de la planche).
+- **Plantations pérennes** (relecture T10e) : le serveur refuse toute modification d'une occupation qui n'est pas celle d'une série (plantation, couverture). L'écran ne propose donc jamais de modifier ou de supprimer ces occupations ; elles s'affichent en lecture seule.
+- **Instantané** (relecture T10e) : le serveur recalcule les dates à partir des paramètres envoyés. L'écran envoie donc l'instantané fidèle de l'itinéraire choisi, jamais des durées modifiées à la main.
+- **Gestes pour la batavia** : appui long, taper « bat », choisir Batavia, garder l'itinéraire proposé, choisir « récolte à partir de », régler la semaine, Enregistrer. Soit 7 gestes au plus.
 
 ## Critères d'acceptation
 
