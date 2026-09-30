@@ -78,6 +78,12 @@
  *    - un mouvement du téléphone qui arrive PLUS TARD pour cet événement (autre id, quantité
  *      quelconque) est accepté sans rien écrire ; le stock reste juste ;
  *    - chaîne sans article (récolte sans stock, d'avant T13) : aucun mouvement n'est créé.
+ *    - id v5 RÉSERVÉ (décision du chef après la dernière relecture) : si l'id déterministe est
+ *      déjà pris par un mouvement qui n'est pas le mouvement d'écart de cet événement
+ *      (recolte_id différent), le lot qui porte la correction ou l'annulation est refusé EN
+ *      ENTIER ('ecriture_invalide' pour l'événement), le refus est enregistré, le stock et la
+ *      quantité en vigueur ne bougent pas. Le renvoi légitime (mouvement v5 déjà écrit pour CET
+ *      événement) reste accepté sans doublon.
  *    Exemple : 12 (stock 12), A corrige à 15 à 05:00 (+3) ; B, hors ligne, change seulement la
  *    date à 06:00 (correction à 12 kg, sans mouvement) → acceptée, 12 en vigueur, −3 écrit par
  *    le serveur, stock 12.
@@ -699,6 +705,47 @@ decrireAvecBase('T10g')('T10g : récoltes annulées et corrections concurrentes'
       }
       expect(await mouvementsDe(b.id)).toHaveLength(1);
       expect(await stock(article)).toBe(12);
+    });
+
+    it('id v5 réservé d’avance par un autre mouvement : la correction 12 → 1 sans mouvement est refusée (ecriture_invalide), stock 17, 12 reste en vigueur', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const c = putRemplacement(recolte, 'correction', H('05:00'), 1);
+
+      // Lot 1 : une vraie récolte R2 de 5, dont le mouvement +5 prend l'id v5 de C.
+      const r2 = putRecolte(5);
+      const reserve: EcritureEnvoyee = { ...putMouvement(article, 5, r2.id), id: idMouvementServeur(c.id) };
+      expect(await lot([r2, reserve])).toEqual({ refus: [] });
+      expect(await stock(article)).toBe(17);
+
+      // Lot 2 : la correction C, sans mouvement.
+      expect(await lot([c])).toEqual(refusSeul(c, 'ecriture_invalide'));
+      expect(await ecrites(c)).toBe(0);
+      expect((await refusEnregistres(c.id)).map((r) => r.motif)).toEqual(['ecriture_invalide']);
+      expect(await stock(article), '12 + 5, rien de plus').toBe(17);
+      expect(await quantiteEcrite(reserve.id), 'le mouvement de R2 est intact').toBe(5);
+      expect(await enVigueur([recolte, c])).toEqual([{ id: recolte.id, quantite: 12 }]);
+    });
+
+    it('id v5 réservé, correction envoyée dans un lot avec une autre écriture de stock : refusé en entier, stock 17', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const c = putRemplacement(recolte, 'correction', H('05:00'), 1);
+      const r2 = putRecolte(5);
+      expect(await lot([r2, { ...putMouvement(article, 5, r2.id), id: idMouvementServeur(c.id) }])).toEqual({ refus: [] });
+      const r3 = putRecolte(2);
+      await refuseEnEntier([c, r3, putMouvement(article, 2, r3.id)], c, 'ecriture_invalide');
+      expect(await stock(article)).toBe(17);
+    });
+
+    it('témoin : renvoi légitime (mouvement v5 déjà écrit pour CET événement) accepté sans doublon', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const c = putRemplacement(recolte, 'correction', H('05:00'), 1);
+      expect(await lot([c])).toEqual({ refus: [] });
+      expect(await quantiteEcrite(idMouvementServeur(c.id))).toBe(-11);
+      expect(await lot([c])).toEqual({ refus: [] });
+      expect(await refusDe(c.id)).toBe(0);
+      expect(await compter(`SELECT 1 FROM mouvement_stock WHERE recolte_id = $1`, [c.id])).toBe(1);
+      expect(await stock(article)).toBe(1);
+      expect(await enVigueur([recolte, c])).toEqual([{ id: c.id, quantite: 1 }]);
     });
 
     it('annulation envoyée sans mouvement (après 12 → 15) : acceptée, −15 écrit par le serveur (moins la quantité en vigueur), stock 0, renvoi sans doublon', async () => {
