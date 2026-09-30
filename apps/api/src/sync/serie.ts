@@ -465,7 +465,8 @@ export async function fermesDesLignesVisees(
   fermes: ReadonlySet<string>,
 ): Promise<string[]> {
   const trouvees = new Set<string>();
-  for (const table of ['serie', 'occupation'] as const) {
+  // T23 : les itinéraires et les types d'intervention se modifient aussi, sous le même verrou.
+  for (const table of ['serie', 'occupation', 'itineraire', 'type_intervention'] as const) {
     const ids = [...new Set(ecritures.filter((e) => e.table === table && e.op === 'PATCH' && estUuid(e.id)).map((e) => e.id.toLowerCase()))];
     if (ids.length === 0) continue;
     const r = await tx.execute<{ ferme_id: string }>(

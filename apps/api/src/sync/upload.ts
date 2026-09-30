@@ -12,6 +12,9 @@
  * - T10e : une série et ses occupations (serie.ts) se créent (PUT) et se modifient (PATCH, la
  *   suppression douce comprise) ; un lot qui en contient est tout ou rien comme le stock, et la
  *   cohérence série ↔ occupations se vérifie en fin de lot. Contrat : serie.integration.test.ts.
+ * - T23 : un itinéraire et un type d'intervention (itineraire.ts) se créent et se modifient de même,
+ *   tout ou rien avec les séries du même lot ; la bibliothèque commune reste en lecture seule.
+ *   Contrat : itineraire.integration.test.ts.
  * - Un refus métier répond 200 (une 4xx bloquerait la file de PowerSync) et s'enregistre dans
  *   `refus_synchro`, qui redescend sur le téléphone de son auteur par la synchro.
  * - Une panne (base injoignable…) lève : 500, PowerSync renverra le lot. Jamais de refus
@@ -50,6 +53,7 @@ import type { Contexte } from '../dependances.ts';
 import { lireEvenement } from './evenement.ts';
 import type { MotifRefus, Refus } from './motifs.ts';
 import { verifierCorrection, verifierReferences, type TransactionDb } from './references.ts';
+import { ecrireItineraire, estTableItineraire, TABLES_ITINERAIRE } from './itineraire.ts';
 import { ecrireSerie, fermesDesLignesVisees, TABLES_SERIE, verifierFinDeLot, type SeriesTouchees } from './serie.ts';
 import { ecrireArticle, ecrireMouvement } from './stock.ts';
 
@@ -93,11 +97,12 @@ const REFUS_PAR_REQUETE = 100;
 /** Tables du stock (T10c) : un lot qui en écrit une est accepté ou refusé en entier. */
 const TABLES_STOCK = new Set(['article_stock', 'mouvement_stock']);
 /**
- * Tables d'une saisie tout ou rien (T10c : le stock ; T10e : une série et ses occupations) : un
- * lot qui en écrit une est accepté ou refusé en entier, sous le verrou de chaque ferme touchée.
+ * Tables d'une saisie tout ou rien (T10c : le stock ; T10e : une série et ses occupations ; T23 :
+ * les itinéraires et les types d'intervention) : un lot qui en écrit une est accepté ou refusé en
+ * entier, sous le verrou de chaque ferme touchée.
  */
-const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE]);
-/** Tables que le téléphone écrit (T10 : le journal ; T10c : le stock ; T10e : les séries ; les autres suivront avec leurs écrans). */
+const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE, ...TABLES_ITINERAIRE]);
+/** Tables que le téléphone écrit (T10 : le journal ; T10c : le stock ; T10e : les séries ; T23 : les itinéraires ; les autres suivront avec leurs écrans). */
 const TABLES_ECRITES = new Set(['evenement', ...TABLES_TOUT_OU_RIEN]);
 /** Tables en ajout seul : ni modification ni suppression (sinon : création seule, 'table_interdite'). */
 const TABLES_AJOUT_SEUL = new Set(['evenement', 'mouvement_stock']);
@@ -369,6 +374,10 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       // T10e : une série et ses occupations se modifient (suppression douce comprise).
       return ecrireSerie(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, utilisateurId, touchees, index);
     }
+    if (e.op === 'PATCH' && estTableItineraire(e.table)) {
+      // T23 : un itinéraire et un type d'intervention se modifient (suppression douce et masque compris).
+      return ecrireItineraire(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, utilisateurId);
+    }
     if (e.op !== 'PUT') return modificationRefusee(tx, e, fermes);
 
     if (fermeDonnee !== null && !fermes.has(fermeDonnee)) return { motif: 'ferme_interdite', fermeId: fermeDonnee };
@@ -383,6 +392,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     if (e.table === 'serie' || e.table === 'occupation') {
       return ecrireSerie(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId, touchees, index);
     }
+    if (estTableItineraire(e.table)) return ecrireItineraire(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
     // Stock : la ferme, validée par le cœur, est forcément celle de fermeDonnee (UUID de la ferme du jeton).
     const ferme = fermeDonnee ?? '';
     const put = { id: e.id, donnees };
