@@ -44,6 +44,22 @@
       <h3>Stock</h3>
       <ul id="stocks"></ul>
     </section>
+    <section id="section-plan-serie" hidden>
+      <h2>Série de batavias</h2>
+      <form id="creation-serie">
+        <label for="debut-recolte-serie">Début de récolte de la série</label>
+        <input id="debut-recolte-serie" name="debut-recolte-serie" type="text" inputmode="numeric" placeholder="AAAA-MM-JJ" required />
+        <button type="submit">Créer la série</button>
+      </form>
+      <button id="decaler-serie" type="button">Décaler la série d’une semaine</button>
+      <button id="annuler-modification-serie" type="button">Annuler la dernière modification de la série</button>
+      <h3>Séries</h3>
+      <ul id="series"></ul>
+      <h3>Occupations</h3>
+      <ul id="occupations"></ul>
+      <h3>Historique du serveur</h3>
+      <ul id="historique"></ul>
+    </section>
     <p>Saisies en attente d'envoi : <strong id="en-attente" data-testid="en-attente" data-nombre="0">0</strong></p>
     <h2>Refus du serveur</h2>
     <ul id="refus" class="refus"></ul>
