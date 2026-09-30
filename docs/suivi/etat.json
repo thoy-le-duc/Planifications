@@ -1,16 +1,24 @@
 {
- "maj": "29 septembre 2026, 17 h 35 UTC",
- "resume": "Le **moteur**, la **connexion** et la **synchro hors ligne** sont fusionnés : un téléphone sans réseau garde ses saisies et les partage avec la ferme au retour du réseau. En cours : durcissement de la connexion (T09b) et règles des saisies dans le cœur (T10b). **Maquettes à valider** avant les premiers vrais écrans (T11, T13).",
- "en_cours": {
-  "T09b": "en cours",
-  "T10b": "en cours"
- },
- "attente": "**Valider les maquettes** (lien ci-dessous) : couleurs, typo, gros boutons. Une fois validées, un ticket design les applique à tous les écrans, avant T11 et T13.",
+ "maj": "30 septembre 2026, 0 h UTC",
+ "resume": "Fusionnés : **moteur**, **connexion sécurisée**, **synchro hors ligne**, **règles des saisies**, **export complet et compressé**, **moteur d'import de tableur**, et l'**identité visuelle** : l'appli ressemble maintenant aux maquettes. Prochains : **vue des planches (T11)** et **saisie au champ (T13)**.",
+ "en_cours": {},
+ "attente": "Répondre à Q13 (plafonds des quantités), Q14 (fournisseur d'e-mail), Q15 (connexions au magasin), Q17 (délais de retour par famille) et Q18 (saison à cheval sur deux années).",
  "visuels": [
   {
-   "titre": "Maquettes : identité visuelle",
-   "etat": "à valider",
-   "texte": "Quatre écrans téléphone : Aujourd'hui, Planches, Saisie d'une récolte, Connexion. Vert forêt, orange pour les retards, typo lisible au soleil, boutons pour les gants.",
+   "titre": "L'appli habillée",
+   "etat": "fait",
+   "images": [
+    "connexion-code.png",
+    "aujourdhui.png",
+    "ferme.png"
+   ],
+   "alt": "Écrans de l'appli au téléphone",
+   "texte": "T16. Connexion, coquille avec la barre du bas, onglet Ferme (export et déconnexion). Polices livrées avec l'appli, lisible au soleil et zoomée."
+  },
+  {
+   "titre": "Maquettes validées",
+   "etat": "fait",
+   "texte": "Dix écrans : aujourd'hui, semaine, planches, nouvelle série, saisie, dicter, import, ferme, connexion, ordinateur.",
    "lien": "https://claude.ai/artifact/CkYjAD2qX9mxw3FNLT9miP",
    "lien_texte": "Voir les maquettes"
   },
@@ -18,11 +26,6 @@
    "titre": "Synchro hors ligne",
    "etat": "fait",
    "texte": "T10. Deux téléphones sur la même ferme : une récolte saisie sans réseau arrive chez le collègue au retour du réseau. Testé de bout en bout à chaque modification."
-  },
-  {
-   "titre": "Écran de connexion",
-   "etat": "fait",
-   "texte": "T09. Code à 6 chiffres par e-mail, sans mot de passe. Version fonctionnelle brute ; elle prendra l'habillage des maquettes."
   },
   {
    "titre": "Aperçu du moteur",
