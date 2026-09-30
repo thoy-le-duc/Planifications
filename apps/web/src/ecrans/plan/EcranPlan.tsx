@@ -6,13 +6,30 @@
  * Chargé à la demande par App ; reçoit la porte (jamais PowerSync). Seules les lignes visibles
  * (plus une marge) sont dans le DOM : le défilement reste fluide sur 400 planches.
  */
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as EvenementPointeur,
+  type ReactNode,
+} from 'react';
 import type { PorteDonnees } from '@planif/sync';
+import type { DepartSerie, SaisieSerieAnnulable } from '../serie/index.ts';
 import './plan.css';
 import { obtenirDebutDePlan, obtenirPlan, obtenirSaisons, planEnCache, saisonsEnCache, surChangement, type PlanLu } from './cache.ts';
 import {
   fenetreVisible,
   HAUTEUR_LIGNE_PX,
+  LARGEUR_ETIQUETTE_PX,
+  LARGEUR_SEMAINE_PX,
   LIBELLES_COURTS_CONFLITS,
   saisonParDefaut,
   type BarrePlan,
@@ -31,12 +48,25 @@ export interface ProprietesEcranPlan {
   readonly aujourdhui?: () => string;
 }
 
+/**
+ * Formulaire d'une série (T12), chargé à la demande : ni dans le JavaScript de démarrage, ni
+ * dans le morceau de cet écran.
+ */
+const chargerFormulaire = () => import('../serie/index.ts');
+const FormulaireSerie = lazy(chargerFormulaire);
+
+/** Appui long sur une case vide (T12) : durée, et déplacement toléré du doigt. */
+const DELAI_APPUI_LONG_MS = 500;
+const TOLERANCE_APPUI_PX = 10;
+/** Durée du bandeau « Annuler » après l'enregistrement d'une série (comme T13). */
+const DELAI_ANNULATION_MS = 10_000;
+
 /** Marque de performance posée quand les premières lignes sont dessinées (e2e/plan.e2e.ts). */
 export const MARQUE_PLAN_AFFICHE = 'planif:plan-affiche';
 
-/** Largeur d'une semaine et de la colonne des codes, en px. */
-const LARGEUR_SEMAINE = 36;
-const LARGEUR_ETIQUETTE = 92;
+/** Largeur d'une semaine et de la colonne des codes, en px (calculs.ts, partagées avec T12). */
+const LARGEUR_SEMAINE = LARGEUR_SEMAINE_PX;
+const LARGEUR_ETIQUETTE = LARGEUR_ETIQUETTE_PX;
 const HAUTEUR_ENTETE = 28;
 const PX_PAR_JOUR = LARGEUR_SEMAINE / 7;
 /** En deçà (px), la marge intérieure de la barre (plan.css) la ferait plus large que ses dates. */
@@ -173,7 +203,7 @@ type Detail =
 const cleConflit = (c: ConflitPlan) => `${c.sorte}-${c.du}-${c.occupations.join('-')}`;
 
 /** Feuille en bas de l'écran : titre, contenu, un seul bouton « Fermer » (Échap ferme aussi). */
-function Feuille({ titre, surFermer, children }: { readonly titre: string; readonly surFermer: () => void; readonly children: ReactNode }) {
+function Feuille({ titre, surFermer, actions, children }: { readonly titre: string; readonly surFermer: () => void; readonly actions?: ReactNode; readonly children: ReactNode }) {
   const idTitre = useId();
   const fermer = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -191,6 +221,7 @@ function Feuille({ titre, surFermer, children }: { readonly titre: string; reado
       <div role="dialog" aria-modal="true" aria-labelledby={idTitre} className="plan-detail">
         <h2 id={idTitre}>{titre}</h2>
         {children}
+        {actions}
         <button ref={fermer} type="button" className="plan-fermer" onClick={surFermer}>
           Fermer
         </button>
@@ -199,11 +230,35 @@ function Feuille({ titre, surFermer, children }: { readonly titre: string; reado
   );
 }
 
-function DetailSerie({ ligne, barre, surFermer }: { readonly ligne: LigneEmplacementPlan; readonly barre: BarrePlan; readonly surFermer: () => void }) {
+interface ProprietesDetailSerie {
+  readonly ligne: LigneEmplacementPlan;
+  readonly barre: BarrePlan;
+  readonly surFermer: () => void;
+  readonly surModifier: (serieId: string) => void;
+}
+
+/**
+ * Détail d'une barre. Une série se modifie (T12, « Modifier la série ») ; une plantation ou une
+ * couverture reste en lecture seule (le serveur refuse de les modifier depuis le téléphone).
+ */
+function DetailSerie({ ligne, barre, surFermer, surModifier }: ProprietesDetailSerie) {
   const conflits = ligne.conflits.filter((c) => c.occupations.includes(barre.occupationId));
   const nature = barre.serieId !== null ? 'Série' : barre.plantationId !== null ? 'Plantation' : 'Couverture';
+  const serieId = barre.serieId;
+  const actions =
+    serieId === null ? undefined : (
+      <button
+        type="button"
+        className="plan-modifier"
+        onClick={() => {
+          surModifier(serieId);
+        }}
+      >
+        Modifier la série
+      </button>
+    );
   return (
-    <Feuille titre="Détail de la série" surFermer={surFermer}>
+    <Feuille titre="Détail de la série" surFermer={surFermer} actions={actions}>
       <p className="plan-detail-culture">{barre.libelle}</p>
       <dl>
         <dt>Emplacement</dt>
@@ -305,6 +360,9 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   const plan = lu?.plan ?? null;
   const [echec, setEchec] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
+  const [formulaire, setFormulaire] = useState<DepartSerie | null>(null);
+  const [annulable, setAnnulable] = useState<(SaisieSerieAnnulable & { readonly numero: number }) | null>(null);
+  const numeroAnnulable = useRef(0);
   const defilement = useRef<HTMLDivElement>(null);
   const total = plan?.lignes.length ?? 0;
   const [vue, setVue] = useState(() => fenetre(null, total));
@@ -415,13 +473,80 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
     el.scrollLeft = semaineCourante === null ? 0 : Math.max(0, semaineCourante * LARGEUR_SEMAINE - utile / 3);
   }, [saisonAffichee, semaineCourante]);
 
-  // Une marque par ouverture de l'écran, quand les premières lignes sont dessinées.
+  // Une marque par ouverture de l'écran, quand les premières lignes sont dessinées ; le
+  // formulaire d'une série se charge ensuite, au calme (T12 : il s'ouvre alors tout de suite).
   const marquee = useRef(false);
   useEffect(() => {
     if (plan === null || marquee.current) return;
     marquee.current = true;
     performance.mark(MARQUE_PLAN_AFFICHE);
+    const precharger = () => {
+      chargerFormulaire().catch((erreur: unknown) => {
+        console.warn('Formulaire de série non préchargé', erreur);
+      });
+    };
+    const minuterie = setTimeout(precharger, 1_000);
+    return () => {
+      clearTimeout(minuterie);
+    };
   }, [plan]);
+
+  // « Annuler » : DELAI_ANNULATION_MS après l'enregistrement d'une série.
+  useEffect(() => {
+    if (annulable === null) return undefined;
+    const minuterie = setTimeout(() => {
+      setAnnulable((a) => (a?.numero === annulable.numero ? null : a));
+    }, DELAI_ANNULATION_MS);
+    return () => {
+      clearTimeout(minuterie);
+    };
+  }, [annulable]);
+
+  // Appui long sur une case vide (T12) : planche et semaine sous le doigt.
+  const appui = useRef<{ readonly x: number; readonly y: number; readonly minuterie: ReturnType<typeof setTimeout> } | null>(null);
+  const lacherAppui = useCallback(() => {
+    if (appui.current !== null) clearTimeout(appui.current.minuterie);
+    appui.current = null;
+  }, []);
+  useEffect(() => lacherAppui, [lacherAppui]);
+  const semainesDuPlan = plan?.semaines ?? AUCUNE_SEMAINE;
+  const saisonDuPlan = plan?.saison.id ?? null;
+  const surPointeurBas = useCallback(
+    (e: EvenementPointeur<HTMLDivElement>) => {
+      lacherAppui();
+      if (!e.isPrimary || e.button > 0 || !(e.target instanceof Element)) return;
+      // Sur une barre ou sur l'étiquette (code de la planche) : pas de création.
+      if (e.target.closest('[data-testid="barre"], .plan-etiquette') !== null) return;
+      const ligne = e.target.closest<HTMLElement>('[data-testid="ligne-plan"][data-sorte="emplacement"]');
+      const emplacementId = ligne?.dataset.id;
+      if (ligne === null || emplacementId === undefined) return;
+      const dx = e.clientX - ligne.getBoundingClientRect().left - LARGEUR_ETIQUETTE_PX;
+      if (dx < 0) return;
+      const semaine = semainesDuPlan[Math.floor(dx / LARGEUR_SEMAINE_PX)];
+      if (semaine === undefined) return;
+      const x = e.clientX;
+      const y = e.clientY;
+      const minuterie = setTimeout(() => {
+        appui.current = null;
+        setDetail(null);
+        setFormulaire({
+          sorte: 'creation',
+          emplacementId,
+          semaine: `${String(semaine.annee)}-W${String(semaine.semaine).padStart(2, '0')}`,
+          ...(saisonDuPlan === null ? {} : { saisonId: saisonDuPlan }),
+        });
+      }, DELAI_APPUI_LONG_MS);
+      appui.current = { x, y, minuterie };
+    },
+    [lacherAppui, semainesDuPlan, saisonDuPlan],
+  );
+  const surPointeurBouge = useCallback(
+    (e: EvenementPointeur<HTMLDivElement>) => {
+      const a = appui.current;
+      if (a !== null && Math.hypot(e.clientX - a.x, e.clientY - a.y) > TOLERANCE_APPUI_PX) lacherAppui();
+    },
+    [lacherAppui],
+  );
 
   const surBarre = useCallback((ligne: LigneEmplacementPlan, barre: BarrePlan) => {
     setDetail({ sorte: 'serie', ligne, barre });
@@ -431,6 +556,23 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   }, []);
   const fermerDetail = useCallback(() => {
     setDetail(null);
+  }, []);
+  const modifierSerie = useCallback((serieId: string) => {
+    setDetail(null);
+    setFormulaire({ sorte: 'modification', serieId });
+  }, []);
+  const fermerFormulaire = useCallback(() => {
+    setFormulaire(null);
+  }, []);
+  const surEnregistree = useCallback((saisie: SaisieSerieAnnulable) => {
+    numeroAnnulable.current++;
+    setAnnulable({ texte: saisie.texte, annuler: () => saisie.annuler(), numero: numeroAnnulable.current });
+  }, []);
+  const annuler = useCallback((a: SaisieSerieAnnulable & { readonly numero: number }) => {
+    setAnnulable((x) => (x?.numero === a.numero ? null : x));
+    a.annuler().catch((erreur: unknown) => {
+      console.error('Annulation impossible', erreur);
+    });
   }, []);
 
   const lignesVisibles = useMemo(() => {
@@ -477,9 +619,33 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          className="plan-nouvelle"
+          onClick={() => {
+            setFormulaire({ sorte: 'creation', ...(saisonId === null ? {} : { saisonId }) });
+          }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Nouvelle série
+        </button>
       </div>
       <div data-testid="plan-defilement" ref={defilement} className="plan-defilement">
-        <div className="plan-grille" style={{ width: largeur, height: hauteur }}>
+        <div
+          className="plan-grille"
+          style={{ width: largeur, height: hauteur }}
+          onPointerDown={surPointeurBas}
+          onPointerMove={surPointeurBouge}
+          onPointerUp={lacherAppui}
+          onPointerCancel={lacherAppui}
+          onPointerLeave={lacherAppui}
+          onContextMenu={(e) => {
+            // L'appui long crée une série : pas de menu du navigateur sur les lignes.
+            if (e.target instanceof Element && e.target.closest('[data-testid="ligne-plan"]') !== null) e.preventDefault();
+          }}
+        >
           <EnteteSemaines semaines={semaines} courante={semaineCourante} largeur={largeur} />
           {semaineCourante !== null && (
             <div
@@ -500,8 +666,31 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
         </div>
       </div>
       <Legende />
-      {detail?.sorte === 'serie' && <DetailSerie ligne={detail.ligne} barre={detail.barre} surFermer={fermerDetail} />}
+      {detail?.sorte === 'serie' && <DetailSerie ligne={detail.ligne} barre={detail.barre} surFermer={fermerDetail} surModifier={modifierSerie} />}
       {detail?.sorte === 'conflits' && <DetailConflits ligne={detail.ligne} surFermer={fermerDetail} />}
+      {formulaire !== null && (
+        <Suspense fallback={null}>
+          <FormulaireSerie porte={porte} fermeId={fermeId} depart={formulaire} aujourdhui={() => jour} surFermer={fermerFormulaire} surEnregistree={surEnregistree} />
+        </Suspense>
+      )}
+      {annulable !== null && (
+        <div key={annulable.numero} data-testid="saisie-annulable" role="status" className="plan-bandeau">
+          <span className="plan-bandeau-texte">
+            <strong>Série enregistrée</strong>
+            <span>{annulable.texte}</span>
+          </span>
+          <button
+            type="button"
+            className="plan-bandeau-annuler"
+            onClick={() => {
+              annuler(annulable);
+            }}
+          >
+            Annuler
+          </button>
+          <span aria-hidden="true" className="plan-bandeau-temps" />
+        </div>
+      )}
     </div>
   );
 }
