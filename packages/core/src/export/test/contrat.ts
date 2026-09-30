@@ -349,6 +349,7 @@ export const TABLES_ATTENDUES = [
   'secteur_emplacement',
   'secteur_irrigation',
   'serie',
+  'type_intervention',
   'utilisateur',
   'variete',
   'zone',
