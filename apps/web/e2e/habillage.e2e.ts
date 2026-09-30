@@ -340,6 +340,10 @@ test('Ferme : un effacement en attente est signalé par une alerte orange', asyn
   // Session et marqueur posés ensemble : sans session, l'écran de connexion reprendrait
   // l'effacement (et le réussirait, la base de l'autre compte n'existant pas ici).
   await page.goto('/');
+  // T20 : attendre l'écran de connexion avant de poser la marque. Sinon, chargé à la demande,
+  // il peut démarrer après elle, reprendre l'effacement et l'effacer avant le rechargement
+  // (6 échecs sur 30 sur main). Même course que deconnexion.e2e.ts, corrigée dans T19.
+  await expect(page.getByLabel(/adresse e-mail/i)).toBeVisible();
   await page.evaluate(
     ([cleSession, session, cleEffacement, enAttente]) => {
       localStorage.setItem(cleSession, session);
