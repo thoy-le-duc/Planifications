@@ -6,6 +6,7 @@ export * from './domaine/index.ts';
 export * from './saisies/index.ts';
 export * from './saisies/stock.ts';
 export * from './saisies/serie.ts';
+export * from './saisies/itineraire.ts';
 export * from './export/index.ts';
 export * from './import/index.ts';
 

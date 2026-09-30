@@ -66,7 +66,7 @@ export const CATEGORIES_AVEC_PRODUIT: readonly CategorieIntervention[] = ['ferti
  * Caractères de contrôle et demi-paires de substitution : ils s'écrivent en JSON sur 6 octets
  * (\u0001), et casseraient la garantie des 8 192 octets de l'instantané. Aucun libellé n'en a besoin.
  */
-function texteInterdit(v: string): boolean {
+export function texteInterdit(v: string): boolean {
   for (let i = 0; i < v.length; i++) {
     const c = v.charCodeAt(i);
     if (c < 0x20 || c === 0x7f) return true;
