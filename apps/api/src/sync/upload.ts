@@ -20,6 +20,9 @@
  *   tronqués, données trop grosses non conservées, erreur de données de la base = refus.
  * - Limites : corps ≤ 5 Mio (413), lot ≤ 500 écritures (400), tailles de l'événement dans
  *   evenement.ts.
+ * - T10d : une ligne d'une autre ferme (référence, PATCH, DELETE) se comporte exactement comme
+ *   une ligne inexistante ; seul un ferme_id étranger déclaré par l'écriture elle-même donne
+ *   'ferme_interdite'.
  */
 import { ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
 import {
@@ -240,16 +243,20 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     return null;
   }
 
-  /** PATCH ou DELETE : refusé (ajout seul, ou création seule pour un article). La ferme est celle de la ligne. */
+  /**
+   * PATCH ou DELETE : refusé (ajout seul, ou création seule pour un article). La ferme du refus
+   * est celle de la ligne, lue seulement parmi les fermes de l'utilisateur (T10d) : une ligne
+   * d'une autre ferme répond exactement comme un id inexistant (même motif, ferme nulle).
+   */
   async function modificationRefusee(tx: TransactionDb, e: EcritureRecue, fermes: ReadonlySet<string>): Promise<Refus> {
     const [existant] = estUuid(e.id)
       ? (
           await tx.execute<{ ferme_id: string }>(
-            sql`SELECT ferme_id::text AS ferme_id FROM ${sql.identifier(e.table)} WHERE id = ${e.id.toLowerCase()}::uuid`,
+            sql`SELECT ferme_id::text AS ferme_id FROM ${sql.identifier(e.table)}
+                WHERE id = ${e.id.toLowerCase()}::uuid AND ferme_id = ANY(${sql.param([...fermes])}::uuid[])`,
           )
         ).rows
       : [];
-    if (existant !== undefined && !fermes.has(existant.ferme_id)) return { motif: 'ferme_interdite', fermeId: existant.ferme_id };
     return { motif: TABLES_AJOUT_SEUL.has(e.table) ? 'ajout_seul' : 'table_interdite', fermeId: existant?.ferme_id ?? null };
   }
 
