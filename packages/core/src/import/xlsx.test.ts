@@ -241,7 +241,7 @@ describe('lecteurXlsx.lire : références numériques qui ne sont pas des caract
 
 // ── 4e relecture (T14c) ──────────────────────────────────────────────────────────────────────
 
-describe('lecteurXlsx.lire : caractères interdits en XML 1.0, en référence comme en échappement OOXML → classeur_illisible (T14c)', () => {
+describe('lecteurXlsx.lire : caractères interdits en XML 1.0 → classeur_illisible, contrôles OOXML → espace (T14c)', () => {
   const SST = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
   const enLigne = (texte: string) => classeurSimple(`<row r="1"><c r="A1" t="inlineStr"><is><t>${texte}</t></is></c></row>`);
   const partagee = (texte: string) =>
@@ -302,9 +302,9 @@ describe('lecteurXlsx.lire : caractères interdits en XML 1.0, en référence co
     await attendreIllisible('a&#x1f;b');
   });
 
-  it('échappements OOXML _x0001_ à _x001F_ interdits (sauf _x0009_, _x000A_, _x000D_) → illisible', async () => {
-    for (const n of INTERDITS) await attendreIllisible(`a_x${hex4(n)}_b`);
-    await attendreIllisible('a_x001f_b');
+  it('décision du chef : échappements OOXML _x0001_ à _x001F_ (sauf _x0009_, _x000A_, _x000D_) → remplacés par une espace, classeur lisible', async () => {
+    for (const n of INTERDITS) await attendreLu(`a_x${hex4(n)}_b`, 'a b');
+    await attendreLu('a_x001f_b_x000B_c', 'a b c');
   });
 
   it('caractère de contrôle écrit tel quel dans le XML (octet 0x01, 0x0B, 0x1F) → illisible', async () => {

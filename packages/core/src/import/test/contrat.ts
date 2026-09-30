@@ -82,9 +82,13 @@
  *     référence `&#…;` note un point de code, et `&#xD83D;&#xDE00;` reste refusée (règle XML) ;
  *     `_x005F_xD83D_` reste le texte « _xD83D_ » ;
  *   - (4e relecture, T14c) caractères de contrôle interdits en XML 1.0 : U+0001 à U+0008, U+000B,
- *     U+000C, U+000E à U+001F, qu'ils soient écrits en référence (`&#1;`, `&#x1F;`), en échappement
- *     OOXML (`_x0001_`, `_x001f_`) ou tels quels dans le XML → illisible, dans un texte comme dans un
- *     attribut ; tabulation, LF et CR (`&#9;` `&#xA;` `_x000D_`…) restent acceptés.
+ *     U+000C, U+000E à U+001F, écrits en référence (`&#1;`, `&#x1F;`) ou tels quels dans le XML
+ *     → illisible (XML invalide), dans un texte comme dans un attribut. DÉCISION DU CHEF : écrits en
+ *     échappement OOXML (`_x0001_`, `_x000B_`, `_x001f_`, minuscules comprises), ils sont REMPLACÉS
+ *     PAR UNE ESPACE dans le texte de la cellule, le classeur reste lisible (Excel écrit ainsi un
+ *     caractère de contrôle collé depuis Word ou PowerPoint) ; `_x0000_` et les moitiés de paire
+ *     seules restent refusés (voir plus haut). Tabulation, LF et CR (`&#9;` `&#xA;` `_x000D_`…)
+ *     restent acceptés tels quels.
  * Entités XML (`&amp;` `&lt;` `&gt;` `&quot;` `&apos;`, `&#233;`, `&#xE9;`) et échappements OOXML
  * (`_x0041_` → 'A', `_x005F_x0041_` → '_x0041_' : `_x005F_` échappe le soulignement) décodés dans
  * les textes et les attributs, en temps et en mémoire LINÉAIRES : une chaîne en ligne de 5 millions
