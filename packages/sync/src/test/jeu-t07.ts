@@ -10,7 +10,7 @@
  * identifiants ne doivent jamais sortir dans l'export de la première.
  */
 import { TABLES_LOCALES, type NomTableLocale } from '../schema.ts';
-import type { BaseMemoire } from './base-memoire.ts';
+import type { BaseLocale } from '../types.ts';
 
 type Valeur = string | number | null;
 type Ligne = Record<string, Valeur>;
@@ -81,8 +81,12 @@ const NOTES = [
   '@Théo : à voir',
 ];
 
-/** Remplit `base` (créée depuis SCHEMA_LOCAL) : ferme principale au volume de T07, ferme voisine réduite. */
-export async function remplirJeuT07(base: BaseMemoire, graine = 7): Promise<JeuT07> {
+/**
+ * Remplit `base` (créée depuis SCHEMA_LOCAL) : ferme principale au volume de T07, ferme voisine réduite.
+ * T11 : toute base qui a `writeTransaction` (base mémoire des tests, ou PowerSync dans la page
+ * d'amorçage des tests de bout en bout, /diagnostic/amorcer.html).
+ */
+export async function remplirJeuT07(base: Pick<BaseLocale, 'writeTransaction'>, graine = 7): Promise<JeuT07> {
   const alea = creerAlea(graine);
   const entier = (min: number, max: number) => min + Math.floor(alea() * (max - min + 1));
   const choisir = <T>(liste: readonly T[]): T => {

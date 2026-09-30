@@ -34,7 +34,9 @@ import { surveillerCsp } from './outils.ts';
  *     chacun ≥ 48 × 48 px, aria-current="page" sur l'onglet affiché ; au démarrage : Aujourd'hui ;
  *   - chaque onglet : en-tête vert avec un h1 au nom de l'onglet (Archivo), interlettrage
  *     −0,01em ; 34 px pour Aujourd'hui, 32 px pour Planches, Dicter et Ferme ;
- *   - Aujourd'hui, Planches, Dicter : écran d'attente propre, un texte « Bientôt : … » ;
+ *   - Aujourd'hui, Dicter : écran d'attente propre, un texte « Bientôt : … » ; Planches (T11) :
+ *     l'écran de la vue 2D (e2e/plan.e2e.ts), plus de « Bientôt » ; ici, sans ferme dans la
+ *     base locale (session factice), il reste propre : en-tête, pas de défilement horizontal ;
  *   - Ferme (maquette « Ferme ») : bouton « Exporter toute ma ferme » (T15) et bouton
  *     « Se déconnecter » (T09b, texte orange #9A4A0F), noms accessibles exacts, ≥ 48 px ;
  *     intitulé de section h2 « Mes données » en Atkinson Hyperlegible 700, majuscules
@@ -292,7 +294,9 @@ test('coquille : barre de navigation basse, onglets, écrans d’attente', async
     await expect(onglet(page, libelle)).toHaveAttribute('aria-current', 'page');
     await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
     await enTeteVert(page, libelle);
-    await expect(page.getByText(/^Bientôt : .+/)).toBeVisible();
+    // T11 : Planches n'est plus un écran d'attente (vue 2D, e2e/plan.e2e.ts).
+    if (libelle === 'Planches') await expect(page.getByText(/^Bientôt : .+/)).toHaveCount(0);
+    else await expect(page.getByText(/^Bientôt : .+/)).toBeVisible();
     await sansDefilementHorizontal(page);
     await capturer(page, capture);
   }
