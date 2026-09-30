@@ -1,0 +1,623 @@
+/*
+ * Formulaire d'une série (T12, maquette Serie). Aucune couleur en dur : jetons seulement
+ * (src/ui/jetons.ts, variables CSS). Toute commande fait au moins 56 × 56 px (utilisable avec
+ * des gants), textes au contraste AA ; à 360 px de large, rien ne déborde.
+ */
+
+.serie-voile {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  background: var(--couleur-fond);
+}
+
+.serie {
+  width: 100%;
+  max-width: 560px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  outline: none;
+}
+
+/* ── En-tête ─────────────────────────────────────────────────────────────────────────────── */
+
+.serie-tete {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: max(18px, env(safe-area-inset-top)) 16px 10px;
+}
+
+.serie-surtitre {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.serie-tete h2 {
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.05;
+  outline: none;
+}
+
+/* ── Corps (défile seul) ─────────────────────────────────────────────────────────────────── */
+
+.serie-corps {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.serie-vide {
+  margin: var(--espace-xl) 4px;
+  font-size: 17px;
+  color: var(--couleur-secondaire);
+}
+
+.serie-carte {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  background: var(--couleur-surface);
+  border-radius: var(--rayon-carte);
+  box-shadow: var(--ombre-carte);
+  min-width: 0;
+}
+
+.serie-etiquette {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.serie-aide {
+  margin: 0;
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.serie-champ {
+  width: 100%;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 2px solid var(--couleur-tertiaire);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font: inherit;
+  font-size: 18px;
+}
+
+.serie-champ:focus-visible {
+  outline-offset: 0;
+  border-color: var(--couleur-foret);
+}
+
+select.serie-champ {
+  appearance: none;
+  padding-right: 44px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--couleur-encre) 50%), linear-gradient(135deg, var(--couleur-encre) 50%, transparent 50%);
+  background-position: calc(100% - 22px) 50%, calc(100% - 16px) 50%;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+}
+
+/* ── Culture ─────────────────────────────────────────────────────────────────────────────── */
+
+.serie-choix {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.serie-aucun {
+  padding: 6px 2px;
+  color: var(--couleur-secondaire);
+}
+
+.serie-choix-bouton {
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  gap: 0 8px;
+  text-align: left;
+  font-size: 18px;
+}
+
+.serie-choix-bouton strong {
+  font-weight: 700;
+}
+
+.serie-choix-bouton span {
+  color: var(--couleur-secondaire);
+}
+
+.serie-choix-bouton:active {
+  background: var(--couleur-trait);
+}
+
+.serie-culture {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.serie-culture-texte {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.serie-culture-texte p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.serie-culture-texte strong {
+  display: block;
+  font-size: 19px;
+}
+
+/* « · » entre culture et famille : lu par les lecteurs d'écran, la famille passe à la ligne. */
+.serie-separateur {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.serie-culture-texte p span {
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.serie-bouton-leger {
+  flex-shrink: 0;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 2px solid var(--couleur-trait);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* ── Ancre ───────────────────────────────────────────────────────────────────────────────── */
+
+.serie-ancres {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 16px;
+  background: var(--couleur-fond);
+}
+
+.serie-ancre {
+  position: relative;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 4px 6px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.15;
+  color: var(--couleur-encre);
+  background: var(--couleur-fond);
+  cursor: pointer;
+}
+
+/* Le vrai bouton radio reste dans le label (clavier, lecteur d'écran) mais ne se voit pas. */
+.serie-ancre input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.serie-ancre-choisie {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.serie-ancre-desactivee {
+  color: var(--couleur-tertiaire);
+  text-decoration: line-through;
+  cursor: default;
+}
+
+.serie-ancre:has(input:focus-visible) {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: 2px;
+}
+
+.serie-champ-semaine {
+  font-family: var(--police-code);
+  font-weight: 600;
+}
+
+/* ── Planches ────────────────────────────────────────────────────────────────────────────── */
+
+.serie-planches {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.serie-planche {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 12px;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-fond);
+}
+
+.serie-planche-nom {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+
+.serie-code {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.serie-planche-nom span {
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.serie-longueur {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+}
+
+.serie-champ-longueur {
+  width: 88px;
+  padding: 0 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.serie-retirer {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Calculé par le moteur ───────────────────────────────────────────────────────────────── */
+
+.serie-dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 8px;
+  margin-top: 2px;
+}
+
+@media (min-width: 480px) {
+  .serie-dates {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.serie-date {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.serie-date i {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--couleur-sur-foret-doux);
+}
+
+.serie-date-miseEnPlace i {
+  background: var(--famille-salades);
+}
+
+.serie-date-debutRecolte i {
+  background: var(--famille-cruciferes);
+}
+
+.serie-date-finRecolte i {
+  background: var(--famille-cruciferes);
+  opacity: 0.5;
+}
+
+.serie-date span {
+  font-size: 13px;
+  color: var(--couleur-secondaire);
+}
+
+.serie-date strong {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.serie-besoins {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.serie-besoins li {
+  padding: 4px 8px;
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-fond);
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* ── Conflits et alertes ─────────────────────────────────────────────────────────────────── */
+
+.serie-alerte {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--rayon-carte);
+  border-left: 8px solid var(--couleur-orange);
+  background: var(--couleur-surface);
+  box-shadow: var(--ombre-carte);
+  overflow-wrap: anywhere;
+}
+
+.serie-alerte strong {
+  font-size: 16px;
+  color: var(--couleur-texte-orange);
+}
+
+.serie-alerte span {
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.serie-alerte-rouge {
+  border-left-color: var(--couleur-conflit);
+}
+
+.serie-alerte-rouge strong {
+  color: var(--couleur-conflit);
+}
+
+/* ── Historique ──────────────────────────────────────────────────────────────────────────── */
+
+.serie-historique ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.serie-entree {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--couleur-trait);
+}
+
+.serie-entree:first-child {
+  border-top: 0;
+}
+
+.serie-entree-texte {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+
+.serie-entree-texte span {
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.serie-entree-texte .serie-entree-illisible {
+  font-weight: 700;
+  color: var(--couleur-conflit);
+}
+
+/* ── Pied : Fermer, Planifier ────────────────────────────────────────────────────────────── */
+
+.serie-pied {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px max(16px, env(safe-area-inset-bottom));
+  background: var(--couleur-fond);
+  box-shadow: 0 -1px 0 var(--couleur-trait);
+}
+
+.serie-pied .serie-aide {
+  text-align: center;
+}
+
+.serie-erreur {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 6px solid var(--couleur-conflit);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-conflit);
+  font-weight: 700;
+}
+
+.serie-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.serie-bouton-secondaire,
+.serie-bouton-principal,
+.serie-bouton-danger {
+  min-width: 56px;
+  min-height: 60px;
+  padding: 0 14px;
+  border-radius: var(--rayon-bouton);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.serie-bouton-secondaire {
+  flex: 1 1 0;
+  border: 0;
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: var(--ombre-carte);
+}
+
+.serie-bouton-principal {
+  flex: 2 1 0;
+  border: 0;
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 18px;
+  box-shadow: var(--ombre-basse);
+}
+
+/* ── Confirmation (alerte rouge, historique) ─────────────────────────────────────────────── */
+
+.serie-voile-confirmation {
+  position: fixed;
+  z-index: 31;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in srgb, var(--couleur-encre) 45%, transparent);
+}
+
+.serie-confirmation {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 16px max(20px, env(safe-area-inset-bottom));
+  border-radius: var(--rayon-feuille) var(--rayon-feuille) 0 0;
+  background: var(--couleur-surface);
+  overflow-wrap: anywhere;
+}
+
+.serie-confirmation-icone {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-fond);
+  color: var(--couleur-conflit);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.serie-confirmation h3 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.serie-confirmation p {
+  font-size: 17px;
+}
+
+.serie-confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.serie-confirmation-actions .serie-bouton-secondaire {
+  border: 2px solid var(--couleur-trait);
+  box-shadow: none;
+}
+
+.serie-bouton-danger {
+  flex: 2 1 0;
+  border: 0;
+  background: var(--couleur-conflit);
+  color: var(--couleur-surface);
+  font-family: var(--police-titre);
+  font-weight: 800;
+}

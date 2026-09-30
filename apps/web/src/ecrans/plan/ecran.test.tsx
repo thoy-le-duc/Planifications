@@ -251,13 +251,17 @@ describe('T11 : écran Planches, ferme de T07 (430 lignes)', () => {
     expect(detail.textContent).toContain(cible.libelle);
     expect(detail.textContent).toContain(ligne.code);
     for (const c of ligne.conflits.filter((x) => x.occupations.includes(cible.occupationId))) expect(detail.textContent).toContain(c.nom);
-    // Lecture seule : ni champ, ni autre bouton que « Fermer ».
+    // Lecture seule : ni champ, ni autre bouton que « Fermer »… sauf, depuis T12, « Modifier la
+    // série » pour une barre de série (qui ouvre le formulaire de T12) ; jamais pour une
+    // plantation (décision du chef, T12).
     expect(detail.querySelectorAll('input, select, textarea, [contenteditable="true"]')).toHaveLength(0);
     const boutons = [...detail.querySelectorAll<HTMLElement>('button, [role="button"]')];
-    expect(boutons.map((b) => b.textContent.trim())).toEqual(['Fermer']);
+    const attendus = cible.serieId !== null ? ['Fermer', 'Modifier la série'] : ['Fermer'];
+    expect(boutons.map((b) => b.textContent.trim()).sort()).toEqual(attendus.sort());
+    const fermer = boutons.find((b) => b.textContent.trim() === 'Fermer');
 
     await act(async () => {
-      boutons[0]?.click();
+      fermer?.click();
       await Promise.resolve();
     });
     await laisserFinir(3);
