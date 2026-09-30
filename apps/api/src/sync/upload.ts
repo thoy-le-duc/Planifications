@@ -33,6 +33,10 @@
  * - T10d : une ligne d'une autre ferme (référence, PATCH, DELETE) se comporte exactement comme
  *   une ligne inexistante ; seul un ferme_id étranger déclaré par l'écriture elle-même donne
  *   'ferme_interdite'.
+ * - T10g (Q20) : une récolte annulée ne se corrige plus, et une annulation ne s'annule pas
+ *   ('recolte_annulee') ; une correction plus ancienne que celle en vigueur (heure du téléphone,
+ *   puis id) est refusée ; le serveur écrit lui-même l'écart de stock d'un remplacement
+ *   (references.ts, stock.ts). Contrat : recoltes-annulees.integration.test.ts.
  */
 import { ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
 import {
@@ -52,7 +56,7 @@ import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
 import { lireEvenement } from './evenement.ts';
 import type { MotifRefus, Refus } from './motifs.ts';
-import { verifierCorrection, verifierReferences, type TransactionDb } from './references.ts';
+import { verifierCorrection, verifierReferences, verifierRemplacementRecolte, type TransactionDb } from './references.ts';
 import { ecrireItineraire, estTableItineraire, TABLES_ITINERAIRE } from './itineraire.ts';
 import { ecrireSerie, fermesDesLignesVisees, TABLES_SERIE, verifierFinDeLot, type SeriesTouchees } from './serie.ts';
 import { ecrireArticle, ecrireMouvement } from './stock.ts';
@@ -73,6 +77,7 @@ const MESSAGES: Readonly<Record<MotifRefus, string>> = {
   ecriture_invalide: 'Saisie non enregistrée, données invalides',
   lot_trop_gros:
     'Saisie non enregistrée : envoi trop volumineux (plus de 500 saisies ou de 5 Mio en une fois). Ressaisissez-la.',
+  recolte_annulee: 'Cette récolte a été annulée : elle ne se corrige plus. Pour la rétablir, saisissez une nouvelle récolte.',
 };
 
 /** Corps HTTP au plus (au-delà : 200, chaque écriture refusée 'lot_trop_gros', rien d'écrit). */
@@ -191,6 +196,11 @@ function fermeDesDonnees(e: EcritureRecue): string | null {
   return estUuid(e.donnees?.ferme_id) ? e.donnees.ferme_id.toLowerCase() : null;
 }
 
+/** PUT d'un événement de récolte qui en remplace un autre (lu sans confiance : il ne sert qu'au verrou). */
+function remplacementDeRecolte(e: EcritureRecue): boolean {
+  return e.op === 'PUT' && e.table === 'evenement' && e.donnees?.type === 'recolte' && typeof e.donnees.remplace_evenement_id === 'string';
+}
+
 /** Levée dans la transaction d'un lot pour l'annuler : l'écriture `index` est refusée. */
 class RefusDansLot extends Error {
   readonly index: number;
@@ -306,7 +316,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
    */
   async function ecrireEvenement(tx: TransactionDb, l: LigneEvenement, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
     const maintenant = ctx.maintenant();
-    const refusReference = (await verifierReferences(tx, l)) ?? (await verifierCorrection(tx, l));
+    const refusReference = (await verifierReferences(tx, l)) ?? (await verifierCorrection(tx, l)) ?? (await verifierRemplacementRecolte(tx, l));
     if (refusReference !== null) return { ...refusReference, fermeId: l.fermeId };
     const [ecrit] = await tx
       .insert(evenement)
@@ -418,8 +428,12 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
         // après l'autre (le second voit les écritures du premier), sans interblocage. Seulement
         // les fermes de l'utilisateur : personne ne bloque une autre ferme. La ferme d'un PATCH
         // est celle de la ligne existante (ses données ne la portent pas forcément).
+        // T10g : un remplacement de récolte (correction, annulation) se vérifie sur sa chaîne ; sous
+        // le même verrou, deux corrections concurrentes de la même ferme passent l'une après l'autre.
         const tout = ecritures.filter((e) => TABLES_TOUT_OU_RIEN.has(e.table));
-        const declarees = tout.map(fermeDesDonnees).filter((f): f is string => f !== null && fermes.has(f));
+        const declarees = [...tout, ...ecritures.filter(remplacementDeRecolte)]
+          .map(fermeDesDonnees)
+          .filter((f): f is string => f !== null && fermes.has(f));
         const verrous = [...new Set([...declarees, ...(await fermesDesLignesVisees(tx, tout, fermes))])].sort();
         for (const ferme of verrous) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`ferme:${ferme}`}, 0))`);
         for (const [i, e] of ecritures.entries()) {

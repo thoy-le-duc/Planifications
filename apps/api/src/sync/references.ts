@@ -136,3 +136,103 @@ export async function verifierCorrection(tx: TransactionDb, l: LigneEvenement): 
   }
   return null;
 }
+
+/** Un événement de la chaîne d'une récolte, tel que la base le connaît. */
+export interface MaillonChaine {
+  readonly id: string;
+  readonly remplace_sorte: 'correction' | 'annulation' | null;
+  /** detail.quantite si c'est un nombre (toujours, pour une récolte : CHECK de la base). */
+  readonly quantite: number | null;
+  readonly profondeur: number;
+}
+
+/**
+ * Chaîne de l'événement `id` : son origine (l'événement sans remplace_evenement_id tout en haut),
+ * les corrections de l'origine, les corrections de ces corrections, et toutes leurs annulations,
+ * dans l'ordre (origine d'abord, puis horodatage, puis id). null si `id` est introuvable dans la
+ * ferme, ou si la chaîne dépasse PROFONDEUR_MAX_CHAINE niveaux (jamais de chaîne partielle).
+ * Montée par la clé composée (ferme_id, remplace_evenement_id) : toute la chaîne est de la ferme.
+ */
+export async function lireMaillons(tx: TransactionDb, id: string, fermeId: string): Promise<MaillonChaine[] | null> {
+  const racine = await tx.execute<{ id: string }>(
+    sql`WITH RECURSIVE montee(id, parent, profondeur) AS (
+          SELECT id, remplace_evenement_id, 0 FROM evenement WHERE id = ${id}::uuid AND ferme_id = ${fermeId}::uuid
+          UNION ALL
+          SELECT e.id, e.remplace_evenement_id, m.profondeur + 1
+          FROM evenement e JOIN montee m ON e.id = m.parent
+          WHERE m.profondeur < ${PROFONDEUR_MAX_CHAINE}
+        )
+        SELECT id::text AS id FROM montee WHERE parent IS NULL`,
+  );
+  const origine = racine.rows[0]?.id;
+  if (origine === undefined) return null;
+  const r = await tx.execute<{ id: string; remplace_sorte: MaillonChaine['remplace_sorte']; quantite: number | null; profondeur: number }>(
+    sql`WITH RECURSIVE chaine(id, profondeur) AS (
+          SELECT ${origine}::uuid, 0
+          UNION ALL
+          SELECT e.id, c.profondeur + 1 FROM evenement e JOIN chaine c ON e.remplace_evenement_id = c.id
+          WHERE c.profondeur <= ${PROFONDEUR_MAX_CHAINE}
+        )
+        SELECT e.id::text AS id, e.remplace_sorte, c.profondeur,
+               CASE WHEN jsonb_typeof(e.detail -> 'quantite') = 'number' THEN (e.detail ->> 'quantite')::float8 END AS quantite
+        FROM chaine c JOIN evenement e ON e.id = c.id
+        ORDER BY (e.remplace_sorte IS NOT NULL), e.horodatage, e.id`,
+  );
+  return r.rows.some((l) => l.profondeur > PROFONDEUR_MAX_CHAINE) ? null : r.rows;
+}
+
+/**
+ * Maillon en vigueur d'une chaîne (T10g, décision 4) : aucun si la chaîne contient une
+ * annulation ; sinon la correction la plus récente de TOUTE la chaîne (horodatage, puis id), à
+ * défaut l'origine. `maillons` dans l'ordre de `lireMaillons`. Même règle que la vue
+ * evenements_en_vigueur et que `enVigueur` du téléphone.
+ */
+export function maillonEnVigueur(maillons: readonly MaillonChaine[]): MaillonChaine | undefined {
+  if (maillons.some((m) => m.remplace_sorte === 'annulation')) return undefined;
+  return [...maillons].reverse().find((m) => m.remplace_sorte === 'correction') ?? maillons.find((m) => m.remplace_sorte === null);
+}
+
+export interface RefusRemplacement {
+  readonly motif: 'recolte_annulee' | 'ecriture_invalide';
+  readonly precision?: string;
+}
+
+/**
+ * T10g (Q20) : un remplacement de récolte (correction ou annulation) reçu du téléphone.
+ *   - viser une annulation (la corriger, ou « annuler l'annulation ») : 'recolte_annulee' ;
+ *   - corriger une récolte dont la chaîne est annulée (par une annulation de l'origine ou de
+ *     n'importe quelle correction) : 'recolte_annulee'. Une annulation redondante reste acceptée
+ *     (T10d) ;
+ *   - une correction plus ancienne (horodatage du téléphone, puis id) qu'une correction déjà
+ *     écrite de la chaîne ne serait jamais en vigueur : refusée (décision 5, forme figée par les
+ *     tests), le stock et la vue restent sur la plus récente.
+ * Un événement déjà écrit (renvoi du même lot) n'est pas un nouveau remplacement : pas vérifié
+ * ici, la règle du renvoi identique s'applique. À appeler après verifierReferences (l'événement
+ * remplacé est de la ferme) ; sous le verrou de la ferme (upload.ts), deux remplacements d'une
+ * même ferme passent l'un après l'autre.
+ */
+export async function verifierRemplacementRecolte(tx: TransactionDb, l: LigneEvenement): Promise<RefusRemplacement | null> {
+  if (l.type !== 'recolte' || l.remplaceSorte === null || l.remplaceEvenementId === null) return null;
+  const deja = await tx.execute<{ n: number }>(sql`SELECT 1 AS n FROM evenement WHERE id = ${l.id}::uuid`);
+  if (deja.rows.length > 0) return null;
+  const maillons = await lireMaillons(tx, l.remplaceEvenementId, l.fermeId);
+  if (maillons === null) return { motif: 'ecriture_invalide', precision: `chaîne de corrections trop longue (${String(PROFONDEUR_MAX_CHAINE)} au plus)` };
+  const cible = maillons.find((m) => m.id === l.remplaceEvenementId);
+  if (cible?.remplace_sorte === 'annulation') return { motif: 'recolte_annulee' };
+  if (l.remplaceSorte === 'annulation') return null;
+  if (maillons.some((m) => m.remplace_sorte === 'annulation')) return { motif: 'recolte_annulee' };
+
+  const corrections = maillons.filter((m) => m.remplace_sorte === 'correction').map((m) => m.id);
+  if (corrections.length === 0) return null;
+  const r = await tx.execute<{ plus_recente: boolean }>(
+    sql`SELECT EXISTS (
+          SELECT 1 FROM evenement
+          WHERE id = ANY(${sql.param(corrections)}::uuid[])
+            AND (horodatage, id) > (${l.horodatage.toISOString()}::timestamptz, ${l.id}::uuid)
+        ) AS plus_recente`,
+  );
+  if (r.rows[0]?.plus_recente === true) {
+    return { motif: 'ecriture_invalide', precision: 'une correction plus récente de cette récolte est déjà enregistrée' };
+  }
+  return null;
+}
