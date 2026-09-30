@@ -210,6 +210,30 @@ describe('validerItineraire : refus', () => {
     expect(code(m.validerItineraire(itineraire({ nom: 'B'.repeat(60) }), { typesIntervention: TYPES }))).toBeNull();
   });
 
+  describe('décision 6 du chef : nom de 1 à 80 caractères, espaces de bord retirés', () => {
+    it('80 caractères : accepté', () => {
+      expect(code(m.validerItineraire(itineraire({ nom: 'B'.repeat(80) }), { typesIntervention: TYPES }))).toBeNull();
+    });
+
+    it('80 caractères entourés d’espaces : accepté', () => {
+      expect(code(m.validerItineraire(itineraire({ nom: `  ${'B'.repeat(80)}  ` }), { typesIntervention: TYPES }))).toBeNull();
+    });
+
+    it('1 caractère : accepté', () => {
+      expect(code(m.validerItineraire(itineraire({ nom: 'B' }), { typesIntervention: TYPES }))).toBeNull();
+    });
+
+    it.each([
+      ['81 caractères', 'B'.repeat(81)],
+      ['vide', ''],
+      ['que des espaces', '   '],
+    ])('nom de %s : refusé, champ nom', (_cas, nom) => {
+      const r = m.validerItineraire(itineraire({ nom }), { typesIntervention: TYPES });
+      expect(r.ok).toBe(false);
+      expect(champ(r)).toBe('nom');
+    });
+  });
+
   it('colonne inconnue : colonne_inconnue', () => {
     expect(code(m.validerItineraire(itineraire({ saison_id: FERME }), { typesIntervention: TYPES }))).toBe('colonne_inconnue');
   });

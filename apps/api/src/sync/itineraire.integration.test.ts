@@ -27,9 +27,9 @@
  *           'ecriture_invalide', la ligne existante ne change pas.
  *   PATCH   modifie une ligne de la ferme. Ligne introuvable, d'une autre ferme OU de la
  *           bibliothèque (ferme_id nul) → 'ecriture_invalide', ferme nulle dans refus_synchro
- *           (T10d : même réponse qu'une ligne inexistante). PATCH de `ferme_id` → refusé
- *           ('ferme_interdite' vers une ferme étrangère ; refusé aussi vers une autre de SES
- *           fermes ou vers NULL). PATCH qui ne change rien : accepté, rien d'écrit.
+ *           (T10d : même réponse qu'une ligne inexistante). PATCH de `ferme_id` vers une autre
+ *           valeur (ferme étrangère, autre ferme de l'utilisateur, NULL) → 'ecriture_invalide'
+ *           et rien d'autre (décision 7 du chef). PATCH qui ne change rien : accepté, rien d'écrit.
  *   Suppression douce : PATCH de `supprime_le` ; rétablir = PATCH supprime_le NULL.
  *   DELETE  refusé ('table_interdite' ou 'ajout_seul', au choix du développeur), rien ne change.
  *
@@ -47,6 +47,14 @@
  * Type d'intervention UTILISÉ : son couple (categorie, libelle) figure dans les travaux prévus
  * d'un itinéraire NON SUPPRIMÉ de la même ferme. Sa suppression douce → 'ecriture_invalide'
  * (précision : il faut le masquer) ; le masquer (PATCH masque = 1) est accepté.
+ *
+ * Décisions du chef (docs/backlog/T23-itineraires-synchro.md) :
+ *   5. les itinéraires désignent un type par son libellé : renommer un type UTILISÉ, ou changer
+ *      sa catégorie → 'ecriture_invalide' ; (categorie, libelle) est unique parmi les types NON
+ *      SUPPRIMÉS de la ferme ET de la liste de départ (création, renommage ou rétablissement
+ *      d'un doublon → 'ecriture_invalide') ; recréer après une suppression est accepté.
+ *   6. nom d'un itinéraire : 1 à 80 caractères après suppression des espaces de bord.
+ *   7. ferme_id nul en PUT, ou PATCH de ferme_id → 'ecriture_invalide', rien d'autre.
  *
  * Une saisie = une transaction : un lot qui contient une écriture sur `itineraire` ou
  * `type_intervention` est accepté ou refusé EN ENTIER, avec les séries, occupations et le stock
@@ -474,9 +482,10 @@ decrireAvecBase('T23')('T23 : POST /sync/upload accepte les itinéraires et les 
       expect(String(l?.modifie_le)).not.toContain('2020-01-01');
     });
 
-    it('dupliquer un type de la liste de départ dans la ferme (même catégorie, même libellé) : accepté, la liste de départ ne change pas', async () => {
+    it('décision 5 : même catégorie et même libellé qu’un type de la liste de départ : refusé (doublon), la liste de départ ne change pas', async () => {
       const avant = await ligne('type_intervention', typeDepart.id);
-      await typeAccepte({ categorie: typeDepart.categorie, libelle: typeDepart.libelle });
+      const t = putType({ categorie: typeDepart.categorie, libelle: typeDepart.libelle });
+      await refuseEnEntier([t], t, 'ecriture_invalide');
       expect(await ligne('type_intervention', typeDepart.id)).toEqual(avant);
     });
 
@@ -625,14 +634,12 @@ decrireAvecBase('T23')('T23 : POST /sync/upload accepte les itinéraires et les 
       expect(a.at(-1)?.message).toBe(b.at(-1)?.message);
     });
 
-    it('PATCH de ferme_id vers la ferme voisine : ferme_interdite ; vers une autre ferme de Théophane ou vers NULL : refusé', async () => {
+    it('décision 7 : PATCH de ferme_id vers la ferme voisine, une autre ferme de Théophane ou NULL : ecriture_invalide, rien d’autre', async () => {
       const t = await typeAccepte();
-      const versVoisine = patch('type_intervention', t.id, { ferme_id: autreFerme });
-      await refuseEnEntier([versVoisine], versVoisine, 'ferme_interdite');
-      const versSeconde = patch('type_intervention', t.id, { ferme_id: secondeFerme });
-      await refuseEnEntier([versSeconde], versSeconde, ['ecriture_invalide', 'ferme_interdite']);
-      const versBibliotheque = patch('type_intervention', t.id, { ferme_id: null });
-      await refuseEnEntier([versBibliotheque], versBibliotheque, ['ecriture_invalide', 'ferme_interdite']);
+      for (const vers of [autreFerme, secondeFerme, null]) {
+        const p = patch('type_intervention', t.id, { ferme_id: vers });
+        await refuseEnEntier([p], p, 'ecriture_invalide');
+      }
     });
 
     it('DELETE réel d’un type : refusé, la ligne reste', async () => {
@@ -895,13 +902,15 @@ decrireAvecBase('T23')('T23 : POST /sync/upload accepte les itinéraires et les 
     it('PATCH qui verse un itinéraire de la ferme dans la bibliothèque (ferme_id NULL) : refusé', async () => {
       const i = await itineraireAccepte();
       const p = patch('itineraire', i.id, { ferme_id: null });
-      await refuseEnEntier([p], p, ['ecriture_invalide', 'ferme_interdite']);
+      await refuseEnEntier([p], p, 'ecriture_invalide');
     });
 
-    it('PATCH de ferme_id vers la ferme voisine : ferme_interdite, rien ne change', async () => {
+    it('décision 7 : PATCH de ferme_id vers la ferme voisine ou une autre ferme de Théophane : ecriture_invalide, rien ne change', async () => {
       const i = await itineraireAccepte();
-      const p = patch('itineraire', i.id, { ferme_id: autreFerme });
-      await refuseEnEntier([p], p, 'ferme_interdite');
+      for (const vers of [autreFerme, secondeFerme]) {
+        const p = patch('itineraire', i.id, { ferme_id: vers });
+        await refuseEnEntier([p], p, 'ecriture_invalide');
+      }
     });
 
     it('PATCH d’un itinéraire de la ferme voisine : même réponse qu’un id inexistant, rien ne change', async () => {
@@ -1042,6 +1051,107 @@ decrireAvecBase('T23')('T23 : POST /sync/upload accepte les itinéraires et les 
         const itineraireEcrit = (await ligne('itineraire', i.id)) !== null;
         expect(typeSupprime && itineraireEcrit, 'un itinéraire actif n’utilise jamais un type supprimé').toBe(false);
       }
+    });
+  });
+
+  // ── Décisions du chef 5 et 6 ────────────────────────────────────────────────────────────────
+
+  describe('décision 5 : un type est désigné par son libellé', () => {
+    it('renommer un type utilisé par un itinéraire : refusé, rien ne change', async () => {
+      const t = await typeAccepte();
+      await itineraireAccepte({ parametres: avecTravaux([entretien(libelleDe(t))]) });
+      const p = patch('type_intervention', t.id, { libelle: 'nouveau nom' });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+
+    it('changer la catégorie d’un type utilisé : refusé, rien ne change', async () => {
+      const t = await typeAccepte();
+      await itineraireAccepte({ parametres: avecTravaux([entretien(libelleDe(t))]) });
+      const p = patch('type_intervention', t.id, { categorie: 'travail_sol' });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+
+    it('renommer ou changer la catégorie d’un type non utilisé : accepté', async () => {
+      const t = await typeAccepte();
+      await accepte([patch('type_intervention', t.id, { libelle: `${libelleDe(t)} r` })]);
+      await accepte([patch('type_intervention', t.id, { categorie: 'couverture' })]);
+      expect(await ligne('type_intervention', t.id)).toMatchObject({ libelle: `${libelleDe(t)} r`, categorie: 'couverture' });
+    });
+
+    it('un type utilisé seulement par un itinéraire supprimé se renomme', async () => {
+      const t = await typeAccepte();
+      const i = await itineraireAccepte({ parametres: avecTravaux([entretien(libelleDe(t))]) });
+      await accepte([supprimer('itineraire', i.id)]);
+      await accepte([patch('type_intervention', t.id, { libelle: `${libelleDe(t)} r` })]);
+    });
+
+    it('doublon d’un type actif de la ferme (même catégorie, même libellé) : refusé', async () => {
+      const t = await typeAccepte();
+      const doublon = putType({ libelle: libelleDe(t) });
+      await refuseEnEntier([doublon], doublon, 'ecriture_invalide');
+    });
+
+    it('deux créations du même type dans un même lot : refusé en entier', async () => {
+      const a = putType();
+      const b = putType({ libelle: libelleDe(a) });
+      await refuseEnEntier([a, b], b, 'ecriture_invalide');
+    });
+
+    it('même libellé dans une autre catégorie : accepté', async () => {
+      const t = await typeAccepte();
+      await typeAccepte({ categorie: 'couverture', libelle: libelleDe(t) });
+    });
+
+    it('même catégorie et même libellé qu’un type d’une autre ferme : accepté (l’unicité est par ferme)', async () => {
+      await typeAccepte({ libelle: 'sarclage' });
+    });
+
+    it('renommer un type en doublon d’un autre type actif ou de la liste de départ : refusé', async () => {
+      const autre = await typeAccepte();
+      const t = await typeAccepte();
+      const versAutre = patch('type_intervention', t.id, { libelle: libelleDe(autre) });
+      await refuseEnEntier([versAutre], versAutre, 'ecriture_invalide');
+      const versDepart = patch('type_intervention', t.id, { categorie: typeDepart.categorie, libelle: typeDepart.libelle });
+      await refuseEnEntier([versDepart], versDepart, 'ecriture_invalide');
+    });
+
+    it('recréer un type après l’avoir supprimé : accepté', async () => {
+      const t = await typeAccepte();
+      await accepte([supprimer('type_intervention', t.id)]);
+      await typeAccepte({ libelle: libelleDe(t) });
+    });
+
+    it('rétablir un type supprimé alors qu’un type actif a pris son libellé : refusé', async () => {
+      const t = await typeAccepte();
+      await accepte([supprimer('type_intervention', t.id)]);
+      await typeAccepte({ libelle: libelleDe(t) });
+      const p = patch('type_intervention', t.id, { supprime_le: null });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+  });
+
+  describe('décision 6 : nom d’un itinéraire de 1 à 80 caractères, espaces de bord retirés', () => {
+    it('80 caractères : accepté', async () => {
+      await itineraireAccepte({ nom: 'B'.repeat(80) });
+    });
+
+    it('80 caractères entourés d’espaces : accepté', async () => {
+      await itineraireAccepte({ nom: `  ${'B'.repeat(80)}  ` });
+    });
+
+    it.each([
+      ['81 caractères', 'B'.repeat(81)],
+      ['vide', ''],
+      ['que des espaces', '   '],
+    ])('nom de %s : ecriture_invalide', async (_cas, nom) => {
+      const i = putItineraire({ nom });
+      await refuseEnEntier([i], i, 'ecriture_invalide');
+    });
+
+    it('PATCH vers un nom de 81 caractères : refusé, rien ne change', async () => {
+      const i = await itineraireAccepte();
+      const p = patch('itineraire', i.id, { nom: 'B'.repeat(81) });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
     });
   });
 

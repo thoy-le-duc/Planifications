@@ -29,8 +29,8 @@
  *   id, ferme_id, espece_id   UUID obligatoires. `ferme_id` nul (la bibliothèque commune) →
  *                             refusé : le téléphone n'écrit jamais dans la bibliothèque.
  *   variete_id                UUID ou null.
- *   nom                       texte non vide (après espaces), sans caractère de contrôle, de
- *                             longueur raisonnable (60 caractères acceptés, 10 000 refusés).
+ *   nom                       texte sans caractère de contrôle, de 1 à 80 caractères après
+ *                             suppression des espaces de bord (décision 6 du chef).
  *   mode                      semis_direct | plant_maison | plant_achete.
  *   parametres                les ParametresItineraire de T01, LISIBLES, mêmes règles que
  *                             l'instantané d'une série (validerSerie) : objet JSON d'au plus
