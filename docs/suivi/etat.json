@@ -1,48 +1,53 @@
 {
- "maj": "30 septembre 2026, 0 h UTC",
- "resume": "Fusionnés : **moteur**, **connexion sécurisée**, **synchro hors ligne**, **règles des saisies**, **export complet et compressé**, **moteur d'import de tableur**, et l'**identité visuelle** : l'appli ressemble maintenant aux maquettes. Prochains : **vue des planches (T11)** et **saisie au champ (T13)**.",
- "en_cours": {},
- "attente": "Répondre à Q13 (plafonds des quantités), Q14 (fournisseur d'e-mail), Q15 (connexions au magasin), Q17 (délais de retour par famille) et Q18 (saison à cheval sur deux années).",
- "visuels": [
-  {
-   "titre": "L'appli habillée",
-   "etat": "fait",
-   "images": [
-    "connexion-code.png",
-    "aujourdhui.png",
-    "ferme.png"
-   ],
-   "alt": "Écrans de l'appli au téléphone",
-   "texte": "T16. Connexion, coquille avec la barre du bas, onglet Ferme (export et déconnexion). Polices livrées avec l'appli, lisible au soleil et zoomée."
-  },
-  {
-   "titre": "Maquettes validées",
-   "etat": "fait",
-   "texte": "Dix écrans : aujourd'hui, semaine, planches, nouvelle série, saisie, dicter, import, ferme, connexion, ordinateur.",
-   "lien": "https://claude.ai/artifact/CkYjAD2qX9mxw3FNLT9miP",
-   "lien_texte": "Voir les maquettes"
-  },
-  {
-   "titre": "Synchro hors ligne",
-   "etat": "fait",
-   "texte": "T10. Deux téléphones sur la même ferme : une récolte saisie sans réseau arrive chez le collègue au retour du réseau. Testé de bout en bout à chaque modification."
-  },
-  {
-   "titre": "Aperçu du moteur",
-   "etat": "fait",
-   "texte": "Plan des planches, conflits, semainier, rotation et semences calculés par le vrai code sur une ferme d'exemple.",
-   "lien": "https://claude.ai/artifact/AUGp6QuNgwXiY4HdwUJDYG",
-   "lien_texte": "Ouvrir l'aperçu"
-  },
-  {
-   "titre": "Vue 2D planches × semaines",
-   "etat": "à faire",
-   "texte": "T11, après validation des maquettes. Premier écran de planification au téléphone."
-  },
-  {
-   "titre": "Saisie au champ hors ligne",
-   "etat": "à faire",
-   "texte": "T13, après validation des maquettes. Réalisés et récoltes en trois taps, sans réseau."
-  }
- ]
+  "maj": "30 septembre 2026, 4 h 30 UTC",
+  "resume": "Fusionnés cette nuit : **la vue des planches (T11)**, premier écran de planification au téléphone, qui marche hors ligne sur une ferme de 42 000 lignes, et **des tests de temps fiables (T19)**. Prochains : **saisie au champ (T13)** et **export branché dans l'onglet Ferme (T16b)**.",
+  "en_cours": {},
+  "attente": "Répondre à Q19 (premier tap avant l'ouverture des données : 0,7 à 0,8 s, acceptable ?), puis Q13 (plafonds des quantités), Q14 (fournisseur d'e-mail), Q15 (connexions au magasin), Q17 (délais de retour par famille) et Q18 (saison à cheval sur deux années).",
+  "visuels": [
+    {
+      "titre": "Planches, sur le téléphone",
+      "etat": "fait",
+      "images": [
+        "plan-rempli.png",
+        "plan-conflits.png"
+      ],
+      "alt": "Écran Planches avec des conflits, puis la feuille de détail des conflits",
+      "texte": "T11. Planches × semaines, réel en plein et prévu hachuré, semaine en cours en orange. Les conflits sont nommés sur la planche ; un toucher ouvre le détail. Hors ligne, 0,1 à 0,3 s sur un téléphone moyen."
+    },
+    {
+      "titre": "L'appli habillée",
+      "etat": "fait",
+      "images": [
+        "connexion-code.png",
+        "aujourdhui.png",
+        "ferme.png"
+      ],
+      "alt": "Écrans de l'appli au téléphone",
+      "texte": "T16. Connexion, coquille avec la barre du bas, onglet Ferme (export et déconnexion). Polices livrées avec l'appli, lisible au soleil et zoomée."
+    },
+    {
+      "titre": "Maquettes validées",
+      "etat": "fait",
+      "texte": "Dix écrans : aujourd'hui, semaine, planches, nouvelle série, saisie, dicter, import, ferme, connexion, ordinateur.",
+      "lien": "https://claude.ai/artifact/CkYjAD2qX9mxw3FNLT9miP",
+      "lien_texte": "Voir les maquettes"
+    },
+    {
+      "titre": "Synchro hors ligne",
+      "etat": "fait",
+      "texte": "T10. Deux téléphones sur la même ferme : une récolte saisie sans réseau arrive chez le collègue au retour du réseau. Testé de bout en bout à chaque modification."
+    },
+    {
+      "titre": "Aperçu du moteur",
+      "etat": "fait",
+      "texte": "Plan des planches, conflits, semainier, rotation et semences calculés par le vrai code sur une ferme d'exemple.",
+      "lien": "https://claude.ai/artifact/AUGp6QuNgwXiY4HdwUJDYG",
+      "lien_texte": "Ouvrir l'aperçu"
+    },
+    {
+      "titre": "Saisie au champ hors ligne",
+      "etat": "à faire",
+      "texte": "T13, après validation des maquettes. Réalisés et récoltes en trois taps, sans réseau."
+    }
+  ]
 }
