@@ -205,9 +205,9 @@ function boutonExporter(): HTMLButtonElement {
   return premier;
 }
 
-function poignee(fermer: () => void): PoigneeDonnees {
+function poignee(fermer: () => void, enAttente = 0): PoigneeDonnees {
   return {
-    compterEnAttente: () => Promise.resolve(0),
+    compterEnAttente: () => Promise.resolve(enAttente),
     fermer: () => {
       ordre.push('fermer');
       fermer();
@@ -216,10 +216,17 @@ function poignee(fermer: () => void): PoigneeDonnees {
   };
 }
 
-async function rendre(o: { etatBase: EtatBase; porte: PorteDonnees | null; fermer?: () => void; surDeconnecte?: (e: string | null) => void }): Promise<void> {
+async function rendre(o: {
+  etatBase: EtatBase;
+  porte: PorteDonnees | null;
+  fermer?: () => void;
+  surDeconnecte?: (e: string | null) => void;
+  /** Saisies en attente dans la file d'envoi (≠ 0 : confirmation de déconnexion). */
+  enAttente?: number;
+}): Promise<void> {
   const proprietes: ProprietesEcranFerme = {
     session: SESSION,
-    baseLocale: poignee(o.fermer ?? (() => undefined)),
+    baseLocale: poignee(o.fermer ?? (() => undefined), o.enAttente),
     surDeconnecte: o.surDeconnecte ?? (() => undefined),
     etatBase: o.etatBase,
   };
@@ -486,5 +493,86 @@ describe('T16b : export branché dans l’onglet Ferme', () => {
     const annuler = boutonsNommes('Annuler')[0];
     expect(annuler, 'bouton « Annuler »').toBeDefined();
     expect(document.activeElement, 'focus sur « Annuler »').toBe(annuler);
+  }, 20_000);
+
+  /**
+   * Vérification T16b (bloquant) : une lecture de la porte qui ne revient JAMAIS (worker planté,
+   * verrou d'un autre onglet) ne doit pas bloquer la déconnexion. Décision du chef : l'attente
+   * des lectures en vol est bornée (DELAI_FERMETURE_MS, 2 s) ; au-delà, on ferme et on efface
+   * quand même (fermer et l'effacement ont leurs propres limites et la marque d'attente).
+   * Horloge simulée à partir de la déconnexion : 3 s simulées suffisent (2 s + marge).
+   */
+  it('déconnexion pendant un export dont une lecture ne revient jamais : en quelques secondes, base fermée puis effacée, aucune erreur, rien de téléchargé', async () => {
+    const journal = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const rejets: unknown[] = [];
+    const surRejet = (e: unknown) => rejets.push(e);
+    process.on('unhandledRejection', surRejet);
+    try {
+      // `liberer` n'est jamais appelé : la lecture reste en vol pour toujours.
+      const { porte, fermer, lectures } = porteControlee();
+      const surDeconnecte = vi.fn<(e: string | null) => void>();
+      await rendre({ etatBase: 'prete', porte, fermer, surDeconnecte });
+      await attendre(() => !boutonExporter().disabled, 'bouton actif, base prête');
+      await act(async () => {
+        boutonExporter().click();
+        await Promise.resolve();
+      });
+      await attendre(() => lectures() > 0, 'export en cours, une lecture qui ne reviendra pas');
+
+      vi.useFakeTimers();
+      await act(async () => {
+        boutonsNommes('Se déconnecter')[0]?.click();
+        await vi.advanceTimersByTimeAsync(50);
+      });
+      const quandMeme = boutonsNommes('Se déconnecter quand même')[0];
+      if (quandMeme !== undefined) {
+        await act(async () => {
+          quandMeme.click();
+          await vi.advanceTimersByTimeAsync(50);
+        });
+      }
+      for (let k = 0; k < 30 && surDeconnecte.mock.calls.length === 0; k++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(100);
+        });
+      }
+      vi.useRealTimers();
+      await laisserFiler();
+
+      expect(ordre, 'en 3 s simulées : base fermée puis effacée malgré la lecture bloquée').toEqual(['fermer', 'effacer']);
+      expect(surDeconnecte, 'retour à l’écran de connexion').toHaveBeenCalledWith(null);
+      expect(
+        journal.mock.calls.map((a) => a.map(String).join(' ')),
+        'aucun console.error',
+      ).toEqual([]);
+      expect(rejets, 'aucun rejet non géré').toEqual([]);
+      expect(blobs, 'aucun téléchargement').not.toHaveBeenCalled();
+      expect(conteneur.querySelector('[role="alert"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+      process.off('unhandledRejection', surRejet);
+    }
+  }, 20_000);
+
+  it('relecture (suite) : confirmation de déconnexion puis « Annuler » → le bouton d’export redevient actif', async () => {
+    const { porte } = porteControlee();
+    const surDeconnecte = vi.fn<(e: string | null) => void>();
+    await rendre({ etatBase: 'prete', porte, surDeconnecte, enAttente: 2 });
+    await attendre(() => !boutonExporter().disabled, 'bouton actif, base prête');
+
+    await act(async () => {
+      boutonsNommes('Se déconnecter')[0]?.click();
+      await Promise.resolve();
+    });
+    await attendre(() => boutonsNommes('Annuler').length > 0, 'confirmation de déconnexion (2 saisies en attente)');
+    await act(async () => {
+      boutonsNommes('Annuler')[0]?.click();
+      await Promise.resolve();
+    });
+    await laisserFiler();
+
+    expect(surDeconnecte, 'déconnexion annulée').not.toHaveBeenCalled();
+    expect(ordre, 'ni fermeture ni effacement').toEqual([]);
+    expect(boutonExporter().disabled, 'bouton d’export de nouveau actif').toBe(false);
   }, 20_000);
 });
