@@ -2,6 +2,20 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T24 : l'écran « Mes itinéraires »
+
+- **Fait** :
+  - Onglet Ferme, carte « Ma façon de cultiver » : liste des itinéraires par culture. Ceux de la bibliothèque se consultent, et « Adapter pour ma ferme » en fait une copie modifiable.
+  - Formulaire : mode, durées, densité et travaux prévus (type, X jours avant ou après un repère, répétition, temps estimé), avec aperçu des dates en direct. Un travail qui ne tombe jamais est signalé.
+  - Modifier un itinéraire propose « Appliquer aux N séries à venir » ; les séries commencées ou passées ne bougent jamais. Tout s'écrit en une transaction, et « Annuler » reste possible 10 s.
+  - Types d'intervention de la ferme : ajouter, renommer, masquer, avec les doublons refusés avant l'envoi.
+  - Mesures : écran en 82 ms, formulaire en 25 ms, aperçu en 10 ms (CPU ×4).
+- **Décidé** :
+  - « Annuler » ne défait que ce que l'écriture a changé : une ligne modifiée entre-temps sur un autre téléphone reste telle quelle, avec un message.
+  - Une série avec un travail déjà fait n'est plus « à venir ».
+  - Au-delà de 500 écritures, on propose « Itinéraire seul ».
+- **Bloquant** : rien. Masquer un type de la liste de départ pour une seule ferme reste à concevoir.
+
 ## 2026-09-30 — T23 : le serveur accepte les itinéraires et les types d'intervention
 
 - **Fait** :
