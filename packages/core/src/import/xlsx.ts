@@ -193,6 +193,7 @@ class Archive {
     const bom = octets[0] === 0xef && octets[1] === 0xbb && octets[2] === 0xbf;
     const t = decoderUtf8(octets, bom ? 3 : 0);
     if (t === null) throw new Illisible(`texte illisible : ${nom}`);
+    if (controleInterdit(t)) throw new Illisible(`caractère interdit en XML : ${nom}`);
     return t;
   }
 }
@@ -226,6 +227,16 @@ const ENTITES: ReadonlyMap<string, string> = new Map([
 const chiffre = (c: number): boolean => c >= 0x30 && c <= 0x39;
 const hexa = (c: number): boolean => chiffre(c) || (c >= 0x41 && c <= 0x46) || (c >= 0x61 && c <= 0x66);
 const lettre = (c: number): boolean => (c >= 0x41 && c <= 0x5a) || (c >= 0x61 && c <= 0x7a);
+/** Caractère de contrôle C0 interdit en XML 1.0 : tous sauf tabulation, LF et CR (et le nul compris). */
+const controle = (c: number): boolean => c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d;
+const moitieHaute = (c: number): boolean => c >= 0xd800 && c <= 0xdbff;
+const moitieBasse = (c: number): boolean => c >= 0xdc00 && c <= 0xdfff;
+
+/** Vrai si le texte contient, tel quel, un caractère de contrôle interdit en XML 1.0. */
+function controleInterdit(t: string): boolean {
+  for (let i = 0; i < t.length; i++) if (controle(t.charCodeAt(i))) return true;
+  return false;
+}
 
 /** Assemble les morceaux décodés en vérifiant la longueur au fur et à mesure. */
 class Sortie {
@@ -276,7 +287,8 @@ function decoderEntites(t: string, plafond: number): string {
         const code = Number.parseInt(t.slice(debut, j), x ? 16 : 10);
         // Pas un caractère XML : nul, ou moitié de paire de substitution (même écrite en deux
         // références) → illisible, jamais un caractère nul ni une paire cassée dans une cellule.
-        if (code === 0 || (code >= 0xd800 && code <= 0xdfff)) throw new Illisible('référence à un caractère interdit en XML');
+        // Contrôles C0 (hors tabulation, LF, CR) : interdits en XML 1.0, même en référence.
+        if (controle(code) || (code >= 0xd800 && code <= 0xdfff)) throw new Illisible('référence à un caractère interdit en XML');
         if (Number.isInteger(code) && code <= 0x10ffff) remplacement = String.fromCodePoint(code);
       }
     } else {
@@ -297,7 +309,9 @@ function decoderEntites(t: string, plafond: number): string {
 
 /**
  * Échappements OOXML (« _x000D_ » → retour chariot, « _x005F_ » → « _ ») décodés en un seul
- * balayage (`indexOf`) ; plus de 32 767 caractères produits → illisible.
+ * balayage (`indexOf`) ; plus de 32 767 caractères produits → illisible. Chaque échappement note
+ * une unité UTF-16 : une paire complète (« _xD83D__xDE00_ ») est recomposée, un nul ou une moitié
+ * de paire seule → illisible, un autre contrôle C0 (hors tabulation, LF, CR) → une espace.
  */
 function decoderOoxml(t: string): string {
   let p = t.indexOf('_x');
@@ -308,15 +322,36 @@ function decoderOoxml(t: string): string {
   const sortie = new Sortie(CELLULE_MAX);
   let i = 0;
   while (p !== -1) {
-    if (p + 6 < t.length && hexa(t.charCodeAt(p + 2)) && hexa(t.charCodeAt(p + 3)) && hexa(t.charCodeAt(p + 4)) && hexa(t.charCodeAt(p + 5)) && t.charCodeAt(p + 6) === 0x5f) {
-      sortie.ajouter(t.slice(i, p));
-      sortie.ajouter(String.fromCharCode(Number.parseInt(t.slice(p + 2, p + 6), 16)));
-      i = p + 7;
-      p = t.indexOf('_x', i);
-    } else p = t.indexOf('_x', p + 1);
+    const code = uniteOoxml(t, p);
+    if (code === -1) {
+      p = t.indexOf('_x', p + 1);
+      continue;
+    }
+    sortie.ajouter(t.slice(i, p));
+    i = p + 7;
+    if (moitieHaute(code)) {
+      // Une unité UTF-16 par échappement : une paire complète s'écrit en deux échappements.
+      const basse = uniteOoxml(t, i);
+      if (!moitieBasse(basse)) throw new Illisible('moitié de paire de substitution seule');
+      sortie.ajouter(String.fromCharCode(code, basse));
+      i += 7;
+    } else if (code === 0 || moitieBasse(code)) {
+      throw new Illisible('échappement vers un caractère interdit en XML');
+    } else {
+      // Contrôle collé depuis Word ou PowerPoint : remplacé par une espace (décision du chef).
+      sortie.ajouter(controle(code) ? ' ' : String.fromCharCode(code));
+    }
+    p = t.indexOf('_x', i);
   }
   sortie.ajouter(t.slice(i));
   return sortie.texte();
+}
+
+/** Unité UTF-16 de l'échappement « _xHHHH_ » qui commence en `p`, ou -1 s'il n'y en a pas. */
+function uniteOoxml(t: string, p: number): number {
+  if (p + 6 >= t.length || t.charCodeAt(p) !== 0x5f || t.charCodeAt(p + 1) !== 0x78 || t.charCodeAt(p + 6) !== 0x5f) return -1;
+  for (let k = p + 2; k < p + 6; k++) if (!hexa(t.charCodeAt(k))) return -1;
+  return Number.parseInt(t.slice(p + 2, p + 6), 16);
 }
 
 /** Nom local (sans préfixe d'espace de noms). */

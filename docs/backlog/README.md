@@ -30,7 +30,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T16 | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16 | à faire |
-| [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | à faire |
+| [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | fait |
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
 | [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | fait |
 
@@ -51,3 +51,4 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 - Quantités calculées en nombres entiers quand un arrondi est en jeu ; pas de flottant avant l'arrondi final.
 - Textes de l'interface en français ; noms de code en français comme dans le modèle (`serie`, `emplacement`, `occupation`).
 - Fin de ticket : trois lignes dans `docs/journal.md` et le statut mis à jour dans ce tableau.
+| [T19](T19-tests-de-temps.md) | Tests de temps robustes sous charge | — | à faire |

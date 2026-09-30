@@ -309,3 +309,60 @@ describe('lireCsv : BOM UTF-16 suivi d’un contenu binaire → fichier_binaire 
     expect(m.lireCsv(utf16('Zone;Planche\r\nT1;P1\r\n', 'le')).erreur).toBeNull();
   });
 });
+
+// ── 4e relecture (T14c) ──────────────────────────────────────────────────────────────────────
+
+describe('decoderTexte : fin de fichier UTF-16 corrompue, repli = natif = WHATWG (T14c)', () => {
+  const FFFD = '�';
+  const LE = [0xff, 0xfe] as const;
+  const BE = [0xfe, 0xff] as const;
+
+  /**
+   * [cas, BOM, octets après le BOM, texte attendu]. Norme WHATWG (décodeur UTF-16) : en fin de
+   * fichier, une moitié haute en attente et un octet impair donnent ENSEMBLE un seul U+FFFD.
+   */
+  const FINS: readonly (readonly [string, readonly number[], readonly number[], string])[] = [
+    ['LE : moitié haute puis octet impair', LE, [0x41, 0x00, 0x3d, 0xd8, 0x42], `A${FFFD}`],
+    ['LE : moitié haute seule puis octet impair', LE, [0x3d, 0xd8, 0x42], FFFD],
+    ['LE : moitié haute puis octet nul impair', LE, [0x3d, 0xd8, 0x00], FFFD],
+    ['LE : deux moitiés hautes puis octet impair', LE, [0x41, 0x00, 0x3d, 0xd8, 0x3d, 0xd8, 0x42], `A${FFFD}${FFFD}`],
+    ['LE : moitié basse puis octet impair', LE, [0x41, 0x00, 0x00, 0xdc, 0x42], `A${FFFD}${FFFD}`],
+    ['LE : paire complète puis octet impair', LE, [0x3d, 0xd8, 0x00, 0xde, 0x42], `😀${FFFD}`],
+    ['LE : moitié haute, caractère, octet impair', LE, [0x3d, 0xd8, 0x41, 0x00, 0x42], `${FFFD}A${FFFD}`],
+    ['LE : octet impair seul', LE, [0x42], FFFD],
+    ['LE : moitié haute en fin (sans octet impair)', LE, [0x41, 0x00, 0x3d, 0xd8], `A${FFFD}`],
+    ['BE : moitié haute puis octet impair', BE, [0x00, 0x41, 0xd8, 0x3d, 0x42], `A${FFFD}`],
+    ['BE : moitié haute seule puis octet impair', BE, [0xd8, 0x3d, 0x42], FFFD],
+    ['BE : deux moitiés hautes puis octet impair', BE, [0x00, 0x41, 0xd8, 0x3d, 0xd8, 0x3d, 0x42], `A${FFFD}${FFFD}`],
+    ['BE : moitié basse puis octet impair', BE, [0x00, 0x41, 0xdc, 0x00, 0x42], `A${FFFD}${FFFD}`],
+  ];
+  const octetsDe = (bom: readonly number[], suite: readonly number[]) => new Uint8Array([...bom, ...suite]);
+  const attenduDe = (bom: readonly number[], texte: string) => ({ texte, encodage: bom === LE ? 'utf-16le' : 'utf-16be', bom: true });
+
+  /** `TextDecoder` natif de Node, la référence WHATWG (type local : le cœur n'a pas les types du DOM). */
+  function natif(bom: readonly number[], suite: readonly number[]): string {
+    const { TextDecoder } = globalThis as unknown as { TextDecoder: new (etiquette: string) => { decode(o: Uint8Array): string } };
+    return new TextDecoder(bom === LE ? 'utf-16le' : 'utf-16be').decode(new Uint8Array(suite));
+  }
+
+  it.each(FINS)('la référence (TextDecoder de Node) donne bien le texte attendu : %s', (_cas, bom, suite, texte) => {
+    expect(natif(bom, suite)).toBe(texte);
+  });
+
+  it.each(FINS)('module, décodeur natif présent : %s', (_cas, bom, suite, texte) => {
+    expect(m.decoderTexte(octetsDe(bom, suite))).toStrictEqual(attenduDe(bom, texte));
+  });
+
+  it('repli sans TextDecoder (fil isolé) : même texte, donc même nombre de U+FFFD, que le décodeur natif', async () => {
+    const r = await executerIsole('scenarios', ['decoderSansNatif'], [FINS.map(([, bom, suite]) => octetsDe(bom, suite))], { arretMs: 10_000, memoireMo: 256 });
+    expect(r).toMatchObject({ issue: 'resultat', valeur: { natifAbsent: true } });
+    if (r.issue !== 'resultat') return;
+    const { resultats } = r.valeur as { resultats: readonly { texte: string }[] };
+    const compter = (t: string) => t.split(FFFD).length - 1;
+    FINS.forEach(([cas, bom, suite, texte], i) => {
+      const repli = resultats[i]?.texte ?? '';
+      expect(compter(repli), `nombre de U+FFFD : ${cas}`).toBe(compter(natif(bom, suite)));
+      expect(resultats[i], `repli : ${cas}`).toStrictEqual(attenduDe(bom, texte));
+    });
+  }, 20_000);
+});

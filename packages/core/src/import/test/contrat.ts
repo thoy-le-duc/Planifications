@@ -73,7 +73,22 @@
  *     `<v>` de plus de 32 767 caractères (nombre, `t="e"`, `t="d"`, `t="b"`, `t="str"`) → illisible ;
  *   - (3e relecture) une référence numérique qui n'est pas un caractère XML (`&#0;`, `&#x0;`, une
  *     moitié de paire de substitution `&#xD800;` … `&#xDFFF;`, en décimal comme en hexadécimal)
- *     → illisible, jamais une moitié de paire ni un caractère nul dans une cellule.
+ *     → illisible, jamais une moitié de paire ni un caractère nul dans une cellule ;
+ *   - (4e relecture, T14c) de même pour les échappements OOXML : `_x0000_` et une moitié de paire
+ *     seule (`_xD83D_`, `_xDC00_`, en fin de cellule, deux moitiés hautes, moitiés dans le désordre)
+ *     → illisible. DÉCISION TESTEUR : une paire COMPLÈTE écrite en deux échappements
+ *     (`_xD83D__xDE00_`) est ACCEPTÉE et recomposée (« 😀 ») : un échappement `_xHHHH_` note une
+ *     unité UTF-16 (ECMA-376, ST_Xstring), et la paire donne un vrai caractère ; à l'inverse, une
+ *     référence `&#…;` note un point de code, et `&#xD83D;&#xDE00;` reste refusée (règle XML) ;
+ *     `_x005F_xD83D_` reste le texte « _xD83D_ » ;
+ *   - (4e relecture, T14c) caractères de contrôle interdits en XML 1.0 : U+0001 à U+0008, U+000B,
+ *     U+000C, U+000E à U+001F, écrits en référence (`&#1;`, `&#x1F;`) ou tels quels dans le XML
+ *     → illisible (XML invalide), dans un texte comme dans un attribut. DÉCISION DU CHEF : écrits en
+ *     échappement OOXML (`_x0001_`, `_x000B_`, `_x001f_`, minuscules comprises), ils sont REMPLACÉS
+ *     PAR UNE ESPACE dans le texte de la cellule, le classeur reste lisible (Excel écrit ainsi un
+ *     caractère de contrôle collé depuis Word ou PowerPoint) ; `_x0000_` et les moitiés de paire
+ *     seules restent refusés (voir plus haut). Tabulation, LF et CR (`&#9;` `&#xA;` `_x000D_`…)
+ *     restent acceptés tels quels.
  * Entités XML (`&amp;` `&lt;` `&gt;` `&quot;` `&apos;`, `&#233;`, `&#xE9;`) et échappements OOXML
  * (`_x0041_` → 'A', `_x005F_x0041_` → '_x0041_' : `_x005F_` échappe le soulignement) décodés dans
  * les textes et les attributs, en temps et en mémoire LINÉAIRES : une chaîne en ligne de 5 millions
@@ -88,6 +103,9 @@
  * Sans BOM, des octets nuls restent un fichier binaire (voir lireCsv).
  * (3e relecture) Une moitié de paire de substitution isolée (unité D800–DFFF sans sa moitié) ou un
  * octet final impair → U+FFFD, comme `TextDecoder`.
+ * (4e relecture, T14c) Norme WHATWG en fin de fichier : une moitié haute en attente SUIVIE d'un octet
+ * impair donne UN SEUL U+FFFD (« A », D83D, octet impair → « A\uFFFD ») ; le repli écrit à la main
+ * rend exactement le même texte que le décodeur natif, en petit- comme en gros-boutiste.
  * UTF-8 si les octets sont de l'UTF-8 valide (BOM EF BB BF retiré du texte, `bom: true`) ;
  * sinon Windows-1252 (exports Excel) : 0xE9 → 'é', 0x80 → '€', 0x92 → '’', 0x9C → 'œ',
  * (BOM UTF-8 suivi d'octets qui ne sont pas de l'UTF-8 : décodé en Windows-1252, BOM retiré du
@@ -389,10 +407,19 @@
  * substitution (émoji…) ; le message non plus.
  * Correspondance dont un champ obligatoire n'est associé à aucune colonne : chaque ligne est en
  * erreur 'champ_manquant' (colonne null).
+ * Mémoire (4e relecture, T14c) : 400 000 lignes de données à 5 erreurs chacune (5 colonnes en
+ * erreur, valeurs toutes différentes d'une ligne à l'autre) → plan dans un tas de 512 Mo, ENTRÉE
+ * COMPRISE (fil isolé ; le plan d'avant en demandait plus de 600). La forme ne change pas : chaque
+ * `LignePlan` garde dans `erreurs` TOUTES ses erreurs (code, champ, colonne, message non vide de
+ * 200 caractères au plus), en données simples (propriétés propres, pas d'accesseur de prototype :
+ * le plan passe par `structuredClone` et `postMessage`). Pour tenir, le moteur PEUT partager un
+ * même objet `ErreurImport` entre plusieurs lignes (objets gelés ou jamais modifiés), et le message
+ * PEUT ne plus citer la cellule (elle se relit dans `lignes[ligne - 1][colonne]`) ; s'il la cite,
+ * les règles des messages ci-dessus tiennent toujours.
  *
  * ── Modèle d'import ─────────────────────────────────────────────────────────────────────────
  *
- *   creerModele(entetes: readonly Cellule[], correspondance: Correspondance, choix: readonly ChoixValeur[]): ModeleImport
+ *   creerModele(entetes: readonly Cellule[], correspondance: Correspondance, choix: readonly ChoixValeur[]): ResultatModele
  *   serialiserModele(modele: ModeleImport): string          // JSON
  *   lireModele(texte: string): ModeleImport | null          // null si illisible, version ou champ inconnus,
  *                                                            // id de choix vide, nom de nouvelle
@@ -404,6 +431,21 @@
  * Le modèle retient, par en-tête, le champ et l'unité validés, plus les choix de valeurs. Il
  * s'applique à un fichier de MÊME FORME : mêmes en-têtes normalisés, dans n'importe quel ordre ;
  * sinon null. lireModele(serialiserModele(m)) est égal à m.
+ * (4e relecture, T14c) `creerModele` rend `{ ok: true, modele }` ou `{ ok: false, code, champ,
+ * colonne, message }` (message en français), sans jamais lever : un modèle créé est TOUJOURS
+ * relisible, et `creerModele` ne refuse QUE ce que `lireModele` refuserait. Le modèle est celui
+ * d'avant : une colonne par en-tête (texte de la cellule, '' si vide ; champ et unité de la
+ * colonne de même rang, `null` si la correspondance est plus courte), puis les choix recopiés.
+ * Refus (codes stables) :
+ *   'champ_en_double' un champ associé à deux colonnes ou plus : champ = ce champ, colonne = la
+ *                     DEUXIÈME colonne qui le porte (comme dans le plan) ;
+ *   'champ_inconnu'   un champ qui n'est pas du type : champ, colonne = la sienne ;
+ *   'unite_refusee'   une unité non acceptée pour le champ, ou sur une colonne ignorée : champ
+ *                     (null si ignorée), colonne = la sienne ;
+ *   'choix_invalide'  un choix dont l'identifiant est vide ou le nom nouveau fait d'espaces :
+ *                     champ = celui du choix, colonne null.
+ * Plusieurs problèmes : le code de l'un d'eux (ordre libre). Vérifié par propriété sur des
+ * correspondances générées : `ok` exactement quand le modèle ainsi construit se relit.
  * (3e relecture) `appliquerModele` en temps linéaire, même avec beaucoup d'en-têtes identiques :
  * 400 000 colonnes à l'en-tête vide → moins de 1 s.
  *
@@ -643,6 +685,13 @@ export interface ModeleImport {
   readonly choix: readonly ChoixValeur[];
 }
 
+/** (4e relecture, T14c) Résultat de `creerModele`. */
+export type CodeRefusModele = 'champ_en_double' | 'champ_inconnu' | 'unite_refusee' | 'choix_invalide';
+
+export type ResultatModele =
+  | { readonly ok: true; readonly modele: ModeleImport }
+  | { readonly ok: false; readonly code: CodeRefusModele; readonly champ: CleChamp | null; readonly colonne: number | null; readonly message: string };
+
 // ── Bibliothèque ─────────────────────────────────────────────────────────────────────────────
 
 export interface FamilleParDefaut {
@@ -666,7 +715,7 @@ export interface ModuleImport {
   lireDate(c: Cellule, anneeSaison: number | null, options?: OptionsDate): Lecture<DateCalendaire | null>;
   rapprocher(valeur: string, references: readonly Reference[]): Rapprochement;
   preparerImport(entree: EntreeImport): PlanImport;
-  creerModele(entetes: readonly Cellule[], correspondance: Correspondance, choix: readonly ChoixValeur[]): ModeleImport;
+  creerModele(entetes: readonly Cellule[], correspondance: Correspondance, choix: readonly ChoixValeur[]): ResultatModele;
   serialiserModele(modele: ModeleImport): string;
   lireModele(texte: string): ModeleImport | null;
   appliquerModele(modele: ModeleImport, entetes: readonly Cellule[]): Correspondance | null;

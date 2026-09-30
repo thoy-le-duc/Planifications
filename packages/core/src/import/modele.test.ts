@@ -4,7 +4,7 @@
  * Contrat : ./test/contrat.ts. Fichiers : modele-a.csv et modele-b.csv (mêmes en-têtes, autre ordre).
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { chargerImport, type Cellule, type ChoixValeur, type Correspondance, type ModeleImport, type ModuleImport } from './test/contrat.ts';
+import { chargerImport, type Cellule, type ChoixValeur, type CleChamp, type ColonneAssociee, type Correspondance, type ModeleImport, type ModuleImport, type TypeContenu, type UniteColonne } from './test/contrat.ts';
 import { BIBLIOTHEQUE, lireFixture } from './test/fixtures.ts';
 
 let m: ModuleImport;
@@ -41,7 +41,9 @@ describe('modèle d’import', () => {
 
   beforeAll(async () => {
     const { entetes, correspondance, choix } = await preparerPremier();
-    modele = m.creerModele(entetes, correspondance, choix);
+    const r = m.creerModele(entetes, correspondance, choix);
+    if (!r.ok) throw new Error(`modèle refusé : ${r.message}`);
+    modele = r.modele;
   });
 
   it('retient le type, chaque en-tête avec son champ et son unité, et les choix de valeurs', () => {
@@ -214,5 +216,176 @@ describe('lireModele : un champ sur deux colonnes → null (3e relecture, point 
       choix: [],
     };
     expect(m.lireModele(JSON.stringify(modele))).toStrictEqual(modele);
+  });
+});
+
+// ── 4e relecture (T14c) ──────────────────────────────────────────────────────────────────────
+
+/** Gèle en profondeur : `creerModele` ne doit rien modifier de ce qu'on lui passe. */
+function geler<T>(v: T): T {
+  if (typeof v === 'object' && v !== null) {
+    for (const x of Object.values(v)) geler(x);
+    Object.freeze(v);
+  }
+  return v;
+}
+
+describe('creerModele : un champ sur deux colonnes est refusé, sans lever (T14c)', () => {
+  const col = (champ: CleChamp | null, unite: UniteColonne | null = null): ColonneAssociee => ({ champ, unite });
+
+  it('deux colonnes sur emplacement → champ_en_double, colonne = la deuxième ; message en français', () => {
+    const entetes = geler(['Zone', 'Planche', 'Notes', 'N° planche']);
+    const correspondance = geler<Correspondance>({ type: 'parcellaire', colonnes: [col('zone'), col('emplacement'), col(null), col('emplacement')] });
+    const r = m.creerModele(entetes, correspondance, []);
+    expect(r).toMatchObject({ ok: false, code: 'champ_en_double', champ: 'emplacement', colonne: 3 });
+    if (!r.ok) expect(r.message.trim().length).toBeGreaterThan(5);
+  });
+
+  it('deux colonnes sur la longueur en unités différentes → champ_en_double', () => {
+    const correspondance = geler<Correspondance>({ type: 'series', colonnes: [col('espece'), col('longueur_m', 'm'), col('longueur_m', 'cm')] });
+    expect(m.creerModele(geler(['Culture', 'Longueur (m)', 'Longueur (cm)']), correspondance, [])).toMatchObject({ ok: false, code: 'champ_en_double', champ: 'longueur_m', colonne: 2 });
+  });
+
+  it('trois colonnes sur le même champ : colonne = la deuxième', () => {
+    const correspondance = geler<Correspondance>({ type: 'cultures', colonnes: [col('espece'), col('espece'), col('espece')] });
+    expect(m.creerModele(geler(['a', 'b', 'c']), correspondance, [])).toMatchObject({ ok: false, code: 'champ_en_double', champ: 'espece', colonne: 1 });
+  });
+
+  it('plusieurs colonnes ignorées restent permises ; le modèle créé se relit', () => {
+    const correspondance = geler<Correspondance>({ type: 'parcellaire', colonnes: [col('zone'), col(null), col(null)] });
+    const r = m.creerModele(geler(['Zone', 'Notes', 'Id']), correspondance, []);
+    expect(r).toStrictEqual({
+      ok: true,
+      modele: {
+        version: 1,
+        type: 'parcellaire',
+        colonnes: [
+          { entete: 'Zone', champ: 'zone', unite: null },
+          { entete: 'Notes', champ: null, unite: null },
+          { entete: 'Id', champ: null, unite: null },
+        ],
+        choix: [],
+      },
+    });
+    if (r.ok) expect(m.lireModele(m.serialiserModele(r.modele))).toStrictEqual(r.modele);
+  });
+
+  it('le champ en double au-delà des en-têtes ne compte pas (la colonne n’existe pas dans le fichier)', () => {
+    const correspondance = geler<Correspondance>({ type: 'parcellaire', colonnes: [col('zone'), col('emplacement'), col('emplacement')] });
+    expect(m.creerModele(geler(['Zone', 'Planche']), correspondance, [])).toMatchObject({ ok: true });
+  });
+
+  it.each([
+    ['champ d’un autre type', { type: 'parcellaire', colonnes: [col('zone'), col('espece')] }, 'champ_inconnu', 'espece', 1],
+    ['unité sur un champ texte', { type: 'parcellaire', colonnes: [col('zone', 'm')] }, 'unite_refusee', 'zone', 0],
+    ['unité sur une colonne ignorée', { type: 'parcellaire', colonnes: [col('zone'), col(null, 'cm')] }, 'unite_refusee', null, 1],
+    ['unité d’une autre grandeur', { type: 'parcellaire', colonnes: [col('zone'), col('longueur_m', 'kg')] }, 'unite_refusee', 'longueur_m', 1],
+  ] as const)('%s → %s', (_cas, correspondance, code, champ, colonne) => {
+    const r = m.creerModele(geler(['A', 'B']), geler<Correspondance>(correspondance), []);
+    expect(r).toMatchObject({ ok: false, code, champ, colonne });
+  });
+
+  it.each([
+    ['identifiant vide', { champ: 'espece', valeur: 'Salade', decision: { sorte: 'existante', id: '' } }],
+    ['nom nouveau fait d’espaces', { champ: 'famille', valeur: 'Solanées', decision: { sorte: 'nouvelle', nom: '   ' } }],
+  ] as const)('choix : %s → choix_invalide', (_cas, choix) => {
+    const correspondance = geler<Correspondance>({ type: 'cultures', colonnes: [col('espece'), col('famille')] });
+    expect(m.creerModele(geler(['Culture', 'Famille']), correspondance, geler([choix]))).toMatchObject({ ok: false, code: 'choix_invalide', champ: choix.champ, colonne: null });
+  });
+});
+
+describe('creerModele : un modèle créé est toujours relisible (propriété, correspondances générées, T14c)', () => {
+  /** Générateur pseudo-aléatoire déterministe (mulberry32) : mêmes cas à chaque exécution. */
+  function generateur(graine: number): () => number {
+    let a = graine >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+    };
+  }
+
+  const TYPES: readonly TypeContenu[] = ['parcellaire', 'cultures', 'series', 'assolement'];
+  const TOUS_CHAMPS: readonly CleChamp[] = [
+    'zone', 'sous_zone', 'emplacement', 'sorte', 'longueur_m', 'largeur_m', 'type_abri', 'surface_m2', 'nombre_places', 'espece', 'variete', 'famille', 'mode',
+    'duree_pepiniere_jours', 'duree_avant_recolte_jours', 'fenetre_recolte_jours', 'rangs_par_planche', 'ecartement_cm', 'poids_mille_graines_g', 'date_semis',
+    'date_plantation', 'date_debut_recolte', 'date_fin_recolte', 'nombre_plants', 'annee',
+  ];
+  const UNITES: readonly UniteColonne[] = ['m', 'cm', 'kg', 'g', 'ha', 'semaine'];
+  const ENTETES: readonly Cellule[] = ['Planche', ' Longueur (m) ', '', '   ', null, 12, 3.5, 'É', 'Culture', 'Culture', 'N° planche', '🌱 Semis', '\uD800', 'a"b\\c', '__proto__'];
+  const CODES = ['champ_en_double', 'champ_inconnu', 'unite_refusee', 'choix_invalide'];
+
+  function cas(alea: () => number): { entetes: Cellule[]; correspondance: Correspondance; choix: ChoixValeur[] } {
+    const pris = <T>(liste: readonly T[]): T => liste[Math.floor(alea() * liste.length)] as T;
+    const type = pris(TYPES);
+    const duType = m.CHAMPS_IMPORT[type].map((d) => d.cle);
+    const n = Math.floor(alea() * 7);
+    const entetes = Array.from({ length: n }, () => pris(ENTETES));
+    const longueur = Math.max(0, n + Math.floor(alea() * 3) - 1);
+    const colonnes = Array.from({ length: longueur }, (): ColonneAssociee => {
+      const x = alea();
+      // Surtout des champs du type (doublons fréquents), parfois un champ d'un autre type ou ignoré.
+      const champ = x < 0.2 ? null : x < 0.9 ? pris(duType) : pris(TOUS_CHAMPS);
+      const unite = alea() < 0.6 ? null : pris(UNITES);
+      return { champ, unite };
+    });
+    const choix = Array.from({ length: Math.floor(alea() * 3) }, (): ChoixValeur => {
+      const champ = alea() < 0.5 ? 'espece' : 'famille';
+      const valeur = pris(['Salade', '', '  laitue ', 'Solanées']);
+      const y = alea();
+      const decision = y < 0.45 ? { sorte: 'existante' as const, id: pris(['esp-laitue', 'fam-1', '', ' ']) } : { sorte: 'nouvelle' as const, nom: pris(['Salade', '', '   ', 'Poireau']) };
+      return { champ, valeur, decision };
+    });
+    return { entetes, correspondance: { type, colonnes }, choix };
+  }
+
+  /** Le modèle tel que `creerModele` le construit (contrat) : une colonne par en-tête, choix recopiés. */
+  function modeleAttendu(entetes: readonly Cellule[], correspondance: Correspondance, choix: readonly ChoixValeur[]): ModeleImport {
+    return {
+      version: 1,
+      type: correspondance.type,
+      colonnes: entetes.map((e, i) => ({ entete: e === null ? '' : typeof e === 'number' ? String(e) : e, champ: correspondance.colonnes[i]?.champ ?? null, unite: correspondance.colonnes[i]?.unite ?? null })),
+      choix: choix.map((c) => ({ champ: c.champ, valeur: c.valeur, decision: c.decision.sorte === 'existante' ? { sorte: 'existante', id: c.decision.id } : { sorte: 'nouvelle', nom: c.decision.nom } })),
+    };
+  }
+
+  it('2 000 correspondances générées : jamais d’exception ; ok ⇔ relisible ; un modèle créé se relit à l’identique', () => {
+    const alea = generateur(20260930);
+    let acceptes = 0;
+    let refuses = 0;
+    let doublons = 0;
+    for (let k = 0; k < 2_000; k++) {
+      const { entetes, correspondance, choix } = cas(alea);
+      const trace = JSON.stringify({ entetes, correspondance, choix });
+      const r = m.creerModele(geler(entetes), geler(correspondance), geler(choix));
+      const naif = modeleAttendu(entetes, correspondance, choix);
+      const relisible = m.lireModele(JSON.stringify(naif)) !== null;
+      if (r.ok) {
+        acceptes++;
+        // Espaces autour des en-têtes : `texteCellule` peut les retirer ; on compare donc au modèle relu.
+        const relu = m.lireModele(m.serialiserModele(r.modele));
+        expect(relu, `relisible : ${trace}`).toStrictEqual(r.modele);
+        expect(r.modele.colonnes.map((c) => [c.champ, c.unite]), trace).toStrictEqual(naif.colonnes.map((c) => [c.champ, c.unite]));
+        expect(r.modele.choix, trace).toStrictEqual(naif.choix);
+        expect(relisible, `accepté alors que lireModele refuserait : ${trace}`).toBe(true);
+      } else {
+        refuses++;
+        expect(CODES, trace).toContain(r.code);
+        expect(r.message.trim().length, trace).toBeGreaterThan(5);
+        expect(relisible, `refusé (${r.code}) alors que lireModele accepterait : ${trace}`).toBe(false);
+        const champs = naif.colonnes.map((c) => c.champ).filter((c) => c !== null);
+        if (r.code === 'champ_en_double') {
+          doublons++;
+          expect(champs.filter((c) => c === r.champ).length, trace).toBeGreaterThan(1);
+          expect(naif.colonnes.findIndex((c, i) => c.champ === r.champ && naif.colonnes.findIndex((d) => d.champ === r.champ) < i), trace).toBe(r.colonne);
+        }
+      }
+    }
+    // Le générateur couvre bien les deux issues, et des doublons.
+    expect(acceptes).toBeGreaterThan(100);
+    expect(refuses).toBeGreaterThan(100);
+    expect(doublons).toBeGreaterThan(20);
   });
 });
