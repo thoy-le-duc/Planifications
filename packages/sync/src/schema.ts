@@ -38,6 +38,7 @@ export const TABLES_LOCALES = {
   secteur_emplacement: { ferme_id: T, secteur_irrigation_id: T, emplacement_id: T, du: T, au: T, cree_le: T, modifie_le: T, supprime_le: T },
   secteur_irrigation: { ferme_id: T, numero_vanne: 'entier', nom: T, debit_litres_heure: 'reel', adresse_modbus: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
   serie: { ferme_id: T, saison_id: T, espece_id: T, variete_id: T, itineraire_id: T, parametres: T, ancre_type: T, ancre_date: T, prevu_semis_pepiniere: T, prevu_mise_en_place: T, prevu_debut_recolte: T, prevu_fin_recolte: T, longueur_m: 'reel', nombre_plants: 'entier', statut: T, rotation_acceptee: T, cree_le: T, modifie_le: T, supprime_le: T },
+  type_intervention: { ferme_id: T, categorie: T, libelle: T, masque: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
   utilisateur: { nom: T, cree_le: T, modifie_le: T, supprime_le: T },
   variete: { ferme_id: T, espece_id: T, nom: T, fournisseur: T, poids_mille_graines_g: 'reel', taux_germination: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
   zone: { ferme_id: T, nom: T, zone_parente_id: T, type_abri: T, surface_m2: 'reel', cree_le: T, modifie_le: T, supprime_le: T },

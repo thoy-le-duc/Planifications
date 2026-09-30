@@ -113,6 +113,13 @@ streams:
   produit_phyto_reference:
     auto_subscribe: true
     query: SELECT * FROM produit_phyto WHERE ferme_id IS NULL
+  # Types d'intervention (T23) : ceux de la ferme, puis la liste de départ (ferme_id nul).
+  type_intervention_ferme:
+    auto_subscribe: true
+    query: SELECT * FROM type_intervention WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  type_intervention_reference:
+    auto_subscribe: true
+    query: SELECT * FROM type_intervention WHERE ferme_id IS NULL
 
   # Son propre compte seulement, sans e-mail. Pas les collègues : le nom est libre (rien n'empêche
   # d'y mettre son adresse), et aucun écran n'en a encore besoin. À revoir avec les écrans qui
