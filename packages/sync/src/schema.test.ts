@@ -34,4 +34,12 @@ describe('schéma local', () => {
       expect(locale?.columns.map((c) => c.name).sort()).toEqual(attendues.sort());
     },
   );
+
+  it('T10e : serie.rotation_acceptee, jsonb nullable dans Postgres, descend sur le téléphone en texte JSON', () => {
+    const colonne = tablesPostgres.find((t) => t.name === 'serie')?.columns.find((c) => c.name === 'rotation_acceptee');
+    expect(colonne?.getSQLType()).toBe('jsonb');
+    expect(colonne?.notNull).toBe(false);
+    const serieLocale: Readonly<Record<string, string>> = TABLES_LOCALES.serie;
+    expect(serieLocale.rotation_acceptee).toBe('texte');
+  });
 });
