@@ -1,9 +1,20 @@
 {
-  "maj": "30 septembre 2026, 13 h UTC",
-  "resume": "Fusionnés depuis ce matin : **la saisie au champ (T13)**, **l'export dans l'onglet Ferme (T16b)**, **le stock synchronisé en sécurité (T10c, T10d)**, **les pages de test retirées du site en ligne (T11c)** et **le serveur qui accepte les séries (T10e)**. Prochains : **le plan de culture (T12)** et **les travaux prévus dans les itinéraires (T22)**, puis leurs écrans (T23, T24).",
+  "maj": "30 septembre 2026, 17 h UTC",
+  "resume": "Cette fenêtre : **les travaux prévus des itinéraires (T22)**, fusionnés : grelinette, compost, désherbage répété… apparaissent dans Aujourd'hui avec leur temps estimé et la charge de la semaine. **Le plan de culture (T12)** : on crée et modifie une série depuis Planches par un appui long, dates et besoins calculés en direct. Prochains : **le serveur des itinéraires (T23)**, puis **l'écran « Mes itinéraires » (T24)** et les suites du formulaire (T12b, dont un sélecteur de semaine pour iPhone).",
   "en_cours": {},
-  "attente": "Répondre à Q20 (corriger une récolte déjà annulée ; deux téléphones qui corrigent la même récolte), puis Q13 (plafonds des quantités), Q14 (fournisseur d'e-mail, bloque la mise en ligne), Q15 (connexions au magasin), Q17 (délais de retour par famille) et Q18 (saison à cheval sur deux années).",
+  "attente": "Répondre à Q24 (« Fait » sur un travail répété en retard : solder cette occurrence plutôt que la suivante ?) et confirmer Q23 (un travail prévu jamais fait disparaît quand l'étape repère est faite). Toujours ouvertes : Q20 (corriger une récolte annulée), Q13 (plafonds des quantités), Q14 (fournisseur d'e-mail, bloque la mise en ligne), Q15 (connexions au magasin), Q17 (délais de retour par famille) et Q18 (saison à cheval sur deux années).",
   "visuels": [
+    {
+      "titre": "Plan de culture : nouvelle série",
+      "etat": "fait",
+      "images": [
+        "serie-formulaire.png",
+        "serie-rotation.png",
+        "serie-rotation-confirmation.png"
+      ],
+      "alt": "Formulaire Nouvelle série avec dates et besoins calculés, alerte de rotation rouge, confirmation",
+      "texte": "T12. Appui long sur une case vide du plan (ou « Nouvelle série ») : planche et semaine préremplies. Culture, itinéraire, ancre, planches : le moteur recalcule dates, mottes, graines et plaques en 1 ms. Alerte de rotation rouge avec confirmation. « Annuler » 10 s puis depuis l'historique. La batavia se planifie en 6 gestes, formulaire affiché en 111 ms hors ligne."
+    },
     {
       "titre": "Aujourd'hui : la saisie au champ",
       "etat": "fait",
@@ -17,8 +28,12 @@
     },
     {
       "titre": "Itinéraires et travaux de culture",
-      "etat": "à faire",
-      "texte": "T22 à T24, demandés par Théophane. Chaque ferme décrit sa façon de cultiver : travail du sol, faux semis, désherbages répétés, temps estimé. Les tâches arrivent seules dans Aujourd'hui."
+      "etat": "en cours",
+      "texte": "T22 fait : chaque itinéraire porte ses travaux prévus (travail du sol, amendement, désherbage, palissage…), à X jours d'une étape, répétables, avec un temps estimé facultatif. Ils apparaissent dans Aujourd'hui avec « Fait » en un geste et la charge de la semaine (« 1 h 24 de travail »). À venir : T23 (serveur, types d'intervention de la ferme) et T24 (écran « Mes itinéraires »).",
+      "images": [
+        "aujourdhui-travaux.png"
+      ],
+      "alt": "Écran Aujourd'hui avec la grelinette en retard, son temps estimé et la charge de la semaine"
     },
     {
       "titre": "Planches, sur le téléphone",
