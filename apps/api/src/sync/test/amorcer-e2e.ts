@@ -24,6 +24,15 @@
  * stock ; la sortie gagne `"serieTomates": { "id", "especeId" }` (e2e-synchro/stock.e2e.ts).
  *
  *   node apps/api/src/sync/test/amorcer-e2e.ts --serie-tomates
+ *
+ * T10e : avec `--plan-serie`, la ferme reçoit de quoi planifier une série de batavias depuis le
+ * téléphone, sans aucune série : une famille « Astéracées » de la ferme (retour minimal 2 ans,
+ * conseillé 3), une espèce « Laitue », une variété « Batavia blonde », un itinéraire « Batavia de
+ * printemps » (plant maison, instantané de la batavia de T02), une saison « 2027 », une zone et
+ * deux planches de 30 m ; la sortie gagne `"planSerie": { "saisonId", "itineraireId",
+ * "especeId", "familleId", "delaiMinimalAns", "planches" }` (e2e-synchro/serie.e2e.ts).
+ *
+ *   node apps/api/src/sync/test/amorcer-e2e.ts --plan-serie
  */
 import { randomUUID } from 'node:crypto';
 import { ajouterJours, type DateCalendaire } from '@planif/core';
@@ -123,7 +132,67 @@ async function amorcerSerieTomates(bd: pg.Pool, fermeId: string): Promise<{ id: 
   return { id: serie, especeId: espece };
 }
 
+/** Batavia de T02 : plant maison, pépinière 28 j, avant récolte 49 j, fenêtre 14 j. */
+const PARAMETRES_BATAVIA = {
+  mode: 'plant_maison',
+  densite: { facon: 'ecartement', rangsParPlanche: 3, ecartementSurRangCm: 30 },
+  dureePepiniereJours: 28,
+  grainesParMotte: 1,
+  plantsParMotte: 1,
+  pertePepiniere: 10,
+  alveolesParPlaque: 77,
+  periodeUsage: null,
+  typeAbri: 'tunnel',
+  dureeAvantRecolteJours: 49,
+  fenetreRecolteJours: 14,
+  margeSecurite: 10,
+  rendementAttendu: null,
+  perenne: null,
+};
+
+/** Délai de retour minimal de la famille amorcée (celui que la décision de rotation reprend). */
+const DELAI_MINIMAL_ASTERACEES = 2;
+
+interface PlanSerie {
+  readonly saisonId: string;
+  readonly itineraireId: string;
+  readonly especeId: string;
+  readonly familleId: string;
+  readonly delaiMinimalAns: number;
+  readonly planches: readonly [string, string];
+}
+
+/** Famille, espèce, variété, itinéraire, saison 2027 et deux planches de 30 m : de quoi créer une série au téléphone. */
+async function amorcerPlanSerie(bd: pg.Pool, fermeId: string): Promise<PlanSerie> {
+  const [famille, espece, variete, itineraire, saison, zone] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  await bd.query(
+    `INSERT INTO famille (id, ferme_id, nom, delai_retour_minimal_ans, delai_retour_conseille_ans) VALUES ($1, $2, 'Astéracées', $3, 3)`,
+    [famille, fermeId, DELAI_MINIMAL_ASTERACEES],
+  );
+  await bd.query(
+    `INSERT INTO espece (id, ferme_id, famille_id, nom, categorie, perenne, unite_recolte) VALUES ($1, $2, $3, 'Laitue', 'legume', false, 'piece')`,
+    [espece, fermeId, famille],
+  );
+  await bd.query(`INSERT INTO variete (id, ferme_id, espece_id, nom) VALUES ($1, $2, $3, 'Batavia blonde')`, [variete, fermeId, espece]);
+  await bd.query(
+    `INSERT INTO itineraire (id, ferme_id, espece_id, variete_id, nom, mode, parametres)
+     VALUES ($1, $2, $3, $4, 'Batavia de printemps', 'plant_maison', $5)`,
+    [itineraire, fermeId, espece, variete, JSON.stringify(PARAMETRES_BATAVIA)],
+  );
+  await bd.query(`INSERT INTO saison (id, ferme_id, nom, debut, fin) VALUES ($1, $2, '2027', '2027-01-01', '2027-12-31')`, [saison, fermeId]);
+  await bd.query(`INSERT INTO zone (id, ferme_id, nom, type_abri) VALUES ($1, $2, 'Tunnel 2', 'tunnel')`, [zone, fermeId]);
+  const planches = [randomUUID(), randomUUID()] as const;
+  for (const [i, planche] of planches.entries()) {
+    await bd.query(
+      `INSERT INTO emplacement (id, ferme_id, zone_id, code, sorte, longueur_m, actif_du) VALUES ($1, $2, $3, $4, 'planche', 30, '2026-01-01')`,
+      [planche, fermeId, zone, `T2-P0${String(i + 1)}`],
+    );
+  }
+  return { saisonId: saison, itineraireId: itineraire, especeId: espece, familleId: famille, delaiMinimalAns: DELAI_MINIMAL_ASTERACEES, planches };
+}
+
 const avecSerieTomates = process.argv.slice(2).includes('--serie-tomates');
+const avecPlanSerie = process.argv.slice(2).includes('--plan-serie');
 const urlApi = process.env.API_URL ?? '';
 const pool = new pg.Pool({ connectionString: variable('DATABASE_URL'), max: 1 });
 try {
@@ -154,7 +223,14 @@ try {
     );
   }
   const serieTomates = avecSerieTomates ? await amorcerSerieTomates(pool, fermeId) : undefined;
-  process.stdout.write(`${JSON.stringify(serieTomates === undefined ? { fermeId, sessions } : { fermeId, sessions, serieTomates })}\n`);
+  const planSerie = avecPlanSerie ? await amorcerPlanSerie(pool, fermeId) : undefined;
+  const sortie = {
+    fermeId,
+    sessions,
+    ...(serieTomates === undefined ? {} : { serieTomates }),
+    ...(planSerie === undefined ? {} : { planSerie }),
+  };
+  process.stdout.write(`${JSON.stringify(sortie)}\n`);
 } finally {
   await pool.end();
 }
