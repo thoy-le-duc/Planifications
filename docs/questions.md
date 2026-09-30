@@ -244,6 +244,18 @@ Question : si tu ouvres l'appli et tapes tout de suite sur Planches, l'écran me
 
 Réponse (2026-09-30) : « ok pour l'instant ». La correction reste dans T11b, sans priorité.
 
+### Q22 — Itinéraires et travaux de culture (posée le 2026-09-30, demande de Théophane)
+
+Demande : « des itinéraires de cultures, l'outil adaptable à n'importe quelle ferme ; ça marche aussi pour le travail du sol par culture, les travaux de cultures ».
+
+Réponses (2026-09-30) :
+- les travaux prévus peuvent se répéter (tous les N jours entre deux repères), dès le début ;
+- un temps de travail estimé, facultatif, par tâche, pour voir la charge de la semaine ;
+- modifier un itinéraire : l'appli propose de mettre à jour les séries à venir, avec confirmation ; les séries passées ne bougent jamais ;
+- le travail du sol fait partie de l'itinéraire de la culture.
+
+Tickets : T22 (cœur), T23 (serveur), T24 (écran).
+
 ### Q21 — Plafonds d'une série (posée le 2026-09-30, T10e)
 
 Question : le serveur refusera une série trop grande. Proposition provisoire : 10 000 m de planche et 1 000 000 de plants au plus. Est-ce que ça te va, ou faut-il d'autres chiffres ? (Même esprit que Q13 pour les quantités.)
