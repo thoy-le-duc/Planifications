@@ -226,12 +226,17 @@ const sqlCampagnes = (filtre: string) => `SELECT c.id, c.debut_recolte_prevu, c.
   LEFT JOIN variete v ON v.id = p.variete_id
   WHERE c.ferme_id = ? AND c.supprime_le IS NULL AND p.supprime_le IS NULL AND ${filtre}`;
 
-/** Emplacements occupés, par série ou plantation ; `filtre` sur l'alias `o`. */
+/**
+ * Emplacements occupés, par série ou plantation ; `filtre` sur l'alias `o`. Seuls les
+ * emplacements actifs le jour donné (deux derniers paramètres) : jamais un emplacement supprimé
+ * ou retiré recopié dans une saisie (le serveur le refuserait).
+ */
 const sqlOccupations = (filtre: string) => `SELECT o.serie_id, o.plantation_id, em.id AS emplacement_id, em.code, z.nom AS zone
   FROM occupation o
   JOIN emplacement em ON em.id = o.emplacement_id
   LEFT JOIN zone z ON z.id = em.zone_id
-  WHERE o.ferme_id = ? AND o.supprime_le IS NULL AND ${filtre}`;
+  WHERE o.ferme_id = ? AND o.supprime_le IS NULL AND ${filtre}
+    AND em.supprime_le IS NULL AND em.actif_du <= ? AND (em.actif_au IS NULL OR em.actif_au > ?)`;
 
 const SQL_SERIES = sqlSeries(FILTRE_SERIES_ACTIVES);
 const SQL_CAMPAGNES = sqlCampagnes('(c.fin_recolte_prevue IS NULL OR c.fin_recolte_prevue >= ?)');
@@ -313,7 +318,7 @@ export async function lireJournee(
   };
   const series = await lire(SQL_SERIES, [fermeId]);
   const campagnes = await lire(SQL_CAMPAGNES, [fermeId, aujourdhui]);
-  const occupations = await lire(SQL_OCCUPATIONS, [fermeId, fermeId, fermeId, aujourdhui]);
+  const occupations = await lire(SQL_OCCUPATIONS, [fermeId, fermeId, fermeId, aujourdhui, aujourdhui, aujourdhui]);
   const realises = await lire(SQL_REALISES, [fermeId, fermeId, fermeId, aujourdhui, fermeId, fermeId, fermeId]);
   const recents = await lire(SQL_RECENTS, [fermeId, depuis, horodatageDepuis]);
   // Historique : les cultures terminées ou passées qu'il nomme, lues en plus (rarement).
@@ -328,7 +333,7 @@ export async function lireJournee(
   const plantations = c2.map((l) => texte(l.plantation_id));
   const o2 = await lire(
     sqlOccupations(`(o.serie_id IN (${marques(autresSeries.length)}) OR o.plantation_id IN (${marques(plantations.length)}))`),
-    [fermeId, ...autresSeries, ...plantations],
+    [fermeId, ...autresSeries, ...plantations, aujourdhui, aujourdhui],
   );
   return { series: [...series, ...s2], campagnes: [...campagnes, ...c2], occupations: [...occupations, ...o2], realises, recents };
 }

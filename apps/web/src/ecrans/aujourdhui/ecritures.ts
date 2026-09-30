@@ -71,7 +71,6 @@ const SQL_STOCK_CHAINE = `WITH RECURSIVE
 
 /** Prépare l'événement et le vérifie par les règles du serveur. */
 function evenement(porte: PorteDonnees, saisie: SaisieEvenement): { readonly id: Id<'Evenement'>; readonly ordre: OrdreEcriture } {
-  if (porte.preparerSaisie === undefined) throw new Error('porte sans préparation des saisies (preparerSaisie)');
   const { id, ligne, ordre } = porte.preparerSaisie(saisie);
   const r = validerSaisie(ligne);
   if (!r.ok) throw new SaisieRefusee(r.erreur.message);
@@ -149,8 +148,23 @@ export async function noterRecolte(ctx: ContexteEcriture, culture: Culture, quan
 const SQL_ORIGINAL = 'SELECT emplacement_ids, note, photos FROM evenement WHERE id = ?';
 
 /**
- * Saisie qui remplace `ev` : même type, même culture, emplacements, note et photos (relus dans la
- * base), détail repris.
+ * Emplacements encore actifs le jour donné, parmi `ids` (le serveur refuse un emplacement
+ * supprimé ; un emplacement retiré du plan ne se recopie pas).
+ */
+async function emplacementsActifs(ctx: ContexteEcriture, ids: readonly string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const actifs = await ctx.porte.lire<{ id: string }>(
+    `SELECT id FROM emplacement WHERE id IN (${ids.map(() => '?').join(', ')})
+       AND supprime_le IS NULL AND actif_du <= ? AND (actif_au IS NULL OR actif_au > ?)`,
+    [...ids, ctx.aujourdhui, ctx.aujourdhui],
+  );
+  const garder = new Set(actifs.map((l) => l.id.toLowerCase()));
+  return ids.filter((id) => garder.has(id.toLowerCase()));
+}
+
+/**
+ * Saisie qui remplace `ev` : même type, même culture, note et photos (relus dans la base),
+ * détail repris ; ses emplacements encore actifs seulement (liste vide acceptée).
  */
 async function remplacement(ctx: ContexteEcriture, ev: EvenementLu, sorte: RemplacementEvenement['sorte'], date: string): Promise<SaisieEvenement> {
   const original = (await ctx.porte.lire<{ emplacement_ids: string | null; note: string | null; photos: string | null }>(SQL_ORIGINAL, [ev.id]))[0];
@@ -164,7 +178,7 @@ async function remplacement(ctx: ContexteEcriture, ev: EvenementLu, sorte: Rempl
         : ev.campagneId !== null
           ? { sorte: 'campagne' as const, campagneId: ev.campagneId as Id<'Campagne'> }
           : null,
-    emplacementIds: listeTextes(original.emplacement_ids) as Id<'Emplacement'>[],
+    emplacementIds: (await emplacementsActifs(ctx, listeTextes(original.emplacement_ids))) as Id<'Emplacement'>[],
     note: original.note,
     photos: listeTextes(original.photos),
     remplaceEvenement: { sorte, evenementId: ev.id as Id<'Evenement'> },
@@ -184,33 +198,30 @@ async function mouvementDuRemplacement(
   ev: EvenementLu,
   sorte: RemplacementEvenement['sorte'],
   remplacantId: string,
-  culture: Culture | null,
 ): Promise<{ readonly articles: OrdreEcriture[]; readonly mouvements: OrdreEcriture[] }> {
   const rien = { articles: [], mouvements: [] };
   if (ev.detail.type !== 'recolte') return rien;
   const stock = await ctx.porte.lire<{ article: string; somme: number | null }>(SQL_STOCK_CHAINE, [ev.id]);
   const chaine = stock.find((s) => (s.somme ?? 0) !== 0) ?? stock[0];
   const attendu = mouvementAttendu({ remplaceSorte: sorte, quantite: ev.detail.quantite }, chaine?.somme ?? 0);
-  if (attendu === null || attendu === 0) return rien;
-  if (chaine !== undefined) return { articles: [], mouvements: [ordreMouvement(ctx, chaine.article, attendu, remplacantId)] };
-  // Récolte sans entrée en stock (saisie d'avant T13) corrigée : l'article de la culture.
-  if (culture === null) return rien;
-  const a = await article(ctx, culture, ev.detail.unite);
-  return { articles: a.ordres, mouvements: [ordreMouvement(ctx, a.id, attendu, remplacantId)] };
+  // Récolte sans aucune entrée en stock (saisie d'avant T13) : sa correction ou son annulation
+  // ne touche pas au stock non plus.
+  if (chaine === undefined || attendu === null || attendu === 0) return rien;
+  return { articles: [], mouvements: [ordreMouvement(ctx, chaine.article, attendu, remplacantId)] };
 }
 
 /** Annule `ev` (en vigueur) : événement d'annulation et, pour une récolte, le mouvement inverse. */
-export async function annulerSaisie(ctx: ContexteEcriture, ev: EvenementLu, culture: Culture | null): Promise<Id<'Evenement'>> {
+export async function annulerSaisie(ctx: ContexteEcriture, ev: EvenementLu): Promise<Id<'Evenement'>> {
   const e = evenement(ctx.porte, await remplacement(ctx, ev, 'annulation', ev.date));
-  const stock = await mouvementDuRemplacement(ctx, ev, 'annulation', e.id, culture);
+  const stock = await mouvementDuRemplacement(ctx, ev, 'annulation', e.id);
   await ctx.porte.ecrireEnsemble([...stock.articles, e.ordre, ...stock.mouvements]);
   return e.id;
 }
 
 /** Change la date de `ev` (en vigueur) : une correction, même détail, nouvelle date. */
-export async function changerDate(ctx: ContexteEcriture, ev: EvenementLu, date: string, culture: Culture | null): Promise<Id<'Evenement'>> {
+export async function changerDate(ctx: ContexteEcriture, ev: EvenementLu, date: string): Promise<Id<'Evenement'>> {
   const e = evenement(ctx.porte, await remplacement(ctx, ev, 'correction', date));
-  const stock = await mouvementDuRemplacement(ctx, ev, 'correction', e.id, culture);
+  const stock = await mouvementDuRemplacement(ctx, ev, 'correction', e.id);
   await ctx.porte.ecrireEnsemble([...stock.articles, e.ordre, ...stock.mouvements]);
   return e.id;
 }
