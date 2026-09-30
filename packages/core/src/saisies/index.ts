@@ -18,6 +18,7 @@ import type {
   TypeEvenement,
   UniteRecolte,
 } from '../domaine/index.ts';
+import { octetsUtf8, texteJson } from './outils.ts';
 
 // ── Types publics ────────────────────────────────────────────────────────────────────────────
 
@@ -161,24 +162,6 @@ const parmi = <T extends string>(liste: readonly T[], v: unknown): v is T => typ
 /** Texte court pour un message : un nom de clé reçu peut faire 10 000 caractères. */
 const extrait = (texte: string): string => (texte.length > 40 ? `${texte.slice(0, 40)}…` : texte);
 
-/** Octets UTF-8 d'un texte (sans TextEncoder : le cœur n'a ni DOM ni Node). */
-function octetsUtf8(texte: string): number {
-  let n = 0;
-  for (let i = 0; i < texte.length; i++) {
-    const c = texte.charCodeAt(i);
-    if (c < 0x80) n += 1;
-    else if (c < 0x800) n += 2;
-    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < texte.length) {
-      const suivant = texte.charCodeAt(i + 1);
-      if (suivant >= 0xdc00 && suivant <= 0xdfff) {
-        n += 4;
-        i++;
-      } else n += 3;
-    } else n += 3;
-  }
-  return n;
-}
-
 /** Texte JSON (format de PowerSync) ou déjà la valeur ; JSON.parse ne lève pas ici. */
 function json(v: unknown, champ: string, libelle: string): Lu<unknown> {
   if (typeof v !== 'string') return lu(v);
@@ -186,19 +169,6 @@ function json(v: unknown, champ: string, libelle: string): Lu<unknown> {
     return lu(JSON.parse(v) as unknown);
   } catch {
     return echec(erreur('json_illisible', champ, `${libelle} : texte JSON illisible`));
-  }
-}
-
-/**
- * JSON.stringify qui ne lève jamais : le texte, ou le motif de l'échec ('imbrique' : pile
- * dépassée, RangeError ; 'illisible' : BigInt, valeur qui ne s'écrit pas).
- */
-function texteJson(v: unknown): { readonly texte: string } | { readonly echec: 'imbrique' | 'illisible' } {
-  try {
-    const texte: unknown = JSON.stringify(v);
-    return typeof texte === 'string' ? { texte } : { echec: 'illisible' };
-  } catch (e) {
-    return { echec: e instanceof RangeError ? 'imbrique' : 'illisible' };
   }
 }
 

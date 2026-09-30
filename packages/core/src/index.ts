@@ -5,6 +5,7 @@ export * from './dates/index.ts';
 export * from './domaine/index.ts';
 export * from './saisies/index.ts';
 export * from './saisies/stock.ts';
+export * from './saisies/serie.ts';
 export * from './export/index.ts';
 export * from './import/index.ts';
 
@@ -25,4 +26,32 @@ export {
   type SerieSemainier,
   type TacheSemainier,
 } from './planification/semainier.ts';
-export { appliquerRealises, type EtapeSerie, type RealisesSerie } from './planification/dates-serie.ts';
+export {
+  appliquerRealises,
+  calculerDatesSerie,
+  type DatesSerie,
+  type EtapeSerie,
+  type ParametresDatesSerie,
+  type RealisesSerie,
+} from './planification/dates-serie.ts';
+
+// Plan de culture (T12) : dates (T02), besoins en semences et en plants (T05) et alertes de
+// rotation (T04) viennent du moteur, jamais d'une règle réécrite dans l'écran. Les règles d'une
+// série écrite par le téléphone (validerSerie, validerOccupation) sont celles que le serveur
+// rejoue (T10e, saisies/serie.ts).
+export {
+  besoinsSerie,
+  type BesoinsSerie,
+  type ItineraireBesoins,
+} from './planification/besoins.ts';
+export {
+  alertesRotation,
+  type AlerteRotation,
+  type CulturePrevue,
+  type HierarchieParcellaire,
+  type HistoriqueRotation,
+  type LigneEnCause,
+  type NiveauAlerteRotation,
+  type OccupationHistorique,
+  type SourceLigneRotation,
+} from './planification/rotation.ts';

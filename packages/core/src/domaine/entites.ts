@@ -313,6 +313,17 @@ export type TailleSerie =
 
 export type StatutSerie = 'prevue' | 'en_cours' | 'terminee' | 'abandonnee';
 
+/**
+ * Alerte rouge de rotation (T04) acceptée par le maraîcher (T12, T10e) : la famille en cause, le
+ * délai de retour qui n'est pas respecté, et l'instant de la décision. En base : jsonb
+ * `serie.rotation_acceptee`, `{ famille, delai_ans, le }` (le : instant ISO).
+ */
+export interface RotationAcceptee {
+  readonly familleId: Id<'Famille'>;
+  readonly delaiAns: Annees;
+  readonly le: Instant;
+}
+
 export interface Serie extends LigneDeFerme<'Serie'> {
   /** Saison de la mise en place. */
   readonly saisonId: Id<'Saison'>;
@@ -325,6 +336,8 @@ export interface Serie extends LigneDeFerme<'Serie'> {
   readonly datesPrevues: DatesPrevuesSerie;
   readonly taille: TailleSerie;
   readonly statut: StatutSerie;
+  /** Alerte rouge de rotation acceptée ; clé absente quand il n'y en a pas (T10e). */
+  readonly rotationAcceptee?: RotationAcceptee;
 }
 
 /** Culture pluriannuelle (kiwis, asperges, pivoines, fraisiers conservés). */
