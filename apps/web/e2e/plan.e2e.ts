@@ -6,7 +6,7 @@ import { remplirJeuT07 } from '../../../packages/sync/src/test/jeu-t07.ts';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import { LIBELLES_COURTS_ATTENDUS, type LigneEmplacementPlan, type ModuleCalculsPlan, type Plan } from '../src/ecrans/plan/test/contrat.ts';
 import { COULEURS, FAMILLES } from '../src/ui/jetons.ts';
-import { ralentirCpu, surveillerCsp, tempsAppPrete } from './outils.ts';
+import { decrireSerie, ralentirCpu, repeterMesures, REPETITIONS_MESURE, surveillerCsp, tempsAppPrete } from './outils.ts';
 
 /**
  * T11 — vue 2D planches × semaines, de bout en bout, sur le build de production servi par
@@ -46,6 +46,8 @@ import { ralentirCpu, surveillerCsp, tempsAppPrete } from './outils.ts';
  *   1. réouverture hors ligne sous 300 ms (marque app-prete) malgré l'ouverture de la base ;
  *   2. tap sur « Planches » → marque 'planif:plan-affiche' en moins de 300 ms (base déjà ouverte
  *      au démarrage), puis de nouveau après un aller-retour par « Ferme » ;
+ *      (T20) 1 et 2 répétés 5 fois depuis le même état (rechargement hors ligne) : la médiane de
+ *      chaque temps est comparée au budget ; le journal donne les 5 valeurs ;
  *   3. un conflit du jeu (le premier du plan, recalculé sous Node par calculs.ts) est visible
  *      sur sa ligne et nommé (libellé court de sa sorte, relecture C1) ; sa barre a la bordure
  *      --couleur-conflit ; le toucher ouvre le détail qui le nomme (nom long) ;
@@ -170,35 +172,43 @@ test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, con
     await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 30_000 });
   });
 
-  await test.step('réouverture hors ligne, CPU ×4 : appli sous 300 ms, base ouverte depuis le cache', async () => {
+  await test.step('réouverture hors ligne puis tap sur « Planches », CPU ×4, 5 fois : médianes sous 300 ms', async () => {
     await context.setOffline(true);
     await ralentirCpu(page);
-    await page.reload();
-    const ms = await tempsAppPrete(page);
-    console.log(`réouverture hors ligne, base locale remplie : ${ms.toFixed(0)} ms (budget ${String(BUDGET_MS)} ms)`);
-    expect(ms).toBeLessThan(BUDGET_MS);
-    await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 15_000 });
-    const base = await page.evaluate(() => performance.now());
-    console.log(`base locale prête vers ${base.toFixed(0)} ms après la navigation`);
-    const etat = page.getByTestId('etat-synchro');
-    await expect(etat).toBeVisible();
-    await expect(etat).toHaveText('Hors ligne');
-    await expect(etat).toHaveAttribute('role', 'status');
-  });
+    // T20 : 5 répétitions, médiane comparée au budget (inchangé). Chaque répétition part du même
+    // état : rechargement hors ligne (appli servie par le service worker), base locale rouverte à
+    // froid (worker dédié, recréé à chaque page), écran Aujourd'hui (l'onglet n'est pas gardé),
+    // module Planches pas encore chargé dans la page.
+    const series = await repeterMesures(REPETITIONS_MESURE, async () => {
+      await page.reload();
+      const reouverture = await tempsAppPrete(page);
+      expect(await page.evaluate(() => navigator.serviceWorker.controller !== null), 'servie par le service worker').toBe(true);
+      await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 15_000 });
+      const base = await page.evaluate(() => performance.now());
+      console.log(`base locale prête vers ${base.toFixed(0)} ms après la navigation`);
+      const etat = page.getByTestId('etat-synchro');
+      await expect(etat).toBeVisible();
+      await expect(etat).toHaveText('Hors ligne');
+      await expect(etat).toHaveAttribute('role', 'status');
 
-  await test.step('tap sur « Planches » : plan affiché en moins de 300 ms', async () => {
-    const ms = await tapJusquAuPlan(page, 'Planches');
-    console.log(`Planches, premier affichage : ${ms.toFixed(0)} ms (budget ${String(BUDGET_MS)} ms)`);
-    expect(ms).toBeLessThan(BUDGET_MS);
+      await expect(page.getByRole('heading', { level: 1, name: 'Planches' }), 'la répétition part d’Aujourd’hui').toHaveCount(0);
+      const planches = await tapJusquAuPlan(page, 'Planches');
+      await expect(page.getByRole('heading', { level: 1, name: 'Planches' })).toBeVisible();
+      await expect(page.getByTestId('barre').first()).toBeVisible();
+      await expect(page.getByTestId('etat-synchro')).toHaveText('Hors ligne');
+
+      await onglet(page, 'Ferme').click();
+      await expect(page.getByRole('heading', { level: 1, name: 'Ferme' })).toBeVisible();
+      const retour = await tapJusquAuPlan(page, 'Planches');
+      return { reouverture, planches, retour };
+    });
+    console.log(decrireSerie('réouverture hors ligne, base locale remplie', series.reouverture, BUDGET_MS));
+    console.log(decrireSerie('Planches, premier affichage', series.planches, BUDGET_MS));
+    console.log(decrireSerie('Planches, retour', series.retour, BUDGET_MS));
+    expect(series.reouverture.mediane, 'réouverture hors ligne (médiane)').toBeLessThan(BUDGET_MS);
+    expect(series.planches.mediane, 'Planches, premier affichage (médiane)').toBeLessThan(BUDGET_MS);
+    expect(series.retour.mediane, 'Planches, retour (médiane)').toBeLessThan(BUDGET_MS);
     await expect(page.getByRole('heading', { level: 1, name: 'Planches' })).toBeVisible();
-    await expect(page.getByTestId('barre').first()).toBeVisible();
-    await expect(page.getByTestId('etat-synchro')).toHaveText('Hors ligne');
-
-    await onglet(page, 'Ferme').click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Ferme' })).toBeVisible();
-    const retour = await tapJusquAuPlan(page, 'Planches');
-    console.log(`Planches, retour : ${retour.toFixed(0)} ms (budget ${String(BUDGET_MS)} ms)`);
-    expect(retour).toBeLessThan(BUDGET_MS);
   });
 
   await test.step('semaine courante marquée et visible à l’ouverture', async () => {
