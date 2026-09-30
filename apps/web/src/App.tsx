@@ -6,7 +6,8 @@
  *   - la carte de connexion (utile une fois par téléphone) et la reprise des effacements en
  *     attente : ecrans/accueil/Accueil.tsx ;
  *   - l'écran Ferme (export, déconnexion) : ecrans/ferme/EcranFerme.tsx ;
- *   - l'écran Planches (T11) : ecrans/plan/.
+ *   - l'écran Planches (T11) : ecrans/plan/ ;
+ *   - l'écran Aujourd'hui (T13) : ecrans/aujourdhui/.
  * Tous sont dans le précache du service worker : ils s'ouvrent aussi hors ligne.
  *
  * T11 : connecté, l'appli ouvre la base locale (src/donnees/appli.ts, chargé à la demande, puis
@@ -82,6 +83,8 @@ const accueil = differe(() => import('./ecrans/accueil/Accueil.tsx'));
 const ferme = differe(() => import('./ecrans/ferme/EcranFerme.tsx'));
 const chargerPlanches = () => import('./ecrans/plan/index.ts');
 const planches = differe(chargerPlanches);
+const chargerAujourdhui = () => import('./ecrans/aujourdhui/index.ts');
+const aujourdhui = differe(chargerAujourdhui);
 /**
  * À attendre avant le premier rendu (main.tsx) : sans session, la carte de connexion est le
  * premier écran, son chargement part tout de suite et l'appli s'affiche d'un coup, carte
@@ -91,24 +94,28 @@ export function avantPremierRendu(): Promise<unknown> {
   return lireSession(stockageNavigateur()) === null ? accueil.precharger() : Promise.resolve();
 }
 
-/** Onglets pas encore construits : un écran d'attente propre (T13, phase 2). */
-const BIENTOT: Readonly<Record<Exclude<Onglet, 'ferme' | 'planches'>, string>> = {
-  aujourdhui: 'Bientôt : les tâches du jour, ce qui est en retard d’abord.',
+/** Onglets pas encore construits : un écran d'attente propre (phase 2). */
+const BIENTOT: Readonly<Record<Exclude<Onglet, 'ferme' | 'planches' | 'aujourdhui'>, string>> = {
   dicter: 'Bientôt : dicter une récolte ou une tâche ; l’appli propose, vous validez.',
 };
 
-/** Onglet Planches sans ferme ouverte : ce qui se passe, dit franchement. */
-const ATTENTE_PLANCHES: Readonly<Record<Exclude<EtatDonnees['base'], 'prete'>, string>> = {
-  ouverture: 'Ouverture des données de ce téléphone…',
-  'sans-ferme': 'Aucune ferme sur ce téléphone pour l’instant : le plan s’affichera après la première synchronisation.',
-  echec: 'Les données de ce téléphone n’ont pas pu s’ouvrir. Rechargez l’appli ; si cela recommence, signalez-le.',
-};
+/**
+ * Onglet d'un écran de la ferme (Aujourd'hui, Planches) sans ferme ouverte : ce qui se passe, dit
+ * franchement. `sans-ferme` : ce que l'onglet montrera.
+ */
+function attente(base: EtatDonnees['base'], montrera: string): string {
+  return base === 'sans-ferme'
+    ? `Aucune ferme sur ce téléphone pour l’instant : ${montrera} après la première synchronisation.`
+    : base === 'echec'
+      ? 'Les données de ce téléphone n’ont pas pu s’ouvrir. Rechargez l’appli ; si cela recommence, signalez-le.'
+      : 'Ouverture des données de ce téléphone…';
+}
 
-/** L'écran Planches sur la ferme du contexte (fournie par la coquille). */
-function OngletPlanches({ base }: { readonly base: EtatDonnees['base'] }) {
+/** Un écran chargé à la demande sur la ferme du contexte (fournie par la coquille). */
+function OngletFerme({ base, ecran, montrera }: { readonly base: EtatDonnees['base']; readonly ecran: typeof planches; readonly montrera: string }) {
   const ouverte = useContext(ContexteFerme);
-  if (ouverte === null) return <p className="attente">{ATTENTE_PLANCHES[base === 'prete' ? 'ouverture' : base]}</p>;
-  return <planches.Composant key={ouverte.fermeId} porte={ouverte.porte} fermeId={ouverte.fermeId} />;
+  if (ouverte === null) return <p className="attente">{attente(base, montrera)}</p>;
+  return <ecran.Composant key={ouverte.fermeId} porte={ouverte.porte} fermeId={ouverte.fermeId} />;
 }
 
 /**
@@ -171,6 +178,9 @@ export function App() {
     // L'écran Planches se charge pendant que la base s'ouvre ; dès la ferme connue, le début de
     // son plan se prépare (avant même le rendu) : un tap sur « Planches » l'affiche tout de suite.
     const planches = chargerPlanches();
+    // Aujourd'hui, premier écran : son code se charge aussi pendant que la base s'ouvre, et la
+    // journée se lit dès la ferme connue.
+    const ecranDuJour = chargerAujourdhui();
     let prechargee: FermeOuverte | null = null;
     const surEtat = (e: EtatDonnees) => {
       if (fermee) return;
@@ -180,6 +190,7 @@ export function App() {
         prechargee = f;
         // Échec : l'écran lira le plan lui-même à l'ouverture.
         planches.then((m) => m.prechargerPlan(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
+        ecranDuJour.then((m) => m.prechargerJournee(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
       }
     };
     import('./donnees/appli.ts').then(
@@ -257,7 +268,9 @@ export function App() {
           {onglet === 'ferme' ? (
             <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} />
           ) : onglet === 'planches' ? (
-            <OngletPlanches base={donnees.base} />
+            <OngletFerme base={donnees.base} ecran={planches} montrera="le plan s’affichera" />
+          ) : onglet === 'aujourdhui' ? (
+            <OngletFerme base={donnees.base} ecran={aujourdhui} montrera="les tâches du jour s’afficheront" />
           ) : (
             <p className="attente">{BIENTOT[onglet]}</p>
           )}
