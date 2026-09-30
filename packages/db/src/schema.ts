@@ -701,8 +701,8 @@ export const mouvementStock = pgTable(
       .notNull()
       .references(() => articleStock.id),
     date: jour('date').notNull(),
-    /** Positive en entrée, négative en sortie. */
-    quantite: decimal('quantite').notNull(),
+    /** Positive en entrée, négative en sortie. Six décimales au plus (T10d), comme la règle de l'API. */
+    quantite: numeric('quantite', { mode: 'number', precision: 12, scale: 6 }).notNull(),
     motif: text('motif', { enum: MOTIFS_MOUVEMENT }).notNull(),
     /** Événement de récolte à l'origine de l'entrée : si et seulement si motif = 'recolte'. */
     recolteId: idDe<'Evenement'>('recolte_id').references(() => evenement.id),
