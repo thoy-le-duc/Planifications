@@ -362,17 +362,35 @@ interface Port {
   close(): void;
 }
 interface Minuteries {
+  readonly setImmediate?: (f: () => void) => unknown;
   readonly MessageChannel?: new () => { readonly port1: Port; readonly port2: Port };
   readonly setTimeout?: (f: () => void, ms: number) => unknown;
 }
 
 /**
- * Rend la main à la boucle d'événements (une vraie tâche, pas une micro-tâche) : MessageChannel
- * s'il existe (sans le délai minimal de 4 ms des minuteries imbriquées), sinon setTimeout.
+ * Rend la main à la boucle d'événements (une vraie tâche, pas une micro-tâche), sans le délai
+ * minimal de 4 ms des minuteries imbriquées :
+ *   - setImmediate s'il existe (Node) : la boucle fait un tour complet, minuteries comprises.
+ *     Surtout pas MessageChannel sous Node : un port y traite jusqu'à 1 000 messages d'affilée
+ *     dans un seul rappel (node_messaging.cc), sans laisser passer les minuteries ni les
+ *     entrées-sorties ; les tranches de 8 ms s'y enchaînaient en un seul long calcul (T19 :
+ *     jusqu'à 31 ms de CPU entre deux tours de la boucle) ;
+ *   - sinon MessageChannel (navigateur) : un message par tâche ;
+ *   - sinon setTimeout.
  * Le cœur n'a pas les types du DOM ni de Node : ils sont décrits ici, au minimum.
  */
 function creerRendeur(): { rendre: () => Promise<void>; fermer: () => void } {
   const g = globalThis as unknown as Minuteries;
+  const immediat = g.setImmediate;
+  if (immediat !== undefined) {
+    return {
+      rendre: () =>
+        new Promise<void>((ok) => {
+          immediat(ok);
+        }),
+      fermer: () => undefined,
+    };
+  }
   if (g.MessageChannel !== undefined) {
     const canal = new g.MessageChannel();
     const enAttente: (() => void)[] = [];
