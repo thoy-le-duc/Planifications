@@ -6,19 +6,22 @@
  * Chargé à la demande par App ; reçoit la porte (jamais PowerSync). Seules les lignes visibles
  * (plus une marge) sont dans le DOM : le défilement reste fluide sur 400 planches.
  */
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import type { PorteDonnees } from '@planif/sync';
 import './plan.css';
 import { obtenirDebutDePlan, obtenirPlan, obtenirSaisons, planEnCache, saisonsEnCache, surChangement, type PlanLu } from './cache.ts';
 import {
   fenetreVisible,
   HAUTEUR_LIGNE_PX,
+  LIBELLES_COURTS_CONFLITS,
   saisonParDefaut,
   type BarrePlan,
+  type ConflitPlan,
   type LigneEmplacementPlan,
   type LignePlan,
   type SaisonPlan,
   type SemainePlan,
+  type SorteConflit,
 } from './calculs.ts';
 
 export interface ProprietesEcranPlan {
@@ -77,6 +80,14 @@ interface ProprietesLigne {
   readonly ligne: LignePlan;
   readonly index: number;
   readonly surBarre: (ligne: LigneEmplacementPlan, barre: BarrePlan) => void;
+  readonly surConflits: (ligne: LigneEmplacementPlan) => void;
+}
+
+/** Sortes distinctes des conflits, dans l'ordre de leur première apparition. */
+function sortesDe(conflits: readonly ConflitPlan[]): SorteConflit[] {
+  const sortes: SorteConflit[] = [];
+  for (const c of conflits) if (!sortes.includes(c.sorte)) sortes.push(c.sorte);
+  return sortes;
 }
 
 function Barre({ ligne, barre, surBarre }: { readonly ligne: LigneEmplacementPlan; readonly barre: BarrePlan; readonly surBarre: ProprietesLigne['surBarre'] }) {
@@ -105,7 +116,7 @@ function Barre({ ligne, barre, surBarre }: { readonly ligne: LigneEmplacementPla
   );
 }
 
-const Ligne = memo(function Ligne({ ligne, index, surBarre }: ProprietesLigne) {
+const Ligne = memo(function Ligne({ ligne, index, surBarre, surConflits }: ProprietesLigne) {
   const style: CSSProperties = { transform: `translateY(${String(HAUTEUR_ENTETE + index * HAUTEUR_LIGNE_PX)}px)` };
   if (ligne.sorte !== 'emplacement') {
     return (
@@ -114,25 +125,36 @@ const Ligne = memo(function Ligne({ ligne, index, surBarre }: ProprietesLigne) {
       </div>
     );
   }
-  const conflit = ligne.conflits[0];
-  const nomConflit = conflit === undefined ? null : ligne.conflits.length > 1 ? `${conflit.nom} +${String(ligne.conflits.length - 1)}` : conflit.nom;
+  const sortes = sortesDe(ligne.conflits);
+  const enConflit = sortes.length > 0;
+  // Plus de deux libellés : l'étiquette peut dépasser sur la ligne suivante plutôt que de rogner.
+  const classe = `plan-ligne${enConflit ? ' plan-ligne-conflit' : ''}${sortes.length > 2 ? ' plan-ligne-conflits-nombreux' : ''}`;
   return (
-    <div
-      data-testid="ligne-plan"
-      data-sorte="emplacement"
-      data-id={ligne.id}
-      data-conflit={nomConflit === null ? undefined : 'oui'}
-      className={`plan-ligne${nomConflit === null ? '' : ' plan-ligne-conflit'}`}
-      style={style}
-    >
-      <span className="plan-etiquette">
-        <span className="plan-code">{ligne.code}</span>
-        {nomConflit !== null && (
-          <span data-testid="conflit" className="plan-conflit" title={ligne.conflits.map((c) => c.nom).join('\n')}>
-            {nomConflit}
+    <div data-testid="ligne-plan" data-sorte="emplacement" data-id={ligne.id} data-conflit={enConflit ? 'oui' : undefined} className={classe} style={style}>
+      {enConflit ? (
+        <button
+          type="button"
+          data-testid="etiquette-conflit"
+          aria-haspopup="dialog"
+          className="plan-etiquette plan-etiquette-conflit"
+          onClick={() => {
+            surConflits(ligne);
+          }}
+        >
+          <span className="plan-code">{ligne.code}</span>
+          <span className="plan-conflits">
+            {sortes.map((s) => (
+              <span key={s} data-testid="conflit" data-sorte={s} className="plan-conflit">
+                {LIBELLES_COURTS_CONFLITS[s]}
+              </span>
+            ))}
           </span>
-        )}
-      </span>
+        </button>
+      ) : (
+        <span className="plan-etiquette">
+          <span className="plan-code">{ligne.code}</span>
+        </span>
+      )}
       {ligne.barres.map((b) => (
         <Barre key={b.occupationId} ligne={ligne} barre={b} surBarre={surBarre} />
       ))}
@@ -140,15 +162,17 @@ const Ligne = memo(function Ligne({ ligne, index, surBarre }: ProprietesLigne) {
   );
 });
 
-// ── Détail d'une barre (lecture seule) ───────────────────────────────────────────────────────
+// ── Feuilles de détail (lecture seule) ───────────────────────────────────────────────────────
 
-interface Detail {
-  readonly ligne: LigneEmplacementPlan;
-  readonly barre: BarrePlan;
-}
+type Detail =
+  | { readonly sorte: 'serie'; readonly ligne: LigneEmplacementPlan; readonly barre: BarrePlan }
+  | { readonly sorte: 'conflits'; readonly ligne: LigneEmplacementPlan };
 
-function DetailSerie({ detail, surFermer }: { readonly detail: Detail; readonly surFermer: () => void }) {
-  const titre = useId();
+const cleConflit = (c: ConflitPlan) => `${c.sorte}-${c.du}-${c.occupations.join('-')}`;
+
+/** Feuille en bas de l'écran : titre, contenu, un seul bouton « Fermer » (Échap ferme aussi). */
+function Feuille({ titre, surFermer, children }: { readonly titre: string; readonly surFermer: () => void; readonly children: ReactNode }) {
+  const idTitre = useId();
   const fermer = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     fermer.current?.focus();
@@ -160,37 +184,61 @@ function DetailSerie({ detail, surFermer }: { readonly detail: Detail; readonly 
       removeEventListener('keydown', touche);
     };
   }, [surFermer]);
-  const { ligne, barre } = detail;
-  const conflits = ligne.conflits.filter((c) => c.occupations.includes(barre.occupationId));
-  const nature = barre.serieId !== null ? 'Série' : barre.plantationId !== null ? 'Plantation' : 'Couverture';
   return (
     <div className="plan-voile">
-      <div role="dialog" aria-modal="true" aria-labelledby={titre} className="plan-detail">
-        <h2 id={titre}>Détail de la série</h2>
-        <p className="plan-detail-culture">{barre.libelle}</p>
-        <dl>
-          <dt>Emplacement</dt>
-          <dd className="plan-code">{ligne.code}</dd>
-          <dt>{nature}</dt>
-          <dd>{barre.famille ?? 'Famille non renseignée'}</dd>
-          <dt>{barre.etat === 'reel' ? 'En place' : 'Prévu'}</dt>
-          <dd>
-            du {dateLisible(barre.du)}
-            {barre.au === null ? ', sans fin' : ` au ${dateLisible(barre.au)}`}
-          </dd>
-        </dl>
-        {conflits.length > 0 && (
-          <ul className="plan-detail-conflits">
-            {conflits.map((c) => (
-              <li key={`${c.sorte}-${c.du}-${c.occupations.join('-')}`}>{c.nom}</li>
-            ))}
-          </ul>
-        )}
+      <div role="dialog" aria-modal="true" aria-labelledby={idTitre} className="plan-detail">
+        <h2 id={idTitre}>{titre}</h2>
+        {children}
         <button ref={fermer} type="button" className="plan-fermer" onClick={surFermer}>
           Fermer
         </button>
       </div>
     </div>
+  );
+}
+
+function DetailSerie({ ligne, barre, surFermer }: { readonly ligne: LigneEmplacementPlan; readonly barre: BarrePlan; readonly surFermer: () => void }) {
+  const conflits = ligne.conflits.filter((c) => c.occupations.includes(barre.occupationId));
+  const nature = barre.serieId !== null ? 'Série' : barre.plantationId !== null ? 'Plantation' : 'Couverture';
+  return (
+    <Feuille titre="Détail de la série" surFermer={surFermer}>
+      <p className="plan-detail-culture">{barre.libelle}</p>
+      <dl>
+        <dt>Emplacement</dt>
+        <dd className="plan-code">{ligne.code}</dd>
+        <dt>{nature}</dt>
+        <dd>{barre.famille ?? 'Famille non renseignée'}</dd>
+        <dt>{barre.etat === 'reel' ? 'En place' : 'Prévu'}</dt>
+        <dd>
+          du {dateLisible(barre.du)}
+          {barre.au === null ? ', sans fin' : ` au ${dateLisible(barre.au)}`}
+        </dd>
+      </dl>
+      {conflits.length > 0 && (
+        <ul className="plan-detail-conflits">
+          {conflits.map((c) => (
+            <li key={cleConflit(c)}>{c.nom}</li>
+          ))}
+        </ul>
+      )}
+    </Feuille>
+  );
+}
+
+/** Tous les conflits d'une planche, noms longs (cultures en cause), dans l'ordre de T03. */
+function DetailConflits({ ligne, surFermer }: { readonly ligne: LigneEmplacementPlan; readonly surFermer: () => void }) {
+  const n = ligne.conflits.length;
+  return (
+    <Feuille titre={`Conflits de ${ligne.code}`} surFermer={surFermer}>
+      <p className="plan-detail-culture">
+        {String(n)} conflit{n > 1 ? 's' : ''} sur cette planche
+      </p>
+      <ul className="plan-detail-conflits">
+        {ligne.conflits.map((c) => (
+          <li key={cleConflit(c)}>{c.nom}</li>
+        ))}
+      </ul>
+    </Feuille>
   );
 }
 
@@ -371,7 +419,10 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   }, [plan]);
 
   const surBarre = useCallback((ligne: LigneEmplacementPlan, barre: BarrePlan) => {
-    setDetail({ ligne, barre });
+    setDetail({ sorte: 'serie', ligne, barre });
+  }, []);
+  const surConflits = useCallback((ligne: LigneEmplacementPlan) => {
+    setDetail({ sorte: 'conflits', ligne });
   }, []);
   const fermerDetail = useCallback(() => {
     setDetail(null);
@@ -433,7 +484,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
             />
           )}
           {lignesVisibles.map(({ ligne, index }) => (
-            <Ligne key={ligne.id} ligne={ligne} index={index} surBarre={surBarre} />
+            <Ligne key={ligne.id} ligne={ligne} index={index} surBarre={surBarre} surConflits={surConflits} />
           ))}
           {suite && (
             <p className="plan-suite" style={{ transform: `translateY(${String(HAUTEUR_ENTETE + total * HAUTEUR_LIGNE_PX)}px)` }}>
@@ -443,7 +494,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
         </div>
       </div>
       <Legende />
-      {detail !== null && <DetailSerie detail={detail} surFermer={fermerDetail} />}
+      {detail?.sorte === 'serie' && <DetailSerie ligne={detail.ligne} barre={detail.barre} surFermer={fermerDetail} />}
+      {detail?.sorte === 'conflits' && <DetailConflits ligne={detail.ligne} surFermer={fermerDetail} />}
     </div>
   );
 }

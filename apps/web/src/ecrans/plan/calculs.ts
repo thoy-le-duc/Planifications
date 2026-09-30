@@ -133,6 +133,18 @@ export const NOMS_CONFLITS: Readonly<Record<SorteConflit, string>> = {
   periode_invalide: 'Dates inversées',
 };
 
+/**
+ * Libellé court de chaque sorte, tel que la colonne des codes le montre (relecture C1) : il tient
+ * dans la colonne à 360 px ; le nom complet est dans le détail des conflits de la planche.
+ */
+export const LIBELLES_COURTS_CONFLITS: Readonly<Record<SorteConflit, string>> = {
+  chevauchement: 'Chevauche',
+  depassement: 'Trop long',
+  surcharge: 'Surcharge',
+  emplacement_inactif: 'Inactif',
+  periode_invalide: 'Dates',
+};
+
 /** Tri « naturel » : « Tunnel 2 » avant « Tunnel 10 ». */
 const COLLATEUR = new Intl.Collator('fr', { numeric: true });
 
