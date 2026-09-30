@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadEnv } from 'vite';
 import { defineConfig, type Plugin } from 'vitest/config';
@@ -20,6 +21,10 @@ const PREFIXES_PAGES_HORS_APPLI = ['/mesures/', '/diagnostic/'];
 /** Mode du build des essais (pages de test seules). */
 const MODE_ESSAIS = 'essais';
 
+/** Liste blanche du build de production : l'entrée `index`, la page `/index.html`, rien d'autre. */
+const ENTREE_APPLI = 'index';
+const PAGE_APPLI = '/index.html';
+
 /** Code de la base locale (PowerSync, wa-sqlite) : rangé à part, dans `assets/sqlite/`. */
 const MOTIF_SQLITE = /node_modules\/(\.pnpm\/[^/]+\/node_modules\/)?(@powersync|@journeyapps)\//;
 
@@ -34,7 +39,9 @@ const MOTIF_SQLITE_UTILISE = /@journeyapps\/wa-sqlite\/(dist\/wa-sqlite-async\.m
 /**
  * Variantes que l'appli ne charge pas (SQLite chiffré ou synchrone, VFS OPFS ou mémoire,
  * WebSocket, SQLite dans la page plutôt que dans un worker) : `assets/sqlite-annexe/`, hors
- * précache. Les pages de mesure (T07) s'en servent ; l'appli jamais.
+ * précache. Le code de PowerSync y fait référence par des imports dynamiques, d'où leur présence
+ * dans le build de production, mais l'appli ne les charge jamais. Les pages de mesure (T07),
+ * dans le build des essais, s'en servent.
  */
 const MOTIF_SQLITE_ANNEXE = /@journeyapps\/wa-sqlite\/(dist\/|src\/examples\/|src\/FacadeVFS\.js)|[\\/]websockets[\\/.]/;
 
@@ -123,6 +130,21 @@ function pagesHorsAppliSansServiceWorker(essais: boolean): Plugin {
     name: 'planif:pages-hors-appli-sans-sw',
     apply: 'build',
     enforce: 'post',
+    configResolved(config) {
+      // T11c : le build des essais ne vide jamais le dossier du build de production.
+      if (essais && resolve(config.root, config.build.outDir) === resolve(config.root, 'dist')) {
+        throw new Error('build des essais vers dist/ refusé : passer --outDir (scripts/build-essais.ts) (T11c)');
+      }
+    },
+    buildStart(options) {
+      if (essais) return;
+      const input = options.input;
+      const noms = typeof input === 'string' ? [input] : Array.isArray(input) ? input : Object.keys(input);
+      const refusees = noms.filter((n) => n !== ENTREE_APPLI);
+      if (refusees.length > 0) {
+        throw new Error(`entrées refusées dans le build de production : ${refusees.join(', ')} ; seule « ${ENTREE_APPLI} » est admise (T11c)`);
+      }
+    },
     transformIndexHtml: {
       order: 'post',
       handler(html, contexte) {
@@ -131,7 +153,9 @@ function pagesHorsAppliSansServiceWorker(essais: boolean): Plugin {
           throw new Error(`${contexte.path} : enregistrement du service worker injecté dans la page (attendu : src/serviceWorker.ts, au repos)`);
         }
         const horsAppli = PREFIXES_PAGES_HORS_APPLI.some((p) => contexte.path.startsWith(p));
-        if (!essais && horsAppli) throw new Error(`${contexte.path} : page de test dans le build de production (T11c)`);
+        if (!essais && contexte.path !== PAGE_APPLI) {
+          throw new Error(`${contexte.path} : page refusée dans le build de production, seule ${PAGE_APPLI} est admise (T11c)`);
+        }
         if (essais && !horsAppli) throw new Error(`${contexte.path} : le build des essais ne construit que les pages de test (T11c)`);
         if (essais && /<link\b[^>]*\brel="manifest"/.test(html)) throw new Error(`${contexte.path} : manifeste dans une page de test`);
         return html;
@@ -142,10 +166,12 @@ function pagesHorsAppliSansServiceWorker(essais: boolean): Plugin {
       for (const [fichier, sortie] of Object.entries(paquet)) {
         if (sortie.type === 'chunk') morceaux.set(fichier, sortie);
       }
-      const entreesHorsAppli = [ENTREE_MESURE, ...ENTREES_DIAGNOSTIC];
+      // Build des essais : toutes les entrées sont des pages de test, chacune est parcourue.
       for (const [fichierEntree, entree] of morceaux) {
         if (!entree.isEntry) continue;
-        if (!essais && entreesHorsAppli.includes(entree.name)) throw new Error(`entrée de test « ${entree.name} » dans le build de production (T11c)`);
+        if (!essais && entree.name !== ENTREE_APPLI) {
+          throw new Error(`entrée « ${entree.name} » refusée dans le build de production, seule « ${ENTREE_APPLI} » est admise (T11c)`);
+        }
         if (!essais) continue;
         const aVoir = [fichierEntree];
         const vus = new Set<string>();
