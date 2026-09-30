@@ -133,7 +133,8 @@ function decoderCp1252(octets: Uint8Array, debut: number): string {
 
 /**
  * UTF-16 (petit- ou gros-boutiste) à partir de `debut` ; une moitié de paire de substitution
- * isolée ou un octet final impair → U+FFFD (comme `TextDecoder`).
+ * isolée ou un octet final impair → U+FFFD, un seul pour une moitié haute finale suivie d'un
+ * octet impair (norme WHATWG, comme `TextDecoder`).
  */
 function decoderUtf16(octets: Uint8Array, debut: number, petit: boolean): string {
   const natif = decoderNatif(petit ? 'utf-16le' : 'utf-16be', octets.subarray(debut));
@@ -159,8 +160,14 @@ function decoderUtf16(octets: Uint8Array, debut: number, petit: boolean): string
     }
     unites[i] = u >= 0xd800 && u <= 0xdfff ? 0xfffd : u;
   }
-  if (n & 1) unites[paires] = 0xfffd;
-  return texteDepuisUnites(unites, unites.length);
+  // Norme WHATWG : en fin de fichier, une moitié haute en attente et un octet impair donnent
+  // ENSEMBLE un seul U+FFFD (celui de la moitié haute, déjà écrit).
+  if ((n & 1) === 0) return texteDepuisUnites(unites, paires);
+  // Une moitié haute en dernière position n'a jamais de moitié basse : toujours en attente.
+  const derniere = paires > 0 ? unite(paires - 1) : 0;
+  if (derniere >= 0xd800 && derniere <= 0xdbff) return texteDepuisUnites(unites, paires);
+  unites[paires] = 0xfffd;
+  return texteDepuisUnites(unites, paires + 1);
 }
 
 /** Encodage UTF-16 annoncé par un BOM (FF FE, FE FF : export « Texte Unicode » d'Excel), ou `null`. */
