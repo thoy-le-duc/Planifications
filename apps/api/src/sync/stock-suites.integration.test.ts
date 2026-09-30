@@ -41,10 +41,24 @@
  *    rien n'est écrit (ni événement, ni stock, ni historique) ; chaque refus est enregistré dans
  *    refus_synchro (il redescend sur le téléphone). Le lot suivant, de taille normale, passe.
  *    Un lot d'exactement ECRITURES_MAX_PAR_LOT écritures valides est accepté en entier.
- *    Limite dure (décision du chef) : corps de plus de TAILLE_MAX_CORPS_DURE = 32 Mio (exporté
- *    par upload.ts) → 413, rien d'écrit, aucun refus enregistré ; le serveur refuse dès l'en-tête
- *    Content-Length s'il est déclaré, et cesse de lire un flux sans Content-Length au-delà de
- *    la limite (jamais tout le corps en mémoire).
+ *    Limites dures (décisions du chef après la relecture de sécurité : amplification) :
+ *      - corps de plus de TAILLE_MAX_CORPS_DURE = 8 Mio (exporté par upload.ts) → 413, rien
+ *        d'écrit, AUCUN refus enregistré ; refusé dès l'en-tête Content-Length s'il est déclaré,
+ *        et un flux sans Content-Length cesse d'être lu au-delà de la limite ;
+ *      - plus de ECRITURES_MAX_DURES = 2 000 écritures (exporté par upload.ts) → 413, rien
+ *        d'écrit, aucun refus enregistré (ex. 200 000 écritures bidon en 7 Mio).
+ *    Entre ECRITURES_MAX_PAR_LOT + 1 et 2 000 écritures (ou corps entre 5 et 8 Mio) : un refus
+ *    'lot_trop_gros' seulement pour chaque écriture PLAUSIBLE (table parmi evenement,
+ *    article_stock, mouvement_stock ; id au format UUID ; op PUT, PATCH ou DELETE), dédupliqué
+ *    par (table, id, op) ; toutes les autres écritures tiennent en UNE seule ligne
+ *    récapitulative 'lot_trop_gros' (dans refus_synchro et dans la réponse). La réponse suit la
+ *    même règle : autant d'entrées que de lignes refus_synchro créées.
+ *
+ * 7. Collision d'id (limite acceptée, structurelle) : un PUT d'un membre de B qui reprend l'id
+ *    d'une ligne EXISTANTE de A (evenement, article_stock, mouvement_stock) reçoit exactement la
+ *    même réponse (motif, message, ferme_id du refus) qu'un PUT qui reprend l'id d'une ligne de
+ *    sa propre ferme avec d'autres valeurs. Aucune valeur de A dans la réponse ni dans
+ *    refus_synchro ; la ligne de A ne change pas. (Comportement attendu déjà en place : figé.)
  *
  * 6. PATCH ou DELETE d'un membre de la ferme B sur l'id EXISTANT d'une ligne de la ferme A
  *    (evenement, article_stock, mouvement_stock) : exactement la même réponse que sur un id
@@ -82,7 +96,9 @@ const MAINTENANT = new Date('2026-10-01T06:00:00Z');
 /** Au-delà, la requête du membre est jugée bloquée par le verrou d'une autre connexion. */
 const ATTENTE_MAX_MS = 3_000;
 /** Limite dure du corps (décision du chef) : au-delà, 413 et le serveur ne lit pas plus. */
-const TAILLE_MAX_CORPS_DURE = 32 * 1_048_576;
+const TAILLE_MAX_CORPS_DURE = 8 * 1_048_576;
+/** Écritures au plus (décision du chef) : au-delà, 413 sans aucun refus enregistré. */
+const ECRITURES_MAX_DURES = 2_000;
 const DOSSIER_MIGRATIONS = new URL('../../../../packages/db/migrations/', import.meta.url);
 
 interface EcritureEnvoyee {
@@ -684,11 +700,13 @@ decrireAvecBase('T10d')('T10d : suites de la sécurité du stock', { timeout: 60
   });
 
   describe('4 bis. limite dure du corps : 413 sans tout lire', () => {
-    it('TAILLE_MAX_CORPS_DURE est exportée par upload.ts et vaut 32 Mio', () => {
-      expect((upload as unknown as Record<string, unknown>).TAILLE_MAX_CORPS_DURE).toBe(TAILLE_MAX_CORPS_DURE);
+    it('TAILLE_MAX_CORPS_DURE (8 Mio) et ECRITURES_MAX_DURES (2 000) sont exportées par upload.ts', () => {
+      const exports = upload as unknown as Record<string, unknown>;
+      expect(exports.TAILLE_MAX_CORPS_DURE).toBe(TAILLE_MAX_CORPS_DURE);
+      expect(exports.ECRITURES_MAX_DURES).toBe(ECRITURES_MAX_DURES);
     });
 
-    it('Content-Length déclaré au-delà de 32 Mio : 413 tout de suite, rien d’écrit, aucun refus', async () => {
+    it('Content-Length déclaré au-delà de 8 Mio : 413 tout de suite, rien d’écrit, aucun refus', async () => {
       const u = await nouveauMembre();
       const e = putRecolte(1, {}, u.id);
       const res = await Promise.resolve(
@@ -707,13 +725,13 @@ decrireAvecBase('T10d')('T10d : suites de la sécurité du stock', { timeout: 60
       expect(await refusDeLUtilisateur(u.id)).toBe(0);
     });
 
-    it('flux sans Content-Length de 64 Mio : 413, et le serveur cesse de lire après 32 Mio', async () => {
+    it('flux sans Content-Length de 32 Mio : 413, et le serveur cesse de lire après 8 Mio', async () => {
       const u = await nouveauMembre();
       const morceau = new Uint8Array(1_048_576).fill(0x20);
       let lus = 0;
       const flux = new ReadableStream<Uint8Array>({
         pull(controleur) {
-          if (lus >= 64 * 1_048_576) {
+          if (lus >= 32 * 1_048_576) {
             controleur.close();
             return;
           }
@@ -736,6 +754,149 @@ decrireAvecBase('T10d')('T10d : suites de la sécurité du stock', { timeout: 60
   });
 
   // ── 6. PATCH et DELETE sur une ligne d'une autre ferme ───────────────────────────────────────
+
+  describe('4 ter. pas d’amplification : un envoi trop gros ne produit jamais des milliers de refus', () => {
+    /** Réponse et lignes refus_synchro d'un envoi de `u`. */
+    async function envoyerEtCompter(ecritures: readonly unknown[], u: Membre): Promise<{ status: number; refus: readonly RefusRecu[]; lignes: number }> {
+      const res = await envoyer(JSON.stringify({ ecritures }), u.jeton);
+      const status = res.status;
+      const refus = status === 200 ? ((await res.json()) as ReponseUpload).refus : [];
+      return { status, refus, lignes: await refusDeLUtilisateur(u.id) };
+    }
+
+    it(`${String(ECRITURES_MAX_DURES + 1)} écritures plausibles : 413, aucun refus, rien d’écrit`, async () => {
+      const u = await nouveauMembre();
+      const ecritures = Array.from({ length: ECRITURES_MAX_DURES + 1 }, () => putRecolte(1, {}, u.id));
+      const r = await envoyerEtCompter(ecritures, u);
+      expect(r.status).toBe(413);
+      expect(r.lignes).toBe(0);
+      expect(await traces(ecritures)).toBe(0);
+    });
+
+    it('relecture : 200 000 écritures bidon en moins de 8 Mio : 413, aucune ligne refus_synchro', async () => {
+      const u = await nouveauMembre();
+      const bidon = Array.from({ length: 200_000 }, (_, i) => ({ op: 'PUT', table: 't', id: String(i) }));
+      expect(new TextEncoder().encode(JSON.stringify({ ecritures: bidon })).length).toBeLessThan(TAILLE_MAX_CORPS_DURE);
+      const r = await envoyerEtCompter(bidon, u);
+      expect(r.status).toBe(413);
+      expect(r.lignes).toBe(0);
+    });
+
+    it(`${String(ECRITURES_MAX_DURES)} écritures bidon (non plausibles) : 200, UNE seule ligne récapitulative`, async () => {
+      const u = await nouveauMembre();
+      const bidon = Array.from({ length: ECRITURES_MAX_DURES }, (_, i) => ({ op: 'PUT', table: 't', id: String(i) }));
+      const r = await envoyerEtCompter(bidon, u);
+      expect(r.status).toBe(200);
+      expect(r.lignes).toBe(1);
+      expect(r.refus).toHaveLength(1);
+      expect(r.refus[0]?.motif).toBe('lot_trop_gros');
+    });
+
+    it('lot mêlé : un refus par écriture plausible (dédupliqué par table, id, op), les autres en une ligne récapitulative', async () => {
+      const u = await nouveauMembre();
+      const plausibles = Array.from({ length: 300 }, () => putRecolte(1, {}, u.id));
+      const doublons = plausibles.slice(0, 100);
+      const patchs: EcritureEnvoyee[] = plausibles.slice(0, 50).map((e) => ({ op: 'PATCH', table: 'evenement', id: e.id, donnees: { note: 'x' } }));
+      const articles = Array.from({ length: 20 }, () => putArticle());
+      const suppressions: EcritureEnvoyee[] = Array.from({ length: 10 }, () => ({ op: 'DELETE', table: 'mouvement_stock', id: randomUUID() }));
+      const autres: unknown[] = [
+        ...Array.from({ length: 100 }, () => ({ op: 'PUT', table: 'membre', id: randomUUID(), donnees: {} })),
+        ...Array.from({ length: 100 }, (_, i) => ({ op: 'PUT', table: 'evenement', id: `pas-un-uuid-${String(i)}`, donnees: {} })),
+        ...Array.from({ length: 100 }, () => ({ op: 'MERGE', table: 'evenement', id: randomUUID(), donnees: {} })),
+        ...Array.from({ length: 50 }, () => ({ table: 'evenement', id: randomUUID() })),
+        ...Array.from({ length: 50 }, () => 'pas un objet'),
+      ];
+      const ecritures: unknown[] = [...plausibles, ...doublons, ...patchs, ...articles, ...suppressions, ...autres];
+      expect(ecritures.length).toBeGreaterThan(ECRITURES_MAX_PAR_LOT);
+      expect(ecritures.length).toBeLessThanOrEqual(ECRITURES_MAX_DURES);
+      const attendus = plausibles.length + patchs.length + articles.length + suppressions.length + 1;
+
+      const r = await envoyerEtCompter(ecritures, u);
+      expect(r.status).toBe(200);
+      expect(r.lignes, 'lignes refus_synchro : plausibles dédupliquées + 1 récapitulative').toBe(attendus);
+      expect(r.refus, 'réponse : même règle').toHaveLength(attendus);
+      expect(new Set(r.refus.map((x) => x.motif))).toEqual(new Set(['lot_trop_gros']));
+      const cles = new Set(r.refus.map((x) => `${x.table}|${x.id}`));
+      for (const e of [...plausibles, ...articles, ...suppressions]) expect(cles.has(`${e.table}|${e.id}`), `${e.table} ${e.id}`).toBe(true);
+      const ops = await base.pool.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM refus_synchro WHERE utilisateur_id = $1 AND operation = 'PATCH' AND ligne_id = ANY($2::text[])`,
+        [u.id, patchs.map((e) => e.id)],
+      );
+      expect(ops.rows[0]?.n, 'un PATCH plausible a son propre refus').toBe(patchs.length);
+      expect(await traces([...plausibles, ...articles])).toBe(0);
+    });
+
+    it(`lot légitime de ${String(ECRITURES_MAX_PAR_LOT + 1)} écritures plausibles distinctes : un refus par écriture, la file avance`, async () => {
+      const u = await nouveauMembre();
+      const ecritures = Array.from({ length: ECRITURES_MAX_PAR_LOT + 1 }, () => putRecolte(1, {}, u.id));
+      const r = await envoyerEtCompter(ecritures, u);
+      expect(r.status).toBe(200);
+      expect(r.lignes).toBe(ecritures.length);
+      expect(r.refus).toHaveLength(ecritures.length);
+      const suivante = putRecolte(2, {}, u.id);
+      expect(await lot([suivante], u.jeton)).toEqual({ refus: [] });
+    });
+  });
+
+  // ── 7. Collision d'id avec une ligne d'une autre ferme ──────────────────────────────────────
+
+  describe('7. collision d’id : un PUT qui reprend l’id d’une ligne de A répond comme pour une ligne de B', () => {
+    let mouvementA: string;
+    let mouvementB: string;
+
+    beforeAll(async () => {
+      mouvementA = (await recolteAcceptee(6)).mouvement.id;
+      const m = putMouvement(articleB, 5, recolteB, fermeB);
+      expect(await lot([m], voisin.jeton)).toEqual({ refus: [] });
+      mouvementB = m.id;
+    });
+
+    async function refusDeVoisin(id: string): Promise<Record<string, unknown>[]> {
+      const r = await base.pool.query<Record<string, unknown>>(
+        `SELECT motif, message, ferme_id, donnees FROM refus_synchro WHERE ligne_id = $1 AND utilisateur_id = $2`,
+        [id, voisin.id],
+      );
+      return r.rows;
+    }
+
+    async function empreinte(table: string, id: string): Promise<unknown> {
+      const r = await base.pool.query(`SELECT to_jsonb(l) AS l FROM ${TABLE_DE[table] ?? 'evenement'} l WHERE id = $1`, [id]);
+      return r.rows[0];
+    }
+
+    const avecId = (e: EcritureEnvoyee, id: string): EcritureEnvoyee => ({ ...e, id });
+
+    it.each([
+      ['evenement', () => recolteA, () => recolteB, () => putRecolte(1, {}, voisin.id, fermeB)],
+      ['article_stock', () => articleA, () => articleB, () => putArticle({ espece_id: especeB, categorie: 'extra' }, fermeB)],
+      ['mouvement_stock', () => mouvementA, () => mouvementB, () => putMouvement(articleB, 2, recolteB, fermeB)],
+    ])('%s : même réponse, même refus enregistré, aucune valeur de A', async (table, idA, idB, fabriquer) => {
+      const ligneA = await empreinte(table, idA());
+      expect(ligneA, 'la ligne de A existe').toBeDefined();
+      expect(await empreinte(table, idB()), 'la ligne de B existe').toBeDefined();
+      const modele = fabriquer();
+      const versA = avecId(modele, idA());
+      const versB = avecId(modele, idB());
+
+      const reponseA = await lot([versA], voisin.jeton);
+      const reponseB = await lot([versB], voisin.jeton);
+      expect(reponseA.refus).toHaveLength(1);
+      expect(reponseA.refus.map((x) => x.motif), 'même motif').toEqual(reponseB.refus.map((x) => x.motif));
+      const refusA = await refusDeVoisin(idA());
+      const refusB = await refusDeVoisin(idB());
+      expect(refusA).toHaveLength(1);
+      expect(refusB).toHaveLength(1);
+      expect({ ...refusA[0], donnees: undefined }, 'même motif, même message, même ferme_id').toEqual({ ...refusB[0], donnees: undefined });
+      expect(refusA[0]?.donnees, 'donnees = ce que B a envoyé').toEqual(versA.donnees);
+
+      const vu = JSON.stringify([reponseA, refusA]);
+      // Identifiants portés par la ligne de A (ferme, auteur, espèce, article, récolte…), sauf son propre id que B a envoyé.
+      const secrets = new Set([...(JSON.stringify(ligneA).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g) ?? []), fermeA, theo.id]);
+      secrets.delete(idA());
+      for (const secret of secrets) expect(vu.includes(secret), `valeur de A dans la réponse ou le refus : ${secret}`).toBe(false);
+      expect(await empreinte(table, idA()), 'la ligne de A ne change pas').toEqual(ligneA);
+    });
+  });
 
   describe('6. PATCH ou DELETE sur une ligne d’une autre ferme : comme sur un id inexistant', () => {
     /** Mouvement de la ferme A. */
