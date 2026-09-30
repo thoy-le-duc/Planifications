@@ -2,15 +2,19 @@
  * Écran Ferme (T16, maquette « Ferme ») : l'export de toute la ferme (T15) et la déconnexion
  * (T09b). Chargé à la demande par App : hors du JavaScript de démarrage.
  *
- * Export : la ligne est en place, mais l'appli n'ouvre pas encore la base du téléphone (PowerSync)
- * et ne sait pas quelle est sa ferme ; c'est le rôle des premiers écrans de données (T11). Tant
- * que ce n'est pas fait, le tap le dit franchement au lieu de faire semblant (voir le journal).
+ * Export : la ligne est en place ; depuis T11 l'appli ouvre la base du téléphone et connaît sa
+ * ferme, mais le branchement de l'export sur cette base reste à faire (ticket à venir). D'ici là,
+ * le tap le dit franchement au lieu de faire semblant (voir le journal).
+ *
+ * Déconnexion (T11) : la base ouverte par l'appli compte les saisies en attente et se ferme avant
+ * l'effacement.
  */
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { urlApi } from '../../connexion/client.ts';
 import { deconnecterAvecConfirmation, effacementsEnAttente } from '../../connexion/deconnexion.ts';
 import { stockageNavigateur, type SessionConnexion } from '../../connexion/session.ts';
 import { baseLocaleExiste, effacerDonneesLocales } from '../../donnees/effacer.ts';
+import type { PoigneeDonnees } from '../../donnees/etat-appli.ts';
 import { AlerteOrange, CARTE } from '../../ui/elements.tsx';
 import { Confirmation } from '../../ui/confirmation.tsx';
 
@@ -22,6 +26,11 @@ interface ConfirmationEnAttente {
 
 export interface ProprietesEcranFerme {
   readonly session: SessionConnexion;
+  /**
+   * Base locale ouverte par l'appli (T11) : elle compte les saisies en attente, et se ferme avant
+   * l'effacement (une base ouverte bloquerait la suppression).
+   */
+  readonly baseLocale: PoigneeDonnees;
   /** Déconnecté : retour à l'écran de connexion, avec le message d'échec éventuel. */
   readonly surDeconnecte: (erreur: string | null) => void;
 }
@@ -94,7 +103,7 @@ function Carte({ titre, children }: { readonly titre: string; readonly children:
 /** Effacement d'un ancien compte resté en attente (T09b) : le dire, jusqu'à ce qu'il aboutisse. */
 const ALERTE_EFFACEMENT = 'Les données d’un ancien compte n’ont pas encore été effacées de ce téléphone : fermez les autres onglets.';
 
-export default function EcranFerme({ session, surDeconnecte }: ProprietesEcranFerme) {
+export default function EcranFerme({ session, baseLocale, surDeconnecte }: ProprietesEcranFerme) {
   // Lu à l'ouverture de l'écran : l'effacement n'est repris que sur l'écran de connexion.
   const [effacementEnAttente] = useState(() => effacementsEnAttente(stockageNavigateur()).length > 0);
   const [exportDemande, setExportDemande] = useState(false);
@@ -119,15 +128,19 @@ export default function EcranFerme({ session, surDeconnecte }: ProprietesEcranFe
     setDeconnexionEnCours(true);
     let erreur: string | null = null;
     try {
-      // Sans ouvrir PowerSync, on ne sait pas compter la file d'envoi : si la base locale existe,
-      // confirmation générique d'abord (null) ; sans base, rien à perdre (0). Effacement de la base
-      // sans PowerSync (quelques lignes) : hors ligne, ses fichiers ne sont pas en cache.
+      // Base ouverte par l'appli (T11) : elle compte la file d'envoi. Pas encore lisible (en cours
+      // d'ouverture, ou bloquée par un autre onglet) : si la base locale existe, confirmation
+      // générique d'abord (null) ; sans base, rien à perdre (0). Effacement : la base est fermée
+      // d'abord, puis supprimée sans PowerSync (quelques lignes, aussi hors ligne).
       const issue = await deconnecterAvecConfirmation(session, {
         urlApi: urlApi(),
         fetch: envoyer,
         stockage: stockageNavigateur(),
-        effacerBaseLocale: effacerDonneesLocales,
-        compterEnAttente: async () => ((await baseLocaleExiste(session.utilisateurId)) ? null : 0),
+        effacerBaseLocale: async (utilisateurId) => {
+          await baseLocale.fermer();
+          await effacerDonneesLocales(utilisateurId);
+        },
+        compterEnAttente: async () => (await baseLocale.compterEnAttente()) ?? ((await baseLocaleExiste(session.utilisateurId)) ? null : 0),
         confirmer,
       });
       if (issue === 'annule') {
