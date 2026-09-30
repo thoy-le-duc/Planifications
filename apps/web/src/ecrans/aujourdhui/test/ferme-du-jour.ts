@@ -56,6 +56,15 @@
  * relecture (mise en place 2027-05-03, tous les 3 jours, aujourd'hui 2027-05-19 : 05-18 en
  * retard et 05-21) transposé à la ferme du jour. Exige un J du lundi au jeudi (J+2 avant le
  * dimanche) : le jour fixe des tests d'écran, un mercredi.
+ *
+ * Variante « Fait en retard » (T22b, Q24, `{ travaux: true, faitEnRetard: true }`, tests d'écran
+ * seulement) : en plus, un travail d'indice 2 sur la batavia, entretien « désherbage », semis en
+ * pépinière (réalisé à J−30) +17, tous les 14 jours jusqu'à la fin de récolte, sans temps estimé
+ * (charge inchangée). Occurrences J−13, J+1, J+15… : UNE ligne en retard (J−13, 13 jours de
+ * retard ; le 2026-09-17 pour J = 2026-09-30) et l'occurrence de demain (J+1), PLUS PROCHE de J
+ * que J−13. C'est l'exemple du ticket (désherbage tous les 14 jours, « Fait » en retard sur la
+ * carte du 17) : la règle de T22 solderait aussi J+1 ; avec l'occurrence visée, J+1 reste.
+ * Exige un J du lundi au samedi (J+1 dans la semaine).
  *   Batavia : plantation non réalisée (J), donc grelinette et compost ne sont pas caducs ; ils le
  *   deviennent dès que la plantation est marquée faite (décision du chef, Q23).
  *
@@ -272,6 +281,21 @@ export const ARROSAGE: TravailPrevuFerme = {
   tempsEstime: null,
 };
 
+/**
+ * Désherbage de la batavia (variante « Fait en retard », T22b) : semis en pépinière (J−30) +17,
+ * tous les 14 jours → J−13 (en retard), J+1, J+15…
+ */
+export const DESHERBAGE_BATAVIA: TravailPrevuFerme = {
+  categorie: 'entretien',
+  type: 'désherbage',
+  repere: 'semis_pepiniere',
+  decalageJours: 17,
+  repetition: { tousLesJours: 14, repereFin: 'fin_recolte' },
+  outil: null,
+  produit: null,
+  tempsEstime: null,
+};
+
 /** Libellés des catégories d'intervention, en surtitre des tâches de travail (T22). */
 export const LIBELLES_CATEGORIES: Readonly<Record<string, string>> = {
   travail_sol: 'Travail du sol',
@@ -303,6 +327,8 @@ export interface OptionsFermeDuJour {
   readonly travaux?: boolean;
   /** Relecture : ajoute l'arrosage de la tomate (exige `travaux`, J du lundi au jeudi). */
   readonly arrosage?: boolean;
+  /** T22b : ajoute le désherbage de la batavia, J−13 en retard et J+1 (exige `travaux`, J du lundi au samedi). */
+  readonly faitEnRetard?: boolean;
 }
 
 /** Clé d'une tâche, telle que l'écran la porte (data-cle) : `<id de la série ou campagne>:<étape>`. */
@@ -329,7 +355,8 @@ export interface FermeDuJour {
     readonly tempsEstimes: Readonly<Record<string, number | null>>;
     /**
      * T22 : clés des tâches de travail, par nom (grelinette, compost, desherbage, palissage ;
-     * avec arrosage : arrosageRetard, arrosageSemaine). Vide sans travaux.
+     * avec arrosage : arrosageRetard, arrosageSemaine ; avec « Fait en retard » :
+     * desherbageBataviaRetard, desherbageBataviaDemain). Vide sans travaux.
      */
     readonly cles: Readonly<Record<string, string>>;
   };
@@ -339,6 +366,7 @@ export interface FermeDuJour {
 export function fermeDuJour(aujourdhui: string, options: OptionsFermeDuJour = {}): FermeDuJour {
   const avecTravaux = options.travaux === true;
   const avecArrosage = avecTravaux && options.arrosage === true;
+  const avecFaitEnRetard = avecTravaux && options.faitEnRetard === true;
   const J = aujourdhui as DateCalendaire;
   const j = (n: number): string => ajouterJours(J, n);
   const semaine = semaineIso(J);
@@ -451,7 +479,7 @@ export function fermeDuJour(aujourdhui: string, options: OptionsFermeDuJour = {}
   // T22 : travaux prévus de l'itinéraire, copiés dans l'instantané de la série.
   const travauxDe = (sid: string): readonly TravailPrevuFerme[] => {
     if (!avecTravaux) return [];
-    if (sid === SERIE.batavia) return [GRELINETTE, COMPOST];
+    if (sid === SERIE.batavia) return avecFaitEnRetard ? [GRELINETTE, COMPOST, DESHERBAGE_BATAVIA] : [GRELINETTE, COMPOST];
     if (sid === SERIE.tomate) return avecArrosage ? [DESHERBAGE, palissage(90 + jours(J, dimanche)), ARROSAGE] : [DESHERBAGE, palissage(90 + jours(J, dimanche))];
     return [];
   };
@@ -614,12 +642,16 @@ export function fermeDuJour(aujourdhui: string, options: OptionsFermeDuJour = {}
   // l'arrosage), puis la semaine par date et par code d'emplacement (T2-P01, T2-P05, T2-P07 le
   // même jour).
   if (avecArrosage && jours(J, dimanche) < 3) throw new Error('ferme du jour avec arrosage : J du lundi au jeudi');
+  if (avecFaitEnRetard && jours(J, dimanche) < 1) throw new Error('ferme du jour « Fait en retard » : J du lundi au samedi');
   const cles: Record<string, string> = {
     grelinette: cleTravail(SERIE.batavia, 0, j(-12)),
     compost: cleTravail(SERIE.batavia, 1, j(-3)),
     desherbage: cleTravail(SERIE.tomate, 0, j(-6)),
     palissage: cleTravail(SERIE.tomate, 1, dimanche),
     ...(avecArrosage ? { arrosageRetard: cleTravail(SERIE.tomate, 2, j(-1)), arrosageSemaine: cleTravail(SERIE.tomate, 2, j(2)) } : {}),
+    ...(avecFaitEnRetard
+      ? { desherbageBataviaRetard: cleTravail(SERIE.batavia, 2, j(-13)), desherbageBataviaDemain: cleTravail(SERIE.batavia, 2, j(1)) }
+      : {}),
   };
   const cle = (nom: string): string => cles[nom] ?? '';
   return {
@@ -631,6 +663,7 @@ export function fermeDuJour(aujourdhui: string, options: OptionsFermeDuJour = {}
     attendu: {
       taches: [
         cleTache(SERIE.carotte, 'semis_direct'),
+        ...(avecFaitEnRetard ? [cle('desherbageBataviaRetard')] : []),
         cle('grelinette'),
         cleTache(CAMPAGNE.fraise, 'debut_recolte'),
         cleTache(SERIE.chou, 'plantation'),
@@ -638,6 +671,7 @@ export function fermeDuJour(aujourdhui: string, options: OptionsFermeDuJour = {}
         cle('compost'),
         ...(avecArrosage ? [cle('arrosageRetard')] : []),
         cleTache(SERIE.batavia, 'plantation'),
+        ...(avecFaitEnRetard ? [cle('desherbageBataviaDemain')] : []),
         ...(avecArrosage ? [cle('arrosageSemaine')] : []),
         cleTache(SERIE.radis, 'semis_direct'),
         cle('palissage'),
@@ -648,6 +682,7 @@ export function fermeDuJour(aujourdhui: string, options: OptionsFermeDuJour = {}
         [cle('desherbage')]: 6,
         [cle('compost')]: 3,
         ...(avecArrosage ? { [cle('arrosageRetard')]: 1 } : {}),
+        ...(avecFaitEnRetard ? { [cle('desherbageBataviaRetard')]: 13 } : {}),
       },
       recoltesEnCours: [SERIE.tomate, CAMPAGNE.fraise],
       chargeMinutes: 84,
@@ -657,6 +692,7 @@ export function fermeDuJour(aujourdhui: string, options: OptionsFermeDuJour = {}
         [cle('desherbage')]: 45,
         [cle('palissage')]: 3,
         ...(avecArrosage ? { [cle('arrosageRetard')]: null, [cle('arrosageSemaine')]: null } : {}),
+        ...(avecFaitEnRetard ? { [cle('desherbageBataviaRetard')]: null, [cle('desherbageBataviaDemain')]: null } : {}),
       },
       cles,
     },

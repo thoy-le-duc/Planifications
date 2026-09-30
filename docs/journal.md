@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T22b : « Fait » sur un travail en retard solde la bonne occurrence
+
+- **Fait** : « Marquer fait » sur une carte de travail écrit la date de cette carte (`occurrenceVisee`) dans l'intervention. Elle solde cette occurrence et les précédentes, jamais la suivante (Q24). Le désherbage du 31 reste à faire quand on rattrape celui du 17.
+- **Décidé** : champ facultatif, permis seulement sur une intervention. Les anciennes saisies gardent la règle de T22 (occurrence la plus proche). Aucune migration.
+- **Bloquant** : rien. Noté pour T13b : un détail d'événement qui n'est pas du JSON fait échouer toute la lecture d'Aujourd'hui (défaut antérieur).
+
 ## 2026-09-30 — T12 : planifier une série depuis le plan
 
 - **Fait** :

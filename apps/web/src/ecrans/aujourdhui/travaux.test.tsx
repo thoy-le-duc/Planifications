@@ -14,6 +14,14 @@
  * même, et « Marquer fait » sur la carte en retard masquait les deux. Les attendus des tests
  * ci-dessous ne changent pas, seules leurs clés gagnent la date (J = 2026-09-30) ; le cas des
  * deux cartes a son test (« relecture : deux occurrences du même travail »).
+ *
+ * T22b (Q24, « Fait » sur un travail répété en retard) — changement des tests existants,
+ * justifié : l'intervention écrite par « Fait » porte désormais l'occurrence visée
+ * (`detail.occurrenceVisee`, la date prévue de la carte touchée ; contrat :
+ * packages/core/src/planification/test/contrat-travaux.ts, section « T22b »). Les quatre
+ * `toStrictEqual` sur le détail écrit (grelinette, compost, désherbage, arrosage) gagnent donc
+ * cette clé, avec la date de la clé de leur carte ; rien d'autre ne change. Les tests propres à
+ * T22b sont à la fin (« T22b : … »), sur la ferme du jour { travaux: true, faitEnRetard: true }.
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -334,7 +342,7 @@ describe('T22 : « Fait » sur un travail prévu écrit une intervention', () =>
       remplace_sorte: null,
       remplace_evenement_id: null,
     });
-    expect(detail(e)).toStrictEqual({ categorie: 'travail_sol', type: 'grelinette', outil: 'grelinette' });
+    expect(detail(e)).toStrictEqual({ categorie: 'travail_sol', type: 'grelinette', outil: 'grelinette', occurrenceVisee: '2026-09-18' });
     expect(emplacements(e)).toEqual([EMPLACEMENT.t2p01]);
     verifierValide(e);
     expect(transactions, 'une saisie = une transaction').toBe(1);
@@ -363,6 +371,7 @@ describe('T22 : « Fait » sur un travail prévu écrit une intervention', () =>
       outil: null,
       produit: 'compost',
       quantite: { valeur: 3, unite: 'kg/m²' },
+      occurrenceVisee: '2026-09-27',
     });
     verifierValide(e);
     await attendre(() => tache(COMPOST) === undefined, 'le compost fait quitte la liste');
@@ -375,7 +384,7 @@ describe('T22 : « Fait » sur un travail prévu écrit une intervention', () =>
     const e = nouveauxEvenements()[0];
     if (e === undefined) return;
     expect(e.serie_id).toBe(SERIE.tomate);
-    expect(detail(e)).toStrictEqual({ categorie: 'entretien', type: 'désherbage', outil: null });
+    expect(detail(e)).toStrictEqual({ categorie: 'entretien', type: 'désherbage', outil: null, occurrenceVisee: '2026-09-24' });
     expect(emplacements(e)).toEqual([EMPLACEMENT.t2p07]);
     verifierValide(e);
     await attendre(() => tache(DESHERBAGE) === undefined, 'le désherbage quitte la liste (la prochaine occurrence est la semaine prochaine)');
@@ -512,7 +521,7 @@ describe('T22 (relecture) : deux occurrences du même travail, deux cartes, deux
     const e = nouveaux[0];
     if (e === undefined) return;
     expect(e).toMatchObject({ type: 'intervention', date: AUJOURDHUI, serie_id: SERIE.tomate });
-    expect(detail(e)).toStrictEqual({ categorie: 'entretien', type: 'arrosage', outil: null });
+    expect(detail(e)).toStrictEqual({ categorie: 'entretien', type: 'arrosage', outil: null, occurrenceVisee: '2026-09-29' });
     verifierValide(e);
 
     // L'intervention du jour solde l'occurrence la plus proche (J−1) et les précédentes, pas J+2.
@@ -534,5 +543,137 @@ describe('T22 : ferme sans travaux prévus', () => {
     await rendre();
     expect(taches().map((t) => t.dataset.cle)).toEqual(ferme.attendu.taches);
     expect(pastille()).toBeNull();
+  });
+});
+
+describe('T22b : « Fait » sur la carte en retard d’un travail répété (Q24)', () => {
+  // Désherbage de la batavia tous les 14 jours : carte du 2026-09-17 (J−13, en retard) et
+  // occurrence de demain (J+1 = 2026-10-01), plus proche d'aujourd'hui que le 17. La règle de
+  // T22 (l'occurrence la plus proche de la date réelle) solderait les deux ; Q24 : seulement le 17.
+  const RETARD_17 = cleTravail(SERIE.batavia, 2, '2026-09-17');
+  const DEMAIN = cleTravail(SERIE.batavia, 2, '2026-10-01');
+
+  beforeEach(async () => {
+    base.fermer();
+    base = creerBaseMemoire(SCHEMA_LOCAL);
+    ferme = await ecrireFermeDuJour(base, AUJOURDHUI, { travaux: true, faitEnRetard: true });
+    const compteuse: BaseLocale = {
+      getAll: (sql, p) => base.getAll(sql, p),
+      execute: (sql, p) => base.execute(sql, p),
+      writeTransaction: (fn) => {
+        transactions++;
+        return base.writeTransaction(fn);
+      },
+      onChange: (g, o) => base.onChange(g, o),
+    };
+    porte = creerPorte(compteuse, { utilisateurId: UTILISATEUR as Id<'Utilisateur'>, fermeId: FERME as Id<'Ferme'> });
+    remiseAZero();
+  });
+
+  it('le jeu d’essai : la carte du 17 en retard (13 jours) et celle de demain, à leur place', async () => {
+    expect(ferme.attendu.cles.desherbageBataviaRetard).toBe(RETARD_17);
+    expect(ferme.attendu.cles.desherbageBataviaDemain).toBe(DEMAIN);
+    await rendre();
+    expect(taches().map((t) => t.dataset.cle)).toEqual(ferme.attendu.taches);
+    const r = tacheOuEchec(RETARD_17);
+    expect(r.dataset.retard).toBe('oui');
+    expect(texte(r)).toMatch(/désherbage/i);
+    expect(texte(r)).toContain('13 jours de retard');
+    expect(tacheOuEchec(DEMAIN).dataset.retard).toBe('non');
+  });
+
+  it('exemple du ticket : « Fait » sur la carte du 17 solde le 17 ; l’occurrence de demain reste affichée', async () => {
+    await rendre();
+    gestes = 0;
+    await toucher(bouton(/^Marquer fait/, tacheOuEchec(RETARD_17)));
+    await attendre(() => nouveauxEvenements().length > 0, 'une intervention écrite');
+    expect(gestes).toBe(1);
+    const nouveaux = nouveauxEvenements();
+    expect(nouveaux).toHaveLength(1);
+    const e = nouveaux[0];
+    if (e === undefined) return;
+    // La date réelle est aujourd'hui ; l'occurrence visée est la date prévue de la carte touchée.
+    expect(e).toMatchObject({ type: 'intervention', date: AUJOURDHUI, serie_id: SERIE.batavia, source: 'tap', remplace_sorte: null });
+    expect(detail(e)).toStrictEqual({ categorie: 'entretien', type: 'désherbage', outil: null, occurrenceVisee: '2026-09-17' });
+    expect(emplacements(e)).toEqual([EMPLACEMENT.t2p01]);
+    verifierValide(e);
+    expect(transactions, 'une saisie = une transaction').toBe(1);
+
+    await attendre(() => tache(RETARD_17) === undefined, 'la carte du 17 quitte la liste');
+    for (let k = 0; k < 10; k++) await unTour();
+    expect(tache(DEMAIN), 'l’occurrence de demain reste à faire').toBeDefined();
+    expect(tache(DEMAIN)?.dataset.retard).toBe('non');
+    expect(taches().map((t) => t.dataset.cle)).toEqual(ferme.attendu.taches.filter((c) => c !== RETARD_17));
+    // Les autres travaux de la batavia (grelinette, compost) ne sont pas touchés.
+    expect(tache(GRELINETTE)).toBeDefined();
+    expect(tache(COMPOST)).toBeDefined();
+    verifierAjoutSeul();
+  });
+
+  it('« Fait » en avance sur la carte de demain : elle porte sa date, et le 17 d’avant est soldé aussi', async () => {
+    await rendre();
+    await toucher(bouton(/^Marquer fait/, tacheOuEchec(DEMAIN)));
+    await attendre(() => nouveauxEvenements().length > 0, 'une intervention écrite');
+    const e = nouveauxEvenements()[0];
+    if (e === undefined) return;
+    expect(e.date).toBe(AUJOURDHUI);
+    expect(detail(e)).toStrictEqual({ categorie: 'entretien', type: 'désherbage', outil: null, occurrenceVisee: '2026-10-01' });
+    verifierValide(e);
+    await attendre(() => tache(DEMAIN) === undefined && tache(RETARD_17) === undefined, 'les deux cartes quittent la liste');
+  });
+
+  it('« Annuler » (bandeau) : l’annulation reprend le détail avec l’occurrence visée ; la carte du 17 revient', async () => {
+    await rendre();
+    await toucher(bouton(/^Marquer fait/, tacheOuEchec(RETARD_17)));
+    await attendre(() => nouveauxEvenements().length === 1 && bandeau() !== null, 'intervention écrite, bandeau affiché');
+    const fait = nouveauxEvenements()[0];
+    if (fait === undefined) return;
+    await attendre(() => tache(RETARD_17) === undefined, 'la carte du 17 quitte la liste');
+
+    remiseAZero();
+    await toucher(bouton('Annuler', bandeau() ?? conteneur));
+    await attendre(() => nouveauxEvenements().length === 1, 'annulation écrite');
+    const annulation = nouveauxEvenements()[0];
+    if (annulation === undefined) return;
+    expect(annulation).toMatchObject({ type: 'intervention', serie_id: SERIE.batavia, remplace_sorte: 'annulation', remplace_evenement_id: fait.id });
+    expect(detail(annulation)).toStrictEqual({ categorie: 'entretien', type: 'désherbage', outil: null, occurrenceVisee: '2026-09-17' });
+    expect(detail(annulation)).toStrictEqual(detail(fait));
+    verifierValide(annulation);
+    expect(transactions).toBe(1);
+    verifierAjoutSeul();
+
+    await attendre(() => tache(RETARD_17) !== undefined, 'la carte du 17 redevient à faire');
+    expect(tache(RETARD_17)?.dataset.retard).toBe('oui');
+    expect(tache(DEMAIN)).toBeDefined();
+    expect(taches().map((t) => t.dataset.cle)).toEqual(ferme.attendu.taches);
+  });
+
+  it('« Annuler » depuis l’historique : même détail, occurrence visée comprise', async () => {
+    await rendre();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    await toucher(bouton(/^Marquer fait/, tacheOuEchec(RETARD_17)));
+    await attendre(() => bandeau() !== null && nouveauxEvenements().length === 1, 'bandeau affiché après la saisie');
+    const fait = nouveauxEvenements()[0];
+    if (fait === undefined) return;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DELAI_ANNULATION_MS + 200);
+    });
+    await unTour();
+    expect(bandeau(), 'disparu après 10 s').toBeNull();
+
+    remiseAZero();
+    const h = await historique();
+    await attendre(() => entrees(h).some((x) => x.dataset.evenement === fait.id), 'l’intervention est dans l’historique');
+    const entree = entrees(h).find((x) => x.dataset.evenement === fait.id);
+    await toucher(bouton(/^Annuler/, entree));
+    await attendre(() => nouveauxEvenements().length === 1, 'annulation écrite');
+    const annulation = nouveauxEvenements()[0];
+    if (annulation === undefined) return;
+    expect(annulation).toMatchObject({ remplace_sorte: 'annulation', remplace_evenement_id: fait.id });
+    expect(detail(annulation)).toStrictEqual(detail(fait));
+    expect((detail(annulation) as { occurrenceVisee?: unknown }).occurrenceVisee).toBe('2026-09-17');
+    verifierValide(annulation);
+    await attendre(() => tache(RETARD_17) !== undefined, 'la carte du 17 redevient à faire');
+    verifierAjoutSeul();
   });
 });
