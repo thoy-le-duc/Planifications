@@ -104,6 +104,16 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       });
     },
 
+    async ecrireEnsemble(ordres) {
+      // Liste vide : rien à écrire, aucune transaction (donc rien dans la file d'envoi).
+      if (ordres.length === 0) return;
+      // Une seule transaction locale : PowerSync l'envoie en un seul lot, que le serveur accepte ou
+      // refuse en entier. Un ordre qui échoue rejette la promesse et annule tout.
+      await base.writeTransaction(async (tx) => {
+        for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
+      });
+    },
+
     surveiller,
 
     async saisirEvenement(saisie: SaisieEvenement): Promise<Id<'Evenement'>> {
