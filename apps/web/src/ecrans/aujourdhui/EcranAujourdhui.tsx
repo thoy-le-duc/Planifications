@@ -166,16 +166,17 @@ function CarteTache({ tache: t, aujourdhui, surFait, surPeser }: ProprietesCarte
 // ── Historique ───────────────────────────────────────────────────────────────────────────────
 
 interface ProprietesHistorique {
+  readonly id: string;
   readonly entrees: readonly EntreeHistorique[];
   readonly aujourdhui: string;
   readonly surAnnuler: (e: EntreeHistorique) => void;
   readonly surChangerDate: (e: EntreeHistorique) => void;
 }
 
-function Historique({ entrees, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
+function Historique({ id, entrees, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
   const idTitre = useId();
   return (
-    <section aria-labelledby={idTitre} className="auj-historique">
+    <section id={id} aria-labelledby={idTitre} className="auj-historique">
       <div className="auj-historique-tete">
         <h2 id={idTitre} className="auj-groupe">
           Historique
@@ -342,6 +343,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
   /** Une écriture à la fois : un double appui n'écrit pas deux fois. */
   const occupe = useRef(false);
   const numero = useRef(0);
+  const idHistorique = useId();
 
   useEffect(
     () =>
@@ -491,16 +493,33 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
         </div>
       )}
 
-      <button
-        type="button"
-        className="auj-bouton-principal auj-noter"
-        onClick={() => {
-          setDialogue({ sorte: 'recolte', culture: null });
-        }}
-      >
-        <IconePanier />
-        Noter une récolte
-      </button>
+      <div className="auj-actions">
+        <button
+          type="button"
+          className="auj-bouton-principal auj-noter"
+          onClick={() => {
+            setDialogue({ sorte: 'recolte', culture: null });
+          }}
+        >
+          <IconePanier />
+          Noter une récolte
+        </button>
+        {/* L'historique est en bas de l'écran : ce bouton y mène d'un geste. */}
+        <button
+          type="button"
+          aria-label="Historique"
+          className="auj-vers-historique"
+          onClick={() => {
+            document.getElementById(idHistorique)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+        >
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+            <path d="M3 3v5h5M12 7v5l3 2" />
+          </svg>
+          Historique
+        </button>
+      </div>
 
       {erreur !== null && (
         <p role="alert" className="auj-erreur">
@@ -550,6 +569,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
 
       {journee !== null && (
         <Historique
+          id={idHistorique}
           entrees={journee.historique}
           aujourdhui={jour}
           surAnnuler={(h) => {

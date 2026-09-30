@@ -68,6 +68,38 @@
   box-shadow: var(--ombre-basse);
 }
 
+.auj-actions {
+  display: flex;
+  gap: var(--espace-s);
+}
+
+.auj-noter {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.auj-vers-historique {
+  flex-shrink: 0;
+  width: 84px;
+  min-height: 64px;
+  border: 0;
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  box-shadow: var(--ombre-carte);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.auj-historique {
+  scroll-margin-top: var(--espace-l);
+}
+
 .auj-bouton-secondaire {
   display: flex;
   align-items: center;
