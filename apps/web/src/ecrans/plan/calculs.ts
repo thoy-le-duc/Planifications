@@ -124,6 +124,12 @@ export interface OptionsPlan {
  */
 export const HAUTEUR_LIGNE_PX = 48;
 
+/** Largeur d'une semaine sur le plan, en px (T12 : semaine sous le doigt d'un appui long). */
+export const LARGEUR_SEMAINE_PX = 36;
+
+/** Largeur de la colonne des codes, en px (T12 : un appui long dessus n'ouvre rien). */
+export const LARGEUR_ETIQUETTE_PX = 92;
+
 /** Nom de chaque sorte de conflit de T03, tel que l'écran le montre. */
 export const NOMS_CONFLITS: Readonly<Record<SorteConflit, string>> = {
   chevauchement: 'Chevauchement',
@@ -157,7 +163,8 @@ const texteOuNul = (v: Valeur): string | null => (v === null || v === undefined 
 const nombre = (v: Valeur): number => (typeof v === 'number' ? v : Number(v));
 const nombreOuNul = (v: Valeur): number | null => (v === null || v === undefined ? null : nombre(v));
 
-function versEmplacement(l: LigneLocale): Emplacement {
+/** Ligne `emplacement` locale → Emplacement de T01 (partagé avec le formulaire d'une série, T12). */
+export function versEmplacement(l: LigneLocale): Emplacement {
   const commun = {
     id: texte(l.id) as Id<'Emplacement'>,
     fermeId: texte(l.ferme_id) as Id<'Ferme'>,
@@ -174,7 +181,8 @@ function versEmplacement(l: LigneLocale): Emplacement {
   return { ...commun, sorte: l.sorte === 'rang' ? 'rang' : 'planche' };
 }
 
-function versOccupation(l: LigneLocale, emplacement: Emplacement): Occupation {
+/** Ligne `occupation` locale → Occupation de T01, sur son emplacement (partagé avec T12). */
+export function versOccupation(l: LigneLocale, emplacement: Emplacement): Occupation {
   const serieId = texteOuNul(l.serie_id);
   const plantationId = texteOuNul(l.plantation_id);
   const occupant: OccupantEmplacement =
