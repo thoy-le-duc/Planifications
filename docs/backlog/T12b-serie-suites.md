@@ -8,6 +8,7 @@
 ## Constats (relecture T12, non bloquants)
 
 - **N8. Sélecteur de semaine.** `<input type="week">` n'a pas de sélecteur sur iOS Safari ni sur Firefox Android : il faut taper « 2027-W22 » à la main. Il faut un sélecteur de semaine maison, tactile, avec des cibles d'au moins 56 px et des libellés en français (« S22 · 31 mai »).
+- **Sélecteur d'ancre coupé.** Sur la capture à 390 px, le libellé « Récolte à partir de » déborde de son bouton et est rogné en haut. Le libellé doit tenir (par exemple « Récolte » avec « à partir de » en dessous, ou une taille adaptée), sans passer sous 56 px de cible.
 - **N1. Ancre hors lundi.** Une série importée dont l'ancre n'est pas un lundi est recalée au lundi dès qu'on l'enregistre, même si seule la longueur a changé. Il faut garder l'ancre d'origine tant que la semaine n'est pas touchée.
 - **N2. Variété supprimée.** Si la variété d'une série a été supprimée de la bibliothèque, « Enregistrer » la remplace par `null` sans prévenir. Il faut la garder, ou prévenir avant.
 - **N3. Décision de rotation périmée.** Si on change de culture ou si l'alerte rouge disparaît, l'ancien `rotation_acceptee` reste sur la série. Il faut l'effacer quand il ne correspond plus.

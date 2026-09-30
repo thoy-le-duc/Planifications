@@ -1,6 +1,6 @@
 {
   "maj": "30 septembre 2026, 17 h UTC",
-  "resume": "Cette fenêtre : **les travaux prévus des itinéraires (T22)**, fusionnés : grelinette, compost, désherbage répété… apparaissent dans Aujourd'hui avec leur temps estimé et la charge de la semaine. **Le plan de culture (T12)** : on crée et modifie une série depuis Planches par un appui long, dates et besoins calculés en direct. Prochains : **le serveur des itinéraires (T23)**, puis **l'écran « Mes itinéraires » (T24)** et les suites du formulaire (T12b, dont un sélecteur de semaine pour iPhone).",
+  "resume": "Cette fenêtre : **les travaux prévus des itinéraires (T22)**, fusionnés : grelinette, compost, désherbage répété… apparaissent dans Aujourd'hui avec leur temps estimé et la charge de la semaine. **Le plan de culture (T12)**, fusionné aussi : on crée et modifie une série depuis Planches par un appui long, dates et besoins calculés en direct. Prochains : **le serveur des itinéraires (T23)**, puis **l'écran « Mes itinéraires » (T24)** et les suites du formulaire (T12b, dont un sélecteur de semaine pour iPhone).",
   "en_cours": {},
   "attente": "Rien de bloquant côté questions : Théophane a répondu le 30 septembre à Q13, Q14, Q15, Q17, Q18, Q20, Q23 et Q24 (tickets T04b, T09c, T10g, T14d, T22b). À faire de son côté pour la mise en ligne : créer le compte Brevo et choisir le domaine d'envoi (T09c).",
   "visuels": [
