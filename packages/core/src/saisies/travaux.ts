@@ -12,7 +12,7 @@ import type {
   TempsEstime,
   TravailPrevu,
 } from '../domaine/index.ts';
-import { PLAFONDS_PROVISOIRES, type CodeErreurSaisie, type ErreurSaisie } from './index.ts';
+import { PLAFONDS_SAISIES, type CodeErreurSaisie, type ErreurSaisie } from './index.ts';
 
 export type ResultatTravaux<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly erreur: ErreurSaisie };
 
@@ -191,8 +191,8 @@ function lireProduit(v: unknown, categorie: CategorieIntervention): Lu<ProduitTr
     return echec(erreur('champ_invalide', 'produit.quantite.valeur', 'quantité : nombre positif attendu'));
   }
   // Même plafond que la quantité d'une intervention : « Fait » l'écrit telle quelle.
-  if (valeur > PLAFONDS_PROVISOIRES.interventionQuantite) {
-    return echec(erreur('plafond_depasse', 'produit.quantite.valeur', `quantité au-delà du plafond (${String(PLAFONDS_PROVISOIRES.interventionQuantite)} au plus)`));
+  if (valeur > PLAFONDS_SAISIES.interventionQuantite) {
+    return echec(erreur('plafond_depasse', 'produit.quantite.valeur', `quantité au-delà du plafond (${String(PLAFONDS_SAISIES.interventionQuantite)} au plus)`));
   }
   const unite = texte(q.unite, 'produit.quantite.unite', 'unité');
   if (!unite.ok) return unite;
