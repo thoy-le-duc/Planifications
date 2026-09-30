@@ -79,8 +79,11 @@ export interface PorteDonnees {
    * serveur, accepté ou refusé en entier). Ordres exécutés dans l'ordre ; un ordre qui échoue
    * rejette la promesse et rien n'est écrit. Liste vide : aucune transaction. Les requêtes
    * surveillées sont prévenues une fois l'ensemble validé.
+   *
+   * Toujours présente sur la porte de `creerPorte` ; facultative dans le type seulement parce que
+   * des doublures de tests écrites avant T10c (écran d'export) ne l'ont pas.
    */
-  ecrireEnsemble(ordres: readonly OrdreEcriture[]): Promise<void>;
+  ecrireEnsemble?(ordres: readonly OrdreEcriture[]): Promise<void>;
   /**
    * Appelle `rappel` avec le résultat tout de suite, puis après chaque écriture validée sur l'une
    * des `tables` (écriture locale ou arrivée par la synchro). Rend la fonction de désabonnement.

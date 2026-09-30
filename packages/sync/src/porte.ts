@@ -4,7 +4,7 @@
  * d'envoi de PowerSync (voir envoi.ts) au retour du réseau.
  */
 import { creerGenerateurId, type Id } from '@planif/core';
-import type { BaseLocale, OptionsPorte, PorteDonnees, RefusSynchro, RequeteSurveillee, SaisieEvenement } from './types.ts';
+import type { BaseLocale, OptionsPorte, OrdreEcriture, PorteDonnees, RefusSynchro, RequeteSurveillee, SaisieEvenement } from './types.ts';
 
 const COLONNES_EVENEMENT = [
   'id',
@@ -51,7 +51,7 @@ function refusDepuisLigne(l: LigneRefus): RefusSynchro {
   };
 }
 
-export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnees {
+export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnees & Required<Pick<PorteDonnees, 'ecrireEnsemble'>> {
   const maintenant = options.maintenant ?? (() => new Date());
   const nouvelId =
     options.nouvelId ??
@@ -104,7 +104,7 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       });
     },
 
-    async ecrireEnsemble(ordres) {
+    async ecrireEnsemble(ordres: readonly OrdreEcriture[]) {
       // Liste vide : rien à écrire, aucune transaction (donc rien dans la file d'envoi).
       if (ordres.length === 0) return;
       // Une seule transaction locale : PowerSync l'envoie en un seul lot, que le serveur accepte ou
