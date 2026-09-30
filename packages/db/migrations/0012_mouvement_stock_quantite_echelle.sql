@@ -1,0 +1,1 @@
+ALTER TABLE "mouvement_stock" ALTER COLUMN "quantite" SET DATA TYPE numeric(12, 6);

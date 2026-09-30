@@ -85,6 +85,13 @@
       "when": 1790708458257,
       "tag": "0011_rotation_successeurs",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790764685345,
+      "tag": "0012_mouvement_stock_quantite_echelle",
+      "breakpoints": true
     }
   ]
 }

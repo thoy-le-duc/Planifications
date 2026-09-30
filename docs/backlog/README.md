@@ -24,7 +24,8 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10](T10-synchro.md) | Synchro de bout en bout | T07, T08, T09 | fait |
 | [T10b](T10b-regles-saisies-coeur.md) | Règles des saisies dans le cœur | T10 | fait |
 | [T10c](T10c-stock-synchro.md) | Synchro : le serveur accepte les saisies de stock des téléphones | T10, T10b | fait |
-| [T10d](T10d-stock-suites.md) | Stock synchronisé : suites des relectures | T10c | à faire |
+| [T10d](T10d-stock-suites.md) | Stock synchronisé : suites des relectures | T10c | fait |
+| [T10f](T10f-synchro-debit.md) | Synchro : débit, délais et envois trop lourds | T10d | à faire |
 | [T10e](T10e-series-synchro.md) | Synchro : le serveur accepte les séries des téléphones | T10, T10b, T10c | en cours |
 | [T16](T16-design.md) | Identité visuelle : système de design et habillage | T09b | fait |
 | [T16b](T16b-brancher-export.md) | Brancher l'export dans l'onglet Ferme | T11 | fait |
@@ -59,4 +60,5 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 - Fin de ticket : trois lignes dans `docs/journal.md` et le statut mis à jour dans ce tableau.
 | [T19](T19-tests-de-temps.md) | Tests de temps robustes sous charge | — | fait |
 | [T20](T20-main-verte.md) | Main verte : service worker après le premier affichage, mesures e2e stables | T11 | fait |
+| [T11c](T11c-diagnostic-hors-prod.md) | Pages de test hors du site en production | T11, T10c | fait |
 | [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | à faire |

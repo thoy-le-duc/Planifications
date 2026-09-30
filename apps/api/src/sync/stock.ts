@@ -11,6 +11,9 @@
  *
  * Tout se fait dans la transaction du lot (upload.ts) : références verrouillées (FOR SHARE)
  * jusqu'à l'écriture ; les lignes écrites plus haut dans le même lot sont visibles.
+ *
+ * T10d : la ferme est filtrée dans la requête même du verrou. Une ligne d'une autre ferme n'est
+ * ni lue ni verrouillée, et se comporte exactement comme une ligne inexistante.
  */
 import {
   validerArticleStock,
@@ -24,7 +27,7 @@ import { articleStock, modification, mouvementStock } from '@planif/db';
 import { sql } from 'drizzle-orm';
 import type { Contexte } from '../dependances.ts';
 import type { Refus } from './motifs.ts';
-import type { TransactionDb } from './references.ts';
+import { PROFONDEUR_MAX_CHAINE, visibleParLaFerme, type TransactionDb } from './references.ts';
 
 /** Écriture PUT reçue : id de l'écriture PowerSync et colonnes (lues sans confiance). */
 export interface PutRecu {
@@ -32,17 +35,13 @@ export interface PutRecu {
   readonly donnees: Readonly<Record<string, unknown>>;
 }
 
-/** Ligne référencée : sa ferme (null : bibliothèque commune), si elle est supprimée, et son espèce (variété). */
+/** Ligne référencée, visible par la ferme : si elle est supprimée, et son espèce (variété). */
 interface LigneReference {
-  readonly ferme_id: string | null;
   readonly supprimee: boolean;
   /** Colonnes lues en plus (`extra`) : espèce d'une variété ou d'un article, unité d'un article. */
   readonly espece_id?: string;
   readonly unite?: string;
 }
-
-/** Profondeur au plus d'une chaîne de corrections (garde-fou : le journal n'a pas de cycle). */
-const PROFONDEUR_MAX_CHAINE = 1_000;
 
 /** Colonnes reçues + id de l'écriture ; un `id` glissé dans les données est refusé (colonne inconnue). */
 function avecId(e: PutRecu): Readonly<Record<string, unknown>> | { readonly idGlisse: true } {
@@ -52,19 +51,22 @@ function avecId(e: PutRecu): Readonly<Record<string, unknown>> | { readonly idGl
 const invalide = (precision: string, fermeId: string): Refus => ({ motif: 'ecriture_invalide', precision, fermeId });
 
 /**
- * Ligne `table` d'identifiant `id`, verrouillée (FOR SHARE) jusqu'à la fin de la transaction ;
- * `extra` : colonnes lues en plus. Table et colonnes sont des constantes de ce fichier, l'id un
- * paramètre.
+ * Ligne `table` d'identifiant `id` visible par la ferme `fermeId` (la sienne, ou la bibliothèque
+ * commune : ferme_id nul), verrouillée (FOR SHARE) jusqu'à la fin de la transaction ; undefined
+ * si elle n'existe pas OU si elle est d'une autre ferme (T10d : filtre et verrou dans la même
+ * requête, la ligne d'une autre ferme n'est jamais verrouillée). `extra` : colonnes lues en plus.
+ * Table et colonnes sont des constantes de ce fichier, id et ferme des paramètres.
  */
 async function lireReference(
   tx: TransactionDb,
   table: 'espece' | 'variete' | 'article_stock',
   id: string,
+  fermeId: string,
   extra: ReturnType<typeof sql> = sql``,
 ): Promise<LigneReference | undefined> {
-  const r = await tx.execute<{ ferme_id: string | null; supprimee: boolean; espece_id?: string; unite?: string }>(
-    sql`SELECT ferme_id::text AS ferme_id, supprime_le IS NOT NULL AS supprimee ${extra}
-        FROM ${sql.identifier(table)} WHERE id = ${id}::uuid FOR SHARE`,
+  const r = await tx.execute<{ supprimee: boolean; espece_id?: string; unite?: string }>(
+    sql`SELECT supprime_le IS NOT NULL AS supprimee ${extra}
+        FROM ${sql.identifier(table)} WHERE id = ${id}::uuid AND ${visibleParLaFerme(fermeId, table !== 'article_stock')} FOR SHARE`,
   );
   return r.rows[0];
 }
@@ -115,14 +117,12 @@ async function articleIdentique(tx: TransactionDb, a: ArticleStock): Promise<boo
 
 /** Espèce et variété visibles par la ferme (la sienne ou la bibliothèque), non supprimées. */
 async function verifierEspece(tx: TransactionDb, a: ArticleStock): Promise<Refus | null> {
-  const espece = await lireReference(tx, 'espece', a.especeId);
+  const espece = await lireReference(tx, 'espece', a.especeId, a.fermeId);
   if (espece === undefined) return invalide('espèce introuvable', a.fermeId);
-  if (espece.ferme_id !== null && espece.ferme_id !== a.fermeId) return { motif: 'ferme_interdite', precision: "espèce d'une autre ferme", fermeId: a.fermeId };
   if (espece.supprimee) return invalide('espèce supprimée', a.fermeId);
   if (a.varieteId === null) return null;
-  const variete = await lireReference(tx, 'variete', a.varieteId, sql`, espece_id::text AS espece_id`);
+  const variete = await lireReference(tx, 'variete', a.varieteId, a.fermeId, sql`, espece_id::text AS espece_id`);
   if (variete === undefined) return invalide('variété introuvable', a.fermeId);
-  if (variete.ferme_id !== null && variete.ferme_id !== a.fermeId) return { motif: 'ferme_interdite', precision: "variété d'une autre ferme", fermeId: a.fermeId };
   if (variete.supprimee) return invalide('variété supprimée', a.fermeId);
   if (variete.espece_id !== a.especeId) return invalide("variété d'une autre espèce", a.fermeId);
   return null;
@@ -186,7 +186,6 @@ async function mouvementIdentique(tx: TransactionDb, m: MouvementLu): Promise<bo
 }
 
 interface RecolteVisee {
-  readonly ferme_id: string;
   readonly type: string;
   readonly remplace_sorte: RemplacementEvenement['sorte'] | null;
   /** detail.quantite (nombre pour une récolte : CHECK de la base et règles du cœur). */
@@ -255,20 +254,19 @@ async function lireChaine(tx: TransactionDb, recolteId: string): Promise<Chaine 
  * et de l'espèce de la récolte (B2) ; puis le mouvement borné (décision 3, B1).
  */
 async function verifierMouvement(tx: TransactionDb, m: MouvementLu): Promise<Refus | null> {
-  const article = await lireReference(tx, 'article_stock', m.articleStockId, sql`, unite, espece_id::text AS espece_id`);
+  const article = await lireReference(tx, 'article_stock', m.articleStockId, m.fermeId, sql`, unite, espece_id::text AS espece_id`);
   if (article === undefined) return invalide('article de stock introuvable', m.fermeId);
-  if (article.ferme_id !== m.fermeId) return { motif: 'ferme_interdite', precision: "article d'une autre ferme", fermeId: m.fermeId };
   if (article.supprimee) return invalide('article de stock supprimé', m.fermeId);
 
+  // Ferme dans la requête du verrou (T10d) : la récolte d'une autre ferme n'est ni lue ni verrouillée.
   const r = await tx.execute<{
-    ferme_id: string;
     type: string;
     remplace_sorte: RecolteVisee['remplace_sorte'];
     quantite: number | null;
     unite: string | null;
     espece_id: string | null;
   }>(
-    sql`SELECT e.ferme_id::text AS ferme_id, e.type, e.remplace_sorte,
+    sql`SELECT e.type, e.remplace_sorte,
                CASE WHEN jsonb_typeof(e.detail -> 'quantite') = 'number' THEN (e.detail ->> 'quantite')::float8 END AS quantite,
                e.detail ->> 'unite' AS unite,
                coalesce(s.espece_id, p.espece_id)::text AS espece_id
@@ -276,11 +274,10 @@ async function verifierMouvement(tx: TransactionDb, m: MouvementLu): Promise<Ref
         LEFT JOIN serie s ON s.id = e.serie_id
         LEFT JOIN campagne c ON c.id = e.campagne_id
         LEFT JOIN plantation p ON p.id = c.plantation_id
-        WHERE e.id = ${m.recolteId}::uuid FOR SHARE OF e`,
+        WHERE e.id = ${m.recolteId}::uuid AND e.ferme_id = ${m.fermeId}::uuid FOR SHARE OF e`,
   );
   const recolte: RecolteVisee | undefined = r.rows[0];
   if (recolte === undefined) return invalide('récolte liée introuvable', m.fermeId);
-  if (recolte.ferme_id !== m.fermeId) return { motif: 'ferme_interdite', precision: "récolte d'une autre ferme", fermeId: m.fermeId };
   if (recolte.type !== 'recolte' || recolte.quantite === null) return invalide("l'événement lié n'est pas une récolte", m.fermeId);
 
   const chaine = await lireChaine(tx, m.recolteId);
