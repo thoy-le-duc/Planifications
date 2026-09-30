@@ -33,11 +33,11 @@ export interface PutRecu {
 }
 
 /** Ligne référencée : sa ferme (null : bibliothèque commune), si elle est supprimée, et son espèce (variété). */
-type LigneReference = {
+interface LigneReference {
   readonly ferme_id: string | null;
   readonly supprimee: boolean;
   readonly espece_id?: string;
-};
+}
 
 /** Profondeur au plus d'une chaîne de corrections (garde-fou : le journal n'a pas de cycle). */
 const PROFONDEUR_MAX_CHAINE = 1_000;
@@ -60,7 +60,7 @@ async function lireReference(
   id: string,
   extra: ReturnType<typeof sql> = sql``,
 ): Promise<LigneReference | undefined> {
-  const r = await tx.execute<LigneReference>(
+  const r = await tx.execute<{ ferme_id: string | null; supprimee: boolean; espece_id?: string }>(
     sql`SELECT ferme_id::text AS ferme_id, supprime_le IS NOT NULL AS supprimee ${extra}
         FROM ${sql.identifier(table)} WHERE id = ${id}::uuid FOR SHARE`,
   );
@@ -183,13 +183,13 @@ async function mouvementIdentique(tx: TransactionDb, m: MouvementLu): Promise<bo
   return ligne === undefined ? null : ligne.identique;
 }
 
-type RecolteVisee = {
+interface RecolteVisee {
   readonly ferme_id: string;
   readonly type: string;
   readonly remplace_sorte: RemplacementEvenement['sorte'] | null;
   /** detail.quantite (nombre pour une récolte : CHECK de la base et règles du cœur). */
   readonly quantite: number | null;
-};
+}
 
 /**
  * Somme des mouvements déjà écrits sur `articleId` pour toute la chaîne de la récolte `recolteId`
@@ -230,12 +230,12 @@ async function verifierMouvement(tx: TransactionDb, m: MouvementLu): Promise<Ref
   if (article.ferme_id !== m.fermeId) return { motif: 'ferme_interdite', precision: "article d'une autre ferme", fermeId: m.fermeId };
   if (article.supprimee) return invalide('article de stock supprimé', m.fermeId);
 
-  const r = await tx.execute<RecolteVisee>(
+  const r = await tx.execute<{ ferme_id: string; type: string; remplace_sorte: RecolteVisee['remplace_sorte']; quantite: number | null }>(
     sql`SELECT ferme_id::text AS ferme_id, type, remplace_sorte,
                CASE WHEN jsonb_typeof(detail -> 'quantite') = 'number' THEN (detail ->> 'quantite')::float8 END AS quantite
         FROM evenement WHERE id = ${m.recolteId}::uuid FOR SHARE`,
   );
-  const recolte = r.rows[0];
+  const recolte: RecolteVisee | undefined = r.rows[0];
   if (recolte === undefined) return invalide('récolte liée introuvable', m.fermeId);
   if (recolte.ferme_id !== m.fermeId) return { motif: 'ferme_interdite', precision: "récolte d'une autre ferme", fermeId: m.fermeId };
   if (recolte.type !== 'recolte' || recolte.quantite === null) return invalide("l'événement lié n'est pas une récolte", m.fermeId);
