@@ -365,6 +365,17 @@ export const saison = pgTable(
   (t) => [verif('saison', 'periode', sql`${t.fin} >= ${t.debut}`)],
 );
 
+/**
+ * Décision sur une alerte rouge de rotation, telle que rangée dans `serie.rotation_acceptee`
+ * (jsonb, clés du téléphone) : famille botanique en cause, délai de retour non respecté (années),
+ * instant ISO de la décision. Validée par le cœur (validerSerie) avant toute écriture.
+ */
+export interface ValeurRotationAcceptee {
+  readonly famille: Id<'Famille'>;
+  readonly delai_ans: number;
+  readonly le: string;
+}
+
 export const serie = pgTable(
   'serie',
   {
@@ -393,12 +404,15 @@ export const serie = pgTable(
     longueurM: decimal('longueur_m'),
     nombrePlants: integer('nombre_plants'),
     statut: text('statut', { enum: STATUTS_SERIE }).notNull(),
+    /** Alerte rouge de rotation acceptée (T10e, T12) : `{ famille, delai_ans, le }`, NULL sans décision. */
+    rotationAcceptee: jsonb('rotation_acceptee').$type<ValeurRotationAcceptee>(),
     ...horodatages(),
   },
   (t) => [
     verif('serie', 'ancre_type', parmi(t.ancreType, TYPES_ANCRE)),
     verif('serie', 'statut', parmi(t.statut, STATUTS_SERIE)),
     verif('serie', 'parametres', sql`jsonb_typeof(${t.parametres}) = 'object'`),
+    verif('serie', 'rotation_acceptee', sql`${t.rotationAcceptee} IS NULL OR jsonb_typeof(${t.rotationAcceptee}) = 'object'`),
     verif('serie', 'une_taille', sql`num_nonnulls(${t.longueurM}, ${t.nombrePlants}) = 1`),
     verif(
       'serie',

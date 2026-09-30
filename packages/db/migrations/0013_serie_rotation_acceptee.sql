@@ -1,0 +1,2 @@
+ALTER TABLE "serie" ADD COLUMN "rotation_acceptee" jsonb;--> statement-breakpoint
+ALTER TABLE "serie" ADD CONSTRAINT "serie_rotation_acceptee" CHECK ("serie"."rotation_acceptee" IS NULL OR jsonb_typeof("serie"."rotation_acceptee") = 'object');

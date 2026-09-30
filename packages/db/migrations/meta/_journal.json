@@ -92,6 +92,13 @@
       "when": 1790764685345,
       "tag": "0012_mouvement_stock_quantite_echelle",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790769636449,
+      "tag": "0013_serie_rotation_acceptee",
+      "breakpoints": true
     }
   ]
 }

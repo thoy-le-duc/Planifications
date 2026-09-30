@@ -65,6 +65,10 @@ export function ligneDepuisSerie(s: Serie): LigneSerie {
     longueurM: s.taille.unite === 'longueur' ? s.taille.longueurM : null,
     nombrePlants: s.taille.unite === 'plants' ? s.taille.nombrePlants : null,
     statut: s.statut,
+    rotationAcceptee:
+      s.rotationAcceptee === undefined
+        ? null
+        : { famille: s.rotationAcceptee.familleId, delai_ans: s.rotationAcceptee.delaiAns, le: new Date(s.rotationAcceptee.le).toISOString() },
   };
 }
 
@@ -96,6 +100,10 @@ export function serieDepuisLigne(l: LigneSerie): Serie {
     },
     taille,
     statut: l.statut,
+    // Sans décision : clé absente, pas nulle (Serie.rotationAcceptee).
+    ...(l.rotationAcceptee === null
+      ? {}
+      : { rotationAcceptee: { familleId: l.rotationAcceptee.famille, delaiAns: l.rotationAcceptee.delai_ans, le: Date.parse(l.rotationAcceptee.le) } }),
   };
 }
 
