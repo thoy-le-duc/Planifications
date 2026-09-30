@@ -50,6 +50,12 @@
 7. **Pas des refus serveur** : une mise en place hors de la saison et une occupation qui dépasse sa planche sont acceptées. Ce sont des alertes et des conflits affichés par T12 (T03), pas des règles d'écriture.
 8. **Plafonds provisoires** (`PLAFONDS_SERIE`) : fourchette du testeur (entre 1 000 et 1 000 000 m, entre 100 000 et 100 000 000 plants ; proposé : 10 000 m, 1 000 000 plants), à valider par Théophane avec Q13.
 
+## Décisions du chef après la relecture de sécurité
+
+1. **Bloquant : une occupation qui n'est pas celle d'une série ne se modifie pas depuis le téléphone.** Un PATCH sur une occupation dont la ligne existante a `serie_id` nul, ou `plantation_id` ou `evenement_id` non nul, est refusé (`ecriture_invalide`), même s'il remet ces colonnes à NULL et ajoute un `serie_id`. La ligne ne change pas et aucun historique n'est écrit. Sonde : l'occupation de la plantation de kiwis transformée en occupation de série 2027 était acceptée.
+2. **Rétablissement** (`supprime_le` non nul → NULL) : toutes les références sont revérifiées comme si elles changeaient. Une saison, une espèce, une variété, un itinéraire ou une planche supprimés entre-temps font refuser le rétablissement.
+3. **Fin de lot** : `verifierFinDeLot` ne lit que les occupations de la ferme. Une occupation d'une autre ferme qui désignerait la série (possible seulement par une écriture directe en base, faute de clé composée) ne bloque ni son décalage ni sa suppression, et ne révèle rien.
+
 ## Critères d'acceptation
 
 - [ ] Un test d'intégration Postgres par règle, y compris :

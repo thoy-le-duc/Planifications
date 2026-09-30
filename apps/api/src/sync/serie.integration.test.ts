@@ -1211,4 +1211,130 @@ decrireAvecBase('T10e')('T10e : POST /sync/upload accepte les séries des télé
       expect(await lot([serie, putOccupation(serie, planche1, { longueur_m: 15, position_m: 20 })])).toEqual({ refus: [] });
     });
   });
+
+  // ── Décisions du chef après la relecture de sécurité ────────────────────────────────────────
+
+  describe('relecture de sécurité : occupations hors série, rétablissement, fin de lot', () => {
+    /** Occupation écrite directement en base (pas par le téléphone), rend son id. */
+    async function occupationEnBase(colonnes: Record<string, unknown>): Promise<string> {
+      const id = randomUUID();
+      const valeurs = { id, ferme_id: ferme, emplacement_id: planche1, longueur_m: 30, ...colonnes };
+      const noms = Object.keys(valeurs);
+      await inserer(
+        `INSERT INTO occupation (${noms.join(', ')}) VALUES (${noms.map((_n, i) => `$${String(i + 1)}`).join(', ')})`,
+        Object.values(valeurs),
+      );
+      return id;
+    }
+
+    const occupationDePlantation = () =>
+      occupationEnBase({ plantation_id: plantation, prevu_du: '2019-03-15', prevu_au: '9999-12-31' });
+    const occupationDeCouverture = () =>
+      occupationEnBase({ evenement_id: evenementCouverture, prevu_du: '2026-09-30', prevu_au: '2026-11-29' });
+
+    describe('bloquant 1 : une occupation qui n’est pas celle d’une série ne se modifie pas', () => {
+      it.each([
+        ['de la plantation de kiwis', occupationDePlantation, { plantation_id: null }],
+        ['de couverture (bâche)', occupationDeCouverture, { evenement_id: null }],
+      ])('occupation %s transformée en occupation de série 2027 : ecriture_invalide, rien ne change', async (_cas, creer, retire) => {
+        const { serie } = await serieAcceptee();
+        const id = await creer();
+        const sonde = patch('occupation', id, { ...retire, serie_id: serie.id, ...OCCUPATION_S22 });
+        await refuseEnEntier([sonde], sonde, 'ecriture_invalide');
+        expect(await modifications(id)).toBe(0);
+      });
+
+      it.each([
+        ['de la plantation de kiwis', occupationDePlantation],
+        ['de couverture (bâche)', occupationDeCouverture],
+      ])('occupation %s : un simple PATCH (longueur) est refusé aussi, rien ne change', async (_cas, creer) => {
+        const id = await creer();
+        const avant = await ligne('occupation', id);
+        const simple = patch('occupation', id, { longueur_m: 12 });
+        await refuseEnEntier([simple], simple, 'ecriture_invalide');
+        expect(await ligne('occupation', id)).toEqual(avant);
+        expect(await modifications(id)).toBe(0);
+      });
+
+      it('occupation de plantation supprimée en douceur par PATCH : refusé aussi', async () => {
+        const id = await occupationDePlantation();
+        const suppression = supprimer('occupation', id);
+        await refuseEnEntier([suppression], suppression, 'ecriture_invalide');
+        expect((await ligne('occupation', id))?.supprime_le).toBeNull();
+      });
+    });
+
+    describe('rétablissement : toutes les références revérifiées', () => {
+      /** Série acceptée avec ses propres références (neuves), puis supprimée avec ses occupations. */
+      async function serieSupprimee(): Promise<{
+        serie: EcritureEnvoyee;
+        occupations: readonly [EcritureEnvoyee, EcritureEnvoyee];
+        refs: { saison: string; espece: string; variete: string; itineraire: string };
+      }> {
+        const espece = await especeEn(ferme, famille);
+        const refs = { saison: await saisonEn(ferme), espece, variete: await varieteEn(ferme, espece), itineraire: await itineraireEn(ferme, espece) };
+        const { serie, occupations } = await serieAcceptee({
+          saison_id: refs.saison,
+          espece_id: refs.espece,
+          variete_id: refs.variete,
+          itineraire_id: refs.itineraire,
+        });
+        expect(await lot([supprimer('serie', serie.id), ...occupations.map((o) => supprimer('occupation', o.id))])).toEqual({ refus: [] });
+        return { serie, occupations, refs };
+      }
+
+      const retablir = (serie: EcritureEnvoyee, occupations: readonly EcritureEnvoyee[]): EcritureEnvoyee[] => [
+        patch('serie', serie.id, { supprime_le: null }),
+        ...occupations.map((o) => patch('occupation', o.id, { supprime_le: null })),
+      ];
+
+      it.each([
+        ['saison', 'saison', 'saison'],
+        ['espèce', 'espece', 'espece'],
+        ['variété', 'variete', 'variete'],
+        ['itinéraire', 'itineraire', 'itineraire'],
+      ] as const)('série dont la référence « %s » a été supprimée entre-temps : rétablissement refusé, rien ne change', async (_nom, table, cle) => {
+        const { serie, occupations, refs } = await serieSupprimee();
+        await base.pool.query(`UPDATE ${table} SET supprime_le = $2 WHERE id = $1`, [refs[cle], MAINTENANT]);
+        const retourSerie = patch('serie', serie.id, { supprime_le: null });
+        await refuseEnEntier([retourSerie, ...retablir(serie, occupations).slice(1)], retourSerie, 'ecriture_invalide');
+        expect((await ligne('serie', serie.id))?.supprime_le).not.toBeNull();
+      });
+
+      it('occupation dont la planche a été supprimée entre-temps : rétablissement refusé, rien ne change', async () => {
+        const planche = await plancheEn(ferme, 'T2-P07');
+        const serie = putSerie({ longueur_m: 30 });
+        const occupation = putOccupation(serie, planche);
+        expect(await lot([serie, occupation])).toEqual({ refus: [] });
+        expect(await lot([supprimer('occupation', occupation.id)])).toEqual({ refus: [] });
+        await base.pool.query(`UPDATE emplacement SET supprime_le = $2 WHERE id = $1`, [planche, MAINTENANT]);
+        const retour = patch('occupation', occupation.id, { supprime_le: null });
+        await refuseEnEntier([retour], retour, 'ecriture_invalide');
+        expect((await ligne('occupation', occupation.id))?.supprime_le).not.toBeNull();
+      });
+
+      it('témoin : références toujours là, le rétablissement reste accepté', async () => {
+        const { serie, occupations } = await serieSupprimee();
+        expect(await lot(retablir(serie, occupations))).toEqual({ refus: [] });
+      });
+    });
+
+    describe('fin de lot : seules les occupations de la ferme comptent', () => {
+      // Seul chemin trouvé : une ligne incohérente écrite directement en base (aucune clé composée
+      // (ferme_id, serie_id) ne l'empêche). Par l'API, une occupation ne désigne jamais la série
+      // d'une autre ferme.
+      it('une occupation d’une autre ferme qui désigne la série ne bloque ni son décalage ni sa suppression', async () => {
+        const { serie, occupations } = await serieAcceptee();
+        await occupationEnBase({ ferme_id: autreFerme, emplacement_id: plancheVoisine, serie_id: serie.id, prevu_du: '2020-01-01', prevu_au: '2020-02-01' });
+        expect(
+          await lot([
+            patch('serie', serie.id, { ...DATES_S23 }),
+            patch('occupation', occupations[0].id, { ...OCCUPATION_S23 }),
+            patch('occupation', occupations[1].id, { ...OCCUPATION_S23 }),
+          ]),
+        ).toEqual({ refus: [] });
+        expect(await lot([supprimer('serie', serie.id), ...occupations.map((o) => supprimer('occupation', o.id))])).toEqual({ refus: [] });
+      });
+    });
+  });
 });
