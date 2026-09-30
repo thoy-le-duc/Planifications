@@ -77,7 +77,10 @@
  *   recolte       quantite (> 0), unite (kg | botte | piece | barquette), categorie (texte ou null)
  *   realise       etape (semis_pepiniere | semis_direct | plantation | arrachage), quantiteReelle (nombre ≥ 0 ou null)
  *   intervention  categorie (travail_sol | couverture | fertilisation | amendement | entretien),
- *                 type (texte non vide), outil (texte ou null) ;
+ *                 type (texte non vide), outil (texte ou null),
+ *                 occurrenceVisee (T22b, facultative : absente, null, ou 'AAAA-MM-JJ' existante
+ *                 dans [2000-01-01, 2100-12-31] ; champ_invalide / hors_bornes ; tests :
+ *                 ../occurrence-visee.test.ts) ;
  *                 + couverture : dureeOccupationJours (entier ≥ 0 ou null ; T01 : jours entiers)
  *                 + fertilisation, amendement : produit (texte non vide), quantite { valeur ≥ 0, unite texte } obligatoires
  *   irrigation    secteurIrrigationId (UUID), dureeMinutes (entier ≥ 0 ; T01 : minutes entières)
