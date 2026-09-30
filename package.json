@@ -11,10 +11,11 @@
     "lint": "eslint --max-warnings 0 .",
     "test": "vitest run",
     "build": "pnpm -r build",
+    "build:essais": "pnpm --filter @planif/web build:essais",
     "budget": "pnpm --filter @planif/web budget",
     "e2e": "pnpm --filter @planif/web e2e",
     "e2e:synchro": "node scripts/e2e-synchro.ts",
-    "verif": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm budget && pnpm e2e"
+    "verif": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm build:essais && pnpm budget && pnpm e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
