@@ -66,9 +66,9 @@ Node 22.18 ou plus (exécute le TypeScript sans compilation), pnpm 10.
 | `pnpm lint` | ESLint strict, aucun `any`, zéro avertissement |
 | `pnpm test` | Tests unitaires Vitest de tous les paquets |
 | `pnpm build` | Build de production (`apps/web/dist/`) : le site mis en ligne, l'appli seule |
-| `pnpm build:essais` | Build des essais (`apps/web/dist-essais/`) : copie de `dist/` plus les pages de mesure et de diagnostic (après `pnpm build`) |
+| `pnpm build:essais` | Build des essais (`apps/web/dist-essais/`) : reconstruit `dist/`, le copie, puis y ajoute les pages de mesure et de diagnostic |
 | `pnpm budget` | Poids du JavaScript de démarrage (limite dans `apps/web/budget.json`) |
-| `pnpm e2e` | Playwright : temps d'affichage avec CPU ralenti ×4 et réouverture hors ligne, sur `dist-essais/` (après `pnpm build` puis `pnpm build:essais`) |
+| `pnpm e2e` | Playwright : temps d'affichage avec CPU ralenti ×4 et réouverture hors ligne, sur `dist-essais/` (après `pnpm build:essais`, qui fait les deux builds) |
 | `pnpm e2e:synchro` | Synchro de bout en bout : Postgres + PowerSync + API + deux navigateurs (Docker requis) |
 
 Sur une machine où Chromium est déjà installé, `CHROMIUM_PATH=/chemin/vers/chrome pnpm e2e` évite le téléchargement.

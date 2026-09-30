@@ -3,8 +3,8 @@
  *
  *   node scripts/build-essais.ts [--depuis dist] [--vers dist-essais]
  *
- * 1. `--vers` est vidé puis rempli d'une copie du build de production `--depuis` (déjà construit
- *    par `vite build`) ; si les deux dossiers sont le même, rien n'est copié (cas de
+ * 1. `--vers` est vidé puis rempli d'une copie du build de production `--depuis`, construit juste
+ *    avant par `vite build` (`pnpm build:essais` enchaîne les deux : jamais de dist/ périmé) ; si les deux dossiers sont le même, rien n'est copié (cas de
  *    `pnpm e2e:synchro`, qui construit l'appli avec ses URL dans `dist-synchro/`).
  * 2. `vite build --mode essais` construit les seules pages de test dans un dossier temporaire.
  *    Un seul `vite build` pour l'appli et les pages redécouperait les morceaux partagés : l'entrée
