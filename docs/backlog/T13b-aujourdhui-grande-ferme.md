@@ -31,6 +31,9 @@ Mesure simulée (node:sqlite, index de `SCHEMA_LOCAL`) :
 - **Un jeu d'essai avec des itinéraires valides** (des milliers de tâches) et une mesure e2e de l'écran sur ce jeu.
 - **Question de conflit** : deux téléphones qui annulent la même récolte hors ligne. Le second lot est refusé par le serveur (T10c). Accepter une annulation redondante sans mouvement ? À voir avec Q20.
 
+- **Masque des tâches faites** (vérification T13) : le retirer dès qu'une journée relue arrive. Sinon, un réalisé annulé depuis un autre téléphone laisse « Fait » sans effet.
+- **Focus après « Changer la date »** : le rendre à l'entrée corrigée ou au titre de l'historique, au lieu de le laisser tomber sur `body`.
+
 ## Critères d'acceptation
 
 - [ ] Sur le grand jeu, CPU ×4 : Aujourd'hui en moins de 300 ms au tap et en moins de 1 s à froid, relecture après une saisie en moins de 500 ms.
