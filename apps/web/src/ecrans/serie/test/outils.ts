@@ -21,6 +21,8 @@ export interface Banc {
   readonly porte: PorteDonnees;
   /** Transactions d'écriture passées par la porte depuis le dernier `remiseAZero()`. */
   transactions(): number;
+  /** Nombre d'écritures SQL de la base au dernier `remiseAZero()` : ce qui précède (amorçage, `recevoir` du test) n'est pas vérifié. */
+  ecrituresAvant(): number;
   remiseAZero(): void;
 }
 
@@ -29,6 +31,7 @@ export async function creerBanc(): Promise<Banc> {
   const base = creerBaseMemoire(SCHEMA_LOCAL);
   await ecrireFermeSerie(base);
   let transactions = 0;
+  let ecrituresAvant = 0;
   const compteuse: BaseLocale = {
     getAll: (sql, p) => base.getAll(sql, p),
     execute: (sql, p) => base.execute(sql, p),
@@ -47,8 +50,10 @@ export async function creerBanc(): Promise<Banc> {
     base,
     porte,
     transactions: () => transactions,
+    ecrituresAvant: () => ecrituresAvant,
     remiseAZero: () => {
       transactions = 0;
+      ecrituresAvant = base.ecritures.length;
     },
   };
 }
@@ -67,7 +72,7 @@ export const MOTIF_UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-
  * (le serveur seul), jamais de DELETE ni de REPLACE sur `serie` ou `occupation`.
  */
 export function verifierOrdres(b: Banc): void {
-  const vers = (motif: RegExp) => b.base.ecritures.filter((sql) => motif.test(sql));
+  const vers = (motif: RegExp) => b.base.ecritures.slice(b.ecrituresAvant()).filter((sql) => motif.test(sql));
   expect(vers(/^\s*(INSERT|UPDATE|DELETE|REPLACE)\b[^;]*\bmodification\b/i), 'jamais d’écriture dans modification (le serveur l’écrit)').toEqual([]);
   expect(
     vers(/^\s*(DELETE\s+FROM|REPLACE\s+INTO|INSERT\s+OR\s+REPLACE\s+INTO)\s+["`]?(serie|occupation)\b/i),
