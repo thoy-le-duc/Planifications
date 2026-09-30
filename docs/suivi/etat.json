@@ -1,8 +1,8 @@
 {
-  "maj": "30 septembre 2026, 10 h 45 UTC",
-  "resume": "Fusionnés depuis ce matin : **la saisie au champ (T13)**, l'écran d'accueil où l'on coche « Fait » et note une récolte en trois gestes, hors ligne ; **l'export branché dans l'onglet Ferme (T16b)** ; **le stock synchronisé en sécurité (T10c)** ; et **main de nouveau verte (T20)**. En cours : **pages de test retirées du site en ligne (T11c)** et **suites de sécurité du stock (T10d)**.",
+  "maj": "30 septembre 2026, 13 h UTC",
+  "resume": "Fusionnés depuis ce matin : **la saisie au champ (T13)**, **l'export dans l'onglet Ferme (T16b)**, **le stock synchronisé en sécurité (T10c, T10d)**, **les pages de test retirées du site en ligne (T11c)** et **le serveur qui accepte les séries (T10e)**. Prochains : **le plan de culture (T12)** et **les travaux prévus dans les itinéraires (T22)**, puis leurs écrans (T23, T24).",
   "en_cours": {},
-  "attente": "Répondre à Q20 (corriger une récolte déjà annulée ; deux téléphones qui corrigent la même récolte), puis Q13 (plafonds des quantités), Q14 (fournisseur d'e-mail), Q15 (connexions au magasin), Q17 (délais de retour par famille) et Q18 (saison à cheval sur deux années).",
+  "attente": "Répondre à Q20 (corriger une récolte déjà annulée ; deux téléphones qui corrigent la même récolte), puis Q13 (plafonds des quantités), Q14 (fournisseur d'e-mail, bloque la mise en ligne), Q15 (connexions au magasin), Q17 (délais de retour par famille) et Q18 (saison à cheval sur deux années).",
   "visuels": [
     {
       "titre": "Aujourd'hui : la saisie au champ",
@@ -14,6 +14,11 @@
       ],
       "alt": "Écran Aujourd'hui avec les tâches en retard, pavé de récolte, bandeau Annuler",
       "texte": "T13. Les tâches de la semaine, en retard d'abord ; « Fait » en un geste ; récolte en trois gestes avec un pavé géant et la virgule ; « Annuler » pendant 10 s puis depuis l'historique. Tout marche sans réseau, le stock suit."
+    },
+    {
+      "titre": "Itinéraires et travaux de culture",
+      "etat": "à faire",
+      "texte": "T22 à T24, demandés par Théophane. Chaque ferme décrit sa façon de cultiver : travail du sol, faux semis, désherbages répétés, temps estimé. Les tâches arrivent seules dans Aujourd'hui."
     },
     {
       "titre": "Planches, sur le téléphone",
