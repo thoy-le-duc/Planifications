@@ -363,6 +363,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   const [formulaire, setFormulaire] = useState<DepartSerie | null>(null);
   const [annulable, setAnnulable] = useState<(SaisieSerieAnnulable & { readonly numero: number }) | null>(null);
   const numeroAnnulable = useRef(0);
+  /** Annulation par le bandeau refusée : ce qui n'a pas pu être défait (message affiché). */
+  const [echecAnnulation, setEchecAnnulation] = useState<string | null>(null);
   const defilement = useRef<HTMLDivElement>(null);
   const total = plan?.lignes.length ?? 0;
   const [vue, setVue] = useState(() => fenetre(null, total));
@@ -491,6 +493,17 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
     };
   }, [plan]);
 
+  // Message d'échec d'une annulation : affiché DELAI_ANNULATION_MS, ou jusqu'à « OK ».
+  useEffect(() => {
+    if (echecAnnulation === null) return undefined;
+    const minuterie = setTimeout(() => {
+      setEchecAnnulation(null);
+    }, DELAI_ANNULATION_MS);
+    return () => {
+      clearTimeout(minuterie);
+    };
+  }, [echecAnnulation]);
+
   // « Annuler » : DELAI_ANNULATION_MS après l'enregistrement d'une série.
   useEffect(() => {
     if (annulable === null) return undefined;
@@ -570,8 +583,10 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   }, []);
   const annuler = useCallback((a: SaisieSerieAnnulable & { readonly numero: number }) => {
     setAnnulable((x) => (x?.numero === a.numero ? null : x));
+    setEchecAnnulation(null);
     a.annuler().catch((erreur: unknown) => {
       console.error('Annulation impossible', erreur);
+      setEchecAnnulation(a.texte);
     });
   }, []);
 
@@ -689,6 +704,23 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
             Annuler
           </button>
           <span aria-hidden="true" className="plan-bandeau-temps" />
+        </div>
+      )}
+      {echecAnnulation !== null && annulable === null && (
+        <div role="alert" className="plan-bandeau plan-bandeau-echec">
+          <span className="plan-bandeau-texte">
+            <strong>Annulation impossible</strong>
+            <span>{echecAnnulation} reste enregistrée telle quelle. Réessaie depuis l’historique de la série.</span>
+          </span>
+          <button
+            type="button"
+            className="plan-bandeau-annuler"
+            onClick={() => {
+              setEchecAnnulation(null);
+            }}
+          >
+            OK
+          </button>
         </div>
       )}
     </div>

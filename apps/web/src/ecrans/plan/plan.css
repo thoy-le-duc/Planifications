@@ -533,6 +533,20 @@
   animation: plan-compte-a-rebours 10s linear forwards;
 }
 
+.plan-bandeau-echec {
+  background: var(--couleur-conflit);
+}
+
+.plan-bandeau-echec .plan-bandeau-texte,
+.plan-bandeau-echec .plan-bandeau-texte strong {
+  color: var(--couleur-surface);
+}
+
+.plan-bandeau-echec .plan-bandeau-annuler {
+  min-width: 56px;
+  color: var(--couleur-conflit);
+}
+
 @keyframes plan-compte-a-rebours {
   from {
     transform: scaleX(1);
