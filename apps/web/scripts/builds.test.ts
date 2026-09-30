@@ -39,9 +39,11 @@
  * construirait React en mode développement.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { build as viteBuild, type Plugin } from 'vite';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 const WEB = fileURLToPath(new URL('..', import.meta.url));
@@ -71,12 +73,17 @@ interface Resultat {
 
 /** Lance un script de @planif/web, NODE_ENV et variables de Vitest retirés. */
 function lancer(script: string): Resultat {
+  return commande(['run', script]);
+}
+
+/** Lance `pnpm <args>` dans apps/web, NODE_ENV et variables de Vitest retirés. */
+function commande(args: readonly string[]): Resultat {
   const env: NodeJS.ProcessEnv = {};
   for (const [cle, valeur] of Object.entries(process.env)) {
     if (cle === 'NODE_ENV' || cle.startsWith('VITEST')) continue;
     env[cle] = valeur;
   }
-  const r = spawnSync('pnpm', ['run', script], { cwd: WEB, env, encoding: 'utf8' });
+  const r = spawnSync('pnpm', args, { cwd: WEB, env, encoding: 'utf8' });
   return { ok: r.status === 0, sortie: `${r.stdout}\n${r.stderr}`.slice(-3000) };
 }
 
@@ -129,6 +136,9 @@ function jsAtteint(dossier: string, depart: readonly string[]): string[] {
   return [...vus].sort();
 }
 
+/** index.html du build de production frais (premier describe), pour la garde 3 de la relecture. */
+let indexProductionFrais: string | undefined;
+
 function dansUnDossierDeTest(fichier: string): boolean {
   return DOSSIERS_DE_TEST.some((d) => fichier.startsWith(d));
 }
@@ -138,6 +148,7 @@ describe('T11c : build de production (dist/), l’appli seule', () => {
 
   beforeAll(() => {
     build = lancer('build');
+    if (build.ok) indexProductionFrais = lire(DIST, 'index.html').toString('utf8');
   }, 180_000);
 
   it('le build de production réussit et contient l’appli (témoin)', () => {
@@ -234,4 +245,84 @@ describe('T11c : build des essais (dist-essais/), l’appli et les pages de test
       expect(fautifs, `${page} : morceaux qui enregistrent un service worker`).toEqual([]);
     }
   });
+});
+
+/**
+ * Gardes demandées par la relecture de T11c (contrat) :
+ *
+ *   1. Liste blanche en production : le build de production n'accepte que l'entrée `index`
+ *      (index.html). Toute autre entrée HTML, même hors de mesures/ et diagnostic/ (ici
+ *      `outils/amorcer.html`), fait échouer `vite build`, avec un message qui nomme la page ou
+ *      l'entrée refusée (« outils »). Vérifié par un build programmatique avec la configuration
+ *      du projet, l'entrée ajoutée par `build.rollupOptions.input` (fusionnée avec celle de
+ *      vite.config.ts) et la page fournie par un petit plugin (rien n'est écrit dans le dépôt),
+ *      vers un dossier temporaire. Sans garde, ce build réussit et met la page en précache.
+ *   2. `vite build --mode essais` sans --outDir (donc vers dist/) échoue, et laisse dist/ intact
+ *      (un fichier témoin et index.html y sont encore, inchangés).
+ *   3. `build:essais` reconstruit l'appli du code courant : avec un dist/ périmé (factice),
+ *      `pnpm --filter @planif/web build:essais` produit un dist-essais/ dont index.html est celui
+ *      d'un build de production frais, sans rien du dist/ périmé.
+ *
+ * Ces tests viennent après les deux blocs précédents (Vitest exécute les blocs d'un fichier dans
+ * l'ordre) : ils abîment dist/ volontairement.
+ */
+describe('T11c : gardes de la relecture', () => {
+  it('1. production : une entrée HTML hors liste blanche (outils/amorcer.html) fait échouer le build', async () => {
+    const page = join(WEB, 'outils', 'amorcer.html');
+    const html = '<!doctype html><html lang="fr"><head><meta charset="UTF-8" /><title>Outil</title></head><body><p>outil</p></body></html>';
+    const pageVirtuelle: Plugin = {
+      name: 'planif:test-page-hors-liste',
+      enforce: 'pre',
+      resolveId: (source) => (source === page ? page : null),
+      load: (id) => (id === page ? html : null),
+    };
+    const sortie = mkdtempSync(join(tmpdir(), 'planif-t11c-liste-blanche-'));
+    let erreur: unknown;
+    try {
+      await viteBuild({
+        configFile: join(WEB, 'vite.config.ts'),
+        root: WEB,
+        mode: 'production',
+        logLevel: 'silent',
+        plugins: [pageVirtuelle],
+        build: { outDir: sortie, emptyOutDir: true, rollupOptions: { input: { outils: page } } },
+      });
+    } catch (e) {
+      erreur = e;
+    } finally {
+      rmSync(sortie, { recursive: true, force: true });
+    }
+    expect(erreur, 'le build de production a accepté outils/amorcer.html').toBeDefined();
+    const message = erreur instanceof Error ? erreur.message : String(erreur);
+    expect(message, 'le message nomme la page ou l’entrée refusée').toMatch(/outils/);
+    expect(message, 'échec dû à la garde, pas au mécanisme du test').not.toMatch(/"fileName" or "name" properties/);
+  }, 120_000);
+
+  it('2. `vite build --mode essais` sans --outDir échoue et laisse dist/ intact', () => {
+    mkdirSync(DIST, { recursive: true });
+    const temoin = join(DIST, 'temoin-t11c.txt');
+    writeFileSync(temoin, 'ne pas effacer');
+    const indexAvant = existsSync(join(DIST, 'index.html')) ? lire(DIST, 'index.html') : undefined;
+    const r = commande(['exec', 'vite', 'build', '--mode', 'essais']);
+    const temoinIntact = existsSync(temoin);
+    rmSync(temoin, { force: true });
+    expect(r.ok, `vite build --mode essais vers dist/ a réussi :\n${r.sortie}`).toBe(false);
+    expect(temoinIntact, 'dist/ vidé par le build des essais').toBe(true);
+    if (indexAvant !== undefined) expect(lire(DIST, 'index.html').equals(indexAvant), 'dist/index.html modifié').toBe(true);
+  }, 180_000);
+
+  it('3. `build:essais` reconstruit l’appli du code courant, même avec un dist/ périmé', () => {
+    expect(indexProductionFrais, 'index.html du build de production frais (premier bloc)').toBeDefined();
+    rmSync(DIST, { recursive: true, force: true });
+    mkdirSync(join(DIST, 'assets'), { recursive: true });
+    writeFileSync(
+      join(DIST, 'index.html'),
+      '<!doctype html><html><head><script type="module" src="/assets/index-PERIME.js"></script></head><body></body></html>',
+    );
+    writeFileSync(join(DIST, 'assets', 'index-PERIME.js'), 'console.log("appli périmée");');
+    const r = lancer('build:essais');
+    expect(r.ok, r.sortie).toBe(true);
+    expect(existsSync(join(DIST_ESSAIS, 'assets', 'index-PERIME.js')), 'morceau du dist/ périmé copié dans dist-essais/').toBe(false);
+    expect(lire(DIST_ESSAIS, 'index.html').toString('utf8'), 'index.html de dist-essais/ = build de production frais').toBe(indexProductionFrais);
+  }, 240_000);
 });
