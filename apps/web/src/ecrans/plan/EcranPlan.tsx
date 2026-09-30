@@ -311,8 +311,11 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   const idSaison = useId();
 
   // Plan complet déjà affiché : une relecture ne repasse jamais par le début (retour en haut).
+  // Tenu à jour avant les effets de lecture ci-dessous (les effets passent dans l'ordre).
   const completAffiche = useRef(false);
-  completAffiche.current = lu?.complet === true;
+  useEffect(() => {
+    completAffiche.current = lu?.complet === true;
+  }, [lu]);
 
   // Données changées (saisie, synchro) et ferme relue par le cache : on prend le plan relu.
   useEffect(

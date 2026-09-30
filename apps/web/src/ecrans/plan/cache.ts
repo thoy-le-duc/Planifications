@@ -172,7 +172,7 @@ function relire(porte: PorteDonnees, fermeId: string, cache: CacheFerme): void {
     return;
   }
   cache.enRelecture = true;
-  Promise.allSettled([obtenirSaisons(porte, fermeId), lireTout(porte, fermeId)])
+  void Promise.allSettled([obtenirSaisons(porte, fermeId), lireTout(porte, fermeId)])
     .then(([, tout]) => {
       if (tout.status === 'fulfilled') cache.ancien = null;
       else console.error('Plan illisible après un changement', tout.reason);
