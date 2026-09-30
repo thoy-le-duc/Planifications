@@ -32,7 +32,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T18](T18-mode-sombre.md) | Mode sombre | T16 | à faire |
 | [T11](T11-vue-2d.md) | Vue 2D planches × semaines (et base locale ouverte dans l'appli) | T03, T10, T16 | fait |
 | [T12](T12-plan-de-culture.md) | Plan de culture : créer et modifier une série | T04, T05, T10e, T11 | à faire |
-| [T22](T22-travaux-itineraire.md) | Itinéraires : les travaux prévus (cœur) | T02, T06, T13 | à faire |
+| [T22](T22-travaux-itineraire.md) | Itinéraires : les travaux prévus (cœur) | T02, T06, T13 | fait |
 | [T23](T23-itineraires-synchro.md) | Synchro : le serveur accepte les itinéraires et les types d'intervention | T10e, T22 | à faire |
 | [T24](T24-ecran-itineraires.md) | Écran : mes itinéraires et mes types d'intervention | T22, T23 | à faire |
 | [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T10c, T11, T16 | fait |

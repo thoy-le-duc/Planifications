@@ -16,11 +16,13 @@ import {
   validerMouvementStock,
   validerSaisie,
   type DateCalendaire,
+  type DetailIntervention,
   type DetailRealise,
   type DetailRecolte,
   type EtapeRealisee,
   type Id,
   type RemplacementEvenement,
+  type TravailPrevu,
   type UniteRecolte,
 } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees, SaisieEvenement } from '@planif/sync';
@@ -126,6 +128,44 @@ export async function marquerFait(ctx: ContexteEcriture, culture: Culture, etape
   return e.id;
 }
 
+/**
+ * Détail de l'intervention qui solde un travail prévu (T22) : même catégorie, même libellé,
+ * l'outil ; le produit et sa quantité en fertilisation et amendement (validerSaisie les exige).
+ */
+export function detailDuTravail(travail: TravailPrevu): DetailIntervention {
+  const commun = { type: travail.type, outil: travail.outil };
+  switch (travail.categorie) {
+    case 'fertilisation':
+    case 'amendement': {
+      const produit = travail.produit;
+      if (produit === null) throw new SaisieRefusee('produit manquant pour ce travail prévu');
+      return { ...commun, categorie: travail.categorie, produit: produit.nom, quantite: produit.quantite };
+    }
+    case 'couverture':
+      return { ...commun, categorie: 'couverture', dureeOccupationJours: null };
+    case 'travail_sol':
+    case 'entretien':
+      return { ...commun, categorie: travail.categorie };
+  }
+}
+
+/** « Fait » sur un travail prévu (T22) : l'intervention du même type, à la date du jour. */
+export async function marquerTravailFait(ctx: ContexteEcriture, culture: Culture, travail: TravailPrevu): Promise<Id<'Evenement'>> {
+  const e = evenement(ctx.porte, {
+    type: 'intervention',
+    date: ctx.aujourdhui as DateCalendaire,
+    source: 'tap',
+    culture: culturePour(culture),
+    emplacementIds: emplacementsDe(culture),
+    note: null,
+    photos: [],
+    remplaceEvenement: null,
+    detail: detailDuTravail(travail),
+  });
+  await ctx.porte.ecrireEnsemble([e.ordre]);
+  return e.id;
+}
+
 /** Récolte : l'événement et son entrée en stock (+quantité), l'article créé s'il n'existe pas. */
 export async function noterRecolte(ctx: ContexteEcriture, culture: Culture, quantite: number, unite: UniteRecolte): Promise<Id<'Evenement'>> {
   const detail: DetailRecolte = { quantite, unite, categorie: null };
@@ -145,7 +185,7 @@ export async function noterRecolte(ctx: ContexteEcriture, culture: Culture, quan
   return e.id;
 }
 
-const SQL_ORIGINAL = 'SELECT emplacement_ids, note, photos FROM evenement WHERE id = ?';
+const SQL_ORIGINAL = 'SELECT emplacement_ids, note, photos, detail FROM evenement WHERE id = ?';
 
 /**
  * Emplacements encore actifs le jour donné, parmi `ids` (le serveur refuse un emplacement
@@ -167,7 +207,9 @@ async function emplacementsActifs(ctx: ContexteEcriture, ids: readonly string[])
  * détail repris ; ses emplacements encore actifs seulement (liste vide acceptée).
  */
 async function remplacement(ctx: ContexteEcriture, ev: EvenementLu, sorte: RemplacementEvenement['sorte'], date: string): Promise<SaisieEvenement> {
-  const original = (await ctx.porte.lire<{ emplacement_ids: string | null; note: string | null; photos: string | null }>(SQL_ORIGINAL, [ev.id]))[0];
+  const original = (
+    await ctx.porte.lire<{ emplacement_ids: string | null; note: string | null; photos: string | null; detail: string | null }>(SQL_ORIGINAL, [ev.id])
+  )[0];
   if (original === undefined) throw new Error('saisie introuvable sur ce téléphone');
   const commun = {
     date: date as DateCalendaire,
@@ -184,9 +226,16 @@ async function remplacement(ctx: ContexteEcriture, ev: EvenementLu, sorte: Rempl
     remplaceEvenement: { sorte, evenementId: ev.id as Id<'Evenement'> },
   };
   const d = ev.detail;
-  return d.type === 'realise'
-    ? { ...commun, type: 'realise', detail: { etape: d.etape, quantiteReelle: d.quantiteReelle } }
-    : { ...commun, type: 'recolte', detail: { quantite: d.quantite, unite: d.unite, categorie: d.categorie } };
+  switch (d.type) {
+    case 'realise':
+      return { ...commun, type: 'realise', detail: { etape: d.etape, quantiteReelle: d.quantiteReelle } };
+    case 'recolte':
+      return { ...commun, type: 'recolte', detail: { quantite: d.quantite, unite: d.unite, categorie: d.categorie } };
+    case 'intervention':
+      // Le détail complet, relu tel qu'écrit (produit, quantité, outil…) ; validerSaisie le
+      // vérifie avant toute écriture.
+      return { ...commun, type: 'intervention', detail: JSON.parse(original.detail ?? 'null') as DetailIntervention };
+  }
 }
 
 /**
