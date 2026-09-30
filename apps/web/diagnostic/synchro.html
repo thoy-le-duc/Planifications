@@ -60,6 +60,23 @@
       <h3>Historique du serveur</h3>
       <ul id="historique"></ul>
     </section>
+    <section id="section-itineraires" hidden>
+      <h2>Itinéraires</h2>
+      <form id="creation-itineraire">
+        <label for="nouveau-type-intervention">Nouveau type d’intervention</label>
+        <input id="nouveau-type-intervention" name="nouveau-type-intervention" type="text" maxlength="30" required />
+        <label for="nom-nouvel-itineraire">Nom du nouvel itinéraire</label>
+        <input id="nom-nouvel-itineraire" name="nom-nouvel-itineraire" type="text" maxlength="80" required />
+        <button type="submit">Créer le type et l’itinéraire</button>
+      </form>
+      <button id="masquer-type" type="button">Masquer le dernier type créé</button>
+      <h3>Types d’intervention</h3>
+      <ul id="types-intervention"></ul>
+      <h3>Itinéraires de l’espèce</h3>
+      <ul id="itineraires"></ul>
+      <h3>Historique du serveur</h3>
+      <ul id="historique-itineraires"></ul>
+    </section>
     <p>Saisies en attente d'envoi : <strong id="en-attente" data-testid="en-attente" data-nombre="0">0</strong></p>
     <h2>Refus du serveur</h2>
     <ul id="refus" class="refus"></ul>

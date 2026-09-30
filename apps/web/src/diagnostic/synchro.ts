@@ -1,7 +1,7 @@
 /**
  * T10 — page de diagnostic de la synchro (hors navigation, hors service worker) :
  * `/diagnostic/synchro.html?ferme=<id>` (T10c : `&serie=<id>` ; T10e :
- * `&plan=<itineraireId>&saison=<saisonId>&planches=<id>,<id>`). Sert au test de bout en bout (e2e-synchro/) et à
+ * `&plan=<itineraireId>&saison=<saisonId>&planches=<id>,<id>` ; T23 : `&espece=<especeId>`). Sert au test de bout en bout (e2e-synchro/) et à
  * vérifier la synchro sur un vrai téléphone.
  *
  * Tout passe par la porte de @planif/sync, ouverte par src/donnees : la page n'importe jamais
@@ -15,6 +15,7 @@ import { urlApi } from '../connexion/client.ts';
 import { deconnecterAvecConfirmation } from '../connexion/deconnexion.ts';
 import { lireSession, stockageNavigateur } from '../connexion/session.ts';
 import { ouvrirDonnees } from '../donnees/index.ts';
+import { brancherSectionItineraires } from './itineraires.ts';
 import { brancherSectionPlanSerie } from './plan-serie.ts';
 import { brancherSectionSerie } from './stock-serie.ts';
 
@@ -240,6 +241,12 @@ function demarrer(): void {
       planches: planches.map((p) => p.toLowerCase()),
       afficherErreur,
     });
+  }
+
+  // T23 : section « Itinéraires », inerte (cachée) sans paramètre espece valide.
+  const espece = parametres.get('espece') ?? '';
+  if (MOTIF_UUID.test(espece)) {
+    brancherSectionItineraires({ porte: donnees.porte, fermeId, especeId: espece.toLowerCase(), afficherErreur });
   }
 
   // Transactions pas encore envoyées au serveur (T10c).
