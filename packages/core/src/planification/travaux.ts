@@ -8,6 +8,7 @@ import type { DateCalendaire } from '../dates/index.ts';
 import { verifierExhaustif } from '../domaine/index.ts';
 import type { Itineraire, ParametresItineraire, RepereTravail, TailleSerie, TempsEstime, TravailPrevu } from '../domaine/index.ts';
 import type { DatesSerie, EtapeSerie } from './dates-serie.ts';
+import type { TacheSemainier } from './semainier.ts';
 
 /** Étape de la série que désigne un repère. */
 export function etapeDuRepere(repere: RepereTravail): EtapeSerie {
@@ -69,12 +70,14 @@ export function tempsEstimeMinutes(
   return Math.floor((produit + 50e6) / 100e6);
 }
 
-/** Charge d'une liste de tâches : la somme de leurs temps estimés connus, en minutes. */
-export function chargeSemaine(taches: readonly { readonly tempsEstimeMinutes?: number | null }[]): number {
+/**
+ * Charge d'une liste de tâches du semainier (retards compris) : la somme des temps estimés
+ * connus de ses travaux prévus, en minutes.
+ */
+export function chargeSemaine(taches: readonly TacheSemainier[]): number {
   let total = 0;
   for (const t of taches) {
-    const m = t.tempsEstimeMinutes;
-    if (typeof m === 'number') total += m;
+    if (t.etape === 'travail' && t.tempsEstimeMinutes !== null) total += t.tempsEstimeMinutes;
   }
   return total;
 }
