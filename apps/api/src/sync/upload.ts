@@ -18,10 +18,12 @@
  *   n'est pas recopié (contrainte refus_synchro_sans_doublon).
  * - Rien de ce que le téléphone envoie ne donne un 500 : textes du refus nettoyés (U+0000) et
  *   tronqués, données trop grosses non conservées, erreur de données de la base = refus.
- * - Limites (T10d) : plus de 500 écritures ou corps de plus de 5 Mio → 200, chaque écriture
- *   refusée 'lot_trop_gros' (avant toute autre règle), rien d'écrit : la file PowerSync avance
- *   toujours. Au-delà de 32 Mio (limite dure) → 413, sans lire plus loin. Tailles de
- *   l'événement dans evenement.ts.
+ * - Limites (T10d) : plus de 500 écritures ou corps de plus de 5 Mio → 200, refus
+ *   'lot_trop_gros' (avant toute autre règle), rien d'écrit : la file PowerSync avance toujours.
+ *   Un refus par écriture plausible (dédupliqué), une seule ligne récapitulative pour le reste :
+ *   un envoi forgé ne se multiplie pas en milliers de refus (relecture de sécurité).
+ *   Au-delà de 8 Mio ou de 2 000 écritures (limites dures) → 413, sans lire plus loin, aucun
+ *   refus enregistré. Tailles de l'événement dans evenement.ts.
  * - T10d : une ligne d'une autre ferme (référence, PATCH, DELETE) se comporte exactement comme
  *   une ligne inexistante ; seul un ferme_id étranger déclaré par l'écriture elle-même donne
  *   'ferme_interdite'.
@@ -68,7 +70,12 @@ const MESSAGES: Readonly<Record<MotifRefus, string>> = {
 /** Corps HTTP au plus (au-delà : 200, chaque écriture refusée 'lot_trop_gros', rien d'écrit). */
 export const TAILLE_MAX_CORPS = 5 * 1_048_576;
 /** Limite dure du corps HTTP (au-delà : 413, le serveur cesse de lire ; rien d'écrit, aucun refus). */
-export const TAILLE_MAX_CORPS_DURE = 32 * 1_048_576;
+export const TAILLE_MAX_CORPS_DURE = 8 * 1_048_576;
+/**
+ * Limite dure du nombre d'écritures (au-delà : 413, rien d'écrit, aucun refus). Un vrai téléphone
+ * n'en envoie jamais plus de ECRITURES_MAX_PAR_LOT (la porte) : seul un envoi forgé l'atteint.
+ */
+export const ECRITURES_MAX_DURES = 2_000;
 /** Écritures par lot au plus (au-delà : 'lot_trop_gros' comme un corps trop gros) : la même constante que la porte du téléphone. */
 export { ECRITURES_MAX_PAR_LOT } from '@planif/core';
 /** Longueur au plus de nom_table, ligne_id et message dans refus_synchro. */
@@ -180,6 +187,28 @@ class RefusDansLot extends Error {
     this.index = index;
     this.refus = refus;
   }
+}
+
+/**
+ * Lot trop gros (T10d) : écritures plausibles (table écrite par le téléphone, id UUID, opération
+ * connue), dédupliquées par (table, id, opération), et nombre des autres.
+ *
+ * Limite acceptée (décision du chef) : la contrainte refus_synchro_sans_doublon porte sur
+ * (utilisateur, ligne, opération, motif), sans la table. Deux écritures plausibles de même id et
+ * même opération sur deux tables n'y font qu'une ligne ; les UUID ne se partagent pas entre
+ * tables en usage normal.
+ */
+function trierLotTropGros(ecritures: readonly EcritureRecue[]): { plausibles: EcritureRecue[]; autres: number } {
+  const vues = new Set<string>();
+  const plausibles: EcritureRecue[] = [];
+  for (const e of ecritures) {
+    if (e.op === null || !TABLES_ECRITES.has(e.table) || !estUuid(e.id)) continue;
+    const cle = `${e.table}|${e.id}|${e.op}`;
+    if (vues.has(cle)) continue;
+    vues.add(cle);
+    plausibles.push(e);
+  }
+  return { plausibles, autres: ecritures.length - plausibles.length };
 }
 
 /**
@@ -425,6 +454,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     const corps = lireJson(octets);
     const brutes = corps?.ecritures;
     if (!Array.isArray(brutes)) return c.json({ erreur: 'requete_invalide' }, 400);
+    // Compté avant tout travail par écriture : un envoi forgé ne coûte ni lecture ni refus.
+    if (brutes.length > ECRITURES_MAX_DURES) return c.json({ erreur: 'corps_trop_volumineux' }, 413);
 
     const utilisateurId = c.get('utilisateurId');
     // Droits relus en base à chaque lot (un membre retiré perd l'accès tout de suite).
@@ -437,9 +468,16 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     };
 
     if (ecritures.length > ECRITURES_MAX_PAR_LOT || octets.byteLength > TAILLE_MAX_CORPS) {
-      // T10d : lot trop gros, avant toute autre règle. Rien d'écrit ; chaque écriture a son refus
-      // (200 : la file PowerSync avance, rien ne disparaît du téléphone en silence).
-      await refuser(ecritures.map((e) => [e, { motif: 'lot_trop_gros', fermeId: fermeDesDonnees(e) }] as const));
+      // T10d : lot trop gros, avant toute autre règle. Rien d'écrit (200 : la file PowerSync
+      // avance). Chaque écriture plausible a son refus, rien ne disparaît du téléphone en silence ;
+      // le reste tient en une ligne récapitulative (pas d'amplification).
+      const { plausibles, autres } = trierLotTropGros(ecritures);
+      const liste: (readonly [EcritureRecue, Refus])[] = plausibles.map((e) => [e, { motif: 'lot_trop_gros', fermeId: fermeDesDonnees(e) }] as const);
+      if (autres > 0) {
+        const recapitulatif: EcritureRecue = { op: null, table: 'lot', id: ctx.nouvelId(), donnees: null, donneesIllisibles: false };
+        liste.push([recapitulatif, { motif: 'lot_trop_gros', precision: `${String(autres)} autres écritures illisibles, en double ou hors des tables permises`, fermeId: null }]);
+      }
+      await refuser(liste);
       return c.json({ refus });
     }
 
