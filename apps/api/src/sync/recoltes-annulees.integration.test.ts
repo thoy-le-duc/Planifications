@@ -63,10 +63,33 @@
  *    evenements_en_vigueur montre une seule ligne, la correction la plus récente de toute la
  *    chaîne, dont la quantité est celle du stock. Le téléphone suit la même règle
  *    (apps/web/src/ecrans/aujourdhui/recoltes-annulees.test.tsx).
+ *
+ * 4. Décision 8 du chef (après la relecture) : le serveur écrit lui-même le mouvement d'écart de
+ *    toute correction ou annulation de récolte ACCEPTÉE dont la chaîne a un article, que le
+ *    téléphone ait envoyé un mouvement ou non :
+ *    - mouvement envoyé : sa ligne porte la quantité du serveur (section 2), et le serveur n'en
+ *      crée pas d'autre ;
+ *    - aucun mouvement envoyé et écart non nul : le serveur crée la ligne mouvement_stock
+ *      (motif 'recolte', recolte_id = l'événement, article de la chaîne, ferme de l'événement,
+ *      quantité = l'écart) avec l'id DÉTERMINISTE
+ *        uuidv5(ESPACE_MOUVEMENT_ECART, id de l'événement en minuscules, UTF-8),
+ *        ESPACE_MOUVEMENT_ECART = '675540a1-1589-4a49-9629-84b5d41e55d2' (RFC 4122, SHA-1) ;
+ *      un renvoi du lot ne le double pas ;
+ *    - un mouvement du téléphone qui arrive PLUS TARD pour cet événement (autre id, quantité
+ *      quelconque) est accepté sans rien écrire ; le stock reste juste ;
+ *    - chaîne sans article (récolte sans stock, d'avant T13) : aucun mouvement n'est créé.
+ *    Exemple : 12 (stock 12), A corrige à 15 à 05:00 (+3) ; B, hors ligne, change seulement la
+ *    date à 06:00 (correction à 12 kg, sans mouvement) → acceptée, 12 en vigueur, −3 écrit par
+ *    le serveur, stock 12.
+ *
+ * 5. Décision 9 : écart nul sur une correction acceptée (deux téléphones corrigent à la même
+ *    quantité) → correction acceptée, en vigueur si plus récente ; son mouvement éventuel est
+ *    accepté sans rien écrire (aucune ligne, ni la sienne ni celle du serveur). Le refus de T10d
+ *    de l'annulation redondante qui porte un mouvement reste inchangé.
  */
 import { creerGenerateurId } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { creerApp } from '../app.ts';
 import { emettreJetonAcces, genererCleSignature, type ExpediteurCourriel, type TrousseauCles } from '../auth/index.ts';
@@ -76,6 +99,24 @@ const EMETTEUR = 'https://api.planif.test';
 const AUDIENCE = 'powersync-planif';
 const MAINTENANT = new Date('2026-10-01T06:00:00Z');
 const RECOLTE_ANNULEE = 'recolte_annulee';
+/** Décision 8 : espace de noms des mouvements d'écart créés par le serveur (contrat, en tête). */
+const ESPACE_MOUVEMENT_ECART = '675540a1-1589-4a49-9629-84b5d41e55d2';
+
+/** UUID v5 (RFC 4122 : SHA-1 de l'espace de noms puis du nom, version 5, variante RFC). */
+function uuidV5(nom: string, espace: string): string {
+  const octets = createHash('sha1')
+    .update(Buffer.from(espace.replace(/-/g, ''), 'hex'))
+    .update(Buffer.from(nom, 'utf8'))
+    .digest()
+    .subarray(0, 16);
+  octets[6] = ((octets[6] ?? 0) & 0x0f) | 0x50;
+  octets[8] = ((octets[8] ?? 0) & 0x3f) | 0x80;
+  const h = octets.toString('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+/** Id du mouvement d'écart que le serveur crée pour l'événement `evenementId`. */
+const idMouvementServeur = (evenementId: string): string => uuidV5(evenementId.toLowerCase(), ESPACE_MOUVEMENT_ECART);
 
 interface EcritureEnvoyee {
   readonly op: 'PUT' | 'PATCH' | 'DELETE';
@@ -602,6 +643,128 @@ decrireAvecBase('T10g')('T10g : récoltes annulées et corrections concurrentes'
       const ancienne = putRemplacement(recolte, 'correction', H('04:00'), 100);
       await refuseEnEntier([ancienne, putMouvement(article, 1_000, ancienne.id)]);
       expect(await stock(article)).toBe(15);
+    });
+  });
+
+  // ── 4 et 5. Décisions 8 et 9 : le mouvement d'écart écrit par le serveur ───────────────────
+
+  describe('4. décision 8 : le serveur écrit le mouvement d’écart, envoyé ou non par le téléphone', () => {
+    interface MouvementEnBase {
+      readonly id: string;
+      readonly ferme_id: string;
+      readonly article_stock_id: string;
+      readonly quantite: number;
+      readonly motif: string;
+      readonly recolte_id: string;
+    }
+
+    async function mouvementsDe(evenementId: string): Promise<MouvementEnBase[]> {
+      const r = await base.pool.query<MouvementEnBase>(
+        `SELECT id::text AS id, ferme_id::text AS ferme_id, article_stock_id::text AS article_stock_id, quantite::float8 AS quantite, motif,
+                recolte_id::text AS recolte_id
+         FROM mouvement_stock WHERE recolte_id = $1 ORDER BY id`,
+        [evenementId],
+      );
+      return r.rows;
+    }
+
+    it('uuidV5 du test : vecteur connu de la RFC 4122 (espace DNS, « www.example.com »)', () => {
+      expect(uuidV5('www.example.com', '6ba7b810-9dad-11d1-80b4-00c04fd430c8')).toBe('2ed6657d-e927-568b-95e1-2665a8aea6a2');
+    });
+
+    it('B1 : A corrige à 15 (05:00, +3), B change seulement la date (06:00, 12 kg, sans mouvement) : acceptée, 12 en vigueur, −3 écrit par le serveur, stock 12', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const a = await remplacementAccepte(recolte, 'correction', H('05:00'), 15, article, 3);
+      expect(await stock(article)).toBe(15);
+
+      const b = putRemplacement(recolte, 'correction', H('06:00'), 12);
+      expect(await lot([b])).toEqual({ refus: [] });
+      expect(await enVigueur([recolte, a, b])).toEqual([{ id: b.id, quantite: 12 }]);
+      expect(await stock(article)).toBe(12);
+      expect(await mouvementsDe(b.id)).toEqual([
+        { id: idMouvementServeur(b.id), ferme_id: fermeA, article_stock_id: article, quantite: -3, motif: 'recolte', recolte_id: b.id },
+      ]);
+
+      // Renvoi du même lot (réponse perdue) : rien en double.
+      expect(await lot([b])).toEqual({ refus: [] });
+      expect(await mouvementsDe(b.id)).toHaveLength(1);
+      expect(await stock(article)).toBe(12);
+
+      // Le mouvement du téléphone arrive plus tard (autre id) : accepté, rien d'écrit.
+      for (const quantite of [-3, 1_000]) {
+        const tardif = putMouvement(article, quantite, b.id);
+        expect(await lot([tardif]), `mouvement tardif ${String(quantite)}`).toEqual({ refus: [] });
+        expect(await ecrites(tardif)).toBe(0);
+        expect(await refusDe(tardif.id)).toBe(0);
+      }
+      expect(await mouvementsDe(b.id)).toHaveLength(1);
+      expect(await stock(article)).toBe(12);
+    });
+
+    it('annulation envoyée sans mouvement (après 12 → 15) : acceptée, −15 écrit par le serveur (moins la quantité en vigueur), stock 0, renvoi sans doublon', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      await remplacementAccepte(recolte, 'correction', H('05:00'), 15, article, 3);
+      const annulation = putRemplacement(recolte, 'annulation', H('06:00'));
+      expect(await lot([annulation])).toEqual({ refus: [] });
+      expect(await mouvementsDe(annulation.id)).toEqual([
+        { id: idMouvementServeur(annulation.id), ferme_id: fermeA, article_stock_id: article, quantite: -15, motif: 'recolte', recolte_id: annulation.id },
+      ]);
+      expect(await stock(article)).toBe(0);
+      expect(await lot([annulation])).toEqual({ refus: [] });
+      expect(await mouvementsDe(annulation.id)).toHaveLength(1);
+      expect(await stock(article)).toBe(0);
+    });
+
+    it('correction envoyée AVEC son mouvement : une seule ligne, celle du téléphone (quantité du serveur), pas de ligne à l’id déterministe', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const correction = putRemplacement(recolte, 'correction', H('05:00'), 15);
+      const ecart = putMouvement(article, 1_000, correction.id);
+      expect(await lot([correction, ecart])).toEqual({ refus: [] });
+      expect((await mouvementsDe(correction.id)).map((m) => [m.id, m.quantite])).toEqual([[ecart.id, 3]]);
+      expect(await stock(article)).toBe(15);
+    });
+
+    it('chaîne sans article (récolte sans stock) : correction et annulation sans mouvement acceptées, aucun mouvement créé', async () => {
+      const recolte = putRecolte(12);
+      expect(await lot([recolte])).toEqual({ refus: [] });
+      const correction = putRemplacement(recolte, 'correction', H('05:00'), 15);
+      expect(await lot([correction])).toEqual({ refus: [] });
+      const annulation = putRemplacement(correction, 'annulation', H('06:00'), 15);
+      expect(await lot([annulation])).toEqual({ refus: [] });
+      expect(
+        await compter(`SELECT 1 FROM mouvement_stock WHERE recolte_id = ANY($1::uuid[]) OR id = ANY($2::uuid[])`, [
+          [recolte.id, correction.id, annulation.id],
+          [idMouvementServeur(correction.id), idMouvementServeur(annulation.id)],
+        ]),
+      ).toBe(0);
+    });
+  });
+
+  describe('5. décision 9 : écart nul sur une correction acceptée', () => {
+    it('B2 : A corrige 12 → 15 (05:00, +3), B aussi 12 → 15 (06:00, +3) : acceptée, B en vigueur, stock 15, aucun mouvement écrit pour B', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const a = await remplacementAccepte(recolte, 'correction', H('05:00'), 15, article, 3);
+      const b = putRemplacement(recolte, 'correction', H('06:00'), 15);
+      const mouvementB = putMouvement(article, 3, b.id);
+      expect(await lot([b, mouvementB])).toEqual({ refus: [] });
+      expect(await ecrites(b)).toBe(1);
+      expect(await ecrites(mouvementB)).toBe(0);
+      expect(await compter(`SELECT 1 FROM mouvement_stock WHERE recolte_id = $1`, [b.id])).toBe(0);
+      expect(await stock(article)).toBe(15);
+      expect(await enVigueur([recolte, a, b])).toEqual([{ id: b.id, quantite: 15 }]);
+      // Renvoi du lot : toujours accepté, toujours rien d'écrit.
+      expect(await lot([b, mouvementB])).toEqual({ refus: [] });
+      expect(await ecrites(mouvementB)).toBe(0);
+      expect(await stock(article)).toBe(15);
+    });
+
+    it('inchangé (T10d) : la seconde annulation redondante qui porte −12 est refusée en entier, le mouvement est la fautive, stock 0', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      await remplacementAccepte(recolte, 'annulation', H('05:00'), 12, article, -12);
+      const seconde = putRemplacement(recolte, 'annulation', H('06:00'));
+      const inverse = putMouvement(article, -12, seconde.id);
+      await refuseEnEntier([seconde, inverse], inverse, 'ecriture_invalide');
+      expect(await stock(article)).toBe(0);
     });
   });
 
