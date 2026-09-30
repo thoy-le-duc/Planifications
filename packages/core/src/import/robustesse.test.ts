@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { classeur, classeurSimple, feuilleXml } from './test/classeur.ts';
 import { utf8 } from './test/fixtures.ts';
 import { executerIsole, type Issue } from './test/isole.ts';
+import { MOTIFS_ERREURS_NOMBREUSES, type ResumeErreursNombreuses } from './test/scenarios.ts';
 
 /** Marge pour démarrer le fil et charger le module (hors durée mesurée). */
 const CHARGEMENT_MS = 3_000;
@@ -515,5 +516,40 @@ describe('appliquerModele en temps linéaire (3e relecture)', () => {
       attendreDuree(r, 1_000);
     },
     DELAI_TEST_MS,
+  );
+});
+
+// ── 4e relecture (T14c) ──────────────────────────────────────────────────────────────────────
+
+describe('plan d’import : 400 000 lignes à 5 erreurs tiennent dans un tas de 512 Mo, sans perdre les motifs (T14c)', () => {
+  it(
+    'parcellaire de 400 000 lignes (valeurs toutes différentes), 5 erreurs par ligne : plan rendu, chaque ligne garde ses 5 erreurs',
+    async () => {
+      const n = 400_000;
+      const r = await executerIsole('scenarios', ['planErreursNombreuses'], [n], { arretMs: 60_000, memoireMo: 512 });
+      // « memoire » : le plan (entrée comprise) dépasse 512 Mo ; « delai » : plus d'une minute.
+      expect(r.issue, r.issue === 'exception' ? r.message : r.issue).toBe('resultat');
+      if (r.issue !== 'resultat') return;
+      const v = r.valeur as ResumeErreursNombreuses;
+      expect(v.champs).toStrictEqual(['zone', 'emplacement', 'longueur_m', 'largeur_m', 'surface_m2', 'nombre_places', 'sorte']);
+      expect(v.nombreLignes).toBe(n);
+      expect(v.resume).toStrictEqual({ valides: 0, erreurs: n, aDecider: 0, doublons: 0, ignorees: 0 });
+      expect(v.premiereNonConforme).toBeNull();
+      expect(v.lignesConformes).toBe(n);
+      expect(v.messagesInvalides).toBe(0);
+      // Lignes renvoyées par clonage structuré : numéros, statut, et les 5 erreurs en données simples.
+      expect(v.echantillon.map((l) => l.ligne)).toStrictEqual([2, 2 + n / 2, n + 1]);
+      for (const l of v.echantillon) {
+        expect(l.statut).toBe('erreur');
+        const motifs = l.erreurs.map((e) => [e.code, e.champ, e.colonne] as const).sort((a, b) => (a[2] ?? -1) - (b[2] ?? -1));
+        expect(motifs).toStrictEqual(MOTIFS_ERREURS_NOMBREUSES);
+        for (const e of l.erreurs) {
+          expect(typeof e.message).toBe('string');
+          expect(e.message.trim().length).toBeGreaterThan(5);
+          expect(e.message.length).toBeLessThanOrEqual(200);
+        }
+      }
+    },
+    90_000,
   );
 });

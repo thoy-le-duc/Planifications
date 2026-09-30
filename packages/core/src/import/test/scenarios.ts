@@ -95,3 +95,60 @@ export async function decoderSansNatif(entrees: readonly Uint8Array[]): Promise<
   const m = await chargerImport();
   return { natifAbsent: g.TextDecoder === undefined, resultats: entrees.map((o) => m.decoderTexte(o)) };
 }
+
+/** Erreur réduite à [code, champ, colonne]. */
+type Motif = readonly [string, CleChamp | null, number | null];
+
+export interface ResumeErreursNombreuses {
+  readonly champs: readonly (CleChamp | null)[];
+  readonly nombreLignes: number;
+  readonly resume: PlanImport['resume'];
+  /** Lignes dont les erreurs sont exactement les 5 motifs attendus (triés par colonne). */
+  readonly lignesConformes: number;
+  /** Première ligne non conforme, pour le message d'échec. */
+  readonly premiereNonConforme: { readonly ligne: number; readonly motifs: readonly Motif[] } | null;
+  /** Erreurs dont le message n'est pas une propriété propre de données, texte non vide ≤ 200 caractères. */
+  readonly messagesInvalides: number;
+  /** Première, milieu, dernière ligne du plan, renvoyées telles quelles (clonées par `postMessage`). */
+  readonly echantillon: readonly PlanImport['lignes'][number][];
+}
+
+/** Les 5 erreurs de chaque ligne de `planErreursNombreuses`, triées par colonne. */
+export const MOTIFS_ERREURS_NOMBREUSES: readonly Motif[] = [
+  ['nombre_invalide', 'longueur_m', 2],
+  ['hors_bornes', 'largeur_m', 3],
+  ['nombre_invalide', 'surface_m2', 4],
+  ['nombre_invalide', 'nombre_places', 5],
+  ['valeur_inconnue', 'sorte', 6],
+];
+
+/**
+ * T14c, mémoire du plan : parcellaire de `nombre` lignes à 5 erreurs chacune, valeurs toutes
+ * différentes d'une ligne à l'autre (comme les chaînes d'un vrai CSV lu), entrée construite dans
+ * le fil (elle compte dans le tas plafonné). Seul un résumé revient, vérifié ligne par ligne ici.
+ */
+export async function planErreursNombreuses(nombre: number): Promise<ResumeErreursNombreuses> {
+  const m = await chargerImport();
+  const entetes = ['Zone', 'Planche', 'Longueur', 'Largeur', 'Surface', 'Places', 'Sorte'];
+  const lignes: LigneBrute[] = [entetes];
+  for (let i = 0; i < nombre; i++) lignes.push(['Z1', `P${String(i)}`, `x${String(i)}`, `-${String(i + 1)}`, `s${String(i)}`, `${String(i)}.5`, `sorte${String(i)}`]);
+  const correspondance = m.proposerCorrespondance(entetes, 'parcellaire');
+  const plan = m.preparerImport({ lignes, ligneEntete: 0, correspondance, bibliotheque: BIBLIOTHEQUE, anneeSaison: 2027 });
+  const attendu = JSON.stringify(MOTIFS_ERREURS_NOMBREUSES);
+  let lignesConformes = 0;
+  let premiereNonConforme: ResumeErreursNombreuses['premiereNonConforme'] = null;
+  let messagesInvalides = 0;
+  for (const l of plan.lignes) {
+    const motifs = l.erreurs.map((e): Motif => [e.code, e.champ, e.colonne]).sort((a, b) => (a[2] ?? -1) - (b[2] ?? -1));
+    if (JSON.stringify(motifs) === attendu) lignesConformes++;
+    else premiereNonConforme ??= { ligne: l.ligne, motifs };
+    for (const e of l.erreurs) {
+      const d = Object.getOwnPropertyDescriptor(e, 'message');
+      const v: unknown = d?.value;
+      if (typeof v !== 'string' || v.trim() === '' || v.length > 200) messagesInvalides++;
+    }
+  }
+  const n = plan.lignes.length;
+  const echantillon = [plan.lignes[0], plan.lignes[n >> 1], plan.lignes[n - 1]].filter((l) => l !== undefined);
+  return { champs: correspondance.colonnes.map((c) => c.champ), nombreLignes: n, resume: plan.resume, lignesConformes, premiereNonConforme, messagesInvalides, echantillon };
+}

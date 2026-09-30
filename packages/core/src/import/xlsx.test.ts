@@ -238,3 +238,91 @@ describe('lecteurXlsx.lire : références numériques qui ne sont pas des caract
     expect(sansFinFeuille(f[0]?.lignes ?? [])).toStrictEqual([['a😀b']]);
   });
 });
+
+// ── 4e relecture (T14c) ──────────────────────────────────────────────────────────────────────
+
+describe('lecteurXlsx.lire : caractères interdits en XML 1.0, en référence comme en échappement OOXML → classeur_illisible (T14c)', () => {
+  const SST = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const enLigne = (texte: string) => classeurSimple(`<row r="1"><c r="A1" t="inlineStr"><is><t>${texte}</t></is></c></row>`);
+  const partagee = (texte: string) =>
+    classeur({
+      feuilles: [{ nom: 'Feuil1', partie: 'worksheets/sheet1.xml' }],
+      parties: {
+        'worksheets/sheet1.xml': feuilleXml('<row r="1"><c r="A1" t="s"><v>0</v></c></row>'),
+        'sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="${SST}"><si><t>${texte}</t></si></sst>`,
+      },
+    });
+  const hex4 = (n: number) => n.toString(16).toUpperCase().padStart(4, '0');
+  /** Caractères de contrôle C0 interdits en XML 1.0 : tous sauf tabulation (9), LF (10) et CR (13). */
+  const INTERDITS = Array.from({ length: 31 }, (_, i) => i + 1).filter((n) => n !== 9 && n !== 10 && n !== 13);
+
+  async function attendreIllisible(texte: string): Promise<void> {
+    expect(await lecteur.lire(enLigne(texte)), `en ligne : ${texte}`).toMatchObject({ ok: false, code: 'classeur_illisible' });
+    expect(await lecteur.lire(partagee(texte)), `partagée : ${texte}`).toMatchObject({ ok: false, code: 'classeur_illisible' });
+  }
+
+  async function attendreLu(texte: string, attendu: string): Promise<void> {
+    for (const octets of [enLigne(texte), partagee(texte)]) {
+      const f = feuilles(await lecteur.lire(octets));
+      expect(sansFinFeuille(f[0]?.lignes ?? [])).toStrictEqual([[attendu]]);
+    }
+  }
+
+  it.each([
+    ['_x0000_ (caractère nul)', 'a_x0000_b'],
+    ['_xD83D_ (moitié haute seule)', 'a_xD83D_b'],
+    ['_xDC00_ (moitié basse seule)', 'a_xDC00_b'],
+    ['_xD83D_ en fin de cellule', 'a_xD83D_'],
+    ['_xDE00__xD83D_ (moitiés dans le désordre)', '_xDE00__xD83D_'],
+    ['_xD83D__xD83D_ (deux moitiés hautes)', '_xD83D__xD83D_'],
+    ['_xD83D__x0041_ (moitié haute suivie d’une lettre échappée)', '_xD83D__x0041_'],
+    ['_xd83d_ (moitié haute en minuscules)', 'a_xd83d_b'],
+  ])('échappement OOXML : %s → illisible, en ligne comme partagée', async (_cas, texte) => {
+    await attendreIllisible(texte);
+  });
+
+  it('_x0000_ dans la valeur d’une formule texte (t="str") → illisible', async () => {
+    expect(await lecteur.lire(classeurSimple('<row r="1"><c r="A1" t="str"><f>A2</f><v>a_x0000_b</v></c></row>'))).toMatchObject({ ok: false, code: 'classeur_illisible' });
+  });
+
+  it('décision testeur : une paire complète écrite en deux échappements (_xD83D__xDE00_) est ACCEPTÉE et recomposée en « 😀 »', async () => {
+    await attendreLu('a_xD83D__xDE00_b', 'a😀b');
+  });
+
+  it('_x005F_ échappe le soulignement : « _x005F_x0000_ » et « _x005F_xD83D_ » restent du texte lu tel quel', async () => {
+    await attendreLu('_x005F_x0000_ et _x005F_xD83D_', '_x0000_ et _xD83D_');
+  });
+
+  it('références décimales &#1; à &#31; interdites en XML 1.0 (sauf 9, 10, 13) → illisible', async () => {
+    for (const n of INTERDITS) await attendreIllisible(`a&#${String(n)};b`);
+  });
+
+  it('références hexadécimales &#x1; à &#x1F; interdites (sauf x9, xA, xD) → illisible', async () => {
+    for (const n of INTERDITS) await attendreIllisible(`a&#x${n.toString(16).toUpperCase()};b`);
+    await attendreIllisible('a&#x1f;b');
+  });
+
+  it('échappements OOXML _x0001_ à _x001F_ interdits (sauf _x0009_, _x000A_, _x000D_) → illisible', async () => {
+    for (const n of INTERDITS) await attendreIllisible(`a_x${hex4(n)}_b`);
+    await attendreIllisible('a_x001f_b');
+  });
+
+  it('caractère de contrôle écrit tel quel dans le XML (octet 0x01, 0x0B, 0x1F) → illisible', async () => {
+    for (const c of ['\u0001', '\u000B', '\u001F']) await attendreIllisible(`a${c}b`);
+  });
+
+  it('référence interdite dans un attribut (nom de feuille « a&#1;b ») → illisible', async () => {
+    const octets = classeur({ feuilles: [{ nom: 'a&#1;b', partie: 'worksheets/sheet1.xml' }], parties: { 'worksheets/sheet1.xml': feuilleXml('<row r="1"><c r="A1"><v>1</v></c></row>') } });
+    expect(await lecteur.lire(octets)).toMatchObject({ ok: false, code: 'classeur_illisible' });
+  });
+
+  it('tabulation, LF et CR restent acceptés : références décimales, hexadécimales et échappements OOXML', async () => {
+    await attendreLu('a&#9;b&#10;c&#13;d', 'a\tb\nc\rd');
+    await attendreLu('a&#x9;b&#xA;c&#xD;d', 'a\tb\nc\rd');
+    await attendreLu('a_x0009_b_x000A_c_x000D_d', 'a\tb\nc\rd');
+  });
+
+  it('premier caractère permis après les contrôles : &#32; et _x0020_ → espace', async () => {
+    await attendreLu('a&#32;b_x0020_c', 'a b c');
+  });
+});
