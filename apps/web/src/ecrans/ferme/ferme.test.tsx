@@ -143,6 +143,7 @@ function porteControlee(): {
     surveiller: interdit('surveiller'),
     saisirEvenement: interdit('saisirEvenement'),
     surveillerRefus: interdit('surveillerRefus'),
+    ecrireEnsemble: interdit('ecrireEnsemble'),
   };
   return {
     porte,
