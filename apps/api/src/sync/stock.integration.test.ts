@@ -753,6 +753,9 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
     });
 
     it('décision 5 : vente, perte, ajustement refusés depuis un téléphone (pas encore d’écran), même sans recolte_id', async () => {
+      // Stock relevé avant : l'article est partagé par le describe, les tests précédents y
+      // laissent des mouvements acceptés (correction du chef, voir la PR).
+      const avant = await stock(article);
       for (const [motif, q] of [
         ['vente', -2],
         ['perte', -1],
@@ -760,7 +763,7 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       ] as const) {
         await refuse(putMouvement(article, q, null, { motif }));
       }
-      expect(await stock(article)).toBe(1);
+      expect(await stock(article)).toBe(avant);
     });
 
     it('mouvement négatif de motif recolte rattaché à la récolte elle-même (fausse récolte) : ecriture_invalide', async () => {

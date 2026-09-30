@@ -148,10 +148,6 @@ export function brancherSectionSerie(o: OptionsSectionSerie): void {
 
   const ecrire = (ordres: readonly OrdreEcriture[], quoi: string): void => {
     // Une saisie = UNE transaction de la porte (jamais plusieurs `ecrire`).
-    if (porte.ecrireEnsemble === undefined) {
-      o.afficherErreur(`${quoi} impossible : la porte n'écrit pas plusieurs lignes en une transaction.`);
-      return;
-    }
     porte.ecrireEnsemble(ordres).catch((erreur: unknown) => {
       o.afficherErreur(`${quoi} impossible : ${String(erreur)}`);
     });
