@@ -1,7 +1,8 @@
 /**
- * Contrat de T11 — vue 2D planches × semaines (docs/backlog/T11-vue-2d.md). Types seuls : les
- * tests chargent les modules par import dynamique (chemin tenu dans une variable), leur typage
- * ne dépend pas du code pas encore écrit.
+ * Contrat de T11 — vue 2D planches × semaines (docs/backlog/T11-vue-2d.md). Types seuls (plus
+ * les libellés courts attendus des conflits, en fin de fichier) : les tests chargent les modules
+ * par import dynamique (chemin tenu dans une variable), leur typage ne dépend pas du code pas
+ * encore écrit.
  *
  * ── Modules attendus ─────────────────────────────────────────────────────────────────────────
  *
@@ -69,9 +70,8 @@
  *     hors saison), visible à l'ouverture ;
  *   - lignes : data-testid="ligne-plan", data-sorte="zone|chapelle|emplacement", data-id=<id>,
  *     texte = nom (zone, chapelle) ou code (emplacement) ; seules les lignes de fenetreVisible
- *     sont dans le DOM ; ligne d'emplacement en conflit : data-conflit="oui" et un élément
- *     data-testid="conflit" (couleur --couleur-conflit) dont le texte est le nom du premier
- *     conflit (suivi de « +N » s'il y en a d'autres) ;
+ *     sont dans le DOM ; ligne d'emplacement en conflit : data-conflit="oui", étiquette
+ *     bouton et libellés courts (voir « Corrections de la relecture », C1) ;
  *   - barres : data-testid="barre", <button type="button"> (ou role="button"), data-occupation,
  *     data-etat="reel|prevu", data-famille=<cleFamille ou ''>, data-conflit="oui" si en conflit ;
  *     texte (et nom accessible) contenant le libellé. Réel : plein, fond = bande de la famille ;
@@ -95,6 +95,37 @@
  *   propre (jamais « Bientôt »).
  * Indicateur data-testid="etat-synchro" (role="status") dans la coquille, sur chaque onglet :
  *   libelleSynchro(etat, saisies en attente) (src/donnees/libelle-synchro.ts, démarrage).
+ *
+ * ── Corrections de la relecture (tests : ../relecture.test.tsx, e2e/plan-relecture.e2e.ts,
+ *    src/donnees/base-appli.test.ts) ──────────────────────────────────────────────────────────
+ *
+ * B1 — Relecture sans retour en haut ni clignotement. Un changement des tables du plan (saisie,
+ *   synchro : porte.surveiller) ne remplace jamais le plan affiché par son début : le plan déjà
+ *   affiché reste à l'écran (mêmes lignes, même scrollTop, pas de « Lecture des autres
+ *   planches… ») jusqu'à ce que le plan relu le remplace. Des changements rapprochés sont
+ *   regroupés : deux relectures sont espacées d'au moins 300 ms, et la dernière voit le dernier
+ *   changement (rien n'est perdu).
+ * C1 — Conflits lisibles. Sur la ligne d'un emplacement en conflit :
+ *   - l'étiquette (colonne des codes) est un <button type="button"> data-testid="etiquette-conflit",
+ *     de la hauteur de la ligne (≥ 48 px), qui contient le code et les libellés ;
+ *   - un libellé court par sorte de conflit présente, dans l'ordre de première apparition dans
+ *     `ligne.conflits` : élément data-testid="conflit", data-sorte=<sorte>, texte =
+ *     LIBELLES_COURTS_ATTENDUS[sorte], jamais tronqué à 360 px, police calculée ≥ 12 px ;
+ *   - toucher l'étiquette ouvre un role="dialog" dont le nom commence par « Conflits » (par
+ *     exemple « Conflits de T1-P03 »), qui contient le code et un <li> par conflit de la ligne,
+ *     texte = conflit.nom (nom long : « Chevauchement : Espèce 3 Variété 3-1 et … »), dans
+ *     l'ordre de `ligne.conflits` ; seul bouton : « Fermer » (≥ 48 px), qui le ferme ;
+ *   - « Dates inversées » (periode_invalide) n'a pas de barre : il se voit par « Dates » et se
+ *     détaille par ce bouton ;
+ *   - une ligne sans conflit n'a ni ce bouton ni libellé de conflit.
+ * C3 — Déconnexion avec la base ouverte par l'appli (data-base="prete") : confirmée, elle ne
+ *   laisse aucune base IndexedDB « planif… » ni effacement en attente (non-régression).
+ * C4 — Lecture de la ferme active en échec (suivreFermeActive, src/donnees/ferme-active.ts) :
+ *   l'état publié par ouvrirBaseAppli passe à base: 'echec' (jamais « Ouverture… » sans fin).
+ * C6 — Cible tactile des barres : autour du centre de chaque barre, une zone d'au moins
+ *   44 × 44 px répond au toucher (elementFromPoint à ±21 px du centre, verticalement et
+ *   horizontalement, rend la barre, ou une barre voisine de la même ligne à l'horizontale), sans
+ *   agrandir la barre dessinée (sa largeur dit ses dates).
  *
  * Jeton : COULEURS.conflit ('#RRGGBB', variable CSS --couleur-conflit), distinct de chaque bande
  *   de FAMILLES, contraste ≥ 3:1 (contour) sur le fond et sur la surface.
@@ -219,3 +250,15 @@ export interface ModuleEcranPlan {
   readonly EcranPlan: (p: ProprietesEcranPlan) => ReactElement;
   readonly default: (p: ProprietesEcranPlan) => ReactElement;
 }
+
+/**
+ * Libellés courts des sortes de conflit (C1), tels que la ligne les montre. Attendus par les
+ * tests : l'écran peut les tenir dans sa propre constante, les textes doivent être ceux-ci.
+ */
+export const LIBELLES_COURTS_ATTENDUS: Readonly<Record<SorteConflit, string>> = {
+  chevauchement: 'Chevauche',
+  depassement: 'Trop long',
+  surcharge: 'Surcharge',
+  emplacement_inactif: 'Inactif',
+  periode_invalide: 'Dates',
+};

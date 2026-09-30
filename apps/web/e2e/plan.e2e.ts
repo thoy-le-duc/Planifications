@@ -4,7 +4,7 @@ import { creerPorte, SCHEMA_LOCAL } from '@planif/sync';
 import { creerBaseMemoire } from '../../../packages/sync/src/test/base-memoire.ts';
 import { remplirJeuT07 } from '../../../packages/sync/src/test/jeu-t07.ts';
 import { CLE_SESSION } from '../src/connexion/session.ts';
-import type { LigneEmplacementPlan, ModuleCalculsPlan, Plan } from '../src/ecrans/plan/test/contrat.ts';
+import { LIBELLES_COURTS_ATTENDUS, type LigneEmplacementPlan, type ModuleCalculsPlan, type Plan } from '../src/ecrans/plan/test/contrat.ts';
 import { COULEURS, FAMILLES } from '../src/ui/jetons.ts';
 import { ralentirCpu, surveillerCsp, tempsAppPrete } from './outils.ts';
 
@@ -47,8 +47,8 @@ import { ralentirCpu, surveillerCsp, tempsAppPrete } from './outils.ts';
  *   2. tap sur « Planches » → marque 'planif:plan-affiche' en moins de 300 ms (base déjà ouverte
  *      au démarrage), puis de nouveau après un aller-retour par « Ferme » ;
  *   3. un conflit du jeu (le premier du plan, recalculé sous Node par calculs.ts) est visible
- *      sur sa ligne et nommé ; sa barre a la bordure --couleur-conflit ; le toucher ouvre le
- *      détail qui le nomme ;
+ *      sur sa ligne et nommé (libellé court de sa sorte, relecture C1) ; sa barre a la bordure
+ *      --couleur-conflit ; le toucher ouvre le détail qui le nomme (nom long) ;
  *   4. réel plein (fond = bande de la famille), prévu hachuré (repeating-linear-gradient) ;
  *   5. semaine courante marquée et visible à l'ouverture (si aujourd'hui est dans la saison) ;
  *   6. changement de saison sans rechargement ;
@@ -229,10 +229,14 @@ test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, con
     await expect(el).toHaveCount(1);
     await el.scrollIntoViewIfNeeded();
     await expect(el).toHaveAttribute('data-conflit', 'oui');
-    const nom = el.getByTestId('conflit');
+    // Relecture C1 : libellé court de la sorte du premier conflit ; le nom long (cultures en
+    // cause) est dans le détail de la barre et dans celui de l'étiquette (plan-relecture.e2e.ts).
+    const nom = el.getByTestId('conflit').first();
     await expect(nom).toBeVisible();
     const premier = ligne.conflits[0]?.nom ?? '';
-    await expect(nom).toHaveText(ligne.conflits.length > 1 ? `${premier} +${String(ligne.conflits.length - 1)}` : premier);
+    const sorte = ligne.conflits[0]?.sorte;
+    expect(sorte).toBeDefined();
+    await expect(nom).toHaveText(sorte === undefined ? '' : LIBELLES_COURTS_ATTENDUS[sorte]);
     const conflit = rgb((COULEURS as Readonly<Record<string, string>>).conflit ?? '#000000');
     expect(await nom.evaluate((e) => getComputedStyle(e).color)).toBe(conflit);
 

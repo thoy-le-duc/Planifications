@@ -17,7 +17,7 @@ import type { Id } from '@planif/core';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
 import { remplirJeuT07, type JeuT07 } from '../../../../../packages/sync/src/test/jeu-t07.ts';
 import { COULEURS, FAMILLES } from '../../ui/jetons.ts';
-import type { LigneEmplacementPlan, ModuleCalculsPlan, ModuleEcranPlan, Plan, SaisonPlan } from './test/contrat.ts';
+import { LIBELLES_COURTS_ATTENDUS, type LigneEmplacementPlan, type ModuleCalculsPlan, type ModuleEcranPlan, type Plan, type SaisonPlan } from './test/contrat.ts';
 
 /** Chemins tenus dans des variables : le typage ne dépend pas des modules pas encore écrits. */
 const CHEMIN_ECRAN = './index.ts';
@@ -167,10 +167,12 @@ describe('T11 : écran Planches, ferme de T07 (430 lignes)', () => {
     const el = lignesDom().find((l) => l.dataset.id === ligne.id);
     expect(el, `ligne ${ligne.code} dessinée`).toBeDefined();
     expect(el?.dataset.conflit).toBe('oui');
+    // Relecture C1 : libellé court de la sorte du premier conflit (le nom long est dans le détail,
+    // ouvert par l'étiquette : relecture.test.tsx).
     const nom = el?.querySelector('[data-testid="conflit"]')?.textContent ?? '';
-    const premier = ligne.conflits[0]?.nom ?? '';
-    const attendu = ligne.conflits.length > 1 ? `${premier} +${String(ligne.conflits.length - 1)}` : premier;
-    expect(nom.trim()).toBe(attendu);
+    const sorte = ligne.conflits[0]?.sorte;
+    expect(sorte).toBeDefined();
+    if (sorte !== undefined) expect(nom.trim()).toBe(LIBELLES_COURTS_ATTENDUS[sorte]);
     const enConflit = el?.querySelectorAll('[data-testid="barre"][data-conflit="oui"]') ?? [];
     expect(enConflit.length).toBeGreaterThan(0);
   });
