@@ -39,6 +39,8 @@ const LARGEUR_SEMAINE = 36;
 const LARGEUR_ETIQUETTE = 92;
 const HAUTEUR_ENTETE = 28;
 const PX_PAR_JOUR = LARGEUR_SEMAINE / 7;
+/** En deçà (px), la marge intérieure de la barre (plan.css) la ferait plus large que ses dates. */
+const LARGEUR_BARRE_ETROITE = 24;
 /** Lignes dessinées au-delà de la vue, de chaque côté. */
 const MARGE_LIGNES = 5;
 
@@ -91,11 +93,11 @@ function sortesDe(conflits: readonly ConflitPlan[]): SorteConflit[] {
 }
 
 function Barre({ ligne, barre, surBarre }: { readonly ligne: LigneEmplacementPlan; readonly barre: BarrePlan; readonly surBarre: ProprietesLigne['surBarre'] }) {
-  const style: CSSProperties = {
-    left: LARGEUR_ETIQUETTE + barre.debutJour * PX_PAR_JOUR,
-    width: Math.max(PX_PAR_JOUR, (barre.finJour - barre.debutJour) * PX_PAR_JOUR),
-  };
+  const largeur = Math.max(PX_PAR_JOUR, (barre.finJour - barre.debutJour) * PX_PAR_JOUR);
+  const style: CSSProperties = { left: LARGEUR_ETIQUETTE + barre.debutJour * PX_PAR_JOUR, width: largeur };
   const etat = barre.etat === 'reel' ? 'en place' : 'prévu';
+  // Barre étroite : sans marge intérieure, sa largeur dessinée reste celle de ses dates.
+  const etroite = largeur < LARGEUR_BARRE_ETROITE;
   return (
     <button
       type="button"
@@ -104,7 +106,7 @@ function Barre({ ligne, barre, surBarre }: { readonly ligne: LigneEmplacementPla
       data-etat={barre.etat}
       data-famille={barre.cleFamille ?? ''}
       data-conflit={barre.enConflit ? 'oui' : undefined}
-      className={`barre barre-${barre.etat} famille-${barre.cleFamille ?? 'neutre'}${barre.enConflit ? ' barre-conflit' : ''}`}
+      className={`barre barre-${barre.etat} famille-${barre.cleFamille ?? 'neutre'}${barre.enConflit ? ' barre-conflit' : ''}${etroite ? ' barre-etroite' : ''}`}
       style={style}
       aria-label={`${barre.libelle}, ${etat}${barre.enConflit ? ', en conflit' : ''}`}
       onClick={() => {

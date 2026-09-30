@@ -272,6 +272,16 @@
   box-shadow: inset 0 0 0 1px var(--couleur-surface);
 }
 
+/* Barre étroite (quelques jours) : sans marge intérieure ni texte, la largeur dessinée reste
+   celle de ses dates (bordure comprise). */
+.barre-etroite {
+  padding: 0;
+}
+
+.barre-etroite > span {
+  display: none;
+}
+
 .barre:focus-visible {
   outline-offset: -4px;
 }
