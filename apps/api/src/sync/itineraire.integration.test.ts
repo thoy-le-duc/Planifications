@@ -55,6 +55,15 @@
  *      d'un doublon → 'ecriture_invalide') ; recréer après une suppression est accepté.
  *   6. nom d'un itinéraire : 1 à 80 caractères après suppression des espaces de bord.
  *   7. ferme_id nul en PUT, ou PATCH de ferme_id → 'ecriture_invalide', rien d'autre.
+ *   8. l'espèce d'un itinéraire est figée : PATCH de espece_id → 'ecriture_invalide' (même si
+ *      une série l'utilise) ; variete_id change vers une variété de la même espèce ou null.
+ *   9. supprimer un itinéraire utilisé par une série active est accepté ; un PATCH de la série
+ *      qui ne touche pas itineraire_id passe encore ; créer une série sur l'itinéraire supprimé,
+ *      ou y rattacher une série, reste refusé.
+ *  10. libellé d'un type et `type` d'un travail prévu : espaces de bord (ASCII et insécables)
+ *      rognés, NFC, stockés normalisés ; U+200B…U+200D, U+2060, U+FEFF et contrôles refusés.
+ *  11. unicité (categorie, libelle) insensible à la casse (« Grelinette » doublon de
+ *      « grelinette ») ; la référence d'un travail prévu à un type reste EXACTE.
  *
  * Une saisie = une transaction : un lot qui contient une écriture sur `itineraire` ou
  * `type_intervention` est accepté ou refusé EN ENTIER, avec les séries, occupations et le stock
@@ -1152,6 +1161,230 @@ decrireAvecBase('T23')('T23 : POST /sync/upload accepte les itinéraires et les 
       const i = await itineraireAccepte();
       const p = patch('itineraire', i.id, { nom: 'B'.repeat(81) });
       await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+  });
+
+  // ── Décisions du chef après la relecture (8 à 11) ──────────────────────────────────────────
+
+  describe('décision 8 : l’espèce d’un itinéraire est figée', () => {
+    it('PATCH de espece_id vers une autre espèce de la ferme (variété à null) : refusé, rien ne change', async () => {
+      const i = await itineraireAccepte({ variete_id: null });
+      const p = patch('itineraire', i.id, { espece_id: tomate });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+
+    it('PATCH de espece_id vers une espèce de la bibliothèque : refusé', async () => {
+      const i = await itineraireAccepte({ variete_id: null });
+      const p = patch('itineraire', i.id, { espece_id: especeBibliotheque });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+
+    it('scénario de la relecture : itinéraire utilisé par une série, PATCH de espece_id : refusé, l’itinéraire et la série ne changent pas', async () => {
+      const i = await itineraireAccepte({ variete_id: null });
+      const s = putSerie(i.id, String(i.donnees?.parametres));
+      await accepte([{ ...s, donnees: { ...s.donnees, variete_id: null } }]);
+      const serieAvant = await ligne('serie', s.id);
+      const p = patch('itineraire', i.id, { espece_id: tomate });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+      expect(await ligne('serie', s.id)).toEqual(serieAvant);
+      expect((await ligne('itineraire', i.id))?.espece_id).toBe(laitue);
+    });
+
+    it('variete_id vers une autre variété de la même espèce : accepté', async () => {
+      const autreBatavia = await varieteEn(ferme, laitue);
+      const i = await itineraireAccepte();
+      await accepte([patch('itineraire', i.id, { variete_id: autreBatavia })]);
+      expect((await ligne('itineraire', i.id))?.variete_id).toBe(autreBatavia);
+    });
+
+    it('variete_id vers null : accepté', async () => {
+      const i = await itineraireAccepte();
+      await accepte([patch('itineraire', i.id, { variete_id: null })]);
+      expect((await ligne('itineraire', i.id))?.variete_id).toBeNull();
+    });
+
+    it('variete_id vers une variété d’une autre espèce : refusé', async () => {
+      const i = await itineraireAccepte();
+      const p = patch('itineraire', i.id, { variete_id: varieteTomate });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+  });
+
+  describe('décision 9 : supprimer un itinéraire utilisé par une série', () => {
+    /** Itinéraire accepté et une série active qui l'utilise. */
+    async function itineraireEtSerie(): Promise<{ i: EcritureEnvoyee; s: EcritureEnvoyee }> {
+      const i = await itineraireAccepte();
+      const s = putSerie(i.id, String(i.donnees?.parametres));
+      await accepte([s]);
+      return { i, s };
+    }
+
+    it('supprimer l’itinéraire : accepté, la série garde son instantané', async () => {
+      const { i, s } = await itineraireEtSerie();
+      const serieAvant = await ligne('serie', s.id);
+      await accepte([supprimer('itineraire', i.id)]);
+      expect((await ligne('itineraire', i.id))?.supprime_le).not.toBeNull();
+      expect(await ligne('serie', s.id)).toEqual(serieAvant);
+    });
+
+    it('ensuite, un PATCH de la série qui ne touche pas itineraire_id : accepté', async () => {
+      const { i, s } = await itineraireEtSerie();
+      await accepte([supprimer('itineraire', i.id)]);
+      await accepte([patch('serie', s.id, { statut: 'en_cours' })]);
+      expect((await ligne('serie', s.id))?.statut).toBe('en_cours');
+    });
+
+    it('ensuite, supprimer puis rétablir la série (itineraire_id inchangé) : accepté', async () => {
+      const { i, s } = await itineraireEtSerie();
+      await accepte([supprimer('itineraire', i.id)]);
+      await accepte([supprimer('serie', s.id)]);
+      await accepte([patch('serie', s.id, { supprime_le: null })]);
+    });
+
+    it('créer une série sur l’itinéraire supprimé : refusé', async () => {
+      const { i } = await itineraireEtSerie();
+      await accepte([supprimer('itineraire', i.id)]);
+      const nouvelle = putSerie(i.id, String(i.donnees?.parametres));
+      await refuseEnEntier([nouvelle], nouvelle, 'ecriture_invalide');
+    });
+
+    it('rattacher une série existante à l’itinéraire supprimé : refusé, la série ne change pas', async () => {
+      const { i } = await itineraireEtSerie();
+      const { s: autre } = await itineraireEtSerie();
+      await accepte([supprimer('itineraire', i.id)]);
+      const p = patch('serie', autre.id, { itineraire_id: i.id });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+  });
+
+  describe('décision 10 : libellés rognés et normalisés en NFC', () => {
+    const NFD = (t: string): string => t.normalize('NFD');
+
+    it.each([
+      ['espace finale', (l: string) => `${l} `],
+      ['espace initiale', (l: string) => ` ${l}`],
+      ['espace insécable finale', (l: string) => `${l}\u00A0`],
+    ])('type dont le libellé a une %s : accepté, stocké rogné', async (_cas, habiller) => {
+      const base = libelleDe(putType());
+      const t = putType({ libelle: habiller(base) });
+      await accepte([t]);
+      expect((await ligne('type_intervention', t.id))?.libelle).toBe(base);
+    });
+
+    it('type « bêchage » écrit en NFD : accepté, stocké en NFC', async () => {
+      const nfc = `bêchage ${String(tic % 100_000)}`;
+      const t = putType({ libelle: NFD(nfc) });
+      expect(NFD(nfc)).not.toBe(nfc);
+      await accepte([t]);
+      expect((await ligne('type_intervention', t.id))?.libelle).toBe(nfc);
+    });
+
+    it.each([
+      ['U+200B (espace de largeur nulle) en fin', (l: string) => `${l}\u200B`],
+      ['U+200C au milieu', (l: string) => `${l.slice(0, 3)}\u200C${l.slice(3)}`],
+      ['U+200D au milieu', (l: string) => `${l.slice(0, 3)}\u200D${l.slice(3)}`],
+      ['U+2060 au milieu', (l: string) => `${l.slice(0, 3)}\u2060${l.slice(3)}`],
+      ['U+FEFF au milieu', (l: string) => `${l.slice(0, 3)}\uFEFF${l.slice(3)}`],
+      ['caractère de contrôle', (l: string) => `${l}\u0007`],
+    ])('type dont le libellé contient %s : refusé', async (_cas, habiller) => {
+      const t = putType({ libelle: habiller(libelleDe(putType())) });
+      await refuseEnEntier([t], t, 'ecriture_invalide');
+    });
+
+    it('« grelinette␠ » en travail du sol : doublon de la liste de départ une fois rogné, refusé', async () => {
+      const t = putType({ categorie: 'travail_sol', libelle: 'grelinette ' });
+      await refuseEnEntier([t], t, 'ecriture_invalide');
+    });
+
+    it('renommer un type avec des espaces de bord : stocké rogné', async () => {
+      const t = await typeAccepte();
+      const nouveau = `${libelleDe(t)} n`;
+      await accepte([patch('type_intervention', t.id, { libelle: `\u00A0${nouveau} ` })]);
+      expect((await ligne('type_intervention', t.id))?.libelle).toBe(nouveau);
+    });
+
+    it.each([
+      ['« grelinette␠ »', 'grelinette '],
+      ['« ␠grelinette »', ' grelinette'],
+      ['« grelinette » + espace insécable', 'grelinette\u00A0'],
+    ])('travail prévu de type %s : accepté (liste de départ), stocké « grelinette »', async (_cas, type) => {
+      const i = await itineraireAccepte({ parametres: avecTravaux([{ ...GRELINETTE, type }]) });
+      const travaux = ((await ligne('itineraire', i.id))?.parametres as { travauxPrevus?: { type: string }[] } | undefined)?.travauxPrevus;
+      expect(travaux?.[0]?.type).toBe('grelinette');
+    });
+
+    it('travail prévu de type « grélinette » en NFD, type de la ferme en NFC : accepté, stocké en NFC', async () => {
+      const nfc = `grélinette ${String(tic % 100_000)}`;
+      await typeAccepte({ categorie: 'travail_sol', libelle: nfc });
+      const i = await itineraireAccepte({ parametres: avecTravaux([{ ...GRELINETTE, type: NFD(nfc) }]) });
+      const travaux = ((await ligne('itineraire', i.id))?.parametres as { travauxPrevus?: { type: string }[] } | undefined)?.travauxPrevus;
+      expect(travaux?.[0]?.type).toBe(nfc);
+    });
+
+    it('travail prévu de type « grelinette » + espace de largeur nulle : refusé', async () => {
+      const i = putItineraire({ parametres: avecTravaux([{ ...GRELINETTE, type: 'grelinette\u200B' }]) });
+      await refuseEnEntier([i], i, 'ecriture_invalide');
+    });
+
+    it('série dont l’instantané porte « grelinette␠ » : acceptée, instantané stocké rogné', async () => {
+      const i = await itineraireAccepte();
+      const s = putSerie(i.id, avecTravaux([{ ...GRELINETTE, type: 'grelinette ' }]));
+      await accepte([s]);
+      const travaux = ((await ligne('serie', s.id))?.parametres as { travauxPrevus?: { type: string }[] } | undefined)?.travauxPrevus;
+      expect(travaux?.[0]?.type).toBe('grelinette');
+    });
+  });
+
+  describe('décision 11 : unicité insensible à la casse, référence exacte', () => {
+    it('« Grelinette » en travail du sol : doublon de « grelinette » de la liste de départ, refusé', async () => {
+      const t = putType({ categorie: 'travail_sol', libelle: 'Grelinette' });
+      await refuseEnEntier([t], t, 'ecriture_invalide');
+    });
+
+    it('doublon d’un type de la ferme qui ne diffère que par la casse : refusé', async () => {
+      const t = await typeAccepte();
+      const doublon = putType({ libelle: libelleDe(t).toUpperCase() });
+      await refuseEnEntier([doublon], doublon, 'ecriture_invalide');
+    });
+
+    it('doublon insensible à la casse ET aux accents composés (NFD en majuscules) : refusé', async () => {
+      const nfc = `bêchage ${String(tic % 100_000)}`;
+      await typeAccepte({ libelle: nfc });
+      const doublon = putType({ libelle: nfc.toUpperCase().normalize('NFD') });
+      await refuseEnEntier([doublon], doublon, 'ecriture_invalide');
+    });
+
+    it('renommer un type non utilisé en changeant seulement la casse : accepté (c’est le même type)', async () => {
+      const t = await typeAccepte();
+      const majuscule = `B${libelleDe(t).slice(1)}`;
+      await accepte([patch('type_intervention', t.id, { libelle: majuscule })]);
+      expect((await ligne('type_intervention', t.id))?.libelle).toBe(majuscule);
+    });
+
+    it('renommer un type en une autre casse d’un autre type actif : refusé', async () => {
+      const autre = await typeAccepte();
+      const t = await typeAccepte();
+      const p = patch('type_intervention', t.id, { libelle: libelleDe(autre).toUpperCase() });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+
+    it('rétablir un type supprimé alors qu’un type actif a pris son libellé dans une autre casse : refusé', async () => {
+      const t = await typeAccepte();
+      await accepte([supprimer('type_intervention', t.id)]);
+      await typeAccepte({ libelle: libelleDe(t).toUpperCase() });
+      const p = patch('type_intervention', t.id, { supprime_le: null });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+
+    it('travail prévu « Grelinette » alors que le type s’écrit « grelinette » : refusé (référence exacte)', async () => {
+      const i = putItineraire({ parametres: avecTravaux([{ ...GRELINETTE, type: 'Grelinette' }]) });
+      await refuseEnEntier([i], i, 'ecriture_invalide');
+    });
+
+    it('travail prévu dans une autre casse qu’un type de la ferme : refusé', async () => {
+      const t = await typeAccepte();
+      const i = putItineraire({ parametres: avecTravaux([entretien(libelleDe(t).toUpperCase())]) });
+      await refuseEnEntier([i], i, 'ecriture_invalide');
     });
   });
 

@@ -10,6 +10,7 @@
  * « binage » propre à la ferme, tous les 14 jours de la mise en place au début de récolte.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
+import { validerTravailPrevu } from './travaux.ts';
 import { chargerItineraires, listeDeDepart, type ModuleItineraires, type ResultatLigne } from './test/contrat-itineraire.ts';
 
 let m: ModuleItineraires;
@@ -340,5 +341,82 @@ describe('liste de départ (modèle de données, section 5)', () => {
     };
     const r = m.validerItineraire(itineraire({ parametres: JSON.stringify({ ...BATAVIA, travauxPrevus: [GRELINETTE, compost] }) }), { typesIntervention: types });
     expect(code(r)).toBeNull();
+  });
+});
+
+// ── Décisions du chef après la relecture (10 et 11) ─────────────────────────────────────────
+
+describe('décision 10 : libellé d’un type et type d’un travail rognés, en NFC', () => {
+  const GRELINETTE_NFC = 'grélinette';
+  const GRELINETTE_NFD = GRELINETTE_NFC.normalize('NFD');
+  const ROGNES: readonly (readonly [string, string, string])[] = [
+    ['« grelinette␠ »', 'grelinette ', 'grelinette'],
+    ['« ␠grelinette »', ' grelinette', 'grelinette'],
+    ['« grelinette » + espace insécable', 'grelinette\u00A0', 'grelinette'],
+    ['« grélinette » en NFD', GRELINETTE_NFD, GRELINETTE_NFC],
+  ];
+  const REFUSES: readonly (readonly [string, string])[] = [
+    ['« grelinette » + U+200B', 'grelinette\u200B'],
+    ['U+200C au milieu', 'grel\u200Cinette'],
+    ['U+200D au milieu', 'grel\u200Dinette'],
+    ['U+2060 au milieu', 'grel\u2060inette'],
+    ['U+FEFF au milieu', 'grel\uFEFFinette'],
+    ['caractère de contrôle', 'grelinette\u0007'],
+  ];
+
+  it('témoin : la forme NFD diffère bien de la forme NFC', () => {
+    expect(GRELINETTE_NFD).not.toBe(GRELINETTE_NFC);
+  });
+
+  it.each(ROGNES)('type d’intervention %s : accepté, libellé rendu normalisé', (_cas, libelle, attendu) => {
+    const r = m.validerTypeIntervention(typeIntervention({ categorie: 'travail_sol', libelle }));
+    expect(r.ok && r.valeur.libelle).toBe(attendu);
+  });
+
+  it.each(REFUSES)('type d’intervention, libellé avec %s : refusé, champ libelle', (_cas, libelle) => {
+    const r = m.validerTypeIntervention(typeIntervention({ libelle }));
+    expect(r.ok).toBe(false);
+    expect(champ(r)).toBe('libelle');
+  });
+
+  it.each(ROGNES)('travail prévu de type %s : accepté, type rendu normalisé', (_cas, type, attendu) => {
+    const r = validerTravailPrevu({ ...GRELINETTE, type });
+    expect(r.ok && r.valeur.type).toBe(attendu);
+  });
+
+  it.each(REFUSES)('travail prévu, type avec %s : refusé, champ type', (_cas, type) => {
+    const r = validerTravailPrevu({ ...GRELINETTE, type });
+    expect(r.ok).toBe(false);
+    expect(r.ok ? null : r.erreur.champ).toBe('type');
+  });
+
+  it.each(ROGNES)('itinéraire dont un travail est de type %s : comparé à la liste APRÈS normalisation, accepté', (_cas, type, attendu) => {
+    const types = [{ categorie: 'travail_sol', type: attendu }];
+    const r = m.validerItineraire(itineraire({ parametres: JSON.stringify({ ...BATAVIA, travauxPrevus: [{ ...GRELINETTE, type }] }) }), { typesIntervention: types });
+    if (!r.ok) throw new Error(JSON.stringify(r.erreur));
+    expect((r.valeur.parametres.travauxPrevus as { type: string }[])[0]?.type).toBe(attendu);
+  });
+
+  it('libellé de 30 caractères entouré d’espaces : accepté (le plafond compte après rognage)', () => {
+    const libelle = `  ${'b'.repeat(m.PLAFONDS_TRAVAUX.texte)}  `;
+    expect(code(m.validerTypeIntervention(typeIntervention({ libelle })))).toBeNull();
+  });
+
+  it('libellé fait seulement d’espaces insécables : refusé', () => {
+    expect(champ(m.validerTypeIntervention(typeIntervention({ libelle: '\u00A0\u00A0' })))).toBe('libelle');
+  });
+});
+
+describe('décision 11 : la référence d’un travail prévu à un type reste exacte (casse comprise)', () => {
+  it('« Grelinette » alors que la liste porte « grelinette » : refusé, champ parametres.travauxPrevus.0.type', () => {
+    const r = m.validerItineraire(itineraire({ parametres: JSON.stringify({ ...BATAVIA, travauxPrevus: [{ ...GRELINETTE, type: 'Grelinette' }] }) }), {
+      typesIntervention: TYPES,
+    });
+    expect(champ(r)).toBe('parametres.travauxPrevus.0.type');
+  });
+
+  it('la casse est gardée telle quelle par la validation : « Binage » rendu « Binage »', () => {
+    const r = m.validerTypeIntervention(typeIntervention({ libelle: 'Binage' }));
+    expect(r.ok && r.valeur.libelle).toBe('Binage');
   });
 });
