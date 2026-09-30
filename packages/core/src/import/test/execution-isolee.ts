@@ -5,12 +5,19 @@
  * directement par Node (≥ 22.18), types de Node retrouvés dynamiquement avec un type local.
  */
 
+import { chronometre } from './temps-calcul.ts';
+
 interface PortParent {
   postMessage(message: unknown): void;
 }
 interface FilsNode {
   readonly parentPort: PortParent | null;
   readonly workerData: unknown;
+}
+/** Processus enfant (./isole.ts, T14c) : la demande arrive par le canal IPC, le résultat y repart. */
+interface ProcessusNode {
+  once(evenement: 'message', rappel: (message: unknown) => void): void;
+  send?(message: unknown, rappel?: () => void): boolean;
 }
 
 interface Demande {
@@ -20,8 +27,6 @@ interface Demande {
 }
 
 const MODULE_FILS = 'node:worker_threads';
-/** Présent dans Node, absent des types du cœur (lib ES2023 seule). */
-const { performance } = globalThis as unknown as { readonly performance: { now(): number } };
 
 const estObjet = (v: unknown): v is Record<string, unknown> => (typeof v === 'object' || typeof v === 'function') && v !== null;
 
@@ -31,7 +36,15 @@ function lireDemande(v: unknown): Demande {
 }
 
 const fils = (await import(/* @vite-ignore */ MODULE_FILS)) as FilsNode;
-const demande = lireDemande(fils.workerData);
+const { process } = globalThis as unknown as { readonly process: ProcessusNode };
+const { parentPort } = fils;
+const envoyer = (message: unknown): void => {
+  if (parentPort !== null) parentPort.postMessage(message);
+  else process.send?.(message);
+};
+const demande = lireDemande(parentPort !== null ? fils.workerData : await new Promise<unknown>((resoudre) => {
+  process.once('message', resoudre);
+}));
 let cible: unknown = (await import(/* @vite-ignore */ demande.module)) as unknown;
 let parent: unknown = undefined;
 for (const k of demande.chemin) {
@@ -41,7 +54,8 @@ for (const k of demande.chemin) {
 }
 if (typeof cible !== 'function') throw new Error(`pas une fonction : ${demande.chemin.join('.')}`);
 const fonction = cible as (this: unknown, ...args: unknown[]) => unknown;
-const debut = performance.now();
+// T19 : durée de calcul, min(mural, CPU du processus) (./temps-calcul.ts) ; une machine chargée ne l'allonge plus.
+const duree = chronometre();
 const valeur = await Promise.resolve(fonction.apply(parent, [...demande.args]));
-const dureeMs = performance.now() - debut;
-fils.parentPort?.postMessage({ issue: 'resultat', valeur, dureeMs });
+const dureeMs = duree();
+envoyer({ issue: 'resultat', valeur, dureeMs });

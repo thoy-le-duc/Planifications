@@ -54,7 +54,9 @@
  * de T07. L'écran n'est pas encore atteignable dans l'appli sans synchro réelle (aucune porte
  * ouverte après connexion), donc pas d'e2e Playwright : export.test.ts mesure `exporterFerme`
  * sous Node, sur le volume de T07 dans la base mémoire, avec un seuil de 2,5 s (≈ 10 s / 4 :
- * le ralentissement ×4 de Chromium appliqué à l'envers). Lecture SQLite comprise ; elle est
+ * le ralentissement ×4 de Chromium appliqué à l'envers). Mesure (T19) : min(temps mural, temps
+ * CPU du processus, compression de node:zlib comprise), pour qu'une machine chargée ne fasse
+ * pas échouer le test ; un export vraiment plus lent, lui, échoue. Lecture SQLite comprise ; elle est
  * plus rapide sous node:sqlite que sous wa-sqlite, d'où une marge qui reste à mesurer sur
  * téléphone quand l'écran sera branché (e2e dans le style de apps/web/e2e/mesure-sqlite.e2e.ts).
  *

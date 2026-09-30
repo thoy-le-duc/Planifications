@@ -4,20 +4,49 @@
  */
 import { CHAMPS_IMPORT, uniteAcceptee } from './champs.ts';
 import { cle, texteCellule } from './normalisation.ts';
-import type { Cellule, ChoixValeur, CleChamp, ColonneAssociee, ColonneModele, Correspondance, DecisionPrise, ModeleImport, TypeContenu, UniteColonne } from './types.ts';
+import type { Cellule, ChoixValeur, CleChamp, CodeRefusModele, ColonneAssociee, ColonneModele, Correspondance, DecisionPrise, ModeleImport, ResultatModele, TypeContenu, UniteColonne } from './types.ts';
 
 function copierChoix(c: ChoixValeur): ChoixValeur {
   const decision: DecisionPrise = c.decision.sorte === 'existante' ? { sorte: 'existante', id: c.decision.id } : { sorte: 'nouvelle', nom: c.decision.nom };
   return { champ: c.champ, valeur: c.valeur, decision };
 }
 
-/** Retient, par en-tête, le champ et l'unité validés, plus les choix de valeurs. */
-export function creerModele(entetes: readonly Cellule[], correspondance: Correspondance, choix: readonly ChoixValeur[]): ModeleImport {
-  const colonnes = entetes.map((e, i): ColonneModele => {
+/** Choix que `lireModele` relit : identifiant non vide, nom nouveau qui n'est pas fait d'espaces. */
+const choixValide = (c: ChoixValeur): boolean => (c.decision.sorte === 'existante' ? c.decision.id !== '' : c.decision.nom.trim() !== '');
+
+function refus(code: CodeRefusModele, champ: CleChamp | null, colonne: number | null, message: string): ResultatModele {
+  return { ok: false, code, champ, colonne, message };
+}
+
+/**
+ * Retient, par en-tête, le champ et l'unité validés, plus les choix de valeurs. Refuse (sans
+ * lever) exactement ce que `lireModele` refuserait : un modèle créé se relit toujours.
+ */
+export function creerModele(entetes: readonly Cellule[], correspondance: Correspondance, choix: readonly ChoixValeur[]): ResultatModele {
+  const definitions = CHAMPS_IMPORT[correspondance.type];
+  const libelles = new Map<CleChamp, string>(definitions.map((d) => [d.cle, d.libelle]));
+  const associes = new Set<CleChamp>();
+  const colonnes: ColonneModele[] = [];
+  for (let i = 0; i < entetes.length; i++) {
     const a = correspondance.colonnes[i];
-    return { entete: texteCellule(e) ?? '', champ: a?.champ ?? null, unite: a?.unite ?? null };
-  });
-  return { version: 1, type: correspondance.type, colonnes, choix: choix.map(copierChoix) };
+    const champ = a?.champ ?? null;
+    const unite = a?.unite ?? null;
+    const numero = String(i + 1);
+    if (champ !== null) {
+      const libelle = libelles.get(champ);
+      if (libelle === undefined) return refus('champ_inconnu', champ, i, `La colonne ${numero} est associée à un champ qui n’existe pas pour ce type de fichier.`);
+      if (unite !== null && !uniteAcceptee(champ, unite)) return refus('unite_refusee', champ, i, `L’unité de la colonne ${numero} ne convient pas au champ « ${libelle} ».`);
+      if (associes.has(champ)) return refus('champ_en_double', champ, i, `Le champ « ${libelle} » est associé à plusieurs colonnes (dont la colonne ${numero}) : gardez-en une seule.`);
+      associes.add(champ);
+    } else if (unite !== null) {
+      return refus('unite_refusee', null, i, `La colonne ${numero} est ignorée : elle ne peut pas avoir d’unité.`);
+    }
+    colonnes.push({ entete: texteCellule(entetes[i] ?? null) ?? '', champ, unite });
+  }
+  for (const c of choix) {
+    if (!choixValide(c)) return refus('choix_invalide', c.champ, null, `Le choix fait pour « ${c.valeur} » est incomplet : identifiant ou nom manquant.`);
+  }
+  return { ok: true, modele: { version: 1, type: correspondance.type, colonnes, choix: choix.map(copierChoix) } };
 }
 
 export function serialiserModele(modele: ModeleImport): string {

@@ -238,6 +238,14 @@ export interface ModeleImport {
   readonly choix: readonly ChoixValeur[];
 }
 
+/** Pourquoi `creerModele` refuse un modèle (codes stables). */
+export type CodeRefusModele = 'champ_en_double' | 'champ_inconnu' | 'unite_refusee' | 'choix_invalide';
+
+/** Résultat de `creerModele` : un modèle créé est toujours relisible par `lireModele`. */
+export type ResultatModele =
+  | { readonly ok: true; readonly modele: ModeleImport }
+  | { readonly ok: false; readonly code: CodeRefusModele; readonly champ: CleChamp | null; readonly colonne: number | null; readonly message: string };
+
 // ── Bibliothèque ─────────────────────────────────────────────────────────────────────────────
 
 export interface FamilleParDefaut {
