@@ -77,6 +77,11 @@ export interface InterventionRealisee {
   readonly categorie: CategorieIntervention;
   /** Libellé du type, comparé au texte près au type du travail prévu. */
   readonly type: string;
+  /**
+   * T22b (Q24) : date prévue de la carte touchée par « Fait » (`detail.occurrenceVisee`) ;
+   * absente ou null = saisie libre, soldée selon sa date réelle (règle de T22).
+   */
+  readonly occurrenceVisee?: DateCalendaire | null;
 }
 
 export type EtapeTache = EtapeRealisee | 'debut_recolte';
@@ -248,13 +253,15 @@ function nombreDistincts(emplacements: readonly EmplacementConcerne[]): number {
 
 /**
  * Nombre d'occurrences de `jours` soldées par les interventions : chacune solde l'occurrence la
- * plus proche de sa date (à égalité, la plus ancienne) et toutes les précédentes (Q11).
+ * plus proche de sa date de référence (à égalité, la plus ancienne) et toutes les précédentes
+ * (Q11). Date de référence : l'occurrence visée si l'intervention en porte une (T22b, Q24 :
+ * jamais une occurrence postérieure à la carte touchée), sinon sa date réelle.
  */
 function occurrencesSoldees(jours: readonly number[], travail: TravailPrevu, interventions: readonly InterventionRealisee[]): number {
   let soldees = 0;
   for (const i of interventions) {
     if (i.categorie !== travail.categorie || i.type !== travail.type) continue;
-    const jour = jourAbsolu(i.date);
+    const jour = jourAbsolu(i.occurrenceVisee ?? i.date);
     // Première occurrence au jour de l'intervention ou après (recherche dichotomique).
     let bas = 0;
     let haut = jours.length;
