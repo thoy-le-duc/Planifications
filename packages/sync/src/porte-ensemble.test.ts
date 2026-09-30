@@ -106,6 +106,21 @@ describe('T10c : la porte écrit plusieurs lignes en une transaction', () => {
     expect(vus.every((n) => n === 0 || n === 1)).toBe(true);
   });
 
+  it('relecture : au-delà de ECRITURES_MAX_PAR_LOT ordres (exporté par @planif/sync, 500 comme l’API), rejet avant d’écrire', async () => {
+    const max: unknown = (sync as unknown as Record<string, unknown>).ECRITURES_MAX_PAR_LOT;
+    expect(max, 'ECRITURES_MAX_PAR_LOT exporté par @planif/sync').toBe(500);
+    const ordre = (i: number): Ordre => ({
+      sql: `INSERT INTO article_stock (id, ferme_id, espece_id, variete_id, unite, categorie) VALUES (?, ?, ?, NULL, 'kg', NULL)`,
+      parametres: [`0192f0c1-7a6e-7cc3-9b1e-${String(i).padStart(12, '0')}`, FERME, '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b80'],
+    });
+    await expect(ecrireEnsemble(Array.from({ length: 501 }, (_, i) => ordre(i)))).rejects.toThrow();
+    expect(transactions, 'rien n’est ouvert').toBe(0);
+    expect(compter('article_stock')).toBe(0);
+
+    await ecrireEnsemble(Array.from({ length: 500 }, (_, i) => ordre(i)));
+    expect(compter('article_stock')).toBe(500);
+  });
+
   it('liste vide : aucune transaction', async () => {
     await ecrireEnsemble([]);
     expect(transactions).toBe(0);

@@ -82,7 +82,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { creerApp } from '../app.ts';
 import { emettreJetonAcces, genererCleSignature, type ExpediteurCourriel, type TrousseauCles } from '../auth/index.ts';
-import { ajouterMembre, creerBaseJetable, creerFerme, creerUtilisateur, decrireAvecBase, type BaseJetable } from './test/base-jetable.ts';
+import { ajouterMembre, creerBaseJetable, creerFerme, creerUtilisateur, decrireAvecBase, peuplerFerme, type BaseJetable } from './test/base-jetable.ts';
 
 const EMETTEUR = 'https://api.planif.test';
 const AUDIENCE = 'powersync-planif';
@@ -847,6 +847,183 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       const r = await base.pool.query<Record<string, unknown>>(`SELECT unite, categorie, supprime_le FROM article_stock WHERE id = $1`, [a.id]);
       expect(r.rows).toEqual([{ unite: 'kg', categorie: null, supprime_le: null }]);
       expect(await modifications(a.id)).toBe(1);
+    });
+  });
+
+  // ── Relecture de T10c : décisions du chef (docs/backlog/T10c-stock-synchro.md) ─────────────────
+
+  describe('relecture B1 : mouvement de la récolte d’origine borné par la quantité en vigueur', () => {
+    it('récolte de 12 : +100 000 sur l’origine refusé', async () => {
+      const recolte = putRecolte(12);
+      const article = putArticle();
+      const trop = putMouvement(article.id, PLAFOND, recolte.id);
+      await refuseEnEntier([recolte, article, trop], trop, 'ecriture_invalide');
+    });
+
+    it('récolte de 12 : +12 accepté, puis +1 de plus sur l’origine refusé', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const encore = putMouvement(article.id, 1, recolte.id);
+      expect((await lot([encore])).refus).toEqual([{ table: 'mouvement_stock', id: encore.id, motif: 'ecriture_invalide' }]);
+      expect(await stock(article.id)).toBe(12);
+    });
+
+    it('récolte de 12 : +10 puis +2 (lots séparés) acceptés, somme = 12', async () => {
+      const recolte = putRecolte(12);
+      const article = putArticle();
+      expect(await lot([recolte, article, putMouvement(article.id, 10, recolte.id)])).toEqual({ refus: [] });
+      expect(await lot([putMouvement(article.id, 2, recolte.id)])).toEqual({ refus: [] });
+      expect(await stock(article.id)).toBe(12);
+    });
+
+    it('après annulation (+12, −12) : +50 sur l’origine refusé (la chaîne contient une annulation)', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const annulation = putRemplacement(recolte, 'annulation');
+      expect(await lot([annulation, putMouvement(article.id, -12, annulation.id)])).toEqual({ refus: [] });
+      const retour = putMouvement(article.id, 50, recolte.id);
+      expect((await lot([retour])).refus).toEqual([{ table: 'mouvement_stock', id: retour.id, motif: 'ecriture_invalide' }]);
+      expect(await stock(article.id)).toBe(0);
+    });
+
+    it('récolte corrigée à 15 (+12 puis +3) : +1 de plus sur l’origine refusé (somme ≤ quantité en vigueur)', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const correction = putRemplacement(recolte, 'correction', { quantite: 15, unite: 'kg', categorie: null });
+      expect(await lot([correction, putMouvement(article.id, 3, correction.id)])).toEqual({ refus: [] });
+      const encore = putMouvement(article.id, 1, recolte.id);
+      expect((await lot([encore])).refus).toEqual([{ table: 'mouvement_stock', id: encore.id, motif: 'ecriture_invalide' }]);
+      expect(await stock(article.id)).toBe(15);
+    });
+  });
+
+  describe('relecture B2 : un seul article par chaîne, unité et espèce de la récolte', () => {
+    let serie: string;
+    let especeSerie: string;
+
+    beforeAll(async () => {
+      serie = (await peuplerFerme(base.pool, ferme)).serie;
+      const r = await base.pool.query<{ espece_id: string }>(`SELECT espece_id::text AS espece_id FROM serie WHERE id = $1`, [serie]);
+      especeSerie = r.rows[0]?.espece_id ?? '';
+    });
+
+    it('correction 12 → 15 avec +3 sur l’article de la récolte ET +15 sur un autre article : lot refusé en entier', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const correction = putRemplacement(recolte, 'correction', { quantite: 15, unite: 'kg', categorie: null });
+      const trois = putMouvement(article.id, 3, correction.id);
+      const autre = putArticle();
+      const quinze = putMouvement(autre.id, 15, correction.id);
+      await refuseEnEntier([correction, trois, autre, quinze], quinze, 'ecriture_invalide');
+      expect(await stock(article.id)).toBe(12);
+    });
+
+    it('premier mouvement sur un article d’une autre unité que detail.unite : refusé ; même unité : accepté', async () => {
+      const recolte = putRecolte(12);
+      const bottes = putArticle({ unite: 'botte' });
+      const m = putMouvement(bottes.id, 12, recolte.id);
+      await refuseEnEntier([recolte, bottes, m], m, 'ecriture_invalide');
+      await recolteAcceptee(12);
+    });
+
+    it('récolte d’une série : article d’une autre espèce que la série refusé ; de son espèce accepté', async () => {
+      const recolte = putRecolte(12, { serie_id: serie });
+      const tomates = putArticle({ espece_id: tomate });
+      const m = putMouvement(tomates.id, 12, recolte.id);
+      await refuseEnEntier([recolte, tomates, m], m, 'ecriture_invalide');
+
+      const bonne = putRecolte(12, { serie_id: serie });
+      const article = putArticle({ espece_id: especeSerie });
+      expect(await lot([bonne, article, putMouvement(article.id, 12, bonne.id)])).toEqual({ refus: [] });
+    });
+  });
+
+  describe('relecture : verrou par ferme, deux lots concurrents sur deux chaînes', () => {
+    it('lots R1 puis R2 et R2 puis R1 envoyés en même temps : jamais de 500 ni d’interblocage ; chaque lot accepté ou refusé en entier', async () => {
+      // Non déterministe par nature : on répète pour rendre l'entrelacement probable (sans verrou
+      // unique par ferme, Postgres détecte un interblocage 40P01 et la route répond 500).
+      for (let essai = 0; essai < 15; essai++) {
+        const r1 = await recolteAcceptee(12);
+        const r2 = await recolteAcceptee(12);
+        const lotDe = (premiere: typeof r1, seconde: typeof r1): EcritureEnvoyee[] => {
+          const a = putRemplacement(premiere.recolte, 'annulation');
+          const b = putRemplacement(seconde.recolte, 'annulation');
+          return [a, putMouvement(premiere.article.id, -12, a.id), b, putMouvement(seconde.article.id, -12, b.id)];
+        };
+        const lotA = lotDe(r1, r2);
+        const lotB = lotDe(r2, r1);
+        const envoyer = (ecritures: readonly EcritureEnvoyee[]) =>
+          Promise.resolve(
+            app.request('/sync/upload', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', authorization: `Bearer ${theo.jeton}` },
+              body: JSON.stringify({ ecritures }),
+            }),
+          );
+        const [ra, rb] = await Promise.all([envoyer(lotA), envoyer(lotB)]);
+        expect([ra.status, rb.status], `essai ${String(essai)}`).toEqual([200, 200]);
+        for (const [reponse, ecritures] of [
+          [(await ra.json()) as ReponseUpload, lotA],
+          [(await rb.json()) as ReponseUpload, lotB],
+        ] as const) {
+          const refuses = new Set(reponse.refus.map((x) => x.id));
+          const tout = ecritures.every((e) => refuses.has(e.id));
+          const rien = reponse.refus.length === 0;
+          expect(tout || rien, `essai ${String(essai)} : accepté ou refusé en entier (${JSON.stringify(reponse.refus)})`).toBe(true);
+        }
+        // Chaque récolte est annulée une fois au plus : son stock est 0 (une annulation passée) ou 12.
+        for (const r of [r1, r2]) expect([0, 12]).toContain(await stock(r.article.id));
+      }
+    });
+  });
+
+  describe('relecture : précision au millionième', () => {
+    it('+12,0000004 refusé ; +0,000001 accepté ; 1e-7 refusé', async () => {
+      const recolte = putRecolte(13);
+      const article = putArticle();
+      const septDecimales = putMouvement(article.id, 12.0000004, recolte.id);
+      await refuseEnEntier([recolte, article, septDecimales], septDecimales, 'ecriture_invalide');
+
+      const petite = putRecolte(1);
+      const a2 = putArticle();
+      const millionieme = putMouvement(a2.id, 0.000001, petite.id);
+      expect(await lot([petite, a2, millionieme])).toEqual({ refus: [] });
+      const r = await base.pool.query<{ q: string }>(`SELECT quantite::text AS q FROM mouvement_stock WHERE id = $1`, [millionieme.id]);
+      expect(Number(r.rows[0]?.q)).toBe(0.000001);
+
+      const infime = putMouvement(a2.id, 1e-7, petite.id);
+      expect((await lot([infime])).refus).toEqual([{ table: 'mouvement_stock', id: infime.id, motif: 'ecriture_invalide' }]);
+    });
+  });
+
+  describe('relecture : chaîne de plus de 1 000 niveaux', () => {
+    /**
+     * Récolte d'origine de 12 et `n` corrections en chaîne, écrites directement en base (un seul
+     * INSERT : 1 001 envois HTTP seraient lents). La dernière correction vaut 13. Aucun mouvement
+     * dans la chaîne : le mouvement exact de la dernière correction est donc +13.
+     */
+    async function chaine(n: number): Promise<{ derniere: string; article: string }> {
+      const ids = Array.from({ length: n + 1 }, () => nouvelId<'Evenement'>() as string);
+      const quantites = ids.map((_, i) => (i === 0 ? 12 : i === n ? 13 : 12 + (i % 2)));
+      await base.pool.query(
+        `INSERT INTO evenement (id, ferme_id, type, date, horodatage, auteur_id, source, remplace_sorte, remplace_evenement_id, detail)
+         SELECT t.id, $1, 'recolte', '2026-10-01', '2026-10-01T05:58:00Z', $2, 'tap',
+                CASE WHEN t.parent IS NULL THEN NULL ELSE 'correction' END, t.parent,
+                jsonb_build_object('quantite', t.q, 'unite', 'kg', 'categorie', NULL)
+         FROM unnest($3::uuid[], $4::uuid[], $5::float8[]) AS t(id, parent, q)`,
+        [ferme, theo.id, ids, [null, ...ids.slice(0, -1)], quantites],
+      );
+      const article = putArticle();
+      expect(await lot([article])).toEqual({ refus: [] });
+      return { derniere: ids[n] ?? '', article: article.id };
+    }
+
+    it('50 corrections : le mouvement exact de la dernière (+13) est accepté', async () => {
+      const c = await chaine(50);
+      expect(await lot([putMouvement(c.article, 13, c.derniere)])).toEqual({ refus: [] });
+    });
+
+    it('1 001 corrections : refusé (ecriture_invalide), sans repli sur une somme partielle', async () => {
+      const c = await chaine(1_001);
+      const m = putMouvement(c.article, 13, c.derniere);
+      expect((await lot([m])).refus).toEqual([{ table: 'mouvement_stock', id: m.id, motif: 'ecriture_invalide' }]);
+      expect(await mouvements(m.id)).toBe(0);
     });
   });
 });
