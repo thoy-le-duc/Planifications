@@ -32,7 +32,6 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0000_*.sql` | Généré par drizzle-kit : tables, contraintes, index |
 | `migrations/0001_*.sql` | Migration personnalisée (`drizzle-kit generate --custom`) : déclencheurs d'ajout seul, vues, publication `powersync` |
 | `migrations/0002_*.sql` | Migration personnalisée : fonction `est_date_calendaire`, déclencheur « remplacement du même type », vue `evenements_en_vigueur` (correction la plus récente) |
-| `migrations/0018_*.sql` | Migration personnalisée (T10g) : `evenements_en_vigueur` suit toute la chaîne (une annulation retire tout, sinon la correction la plus récente de la chaîne) |
 | `migrations/0003_*.sql` | Généré par drizzle-kit : CHECK stricts du détail jsonb, clé étrangère composée du remplacement. Seule retouche : l'UNIQUE posé avant la clé étrangère qui s'y appuie |
 | `migrations/0004_*.sql` | Généré par drizzle-kit (T09) : `utilisateur`, `membre`, `code_connexion`, `jeton_renouvellement`, clés `auteur_id` → `utilisateur` |
 | `migrations/0005_*.sql` | Migration personnalisée (T09) : `utilisateur` et `membre` ajoutées à la publication `powersync` |
@@ -44,6 +43,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0015_*.sql` | Généré par drizzle-kit (T23) : table `type_intervention`, unicité (ferme, catégorie, libellé) parmi les types actifs, `modification.nom_table` accepte `TypeIntervention` |
 | `migrations/0017_*.sql` | Généré par drizzle-kit (T23, décision 11) : unicité des types actifs insensible à la casse (`lower(libelle)`) |
 | `migrations/0016_*.sql` | Migration personnalisée (T23) : `type_intervention` dans la publication `powersync`, et la liste de départ (`TYPES_INTERVENTION_PAR_DEFAUT`, `ferme_id` nul, identifiants tirés du couple) |
+| `migrations/0018_*.sql` | Migration personnalisée (T10g) : `evenements_en_vigueur` suit toute la chaîne (une annulation retire tout, sinon la correction la plus récente de la chaîne) |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 
