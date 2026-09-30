@@ -30,6 +30,7 @@ import {
   itineraire,
   occupations,
   occupationsDe,
+  occupationsValides,
   parametresDe,
   remplir,
   serie,
@@ -144,6 +145,49 @@ describe('T24, décision 9 : « Annuler » ne défait que ce que nous avons écr
     expect(etat(serie(b(), SERIE.aVenir2)), 'aVenir2, intacte ailleurs : défaite').toEqual(etat(brute(avant.series, SERIE.aVenir2)));
     expect(occupationsDe(b(), SERIE.aVenir2).map(etat)).toEqual([etat(brute(avant.occupations, OCCUPATION.aVenir2))]);
     expect(etat(itineraire(b(), ITINERAIRE.bataviaFerme)), 'l’itinéraire, intact ailleurs : défait').toEqual(avant.itineraire);
+  });
+
+  it('planche ajoutée ailleurs à aVenir1 aux nouvelles dates : la série et ses occupations restent telles quelles (valides) ; message ; le reste est défait', async () => {
+    await h.ouvrir();
+    const avant = { series: series(b()), occupations: occupations(b()), itineraire: etat(itineraire(b(), ITINERAIRE.bataviaFerme)) };
+    await ouvrirFormulaire(ITINERAIRE.bataviaFerme, MODIFIER_BATAVIA);
+    await remplir(champ('Avant récolte (jours)', formulaire()), '56');
+    await enregistrer();
+    await attendre(() => dialogue(/^Appliquer/) !== undefined, 'confirmation');
+    await toucher(bouton('Appliquer aux séries', dialogueOuEchec(/^Appliquer/)));
+    await attendre(() => bandeau() !== null, 'bandeau');
+
+    // L'autre téléphone ajoute une planche (T1-P01) à aVenir1, aux dates nouvelles de la série.
+    const nouvelle = serie(b(), SERIE.aVenir1);
+    const modele = occupationsDe(b(), SERIE.aVenir1)[0];
+    if (nouvelle === undefined || modele === undefined) throw new Error('aVenir1 absente');
+    const ajoutee: Ligne = {
+      ...modele,
+      id: '0192f0c1-2424-7000-8000-0000000000d1',
+      emplacement_id: EMPLACEMENT.t1p01,
+      prevu_du: nouvelle.prevu_mise_en_place ?? null,
+      prevu_au: nouvelle.prevu_fin_recolte ?? null,
+      cree_le: AILLEURS,
+      modifie_le: AILLEURS,
+    };
+    const cles = Object.keys(ajoutee);
+    b().base.recevoir(`INSERT INTO occupation (${cles.join(', ')}) VALUES (${cles.map(() => '?').join(', ')})`, cles.map((c) => ajoutee[c] ?? null));
+    occupationsValides(b(), SERIE.aVenir1);
+    const occRecues = occupationsDe(b(), SERIE.aVenir1);
+    expect(occRecues).toHaveLength(2);
+    await unTour();
+
+    b().remiseAZero();
+    await annuler();
+    await attendre(() => messages().includes('modifié entre-temps'), `message « modifié entre-temps » (vus : ${messages()})`);
+    verifierOrdres(b());
+    expect(serie(b(), SERIE.aVenir1), 'aVenir1 garde ses nouvelles dates').toEqual(nouvelle);
+    expect(occupationsDe(b(), SERIE.aVenir1), 'ses occupations restent telles quelles').toEqual(occRecues);
+    occupationsValides(b(), SERIE.aVenir1);
+    const brute = (liste: readonly Ligne[], id: string) => liste.find((l) => l.id === id);
+    expect(etat(serie(b(), SERIE.aVenir2)), 'aVenir2 : défaite').toEqual(etat(brute(avant.series, SERIE.aVenir2)));
+    expect(occupationsDe(b(), SERIE.aVenir2).map(etat)).toEqual([etat(brute(avant.occupations, OCCUPATION.aVenir2))]);
+    expect(etat(itineraire(b(), ITINERAIRE.bataviaFerme)), 'l’itinéraire : défait').toEqual(avant.itineraire);
   });
 
   it('contrôle : rien n’a bougé ailleurs, l’annulation rétablit tout, sans message', async () => {
