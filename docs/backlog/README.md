@@ -51,4 +51,4 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 - Quantités calculées en nombres entiers quand un arrondi est en jeu ; pas de flottant avant l'arrondi final.
 - Textes de l'interface en français ; noms de code en français comme dans le modèle (`serie`, `emplacement`, `occupation`).
 - Fin de ticket : trois lignes dans `docs/journal.md` et le statut mis à jour dans ce tableau.
-| [T19](T19-tests-de-temps.md) | Tests de temps robustes sous charge | — | à faire |
+| [T19](T19-tests-de-temps.md) | Tests de temps robustes sous charge | — | fait |

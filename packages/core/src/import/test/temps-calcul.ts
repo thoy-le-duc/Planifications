@@ -11,8 +11,8 @@
  * fil oublierait. Le fil isolé vit dans le processus de ce seul fichier de test (vitest, pool
  * `forks` par défaut, qui attend pendant l'appel) ou dans un processus enfant (./isole.ts) :
  * rien d'autre n'y calcule. Le min avec le temps mural borne le tout (fils parallèles qui se
- * chevauchent, ou pool `threads` qui mêlerait d'autres fichiers) : jamais plus indulgent que
- * l'ancienne mesure murale.
+ * chevauchent, ou pool `threads` qui mêlerait d'autres fichiers) : jamais plus sévère que
+ * l'ancienne mesure murale, parfois plus indulgent (une attente sans calcul ne compte plus).
  */
 
 interface UsageCpu {

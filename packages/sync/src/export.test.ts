@@ -310,7 +310,8 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
    * l'export ; la mesure ne bouge plus. Un export vraiment plus lent consomme plus de CPU ET
    * de temps mural : il se voit toujours. Le min écarte le CPU des fils parallèles (zlib,
    * ramasse-miettes) qui se chevauchent, ou d'autres fichiers si vitest passait en pool
-   * `threads` : jamais plus indulgent que l'ancienne mesure murale.
+   * `threads` : jamais plus sévère que l'ancienne mesure murale, parfois plus indulgent (une
+   * attente sans calcul ne se voit plus ; l'e2e de l'écran d'export la couvrira).
    */
   let duree: number;
   /** Temps mural du même export, en ms, pour information seulement. */
@@ -487,7 +488,7 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
     }
     expect(archive.lignes).toEqual(attendu);
     expect(attendu.evenement).toBe(VOLUMES_T07.evenements);
-  });
+  }, 60_000);
 
   it('aucun identifiant de la ferme voisine, ni du refus de synchro, dans aucun fichier', () => {
     const vus = new Set<string>();
