@@ -36,6 +36,20 @@
 6. **Décision sur une alerte de rotation rouge** : une nouvelle colonne `serie.rotation_acceptee`, en jsonb nullable (`{ famille, delai_ans, le }`), par migration générée. Elle est validée par le cœur et passe d'elle-même dans `modification.apres`.
 7. **Exports du cœur pour T12** : `calculerDatesSerie`, `besoinsSerie` et `alertesRotation`, ou leurs noms réels.
 
+## Décisions du chef (après les tests)
+
+1. **Cohérence série ↔ occupations, vérifiée en fin de lot.** Chaque occupation active d'une série touchée garde les dates de sa série (de la mise en place à la fin de récolte). Décaler une série sans ses occupations est refusé. Supprimer une série en laissant une occupation active est refusé aussi.
+2. **`rotation_acceptee`** : `{ famille, delai_ans, le }`, sans autre clé.
+   - `famille` : identifiant (UUID) de la famille botanique en cause.
+   - `delai_ans` : entier de 0 à 100.
+   - `le` : instant ISO de la décision.
+3. **Rétablir une ligne supprimée** (PATCH de `supprime_le` à NULL) est accepté et s'inscrit comme une `modification` : c'est « annuler une annulation » de T12.
+4. **Même id, autres valeurs en PUT** : refusé avec le motif `ecriture_invalide` (pas `ajout_seul`, dont le message parle des événements).
+5. **Cohérence de la bibliothèque** : la variété d'une série appartient à son espèce, l'itinéraire aussi. Sinon : `ecriture_invalide`, à la création comme au PATCH.
+6. **Pas de création déjà supprimée** : un PUT de série ou d'occupation avec `supprime_le` non nul est refusé (`ecriture_invalide`).
+7. **Pas des refus serveur** : une mise en place hors de la saison et une occupation qui dépasse sa planche sont acceptées. Ce sont des alertes et des conflits affichés par T12 (T03), pas des règles d'écriture.
+8. **Plafonds provisoires** (`PLAFONDS_SERIE`) : fourchette du testeur (entre 1 000 et 1 000 000 m, entre 100 000 et 100 000 000 plants ; proposé : 10 000 m, 1 000 000 plants), à valider par Théophane avec Q13.
+
 ## Critères d'acceptation
 
 - [ ] Un test d'intégration Postgres par règle, y compris :

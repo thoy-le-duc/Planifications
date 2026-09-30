@@ -1120,4 +1120,91 @@ decrireAvecBase('T10e')('T10e : POST /sync/upload accepte les séries des télé
       }
     });
   });
+
+  // ── Décisions du chef après les tests : cohérence espèce, variété, itinéraire ──────────────
+
+  describe('décisions du chef : cohérence espèce, variété, itinéraire ; création déjà supprimée', () => {
+    /** Autre espèce de la ferme (chou), avec sa variété et son itinéraire. */
+    async function chou(): Promise<{ variete: string; itineraire: string }> {
+      const espece = await especeEn(ferme, famille);
+      return { variete: await varieteEn(ferme, espece), itineraire: await itineraireEn(ferme, espece) };
+    }
+
+    it('variété d’une autre espèce de la ferme : ecriture_invalide, rien d’écrit', async () => {
+      const { variete } = await chou();
+      const serie = putSerie({ variete_id: variete });
+      await refuseEnEntier([serie, putOccupation(serie, planche1)], serie, 'ecriture_invalide');
+    });
+
+    it('variété de la bibliothèque, d’une autre espèce que celle de la série : ecriture_invalide', async () => {
+      const serie = putSerie({ variete_id: varieteBibliotheque });
+      await refuseEnEntier([serie], serie, 'ecriture_invalide');
+    });
+
+    it('itinéraire d’une autre espèce de la ferme : ecriture_invalide, rien d’écrit', async () => {
+      const { itineraire: autre } = await chou();
+      const serie = putSerie({ itineraire_id: autre });
+      await refuseEnEntier([serie, putOccupation(serie, planche1)], serie, 'ecriture_invalide');
+    });
+
+    it('itinéraire de la bibliothèque, d’une autre espèce que celle de la série : ecriture_invalide', async () => {
+      const serie = putSerie({ itineraire_id: itineraireBibliotheque });
+      await refuseEnEntier([serie], serie, 'ecriture_invalide');
+    });
+
+    it('PATCH qui change la variété pour celle d’une autre espèce : refusé, rien ne change', async () => {
+      const { serie } = await serieAcceptee();
+      const { variete } = await chou();
+      const changee = patch('serie', serie.id, { variete_id: variete });
+      await refuseEnEntier([changee], changee, 'ecriture_invalide');
+    });
+
+    it('PATCH qui change l’espèce sans changer variété ni itinéraire : refusé', async () => {
+      const { serie } = await serieAcceptee();
+      const changee = patch('serie', serie.id, { espece_id: especeBibliotheque });
+      await refuseEnEntier([changee], changee, 'ecriture_invalide');
+    });
+
+    it('série sans variété (variete_id nul), itinéraire de son espèce : acceptée', async () => {
+      await serieAcceptee({ variete_id: null });
+    });
+
+    it('série créée déjà supprimée (PUT avec supprime_le) : ecriture_invalide, rien d’écrit', async () => {
+      const serie = putSerie({ supprime_le: '2026-10-01T06:30:00.000Z' });
+      await refuseEnEntier([serie, putOccupation(serie, planche1, { supprime_le: '2026-10-01T06:30:00.000Z' })], serie, 'ecriture_invalide');
+      expect(await ligne('serie', serie.id)).toBeNull();
+    });
+
+    it('occupation créée déjà supprimée (PUT avec supprime_le) : ecriture_invalide, la série du lot n’est pas écrite', async () => {
+      const serie = putSerie();
+      const occupation = putOccupation(serie, planche1, { supprime_le: '2026-10-01T06:30:00.000Z' });
+      await refuseEnEntier([serie, occupation, putOccupation(serie, planche2)], occupation, 'ecriture_invalide');
+    });
+
+    it('mise en place hors de la saison (2028 dans la saison 2027) : acceptée, c’est une alerte de T12, pas un refus', async () => {
+      const serie = putSerie({
+        ancre_type: 'plantation',
+        ancre_date: '2028-04-10',
+        prevu_semis_pepiniere: '2028-03-13',
+        prevu_mise_en_place: '2028-04-10',
+        prevu_debut_recolte: '2028-05-29',
+        prevu_fin_recolte: '2028-06-12',
+      });
+      const occupation = putOccupation(serie, planche1, { prevu_du: '2028-04-10', prevu_au: '2028-06-12' });
+      expect(await lot([serie, occupation])).toEqual({ refus: [] });
+      expect(await ligne('serie', serie.id)).toMatchObject({ saison_id: saison, prevu_mise_en_place: '2028-04-10' });
+    });
+
+    it('occupation plus longue que sa planche (45 m sur 30 m) : acceptée, c’est un conflit de T03, pas un refus', async () => {
+      const serie = putSerie({ longueur_m: 45 });
+      const occupation = putOccupation(serie, planche1, { longueur_m: 45 });
+      expect(await lot([serie, occupation])).toEqual({ refus: [] });
+      expect((await ligne('occupation', occupation.id))?.longueur_m).toBe(45);
+    });
+
+    it('tronçon qui dépasse le bout de la planche (position 20 m, 15 m sur 30 m) : accepté aussi', async () => {
+      const serie = putSerie({ longueur_m: 15 });
+      expect(await lot([serie, putOccupation(serie, planche1, { longueur_m: 15, position_m: 20 })])).toEqual({ refus: [] });
+    });
+  });
 });
