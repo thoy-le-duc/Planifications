@@ -23,6 +23,15 @@
 - **Plus aucun indice d'existence** : un PATCH ou un DELETE sur une ligne existante d'une autre ferme répond exactement comme sur un id inexistant. Le test M1 de T10 est adapté en conséquence. Un `ferme_id` étranger déclaré par l'écriture elle-même garde `ferme_interdite`.
 - **Tests existants adaptés** (T10, T10c) : les références étrangères passent de `ferme_interdite` à `ecriture_invalide`, et un lot trop gros reçoit 200 avec des refus au lieu de 400 ou 413.
 
+## Décisions du chef après la relecture de sécurité (2026-09-30)
+
+- **Amplification** (bloquant) : un envoi trop gros ne doit jamais produire des milliers de lignes de refus.
+  - Limites dures : au-delà de 2 000 écritures ou de **8 Mio** (au lieu de 32), réponse 413 et aucun refus enregistré.
+  - Entre 500 et 2 000 écritures, un refus `lot_trop_gros` n'est enregistré que pour une écriture plausible : table dans `TABLES_ECRITES`, id au format UUID, opération connue. Les refus sont dédupliqués par (table, id, opération), et tout le reste tient en une seule ligne récapitulative.
+  - Un vrai téléphone n'est jamais concerné : la porte est bornée à 500 ordres.
+- **Collision d'id avec une ligne d'une autre ferme** : limite acceptée, car structurelle (clé primaire commune à toutes les fermes). Un PUT qui reprend l'id d'une ligne d'une autre ferme reçoit la même réponse que pour un id existant de sa propre ferme avec d'autres valeurs. Aucune valeur de l'autre ferme ne fuit. Un test fige ce comportement.
+- **Suite** (ticket ultérieur) : délai court de lecture du corps et limite de débit par utilisateur ; contrôle préalable dans les migrations de données.
+
 ## Critères d'acceptation
 
 - [ ] Un test par règle.
