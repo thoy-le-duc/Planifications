@@ -7,7 +7,7 @@
  * itinéraire qui a des séries à venir demande d'abord « Appliquer aux N séries à venir ? ».
  */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
-import { CATEGORIES_AVEC_PRODUIT, type FaconDensite, type ModeItineraire, type RepereTravail } from '@planif/core';
+import { CATEGORIES_AVEC_PRODUIT, ECRITURES_MAX_PAR_LOT, type FaconDensite, type ModeItineraire, type RepereTravail } from '@planif/core';
 import {
   apercu,
   CATEGORIES,
@@ -49,7 +49,8 @@ export type DepartFormulaire =
 /** Saisie enregistrée, que le bandeau de l'écran peut défaire. */
 export interface SaisieAnnulable {
   readonly texte: string;
-  annuler(): Promise<void>;
+  /** Défait la saisie ; rend un message si une partie a été laissée (modifiée ailleurs). */
+  annuler(): Promise<string | null>;
 }
 
 export interface ProprietesFormulaire {
@@ -451,6 +452,9 @@ function ConfirmationSeries({ series, occupe, surAppliquer, surSeul, surRevenir 
     revenir.current?.focus();
   }, []);
   const n = series.length;
+  // Itinéraire + séries + occupations : au-delà du plafond d'une transaction, rien ne s'écrirait (décision 12).
+  const ecritures = 1 + n + series.reduce((t, s) => t + s.occupations, 0);
+  const tropGros = ecritures > ECRITURES_MAX_PAR_LOT;
   const titre = n === 1 ? 'Appliquer à la série à venir ?' : `Appliquer aux ${String(n)} séries à venir ?`;
   return (
     <div className="itin-voile-confirmation">
@@ -470,6 +474,11 @@ function ConfirmationSeries({ series, occupe, surAppliquer, surSeul, surRevenir 
       >
         <h3 id={idTitre}>{titre}</h3>
         <p>Les séries passées, commencées ou terminées ne bougent pas. {n === 1 ? 'Celle-ci recevra' : 'Celles-ci recevront'} le nouvel itinéraire et des dates recalculées :</p>
+        {tropGros && (
+          <p role="alert" className="itin-erreur">
+            Trop de séries en une fois ({String(ecritures)} écritures, {String(ECRITURES_MAX_PAR_LOT)} au plus) : utilisez « Itinéraire seul », puis modifiez les séries par petits groupes.
+          </p>
+        )}
         <ul className="itin-series">
           {series.map((s) => (
             <li key={s.id} data-testid="serie-a-venir" data-serie={s.id}>
@@ -481,7 +490,7 @@ function ConfirmationSeries({ series, occupe, surAppliquer, surSeul, surRevenir 
           ))}
         </ul>
         <div className="itin-confirmation-actions">
-          <button type="button" className="itin-bouton-principal" disabled={occupe} onClick={surAppliquer}>
+          <button type="button" className="itin-bouton-principal" disabled={occupe || tropGros} onClick={surAppliquer}>
             Appliquer aux séries
           </button>
           <button type="button" className="itin-bouton-secondaire" disabled={occupe} onClick={surSeul}>
@@ -567,6 +576,7 @@ export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, 
         { nom: String(ligne.nom), mode: String(ligne.mode), parametres: String(ligne.parametres) },
         seriesIds,
         types,
+        aujourdhui,
       );
       surEnregistre({ texte: String(ligne.nom), annuler: () => ramener(ctx, avant, types) });
       surFermer();

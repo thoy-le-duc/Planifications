@@ -190,7 +190,7 @@ export function EcranItineraires({ porte, fermeId, surFermer, aujourdhui = jourD
   const [depart, setDepart] = useState<(DepartFormulaire & { readonly numero: number }) | null>(null);
   const [renommer, setRenommer] = useState<TypeLu | null>(null);
   const [bandeau, setBandeau] = useState<Bandeau | null>(null);
-  const [echec, setEchec] = useState<string | null>(null);
+  const [echec, setEchec] = useState<{ readonly titre: string; readonly texte: string } | null>(null);
   const [categorie, setCategorie] = useState<CategorieIntervention>('entretien');
   const [nouveau, setNouveau] = useState('');
   const [messageType, setMessageType] = useState<string | null>(null);
@@ -263,10 +263,15 @@ export function EcranItineraires({ porte, fermeId, surFermer, aujourdhui = jourD
 
   function annuler(b: Bandeau): void {
     setBandeau(null);
-    b.annuler().catch((e: unknown) => {
-      console.error('Annulation impossible', e);
-      setEchec(`« ${b.texte} » reste enregistré tel quel : ${e instanceof EcritureRefusee ? e.message : 'la base du téléphone a refusé l’écriture'}.`);
-    });
+    b.annuler().then(
+      (laisse) => {
+        if (laisse !== null) setEchec({ titre: 'Annulation incomplète', texte: `« ${b.texte} » : ${laisse}.` });
+      },
+      (e: unknown) => {
+        console.error('Annulation impossible', e);
+        setEchec({ titre: 'Annulation impossible', texte: `« ${b.texte} » reste enregistré tel quel : ${e instanceof EcritureRefusee ? e.message : 'la base du téléphone a refusé l’écriture'}.` });
+      },
+    );
   }
 
   async function ajouter(): Promise<void> {
@@ -592,8 +597,8 @@ export function EcranItineraires({ porte, fermeId, surFermer, aujourdhui = jourD
           {echec !== null && bandeau === null && (
             <div role="alert" className="itin-bandeau itin-bandeau-echec">
               <span className="itin-bandeau-texte">
-                <strong>Annulation impossible</strong>
-                <span>{echec}</span>
+                <strong>{echec.titre}</strong>
+                <span>{echec.texte}</span>
               </span>
               <button
                 type="button"
