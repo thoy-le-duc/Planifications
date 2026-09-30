@@ -12,9 +12,12 @@
 - **Double téléchargement à la première visite.** PowerSync et le WASM sont peut-être chargés une fois par la page, puis une fois par le précache. À mesurer, et à éviter si c'est confirmé.
 - **Libellé des barres coupé à gauche.** Quand une barre commence avant la zone visible, son libellé est coupé (« spèce 34… »). Il faut le rendre collant à gauche à l'intérieur de la barre.
 - **Plus de deux sortes de conflit sur une planche.** L'étiquette déborde alors sur la ligne suivante. La rendre propre (par exemple « Chevauche +2 ») et ajouter un test.
-- **Zones supprimées.** `lireStructure` et `lireDebutDePlan` ne filtrent pas `zone.supprime_le`. À trancher avec le modèle de données.
+- **Zones supprimées.** `lireStructure`, `lireDebutDePlan` et la structure réservée pendant le début ne filtrent pas `zone.supprime_le`. À trancher avec le modèle de données.
 - **Écarts avec la maquette Plan.** Il manque les puces de zone, le surtitre « TUNNEL 2 · 6 PLANCHES · 30 M » et la carte d'alerte sous la légende.
 - **Marge des temps.** « Planches » (jusqu'à 313 ms) et la pire image au défilement (50,1 ms) ont dépassé une fois sur sept environ sous charge. Il faut trouver ce qui coûte (profil sur CPU ×4) plutôt que relever les budgets.
+
+- **Focus rendu à la fermeture.** Quand la feuille des conflits ou le détail d'une série se ferme, le focus revient à l'étiquette ou à la barre qui l'a ouverte (ou à la ligne, si la virtualisation l'a retirée du DOM).
+- **Hauteur réservée testée.** Un test vérifie que la hauteur réservée pendant le début égale celle du plan complet (zone sans emplacement, emplacement inactif).
 
 ## Critères d'acceptation
 
