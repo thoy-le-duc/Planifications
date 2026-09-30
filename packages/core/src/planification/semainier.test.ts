@@ -250,7 +250,9 @@ describe('types du module', () => {
       readonly code: string;
       readonly zone: string;
     }>();
-    expectTypeOf<SerieSemainier>().toEqualTypeOf<{
+    // T22 ajoute `travauxPrevus` (facultative) à la série et `interventions` (facultative) aux
+    // réalisés : ces clés sont vérifiées par travaux.test.ts ; le reste de T06 est inchangé.
+    expectTypeOf<Omit<SerieSemainier, 'travauxPrevus'>>().toEqualTypeOf<{
       readonly id: Id<'Serie'>;
       readonly statut: StatutSerie;
       readonly mode: ModeItineraire;
@@ -269,7 +271,7 @@ describe('types du module', () => {
       readonly nombrePlants: number;
       readonly emplacements: readonly EmplacementConcerne[];
     }>();
-    expectTypeOf<RealisesSemainier>().toEqualTypeOf<{
+    expectTypeOf<Omit<RealisesSemainier, 'interventions'>>().toEqualTypeOf<{
       readonly series: ReadonlyMap<Id<'Serie'>, RealisesSerie>;
       readonly campagnes: ReadonlyMap<Id<'Campagne'>, DateCalendaire>;
     }>();
@@ -277,7 +279,9 @@ describe('types du module', () => {
 
   it('la forme de la tâche', () => {
     expectTypeOf<EtapeTache>().toEqualTypeOf<EtapeRealisee | 'debut_recolte'>();
-    expectTypeOf<TacheSemainier>().toEqualTypeOf<{
+    // T22 : TacheSemainier devient une union ; les tâches d'étape de T06 gardent leur forme, les
+    // tâches de travail (etape 'travail') sont vérifiées par travaux.test.ts.
+    expectTypeOf<Extract<TacheSemainier, { readonly etape: EtapeTache }>>().toEqualTypeOf<{
       readonly etape: EtapeTache;
       readonly cible: CultureConcernee;
       readonly culture: string;
