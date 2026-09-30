@@ -383,6 +383,11 @@ async function modifier(
   if (existante === undefined) return invalide('ligne introuvable', null);
   const avant = existante.l;
   const fermeId = String(avant.ferme_id);
+  // Relecture de sécurité (décision 1) : seule une occupation de série se modifie depuis le
+  // téléphone, quoi que contienne le PATCH (une plantation ou une couverture ne devient pas une série).
+  if (e.table === 'occupation' && (avant.serie_id == null || avant.plantation_id != null || avant.evenement_id != null)) {
+    return invalide("cette occupation n'est pas celle d'une série : elle ne se modifie pas depuis le téléphone", fermeId);
+  }
 
   const fermeDemandee = e.donnees.ferme_id;
   if (fermeDemandee !== undefined && (typeof fermeDemandee !== 'string' || fermeDemandee.toLowerCase() !== fermeId)) {
@@ -396,7 +401,9 @@ async function modifier(
 
   if ((await identique(tx, e.table, ligne, valeur.id)) === true) return null;
 
-  const change = (colonne: string): boolean => JSON.stringify(ligne[colonne] ?? null) !== JSON.stringify(avant[colonne] ?? null);
+  // Rétablissement (décision 2) : toutes les références sont revérifiées, comme si elles changeaient.
+  const retablie = avant.supprime_le != null && valeur.supprimeLe === null;
+  const change = (colonne: string): boolean => retablie || JSON.stringify(ligne[colonne] ?? null) !== JSON.stringify(avant[colonne] ?? null);
   if (e.table === 'serie') {
     const refus = await verifierReferencesSerie(tx, valeur as Serie, {
       saison: change('saison_id'),
@@ -491,7 +498,9 @@ export async function verifierFinDeLot(
     const serie = validerSerie(ligne);
     if (!serie.ok) return { index, refus: invalide(`série illisible : ${serie.erreur.message}`, fermeId) };
     const occupations = await tx.execute<{ l: Ligne }>(
-      sql`SELECT to_jsonb(o) AS l FROM occupation o WHERE o.serie_id = ${serieId}::uuid AND o.supprime_le IS NULL ORDER BY o.id`,
+      // Décision 3 : seulement les occupations de la ferme de la série.
+      sql`SELECT to_jsonb(o) AS l FROM occupation o
+          WHERE o.serie_id = ${serieId}::uuid AND o.ferme_id = ${fermeId}::uuid AND o.supprime_le IS NULL ORDER BY o.id`,
     );
     if (occupations.rows.length > 0 && serie.valeur.supprimeLe !== null) {
       return { index, refus: invalide('série supprimée alors qu’une de ses occupations reste active', fermeId) };
