@@ -2,6 +2,15 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T11c : pages de test hors du site en production
+
+- **Fait** : le site mis en ligne (`pnpm build`) ne contient plus que l'appli. La page de diagnostic de synchro, qui écrivait dans une vraie ferme, la page d'amorçage (42 000 lignes chez le visiteur) et la page de mesure n'existent plus que dans le build des essais (`dist-essais/`), qui sert aux tests e2e. Le démarrage passe de 70,7 à 70,2 Kio, puisque le code de test n'est plus embarqué.
+- **Décidé** :
+  - le build de production n'accepte qu'une seule page, l'appli : toute autre page fait échouer le build ;
+  - le build des essais recopie l'appli à l'identique (vérifié octet pour octet, `sw.js` compris), puis ajoute les pages de test à côté ;
+  - il reconstruit toujours la production d'abord et ne peut jamais écraser `dist/`.
+- **Bloquant** : aucun. Le jour où l'on mettra en ligne : publier `apps/web/dist` seulement.
+
 ## 2026-09-30 — T13 : saisie au champ, hors ligne
 
 - **Fait** : l'écran Aujourd'hui, écran d'accueil de l'appli :
