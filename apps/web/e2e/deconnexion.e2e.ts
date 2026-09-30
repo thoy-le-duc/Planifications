@@ -310,6 +310,10 @@ test.describe('base ouverte dans un autre onglet (relecture sécurité)', () => 
   test('au démarrage, un effacement resté en attente est repris et terminé', async ({ page }) => {
     const autre = '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b99';
     await page.goto('/');
+    // T19 : attendre l'écran de connexion avant de préparer. Sinon, sur une machine lente, il
+    // démarre après la marque posée ci-dessous et reprend l'effacement avant le premier
+    // contrôle (base déjà effacée, CI de la PR #27). La reprise au rechargement reste vérifiée.
+    await expect(page.getByLabel(/adresse e-mail/i)).toBeVisible();
     await creerBase(page, nomBase(autre), false);
     await page.evaluate(([cle, valeur]) => {
       localStorage.setItem(cle, valeur);

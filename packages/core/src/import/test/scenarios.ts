@@ -6,9 +6,8 @@
  */
 import { chargerImport, chargerXlsx, type CleChamp, type LigneBrute, type PlanImport, type TexteDecode, type TypeContenu } from './contrat.ts';
 import { BIBLIOTHEQUE } from './fixtures.ts';
+import { chronometre } from './temps-calcul.ts';
 
-/** Présent dans Node, absent des types du cœur (lib ES2023 seule). */
-const { performance } = globalThis as unknown as { readonly performance: { now(): number } };
 
 export interface ResumePlan {
   readonly champs: readonly (CleChamp | null)[];
@@ -44,9 +43,9 @@ function resumer(plan: PlanImport, champs: readonly (CleChamp | null)[], dureePl
 async function preparer(lignes: readonly LigneBrute[], ligneEntete: number, type: TypeContenu): Promise<ResumePlan> {
   const m = await chargerImport();
   const correspondance = m.proposerCorrespondance(lignes[ligneEntete] ?? [], type);
-  const debut = performance.now();
+  const duree = chronometre(); // T19 : min(mural, CPU du processus)
   const plan = m.preparerImport({ lignes, ligneEntete, correspondance, bibliotheque: BIBLIOTHEQUE, anneeSaison: 2027 });
-  const dureePlanMs = performance.now() - debut;
+  const dureePlanMs = duree();
   return resumer(plan, correspondance.colonnes.map((c) => c.champ), dureePlanMs);
 }
 

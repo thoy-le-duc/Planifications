@@ -48,8 +48,16 @@ export interface MesureTache {
   readonly plusLongue: number;
   /** Plus long écart MURAL entre deux tours (préemption par le système comprise), en ms ; pour information. */
   readonly plusLongueMurale: number;
-  /** Durée de l'export, en ms. */
+  /** Durée MURALE de l'export, en ms ; pour information (T19). */
   readonly duree: number;
+  /**
+   * Durée de calcul de l'export (T19), en ms : min(mural, temps CPU du PROCESSUS). Le processus
+   * (ce script) ne fait que l'export pendant la mesure ; son temps CPU compte aussi les fils de
+   * node:zlib (compresseurNode) et du ramasse-miettes, que le CPU du fil seul oublierait. Une
+   * machine chargée allonge le temps mural, pas le temps CPU ; le min écarte le CPU des fils
+   * parallèles qui se chevauchent (jamais plus que le temps réellement attendu).
+   */
+  readonly calcul: number;
 }
 
 export interface ResultatMesures {
@@ -101,6 +109,12 @@ const cpuMs: () => number = (() => {
   };
 })();
 
+/** Temps CPU du processus entier (tous fils : zlib, ramasse-miettes), en ms. */
+function cpuProcessusMs(): number {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+}
+
 /**
  * Plus long calcul entre deux tours d'une minuterie de 1 ms pendant `f` : pour chaque intervalle,
  * min(temps mural, temps CPU). Préempté par le système : mural long, CPU court → ne compte pas.
@@ -121,13 +135,16 @@ async function plusLongueTache(f: () => Promise<unknown>): Promise<MesureTache> 
   };
   const minuterie = setInterval(releve, 1);
   const debut = performance.now();
+  const debutCpu = cpuProcessusMs();
   try {
     await f();
   } finally {
     clearInterval(minuterie);
   }
   releve();
-  return { plusLongue, plusLongueMurale, duree: performance.now() - debut };
+  const cpu = cpuProcessusMs() - debutCpu;
+  const duree = performance.now() - debut;
+  return { plusLongue, plusLongueMurale, duree, calcul: Math.min(duree, cpu) };
 }
 
 /** 40 Mio de caractères de CSV, en morceaux d'environ 16 000 caractères (des lignes entières). */

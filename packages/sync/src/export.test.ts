@@ -276,6 +276,21 @@ describe('T15 : TABLES_EXPORTEES suit le schéma local (powersync/sync-config.ya
 
 // ── exporterFerme sur la ferme de T07 ────────────────────────────────────────────────────────
 
+/**
+ * Temps CPU du processus, en ms (T19).
+ *
+ * `exporterFerme` ne calcule pas que sur le fil du test : la compression par défaut
+ * (`CompressionStream` de Node) confie le deflate à node:zlib, sur les fils de libuv, en
+ * parallèle ; le ramasse-miettes aussi a ses fils. Le temps CPU du fil seul
+ * (`process.threadCpuUsage`) oublierait toute la compression. On prend celui du PROCESSUS
+ * (`process.cpuUsage`, tous fils) : vitest lance chaque fichier de test dans son propre
+ * processus (pool `forks`, par défaut) et, pendant le `beforeAll`, seul l'export y calcule.
+ */
+function cpuMs(): number {
+  const u = process.cpuUsage();
+  return (u.user + u.system) / 1000;
+}
+
 interface FermeJson {
   tables: Record<string, unknown[]>;
   bibliotheque: Record<string, unknown[]>;
@@ -288,8 +303,19 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
   let porte: PorteDonnees;
   let archive: ArchiveExport;
   let entrees: EntreeZip[];
-  /** Durée du premier export (à froid), en ms. */
+  /**
+   * Durée du premier export (à froid), en ms, comptée en temps CPU (T19) : min(mural, CPU du
+   * processus). Machine chargée (autres tests, autre équipe) : le système préempte le
+   * processus, le temps mural s'allonge mais pas le temps CPU, qui ne compte que le calcul de
+   * l'export ; la mesure ne bouge plus. Un export vraiment plus lent consomme plus de CPU ET
+   * de temps mural : il se voit toujours. Le min écarte le CPU des fils parallèles (zlib,
+   * ramasse-miettes) qui se chevauchent, ou d'autres fichiers si vitest passait en pool
+   * `threads` : jamais plus sévère que l'ancienne mesure murale, parfois plus indulgent (une
+   * attente sans calcul ne se voit plus ; l'e2e de l'écran d'export la couvrira).
+   */
   let duree: number;
+  /** Temps mural du même export, en ms, pour information seulement. */
+  let dureeMurale: number;
   /** Appels d'avancement du premier export (T15b). */
   const appels: Avancement[] = [];
 
@@ -299,6 +325,7 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
     porte = creerPorte(base, { utilisateurId: jeu.utilisateurId as Id<'Utilisateur'>, fermeId: jeu.principale.fermeId as Id<'Ferme'> });
     exporterFerme = await exigerExporterFerme();
     const debut = performance.now();
+    const debutCpu = cpuMs();
     archive = await exporterFerme(porte, {
       fermeId: jeu.principale.fermeId,
       genereLe: GENERE_LE,
@@ -307,7 +334,9 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
         appels.push({ fait: a.fait, total: a.total });
       },
     });
-    duree = performance.now() - debut;
+    const cpu = cpuMs() - debutCpu;
+    dureeMurale = performance.now() - debut;
+    duree = Math.min(dureeMurale, cpu);
     entrees = lireZip(archive.octets);
   }, 60_000);
 
@@ -333,8 +362,10 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
     return r;
   }
 
-  it('temps : premier export complet (à froid) en moins de 2,5 s sous Node (≈ 10 s CPU ralenti ×4, voir contrat-export.ts)', () => {
-    console.info(`T15 : export de la ferme de T07 en ${duree.toFixed(0)} ms, archive de ${(archive.octets.length / 1_048_576).toFixed(1)} Mio`);
+  it('temps : premier export complet (à froid) en moins de 2,5 s de calcul sous Node (≈ 10 s CPU ralenti ×4, voir contrat-export.ts ; min(mural, CPU), T19)', () => {
+    console.info(
+      `T15 : export de la ferme de T07 en ${duree.toFixed(0)} ms de calcul (mural ${dureeMurale.toFixed(0)} ms), archive de ${(archive.octets.length / 1_048_576).toFixed(1)} Mio`,
+    );
     expect(duree).toBeLessThan(2500);
   });
 
@@ -457,7 +488,7 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
     }
     expect(archive.lignes).toEqual(attendu);
     expect(attendu.evenement).toBe(VOLUMES_T07.evenements);
-  });
+  }, 60_000);
 
   it('aucun identifiant de la ferme voisine, ni du refus de synchro, dans aucun fichier', () => {
     const vus = new Set<string>();

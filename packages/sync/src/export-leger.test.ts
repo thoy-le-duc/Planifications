@@ -99,8 +99,11 @@ describe('T15b : export léger, ferme de T07 (processus isolé)', () => {
     expect(c.unMorceau.pic, `un morceau ${mio(c.unMorceau.pic)}, en morceaux ${mio(c.morceaux.pic)}`).toBeLessThanOrEqual(c.morceaux.pic + MARGE);
   });
 
-  it('temps : construireArchive de T07 (sans lecture) sous 2,5 s, même en rendant la main', () => {
-    for (const x of r.taches ?? []) expect(x.duree).toBeLessThan(2500);
+  it('temps : construireArchive de T07 (sans lecture) sous 2,5 s de calcul, même en rendant la main (min(mural, CPU), T19)', () => {
+    // T19 : temps de calcul (voir MesureTache.calcul), pas temps mural : une machine chargée ne fait plus échouer.
+    const t = r.taches ?? [];
+    const detail = t.map((x) => `${x.calcul.toFixed(0)} ms de calcul (${x.duree.toFixed(0)} ms murales)`).join(', ');
+    for (const x of t) expect(x.calcul, detail).toBeLessThan(2500);
     expect(r.taches?.length).toBe(3);
   });
 });
