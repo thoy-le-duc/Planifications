@@ -12,6 +12,7 @@
 import {
   calculerDatesSerie,
   creerGenerateurId,
+  ECRITURES_MAX_PAR_LOT,
   validerItineraire,
   validerOccupation,
   validerSerie,
@@ -22,6 +23,7 @@ import {
 } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees } from '@planif/sync';
 import { typesPermis, type Ligne, type TypeLu, type Valeur } from './calculs.ts';
+import { conditionAVenir, parametresAVenir } from './donnees.ts';
 
 /** Écriture refusée avant l'envoi (règle du serveur), avec un message clair. */
 export class EcritureRefusee extends Error {}
@@ -55,12 +57,6 @@ function mettreAJour(table: Table, avant: Ligne, valeurs: Readonly<Record<string
   };
 }
 
-function extraire(l: Ligne, colonnes: readonly string[]): Record<string, Valeur> {
-  const r: Record<string, Valeur> = {};
-  for (const c of colonnes) r[c] = l[c] ?? null;
-  return r;
-}
-
 async function lireLigne(porte: PorteDonnees, table: Table, id: string): Promise<Ligne | null> {
   const l = await porte.lire<Ligne>(`SELECT * FROM ${table} WHERE id = ?`, [id]);
   return l[0] ?? null;
@@ -84,16 +80,46 @@ function occupationValide(l: Ligne, serie: Serie): void {
 
 // ── Itinéraires ──────────────────────────────────────────────────────────────────────────────
 
-const COLONNES_ITINERAIRE = ['nom', 'mode', 'parametres', 'supprime_le'] as const;
-const COLONNES_SERIE = ['parametres', 'prevu_semis_pepiniere', 'prevu_mise_en_place', 'prevu_debut_recolte', 'prevu_fin_recolte'] as const;
-const COLONNES_OCCUPATION = ['prevu_du', 'prevu_au'] as const;
+/**
+ * Une ligne écrite : les colonnes changées, leurs valeurs d'avant et celles que nous avons
+ * écrites, et `supprime_le` après notre écriture. « Annuler » ne ramène que cela (décision 9).
+ */
+export interface LigneEcrite {
+  readonly table: Table;
+  readonly id: string;
+  readonly avant: Readonly<Record<string, Valeur>>;
+  readonly apres: Readonly<Record<string, Valeur>>;
+  readonly supprimeLe: Valeur;
+  /** Série de l'occupation (pour la valider contre la série ramenée). */
+  readonly serieId: string | null;
+}
 
-/** Ce qu'une écriture a changé, pour la défaire (lignes d'avant, telles quelles). */
+/** Ce qu'une écriture a changé, pour la défaire. */
 export interface EtatAvant {
-  readonly itineraires: readonly Ligne[];
-  readonly series: readonly Ligne[];
-  readonly occupations: readonly Ligne[];
-  readonly types: readonly Ligne[];
+  readonly lignes: readonly LigneEcrite[];
+}
+
+/** Trace d'un UPDATE : les seules colonnes qui changent. */
+function trace(table: Table, avant: Ligne, valeurs: Readonly<Record<string, Valeur>>): LigneEcrite | null {
+  const changees = Object.keys(valeurs).filter((c) => (valeurs[c] ?? null) !== (avant[c] ?? null));
+  if (changees.length === 0) return null;
+  const a: Record<string, Valeur> = {};
+  const b: Record<string, Valeur> = {};
+  for (const c of changees) {
+    a[c] = avant[c] ?? null;
+    b[c] = valeurs[c] ?? null;
+  }
+  const supprimeLe = 'supprime_le' in b ? (b.supprime_le ?? null) : (avant.supprime_le ?? null);
+  return { table, id: String(avant.id), avant: a, apres: b, supprimeLe, serieId: typeof avant.serie_id === 'string' ? avant.serie_id : null };
+}
+
+/** UPDATE des colonnes de la trace, avec une condition SQL de plus (revérification à l'écriture). */
+function ordreDe(t: LigneEcrite, iso: string, condition = '', parametres: readonly unknown[] = []): OrdreEcriture {
+  const cles = Object.keys(t.apres);
+  return {
+    sql: `UPDATE ${t.table} SET ${cles.map((c) => `${c} = ?`).join(', ')}, modifie_le = ? WHERE id = ?${condition}`,
+    parametres: [...cles.map((c) => t.apres[c] ?? null), iso, t.id, ...parametres],
+  };
 }
 
 /** Création (« Nouvel itinéraire » ou adaptation) : un INSERT. `ligne` : colonnes validées, sans horodatages. */
@@ -109,7 +135,8 @@ export async function creerItineraire(ctx: ContexteEcriture, ligne: Ligne, types
  * Modification : UPDATE de l'itinéraire (nom, mode, parametres), et, pour chaque série de
  * `seriesIds` (les séries à venir), l'instantané fidèle (le texte même de l'itinéraire), ses
  * dates recalculées par le cœur depuis son ancre inchangée, et ses occupations actives. Une seule
- * transaction. Rend l'état d'avant (pour « Annuler »).
+ * transaction, où le caractère « à venir » de chaque série est revérifié (décision 11) : une série
+ * commencée entre-temps n'est pas touchée, ni ses occupations. Rend ce qui a été écrit.
  */
 export async function modifierItineraire(
   ctx: ContexteEcriture,
@@ -117,6 +144,7 @@ export async function modifierItineraire(
   valeurs: { readonly nom: string; readonly mode: string; readonly parametres: string },
   seriesIds: readonly string[],
   types: readonly TypeLu[],
+  aujourdhui: string,
 ): Promise<EtatAvant> {
   const avant = await lireLigne(ctx.porte, 'itineraire', id);
   if (avant?.supprime_le !== null) throw new EcritureRefusee('cet itinéraire n’existe plus sur ce téléphone');
@@ -124,11 +152,13 @@ export async function modifierItineraire(
   const iso = ctx.maintenant().toISOString();
   itineraireValide({ ...avant, ...valeurs, modifie_le: iso }, types);
   const ordres: OrdreEcriture[] = [];
-  const ordre = mettreAJour('itineraire', avant, valeurs, iso);
-  if (ordre !== null) ordres.push(ordre);
+  const lignes: LigneEcrite[] = [];
+  const t = trace('itineraire', avant, valeurs);
+  if (t !== null) {
+    ordres.push(ordreDe(t, iso));
+    lignes.push(t);
+  }
 
-  const series: Ligne[] = [];
-  const occupations: Ligne[] = [];
   if (seriesIds.length > 0) {
     const marques = seriesIds.map(() => '?').join(', ');
     const [lues, occ] = await Promise.all([
@@ -136,6 +166,7 @@ export async function modifierItineraire(
       ctx.porte.lire<Ligne>(`SELECT * FROM occupation WHERE serie_id IN (${marques}) AND supprime_le IS NULL ORDER BY id`, seriesIds),
     ]);
     const parametres = JSON.parse(valeurs.parametres) as ParametresDatesSerie;
+    const aVenir = parametresAVenir(ctx.fermeId, aujourdhui);
     for (const s of lues) {
       if (s.itineraire_id !== id || s.supprime_le !== null) continue;
       const ancre = { type: s.ancre_type, date: s.ancre_date } as AncreSerie;
@@ -153,35 +184,38 @@ export async function modifierItineraire(
         prevu_fin_recolte: d.finRecolte,
       };
       const lue = serieValide({ ...s, ...nouvelles, modifie_le: iso });
-      series.push(s);
-      const o = mettreAJour('serie', s, nouvelles, iso);
-      if (o !== null) ordres.push(o);
+      // Occupations d'abord : la condition « à venir » se lit sur la série encore inchangée.
       for (const x of occ.filter((y) => y.serie_id === s.id)) {
         const dates = { prevu_du: d.miseEnPlace, prevu_au: d.finRecolte };
         occupationValide({ ...x, ...dates, modifie_le: iso }, lue);
-        occupations.push(x);
-        const u = mettreAJour('occupation', x, dates, iso);
-        if (u !== null) ordres.push(u);
+        const to = trace('occupation', x, dates);
+        if (to === null) continue;
+        ordres.push(ordreDe(to, iso, ` AND serie_id IN (SELECT s.id FROM serie s WHERE s.id = ? AND s.itineraire_id = ? AND ${conditionAVenir('s')})`, [s.id, id, ...aVenir]));
+        lignes.push(to);
       }
+      const ts = trace('serie', s, nouvelles);
+      if (ts === null) continue;
+      ordres.push(ordreDe(ts, iso, ` AND id IN (SELECT s.id FROM serie s WHERE s.id = ? AND s.itineraire_id = ? AND ${conditionAVenir('s')})`, [s.id, id, ...aVenir]));
+      lignes.push(ts);
     }
   }
+  if (ordres.length > ECRITURES_MAX_PAR_LOT) throw new EcritureRefusee('trop de séries en une fois : utilisez « Itinéraire seul »');
   await ctx.porte.ecrireEnsemble(ordres);
-  return { itineraires: [avant], series, occupations, types: [] };
+  return { lignes };
 }
 
 /** Annuler une création d'itinéraire : suppression douce. */
-export async function supprimerItineraire(ctx: ContexteEcriture, id: string, types: readonly TypeLu[]): Promise<void> {
+export async function supprimerItineraire(ctx: ContexteEcriture, id: string, types: readonly TypeLu[]): Promise<null> {
   const courant = await lireLigne(ctx.porte, 'itineraire', id);
-  if (courant?.supprime_le !== null) return;
+  if (courant?.supprime_le !== null) return null;
   const iso = ctx.maintenant().toISOString();
   itineraireValide({ ...courant, supprime_le: iso, modifie_le: iso }, types);
   const o = mettreAJour('itineraire', courant, { supprime_le: iso }, iso);
   if (o !== null) await ctx.porte.ecrireEnsemble([o]);
+  return null;
 }
 
 // ── Types d'intervention ─────────────────────────────────────────────────────────────────────
-
-const COLONNES_TYPE = ['libelle', 'masque', 'supprime_le'] as const;
 
 /** Ajout : un INSERT ; `libelle` déjà normalisé. Rend l'id. */
 export async function ajouterType(ctx: ContexteEcriture, categorie: string, libelle: string): Promise<string> {
@@ -193,7 +227,7 @@ export async function ajouterType(ctx: ContexteEcriture, categorie: string, libe
   return String(ligne.id);
 }
 
-/** Renommer ou masquer / afficher un type de la ferme : un UPDATE. Rend l'état d'avant. */
+/** Renommer ou masquer / afficher un type de la ferme : un UPDATE. Rend ce qui a été écrit. */
 export async function modifierType(ctx: ContexteEcriture, id: string, valeurs: { readonly libelle?: string; readonly masque?: 0 | 1 }): Promise<EtatAvant> {
   const avant = await lireLigne(ctx.porte, 'type_intervention', id);
   if (avant?.supprime_le !== null) throw new EcritureRefusee('ce type n’existe plus sur ce téléphone');
@@ -201,62 +235,74 @@ export async function modifierType(ctx: ContexteEcriture, id: string, valeurs: {
   const iso = ctx.maintenant().toISOString();
   const r = validerTypeIntervention({ ...avant, ...valeurs, modifie_le: iso });
   if (!r.ok) throw new EcritureRefusee(r.erreur.message);
-  const o = mettreAJour('type_intervention', avant, valeurs, iso);
-  if (o !== null) await ctx.porte.ecrireEnsemble([o]);
-  return { itineraires: [], series: [], occupations: [], types: [avant] };
+  const t = trace('type_intervention', avant, valeurs);
+  if (t !== null) await ctx.porte.ecrireEnsemble([ordreDe(t, iso)]);
+  return { lignes: t === null ? [] : [t] };
 }
 
 /** Annuler un ajout de type : suppression douce. */
-export async function supprimerType(ctx: ContexteEcriture, id: string): Promise<void> {
+export async function supprimerType(ctx: ContexteEcriture, id: string): Promise<null> {
   const courant = await lireLigne(ctx.porte, 'type_intervention', id);
-  if (courant?.supprime_le !== null) return;
+  if (courant?.supprime_le !== null) return null;
   const iso = ctx.maintenant().toISOString();
   const o = mettreAJour('type_intervention', courant, { supprime_le: iso }, iso);
   if (o !== null) await ctx.porte.ecrireEnsemble([o]);
+  return null;
 }
 
 // ── Annuler ──────────────────────────────────────────────────────────────────────────────────
 
+/** Message d'une annulation incomplète (décision 9). */
+export function messageModifieAilleurs(n: number): string {
+  return `ce qui a été modifié entre-temps sur un autre téléphone est gardé tel quel (${String(n)} ${n > 1 ? 'lignes' : 'ligne'})`;
+}
+
 /**
- * Ramène chaque ligne de `avant` à ses valeurs (hors horodatages), en UNE transaction. Chaque
- * ligne ramenée est d'abord validée comme à l'écriture.
+ * Défait une écriture, en UNE transaction, colonne par colonne et ligne par ligne (décision 9) :
+ * une ligne n'est ramenée que si chaque colonne que nous avions changée vaut encore ce que nous
+ * avions écrit, et que personne ne l'a supprimée ; ramenée, seules ces colonnes reprennent leur
+ * valeur d'avant (ce qu'un autre téléphone a changé ailleurs reste). Sinon la ligne est laissée
+ * telle quelle (et les occupations d'une série laissée aussi). Une ligne que notre écriture n'a
+ * finalement pas touchée (revérification, décision 11) est ignorée. Rend le message à montrer
+ * si des lignes ont été laissées, sinon null.
  */
-export async function ramener(ctx: ContexteEcriture, avant: EtatAvant, types: readonly TypeLu[]): Promise<void> {
+export async function ramener(ctx: ContexteEcriture, etat: EtatAvant, types: readonly TypeLu[]): Promise<string | null> {
   const iso = ctx.maintenant().toISOString();
   const ordres: OrdreEcriture[] = [];
-  const lire = async (table: Table, lignes: readonly Ligne[]) => {
-    const courantes = await Promise.all(lignes.map((l) => lireLigne(ctx.porte, table, String(l.id))));
-    return lignes.flatMap((l, i) => {
-      const c = courantes[i];
-      return c === null || c === undefined ? [] : [{ cible: l, courante: c }];
-    });
-  };
-  for (const { cible, courante } of await lire('itineraire', avant.itineraires)) {
-    const valeurs = extraire(cible, COLONNES_ITINERAIRE);
-    itineraireValide({ ...courante, ...valeurs }, types);
-    const o = mettreAJour('itineraire', courante, valeurs, iso);
-    if (o !== null) ordres.push(o);
-  }
+  const courantes = await Promise.all(etat.lignes.map((l) => lireLigne(ctx.porte, l.table, l.id)));
+  const laissees = new Set<string>();
   const seriesRamenees = new Map<string, Serie>();
-  for (const { cible, courante } of await lire('serie', avant.series)) {
-    const valeurs = extraire(cible, COLONNES_SERIE);
-    seriesRamenees.set(String(courante.id), serieValide({ ...courante, ...valeurs }));
-    const o = mettreAJour('serie', courante, valeurs, iso);
-    if (o !== null) ordres.push(o);
-  }
-  for (const { cible, courante } of await lire('occupation', avant.occupations)) {
-    const valeurs = extraire(cible, COLONNES_OCCUPATION);
-    const serie = seriesRamenees.get(String(courante.serie_id));
-    if (serie !== undefined && courante.supprime_le === null) occupationValide({ ...courante, ...valeurs }, serie);
-    const o = mettreAJour('occupation', courante, valeurs, iso);
-    if (o !== null) ordres.push(o);
-  }
-  for (const { cible, courante } of await lire('type_intervention', avant.types)) {
-    const valeurs = extraire(cible, COLONNES_TYPE);
-    const r = validerTypeIntervention({ ...courante, ...valeurs });
-    if (!r.ok) throw new EcritureRefusee(r.erreur.message);
-    const o = mettreAJour('type_intervention', courante, valeurs, iso);
-    if (o !== null) ordres.push(o);
+  let refusees = 0;
+  const vaut = (c: Ligne, valeurs: Readonly<Record<string, Valeur>>) => Object.keys(valeurs).every((k) => (c[k] ?? null) === (valeurs[k] ?? null));
+  const ordreTables: readonly Table[] = ['itineraire', 'serie', 'occupation', 'type_intervention'];
+  for (const table of ordreTables) {
+    etat.lignes.forEach((l, i) => {
+      if (l.table !== table) return;
+      const c = courantes[i] ?? null;
+      if (c !== null && vaut(c, l.avant)) return; // pas touchée par nous
+      const intacte = c !== null && vaut(c, l.apres) && (c.supprime_le ?? null) === l.supprimeLe && !(l.serieId !== null && laissees.has(l.serieId));
+      let valide = intacte;
+      if (c !== null && intacte) {
+        const ramenee = { ...c, ...l.avant };
+        if (table === 'itineraire') valide = validerItineraire({ ...ramenee }, { typesIntervention: typesPermis(types) }).ok;
+        else if (table === 'type_intervention') valide = validerTypeIntervention({ ...ramenee }).ok;
+        else if (table === 'serie') {
+          const r = validerSerie({ ...ramenee });
+          valide = r.ok;
+          if (r.ok) seriesRamenees.set(l.id, r.valeur);
+        } else {
+          const serie = l.serieId === null ? undefined : seriesRamenees.get(l.serieId);
+          valide = serie === undefined || ramenee.supprime_le !== null || validerOccupation({ ...ramenee }, serie, { datesDeLaSerie: true }).ok;
+        }
+      }
+      if (c === null || !valide) {
+        refusees++;
+        laissees.add(l.id);
+        return;
+      }
+      ordres.push(ordreDe({ ...l, apres: l.avant }, iso));
+    });
   }
   await ctx.porte.ecrireEnsemble(ordres);
+  return refusees === 0 ? null : messageModifieAilleurs(refusees);
 }
