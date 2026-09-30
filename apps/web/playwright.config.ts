@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 // Chromium déjà installé sur la machine (facultatif) ; sinon celui de Playwright.
 const executablePath = process.env.CHROMIUM_PATH;
+// Port de la préversion : 4173 par défaut ; E2E_PORT_APPLI pour que deux équipes lancent
+// `pnpm e2e` en même temps sans réutiliser le serveur de l'autre (T20).
+const port = process.env.E2E_PORT_APPLI ?? '4173';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -12,12 +15,12 @@ export default defineConfig({
   reporter: process.env.CI ? 'github' : 'list',
   use: {
     ...devices['Pixel 7'],
-    baseURL: 'http://localhost:4173',
+    baseURL: `http://localhost:${port}`,
     launchOptions: executablePath ? { executablePath } : {},
   },
   webServer: {
-    command: 'pnpm preview --port 4173 --strictPort',
-    url: 'http://localhost:4173',
+    command: `pnpm preview --port ${port} --strictPort`,
+    url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI,
   },
 });

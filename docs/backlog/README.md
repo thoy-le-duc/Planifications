@@ -53,4 +53,5 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 - Textes de l'interface en français ; noms de code en français comme dans le modèle (`serie`, `emplacement`, `occupation`).
 - Fin de ticket : trois lignes dans `docs/journal.md` et le statut mis à jour dans ce tableau.
 | [T19](T19-tests-de-temps.md) | Tests de temps robustes sous charge | — | fait |
+| [T20](T20-main-verte.md) | Main verte : service worker après le premier affichage, mesures e2e stables | T11 | fait |
 | [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | à faire |
