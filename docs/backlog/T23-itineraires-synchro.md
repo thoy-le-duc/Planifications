@@ -21,3 +21,15 @@
 
 - [ ] Un test d'intégration par règle, dont l'écriture dans la bibliothèque commune (refusée) et celle d'une autre ferme (refusée).
 - [ ] e2e à deux téléphones : un itinéraire créé hors ligne sur A arrive chez B.
+
+## Décisions du chef (après les tests)
+
+1. **Périmètre élargi** à ce qu'exige la table : `packages/db`, `packages/sync/src/schema.ts` et `powersync/sync-config.yaml`, `packages/core/src/domaine`, `packages/core/src/export/tables.ts` (la table part dans l'export complet), la page de diagnostic du banc `e2e:synchro`.
+2. **Liste de départ = lignes à `ferme_id` nul** insérées par migration, en lecture seule comme la bibliothèque. Masquer un type de départ pour une ferme est laissé à T24 (à concevoir avec l'écran).
+3. **« Utilisé »** = présent dans les travaux d'un itinéraire non supprimé de la ferme ; séries et événements ne bloquent pas.
+4. **Un type masqué reste valide** pour le serveur ; un type supprimé est refusé.
+5. **Les itinéraires désignent un type par son libellé**, donc :
+   - renommer un type utilisé, ou changer sa catégorie, est refusé (`ecriture_invalide`) : on en crée un autre et on masque l'ancien ;
+   - (catégorie, libellé) est unique parmi les types non supprimés d'une ferme, y compris face à la liste de départ.
+6. **Nom d'un itinéraire** : 1 à 80 caractères après suppression des espaces de bord.
+7. **Motifs** : `ferme_id` nul en PUT, ou PATCH de `ferme_id` (vers une autre ferme ou NULL) → `ecriture_invalide`.
