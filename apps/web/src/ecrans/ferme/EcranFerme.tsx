@@ -11,7 +11,9 @@
  * l'effacement. Dès que la déconnexion est décidée, le bouton d'export est désactivé et un export
  * en cours est annulé (téléphone partagé : aucune archive ne sort après). L'annulation rejette
  * tout de suite côté export, mais une lecture de page déjà partie dans la porte continue : la
- * base n'est fermée qu'une fois toutes les lectures de l'export terminées (relecture T16b).
+ * base n'est fermée qu'une fois toutes les lectures de l'export terminées (relecture T16b), ou
+ * au plus tard après DELAI_FERMETURE_MS : une lecture qui ne revient jamais (worker planté,
+ * verrou d'un autre onglet) ne doit pas empêcher d'effacer le téléphone.
  */
 import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { urlApi } from '../../connexion/client.ts';
@@ -64,6 +66,26 @@ type EtatExport =
 interface ExportEnCours {
   readonly controleur: AbortController;
   readonly fin: Promise<void>;
+}
+
+/** Attente maximale des lectures de l'export encore en vol avant de fermer la base (déconnexion). */
+const DELAI_FERMETURE_MS = 2_000;
+
+/** Attend la fin des lectures suivies, au plus DELAI_FERMETURE_MS ; ne rejette jamais, ne laisse aucune minuterie. */
+async function attendreLectures(lectures: ReadonlySet<Promise<unknown>>): Promise<void> {
+  if (lectures.size === 0) return;
+  let minuterie: ReturnType<typeof setTimeout> | undefined;
+  const limite = new Promise<void>((fin) => {
+    minuterie = setTimeout(fin, DELAI_FERMETURE_MS);
+  });
+  const toutes = (async () => {
+    while (lectures.size > 0) await Promise.allSettled([...lectures]);
+  })();
+  try {
+    await Promise.race([toutes, limite]);
+  } finally {
+    clearTimeout(minuterie);
+  }
 }
 
 const nombre = new Intl.NumberFormat('fr-FR');
@@ -242,7 +264,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
         setEtatExport({ etape: 'echec' });
       } finally {
         // Annulé : l'export a rejeté tout de suite, mais une lecture de page peut être en vol.
-        while (lectures.size > 0) await Promise.allSettled([...lectures]);
+        await attendreLectures(lectures);
         if (exportEnCours.current?.controleur === controleur) exportEnCours.current = null;
         setExportActif(false);
       }
