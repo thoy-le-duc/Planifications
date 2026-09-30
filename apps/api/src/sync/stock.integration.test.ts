@@ -35,14 +35,21 @@
  *     PLAFONDS_PROVISOIRES.recolteQuantite (100 000, borne comprise ; Q13) → sinon
  *     'ecriture_invalide'.
  *   - `date` : 'AAAA-MM-JJ' existante dans [2000-01-01, 2100-12-31] (comme un événement).
- *   - `motif` ∈ recolte | vente | perte | ajustement ; motif = 'recolte' ⇔ recolte_id non nul
- *     → sinon 'ecriture_invalide'.
+ *   - `motif` : 'recolte' SEULEMENT depuis un téléphone (décision 5 du chef : vente, perte,
+ *     ajustement n'ont pas d'écran, refusés → 'ecriture_invalide') ; motif inconnu, ou
+ *     recolte_id nul → 'ecriture_invalide'.
  *   - `recolte_id` : événement de type 'recolte' (une récolte, ou son annulation ou sa correction,
  *     qui sont du même type) de la MÊME ferme, écrit avant ou plus haut dans le même lot.
  *     D'une autre ferme → 'ferme_interdite' ; introuvable ou d'un autre type → 'ecriture_invalide'.
- *   - Motif 'recolte' et quantite < 0 : accepté seulement si recolte_id désigne une ANNULATION ou
- *     une CORRECTION (remplace_sorte non nul). Rattaché à la récolte d'origine → 'ecriture_invalide'.
- *     (Interprétation retenue avec T13 : le mouvement inverse pointe vers l'événement d'annulation.)
+ *   - Quantité négative : acceptée seulement si recolte_id désigne une ANNULATION ou une
+ *     CORRECTION (remplace_sorte non nul). Rattachée à la récolte d'origine → 'ecriture_invalide'.
+ *   - Décision 3 du chef (mouvement borné), sinon 'ecriture_invalide' :
+ *       annulation : le mouvement rattaché vaut EXACTEMENT l'opposé de la somme des mouvements de
+ *         la récolte annulée (recolte_id = elle), sur le MÊME article (12 → −12 ; −50 ou −12 sur
+ *         un autre article : refusé) ;
+ *       correction : le mouvement rattaché vaut la nouvelle quantité − la quantité de l'événement
+ *         corrigé (12 → 15 : +3 accepté, +5 refusé ; 12 → 10 : −2 accepté, −3 refusé).
+ *     Le mouvement inverse pointe vers l'événement d'annulation ou de correction (comme T13).
  *
  * Règles de `article_stock` (création seule) :
  *   - PUT : espèce visible par la ferme (de la ferme, ou de la bibliothèque : ferme_id nul), non
@@ -57,7 +64,7 @@
  *   événement (T10) : nom_table 'ArticleStock' ou 'MouvementStock' (noms d'entité de T01),
  *   operation 'creation', auteur = utilisateur du jeton, avant NULL, apres = la ligne écrite.
  *
- * Une saisie = une transaction (INTERPRÉTATION, à confirmer par le chef) : un lot (= une
+ * Une saisie = une transaction (décisions 1 et 2 du chef) : un lot (= une
  *   transaction PowerSync) qui contient AU MOINS UNE écriture sur article_stock ou mouvement_stock
  *   est accepté ou refusé EN ENTIER. Si une écriture du lot est refusée, RIEN n'est écrit (ni
  *   l'événement, ni l'article, ni les mouvements, ni leur historique) ; la réponse `refus` et la
@@ -315,7 +322,7 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
         article_stock_id: articleId,
         date: '2026-10-01',
         quantite,
-        motif: recolteId === null ? 'ajustement' : 'recolte',
+        motif: 'recolte',
         recolte_id: recolteId,
         ...autres,
       },
@@ -329,6 +336,13 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
     const mouvement = putMouvement(article.id, quantite, recolte.id);
     expect(await lot([recolte, article, mouvement])).toEqual({ refus: [] });
     return { recolte, article, mouvement };
+  }
+
+  /** Une récolte seule (sans mouvement), acceptée dans son propre lot ; rend son id. */
+  async function recolteSeule(quantite: number): Promise<string> {
+    const recolte = putRecolte(quantite);
+    expect(await lot([recolte])).toEqual({ refus: [] });
+    return recolte.id;
   }
 
   /** Le lot est refusé EN ENTIER : rien d'écrit, chaque écriture a son refus, la fautive son motif. */
@@ -402,6 +416,43 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       const ecart = putMouvement(article.id, -2, correction.id);
       expect(await lot([correction, ecart])).toEqual({ refus: [] });
       expect(await stock(article.id)).toBe(10);
+    });
+
+    it('décision 3 : correction 12 → 15, mouvement +3 accepté ; +5 refusé (rien d’écrit)', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const trop = putRemplacement(recolte, 'correction', { quantite: 15, unite: 'kg', categorie: null });
+      const cinq = putMouvement(article.id, 5, trop.id);
+      await refuseEnEntier([trop, cinq], cinq, 'ecriture_invalide');
+      const correction = putRemplacement(recolte, 'correction', { quantite: 15, unite: 'kg', categorie: null });
+      const trois = putMouvement(article.id, 3, correction.id);
+      expect(await lot([correction, trois])).toEqual({ refus: [] });
+      expect(await stock(article.id)).toBe(15);
+    });
+
+    it('décision 3 : correction 12 → 10, un mouvement −3 (au lieu de −2) est refusé', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const correction = putRemplacement(recolte, 'correction', { quantite: 10, unite: 'kg', categorie: null });
+      const faux = putMouvement(article.id, -3, correction.id);
+      await refuseEnEntier([correction, faux], faux, 'ecriture_invalide');
+      expect(await stock(article.id)).toBe(12);
+    });
+
+    it('décision 3 : annulation d’une récolte de 12 avec −50 : refusée en entier, le stock reste à 12', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const annulation = putRemplacement(recolte, 'annulation');
+      const inverse = putMouvement(article.id, -50, annulation.id);
+      await refuseEnEntier([annulation, inverse], inverse, 'ecriture_invalide');
+      expect(await stock(article.id)).toBe(12);
+    });
+
+    it('décision 3 : annulation avec −12 sur un autre article que celui de la récolte : refusée en entier', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const autreArticle = await articleEnBase(ferme, tomate);
+      const annulation = putRemplacement(recolte, 'annulation');
+      const inverse = putMouvement(autreArticle, -12, annulation.id);
+      await refuseEnEntier([annulation, inverse], inverse, 'ecriture_invalide');
+      expect(await stock(article.id)).toBe(12);
+      expect(await stock(autreArticle)).toBe(0);
     });
 
     it('le même lot renvoyé (réponse perdue) : accepté, rien en double, un seul historique par ligne', async () => {
@@ -551,21 +602,23 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
 
   describe('mouvement_stock : ferme de l’écriture et de ses références', () => {
     it('mouvement pour une ferme dont l’utilisateur n’est pas membre : ferme_interdite, rien d’écrit', async () => {
-      const m = putMouvement(articleVoisin, 5, null, { ferme_id: autreFerme, motif: 'perte' });
+      const recolteVoisine = putRecolte(5, {}, voisin.id, autreFerme);
+      expect(await lot([recolteVoisine], voisin.jeton)).toEqual({ refus: [] });
+      const m = putMouvement(articleVoisin, 5, recolteVoisine.id, { ferme_id: autreFerme });
       expect((await lot([m])).refus).toEqual([{ table: 'mouvement_stock', id: m.id, motif: 'ferme_interdite' }]);
       expect(await mouvements(m.id)).toBe(0);
       expect(await stock(articleVoisin)).toBe(0);
     });
 
     it('article d’une autre ferme, sous le ferme_id de la sienne : ferme_interdite', async () => {
-      const m = putMouvement(articleVoisin, -5, null, { motif: 'perte' });
+      const m = putMouvement(articleVoisin, 5, await recolteSeule(5));
       expect((await lot([m])).refus).toEqual([{ table: 'mouvement_stock', id: m.id, motif: 'ferme_interdite' }]);
       expect(await mouvements(m.id)).toBe(0);
     });
 
     it('article introuvable ou supprimé : ecriture_invalide', async () => {
       for (const articleId of [randomUUID(), articleSupprime]) {
-        const m = putMouvement(articleId, 5, null);
+        const m = putMouvement(articleId, 5, await recolteSeule(5));
         expect((await lot([m])).refus, articleId).toEqual([{ table: 'mouvement_stock', id: m.id, motif: 'ecriture_invalide' }]);
         expect(await mouvements(m.id)).toBe(0);
       }
@@ -596,12 +649,9 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
 
   describe('mouvement_stock : quantité, motif et récolte liée', () => {
     let article: string;
-    let recolte: string;
 
     beforeAll(async () => {
-      const r = await recolteAcceptee(1);
-      article = r.article.id;
-      recolte = r.recolte.id;
+      article = (await recolteAcceptee(1)).article.id;
     });
 
     async function refuse(m: EcritureEnvoyee): Promise<void> {
@@ -614,15 +664,22 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       ['texte', '12'],
       ['absente (null)', null],
       ['au-delà du plafond', PLAFOND + 1],
-      ['en deçà du plafond négatif', -(PLAFOND + 1)],
       ['NaN (texte)', 'NaN'],
     ])('quantité %s : ecriture_invalide', async (_cas, quantite) => {
-      await refuse(putMouvement(article, quantite, null));
+      await refuse(putMouvement(article, quantite, await recolteSeule(1)));
+    });
+
+    it('au-delà du plafond négatif (annulation d’une récolte au plafond avec −plafond − 1) : refusé en entier', async () => {
+      const recolte = putRecolte(PLAFOND);
+      expect(await lot([recolte, putMouvement(article, PLAFOND, recolte.id)])).toEqual({ refus: [] });
+      const annulation = putRemplacement(recolte, 'annulation');
+      const inverse = putMouvement(article, -(PLAFOND + 1), annulation.id);
+      await refuseEnEntier([annulation, inverse], inverse, 'ecriture_invalide');
     });
 
     it('quantité non finie (1e999 dans le JSON reçu, lue Infinity) : ecriture_invalide, jamais 5xx', async () => {
       for (const q of ['1e999', '-1e999']) {
-        const m = putMouvement(article, 1, null);
+        const m = putMouvement(article, 1, await recolteSeule(1));
         const corps = JSON.stringify({ ecritures: [m] }).replace('"quantite":1,', `"quantite":${q},`);
         expect(corps).toContain(`"quantite":${q}`);
         expect((await lotBrut(corps)).refus, q).toEqual([{ table: 'mouvement_stock', id: m.id, motif: 'ecriture_invalide' }]);
@@ -630,50 +687,55 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       }
     });
 
-    it('plafond compris, dans les deux sens ; quantité décimale gardée telle quelle', async () => {
-      const haut = putMouvement(article, PLAFOND, null);
-      const bas = putMouvement(article, -PLAFOND, null, { motif: 'perte' });
-      const decimale = putMouvement(article, 12.5, null);
-      expect(await lot([haut])).toEqual({ refus: [] });
-      expect(await lot([bas])).toEqual({ refus: [] });
-      expect(await lot([decimale])).toEqual({ refus: [] });
+    it('plafond compris, dans les deux sens (récolte au plafond puis son annulation) ; quantité décimale gardée telle quelle', async () => {
+      const recolte = putRecolte(PLAFOND);
+      const haut = putMouvement(article, PLAFOND, recolte.id);
+      expect(await lot([recolte, haut])).toEqual({ refus: [] });
+      const annulation = putRemplacement(recolte, 'annulation');
+      const bas = putMouvement(article, -PLAFOND, annulation.id);
+      expect(await lot([annulation, bas])).toEqual({ refus: [] });
+
+      const petite = putRecolte(12.5);
+      const decimale = putMouvement(article, 12.5, petite.id);
+      expect(await lot([petite, decimale])).toEqual({ refus: [] });
       const r = await base.pool.query<{ q: number }>(`SELECT quantite::float8 AS q FROM mouvement_stock WHERE id = $1`, [decimale.id]);
       expect(r.rows).toEqual([{ q: 12.5 }]);
     });
 
     it('motif recolte sans recolte_id, ou recolte_id avec un autre motif : ecriture_invalide', async () => {
-      await refuse(putMouvement(article, 3, null, { motif: 'recolte' }));
-      for (const motif of ['vente', 'perte', 'ajustement']) await refuse(putMouvement(article, -3, recolte, { motif }));
+      await refuse(putMouvement(article, 3, null));
+      const recolte = await recolteSeule(3);
+      for (const motif of ['vente', 'perte', 'ajustement']) await refuse(putMouvement(article, 3, recolte, { motif }));
     });
 
     it('motif inconnu : ecriture_invalide', async () => {
       await refuse(putMouvement(article, 3, null, { motif: 'don' }));
     });
 
-    it('vente, perte, ajustement sans recolte_id : acceptés', async () => {
+    it('décision 5 : vente, perte, ajustement refusés depuis un téléphone (pas encore d’écran), même sans recolte_id', async () => {
       for (const [motif, q] of [
         ['vente', -2],
         ['perte', -1],
         ['ajustement', 4],
       ] as const) {
-        const m = putMouvement(article, q, null, { motif });
-        expect(await lot([m]), motif).toEqual({ refus: [] });
+        await refuse(putMouvement(article, q, null, { motif }));
       }
+      expect(await stock(article)).toBe(1);
     });
 
     it('mouvement négatif de motif recolte rattaché à la récolte elle-même (fausse récolte) : ecriture_invalide', async () => {
-      await refuse(putMouvement(article, -1, recolte));
+      await refuse(putMouvement(article, -1, await recolteSeule(1)));
     });
 
     it('date invalide ou hors de [2000-01-01, 2100-12-31] : ecriture_invalide', async () => {
       for (const date of ['2026-02-30', '01/10/2026', '1999-12-31', '2101-01-01', null]) {
-        await refuse(putMouvement(article, 3, null, { date }));
+        await refuse(putMouvement(article, 3, await recolteSeule(3), { date }));
       }
     });
 
     it('colonne inconnue, ou id glissé dans les données : ecriture_invalide', async () => {
-      await refuse(putMouvement(article, 3, null, { prix: 4 }));
-      const m = putMouvement(article, 3, null);
+      await refuse(putMouvement(article, 3, await recolteSeule(3), { prix: 4 }));
+      const m = putMouvement(article, 3, await recolteSeule(3));
       await refuse({ ...m, donnees: { ...m.donnees, id: m.id } });
     });
   });

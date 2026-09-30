@@ -4,6 +4,18 @@
  * téléphone reçoit la récolte, son annulation, les deux mouvements (+12 et −12) et un stock
  * inchangé. Lancement, services et règle de saut : comme synchro.e2e.ts (`pnpm e2e:synchro`).
  *
+ * ── Banc paramétrable (décision 7 du chef) ──────────────────────────────────────────────────
+ *
+ * Deux équipes lancent `pnpm e2e:synchro` en même temps sans se croiser. En plus des ports déjà
+ * paramétrables (E2E_PORT_POSTGRES, E2E_PORT_POWERSYNC, E2E_PORT_API), scripts/e2e-synchro.ts lit :
+ *   E2E_PROJET_COMPOSE  nom du projet docker compose (défaut « planif-e2e-synchro ») : conteneurs,
+ *                       volumes et `down -v` de l'arrêt ne touchent que ce projet ;
+ *   E2E_PORT_PAGE       port de la page de diagnostic (défaut 4174) : playwright.synchro.config.ts
+ *                       la construit, la sert et l'attend sur ce port (vérifié par banc.test.ts),
+ *                       et l'origine CORS de l'API (CORS_ORIGINES) le suit.
+ * Exemple : E2E_PROJET_COMPOSE=planif-e2e-t10c E2E_PORT_PAGE=4274 E2E_PORT_POSTGRES=56532
+ *           E2E_PORT_POWERSYNC=59180 E2E_PORT_API=3300 pnpm e2e:synchro
+ *
  * ── Amorçage attendu (apps/api/src/sync/test/amorcer-e2e.ts) ────────────────────────────────
  *
  *   node apps/api/src/sync/test/amorcer-e2e.ts --serie-tomates
@@ -22,7 +34,8 @@
  * `/diagnostic/synchro.html?ferme=<fermeId>&serie=<serieId>` : la page de T10, plus une section
  * « Récolte d'une série » (paramètre `serie` : UUID ; absent ou invalide → section inerte). Comme
  * le reste de la page, tout passe par la porte de @planif/sync (jamais PowerSync directement) ; ne
- * dépend pas de l'écran « Aujourd'hui » de T13.
+ * dépend pas de l'écran « Aujourd'hui » de T13. « UNE transaction de la porte » ci-dessous =
+ * un appel à `porte.ecrireEnsemble([...])` (packages/sync/src/porte-ensemble.test.ts).
  *
  *   champ « Récolte de la série (kg) » (getByLabel) + bouton « Enregistrer la récolte de la série » :
  *       en UNE transaction de la porte (une seule transaction PowerSync, donc un seul envoi) :
