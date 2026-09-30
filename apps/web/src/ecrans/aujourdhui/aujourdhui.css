@@ -254,10 +254,19 @@
 
 /* ── Historique ─────────────────────────────────────────────────────────────────────────── */
 
-.auj-historique-bouton {
+.auj-historique {
   margin-top: var(--espace-s);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+}
+
+.auj-historique-tete {
+  display: flex;
+  align-items: baseline;
   justify-content: space-between;
-  width: 100%;
+  gap: var(--espace-s);
+  margin-right: 6px;
 }
 
 .auj-historique-compte {
@@ -303,6 +312,11 @@
 }
 
 .auj-entree-quand {
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.auj-entree-retiree {
   font-size: 15px;
   color: var(--couleur-secondaire);
 }

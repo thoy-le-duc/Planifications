@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import type { UniteRecolte } from '@planif/core';
 import { codesEmplacements, dateCourte, nomCulture, quantiteAvecUnite, type Culture, type DerniereRecolte } from './calculs.ts';
+import { useFocusDuDialogue } from './dialogue.ts';
 import { appuyer, quantiteDe, type Touche } from './pave.ts';
 
 /** Unités proposées, dans l'ordre du sélecteur, et leur libellé. */
@@ -80,6 +81,7 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
   const [unite, setUnite] = useState<UniteRecolte>(initiale?.unite ?? 'kg');
   const [texte, setTexte] = useState('');
   const retour = useRef<HTMLButtonElement>(null);
+  const garderFocus = useFocusDuDialogue();
   const radios = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
@@ -105,6 +107,7 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
 
   // Clavier physique (tablette, ordinateur) : chiffres, virgule ou point, effacement, Entrée, Échap.
   function surTouche(e: KeyboardEvent<HTMLDivElement>): void {
+    garderFocus(e);
     if (e.key === 'Escape') {
       e.preventDefault();
       surFermer();

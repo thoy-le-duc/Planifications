@@ -26,6 +26,7 @@ import {
   type Journee,
   type TacheJour,
 } from './calculs.ts';
+import { useFocusDuDialogue } from './dialogue.ts';
 import { annulerSaisie, changerDate, marquerFait, noterRecolte, type ContexteEcriture } from './ecritures.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
 
@@ -48,6 +49,12 @@ const TACHES_PAR_GROUPE = 25;
 /** Durée d'affichage du bouton « Annuler » après une saisie. */
 export const DELAI_ANNULATION_MS = 10_000;
 
+/**
+ * Saisie de l'historique dont la série ou la campagne est supprimée : le serveur refuserait sa
+ * correction ou son annulation (culture supprimée), le téléphone ne les propose pas.
+ */
+export const TEXTE_CULTURE_RETIREE = 'Culture retirée : correction impossible depuis le téléphone';
+
 const deux = (n: number) => String(n).padStart(2, '0');
 
 /** Jour du téléphone, 'AAAA-MM-JJ' (heure locale, pas UTC). */
@@ -68,12 +75,19 @@ interface Annulable {
 
 type Dialogue =
   | { readonly sorte: 'recolte'; readonly culture: Culture | null }
-  | { readonly sorte: 'date'; readonly entree: EntreeHistorique }
+  | { readonly sorte: 'date'; readonly entree: EntreeHistorique; readonly max: string }
   | null;
 
 /** Libellé de l'étape faite, pour le bandeau et l'historique. */
 function libelleEvenement(e: EvenementLu): string {
   return e.detail.type === 'realise' ? ETAPES_FAITES[e.detail.etape] : `Récolte · ${quantiteAvecUnite(e.detail.quantite, e.detail.unite)}`;
+}
+
+/** Ce que nomme une saisie : « Récolte 12 kg, Tomate Cœur de bœuf, aujourd'hui ». */
+function nomSaisie(h: EntreeHistorique, aujourdhui: string): string {
+  const e = h.evenement;
+  const quoi = e.detail.type === 'realise' ? ETAPES_FAITES[e.detail.etape] : `Récolte ${quantiteAvecUnite(e.detail.quantite, e.detail.unite)}`;
+  return `${quoi}, ${h.culture === null ? 'culture retirée' : nomCulture(h.culture)}, ${quand(e.date, aujourdhui)}`;
 }
 
 function detailTache(t: TacheJour, aujourdhui: string): string {
@@ -159,15 +173,28 @@ interface ProprietesHistorique {
 }
 
 function Historique({ entrees, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
+  const idTitre = useId();
   return (
-    <section aria-label="Historique" className="auj-historique">
+    <section aria-labelledby={idTitre} className="auj-historique">
+      <div className="auj-historique-tete">
+        <h2 id={idTitre} className="auj-groupe">
+          Historique
+        </h2>
+        <span className="auj-historique-compte">
+          {entrees.length} {entrees.length > 1 ? 'saisies' : 'saisie'} · 7 jours
+        </span>
+      </div>
       {entrees.length === 0 ? (
         <p className="auj-historique-vide">Aucune saisie ces 7 derniers jours.</p>
       ) : (
         <ul>
-          {entrees.map((h) => {
+          {entrees.map((h, i) => {
             const e = h.evenement;
             const codes = h.culture === null ? null : codesEmplacements(h.culture.emplacements);
+            // Deux saisies identiques le même jour : leurs boutons gardent des noms distincts.
+            const base = nomSaisie(h, aujourdhui);
+            const rang = entrees.slice(0, i).filter((x) => nomSaisie(x, aujourdhui) === base).length;
+            const nom = rang === 0 ? base : `${base} (${String(rang + 1)})`;
             return (
               <li key={e.id} data-testid="saisie-historique" data-evenement={e.id} data-type={e.detail.type} className="auj-entree">
                 <div className="auj-entree-texte">
@@ -175,26 +202,32 @@ function Historique({ entrees, aujourdhui, surAnnuler, surChangerDate }: Proprie
                   <span className="auj-entree-culture">{h.culture === null ? 'Culture retirée' : nomCulture(h.culture)}</span>
                   <span className="auj-entree-quand">{[quand(e.date, aujourdhui), codes].filter((x) => x !== null).join(' · ')}</span>
                 </div>
-                <div className="auj-entree-actions">
-                  <button
-                    type="button"
-                    className="auj-bouton-secondaire"
-                    onClick={() => {
-                      surChangerDate(h);
-                    }}
-                  >
-                    Changer la date
-                  </button>
-                  <button
-                    type="button"
-                    className="auj-bouton-secondaire"
-                    onClick={() => {
-                      surAnnuler(h);
-                    }}
-                  >
-                    Annuler
-                  </button>
-                </div>
+                {h.culture === null ? (
+                  <p className="auj-entree-retiree">{TEXTE_CULTURE_RETIREE}</p>
+                ) : (
+                  <div className="auj-entree-actions">
+                    <button
+                      type="button"
+                      aria-label={`Changer la date : ${nom}`}
+                      className="auj-bouton-secondaire"
+                      onClick={() => {
+                        surChangerDate(h);
+                      }}
+                    >
+                      Changer la date
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Annuler : ${nom}`}
+                      className="auj-bouton-secondaire"
+                      onClick={() => {
+                        surAnnuler(h);
+                      }}
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                )}
               </li>
             );
           })}
@@ -217,6 +250,7 @@ function ChangerDate({ entree, aujourdhui, surEnregistrer, surFermer }: Propriet
   const [date, setDate] = useState(entree.evenement.date);
   const idChamp = useId();
   const champ = useRef<HTMLInputElement>(null);
+  const garderFocus = useFocusDuDialogue();
   useEffect(() => {
     champ.current?.focus();
   }, []);
@@ -228,7 +262,7 @@ function ChangerDate({ entree, aujourdhui, surEnregistrer, surFermer }: Propriet
         if (e.key === 'Escape') surFermer();
       }}
     >
-      <div role="dialog" aria-modal="true" aria-label="Changer la date" className="auj-feuille">
+      <div role="dialog" aria-modal="true" aria-label="Changer la date" className="auj-feuille" onKeyDown={garderFocus}>
         <h2 className="auj-feuille-titre">Changer la date</h2>
         <p className="auj-feuille-texte">
           {libelleEvenement(entree.evenement)} · {entree.culture === null ? 'culture retirée' : nomCulture(entree.culture)}
@@ -284,26 +318,50 @@ function evenementEcrit(id: string, culture: Culture, date: string, detail: Even
 }
 
 export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: ProprietesEcranAujourdhui) {
-  const [jour] = useState(() => (jourDonne ?? jourDuTelephone)());
-  const [journee, setJournee] = useState<Journee | null>(() => journeeEnCache(porte, fermeId, jour));
+  /** Jour du téléphone maintenant (relu à chaque écriture : l'écran peut rester ouvert à minuit). */
+  const jourCourant = () => (jourDonne ?? jourDuTelephone)();
+  const [jour, setJour] = useState(jourCourant);
+  const [lue, setLue] = useState<Journee | null>(() => journeeEnCache(porte, fermeId, jour));
+  // Journée du jour affiché : celle lue, sinon celle du cache (changement de jour).
+  const journee = lue !== null && lue.aujourdhui === jour ? lue : journeeEnCache(porte, fermeId, jour);
   const [echecLecture, setEchecLecture] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [annulable, setAnnulable] = useState<Annulable | null>(null);
   const [dialogue, setDialogue] = useState<Dialogue>(null);
-  const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
   const [toutVoir, setToutVoir] = useState(false);
+  /**
+   * Tâches marquées faites et masquées dès le tap (un second tap n'écrit rien) : 'attente'
+   * pendant l'écriture, puis la journée affichée à ce moment, jusqu'à ce qu'une journée relue
+   * la remplace.
+   */
+  const [masquees, setMasquees] = useState<ReadonlyMap<string, Journee | null | 'attente'>>(new Map());
+  const journeeActuelle = useRef<Journee | null>(journee);
+  useEffect(() => {
+    journeeActuelle.current = journee;
+  }, [journee]);
   /** Une écriture à la fois : un double appui n'écrit pas deux fois. */
   const occupe = useRef(false);
   const numero = useRef(0);
 
   useEffect(
     () =>
-      suivreJournee(porte, fermeId, jour, setJournee, (e: unknown) => {
+      suivreJournee(porte, fermeId, jour, setLue, (e: unknown) => {
         console.error('Journée illisible', e);
         setEchecLecture(true);
       }),
     [porte, fermeId, jour],
   );
+
+  // Retour au premier plan (téléphone rallumé le lendemain) : l'écran passe au jour courant.
+  useEffect(() => {
+    const surVisibilite = () => {
+      if (document.visibilityState === 'visible') setJour((jourDonne ?? jourDuTelephone)());
+    };
+    document.addEventListener('visibilitychange', surVisibilite);
+    return () => {
+      document.removeEventListener('visibilitychange', surVisibilite);
+    };
+  }, [jourDonne]);
 
   // Une marque par ouverture de l'écran, quand les tâches (ou « rien à faire ») sont dessinées.
   const marquee = useRef(false);
@@ -324,17 +382,20 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     };
   }, [annulable]);
 
-  const ctx: ContexteEcriture = { porte, fermeId, aujourdhui: jour };
+  /** Contexte d'une écriture, au jour du téléphone à l'instant de l'écriture. */
+  const contexte = (): ContexteEcriture => ({ porte, fermeId, aujourdhui: jourCourant() });
 
-  const ecrire = useCallback(async (action: () => Promise<void>) => {
-    if (occupe.current) return;
+  const ecrire = useCallback(async (action: () => Promise<void>): Promise<boolean> => {
+    if (occupe.current) return false;
     occupe.current = true;
     setErreur(null);
     try {
       await action();
+      return true;
     } catch (e) {
       console.error('Saisie impossible', e);
       setErreur(`La saisie n’a pas pu s’enregistrer sur ce téléphone${e instanceof Error && e.message !== '' ? ` : ${e.message}` : ''}. Réessayez ; si cela recommence, signalez-le.`);
+      return false;
     } finally {
       occupe.current = false;
     }
@@ -345,35 +406,51 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     setAnnulable({ evenement, culture, titre, texte, numero: numero.current });
   }
 
+  function masquer(cle: string, valeur: Journee | null | 'attente' | undefined): void {
+    setMasquees((m) => {
+      const n = new Map(m);
+      if (valeur === undefined) n.delete(cle);
+      else n.set(cle, valeur);
+      return n;
+    });
+  }
+
   function surFait(t: TacheJour): void {
     const etape = t.tache.etape;
-    if (etape === 'debut_recolte') return;
+    if (etape === 'debut_recolte' || masquees.has(t.cle) || occupe.current) return;
+    masquer(t.cle, 'attente');
     void ecrire(async () => {
+      const ctx = contexte();
       const id = await marquerFait(ctx, t.culture, etape);
       const detail = { type: 'realise' as const, etape: etape satisfies EtapeRealisee, quantiteReelle: null };
-      montrerAnnulable(evenementEcrit(id, t.culture, jour, detail), t.culture, `Fait · ${ETAPES_FAITES[etape]}`, nomCulture(t.culture));
+      montrerAnnulable(evenementEcrit(id, t.culture, ctx.aujourdhui, detail), t.culture, `Fait · ${ETAPES_FAITES[etape]}`, nomCulture(t.culture));
+    }).then((ok) => {
+      masquer(t.cle, ok ? journeeActuelle.current : undefined);
     });
   }
 
   function surValiderRecolte(culture: Culture, quantite: number, unite: UniteRecolte): void {
     void ecrire(async () => {
+      const ctx = contexte();
       const id = await noterRecolte(ctx, culture, quantite, unite);
       setDialogue(null);
       const detail = { type: 'recolte' as const, quantite, unite, categorie: null };
-      montrerAnnulable(evenementEcrit(id, culture, jour, detail), culture, 'Récolte notée', `${nomCulture(culture)} · ${quantiteAvecUnite(quantite, unite)}`);
+      montrerAnnulable(evenementEcrit(id, culture, ctx.aujourdhui, detail), culture, 'Récolte notée', `${nomCulture(culture)} · ${quantiteAvecUnite(quantite, unite)}`);
     });
   }
 
-  function annuler(evenement: EvenementLu, culture: Culture | null): void {
+  function annuler(evenement: EvenementLu): void {
     void ecrire(async () => {
-      await annulerSaisie(ctx, evenement, culture);
+      await annulerSaisie(contexte(), evenement);
       setAnnulable((a) => (a?.evenement.id === evenement.id ? null : a));
+      // La tâche faite puis annulée redevient à faire : plus de masque.
+      setMasquees(new Map());
     });
   }
 
   function surChangerDate(entree: EntreeHistorique, date: string): void {
     void ecrire(async () => {
-      await changerDate(ctx, entree.evenement, date, entree.culture);
+      await changerDate(contexte(), entree.evenement, date);
       setDialogue(null);
     });
   }
@@ -388,7 +465,10 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     );
   }
 
-  const taches = journee?.taches ?? [];
+  const taches = (journee?.taches ?? []).filter((t) => {
+    const m = masquees.get(t.cle);
+    return m === undefined || (m !== 'attente' && m !== journee);
+  });
   const enRetard = taches.filter((t) => t.tache.enRetard);
   const semaine = taches.filter((t) => !t.tache.enRetard);
   const recoltes = journee?.recoltesEnCours ?? [];
@@ -469,34 +549,16 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
       )}
 
       {journee !== null && (
-        <>
-          <button
-            type="button"
-            aria-label="Historique"
-            aria-expanded={historiqueOuvert}
-            className="auj-bouton-secondaire auj-historique-bouton"
-            onClick={() => {
-              setHistoriqueOuvert((o) => !o);
-            }}
-          >
-            <span>Historique</span>
-            <span className="auj-historique-compte">
-              {journee.historique.length} {journee.historique.length > 1 ? 'saisies' : 'saisie'} · 7 jours
-            </span>
-          </button>
-          {historiqueOuvert && (
-            <Historique
-              entrees={journee.historique}
-              aujourdhui={jour}
-              surAnnuler={(h) => {
-                annuler(h.evenement, h.culture);
-              }}
-              surChangerDate={(h) => {
-                setDialogue({ sorte: 'date', entree: h });
-              }}
-            />
-          )}
-        </>
+        <Historique
+          entrees={journee.historique}
+          aujourdhui={jour}
+          surAnnuler={(h) => {
+            annuler(h.evenement);
+          }}
+          surChangerDate={(h) => {
+            setDialogue({ sorte: 'date', entree: h, max: jourCourant() });
+          }}
+        />
       )}
 
       {annulable !== null && (
@@ -512,7 +574,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
             type="button"
             className="auj-bandeau-annuler"
             onClick={() => {
-              annuler(annulable.evenement, annulable.culture);
+              annuler(annulable.evenement);
             }}
           >
             Annuler
@@ -536,7 +598,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
       {dialogue?.sorte === 'date' && (
         <ChangerDate
           entree={dialogue.entree}
-          aujourdhui={jour}
+          aujourdhui={dialogue.max}
           surEnregistrer={(date) => {
             surChangerDate(dialogue.entree, date);
           }}
