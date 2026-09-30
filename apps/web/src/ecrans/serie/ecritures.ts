@@ -10,7 +10,7 @@
  */
 import { creerGenerateurId, validerOccupation, validerSerie, type DatesSerie, type Serie, type TypeAncreSerie } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees } from '@planif/sync';
-import { lireEtatSerie, lireModificationsOccupations, type EtatSerie, type Modification } from './donnees.ts';
+import { entreeAnnulable, lireEtatSerie, lireModificationsOccupations, type EtatSerie, type Modification } from './donnees.ts';
 
 /** Une ligne refusée par les règles du serveur : jamais écrite. */
 export class SerieRefusee extends Error {}
@@ -291,18 +291,21 @@ function depuisPostgres(avant: Readonly<Record<string, unknown>>, colonnes: read
  * Rend l'état d'avant l'annulation (pour annuler l'annulation).
  */
 export async function annulerEntree(ctx: ContexteEcriture, serieId: string, entree: Modification): Promise<EtatSerie | null> {
+  // Seule une création mène à la suppression douce ; un `avant` illisible ne s'annule pas.
+  if (!entreeAnnulable(entree)) throw new SerieRefusee('cette ligne de l’historique est illisible');
   const courant = await lireEtatSerie(ctx.porte, serieId);
   if (courant === null) throw new SerieRefusee('série introuvable');
   const modifications = await lireModificationsOccupations(ctx.porte, serieId);
   const serie =
-    entree.operation === 'creation' || entree.avant === null
+    entree.operation === 'creation'
       ? { ...courant.serie, supprime_le: courant.serie.supprime_le ?? ctx.maintenant().toISOString() }
-      : depuisPostgres(entree.avant, COLONNES_SERIE, courant.serie);
+      : depuisPostgres(entree.avant ?? {}, COLONNES_SERIE, courant.serie);
   const occupations = courant.occupations.map((occ) => {
     // La plus ancienne ligne de cette occupation depuis l'horodatage de l'entrée.
     const premiere = modifications.find((m) => m.ligneId === occ.id && m.instant >= entree.instant);
     if (premiere === undefined) return occ;
-    if (premiere.operation === 'creation' || premiere.avant === null) return { ...occ, supprime_le: occ.supprime_le ?? ctx.maintenant().toISOString() };
+    if (premiere.operation === 'creation') return { ...occ, supprime_le: occ.supprime_le ?? ctx.maintenant().toISOString() };
+    if (premiere.avant === null) throw new SerieRefusee('une ligne de l’historique d’une planche est illisible');
     return depuisPostgres(premiere.avant, COLONNES_OCCUPATION, occ);
   });
   await ramenerSerie(ctx, serieId, { serie, occupations });

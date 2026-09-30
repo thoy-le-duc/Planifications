@@ -488,6 +488,11 @@ select.serie-champ {
   color: var(--couleur-secondaire);
 }
 
+.serie-entree-texte .serie-entree-illisible {
+  font-weight: 700;
+  color: var(--couleur-conflit);
+}
+
 /* ── Pied : Fermer, Planifier ────────────────────────────────────────────────────────────── */
 
 .serie-pied {

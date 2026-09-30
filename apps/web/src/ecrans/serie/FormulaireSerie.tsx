@@ -17,7 +17,6 @@ import {
   calculer,
   chercherCultures,
   culturesDe,
-  dateCourte,
   etapeDeLAncre,
   itinerairePropose,
   itinerairesDe,
@@ -33,7 +32,7 @@ import {
   type ChoixCulture,
   type Saisie,
 } from './calculs.ts';
-import { lireBibliotheque, lireEtatSerie, requeteHistorique, type EtatSerie, type Modification } from './donnees.ts';
+import { entreeAnnulable, lireBibliotheque, lireEtatSerie, requeteHistorique, type EtatSerie, type Modification } from './donnees.ts';
 import { annulerEntree, creerSerie, modifierSerie, ramenerSerie, SerieRefusee, type ContexteEcriture, type SerieAEcrire } from './ecritures.ts';
 
 /** Marque de performance posée quand le formulaire est utilisable (e2e/serie.e2e.ts). */
@@ -154,8 +153,17 @@ function saisieInitiale(bib: Bibliotheque, depart: DepartSerie, etat: EtatSerie 
 
 /** Instant lisible d'une ligne d'historique : « 30 sept. 2026, 10:00 ». */
 function quand(m: Modification): string {
-  if (Number.isNaN(m.instant)) return m.horodatage;
+  if (Number.isNaN(m.instant)) return 'date inconnue';
   return new Date(m.instant).toLocaleString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+
+/** Jour d'une entrée, en heure du téléphone : « 2 mars 2027 » (vide si l'horodatage est illisible). */
+function jourLocal(m: Modification): string {
+  if (Number.isNaN(m.instant)) return '';
+  const d = new Date(m.instant);
+  return `${String(d.getDate())} ${MOIS[d.getMonth()] ?? ''} ${String(d.getFullYear())}`;
 }
 
 /** Ce qu'une modification a changé, en quelques mots. */
@@ -764,6 +772,7 @@ export function FormulaireSerie({
                 {historique.map((m, i) => {
                   const detail = resume(m);
                   const acceptee = (m.apres?.rotation_acceptee ?? null) !== null;
+                  const annulable = entreeAnnulable(m);
                   return (
                     <li key={m.id} data-testid="modification-historique" data-modification={m.id} data-operation={m.operation} className="serie-entree">
                       <span className="serie-entree-texte">
@@ -773,12 +782,13 @@ export function FormulaireSerie({
                           {detail === null ? '' : ` · ${detail}`}
                           {acceptee ? ' · alerte de rotation acceptée' : ''}
                         </span>
+                        {!annulable && <span className="serie-entree-illisible">Ligne illisible : elle ne peut pas être annulée.</span>}
                       </span>
                       <button
                         type="button"
                         aria-label={`Annuler : ${OPERATIONS[m.operation]} du ${quand(m)}`}
                         className="serie-bouton-leger"
-                        disabled={occupe}
+                        disabled={occupe || !annulable}
                         onClick={() => {
                           demanderAnnulation(m, i);
                         }}
@@ -869,7 +879,7 @@ export function FormulaireSerie({
           }}
         >
           <p>
-            La série reviendra à son état d’avant le {dateCourte(new Date(confirmer.entree.instant).toISOString().slice(0, 10))} : les {String(confirmer.plusRecentes)}{' '}
+            La série reviendra à son état d’avant le {jourLocal(confirmer.entree)} : les {String(confirmer.plusRecentes)}{' '}
             {confirmer.plusRecentes > 1 ? 'changements plus récents seront défaits' : 'changement plus récent sera défait'} aussi.
           </p>
         </Confirmation>

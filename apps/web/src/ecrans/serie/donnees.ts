@@ -207,6 +207,12 @@ export function versModification(l: Readonly<Record<string, unknown>>): Modifica
   };
 }
 
+/**
+ * Une entrée s'annule si son horodatage se lit et si l'on sait vers quoi revenir : une création
+ * (suppression douce), ou un `avant` lisible (objet JSON). Jamais de suppression faute de mieux.
+ */
+export const entreeAnnulable = (m: Modification): boolean => !Number.isNaN(m.instant) && (m.operation === 'creation' || m.avant !== null);
+
 /** Historique de la série, le plus récent d'abord (requête surveillée par le formulaire). */
 export const requeteHistorique = (serieId: string) => ({
   sql: `SELECT * FROM modification WHERE nom_table = 'Serie' AND ligne_id = ? AND supprime_le IS NULL ORDER BY horodatage DESC, id DESC`,
