@@ -7,6 +7,8 @@
 
 ## Règles
 
+- **Table des types d'intervention de la ferme** (constat T22 : elle n'existe pas, le type est un texte libre dans l'événement) : créer la table, une migration générée, la descente par la synchro, et une liste de départ (modèle de données, section 5).
+
 - `itineraire` et le type d'intervention s'ouvrent à l'écriture, sur le modèle de T10e :
   - PUT, PATCH, suppression douce ; DELETE refusé ;
   - ferme du jeton seulement ;

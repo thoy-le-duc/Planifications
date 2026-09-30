@@ -244,6 +244,10 @@ Question : si tu ouvres l'appli et tapes tout de suite sur Planches, l'écran me
 
 Réponse (2026-09-30) : « ok pour l'instant ». La correction reste dans T11b, sans priorité.
 
+### Q23 — Travail prévu jamais saisi (posée le 2026-09-30, T22)
+
+Question : une grelinette prévue 10 jours avant la plantation n'a pas été saisie. Une fois la plantation faite, doit-elle disparaître de la liste (proposition retenue pour l'instant) ou rester en retard jusqu'à ce qu'on la coche ?
+
 ### Q22 — Itinéraires et travaux de culture (posée le 2026-09-30, demande de Théophane)
 
 Demande : « des itinéraires de cultures, l'outil adaptable à n'importe quelle ferme ; ça marche aussi pour le travail du sol par culture, les travaux de cultures ».
