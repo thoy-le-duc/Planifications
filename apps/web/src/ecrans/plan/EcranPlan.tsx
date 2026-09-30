@@ -260,7 +260,11 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   const [vue, setVue] = useState(() => fenetre(null, total));
   const idSaison = useId();
 
-  // Données changées (saisie, synchro) : on relit.
+  // Plan complet déjà affiché : une relecture ne repasse jamais par le début (retour en haut).
+  const completAffiche = useRef(false);
+  completAffiche.current = lu?.complet === true;
+
+  // Données changées (saisie, synchro) et ferme relue par le cache : on prend le plan relu.
   useEffect(
     () =>
       surChangement(porte, fermeId, () => {
@@ -287,12 +291,19 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
     };
   }, [porte, fermeId, jour, version]);
 
-  // Saison choisie : le plan en cache, sinon son début (premiers emplacements), vite lu.
+  // Saison choisie : le plan en cache, sinon son début (premiers emplacements), vite lu ; si le
+  // plan complet est déjà à l'écran, il y reste jusqu'à ce que le plan complet relu le remplace.
   useEffect(() => {
     if (saison === null) return undefined;
     const enCache = planEnCache(porte, fermeId, saison, jour);
     let actif = true;
-    (enCache === null ? obtenirDebutDePlan(porte, fermeId, saison, jour) : Promise.resolve(enCache)).then(
+    const lecture =
+      enCache !== null
+        ? Promise.resolve(enCache)
+        : completAffiche.current
+          ? obtenirPlan(porte, fermeId, saison, jour)
+          : obtenirDebutDePlan(porte, fermeId, saison, jour);
+    lecture.then(
       (p) => {
         if (actif) setLu(p);
       },

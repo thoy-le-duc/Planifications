@@ -7,8 +7,16 @@
  *     « Planches » l'affiche tout de suite ;
  *   - la ferme entière se lit ensuite, une fois l'écran affiché, et remplace le début.
  * Les lignes lues ne dépendent pas de la saison : changer de saison ne relit rien, le plan se
- * recalcule. Tout changement des tables lues (saisie locale ou synchro) oublie ce qui est en
- * cache et prévient les écrans ouverts, qui relisent.
+ * recalcule.
+ *
+ * Changement des tables lues (saisie locale ou synchro) : la ferme entière est relue ici, puis
+ * les écrans ouverts sont prévenus et prennent le plan relu, complet. Pendant la relecture, ils
+ * gardent le plan affiché (jamais le début : pas de retour en haut ni de clignotement). Les
+ * changements rapprochés sont regroupés : une relecture attend CALME_MS sans changement (une
+ * synchro arrive en rafale), ATTENTE_MAX_MS au plus après le premier changement non relu ; deux
+ * relectures commencent à au moins ESPACEMENT_RELECTURES_MS d'écart, une seule à la fois, et un
+ * changement arrivé pendant l'une en relance une après elle (la dernière voit le dernier
+ * changement).
  */
 import type { PorteDonnees } from '@planif/sync';
 import { chargerSaisons, construirePlan, lireDebutDePlan, lireDonneesPlan, saisonParDefaut, type DonneesPlan, type Plan, type SaisonPlan } from './calculs.ts';
@@ -18,6 +26,13 @@ const TABLES_DU_PLAN = ['saison', 'zone', 'emplacement', 'occupation', 'serie', 
 
 /** Emplacements lus pour le début du plan : de quoi remplir la vue d'un téléphone. */
 export const EMPLACEMENTS_DU_DEBUT = 12;
+
+/** Écart minimal entre le début de deux relectures après changement (synchro en rafale). */
+export const ESPACEMENT_RELECTURES_MS = 300;
+/** Silence attendu après un changement avant de relire (fin de la rafale). */
+export const CALME_MS = 150;
+/** Délai maximal entre un changement et le début de sa relecture, même si la rafale continue. */
+export const ATTENTE_MAX_MS = 1_000;
 
 /** Plan affichable : complet, ou son début (les lignes des premières zones, exactes). */
 export interface PlanLu {
@@ -34,6 +49,17 @@ interface CacheFerme {
   saisons: Entree<SaisonPlan[]> | null;
   debut: Entree<DonneesPlan> | null;
   tout: Entree<DonneesPlan> | null;
+  /** Ferme entière lue avant le dernier changement : montrée tant que la relecture n'a pas abouti. */
+  ancien: DonneesPlan | null;
+  /** Changement pas encore relu. */
+  sale: boolean;
+  /** Premier et dernier changement pas encore relus (performance.now). */
+  premierChangement: number;
+  dernierChangement: number;
+  enRelecture: boolean;
+  minuterie: ReturnType<typeof setTimeout> | null;
+  /** Début de la dernière relecture (performance.now), -Infinity si aucune. */
+  derniere: number;
   /** Plans calculés, par données lues puis par saison et jour. */
   readonly plans: WeakMap<DonneesPlan, Map<string, Plan>>;
   readonly abonnes: Set<() => void>;
@@ -64,24 +90,83 @@ function cacheDe(porte: PorteDonnees, fermeId: string): CacheFerme {
   }
   let cache = parFerme.get(fermeId);
   if (cache === undefined) {
-    const neuf: CacheFerme = { saisons: null, debut: null, tout: null, plans: new WeakMap(), abonnes: new Set() };
+    const neuf: CacheFerme = {
+      saisons: null,
+      debut: null,
+      tout: null,
+      ancien: null,
+      sale: false,
+      premierChangement: 0,
+      dernierChangement: 0,
+      enRelecture: false,
+      minuterie: null,
+      derniere: Number.NEGATIVE_INFINITY,
+      plans: new WeakMap(),
+      abonnes: new Set(),
+    };
     cache = neuf;
     parFerme.set(fermeId, neuf);
-    // Premier appel tout de suite (rien n'a changé) : ignoré ; ensuite, chaque changement vide
-    // le cache et prévient les écrans ouverts.
+    // Premier appel tout de suite (rien n'a changé) : ignoré ; ensuite, chaque changement fait
+    // relire la ferme (regroupé, voir planifierRelecture).
     let premier = true;
     porte.surveiller({ sql: 'SELECT 1 AS temoin', tables: TABLES_DU_PLAN }, () => {
       if (premier) {
         premier = false;
         return;
       }
-      neuf.saisons = null;
-      neuf.debut = null;
-      neuf.tout = null;
-      for (const rappel of [...neuf.abonnes]) rappel();
+      const maintenant = performance.now();
+      if (!neuf.sale) neuf.premierChangement = maintenant;
+      neuf.sale = true;
+      neuf.dernierChangement = maintenant;
+      planifierRelecture(porte, fermeId, neuf);
     });
   }
   return cache;
+}
+
+/**
+ * (Re)programme la relecture : après CALME_MS de silence (ATTENTE_MAX_MS au plus après le premier
+ * changement non relu), jamais moins de ESPACEMENT_RELECTURES_MS après le début de la précédente,
+ * une à la fois.
+ */
+function planifierRelecture(porte: PorteDonnees, fermeId: string, cache: CacheFerme): void {
+  if (!cache.sale || cache.enRelecture) return;
+  if (cache.minuterie !== null) clearTimeout(cache.minuterie);
+  const quand = Math.max(
+    Math.min(cache.dernierChangement + CALME_MS, cache.premierChangement + ATTENTE_MAX_MS),
+    cache.derniere + ESPACEMENT_RELECTURES_MS,
+  );
+  const delai = Math.max(0, quand - performance.now());
+  cache.minuterie = setTimeout(() => {
+    cache.minuterie = null;
+    relire(porte, fermeId, cache);
+  }, delai);
+}
+
+function relire(porte: PorteDonnees, fermeId: string, cache: CacheFerme): void {
+  cache.sale = false;
+  cache.derniere = performance.now();
+  // Ce qui était lu est périmé ; la ferme entière déjà lue reste montrable jusqu'à la relecture.
+  cache.ancien = cache.tout?.valeur ?? cache.ancien;
+  cache.saisons = null;
+  cache.debut = null;
+  cache.tout = null;
+  if (cache.abonnes.size === 0) {
+    // Aucun écran ouvert : rien à relire maintenant, le prochain affichage lira.
+    cache.ancien = null;
+    return;
+  }
+  cache.enRelecture = true;
+  Promise.allSettled([obtenirSaisons(porte, fermeId), lire(porte, fermeId, 'tout')])
+    .then(([, tout]) => {
+      if (tout.status === 'fulfilled') cache.ancien = null;
+      else console.error('Plan illisible après un changement', tout.reason);
+      for (const rappel of [...cache.abonnes]) rappel();
+    })
+    .finally(() => {
+      cache.enRelecture = false;
+      planifierRelecture(porte, fermeId, cache);
+    });
 }
 
 /** Saisons de la ferme, lues une fois tant que rien ne change. */
@@ -142,16 +227,22 @@ export async function obtenirPlan(porte: PorteDonnees, fermeId: string, saison: 
   return { plan: planDe(cacheDe(porte, fermeId), donnees, saison, aujourdhui), complet: true };
 }
 
-/** Le plan le plus complet que les données déjà lues permettent, ou null. */
+/**
+ * Le plan le plus complet que les données déjà lues permettent, ou null. Pendant une relecture,
+ * la ferme entière lue avant le changement (complète, bientôt remplacée).
+ */
 export function planEnCache(porte: PorteDonnees, fermeId: string, saison: SaisonPlan, aujourdhui: string): PlanLu | null {
   const cache = cacheDe(porte, fermeId);
-  const tout = cache.tout?.valeur ?? null;
+  const tout = cache.tout?.valeur ?? cache.ancien;
   if (tout !== null) return { plan: planDe(cache, tout, saison, aujourdhui), complet: true };
   const debut = cache.debut?.valeur ?? null;
   return debut === null ? null : { plan: planDe(cache, debut, saison, aujourdhui), complet: false };
 }
 
-/** Appelle `rappel` quand les données du plan changent ; rend le désabonnement. */
+/**
+ * Appelle `rappel` quand les données du plan ont changé et que la ferme entière a été relue
+ * (planEnCache rend alors le plan à jour) ; rend le désabonnement.
+ */
 export function surChangement(porte: PorteDonnees, fermeId: string, rappel: () => void): () => void {
   const cache = cacheDe(porte, fermeId);
   cache.abonnes.add(rappel);
