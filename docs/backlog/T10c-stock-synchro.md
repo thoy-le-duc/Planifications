@@ -30,6 +30,7 @@
 3. **Mouvement inverse borné.**
    - Annulation : le mouvement rattaché vaut exactement l'opposé de la somme des mouvements de la récolte d'origine, sur le même article.
    - Correction : le mouvement rattaché vaut la différence entre la nouvelle quantité et celle en vigueur.
+   - Chaîne : le mouvement d'une annulation (de l'origine ou d'une correction) vaut l'opposé de la somme de tous les mouvements de la chaîne (origine et corrections) sur le même article ; « en vigueur » s'entend après les corrections précédentes. Annuler retire tout, puisqu'une annulation remplace la saisie.
 4. **Plafond** : |quantité| ≤ plafond provisoire, pour tous les motifs.
 5. **Motifs acceptés depuis un téléphone : `recolte` seulement**, pour l'instant. Vente, perte et ajustement n'ont pas d'écran : ils sont refusés jusqu'au ticket qui les saisira. On n'ouvre pas une porte dont personne n'a besoin.
 6. **Modifier ou effacer un article** : refusé, motif `ajout_seul` ou `table_interdite`.

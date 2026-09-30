@@ -45,10 +45,13 @@
  *     CORRECTION (remplace_sorte non nul). Rattachée à la récolte d'origine → 'ecriture_invalide'.
  *   - Décision 3 du chef (mouvement borné), sinon 'ecriture_invalide' :
  *       annulation : le mouvement rattaché vaut EXACTEMENT l'opposé de la somme des mouvements de
- *         la récolte annulée (recolte_id = elle), sur le MÊME article (12 → −12 ; −50 ou −12 sur
+ *         la chaîne de la récolte annulée, sur le MÊME article (12 → −12 ; −50 ou −12 sur
  *         un autre article : refusé) ;
- *       correction : le mouvement rattaché vaut la nouvelle quantité − la quantité de l'événement
- *         corrigé (12 → 15 : +3 accepté, +5 refusé ; 12 → 10 : −2 accepté, −3 refusé).
+ *       correction : le mouvement rattaché vaut la nouvelle quantité − la quantité EN VIGUEUR
+ *         (après les corrections précédentes) (12 → 15 : +3 accepté, +5 refusé ; 12 → 10 : −2).
+ *       Chaîne : une annulation (de l'origine ou d'une de ses corrections) vaut l'opposé de la somme
+ *         de TOUS les mouvements de la chaîne (origine + corrections) sur le même article :
+ *         12 (+12) → 15 (+3) → annulation −15 ; récolte avec +10 et +2 → annulation −12.
  *     Le mouvement inverse pointe vers l'événement d'annulation ou de correction (comme T13).
  *
  * Règles de `article_stock` (création seule) :
@@ -453,6 +456,43 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       await refuseEnEntier([annulation, inverse], inverse, 'ecriture_invalide');
       expect(await stock(article.id)).toBe(12);
       expect(await stock(autreArticle)).toBe(0);
+    });
+
+    it.each(['la correction', 'l’origine'])(
+      'décision 3 : récolte 12 (+12), correction → 15 (+3), annulation de %s : −12 refusé, −15 accepté (toute la chaîne)',
+      async (cible) => {
+        const { recolte, article } = await recolteAcceptee(12);
+        const correction = putRemplacement(recolte, 'correction', { quantite: 15, unite: 'kg', categorie: null });
+        expect(await lot([correction, putMouvement(article.id, 3, correction.id)])).toEqual({ refus: [] });
+        const annulee = cible === 'la correction' ? correction : recolte;
+
+        const annulationFausse = putRemplacement(annulee, 'annulation', { quantite: 15, unite: 'kg', categorie: null });
+        const moinsDouze = putMouvement(article.id, -12, annulationFausse.id);
+        await refuseEnEntier([annulationFausse, moinsDouze], moinsDouze, 'ecriture_invalide');
+
+        const annulation = putRemplacement(annulee, 'annulation', { quantite: 15, unite: 'kg', categorie: null });
+        const moinsQuinze = putMouvement(article.id, -15, annulation.id);
+        expect(await lot([annulation, moinsQuinze])).toEqual({ refus: [] });
+        expect(await stock(article.id)).toBe(0);
+      },
+    );
+
+    it('décision 3 : récolte 12 avec deux mouvements (+10 et +2, même article, même lot) : annulation −10 refusée, −12 acceptée', async () => {
+      const recolte = putRecolte(12);
+      const article = putArticle();
+      const dix = putMouvement(article.id, 10, recolte.id);
+      const deux = putMouvement(article.id, 2, recolte.id);
+      expect(await lot([recolte, article, dix, deux])).toEqual({ refus: [] });
+      expect(await stock(article.id)).toBe(12);
+
+      const annulationFausse = putRemplacement(recolte, 'annulation');
+      const moinsDix = putMouvement(article.id, -10, annulationFausse.id);
+      await refuseEnEntier([annulationFausse, moinsDix], moinsDix, 'ecriture_invalide');
+
+      const annulation = putRemplacement(recolte, 'annulation');
+      const moinsDouze = putMouvement(article.id, -12, annulation.id);
+      expect(await lot([annulation, moinsDouze])).toEqual({ refus: [] });
+      expect(await stock(article.id)).toBe(0);
     });
 
     it('le même lot renvoyé (réponse perdue) : accepté, rien en double, un seul historique par ligne', async () => {
