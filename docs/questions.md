@@ -244,6 +244,10 @@ Question : si tu ouvres l'appli et tapes tout de suite sur Planches, l'écran me
 
 Réponse (2026-09-30) : « ok pour l'instant ». La correction reste dans T11b, sans priorité.
 
+### Q24 — « Fait » sur un travail répété en retard (posée le 2026-09-30, T22)
+
+Question : désherbage prévu tous les 14 jours, le 17 et le 31. Tu le fais en retard le 25 et tu tapes « Fait ». Aujourd'hui, l'intervention solde l'occurrence la plus proche, donc celle du 31, qui disparaît, tandis que celle du 17 reste affichée en retard. Proposition : « Fait » sur une carte en retard solde cette occurrence et les précédentes, et laisse la suivante (le 31) à faire. D'accord ?
+
 ### Q23 — Travail prévu jamais saisi (posée le 2026-09-30, T22)
 
 Question : une grelinette prévue 10 jours avant la plantation n'a pas été saisie. Une fois la plantation faite, doit-elle disparaître de la liste (proposition retenue pour l'instant) ou rester en retard jusqu'à ce qu'on la coche ?
