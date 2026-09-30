@@ -574,7 +574,7 @@ function contraste(a: string, b: string): number {
 }
 
 /** Parcourt la page au clavier (Tab) jusqu'à revenir au premier élément ; vérifie chaque contour. */
-async function focusVisibleAuClavier(page: Page, attendus: readonly RegExp[]): Promise<void> {
+async function focusVisibleAuClavier(page: Page, attendus: readonly RegExp[], jamais: readonly RegExp[] = []): Promise<void> {
   const vus: FocusVu[] = [];
   const premier = await focusActuel(page);
   if (premier !== null) vus.push(premier);
@@ -590,6 +590,12 @@ async function focusVisibleAuClavier(page: Page, attendus: readonly RegExp[]): P
       vus.some((v) => attendu.test(v.nom)),
       `${String(attendu)} atteint au clavier (vus : ${vus.map((v) => v.nom).join(' | ')})`,
     ).toBe(true);
+  }
+  for (const exclu of jamais) {
+    expect(
+      vus.filter((v) => exclu.test(v.nom)).map((v) => v.nom),
+      `${String(exclu)} jamais atteint au clavier (vus : ${vus.map((v) => v.nom).join(' | ')})`,
+    ).toEqual([]);
   }
   for (const v of vus) {
     expect(['none', 'hidden', 'auto'], `« ${v.nom} » : style du contour`).not.toContain(v.style);
@@ -612,12 +618,21 @@ test('focus au clavier : connexion, contour visible, contrasté, jamais rogné',
   await focusVisibleAuClavier(page, [/^champ code$/, /renvoyer un code/i, /changer d['’]adresse/i]);
 });
 
+/**
+ * T16b (décision du chef) : cette session n'a aucune ferme sur le téléphone, la base n'est donc
+ * pas prête ; le contrat de T16b veut alors « Exporter toute ma ferme » présent mais vraiment
+ * désactivé (attribut disabled, voir e2e/export.e2e.ts). Un bouton désactivé ne prend pas le
+ * focus : le parcours au clavier le saute et atteint les commandes actives, toujours avec un
+ * contour visible, contrasté et jamais rogné (vérification inchangée).
+ */
 test('focus au clavier : onglets et lignes de l’écran Ferme', async ({ page }) => {
   await ouvrirConnecte(page);
   await onglet(page, 'Ferme').click();
-  await expect(page.getByRole('button', { name: 'Exporter toute ma ferme', exact: true })).toBeVisible();
+  const exporter = page.getByRole('button', { name: 'Exporter toute ma ferme', exact: true });
+  await expect(exporter).toBeVisible();
+  await expect(exporter).toBeDisabled();
   await page.evaluate(() => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   });
-  await focusVisibleAuClavier(page, [/Aujourd['’]hui/, /^Planches$/, /^Dicter$/, /^Ferme$/, /^Exporter toute ma ferme$/, /^Se déconnecter$/]);
+  await focusVisibleAuClavier(page, [/Aujourd['’]hui/, /^Planches$/, /^Dicter$/, /^Ferme$/, /^Se déconnecter$/], [/^Exporter toute ma ferme$/]);
 });
