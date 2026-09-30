@@ -62,13 +62,19 @@ const CIBLE_GANT_PX = 56;
  */
 const TACHE_MAX_MS = 50;
 /**
- * Durée totale tap → téléchargement, CPU ×4, ferme de T07 : critère de T15 (« Export de la
- * ferme complète en moins de 10 secondes, CPU ralenti ×4 »), jamais mesuré jusqu'ici dans un
- * navigateur (relecture T19 : les tests Node ne voient plus une attente sans calcul).
- * Mesure du testeur sur main (même branchement provisoire) : 11,9 à 13,0 s sur 4 essais,
- * dont ≈ 3,5 s de lecture de la base. Borne gardée à 10 s : c'est le critère du ticket T15.
+ * Durée totale tap → téléchargement, CPU ×4, ferme de T07. Critère de T15 : 10 s, jamais
+ * mesuré jusqu'ici dans un navigateur (relecture T19 : les tests Node ne voient plus une
+ * attente sans calcul).
+ * Mesures :
+ *   - testeur, sur main (branchement provisoire) : 11,9 à 13,0 s sur 4 essais ;
+ *   - développeur T16b (lecture par pages, compression dans un worker, aucune tâche longue) :
+ *     11,7 à 13,1 s, dont ≈ 6 s de lecture de la base (limitée par IndexedDB) et 3,7 à 5,5 s
+ *     de construction de l'archive sur le fil principal.
+ * Décision du chef (T16b) : borne à 15 s. Geste rare, barre d'avancement, annulable, et le fil
+ * principal ne gèle jamais (TACHE_MAX_MS = 50 inchangé). Le ticket T15c ramènera l'export
+ * sous 10 s (archive construite au fil de la lecture).
  */
-const DUREE_MAX_MS = 10_000;
+const DUREE_MAX_MS = 15_000;
 
 const EXPORTER = 'Exporter toute ma ferme';
 

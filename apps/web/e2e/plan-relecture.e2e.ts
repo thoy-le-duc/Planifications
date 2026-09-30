@@ -279,6 +279,14 @@ test('C3 — déconnexion avec la base ouverte par l’appli : plus aucune base 
   const avant = await page.evaluate(async () => (await indexedDB.databases()).map((b) => b.name ?? ''));
   expect(avant, 'base locale de l’utilisateur ouverte').toContain(`planif-${utilisateurId}.sqlite`);
 
+  // Avant de couper le réseau, le service worker doit avoir tout mis en cache (précache
+  // installé et actif) et contrôler la page, comme dans les autres e2e hors ligne : sinon,
+  // sous charge, l'écran Ferme ne peut pas se charger hors ligne (instabilité, T16b).
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+
   // Hors ligne : l'appel à l'API échoue vite, la déconnexion se fait quand même (T09b).
   await context.setOffline(true);
   await onglet(page, 'Ferme').click();
