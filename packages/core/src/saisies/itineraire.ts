@@ -27,7 +27,7 @@ import {
   type Objet,
   type ResultatLigne,
 } from './lignes.ts';
-import { PLAFONDS_TRAVAUX, texteInterdit, type OptionsTravaux } from './travaux.ts';
+import { libelleType, texteInterdit, type OptionsTravaux } from './travaux.ts';
 
 export type ResultatLigneItineraire<T> = ResultatLigne<T>;
 
@@ -128,15 +128,6 @@ export function validerItineraire(entree: unknown, options: OptionsItineraire = 
   return sansException(entree, (l) => lireItineraire(l, options));
 }
 
-/** Libellé d'un type : texte non vide, de PLAFONDS_TRAVAUX.texte caractères au plus (recopié dans les travaux). */
-function libelle(v: unknown): Lu<string> {
-  if (absent(v)) return echec(erreur('champ_manquant', 'libelle', 'libellé manquant'));
-  if (typeof v !== 'string' || v.trim() === '') return echec(erreur('champ_invalide', 'libelle', 'libellé : texte non vide attendu'));
-  if (v.length > PLAFONDS_TRAVAUX.texte) return echec(erreur('trop_long', 'libelle', `libellé : ${String(PLAFONDS_TRAVAUX.texte)} caractères au plus`));
-  if (texteInterdit(v)) return echec(erreur('champ_invalide', 'libelle', 'libellé : caractère invalide'));
-  return lu(v);
-}
-
 /** Booléen ; le téléphone (SQLite) l'envoie en entier 0 / 1. Absent : false. */
 function masque(v: unknown): Lu<boolean> {
   if (absent(v) || v === 0 || v === false) return lu(false);
@@ -154,7 +145,7 @@ function lireTypeIntervention(l: Objet): Lu<TypeInterventionEcrit> {
   if (!ferme.ok) return ferme;
   const categorie = valeurParmi(l.categorie, CATEGORIES, 'categorie', "catégorie d'intervention");
   if (!categorie.ok) return categorie;
-  const texte = libelle(l.libelle);
+  const texte = libelleType(l.libelle, 'libelle', 'libellé');
   if (!texte.ok) return texte;
   const m = masque(l.masque);
   if (!m.ok) return m;
