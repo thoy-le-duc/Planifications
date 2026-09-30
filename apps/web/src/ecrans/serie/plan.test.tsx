@@ -14,6 +14,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { PorteDonnees } from '@planif/sync';
 import { ecartEnJours, lundiDeSemaine, semaineIso, type DateCalendaire } from '@planif/core';
 import type { ModuleEcranPlan } from '../plan/test/contrat.ts';
 import { DELAI_APPUI_LONG_MS, type GeometriePlan } from './test/contrat.ts';
@@ -81,9 +82,9 @@ afterEach(() => {
 const ligne = (emplacementId: string): HTMLElement | null =>
   conteneur.querySelector<HTMLElement>(`[data-testid="ligne-plan"][data-sorte="emplacement"][data-id="${emplacementId}"]`);
 
-async function rendre(): Promise<void> {
+async function rendre(porte: PorteDonnees = b.porte): Promise<void> {
   await act(async () => {
-    racine.render(<plan.EcranPlan porte={b.porte} fermeId={FERME} aujourdhui={() => AUJOURDHUI} />);
+    racine.render(<plan.EcranPlan porte={porte} fermeId={FERME} aujourdhui={() => AUJOURDHUI} />);
     await Promise.resolve();
   });
   await attendre(() => ligne(EMPLACEMENT.t2p01) !== null, 'plan affiché');
@@ -272,5 +273,38 @@ describe('T12 : autres entrées du plan de culture', () => {
     const detail = dialogueOuEchec('Détail de la série');
     expect(aBouton('Modifier la série', detail)).toBe(false);
     expect(boutons(detail).map(nomAccessible)).toEqual(['Fermer']);
+  });
+});
+
+describe('T12 : corrections de la relecture, écran Planches', () => {
+  it('N4 : si « Annuler » du bandeau échoue (écriture refusée), un message d’erreur visible le dit ; rien ne disparaît en silence', async () => {
+    let refuser = false;
+    const porte: PorteDonnees = {
+      ...b.porte,
+      ecrireEnsemble: (ordres) => (refuser ? Promise.reject(new Error('écriture refusée (test)')) : b.porte.ecrireEnsemble(ordres)),
+      ecrire: (sql, p) => (refuser ? Promise.reject(new Error('écriture refusée (test)')) : b.porte.ecrire(sql, p)),
+    };
+    await rendre(porte);
+    await saison2027();
+    const barre = conteneur.querySelector<HTMLElement>(`[data-testid="barre"][data-occupation="${OCCUPATION_LAITUE}"]`);
+    if (barre === null) throw new Error('barre de SERIE_LAITUE absente');
+    await toucher(barre);
+    await toucher(bouton('Modifier la série', dialogueOuEchec('Détail de la série')));
+    await attendre(() => dialogue('Modifier la série') !== undefined, 'formulaire de modification');
+    const f = dialogueOuEchec('Modifier la série');
+    await attendre(() => f.querySelector('[data-testid="date-serie"]') !== null, 'formulaire rempli');
+    await remplir(champ('Longueur T2-P02', f), '20');
+    await toucher(bouton('Enregistrer', f));
+    await attendre(() => serie(b, SERIE_LAITUE)?.longueur_m === 20, 'modification écrite');
+    await attendre(() => conteneur.querySelector('[data-testid="saisie-annulable"]') !== null, 'bandeau « Annuler »');
+    const bandeau = conteneur.querySelector<HTMLElement>('[data-testid="saisie-annulable"]');
+    if (bandeau === null) return;
+
+    refuser = true;
+    await toucher(bouton('Annuler', bandeau));
+    for (let k = 0; k < 20; k++) await patienter(5);
+    expect(serie(b, SERIE_LAITUE)?.longueur_m, 'rien n’a été défait').toBe(20);
+    const alertes = [...conteneur.querySelectorAll<HTMLElement>('[role="alert"]')].filter((el) => /annul/i.test(texte(el)));
+    expect(alertes.length, 'un message role="alert" dit que l’annulation a échoué').toBeGreaterThan(0);
   });
 });

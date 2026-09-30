@@ -50,6 +50,7 @@ import {
   creerBanc,
   desactive,
   dialogue,
+  dialogues,
   dialogueOuEchec,
   etat,
   MAINTENANT,
@@ -207,7 +208,8 @@ function recevoirModification(m: {
   readonly ligneId: string;
   readonly operation: 'creation' | 'modification' | 'suppression';
   readonly horodatage: string;
-  readonly avant: Record<string, unknown> | null;
+  /** Objet (écrit en JSON), null, ou texte brut tel que reçu (relecture B1 : JSON invalide). */
+  readonly avant: Record<string, unknown> | null | string;
   readonly apres: Record<string, unknown>;
 }): string {
   const id = `0192f0c1-1212-7000-8000-${(prochaineModification++).toString(16).padStart(12, '0')}`;
@@ -222,7 +224,7 @@ function recevoirModification(m: {
       '0192f0c1-1212-7000-8000-000000000001',
       m.horodatage,
       m.operation,
-      m.avant === null ? null : JSON.stringify(m.avant),
+      m.avant === null || typeof m.avant === 'string' ? m.avant : JSON.stringify(m.avant),
       JSON.stringify(m.apres),
       m.horodatage,
       m.horodatage,
@@ -723,5 +725,139 @@ describe('T12 : modifier une série, puis annuler', () => {
     expect(occupationsDe(b, SERIE_LAITUE).map((o) => o.supprime_le)).toEqual([ISO]);
     serieValide(serie(b, SERIE_LAITUE) ?? {});
     verifierOrdres(b);
+  });
+});
+
+// ── Corrections de la relecture ──────────────────────────────────────────────────────────────
+
+describe('T12 : historique reçu abîmé (relecture B1, B2, N7)', () => {
+  /** Ouvre SERIE_LAITUE en modification, attend `n` entrées d'historique. */
+  async function ouvrirHistorique(n: number): Promise<HTMLElement> {
+    await ouvrir({ sorte: 'modification', serieId: SERIE_LAITUE });
+    const h = await historique();
+    await attendre(() => entrees(h).length === n, `${String(n)} entrée(s) dans l’historique`);
+    return h;
+  }
+
+  /**
+   * Tente d'annuler l'entrée `id` : touche « Annuler » s'il est actif, puis confirme si une
+   * confirmation s'ouvre. Rend vrai si le bouton était actif (un message est alors attendu).
+   */
+  async function tenterAnnulation(h: HTMLElement, id: string): Promise<boolean> {
+    const entree = entrees(h).find((e) => e.dataset.modification === id);
+    expect(entree, `entrée ${id} affichée`).toBeDefined();
+    if (entree === undefined) return false;
+    const annuler = bouton(/^Annuler/, entree);
+    if (desactive(annuler)) return false;
+    await toucher(annuler);
+    await unTour();
+    const confirmation = dialogues().find((d) => d !== dialogue(NOM_MODIFICATION) && aBouton(/Tout annuler/, d));
+    if (confirmation !== undefined) await toucher(bouton(/Tout annuler/, confirmation));
+    for (let k = 0; k < 20; k++) await unTour();
+    return true;
+  }
+
+  function verifierIntacte(serieAvant: Record<string, unknown>, occupationsAvant: Record<string, unknown>[]): void {
+    expect(dialogue(NOM_MODIFICATION), 'l’écran reste affiché').toBeDefined();
+    expect(b.transactions(), 'aucune écriture').toBe(0);
+    expect(etat(serie(b, SERIE_LAITUE)), 'la série est inchangée (jamais supprimée)').toEqual(serieAvant);
+    expect(occupationsDe(b, SERIE_LAITUE).map(etat), 'ses occupations aussi').toEqual(occupationsAvant);
+  }
+
+  const messageVisible = (): boolean =>
+    [...formulaire().querySelectorAll('[role="alert"]')].some((el) => /annul/i.test(texte(el)));
+
+  it.each([
+    ['JSON invalide', '{pas du json'],
+    ['JSON nul', 'null'],
+    ['JSON qui n’est pas un objet', '[1, 2]'],
+  ])('B1 : une « modification » dont avant est %s ne supprime JAMAIS la série ; annulation impossible', async (_cas, avant) => {
+    const initiale = serie(b, SERIE_LAITUE);
+    const serieAvant = etat(initiale);
+    const occupationsAvant = occupationsDe(b, SERIE_LAITUE).map(etat);
+    const id = recevoirModification({
+      table: 'Serie',
+      ligneId: SERIE_LAITUE,
+      operation: 'modification',
+      horodatage: '2026-09-30T08:00:05.000Z',
+      avant,
+      apres: versJsonb(initiale),
+    });
+    const h = await ouvrirHistorique(1);
+    b.remiseAZero();
+    const actif = await tenterAnnulation(h, id);
+    verifierIntacte(serieAvant, occupationsAvant);
+    if (actif) expect(messageVisible(), 'bouton actif : un message clair dit que l’annulation est impossible').toBe(true);
+    verifierOrdres(b);
+  });
+
+  it.each([
+    ['vide', ''],
+    ['illisible', '0000-99-99T99:99:99Z'],
+  ])('B2 : une entrée à l’horodatage %s (pas la plus récente) ne fait pas planter l’écran ; annulation impossible', async (_cas, horodatage) => {
+    const initiale = serie(b, SERIE_LAITUE);
+    const serieAvant = etat(initiale);
+    const occupationsAvant = occupationsDe(b, SERIE_LAITUE).map(etat);
+    const abimee = recevoirModification({
+      table: 'Serie',
+      ligneId: SERIE_LAITUE,
+      operation: 'modification',
+      horodatage,
+      avant: versJsonb(initiale),
+      apres: versJsonb(initiale),
+    });
+    recevoirModification({
+      table: 'Serie',
+      ligneId: SERIE_LAITUE,
+      operation: 'modification',
+      horodatage: '2026-09-30T08:00:05.000Z',
+      avant: versJsonb(initiale),
+      apres: versJsonb(initiale),
+    });
+    const h = await ouvrirHistorique(2);
+    const ordre = entrees(h).map((e) => e.dataset.modification);
+    // Seule la plus récente s'annule sans confirmation : l'entrée abîmée doit passer par elle.
+    expect(ordre.indexOf(abimee), 'l’entrée abîmée n’est pas la plus récente').toBeGreaterThan(0);
+    b.remiseAZero();
+    const actif = await tenterAnnulation(h, abimee);
+    verifierIntacte(serieAvant, occupationsAvant);
+    if (actif) expect(messageVisible(), 'bouton actif : un message clair dit que l’annulation est impossible').toBe(true);
+    verifierOrdres(b);
+  });
+
+  it('N7 : la confirmation date l’entrée en heure locale (2027-03-01T23:30Z → 2 mars à Paris)', async () => {
+    const tz = process.env.TZ;
+    process.env.TZ = 'Europe/Paris';
+    try {
+      expect(new Date('2027-03-01T23:30:00.000Z').getDate(), 'le fuseau du test est bien Europe/Paris').toBe(2);
+      const initiale = serie(b, SERIE_LAITUE);
+      const ancienne = recevoirModification({
+        table: 'Serie',
+        ligneId: SERIE_LAITUE,
+        operation: 'modification',
+        horodatage: '2027-03-01T23:30:00.000Z',
+        avant: versJsonb(initiale),
+        apres: versJsonb(initiale),
+      });
+      recevoirModification({
+        table: 'Serie',
+        ligneId: SERIE_LAITUE,
+        operation: 'modification',
+        horodatage: '2027-03-05T10:00:00.000Z',
+        avant: versJsonb(initiale),
+        apres: versJsonb(initiale),
+      });
+      const h = await ouvrirHistorique(2);
+      const entree = entrees(h).find((e) => e.dataset.modification === ancienne);
+      if (entree === undefined) throw new Error('entrée ancienne absente');
+      await toucher(bouton(/^Annuler/, entree));
+      await attendre(() => dialogues().some((d) => d !== dialogue(NOM_MODIFICATION) && aBouton(/Tout annuler/, d)), 'confirmation de l’historique');
+      const confirmation = dialogues().find((d) => d !== dialogue(NOM_MODIFICATION) && aBouton(/Tout annuler/, d));
+      expect(texte(confirmation)).toContain('2 mars');
+      expect(texte(confirmation)).not.toContain('1 mars');
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
   });
 });
