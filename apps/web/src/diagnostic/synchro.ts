@@ -14,9 +14,12 @@ import { urlApi } from '../connexion/client.ts';
 import { deconnecterAvecConfirmation } from '../connexion/deconnexion.ts';
 import { lireSession, stockageNavigateur } from '../connexion/session.ts';
 import { ouvrirDonnees } from '../donnees/index.ts';
+import { brancherSectionSerie } from './stock-serie.ts';
 
 const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const FUSEAU_PAR_DEFAUT = 'Europe/Paris';
+/** Délai entre deux relevés du nombre de saisies en attente d'envoi (contrat : à une seconde près). */
+const RELEVE_EN_ATTENTE_MS = 400;
 
 function element<T extends HTMLElement>(id: string, type: new () => T): T {
   const e = document.getElementById(id);
@@ -61,9 +64,13 @@ function recolteDepuisLigne(l: Readonly<Record<string, unknown>>): Recolte {
   return { id: String(l.id), quantite, note: typeof l.note === 'string' ? l.note : '' };
 }
 
-function brancher(porte: PorteDonnees, fermeId: Id<'Ferme'>, auteurId: string): void {
+function brancher(porte: PorteDonnees, fermeId: Id<'Ferme'>, auteurId: string, serieId: string | null): void {
   let fuseau = FUSEAU_PAR_DEFAUT;
   brancherPutInterdit(porte, auteurId, () => fuseau);
+  // T10c : section « Récolte d'une série », inerte (cachée) sans paramètre `serie` valide.
+  if (serieId !== null) {
+    brancherSectionSerie({ porte, fermeId, serieId, auteurId, aujourdhui: () => aujourdhui(fuseau), afficherErreur });
+  }
   porte.surveiller<string>(
     { sql: 'SELECT fuseau_horaire FROM ferme WHERE id = ?', parametres: [fermeId], tables: ['ferme'], convertir: (l) => String(l.fuseau_horaire) },
     (lignes) => {
@@ -214,7 +221,24 @@ function demarrer(): void {
     etat.dataset.etat = e;
     etat.textContent = LIBELLES[e];
   });
-  brancher(donnees.porte, fermeId, session.utilisateurId);
+  const serie = new URLSearchParams(location.search).get('serie') ?? '';
+  brancher(donnees.porte, fermeId, session.utilisateurId, MOTIF_UUID.test(serie) ? serie.toLowerCase() : null);
+
+  // Transactions pas encore envoyées au serveur (T10c).
+  const enAttente = element('en-attente', HTMLElement);
+  const relever = (): void => {
+    donnees
+      .ecrituresEnAttente()
+      .then((n) => {
+        enAttente.dataset.nombre = String(n);
+        enAttente.textContent = String(n);
+      })
+      .catch(() => {
+        // Base pas encore prête, ou effacée : relevé suivant.
+      });
+  };
+  relever();
+  setInterval(relever, RELEVE_EN_ATTENTE_MS);
 
   // T09b : déconnexion (jeton révoqué, session et base locale effacées), même hors ligne ;
   // confirmation d'abord si des saisies n'ont pas encore été envoyées.
