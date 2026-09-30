@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import { LIBELLES_UNITES, MARQUE_AUJOURDHUI_ATTENDUE } from '../src/ecrans/aujourdhui/test/contrat.ts';
-import { cleTache, fermeDuJour, SERIE } from '../src/ecrans/aujourdhui/test/ferme-du-jour.ts';
+import { cleTache, cleTravail, fermeDuJour, LIBELLES_CATEGORIES, SERIE, texteCharge, texteDuree } from '../src/ecrans/aujourdhui/test/ferme-du-jour.ts';
 import { COULEURS } from '../src/ui/jetons.ts';
 import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp } from './outils.ts';
 
@@ -320,4 +320,68 @@ test('saisie terrain hors ligne : Fait, 12 kg de tomates, rechargement, annulati
   });
 
   expect(await violations()).toEqual([]);
+});
+
+/**
+ * T22 — travaux prévus des itinéraires dans Aujourd'hui, sur le build de production : amorçage
+ * ?jeu=aujourdhui-travaux (ferme du jour avec travaux prévus), tâche de travail affichée
+ * (surtitre, temps estimé, retard), pastille de charge, « Fait » en un geste (≥ 56 px), la tâche
+ * part et la charge baisse. Court : le détail est dans src/ecrans/aujourdhui/travaux.test.tsx.
+ */
+test('travaux prévus : tâche, charge de la semaine, « Fait » sur la grelinette', async ({ page }) => {
+  test.setTimeout(DELAI_AMORCAGE_MS + 60_000);
+  const aujourdhui = jourLocal(new Date());
+  const ferme = fermeDuJour(aujourdhui, { travaux: true });
+  const grelinette = cleTravail(SERIE.batavia, 0);
+
+  await test.step('amorcer la ferme du jour avec travaux prévus', async () => {
+    await page.goto(`/diagnostic/amorcer.html?jeu=aujourdhui-travaux&date=${aujourdhui}`);
+    await expect(page).toHaveTitle('Amorçage de la base locale (tests)');
+    const poignee = await page.waitForFunction(() => (window as unknown as { __amorcage?: unknown }).__amorcage, undefined, {
+      timeout: DELAI_AMORCAGE_MS,
+    });
+    const a = (await poignee.jsonValue()) as Amorcage;
+    expect(a.erreur, 'la page d’amorçage a signalé une erreur').toBeUndefined();
+    expect(a.lignes).toBe(ferme.total);
+  });
+
+  await test.step('connexion (session rangée)', async () => {
+    await page.goto('/');
+    await page.evaluate(
+      ([cle, valeur]) => {
+        localStorage.setItem(cle, valeur);
+      },
+      [
+        CLE_SESSION,
+        JSON.stringify({ utilisateurId: ferme.utilisateurId, email: 'theophane@ferme.fr', jetonAcces: 'aaa.bbb.ccc', jetonRenouvellement: 'r'.repeat(43) }),
+      ] as const,
+    );
+    await page.reload();
+    await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 30_000 });
+    await expect(ecran(page)).toBeVisible();
+  });
+
+  await page.setViewportSize({ width: 360, height: 780 });
+
+  await test.step('les travaux sont des tâches, la charge de la semaine en pastille', async () => {
+    expect(await taches(page).evaluateAll((els) => els.map((e) => e.getAttribute('data-cle')))).toEqual(ferme.attendu.taches);
+    const t = tache(page, grelinette);
+    await expect(t.getByTestId('surtitre')).toHaveText(LIBELLES_CATEGORIES.travail_sol ?? '');
+    await expect(t).toContainText(/grelinette/i);
+    await expect(t.getByTestId('temps-estime')).toHaveText(texteDuree(6));
+    await expect(t).toContainText('12 jours de retard');
+    await expect(t.getByTestId('bande-famille')).toHaveCSS('background-color', rgb(COULEURS.orange));
+    await expect(page.getByTestId('charge-semaine')).toHaveText(texteCharge(ferme.attendu.chargeMinutes));
+    await verifierCommandes(page, 'écran Aujourd’hui avec travaux');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+  });
+
+  await test.step('« Fait » sur la grelinette : la tâche part, la charge baisse, 1 saisie en attente', async () => {
+    await tache(page, grelinette).getByRole('button', { name: /^Marquer fait/ }).click();
+    await expect(tache(page, grelinette)).toHaveCount(0);
+    await expect(bandeau(page)).toContainText(/grelinette/i);
+    await expect(page.getByTestId('charge-semaine')).toHaveText(texteCharge(ferme.attendu.chargeMinutes - 6));
+    await expect(etatSynchro(page)).toContainText('1 saisie en attente');
+    await expect(tache(page, cleTache(SERIE.batavia, 'plantation'))).toBeVisible();
+  });
 });

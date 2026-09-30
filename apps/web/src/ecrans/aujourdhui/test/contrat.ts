@@ -160,6 +160,40 @@
  *   bandeau reste « Annuler ».
  * e2e : temps des taps en médiane de 5 (repeterMesure, décision T20) ; la mesure « appli prête »
  *   est celle de e2e/demarrage.e2e.ts, pas répétée ici.
+ *
+ * ── T22 : travaux prévus des itinéraires (tests : ../travaux.test.tsx, e2e/aujourdhui.e2e.ts) ──
+ *
+ * Données : ferme du jour « avec travaux » (fermeDuJour(jour, { travaux: true }), en-tête de
+ *   ./ferme-du-jour.ts). Les travaux sont lus dans `serie.parametres.travauxPrevus` (instantané),
+ *   passés au semainier (SerieSemainier.travauxPrevus) avec les interventions en vigueur de la
+ *   série (RealisesSemainier.interventions : date, detail.categorie, detail.type ; ni annulées,
+ *   ni corrigées, ni les annulations elles-mêmes) ; aucune règle réécrite dans l'écran
+ *   (retards, soldes, caducité, temps : le cœur, contrat-travaux.ts).
+ * Tâche de travail : data-testid="tache", data-cle="<id série>:travail:<indice>" (cleTravail),
+ *   data-retard comme T13, dans l'ordre du semainier, mêlée aux étapes. Elle montre :
+ *   - la catégorie en surtitre : élément data-testid="surtitre", texte LIBELLES_CATEGORIES
+ *     (« Travail du sol », « Amendement », « Entretien »…) ;
+ *   - le libellé du type (« grelinette »), la culture, le(s) code(s) d'emplacement ;
+ *   - le temps estimé quand il existe : data-testid="temps-estime", texte texteDuree(minutes)
+ *     (« 6 min », « 1 h 05 ») ; absent sans estimation ;
+ *   - « N jours de retard » comme T13 ; bande orange du retard ;
+ *   - un bouton dont le nom accessible commence par « Marquer fait ».
+ * « Fait » (un geste, sans confirmation, une transaction) : événement type 'intervention', date
+ *   = aujourd'hui, source 'tap', serie_id de la tâche, campagne_id nul, emplacement_ids = ceux de
+ *   la tâche (règle B2), remplace_* nuls, detail = { categorie, type (le libellé), outil (ou
+ *   null) }, plus { produit: produit.nom, quantite: produit.quantite } en fertilisation /
+ *   amendement ; accepté par validerSaisie. La tâche quitte la liste (le semainier la solde).
+ *   Bandeau « Annuler » 10 s comme T13 (texte : le libellé et la culture) ; annulation =
+ *   événement 'intervention' d'annulation, même détail ; la tâche revient. Historique : entrée
+ *   data-type="intervention", texte avec le libellé et la culture, bouton « Annuler » (nom
+ *   accessible « Annuler : <libellé>, <culture> » ou tout nom commençant par « Annuler »).
+ * Pastille de charge de la semaine : data-testid="charge-semaine", texte texteCharge(minutes)
+ *   (« 1 h 24 de travail », « 45 min de travail », « 6 h de travail ») = chargeSemaine du cœur
+ *   sur les tâches affichées ; recalculée après chaque saisie ; ABSENTE quand la charge vaut 0.
+ * Cibles ≥ 56 × 56 px pour « Marquer fait » d'une tâche de travail (e2e).
+ * Amorçage : /diagnostic/amorcer.html?jeu=aujourdhui-travaux&date=AAAA-MM-JJ : comme
+ *   ?jeu=aujourdhui, avec ecrireFermeDuJour(base, date, { travaux: true }) ;
+ *   window.__amorcage.lignes = fermeDuJour(date, { travaux: true }).total.
  */
 import type { PorteDonnees } from '@planif/sync';
 import type { ReactElement } from 'react';

@@ -19,7 +19,9 @@
  *   - repère absent pour le mode (semis pépinière d'un semis direct) : refusé à l'écriture
  *     (validation), ignoré sans lever au calcul ;
  *   - une intervention solde l'occurrence la plus proche de sa date et toutes les précédentes
- *     (Q11) ; une seule ligne en retard par travail, la plus récente.
+ *     (Q11) ; une seule ligne en retard par travail, la plus récente ;
+ *   - décision du chef (Q23, remplace le choix 7 du testeur) : une occurrence datée avant son
+ *     repère devient caduque dès que l'étape repère est réalisée (ou rendue faite par Q11).
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
@@ -289,6 +291,7 @@ describe('semainier : les travaux prévus deviennent des tâches', () => {
     const t = taches.find((x) => x.etape === 'travail');
     expect(t?.cible).toStrictEqual({ sorte: 'serie', serieId: 'batavia-ete' });
     expect(t?.travail?.categorie).toBe('travail_sol');
+    expect(t?.travail?.indice, 'position dans travauxPrevus : clé de la tâche pour l’écran').toBe(0);
     expect(t?.culture).toBe('Laitue');
     expect(t?.taille).toStrictEqual({ unite: 'longueur', longueurM: 30 });
     // Le travail du sol tombe sur les planches de la série, triées comme en T06.
@@ -302,6 +305,7 @@ describe('semainier : les travaux prévus deviennent des tâches', () => {
     const taches = m.semainier(s(2027, 17), [serie()], [], realises(), '2027-04-26');
     expect(travaux(taches)).toStrictEqual(['grelinette:2027-04-23:retard 3', 'faux semis:2027-04-26']);
     expect(taches.find((t) => t.travail?.type === 'faux semis')?.tempsEstimeMinutes).toBeNull();
+    expect(taches.find((t) => t.travail?.type === 'faux semis')?.travail?.indice).toBe(1);
   });
 
   it('S18, le jour de la plantation : les deux travaux non faits sont en retard, une ligne chacun, avant la plantation', () => {
@@ -383,12 +387,55 @@ describe('semainier : une intervention du même type sur la même série solde l
     expect(travaux(m.semainier(s(2027, 18), [serie()], [], r, '2027-05-03'))).toContain('grelinette:2027-04-23:retard 10');
   });
 
-  it('une réalisation d’étape (plantation) ne solde pas un travail : seule une intervention le fait', () => {
+});
+
+describe('semainier : un travail prévu avant son repère devient caduc quand le repère est réalisé (décision du chef, Q23)', () => {
+  it('plantation réalisée le jour prévu : grelinette (−10) et faux semis (−7) non saisis disparaissent', () => {
     const r = realises([], [['batavia-ete', { semisPepiniere: '2027-04-05', miseEnPlace: '2027-05-03' }]]);
+    expect(travaux(m.semainier(s(2027, 18), [serie()], [], r, '2027-05-03'))).toStrictEqual([]);
+  });
+
+  it('plantation réalisée en retard (05-05) : caducs aussi', () => {
+    const r = realises([], [['batavia-ete', { miseEnPlace: '2027-05-05' }]]);
+    expect(travaux(m.semainier(s(2027, 18), [serie()], [], r, '2027-05-05'))).toStrictEqual([]);
+  });
+
+  it('repère pas encore réalisé (seul le semis en pépinière l’est) : toujours en retard', () => {
+    const r = realises([], [['batavia-ete', { semisPepiniere: '2027-04-05' }]]);
     expect(travaux(m.semainier(s(2027, 18), [serie()], [], r, '2027-05-03'))).toStrictEqual([
       'grelinette:2027-04-23:retard 10',
       'faux semis:2027-04-26:retard 7',
     ]);
+  });
+
+  it('Q11 : une étape postérieure réalisée (début de récolte) rend le repère fait, donc les travaux d’avant caducs', () => {
+    const r = realises([], [['batavia-ete', { debutRecolte: '2027-05-31' }]]);
+    // Le désherbage (+14, après la mise en place) n'est pas caduc : seule une intervention le solde.
+    expect(travaux(m.semainier(s(2027, 22), [serie()], [], r, '2027-06-02'))).toStrictEqual(['désherbage:2027-05-31:retard 2']);
+  });
+
+  it('travail après son repère (désherbage +14) : la plantation réalisée ne le solde pas', () => {
+    const r = realises([], [['batavia-ete', { miseEnPlace: '2027-05-03' }]]);
+    expect(travaux(m.semainier(s(2027, 20), [serie({ travauxPrevus: [DESHERBAGE] })], [], r, '2027-05-18'))).toStrictEqual([
+      'désherbage:2027-05-17:retard 1',
+    ]);
+  });
+
+  it('répétition qui franchit le repère : seules les occurrences d’avant le repère deviennent caduques', () => {
+    // Binage tous les 7 j de 14 j avant la mise en place jusqu'au début de récolte :
+    // 04-19, 04-26, 05-03, 05-10, 05-17, 05-24, 05-31.
+    const binage = travail({
+      categorie: 'entretien',
+      type: 'binage',
+      repere: 'mise_en_place',
+      decalageJours: -14,
+      repetition: { tousLesJours: 7, repereFin: 'debut_recolte' },
+    });
+    const avant = m.semainier(s(2027, 18), [serie({ travauxPrevus: [binage] })], [], realises(), '2027-05-03');
+    expect(travaux(avant)).toStrictEqual(['binage:2027-04-26:retard 7', 'binage:2027-05-03']);
+    const r = realises([], [['batavia-ete', { miseEnPlace: '2027-05-03' }]]);
+    // 04-19 et 04-26 caducs ; 05-03, le jour même du repère, reste dû.
+    expect(travaux(m.semainier(s(2027, 18), [serie({ travauxPrevus: [binage] })], [], r, '2027-05-03'))).toStrictEqual(['binage:2027-05-03']);
   });
 });
 

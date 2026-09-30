@@ -23,7 +23,9 @@
  *     repetition:    null, ou { tousLesJours: N entier ≥ 1, repereFin: repère } ;
  *     outil:         null ou texte ;
  *     produit:       null, ou { nom: texte, quantite: { valeur > 0, unite: texte } }
- *                    (fertilisation et amendement seulement, comme DetailIntervention) ;
+ *                    (OBLIGATOIRE en fertilisation et amendement, interdit ailleurs, comme
+ *                    DetailIntervention : « Fait » écrit une intervention que validerSaisie
+ *                    accepte ; décision du testeur, 2e passe) ;
  *     tempsEstime:   null, ou { minutes: entier ≥ 1, par: 'cent_metres' | 'planche' }.
  *   }
  *
@@ -61,7 +63,8 @@
  *     Champ 'repetition.repereFin'.
  *   outil : null ou texte non vide ≤ PLAFONDS_TRAVAUX.texte
  *   produit : null, ou nom (texte non vide ≤ texte) et quantite { valeur finie > 0, unite texte
- *     non vide ≤ texte } ; un produit sur une autre catégorie que fertilisation / amendement →
+ *     non vide ≤ texte } ; absent ou null en fertilisation / amendement → 'champ_manquant',
+ *     champ 'produit' ; un produit sur une autre catégorie que fertilisation / amendement →
  *     'incoherent', champ 'produit'. Champs : 'produit.nom', 'produit.quantite.valeur'…
  *   tempsEstime : null, ou minutes entier dans [1, PLAFONDS_TRAVAUX.minutes] (0, négatif,
  *     décimal refusés), par 'cent_metres' | 'planche'. Champs 'tempsEstime.minutes', 'tempsEstime.par'.
@@ -125,8 +128,9 @@
  *     - les tâches d'étape de T06, INCHANGÉES (etape: EtapeTache) ;
  *     - TacheTravail : mêmes champs (cible, culture, variete, emplacements de la série — le
  *       travail du sol tombe sur les planches de la série —, taille, datePrevue, enRetard,
- *       joursDeRetard), avec etape: 'travail', travail: le TravailPrevu (au moins categorie et
- *       type), et tempsEstimeMinutes: number | null.
+ *       joursDeRetard), avec etape: 'travail', travail: le TravailPrevu (au moins categorie,
+ *       type, outil, produit) ET son `indice` dans travauxPrevus (clé stable de la tâche pour
+ *       l'écran : `<id série>:travail:<indice>`), et tempsEstimeMinutes: number | null.
  *
  *   Règles :
  *   - dates des travaux = datesTravailPrevu(travail, dates recalées par les réalisés de T02) ;
@@ -137,6 +141,13 @@
  *     l'occurrence la plus proche de sa date (à égalité, la plus ancienne), ET toutes les
  *     occurrences antérieures du même travail. Sans répétition, toute intervention du type
  *     solde donc le travail, même faite en avance ou en retard, comme un réalisé de T06 ;
+ *   - CADUCITÉ (décision du chef, Q23, à confirmer par Théophane) : dès que l'étape repère d'un
+ *     travail est réalisée (réalisé de T02 sur cette étape, ou étape rendue faite par une étape
+ *     postérieure réalisée, Q11), ses occurrences datées STRICTEMENT avant la date du repère
+ *     (recalée : la date réelle) disparaissent sans intervention. Grelinette −10 : disparaît
+ *     une fois la mise en place faite. Les occurrences au repère ou après (désherbage +14, ou
+ *     la suite d'une répétition qui franchit le repère) restent soldées par une intervention
+ *     seulement ;
  *   - une seule ligne en retard par travail prévu (esprit de Q12) : l'occurrence en retard la
  *     plus RÉCENTE (une intervention aujourd'hui les solderait toutes), son retard compté depuis
  *     sa date. Les occurrences de la semaine pas encore en retard restent listées. Les retards
@@ -244,7 +255,7 @@ export interface TacheLue {
   readonly enRetard: boolean;
   readonly joursDeRetard: number;
   /** Tâche de travail seulement. */
-  readonly travail?: { readonly categorie: string; readonly type: string };
+  readonly travail?: { readonly categorie: string; readonly type: string; readonly indice: number };
   /** Tâche de travail seulement. */
   readonly tempsEstimeMinutes?: number | null;
 }

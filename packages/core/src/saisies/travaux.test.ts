@@ -86,8 +86,12 @@ describe('validerTravailPrevu : un travail valide', () => {
     expect(m.validerTravailPrevu({ ...GRELINETTE, repere }).ok).toBe(true);
   });
 
-  it.each(['travail_sol', 'couverture', 'fertilisation', 'amendement', 'entretien'])('catégorie %s acceptée', (categorie) => {
+  it.each(['travail_sol', 'couverture', 'entretien'])('catégorie %s acceptée', (categorie) => {
     expect(m.validerTravailPrevu({ ...GRELINETTE, categorie }).ok).toBe(true);
+  });
+
+  it.each(['fertilisation', 'amendement'])('catégorie %s acceptée avec son produit', (categorie) => {
+    expect(m.validerTravailPrevu({ ...COMPOST, categorie }).ok).toBe(true);
   });
 
   it('décalage nul ou positif accepté (repère 0 j, 5 j après le début de récolte)', () => {
@@ -272,6 +276,15 @@ describe('validerTravailPrevu : valeurs refusées, sans jamais lever', () => {
     const r = m.validerTravailPrevu({ ...GRELINETTE, produit: COMPOST.produit });
     expect(code(r)).toBe('incoherent');
     expect(champ(r)).toBe('produit');
+  });
+
+  it.each(['fertilisation', 'amendement'])('%s sans produit : champ_manquant (l’intervention écrite par « Fait » l’exige, validerSaisie)', (categorie) => {
+    for (const produit of [undefined, null]) {
+      const entree = produit === undefined ? { ...GRELINETTE, categorie } : { ...GRELINETTE, categorie, produit };
+      const r = m.validerTravailPrevu(entree);
+      expect(code(r)).toBe('champ_manquant');
+      expect(champ(r)).toBe('produit');
+    }
   });
 
   it('produit sur une fertilisation : accepté', () => {
