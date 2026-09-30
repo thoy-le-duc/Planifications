@@ -2,6 +2,21 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T12 : planifier une série depuis le plan
+
+- **Fait** :
+  - Un appui long sur une case vide du plan, ou le bouton « Nouvelle série », ouvre le formulaire, prérempli avec la planche et la semaine.
+  - Culture, itinéraire proposé selon la saison, ancre (semis, plantation ou récolte), planches et longueurs. Dates, besoins, conflits et rotation se recalculent en direct par le moteur, en 1 ms.
+  - L'alerte de rotation rouge demande une confirmation.
+  - « Annuler » est possible 10 s, puis depuis l'historique.
+  - La batavia se planifie en 6 gestes, et le formulaire s'affiche en 111 ms hors ligne (CPU ×4).
+- **Décidé** :
+  - « Fermer » plutôt que « Annuler » sur le formulaire.
+  - Annuler une entrée ancienne de l'historique défait aussi les plus récentes, après avertissement.
+  - Une entrée d'historique illisible ne s'annule pas.
+  - Planches seulement pour l'instant, sans gouttières.
+- **Bloquant** : rien. Suites dans T12b : sélecteur de semaine sur iPhone, décision de rotation périmée, bandeau face à un autre téléphone.
+
 ## 2026-09-30 — T10e : le serveur accepte les séries des téléphones
 
 - **Fait** : une série et ses occupations, créées, modifiées, supprimées ou rétablies au téléphone, même hors ligne, arrivent au serveur.
