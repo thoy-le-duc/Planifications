@@ -2,6 +2,19 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T10d : suites de la sécurité du stock
+
+- **Fait** :
+  - une correction de récolte garde la série et l'unité d'origine ;
+  - le serveur ne laisse plus deviner qu'une ligne d'une autre ferme existe, ni par ses réponses ni par ses délais ;
+  - un envoi trop gros ne bloque plus la file et ne peut plus remplir la base de refus (limites dures : 2 000 écritures, 8 Mio) ;
+  - les quantités de stock sont gardées avec 6 décimales exactes (migration 0012).
+- **Décidé** :
+  - pour corriger une récolte saisie sur la mauvaise série ou dans la mauvaise unité, on l'annule puis on la ressaisit ;
+  - reprendre l'identifiant d'une ligne d'une autre ferme reste détectable, ce qui est une limite structurelle acceptée ;
+  - la correction antidatée attend Q20.
+- **Bloquant** : aucun. Deux relectures de sécurité, dont un bloquant trouvé et corrigé : l'amplification des refus. Suites dans T10f : débit, délais, poids des transactions.
+
 ## 2026-09-30 — T11c : pages de test hors du site en production
 
 - **Fait** : le site mis en ligne (`pnpm build`) ne contient plus que l'appli. La page de diagnostic de synchro, qui écrivait dans une vraie ferme, la page d'amorçage (42 000 lignes chez le visiteur) et la page de mesure n'existent plus que dans le build des essais (`dist-essais/`), qui sert aux tests e2e. Le démarrage passe de 70,7 à 70,2 Kio, puisque le code de test n'est plus embarqué.
