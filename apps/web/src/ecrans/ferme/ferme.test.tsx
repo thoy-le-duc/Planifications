@@ -102,14 +102,25 @@ const LIGNES: Readonly<Record<string, readonly Readonly<Record<string, string | 
 
 /**
  * Porte sur une base qu'on peut fermer : ses lectures attendent `liberer()` (pour observer
- * l'état « en cours ») ; une fois la base fermée, toute lecture lève « base fermée ».
+ * l'état « en cours ») ; chaque fin de lecture est notée dans `ordre` (« lecture-finie ») ; une
+ * lecture qui finit sur une base fermée lève « base fermée ». `fermer()` marque la base fermée
+ * et retient combien de lectures étaient encore en vol (relecture T16b : il en faut zéro) ; il
+ * ne libère PAS les lectures bloquées.
  */
-function porteControlee(): { porte: PorteDonnees; liberer: () => void; fermer: () => void; lectures: () => number } {
+function porteControlee(): {
+  porte: PorteDonnees;
+  liberer: () => void;
+  fermer: () => void;
+  lectures: () => number;
+  enVolALaFermeture: () => number | null;
+} {
   let ouvrir: () => void = () => undefined;
   const barriere = new Promise<void>((r) => {
     ouvrir = r;
   });
   let n = 0;
+  let enVol = 0;
+  let enVolALaFermeture: number | null = null;
   let fermee = false;
   const interdit = (nom: string) => () => {
     throw new Error(`l'export ne doit pas appeler porte.${nom}`);
@@ -117,10 +128,16 @@ function porteControlee(): { porte: PorteDonnees; liberer: () => void; fermer: (
   const porte: PorteDonnees = {
     lire: async <T,>(sql: string) => {
       n++;
-      await barriere;
-      if (fermee) throw new Error('base fermée');
-      const table = /\bFROM\s+"?(\w+)"?/i.exec(sql)?.[1] ?? '';
-      return (LIGNES[table] ?? []) as T[];
+      enVol++;
+      try {
+        await barriere;
+        ordre.push('lecture-finie');
+        if (fermee) throw new Error('base fermée');
+        const table = /\bFROM\s+"?(\w+)"?/i.exec(sql)?.[1] ?? '';
+        return (LIGNES[table] ?? []) as T[];
+      } finally {
+        enVol--;
+      }
     },
     ecrire: interdit('ecrire'),
     surveiller: interdit('surveiller'),
@@ -132,9 +149,10 @@ function porteControlee(): { porte: PorteDonnees; liberer: () => void; fermer: (
     liberer: ouvrir,
     fermer: () => {
       fermee = true;
-      ouvrir();
+      enVolALaFermeture = enVol;
     },
     lectures: () => n,
+    enVolALaFermeture: () => enVolALaFermeture,
   };
 }
 
@@ -299,13 +317,19 @@ describe('T16b : export branché dans l’onglet Ferme', () => {
     });
   }
 
-  it('déconnexion pendant l’export : export annulé avant la fermeture de la base, aucune erreur, rien de téléchargé', async () => {
+  /**
+   * Relecture T16b, point 1 : l'annulation rejette tout de suite côté export (< 200 ms, test de
+   * robustesse de @planif/sync), mais une lecture de page déjà partie dans la porte continue.
+   * La base ne doit être fermée (puis effacée) qu'APRÈS la fin de cette lecture : sinon elle
+   * lit une base en cours de fermeture, et son erreur « base fermée » est avalée.
+   */
+  it('déconnexion pendant l’export : export annulé, base fermée seulement après la fin de la lecture en cours, aucune erreur, rien de téléchargé', async () => {
     const journal = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const rejets: unknown[] = [];
     const surRejet = (e: unknown) => rejets.push(e);
     process.on('unhandledRejection', surRejet);
     try {
-      const { porte, fermer, lectures } = porteControlee();
+      const { porte, fermer, liberer, lectures, enVolALaFermeture } = porteControlee();
       const surDeconnecte = vi.fn<(e: string | null) => void>();
       await rendre({ etatBase: 'prete', porte, fermer, surDeconnecte });
       await attendre(() => !boutonExporter().disabled, 'bouton actif, base prête');
@@ -314,7 +338,7 @@ describe('T16b : export branché dans l’onglet Ferme', () => {
         boutonExporter().click();
         await Promise.resolve();
       });
-      await attendre(() => lectures() > 0, 'export en cours');
+      await attendre(() => lectures() > 0, 'export en cours, une lecture bloquée dans la porte');
 
       const deconnexion = boutonsNommes('Se déconnecter');
       expect(deconnexion, '« Se déconnecter » reste accessible pendant l’export').toHaveLength(1);
@@ -331,14 +355,22 @@ describe('T16b : export branché dans l’onglet Ferme', () => {
           await Promise.resolve();
         });
       }
+      // La lecture reste bloquée : la déconnexion doit l'attendre, sans fermer la base.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 300));
+      });
+      expect(ordre, 'base pas encore fermée tant que la lecture en cours n’est pas finie').toEqual([]);
+
+      liberer();
       await attendre(() => surDeconnecte.mock.calls.length > 0, 'retour à l’écran de connexion');
       await laisserFiler();
 
-      expect(ordre, 'base fermée puis effacée').toEqual(['fermer', 'effacer']);
+      expect(ordre, 'lecture finie, puis base fermée, puis effacée').toEqual(['lecture-finie', 'fermer', 'effacer']);
+      expect(enVolALaFermeture(), 'aucune lecture en vol à la fermeture de la base').toBe(0);
       expect(surDeconnecte).toHaveBeenCalledWith(null);
       expect(
         journal.mock.calls.map((a) => a.map(String).join(' ')),
-        'aucun console.error : l’export a été annulé avant la fermeture de la base (sinon « base fermée »)',
+        'aucun console.error : l’export a été annulé avant la fermeture de la base',
       ).toEqual([]);
       expect(rejets, 'aucun rejet non géré').toEqual([]);
       expect(blobs, 'aucun téléchargement').not.toHaveBeenCalled();
@@ -346,5 +378,112 @@ describe('T16b : export branché dans l’onglet Ferme', () => {
     } finally {
       process.off('unhandledRejection', surRejet);
     }
+  }, 20_000);
+
+  it('relecture, point 2 : « Exporter toute ma ferme » désactivé dès que la déconnexion est décidée (révocation hors ligne en cours)', async () => {
+    let repondre: (r: Response) => void = () => undefined;
+    const reponse = new Promise<Response>((r) => {
+      repondre = r;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => reponse),
+    );
+    const { porte, lectures } = porteControlee();
+    const surDeconnecte = vi.fn<(e: string | null) => void>();
+    await rendre({ etatBase: 'prete', porte, surDeconnecte });
+    await attendre(() => !boutonExporter().disabled, 'bouton actif, base prête');
+
+    await act(async () => {
+      boutonsNommes('Se déconnecter')[0]?.click();
+      await Promise.resolve();
+    });
+    await laisserFiler();
+    const quandMeme = boutonsNommes('Se déconnecter quand même')[0];
+    if (quandMeme !== undefined) {
+      await act(async () => {
+        quandMeme.click();
+        await Promise.resolve();
+      });
+      await laisserFiler();
+    }
+    expect(surDeconnecte, 'l’API n’a pas encore répondu').not.toHaveBeenCalled();
+    expect(boutonExporter().disabled, 'désactivé pendant la révocation').toBe(true);
+    await act(async () => {
+      boutonExporter().click();
+      await Promise.resolve();
+    });
+    await laisserFiler();
+    expect(lectures(), 'un tap pendant la déconnexion ne lance aucun export').toBe(0);
+
+    repondre(new Response(null, { status: 204 }));
+    await attendre(() => surDeconnecte.mock.calls.length > 0, 'déconnexion terminée');
+    expect(blobs).not.toHaveBeenCalled();
+  }, 20_000);
+
+  /** La carte « Mes données » et son unique zone d'annonce (role="status"). */
+  function zoneAnnonce(): Element {
+    const carte = conteneur.querySelector('section[aria-label="Mes données"]');
+    expect(carte, 'carte « Mes données »').not.toBeNull();
+    const zones = carte?.querySelectorAll('[role="status"]') ?? [];
+    expect(zones, 'une seule zone role="status" dans la carte « Mes données »').toHaveLength(1);
+    const [zone] = zones;
+    if (zone === undefined) throw new Error('zone d’annonce introuvable');
+    return zone;
+  }
+
+  it('relecture, point 3 : une zone role="status" toujours présente, le même nœud, dont seul le texte change', async () => {
+    const { porte, liberer, lectures } = porteControlee();
+    await rendre({ etatBase: 'prete', porte });
+    await attendre(() => !boutonExporter().disabled, 'bouton actif, base prête');
+    const zone = zoneAnnonce();
+
+    await act(async () => {
+      boutonExporter().click();
+      await Promise.resolve();
+    });
+    await attendre(() => lectures() > 0, 'export en cours');
+    expect(zoneAnnonce(), 'même nœud au lancement').toBe(zone);
+    expect(zone.textContent).toContain('Export en cours…');
+
+    const annuler = boutonsNommes('Annuler')[0];
+    expect(annuler, 'bouton « Annuler »').toBeDefined();
+    await act(async () => {
+      annuler?.click();
+      await Promise.resolve();
+    });
+    await laisserFiler();
+    expect(zoneAnnonce(), 'même nœud à l’annulation').toBe(zone);
+    expect(zone.textContent).toContain('Export annulé.');
+
+    liberer();
+    await attendre(() => !boutonExporter().disabled, 'bouton de nouveau actif');
+    await act(async () => {
+      boutonExporter().click();
+      await Promise.resolve();
+    });
+    await attendre(() => blobs.mock.calls.length > 0, 'archive téléchargée');
+    await laisserFiler();
+    expect(zoneAnnonce(), 'même nœud à la fin').toBe(zone);
+    expect(zone.textContent).toMatch(/Archive .+ prête/);
+  }, 20_000);
+
+  it('relecture, point 4 : au lancement, le focus clavier passe sur « Annuler » ; le bouton tapé est désactivé', async () => {
+    const { porte, lectures } = porteControlee();
+    await rendre({ etatBase: 'prete', porte });
+    await attendre(() => !boutonExporter().disabled, 'bouton actif, base prête');
+    boutonExporter().focus();
+    expect(document.activeElement).toBe(boutonExporter());
+
+    await act(async () => {
+      boutonExporter().click();
+      await Promise.resolve();
+    });
+    await attendre(() => lectures() > 0, 'export en cours');
+    await laisserFiler();
+    expect(boutonExporter().disabled, 'bouton tapé désactivé').toBe(true);
+    const annuler = boutonsNommes('Annuler')[0];
+    expect(annuler, 'bouton « Annuler »').toBeDefined();
+    expect(document.activeElement, 'focus sur « Annuler »').toBe(annuler);
   }, 20_000);
 });
