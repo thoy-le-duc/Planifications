@@ -1,21 +1,29 @@
 /**
- * Écran Ferme (T16, maquette « Ferme ») : l'export de toute la ferme (T15) et la déconnexion
- * (T09b). Chargé à la demande par App : hors du JavaScript de démarrage.
+ * Écran Ferme (T16, maquette « Ferme ») : l'export de toute la ferme (T15, branché en T16b) et la
+ * déconnexion (T09b). Chargé à la demande par App : hors du JavaScript de démarrage.
  *
- * Export : la ligne est en place ; depuis T11 l'appli ouvre la base du téléphone et connaît sa
- * ferme, mais le branchement de l'export sur cette base reste à faire (ticket à venir). D'ici là,
- * le tap le dit franchement au lieu de faire semblant (voir le journal).
+ * Export (T16b) : un seul bouton, actif quand la base du téléphone est prête et la ferme connue
+ * (ContexteFerme). Un tap charge l'export (`import('../export/index.ts')`, jamais un import
+ * statique : ni l'entrée ni ce morceau ne portent l'export), lit la base par la porte du contexte
+ * et télécharge l'archive. Barre d'avancement et bouton « Annuler » pendant l'export.
  *
  * Déconnexion (T11) : la base ouverte par l'appli compte les saisies en attente et se ferme avant
- * l'effacement.
+ * l'effacement. Dès que la déconnexion est décidée, le bouton d'export est désactivé et un export
+ * en cours est annulé (téléphone partagé : aucune archive ne sort après). L'annulation rejette
+ * tout de suite côté export, mais une lecture de page déjà partie dans la porte continue : la
+ * base n'est fermée qu'une fois toutes les lectures de l'export terminées (relecture T16b), ou
+ * au plus tard après DELAI_FERMETURE_MS : une lecture qui ne revient jamais (worker planté,
+ * verrou d'un autre onglet) ne doit pas empêcher d'effacer le téléphone.
  */
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { urlApi } from '../../connexion/client.ts';
 import { deconnecterAvecConfirmation, effacementsEnAttente } from '../../connexion/deconnexion.ts';
 import { stockageNavigateur, type SessionConnexion } from '../../connexion/session.ts';
+import { ContexteFerme } from '../../donnees/contexte.ts';
 import { baseLocaleExiste, effacerDonneesLocales } from '../../donnees/effacer.ts';
-import type { PoigneeDonnees } from '../../donnees/etat-appli.ts';
-import { AlerteOrange, CARTE } from '../../ui/elements.tsx';
+import type { PorteDonnees } from '@planif/sync';
+import type { EtatBase, PoigneeDonnees } from '../../donnees/etat-appli.ts';
+import { AlerteOrange, BoutonSecondaire, CARTE } from '../../ui/elements.tsx';
 import { Confirmation } from '../../ui/confirmation.tsx';
 
 /** Confirmation de déconnexion en attente de réponse (vrai : se déconnecter quand même). */
@@ -33,10 +41,58 @@ export interface ProprietesEcranFerme {
   readonly baseLocale: PoigneeDonnees;
   /** Déconnecté : retour à l'écran de connexion, avec le message d'échec éventuel. */
   readonly surDeconnecte: (erreur: string | null) => void;
+  /** État de la base locale (T11) : l'export n'est possible que base 'prete'. */
+  readonly etatBase: EtatBase;
 }
 
-// Appel détaché : fetch ne doit pas être invoqué comme méthode d'un autre objet.
-const envoyer: typeof fetch = (entree, init) => fetch(entree, init);
+/** L'écran d'export, chargé à la demande (morceau à part). */
+const chargerExport = () => import('../export/index.ts');
+
+/** Pourquoi le bouton d'export est désactivé, dit en clair. */
+const EXPLICATION_EXPORT: Readonly<Record<Exclude<EtatBase, 'prete'>, string>> = {
+  ouverture: 'Ouverture des données de ce téléphone… L’export sera possible dans un instant.',
+  'sans-ferme': 'Aucune ferme sur ce téléphone pour l’instant : rien à exporter avant la première synchronisation.',
+  echec: 'Les données de ce téléphone n’ont pas pu s’ouvrir : export impossible. Rechargez l’appli ; si cela recommence, signalez-le.',
+};
+
+type EtatExport =
+  | { readonly etape: 'repos' }
+  | { readonly etape: 'en_cours'; readonly fait: number; readonly total: number }
+  | { readonly etape: 'fini'; readonly message: string }
+  | { readonly etape: 'annule' }
+  | { readonly etape: 'echec' };
+
+/** Export en cours : son annulation, et sa fin, lectures de la porte comprises (jamais rejetée). */
+interface ExportEnCours {
+  readonly controleur: AbortController;
+  readonly fin: Promise<void>;
+}
+
+/** Attente maximale des lectures de l'export encore en vol avant de fermer la base (déconnexion). */
+const DELAI_FERMETURE_MS = 2_000;
+
+/** Attend la fin des lectures suivies, au plus DELAI_FERMETURE_MS ; ne rejette jamais, ne laisse aucune minuterie. */
+async function attendreLectures(lectures: ReadonlySet<Promise<unknown>>): Promise<void> {
+  if (lectures.size === 0) return;
+  let minuterie: ReturnType<typeof setTimeout> | undefined;
+  const limite = new Promise<void>((fin) => {
+    minuterie = setTimeout(fin, DELAI_FERMETURE_MS);
+  });
+  const toutes = (async () => {
+    while (lectures.size > 0) await Promise.allSettled([...lectures]);
+  })();
+  try {
+    await Promise.race([toutes, limite]);
+  } finally {
+    clearTimeout(minuterie);
+  }
+}
+
+const nombre = new Intl.NumberFormat('fr-FR');
+/** Texte de la zone d'annonce (role="status") de la carte « Mes données », selon l'étape. */
+const ANNONCE: Readonly<Partial<Record<EtatExport['etape'], string>>> = { en_cours: 'Export en cours…', annule: 'Export annulé.' };
+const BARRE: CSSProperties = { display: 'block', width: '100%', height: 16, accentColor: 'var(--couleur-foret)' };
+const PIED_CARTE: CSSProperties = { display: 'grid', gap: 12, padding: '0 16px 16px' };
 
 /** Ligne d'une carte (maquette) : toute la ligne est la cible, 64 px au moins. */
 const LIGNE: CSSProperties = {
@@ -103,11 +159,134 @@ function Carte({ titre, children }: { readonly titre: string; readonly children:
 /** Effacement d'un ancien compte resté en attente (T09b) : le dire, jusqu'à ce qu'il aboutisse. */
 const ALERTE_EFFACEMENT = 'Les données d’un ancien compte n’ont pas encore été effacées de ce téléphone : fermez les autres onglets.';
 
-export default function EcranFerme({ session, baseLocale, surDeconnecte }: ProprietesEcranFerme) {
+export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBase }: ProprietesEcranFerme) {
   // Lu à l'ouverture de l'écran : l'effacement n'est repris que sur l'écran de connexion.
   const [effacementEnAttente] = useState(() => effacementsEnAttente(stockageNavigateur()).length > 0);
-  const [exportDemande, setExportDemande] = useState(false);
+  const ouverte = useContext(ContexteFerme);
+  const [etatExport, setEtatExport] = useState<EtatExport>({ etape: 'repos' });
+  const exportEnCours = useRef<ExportEnCours | null>(null);
   const [deconnexionEnCours, setDeconnexionEnCours] = useState(false);
+  /** Déconnexion décidée : lu par `exporter` au moment du tap, sans attendre un nouveau rendu. */
+  const deconnexionDecidee = useRef(false);
+  /** Vrai du tap jusqu'à la fin de l'export, lectures en vol comprises (annulé : un peu après « Export annulé »). */
+  const [exportActif, setExportActif] = useState(false);
+  const pied = useRef<HTMLDivElement>(null);
+  const enCours = etatExport.etape === 'en_cours';
+
+  // Au lancement, le focus clavier passe sur « Annuler » (le bouton tapé devient désactivé).
+  useEffect(() => {
+    if (enCours) pied.current?.querySelector('button')?.focus();
+  }, [enCours]);
+
+  // Écran quitté (onglet changé, déconnexion) : l'export en cours est annulé, rien ne sort après.
+  useEffect(
+    () => () => {
+      exportEnCours.current?.controleur.abort();
+    },
+    [],
+  );
+
+  const exportPossible = etatBase === 'prete' && ouverte !== null && !deconnexionEnCours;
+
+  // Export possible : son code est chargé au repos, après l'affichage de l'écran, pour que le tap
+  // ne paie pas l'évaluation du morceau (observé : une tâche d'≈ 50 ms, CPU ×4, juste après le tap).
+  useEffect(() => {
+    if (!exportPossible) return;
+    const g = globalThis as { requestIdleCallback?: (f: () => void) => number; cancelIdleCallback?: (id: number) => void };
+    const precharger = () => {
+      chargerExport().catch(() => undefined);
+    };
+    if (g.requestIdleCallback === undefined || g.cancelIdleCallback === undefined) {
+      const minuterie = setTimeout(precharger, 500);
+      return () => {
+        clearTimeout(minuterie);
+      };
+    }
+    const id = g.requestIdleCallback(precharger);
+    const annuler = g.cancelIdleCallback;
+    return () => {
+      annuler(id);
+    };
+  }, [exportPossible]);
+
+  const annonce = ANNONCE[etatExport.etape] ?? (etatExport.etape === 'fini' ? etatExport.message : '');
+  const explication =
+    etatBase === 'prete' && ouverte !== null ? null : EXPLICATION_EXPORT[etatBase === 'prete' ? 'ouverture' : etatBase];
+
+  function exporter(): void {
+    if (ouverte === null || exportEnCours.current !== null || deconnexionDecidee.current) return;
+    const controleur = new AbortController();
+    const signal = controleur.signal;
+    // Porte suivie : les lectures encore en vol sont attendues avant de fermer la base.
+    const lectures = new Set<Promise<unknown>>();
+    const porte: PorteDonnees = {
+      ...ouverte.porte,
+      lire: <T,>(sql: string, parametres?: readonly unknown[]) => {
+        const p = ouverte.porte.lire<T>(sql, parametres);
+        const suivie = p.then(
+          () => undefined,
+          () => undefined,
+        );
+        lectures.add(suivie);
+        void suivie.then(() => lectures.delete(suivie));
+        return p;
+      },
+    };
+    const { fermeId } = ouverte;
+    setEtatExport({ etape: 'en_cours', fait: 0, total: 0 });
+    setExportActif(true);
+    const fin = (async () => {
+      try {
+        // Le rendu du tap (barre, « Annuler », focus) d'abord, le lancement dans une tâche à part :
+        // observé sous charge, les deux ensemble faisaient une tâche de ≈ 54 ms (CPU ×4).
+        await new Promise((suite) => setTimeout(suite, 0));
+        signal.throwIfAborted();
+        const { lancerExport, telechargerDansLeNavigateur } = await chargerExport();
+        signal.throwIfAborted();
+        const archive = await lancerExport({
+          porte,
+          fermeId,
+          maintenant: () => new Date(),
+          telecharger: telechargerDansLeNavigateur,
+          signal,
+          avancement: ({ fait, total }) => {
+            if (!signal.aborted) setEtatExport({ etape: 'en_cours', fait, total });
+          },
+        });
+        const evenements = archive.lignes.evenement ?? 0;
+        setEtatExport({ etape: 'fini', message: `Archive ${archive.nomFichier} prête : ${nombre.format(evenements)} événements exportés.` });
+      } catch (erreur: unknown) {
+        if (signal.aborted) {
+          setEtatExport({ etape: 'annule' });
+          return;
+        }
+        console.error('Export de la ferme impossible', erreur);
+        setEtatExport({ etape: 'echec' });
+      } finally {
+        // Annulé : l'export a rejeté tout de suite, mais une lecture de page peut être en vol.
+        await attendreLectures(lectures);
+        if (exportEnCours.current?.controleur === controleur) exportEnCours.current = null;
+        setExportActif(false);
+      }
+    })();
+    exportEnCours.current = { controleur, fin };
+  }
+
+  /** Annule l'export en cours (s'il y en a un) ; résout quand il est bien arrêté. */
+  function arreterExport(): Promise<void> {
+    const enCours = exportEnCours.current;
+    if (enCours === null) return Promise.resolve();
+    enCours.controleur.abort();
+    return enCours.fin;
+  }
+
+  // Appel détaché : fetch ne doit pas être invoqué comme méthode d'un autre objet. Premier geste
+  // de la déconnexion une fois décidée (confirmée s'il le fallait) : l'export s'arrête là, pas
+  // 5 s plus tard quand l'API hors d'atteinte a fini de ne pas répondre.
+  const envoyer: typeof fetch = (entree, init) => {
+    void arreterExport();
+    return fetch(entree, init);
+  };
   const [confirmation, setConfirmation] = useState<ConfirmationEnAttente | null>(null);
 
   /** Montre la confirmation ; résout à la réponse (vrai : se déconnecter quand même). */
@@ -125,6 +304,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte }: Propr
 
   async function seDeconnecter(): Promise<void> {
     if (deconnexionEnCours) return;
+    deconnexionDecidee.current = true;
     setDeconnexionEnCours(true);
     let erreur: string | null = null;
     try {
@@ -137,6 +317,8 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte }: Propr
         fetch: envoyer,
         stockage: stockageNavigateur(),
         effacerBaseLocale: async (utilisateurId) => {
+          // Export arrêté AVANT la fermeture : il ne lit plus une base qui se ferme.
+          await arreterExport();
           await baseLocale.fermer();
           await effacerDonneesLocales(utilisateurId);
         },
@@ -144,6 +326,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte }: Propr
         confirmer,
       });
       if (issue === 'annule') {
+        deconnexionDecidee.current = false;
         setDeconnexionEnCours(false);
         return;
       }
@@ -163,20 +346,33 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte }: Propr
       <Carte titre="Mes données">
         <Ligne
           nom="Exporter toute ma ferme"
-          detail="Archive ZIP : tout en JSON, et un CSV par table"
+          detail="Archive ZIP : tout en JSON, et un CSV par table. Sans réseau."
           signe="↓"
           couleur="var(--couleur-encre)"
-          desactivee={false}
-          surTap={() => {
-            setExportDemande(true);
-          }}
+          desactivee={!exportPossible || enCours || exportActif}
+          surTap={exporter}
         />
+        {explication !== null && (
+          <p style={{ ...PIED_CARTE, fontSize: 15, color: 'var(--couleur-secondaire)' }}>{explication}</p>
+        )}
+        {etatExport.etape === 'en_cours' && (
+          <div ref={pied} style={PIED_CARTE}>
+            {etatExport.total > 0 ? (
+              <progress style={BARRE} max={etatExport.total} value={etatExport.fait} aria-label="Avancement de l’export" />
+            ) : (
+              <progress style={BARRE} aria-label="Avancement de l’export" />
+            )}
+            <BoutonSecondaire onClick={() => void arreterExport()}>
+              Annuler
+            </BoutonSecondaire>
+          </div>
+        )}
+        {/* Une seule zone d'annonce, toujours présente : seul son texte change (lecteurs d'écran). */}
+        <p role="status" style={annonce === '' ? undefined : { ...PIED_CARTE, overflowWrap: 'anywhere' }}>
+          {annonce}
+        </p>
       </Carte>
-      {exportDemande && (
-        <AlerteOrange titre="Pas encore branché">
-          L’appli ouvre maintenant les données de ce téléphone, mais l’export n’y est pas encore relié. Il le sera dans une prochaine version.
-        </AlerteOrange>
-      )}
+      {etatExport.etape === 'echec' && <AlerteOrange>L’export n’a pas pu se faire. Réessayez ; si cela recommence, signalez-le.</AlerteOrange>}
 
       <div style={CARTE}>
         <Ligne

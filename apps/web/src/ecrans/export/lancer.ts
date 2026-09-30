@@ -3,7 +3,8 @@
  * compressée, téléchargement.
  * Aucun réseau : fonctionne hors ligne.
  */
-import { exporterFerme, type ArchiveExport, type Avancement, type PorteDonnees } from '@planif/sync/export';
+import { exporterFerme, type ArchiveExport, type Avancement, type Compresseur, type PorteDonnees } from '@planif/sync/export';
+import { compresseurEnWorker } from './compression.ts';
 
 export interface OptionsLancerExport {
   readonly porte: PorteDonnees;
@@ -14,6 +15,11 @@ export interface OptionsLancerExport {
   readonly avancement?: (a: Avancement) => void;
   /** Annulation (bouton « Annuler ») : transmis à `exporterFerme`. */
   readonly signal?: AbortSignal;
+  /**
+   * Deflate brut ; défaut (T16b) : dans un worker (./compression.ts), hors du fil principal, ou
+   * sans Worker celui d'`exporterFerme`.
+   */
+  readonly compresseur?: Compresseur;
 }
 
 const deux = (n: number): string => String(n).padStart(2, '0');
@@ -26,13 +32,21 @@ export function jourLocal(d: Date): string {
 /** Construit l'archive de la ferme et la donne à `telecharger`, une fois. */
 export async function lancerExport(o: OptionsLancerExport): Promise<ArchiveExport> {
   const quand = o.maintenant();
-  const archive = await exporterFerme(o.porte, {
-    fermeId: o.fermeId,
-    genereLe: quand.toISOString(),
-    jour: jourLocal(quand),
-    ...(o.avancement === undefined ? {} : { avancement: o.avancement }),
-    ...(o.signal === undefined ? {} : { signal: o.signal }),
-  });
+  const enWorker = o.compresseur === undefined ? compresseurEnWorker() : null;
+  const compresseur = o.compresseur ?? enWorker?.compresseur;
+  let archive: ArchiveExport;
+  try {
+    archive = await exporterFerme(o.porte, {
+      fermeId: o.fermeId,
+      genereLe: quand.toISOString(),
+      jour: jourLocal(quand),
+      ...(compresseur === undefined ? {} : { compresseur }),
+      ...(o.avancement === undefined ? {} : { avancement: o.avancement }),
+      ...(o.signal === undefined ? {} : { signal: o.signal }),
+    });
+  } finally {
+    enWorker?.fermer();
+  }
   // Annulé au tout dernier moment : pas de téléchargement tardif.
   o.signal?.throwIfAborted();
   o.telecharger(archive.nomFichier, archive.octets);
