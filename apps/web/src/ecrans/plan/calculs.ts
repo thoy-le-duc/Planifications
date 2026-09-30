@@ -576,6 +576,16 @@ export async function chargerPlan(porte: PorteDonnees, fermeId: string, options:
   return construirePlan(await lireDonneesPlan(porte, fermeId), options);
 }
 
+/** Début du plan, et la structure de toute la ferme (zones et emplacements, sans occupation). */
+export interface DonneesDebutDePlan extends DonneesPlan {
+  /**
+   * Toutes les zones et tous les emplacements, sans occupation : le plan construit dessus a
+   * exactement les lignes du plan complet (elles ne dépendent pas des occupations), de quoi
+   * réserver sa hauteur avant qu'il soit lu.
+   */
+  readonly structure: DonneesPlan;
+}
+
 /**
  * Lignes du début du plan, pour le premier affichage : celles des premières zones seulement
  * (dans l'ordre du plan), jusqu'à au moins `emplacements` emplacements, avec toutes leurs
@@ -583,7 +593,7 @@ export async function chargerPlan(porte: PorteDonnees, fermeId: string, options:
  * emplacement ne dépendent que des siennes). Peu de lignes à lire : il s'affiche vite, le plan
  * complet le remplace ensuite. Indépendantes de la saison.
  */
-export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, emplacements: number): Promise<DonneesPlan> {
+export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, emplacements: number): Promise<DonneesDebutDePlan> {
   // Peu de requêtes : chacune coûte un aller-retour vers le worker de la base.
   const [petites, tous] = await Promise.all([
     porte.lire<LigneLocale>(
@@ -633,7 +643,13 @@ export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, empl
     fermeId,
     emplacement.map((e) => texte(e.id)),
   );
-  return { zone: zones, emplacement, espece, variete, famille, ...occupations };
+  const bibliotheque = { zone: zones, espece, variete, famille };
+  return {
+    ...bibliotheque,
+    emplacement,
+    ...occupations,
+    structure: { ...bibliotheque, emplacement: tous, occupation: [], serie: [], plantation: [] },
+  };
 }
 
 // ── Virtualisation ───────────────────────────────────────────────────────────────────────────

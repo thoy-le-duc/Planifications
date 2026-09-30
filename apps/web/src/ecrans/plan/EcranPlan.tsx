@@ -451,9 +451,10 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
 
   const semaines = plan?.semaines ?? AUCUNE_SEMAINE;
   const largeur = LARGEUR_ETIQUETTE + semaines.length * LARGEUR_SEMAINE;
-  // Début du plan affiché : une ligne de plus dit que la suite arrive.
+  // Début du plan affiché : une ligne de plus dit que la suite arrive, et la hauteur du plan
+  // complet est réservée (le défilement ne bute pas sur la fin du début).
   const suite = lu !== null && !lu.complet;
-  const hauteur = HAUTEUR_ENTETE + (total + (suite ? 1 : 0)) * HAUTEUR_LIGNE_PX;
+  const hauteur = HAUTEUR_ENTETE + Math.max(total + (suite ? 1 : 0), lu?.totalLignes ?? 0) * HAUTEUR_LIGNE_PX;
   return (
     <div className="plan">
       <div className="plan-outils">

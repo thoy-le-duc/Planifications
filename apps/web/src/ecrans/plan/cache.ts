@@ -19,7 +19,17 @@
  * changement).
  */
 import type { PorteDonnees } from '@planif/sync';
-import { chargerSaisons, construirePlan, lireDebutDePlan, lireDonneesPlan, saisonParDefaut, type DonneesPlan, type Plan, type SaisonPlan } from './calculs.ts';
+import {
+  chargerSaisons,
+  construirePlan,
+  lireDebutDePlan,
+  lireDonneesPlan,
+  saisonParDefaut,
+  type DonneesDebutDePlan,
+  type DonneesPlan,
+  type Plan,
+  type SaisonPlan,
+} from './calculs.ts';
 
 /** Tables dont le plan dépend. */
 const TABLES_DU_PLAN = ['saison', 'zone', 'emplacement', 'occupation', 'serie', 'plantation', 'espece', 'variete', 'famille'] as const;
@@ -38,6 +48,11 @@ export const ATTENTE_MAX_MS = 1_000;
 export interface PlanLu {
   readonly plan: Plan;
   readonly complet: boolean;
+  /**
+   * Nombre de lignes du plan complet : l'écran réserve leur hauteur dès le début, pour que le
+   * défilement ne bute pas sur la fin du début pendant que le reste se lit.
+   */
+  readonly totalLignes: number;
 }
 
 interface Entree<T> {
@@ -47,7 +62,7 @@ interface Entree<T> {
 
 interface CacheFerme {
   saisons: Entree<SaisonPlan[]> | null;
-  debut: Entree<DonneesPlan> | null;
+  debut: Entree<DonneesDebutDePlan> | null;
   tout: Entree<DonneesPlan> | null;
   /** Ferme entière lue avant le dernier changement : montrée tant que la relecture n'a pas abouti. */
   ancien: DonneesPlan | null;
@@ -157,7 +172,7 @@ function relire(porte: PorteDonnees, fermeId: string, cache: CacheFerme): void {
     return;
   }
   cache.enRelecture = true;
-  Promise.allSettled([obtenirSaisons(porte, fermeId), lire(porte, fermeId, 'tout')])
+  Promise.allSettled([obtenirSaisons(porte, fermeId), lireTout(porte, fermeId)])
     .then(([, tout]) => {
       if (tout.status === 'fulfilled') cache.ancien = null;
       else console.error('Plan illisible après un changement', tout.reason);
@@ -185,17 +200,31 @@ export function saisonsEnCache(porte: PorteDonnees, fermeId: string): SaisonPlan
   return cacheDe(porte, fermeId).saisons?.valeur ?? null;
 }
 
-function lire(porte: PorteDonnees, fermeId: string, etage: 'debut' | 'tout'): Promise<DonneesPlan> {
+function lireDebut(porte: PorteDonnees, fermeId: string): Promise<DonneesDebutDePlan> {
   const cache = cacheDe(porte, fermeId);
   const e =
-    cache[etage] ??
+    cache.debut ??
     retenir(
-      () => (etage === 'debut' ? lireDebutDePlan(porte, fermeId, EMPLACEMENTS_DU_DEBUT) : lireDonneesPlan(porte, fermeId)),
+      () => lireDebutDePlan(porte, fermeId, EMPLACEMENTS_DU_DEBUT),
       (x) => {
-        if (cache[etage] === x) cache[etage] = null;
+        if (cache.debut === x) cache.debut = null;
       },
     );
-  cache[etage] = e;
+  cache.debut = e;
+  return e.promesse;
+}
+
+function lireTout(porte: PorteDonnees, fermeId: string): Promise<DonneesPlan> {
+  const cache = cacheDe(porte, fermeId);
+  const e =
+    cache.tout ??
+    retenir(
+      () => lireDonneesPlan(porte, fermeId),
+      (x) => {
+        if (cache.tout === x) cache.tout = null;
+      },
+    );
+  cache.tout = e;
   return e.promesse;
 }
 
@@ -215,16 +244,28 @@ function planDe(cache: CacheFerme, donnees: DonneesPlan, saison: SaisonPlan, auj
   return plan;
 }
 
+function complet(cache: CacheFerme, donnees: DonneesPlan, saison: SaisonPlan, aujourdhui: string): PlanLu {
+  const plan = planDe(cache, donnees, saison, aujourdhui);
+  return { plan, complet: true, totalLignes: plan.lignes.length };
+}
+
+function debutDe(cache: CacheFerme, donnees: DonneesDebutDePlan, saison: SaisonPlan, aujourdhui: string): PlanLu {
+  const plan = planDe(cache, donnees, saison, aujourdhui);
+  // Lignes du plan complet : celles du plan construit sur la structure seule (calculé une fois).
+  const totalLignes = planDe(cache, donnees.structure, saison, aujourdhui).lignes.length;
+  return { plan, complet: false, totalLignes: Math.max(totalLignes, plan.lignes.length) };
+}
+
 /** Début du plan de la saison (lignes des premières zones, exactes). */
 export async function obtenirDebutDePlan(porte: PorteDonnees, fermeId: string, saison: SaisonPlan, aujourdhui: string): Promise<PlanLu> {
-  const donnees = await lire(porte, fermeId, 'debut');
-  return { plan: planDe(cacheDe(porte, fermeId), donnees, saison, aujourdhui), complet: false };
+  const donnees = await lireDebut(porte, fermeId);
+  return debutDe(cacheDe(porte, fermeId), donnees, saison, aujourdhui);
 }
 
 /** Plan complet de la saison. */
 export async function obtenirPlan(porte: PorteDonnees, fermeId: string, saison: SaisonPlan, aujourdhui: string): Promise<PlanLu> {
-  const donnees = await lire(porte, fermeId, 'tout');
-  return { plan: planDe(cacheDe(porte, fermeId), donnees, saison, aujourdhui), complet: true };
+  const donnees = await lireTout(porte, fermeId);
+  return complet(cacheDe(porte, fermeId), donnees, saison, aujourdhui);
 }
 
 /**
@@ -234,9 +275,9 @@ export async function obtenirPlan(porte: PorteDonnees, fermeId: string, saison: 
 export function planEnCache(porte: PorteDonnees, fermeId: string, saison: SaisonPlan, aujourdhui: string): PlanLu | null {
   const cache = cacheDe(porte, fermeId);
   const tout = cache.tout?.valeur ?? cache.ancien;
-  if (tout !== null) return { plan: planDe(cache, tout, saison, aujourdhui), complet: true };
+  if (tout !== null) return complet(cache, tout, saison, aujourdhui);
   const debut = cache.debut?.valeur ?? null;
-  return debut === null ? null : { plan: planDe(cache, debut, saison, aujourdhui), complet: false };
+  return debut === null ? null : debutDe(cache, debut, saison, aujourdhui);
 }
 
 /**
@@ -256,7 +297,7 @@ export function surChangement(porte: PorteDonnees, fermeId: string, rappel: () =
  * « Planches ») : saisons et lignes du début lues ensemble, plan calculé.
  */
 export async function prechargerPlan(porte: PorteDonnees, fermeId: string, aujourdhui: string): Promise<void> {
-  const debut = lire(porte, fermeId, 'debut');
+  const debut = lireDebut(porte, fermeId);
   const saison = saisonParDefaut(await obtenirSaisons(porte, fermeId), aujourdhui);
   await debut;
   if (saison !== null) await obtenirDebutDePlan(porte, fermeId, saison, aujourdhui);
