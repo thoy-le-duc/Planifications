@@ -67,12 +67,15 @@ export function memoriserFerme(stockage: Pick<Storage, 'setItem'>, utilisateurId
 /**
  * Suit la ferme active : `rappel` dès qu'elle est connue, puis à chaque changement des tables
  * `membre` et `ferme` (écriture locale ou synchro). Pas de second rappel pour la même ferme.
+ * Lecture en échec : `surEchec` (l'appli le dit au lieu d'attendre sans fin) ; un changement
+ * suivant relit, et une lecture réussie rappelle `rappel` même pour la ferme déjà signalée.
  * Rend le désabonnement.
  */
 export function suivreFermeActive(
   base: BaseLocale,
   o: { readonly utilisateurId: string; readonly stockage: Pick<Storage, 'getItem' | 'setItem'> },
   rappel: (e: FermeActive) => void,
+  surEchec?: (erreur: unknown) => void,
 ): () => void {
   let actif = true;
   let enCours = false;
@@ -112,6 +115,10 @@ export function suivreFermeActive(
       }
     } catch (erreur) {
       console.error('ferme active illisible', erreur);
+      if (actif) {
+        signalee = undefined;
+        surEchec?.(erreur);
+      }
     } finally {
       enCours = false;
     }

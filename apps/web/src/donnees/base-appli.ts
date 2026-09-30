@@ -37,9 +37,17 @@ export function ouvrirBaseAppli(o: OptionsBaseAppli, surEtat: (e: EtatDonnees) =
       if (fermee) return;
       prete = true;
       arrets.push(
-        suivreFermeActive(base, { utilisateurId, stockage: o.stockage }, (f) => {
-          publier(f.etat === 'prete' ? { base: 'prete', ferme: { porte: f.porte, fermeId: f.fermeId } } : { base: 'sans-ferme', ferme: null });
-        }),
+        suivreFermeActive(
+          base,
+          { utilisateurId, stockage: o.stockage },
+          (f) => {
+            publier(f.etat === 'prete' ? { base: 'prete', ferme: { porte: f.porte, fermeId: f.fermeId } } : { base: 'sans-ferme', ferme: null });
+          },
+          // Ferme active illisible : l'écran dit l'échec au lieu de rester sur « Ouverture… ».
+          () => {
+            publier({ base: 'echec', ferme: null });
+          },
+        ),
       );
       const compter = () =>
         compterEcrituresEnAttente(base).then(
