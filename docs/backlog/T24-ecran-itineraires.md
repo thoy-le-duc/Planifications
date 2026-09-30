@@ -23,3 +23,15 @@
 - [ ] e2e : adapter l'itinéraire « Batavia » de la bibliothèque, y ajouter « grelinette 10 j avant la mise en place » et « désherbage tous les 14 j » ; les tâches apparaissent dans Aujourd'hui pour une nouvelle série.
 - [ ] e2e : modifier l'itinéraire et l'appliquer aux séries à venir ; les séries passées sont inchangées ; l'annulation rétablit tout.
 - [ ] Formulaire en moins de 300 ms, aperçu recalculé en moins de 100 ms (CPU ×4).
+
+## Décisions du chef (après les tests)
+
+Interprétations du testeur retenues :
+1. « Adapter pour ma ferme » ouvre le formulaire prérempli (« <nom> (ma ferme) ») ; la copie ne s'écrit qu'à l'enregistrement, en une transaction.
+2. Série « à venir » = statut « prévue », aucun réalisé ni récolte en vigueur, première date prévue ≥ aujourd'hui. Une série en retard sans saisie n'est pas modifiée (prudence).
+3. Pas de confirmation si seul le nom change ; « Itinéraire seul » laisse les séries intactes.
+4. Un travail qui ne tombe jamais est signalé, pas bloqué.
+5. Série d'exemple de l'aperçu : lundi de début de la période d'usage (prochaine occurrence), sinon premier lundi après aujourd'hui.
+6. Pas de suppression de type : on masque. Un type masqué reste affiché sur le travail qui l'utilise déjà.
+7. Le bandeau « Annuler » (10 s) vit dans l'écran des itinéraires et couvre aussi les types.
+8. L'e2e compare les textes du détail des barres de Planches avant et après.
