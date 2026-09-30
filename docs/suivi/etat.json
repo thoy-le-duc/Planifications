@@ -1,8 +1,8 @@
 {
-  "maj": "30 septembre 2026, 19 h UTC",
-  "resume": "Fusionnés aujourd'hui en fin de journée : **le plan de culture (T12)**, **les travaux prévus des itinéraires (T22)**, **« Fait » sur un travail en retard qui solde la bonne occurrence (T22b, ta réponse Q24)** et **le serveur qui accepte itinéraires et types d'intervention de la ferme (T23)**, avec une relecture de sécurité (pas de fuite entre fermes, pas de doublon de type par espaces ou majuscules). Prochain : **l'écran « Mes itinéraires » (T24)**, puis T12b (sélecteur de semaine iPhone), T10g et T04b.",
+  "maj": "30 septembre 2026, 22 h UTC",
+  "resume": "Cette fenêtre : **l'écran « Mes itinéraires » (T24)** — chaque ferme décrit sa façon de cultiver, adapte les itinéraires de la bibliothèque, règle ses travaux prévus avec un aperçu des dates en direct et applique ses changements aux séries à venir — et **les récoltes annulées (T10g)** : une récolte annulée ne se corrige plus, la correction la plus récente gagne entre deux téléphones, et le serveur tient lui-même le stock juste (trois failles fermées en relecture). Prochains : T12b (sélecteur de semaine iPhone), T04b (pas de rotation sur le hors-sol), T10h (vitesse de la vue « en vigueur »).",
   "en_cours": {},
-  "attente": "Rien de bloquant côté questions : Théophane a répondu le 30 septembre à Q13, Q14, Q15, Q17, Q18, Q20, Q23 et Q24 (tickets T04b, T09c, T10g, T14d, T22b). À faire de son côté pour la mise en ligne : créer le compte Brevo et choisir le domaine d'envoi (T09c).",
+  "attente": "Rien de bloquant côté questions. Pour la mise en ligne : créer le compte Brevo et choisir le domaine d'envoi (T09c) ; la base de production devra être en locale UTF-8.",
   "visuels": [
     {
       "titre": "Plan de culture : nouvelle série",
@@ -28,12 +28,15 @@
     },
     {
       "titre": "Itinéraires et travaux de culture",
-      "etat": "en cours",
-      "texte": "T22, T22b et T23 faits : chaque itinéraire porte ses travaux prévus (travail du sol, amendement, désherbage, palissage…), répétables, avec un temps estimé ; ils apparaissent dans Aujourd'hui avec « Fait » en un geste et la charge de la semaine. Le serveur accepte les itinéraires et les types d'intervention propres à la ferme (liste de départ de 20 types). Reste l'écran « Mes itinéraires » (T24).",
+      "etat": "fait",
+      "texte": "T22 à T24 faits. Onglet Ferme → « Ma façon de cultiver » : itinéraires par culture, « Adapter pour ma ferme » depuis la bibliothèque, travaux prévus (travail du sol, amendement, désherbage…) répétables avec temps estimé et aperçu des dates en direct. Modifier un itinéraire propose de l'appliquer aux séries à venir ; les séries commencées ne bougent jamais ; « Annuler » ne touche pas au travail d'un autre téléphone. Les travaux apparaissent dans Aujourd'hui avec la charge de la semaine.",
       "images": [
+        "itineraires-liste.png",
+        "itineraires-formulaire.png",
+        "itineraires-series.png",
         "aujourdhui-travaux.png"
       ],
-      "alt": "Écran Aujourd'hui avec la grelinette en retard, son temps estimé et la charge de la semaine"
+      "alt": "Liste Mes itinéraires, formulaire avec aperçu des dates, confirmation d'application aux séries à venir, travaux dans Aujourd'hui"
     },
     {
       "titre": "Planches, sur le téléphone",
