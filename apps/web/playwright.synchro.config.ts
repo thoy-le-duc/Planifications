@@ -5,13 +5,23 @@ import { defineConfig, devices } from '@playwright/test';
  * Postgres, le service PowerSync et l'API (voir l'en-tête de e2e-synchro/synchro.e2e.ts).
  *
  * La page de diagnostic est construite avec les URL de l'API et du service (VITE_API_URL,
- * VITE_POWERSYNC_URL, figées au build) dans `dist-synchro/`, puis servie sur le port 4174.
- * Sans API_URL ni POWERSYNC_URL, aucun serveur n'est lancé et les tests se sautent (hors CI).
+ * VITE_POWERSYNC_URL, figées au build) dans `dist-synchro/`, puis servie sur le port
+ * E2E_PORT_PAGE (4174 par défaut, T10c : deux bancs peuvent tourner en même temps). Sans API_URL
+ * ni POWERSYNC_URL, aucun serveur n'est lancé et les tests se sautent (hors CI).
  */
+/** Port de la page de diagnostic : E2E_PORT_PAGE, sinon 4174. */
+function portDeLaPage(valeur: string | undefined): number {
+  if (valeur === undefined || valeur === '') return 4174;
+  const n = Number(valeur);
+  if (!Number.isInteger(n) || n < 1 || n > 65_535) throw new Error(`E2E_PORT_PAGE : port invalide (${valeur})`);
+  return n;
+}
+
 const executablePath = process.env.CHROMIUM_PATH;
 const apiUrl = process.env.API_URL ?? '';
 const powersyncUrl = process.env.POWERSYNC_URL ?? '';
-const baseURL = process.env.SYNCHRO_BASE_URL ?? 'http://localhost:4174';
+const portPage = portDeLaPage(process.env.E2E_PORT_PAGE);
+const baseURL = process.env.SYNCHRO_BASE_URL ?? `http://localhost:${String(portPage)}`;
 const servicesPresents = apiUrl !== '' && powersyncUrl !== '';
 
 export default defineConfig({
@@ -31,7 +41,7 @@ export default defineConfig({
   ...(servicesPresents && process.env.SYNCHRO_BASE_URL === undefined
     ? {
         webServer: {
-          command: 'pnpm exec vite build --outDir dist-synchro && pnpm exec vite preview --outDir dist-synchro --port 4174 --strictPort',
+          command: `pnpm exec vite build --outDir dist-synchro && pnpm exec vite preview --outDir dist-synchro --port ${String(portPage)} --strictPort`,
           url: baseURL,
           timeout: 180_000,
           reuseExistingServer: !process.env.CI,

@@ -17,8 +17,16 @@
  * rotation : e2e-synchro/deconnexion.e2e.ts).
  *
  *   node apps/api/src/sync/test/amorcer-e2e.ts
+ *
+ * T10c : avec `--serie-tomates`, la ferme reçoit aussi une famille, une espèce « Tomate » de la
+ * ferme (récoltée en kg), une saison, un itinéraire et une série de tomates en récolte (statut
+ * 'en_cours', fenêtre de récolte qui contient aujourd'hui à Europe/Paris), sans article de
+ * stock ; la sortie gagne `"serieTomates": { "id", "especeId" }` (e2e-synchro/stock.e2e.ts).
+ *
+ *   node apps/api/src/sync/test/amorcer-e2e.ts --serie-tomates
  */
 import { randomUUID } from 'node:crypto';
+import { ajouterJours, type DateCalendaire } from '@planif/core';
 import pg from 'pg';
 import { emettreJetonAcces, trousseauDepuisJwks } from '../../auth/index.ts';
 import { empreinteCode, tirerCode } from '../../auth/secrets.ts';
@@ -57,6 +65,65 @@ async function sessionDeLApi(bd: pg.Pool, urlApi: string, email: string): Promis
   return { utilisateurId: corps.utilisateurId, email, jetonAcces: corps.jetonAcces, jetonRenouvellement: corps.jetonRenouvellement };
 }
 
+/** Paramètres d'itinéraire de T01 (plant maison sous tunnel), repris tels quels par la série. */
+const PARAMETRES_TOMATE = {
+  mode: 'plant_maison',
+  densite: { facon: 'ecartement', rangsParPlanche: 2, ecartementSurRangCm: 50 },
+  dureePepiniereJours: 42,
+  grainesParMotte: 1,
+  plantsParMotte: 1,
+  pertePepiniere: 10,
+  alveolesParPlaque: 77,
+  periodeUsage: null,
+  typeAbri: 'tunnel',
+  dureeAvantRecolteJours: 70,
+  fenetreRecolteJours: 90,
+  margeSecurite: 10,
+  rendementAttendu: null,
+  perenne: null,
+};
+
+/** Aujourd'hui à Europe/Paris ('AAAA-MM-JJ'), le fuseau de la ferme amorcée. */
+function aujourdhuiAParis(): DateCalendaire {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(
+    new Date(),
+  ) as DateCalendaire;
+}
+
+/** Série de tomates en récolte aujourd'hui, avec sa famille, son espèce, sa saison et son itinéraire. */
+async function amorcerSerieTomates(bd: pg.Pool, fermeId: string): Promise<{ id: string; especeId: string }> {
+  const [famille, espece, saison, itineraire, serie] = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  const jour = aujourdhuiAParis();
+  const parametres = JSON.stringify(PARAMETRES_TOMATE);
+  await bd.query(
+    `INSERT INTO famille (id, ferme_id, nom, delai_retour_minimal_ans, delai_retour_conseille_ans) VALUES ($1, $2, 'Solanacées', 3, 4)`,
+    [famille, fermeId],
+  );
+  await bd.query(
+    `INSERT INTO espece (id, ferme_id, famille_id, nom, categorie, perenne, unite_recolte) VALUES ($1, $2, $3, 'Tomate', 'legume', false, 'kg')`,
+    [espece, fermeId, famille],
+  );
+  await bd.query(`INSERT INTO saison (id, ferme_id, nom, debut, fin) VALUES ($1, $2, 'Saison e2e', $3, $4)`, [
+    saison,
+    fermeId,
+    ajouterJours(jour, -200),
+    ajouterJours(jour, 200),
+  ]);
+  await bd.query(
+    `INSERT INTO itineraire (id, ferme_id, espece_id, nom, mode, parametres) VALUES ($1, $2, $3, 'Tomate sous tunnel', 'plant_maison', $4)`,
+    [itineraire, fermeId, espece, parametres],
+  );
+  const miseEnPlace = ajouterJours(jour, -80);
+  await bd.query(
+    `INSERT INTO serie (id, ferme_id, saison_id, espece_id, itineraire_id, parametres, ancre_type, ancre_date,
+                        prevu_semis_pepiniere, prevu_mise_en_place, prevu_debut_recolte, prevu_fin_recolte, longueur_m, statut)
+     VALUES ($1, $2, $3, $4, $5, $6, 'plantation', $7, $8, $7, $9, $10, 30, 'en_cours')`,
+    [serie, fermeId, saison, espece, itineraire, parametres, miseEnPlace, ajouterJours(miseEnPlace, -42), ajouterJours(jour, -10), ajouterJours(jour, 80)],
+  );
+  return { id: serie, especeId: espece };
+}
+
+const avecSerieTomates = process.argv.slice(2).includes('--serie-tomates');
 const urlApi = process.env.API_URL ?? '';
 const pool = new pg.Pool({ connectionString: variable('DATABASE_URL'), max: 1 });
 try {
@@ -86,7 +153,8 @@ try {
         : await sessionDeLApi(pool, urlApi, email),
     );
   }
-  process.stdout.write(`${JSON.stringify({ fermeId, sessions })}\n`);
+  const serieTomates = avecSerieTomates ? await amorcerSerieTomates(pool, fermeId) : undefined;
+  process.stdout.write(`${JSON.stringify(serieTomates === undefined ? { fermeId, sessions } : { fermeId, sessions, serieTomates })}\n`);
 } finally {
   await pool.end();
 }

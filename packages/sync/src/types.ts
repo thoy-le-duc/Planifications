@@ -63,11 +63,24 @@ export interface RefusSynchro {
   readonly creeLe: string;
 }
 
+/** Ordre SQL d'écriture (paramètres `?`), pour `ecrireEnsemble`. */
+export interface OrdreEcriture {
+  readonly sql: string;
+  readonly parametres?: readonly unknown[];
+}
+
 export interface PorteDonnees {
   /** Lecture SQL libre (jointures comprises) sur la base locale. */
   lire<T>(sql: string, parametres?: readonly unknown[]): Promise<T[]>;
   /** Écriture SQL brute, dans une transaction locale ; part dans la file d'envoi. */
   ecrire(sql: string, parametres?: readonly unknown[]): Promise<void>;
+  /**
+   * T10c : écrit plusieurs lignes en UNE transaction locale (une saisie = un seul envoi au
+   * serveur, accepté ou refusé en entier). Ordres exécutés dans l'ordre ; un ordre qui échoue
+   * rejette la promesse et rien n'est écrit. Liste vide : aucune transaction. Les requêtes
+   * surveillées sont prévenues une fois l'ensemble validé.
+   */
+  ecrireEnsemble(ordres: readonly OrdreEcriture[]): Promise<void>;
   /**
    * Appelle `rappel` avec le résultat tout de suite, puis après chaque écriture validée sur l'une
    * des `tables` (écriture locale ou arrivée par la synchro). Rend la fonction de désabonnement.

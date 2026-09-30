@@ -2,6 +2,17 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T10c : le serveur accepte le stock des téléphones
+
+- **Fait** : une récolte saisie hors ligne arrive au serveur avec son mouvement de stock, et son annulation aussi. Testé à deux téléphones : 12 kg notés puis annulés sur l'un, stock inchangé chez l'autre. Les règles du serveur :
+  - ajout seul, jamais d'écriture pour une autre ferme ;
+  - une saisie est acceptée ou refusée en entier ;
+  - une annulation retire exactement ce que la chaîne de la récolte avait ajouté, et une correction exactement la différence ;
+  - un seul article par récolte, de la même espèce et de la même unité ;
+  - quantités à 6 décimales au plus.
+- **Décidé** : pour l'instant, un téléphone n'envoie que des récoltes au stock (ni vente, ni perte, ni ajustement). Un verrou par ferme évite les interblocages. Deux relectures de sécurité, deux défauts bloquants corrigés : une récolte pouvait gonfler le stock, et une correction en créer sur un autre article.
+- **Bloquant** : aucun. Question Q20 (corriger une récolte annulée, deux téléphones qui corrigent la même récolte). Suites dans T10d. T11b devient prioritaire : la page de diagnostic de synchro écrit dans une vraie ferme.
+
 ## 2026-09-30 — T20 : main verte
 
 - **Fait** : la CI de main était rouge sur des mesures de temps. L'appli ne précharge plus ses fichiers hors ligne pendant son premier affichage : le service worker s'enregistre après, au repos. Les mesures d'écran prennent la médiane de 5 essais ; les budgets n'ont pas bougé (réouverture hors ligne 205 à 257 ms, Planches 169 à 215 ms). Un test instable de l'onglet Ferme est corrigé (6 échecs sur 30, puis 15 sur 15).
