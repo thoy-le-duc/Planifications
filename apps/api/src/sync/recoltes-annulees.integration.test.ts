@@ -33,15 +33,28 @@
  * 2. Q20, conflit : deux corrections hors ligne de la même récolte. Celle qui reste en vigueur est
  *    la plus récente selon l'heure du téléphone (`horodatage`), égalité départagée par l'id le
  *    plus grand (même ordre que `lireChaine` et la vue evenements_en_vigueur), PAS la dernière
- *    arrivée. Le stock vaut toujours la quantité en vigueur :
- *    - la plus récente arrive d'abord (acceptée) ; la plus ancienne arrive ensuite avec un
- *      mouvement → son lot est refusé en entier (rien d'écrit), le stock ne bouge pas. C'est vrai
- *      quel que soit le mouvement envoyé : celui que le téléphone a calculé sur sa chaîne locale
- *      (100 − 12 = +88) comme celui qui « tomberait juste » sur la somme du serveur
- *      (100 − 15 = +85, l'exemple de T10d). Le motif de la fautive n'est pas figé ici ;
- *    - arrivées dans l'ordre de leur heure : la seconde (plus récente) passe si son mouvement vaut
- *      nouvelle quantité − somme de la chaîne ; le stock suit la plus récente ;
- *    - une correction suivante s'appuie sur celle en vigueur.
+ *    arrivée. Le stock vaut toujours la quantité en vigueur.
+ *
+ *    Décision 6 du chef (après les tests) : le SERVEUR calcule l'écart de stock d'une correction
+ *    ou d'une annulation de récolte, sous le verrou de la ferme ; le mouvement envoyé par le
+ *    téléphone (calculé sur sa chaîne locale, peut-être en retard) n'est plus comparé. La ligne
+ *    mouvement_stock est écrite avec l'id reçu et la quantité du serveur :
+ *      - correction : quantité en vigueur après − quantité en vigueur avant ;
+ *      - annulation : − quantité en vigueur (toute la chaîne).
+ *    Le renvoi identique du lot (même id, quantité du téléphone) reste accepté sans double
+ *    écriture, et la ligne garde la quantité du serveur.
+ *
+ *    Forme figée ici (décision 5, « la plus simple ») : une correction plus ANCIENNE que celle en
+ *    vigueur est REFUSÉE (motif libre), avec ou sans mouvement : lot avec stock refusé en entier,
+ *    rien d'écrit, stock inchangé. Un remplacement dont l'écart du serveur est nul mais qui porte
+ *    un mouvement reste refusé (annulation redondante avec −12 : T10d, inchangé).
+ *
+ *    - la plus récente arrive d'abord (acceptée) ; la plus ancienne arrive ensuite → refusée,
+ *      quel que soit son mouvement (+88 ou +85) ;
+ *    - arrivées dans l'ordre de leur heure, la seconde (plus récente) porte le mouvement de sa
+ *      chaîne locale (15 − 12 = +3) : acceptée, en vigueur, mouvement écrit −85, stock 15 ;
+ *    - un mouvement volontairement faux (+1 000, −50) ne gonfle ni ne vide jamais le stock :
+ *      l'écart écrit est celui du serveur ; un mouvement rattaché à l'origine reste borné (B1).
  *    En vigueur au serveur : la vue evenements_en_vigueur montre UNE seule ligne de la chaîne,
  *    celle de la quantité du stock ; aucune si la chaîne est annulée.
  *
@@ -158,6 +171,12 @@ decrireAvecBase('T10g')('T10g : récoltes annulées et corrections concurrentes'
       [articleId],
     );
     return r.rows[0]?.s ?? Number.NaN;
+  }
+
+  /** Quantité écrite en base pour le mouvement `id` (NaN s'il n'existe pas). */
+  async function quantiteEcrite(id: string): Promise<number> {
+    const r = await base.pool.query<{ q: number }>(`SELECT quantite::float8 AS q FROM mouvement_stock WHERE id = $1`, [id]);
+    return r.rows[0]?.q ?? Number.NaN;
   }
 
   /** Refus enregistrés pour `id` : motif et message. */
@@ -443,11 +462,13 @@ decrireAvecBase('T10g')('T10g : récoltes annulées et corrections concurrentes'
       expect(await enVigueur([recolte, recente, ancienne])).toEqual([{ id: recente.id, quantite: 15 }]);
     });
 
-    it('ordre inverse, la plus ancienne sans mouvement : quelle que soit la réponse, 15 reste en vigueur et en stock', async () => {
+    it('ordre inverse, la plus ancienne sans mouvement : refusée (forme figée), 15 reste en vigueur et en stock', async () => {
       const { recolte, article } = await recolteAcceptee(12);
       const recente = await remplacementAccepte(recolte, 'correction', H('07:00'), 15, article, 3);
       const ancienne = putRemplacement(recolte, 'correction', H('04:00'), 100);
-      await lot([ancienne]);
+      const reponse = await lot([ancienne]);
+      expect(reponse.refus.map((r) => r.id)).toEqual([ancienne.id]);
+      expect(await ecrites(ancienne)).toBe(0);
       expect(await stock(article)).toBe(15);
       expect(await enVigueur([recolte, recente, ancienne])).toEqual([{ id: recente.id, quantite: 15 }]);
     });
@@ -471,6 +492,38 @@ decrireAvecBase('T10g')('T10g : récoltes annulées et corrections concurrentes'
       expect(await enVigueur([recolte, ancienne, recente])).toEqual([{ id: recente.id, quantite: 15 }]);
     });
 
+    it('décision 6 : dans l’ordre de l’heure, la plus récente porte le mouvement de sa chaîne locale (+3 au lieu de −85) : acceptée, en vigueur, −85 écrit, stock 15', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      // Téléphone B (04:00) arrive d'abord ; le téléphone A (07:00) n'a jamais vu B.
+      const ancienne = await remplacementAccepte(recolte, 'correction', H('04:00'), 100, article, 88);
+      expect(await stock(article)).toBe(100);
+      const recente = putRemplacement(recolte, 'correction', H('07:00'), 15);
+      const ecartLocal = putMouvement(article, 3, recente.id);
+      expect(await lot([recente, ecartLocal])).toEqual({ refus: [] });
+      expect(await quantiteEcrite(ecartLocal.id), 'le mouvement écrit est celui du serveur').toBe(-85);
+      expect(await stock(article)).toBe(15);
+      expect(await enVigueur([recolte, ancienne, recente])).toEqual([{ id: recente.id, quantite: 15 }]);
+
+      // Réponse perdue : PowerSync renvoie le lot tel quel (+3). Accepté, rien en double.
+      expect(await lot([recente, ecartLocal])).toEqual({ refus: [] });
+      expect(await refusDe(ecartLocal.id)).toBe(0);
+      expect(await compter(`SELECT 1 FROM mouvement_stock WHERE id = $1`, [ecartLocal.id])).toBe(1);
+      expect(await quantiteEcrite(ecartLocal.id)).toBe(-85);
+      expect(await stock(article)).toBe(15);
+    });
+
+    it('décision 6 : même heure, l’id le plus petit arrive d’abord puis le plus grand avec +3 (chaîne locale) : acceptée, −85 écrit, stock 15', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const petit = putRemplacement(recolte, 'correction', H('07:00'), 100);
+      const grand = putRemplacement(recolte, 'correction', H('07:00'), 15);
+      expect(await lot([petit, putMouvement(article, 88, petit.id)])).toEqual({ refus: [] });
+      const ecartLocal = putMouvement(article, 3, grand.id);
+      expect(await lot([grand, ecartLocal])).toEqual({ refus: [] });
+      expect(await quantiteEcrite(ecartLocal.id)).toBe(-85);
+      expect(await stock(article)).toBe(15);
+      expect(await enVigueur([recolte, petit, grand])).toEqual([{ id: grand.id, quantite: 15 }]);
+    });
+
     it('même heure : l’id le plus grand gagne ; il arrive d’abord, l’autre (id plus petit) arrive ensuite avec +85 → refusée en entier, stock 15', async () => {
       const { recolte, article } = await recolteAcceptee(12);
       // Ids croissants dans l'ordre de création (générateur horodaté) : `petit` < `grand`.
@@ -492,6 +545,63 @@ decrireAvecBase('T10g')('T10g : récoltes annulées et corrections concurrentes'
       expect(await lot([grand, putMouvement(article, -85, grand.id)])).toEqual({ refus: [] });
       expect(await stock(article)).toBe(15);
       expect(await enVigueur([recolte, petit, grand])).toEqual([{ id: grand.id, quantite: 15 }]);
+    });
+  });
+
+  // ── 2 bis. Décision 6 : un mouvement faux ne gonfle jamais le stock ─────────────────────────
+
+  describe('2 bis. décision 6 : l’écart écrit est celui du serveur, un mouvement faux ne gonfle ni ne vide le stock', () => {
+    it('correction 12 → 15 envoyée avec +1 000 : acceptée, +3 écrit, stock 15', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const correction = putRemplacement(recolte, 'correction', H('04:00'), 15);
+      const faux = putMouvement(article, 1_000, correction.id);
+      expect(await lot([correction, faux])).toEqual({ refus: [] });
+      expect(await quantiteEcrite(faux.id)).toBe(3);
+      expect(await stock(article)).toBe(15);
+    });
+
+    it('correction 12 → 10 envoyée avec +1 000 : acceptée, −2 écrit, stock 10', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const correction = putRemplacement(recolte, 'correction', H('04:00'), 10);
+      const faux = putMouvement(article, 1_000, correction.id);
+      expect(await lot([correction, faux])).toEqual({ refus: [] });
+      expect(await quantiteEcrite(faux.id)).toBe(-2);
+      expect(await stock(article)).toBe(10);
+    });
+
+    it.each([1_000, -50, -12])('annulation après 12 → 15, envoyée avec %s : acceptée, −15 écrit (moins la quantité en vigueur), stock 0', async (envoye) => {
+      const { recolte, article } = await recolteAcceptee(12);
+      await remplacementAccepte(recolte, 'correction', H('04:00'), 15, article, 3);
+      const annulation = putRemplacement(recolte, 'annulation', H('05:00'));
+      const faux = putMouvement(article, envoye, annulation.id);
+      expect(await lot([annulation, faux])).toEqual({ refus: [] });
+      expect(await quantiteEcrite(faux.id)).toBe(-15);
+      expect(await stock(article)).toBe(0);
+    });
+
+    it('correction +1 000 puis annulation +1 000 : le stock passe de 12 à 15 puis à 0, jamais au-delà', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const correction = putRemplacement(recolte, 'correction', H('04:00'), 15);
+      expect(await lot([correction, putMouvement(article, 1_000, correction.id)])).toEqual({ refus: [] });
+      expect(await stock(article)).toBe(15);
+      const annulation = putRemplacement(correction, 'annulation', H('05:00'), 15);
+      expect(await lot([annulation, putMouvement(article, 1_000, annulation.id)])).toEqual({ refus: [] });
+      expect(await stock(article)).toBe(0);
+    });
+
+    it('mouvement +1 000 rattaché à la récolte d’origine : toujours refusé en entier (B1), stock 12', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      const faux = putMouvement(article, 1_000, recolte.id);
+      await refuseEnEntier([faux], faux, 'ecriture_invalide');
+      expect(await stock(article)).toBe(12);
+    });
+
+    it('correction plus ancienne que celle en vigueur envoyée avec +1 000 : refusée en entier, stock inchangé', async () => {
+      const { recolte, article } = await recolteAcceptee(12);
+      await remplacementAccepte(recolte, 'correction', H('07:00'), 15, article, 3);
+      const ancienne = putRemplacement(recolte, 'correction', H('04:00'), 100);
+      await refuseEnEntier([ancienne, putMouvement(article, 1_000, ancienne.id)]);
+      expect(await stock(article)).toBe(15);
     });
   });
 
