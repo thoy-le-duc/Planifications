@@ -43,6 +43,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0015_*.sql` | Généré par drizzle-kit (T23) : table `type_intervention`, unicité (ferme, catégorie, libellé) parmi les types actifs, `modification.nom_table` accepte `TypeIntervention` |
 | `migrations/0017_*.sql` | Généré par drizzle-kit (T23, décision 11) : unicité des types actifs insensible à la casse (`lower(libelle)`) |
 | `migrations/0016_*.sql` | Migration personnalisée (T23) : `type_intervention` dans la publication `powersync`, et la liste de départ (`TYPES_INTERVENTION_PAR_DEFAUT`, `ferme_id` nul, identifiants tirés du couple) |
+| `migrations/0018_*.sql` | Migration personnalisée (T10g) : `evenements_en_vigueur` suit toute la chaîne (une annulation retire tout, sinon la correction la plus récente de la chaîne) |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 
@@ -102,15 +103,13 @@ Il n'y a pas de tables Récolte, Intervention et Traitement : le détail est dan
 
 **Seule la version en vigueur apparaît.** Les vues s'appuient sur `evenements_en_vigueur`, utilisable directement, qui exclut :
 
-- les annulations elles-mêmes, et les événements annulés ;
-- les événements corrigés ;
-- d'un événement corrigé plusieurs fois, toutes les corrections sauf la plus récente (`horodatage` le plus grand, puis `id` le plus grand) ;
-- les corrections d'un événement annulé.
+- toute la chaîne d'un événement annulé : la chaîne, c'est l'origine, ses corrections, les corrections de ses corrections, et toutes leurs annulations ; une seule annulation, de l'origine ou de n'importe quelle correction, retire toute la chaîne (T10g) ;
+- sinon, toute la chaîne sauf UNE ligne : la correction la plus récente de toute la chaîne (`horodatage` le plus grand, puis `id` le plus grand), à défaut l'origine. Une chaîne ramifiée n'a qu'une ligne en vigueur (T10g, migration 0018 ; même règle que le stock et le téléphone).
 
 Conséquences à connaître :
 
-- **Annuler une correction retire la saisie** : l'événement d'origine reste masqué (il est corrigé) et la correction est annulée. Pour revenir à une valeur, on saisit une nouvelle correction.
-- **Annuler une annulation ne restaure rien** : l'événement annulé reste masqué. Pour le rétablir, on le saisit de nouveau.
+- **Annuler une correction retire la saisie** : toute la chaîne est annulée. Une récolte annulée ne se corrige plus (l'API refuse, motif `recolte_annulee`) : pour la rétablir, on saisit une nouvelle récolte.
+- **Annuler une annulation ne restaure rien** (l'API la refuse pour une récolte) : pour rétablir, on saisit de nouveau.
 
 Des CHECK contrôlent le détail à l'insertion (erreur `23514`), pour qu'un `SELECT *` sur une vue ne lève jamais : champ obligatoire absent (`… IS TRUE`, un champ absent donnant NULL), date impossible (`est_date_calendaire`, fonction IMMUTABLE qui ne lève jamais), valeur non numérique là où la vue convertit en nombre (`jsonb_typeof`), valeurs des unions de T01.
 

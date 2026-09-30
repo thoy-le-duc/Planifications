@@ -3,6 +3,23 @@
  * Postgres (même amorçage que upload.integration.test.ts : DATABASE_URL, base jetable
  * `t10c_stock_…` supprimée à la fin ; sans DATABASE_URL, échec en CI et saut signalé en local).
  *
+ * T10g (Q13) : test adapté. `PLAFONDS_PROVISOIRES` est renommé `PLAFONDS_SAISIES` (valeurs
+ * inchangées) ; le plafond est lu sous le nouveau nom, par son nom (le typage ne dépend pas du
+ * renommage).
+ *
+ * T10g, décision 6 du chef (docs/backlog/T10g-recoltes-annulees.md) : tests adaptés. Le serveur
+ * calcule lui-même l'écart de stock d'une correction ou d'une annulation de récolte ; le
+ * mouvement envoyé par le téléphone n'est plus comparé, il est écrit (même id) avec la quantité
+ * du serveur. Les tests de la décision 3 qui exigeaient le REFUS d'un mouvement mal calculé
+ * attendent maintenant l'écriture de l'écart du serveur, et un stock juste :
+ *   - correction 12 → 15 avec +5 : acceptée, +3 écrit, stock 15 (au lieu de refusée) ;
+ *   - correction 12 → 10 avec −3 : acceptée, −2 écrit, stock 10 ;
+ *   - annulation d'une récolte de 12 avec −50 : acceptée, −12 écrit, stock 0 ;
+ *   - 12 → 15 puis annulation (de la correction ou de l'origine) avec −12 : acceptée, −15 écrit ;
+ *   - récolte en +10 et +2, annulation avec −10 : acceptée, −12 écrit.
+ * Inchangés : mouvement sur un autre article que celui de la chaîne (B2), mouvement négatif ou
+ * au-delà de la récolte rattaché à l'origine (B1), plafond et précision de la ligne reçue.
+ *
  * ── Rôle ────────────────────────────────────────────────────────────────────────────────────
  *
  * Une récolte saisie au champ (T13) part du téléphone en UNE transaction PowerSync, donc en UN
@@ -32,7 +49,7 @@
  *     non supprimé. Introuvable, supprimé ou d'une autre ferme → 'ecriture_invalide' (T10d : une
  *     ligne d'une autre ferme se comporte comme une ligne inexistante, stock-suites.integration.test.ts).
  *   - `quantite` : un nombre (pas un texte), fini, non nul, |quantite| ≤
- *     PLAFONDS_PROVISOIRES.recolteQuantite (100 000, borne comprise ; Q13) → sinon
+ *     PLAFONDS_SAISIES.recolteQuantite (100 000, borne comprise ; Q13) → sinon
  *     'ecriture_invalide'.
  *   - `date` : 'AAAA-MM-JJ' existante dans [2000-01-01, 2100-12-31] (comme un événement).
  *   - `motif` : 'recolte' SEULEMENT depuis un téléphone (décision 5 du chef : vente, perte,
@@ -44,11 +61,12 @@
  *   - Quantité négative : acceptée seulement si recolte_id désigne une ANNULATION ou une
  *     CORRECTION (remplace_sorte non nul). Rattachée à la récolte d'origine → 'ecriture_invalide'.
  *   - Décision 3 du chef (mouvement borné), sinon 'ecriture_invalide' :
- *       annulation : le mouvement rattaché vaut EXACTEMENT l'opposé de la somme des mouvements de
- *         la chaîne de la récolte annulée, sur le MÊME article (12 → −12 ; −50 ou −12 sur
- *         un autre article : refusé) ;
- *       correction : le mouvement rattaché vaut la nouvelle quantité − la quantité EN VIGUEUR
- *         (après les corrections précédentes) (12 → 15 : +3 accepté, +5 refusé ; 12 → 10 : −2).
+ *       annulation : le mouvement ÉCRIT vaut l'opposé de la somme des mouvements de la chaîne de
+ *         la récolte annulée, sur le MÊME article, quel que soit celui envoyé (T10g, décision 6 :
+ *         12 → −12 écrit même si −50 est envoyé ; −12 sur un autre article : refusé, B2) ;
+ *       correction : le mouvement ÉCRIT vaut la nouvelle quantité − la quantité EN VIGUEUR
+ *         (après les corrections précédentes) (12 → 15 : +3 écrit, même si +5 est envoyé ;
+ *         12 → 10 : −2).
  *       Chaîne : une annulation (de l'origine ou d'une de ses corrections) vaut l'opposé de la somme
  *         de TOUS les mouvements de la chaîne (origine + corrections) sur le même article :
  *         12 (+12) → 15 (+3) → annulation −15 ; récolte avec +10 et +2 → annulation −12.
@@ -76,7 +94,8 @@
  *   écriture de stock garde la règle de T10 (chaque écriture à part) : les tests de T10 ne
  *   changent pas.
  */
-import { creerGenerateurId, PLAFONDS_PROVISOIRES } from '@planif/core';
+import * as coeur from '@planif/core';
+import { creerGenerateurId } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -87,7 +106,14 @@ import { ajouterMembre, creerBaseJetable, creerFerme, creerUtilisateur, decrireA
 const EMETTEUR = 'https://api.planif.test';
 const AUDIENCE = 'powersync-planif';
 const MAINTENANT = new Date('2026-10-01T06:00:00Z');
-const PLAFOND = PLAFONDS_PROVISOIRES.recolteQuantite;
+/** T10g : `PLAFONDS_SAISIES.recolteQuantite`, lu par son nom ; NaN s'il manque (les tests du plafond échouent). */
+function plafondRecolte(): number {
+  const plafonds: unknown = Reflect.get(coeur, 'PLAFONDS_SAISIES');
+  if (typeof plafonds !== 'object' || plafonds === null) return Number.NaN;
+  const v: unknown = Reflect.get(plafonds, 'recolteQuantite');
+  return typeof v === 'number' ? v : Number.NaN;
+}
+const PLAFOND = plafondRecolte();
 
 interface EcritureEnvoyee {
   readonly op: 'PUT' | 'PATCH' | 'DELETE';
@@ -249,6 +275,11 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
   const evenements = (id: string) => compter(`SELECT 1 FROM evenement WHERE id = $1`, [id]);
   const articles = (id: string) => compter(`SELECT 1 FROM article_stock WHERE id = $1`, [id]);
   const mouvements = (id: string) => compter(`SELECT 1 FROM mouvement_stock WHERE id = $1`, [id]);
+  /** T10g, décision 6 : quantité écrite en base pour le mouvement `id` (NaN s'il n'existe pas). */
+  async function quantiteEcrite(id: string): Promise<number> {
+    const r = await base.pool.query<{ q: number }>(`SELECT quantite::float8 AS q FROM mouvement_stock WHERE id = $1`, [id]);
+    return r.rows[0]?.q ?? Number.NaN;
+  }
   const modifications = (id: string) => compter(`SELECT 1 FROM modification WHERE ligne_id = $1`, [id]);
   const refusDe = (id: string) => compter(`SELECT 1 FROM refus_synchro WHERE ligne_id = $1`, [id]);
 
@@ -421,31 +452,31 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       expect(await stock(article.id)).toBe(10);
     });
 
-    it('décision 3 : correction 12 → 15, mouvement +3 accepté ; +5 refusé (rien d’écrit)', async () => {
+    it('décision 3, T10g décision 6 : correction 12 → 15 envoyée avec +5 : acceptée, +3 écrit, stock 15', async () => {
       const { recolte, article } = await recolteAcceptee(12);
-      const trop = putRemplacement(recolte, 'correction', { quantite: 15, unite: 'kg', categorie: null });
-      const cinq = putMouvement(article.id, 5, trop.id);
-      await refuseEnEntier([trop, cinq], cinq, 'ecriture_invalide');
       const correction = putRemplacement(recolte, 'correction', { quantite: 15, unite: 'kg', categorie: null });
-      const trois = putMouvement(article.id, 3, correction.id);
-      expect(await lot([correction, trois])).toEqual({ refus: [] });
+      const cinq = putMouvement(article.id, 5, correction.id);
+      expect(await lot([correction, cinq])).toEqual({ refus: [] });
+      expect(await quantiteEcrite(cinq.id)).toBe(3);
       expect(await stock(article.id)).toBe(15);
     });
 
-    it('décision 3 : correction 12 → 10, un mouvement −3 (au lieu de −2) est refusé', async () => {
+    it('décision 3, T10g décision 6 : correction 12 → 10 envoyée avec −3 (au lieu de −2) : acceptée, −2 écrit, stock 10', async () => {
       const { recolte, article } = await recolteAcceptee(12);
       const correction = putRemplacement(recolte, 'correction', { quantite: 10, unite: 'kg', categorie: null });
       const faux = putMouvement(article.id, -3, correction.id);
-      await refuseEnEntier([correction, faux], faux, 'ecriture_invalide');
-      expect(await stock(article.id)).toBe(12);
+      expect(await lot([correction, faux])).toEqual({ refus: [] });
+      expect(await quantiteEcrite(faux.id)).toBe(-2);
+      expect(await stock(article.id)).toBe(10);
     });
 
-    it('décision 3 : annulation d’une récolte de 12 avec −50 : refusée en entier, le stock reste à 12', async () => {
+    it('décision 3, T10g décision 6 : annulation d’une récolte de 12 envoyée avec −50 : acceptée, −12 écrit, stock 0', async () => {
       const { recolte, article } = await recolteAcceptee(12);
       const annulation = putRemplacement(recolte, 'annulation');
       const inverse = putMouvement(article.id, -50, annulation.id);
-      await refuseEnEntier([annulation, inverse], inverse, 'ecriture_invalide');
-      expect(await stock(article.id)).toBe(12);
+      expect(await lot([annulation, inverse])).toEqual({ refus: [] });
+      expect(await quantiteEcrite(inverse.id)).toBe(-12);
+      expect(await stock(article.id)).toBe(0);
     });
 
     it('décision 3 : annulation avec −12 sur un autre article que celui de la récolte : refusée en entier', async () => {
@@ -459,25 +490,22 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
     });
 
     it.each(['la correction', 'l’origine'])(
-      'décision 3 : récolte 12 (+12), correction → 15 (+3), annulation de %s : −12 refusé, −15 accepté (toute la chaîne)',
+      'décision 3, T10g décision 6 : récolte 12 (+12), correction → 15 (+3), annulation de %s envoyée avec −12 : acceptée, −15 écrit (toute la chaîne)',
       async (cible) => {
         const { recolte, article } = await recolteAcceptee(12);
         const correction = putRemplacement(recolte, 'correction', { quantite: 15, unite: 'kg', categorie: null });
         expect(await lot([correction, putMouvement(article.id, 3, correction.id)])).toEqual({ refus: [] });
         const annulee = cible === 'la correction' ? correction : recolte;
 
-        const annulationFausse = putRemplacement(annulee, 'annulation', { quantite: 15, unite: 'kg', categorie: null });
-        const moinsDouze = putMouvement(article.id, -12, annulationFausse.id);
-        await refuseEnEntier([annulationFausse, moinsDouze], moinsDouze, 'ecriture_invalide');
-
         const annulation = putRemplacement(annulee, 'annulation', { quantite: 15, unite: 'kg', categorie: null });
-        const moinsQuinze = putMouvement(article.id, -15, annulation.id);
-        expect(await lot([annulation, moinsQuinze])).toEqual({ refus: [] });
+        const moinsDouze = putMouvement(article.id, -12, annulation.id);
+        expect(await lot([annulation, moinsDouze])).toEqual({ refus: [] });
+        expect(await quantiteEcrite(moinsDouze.id)).toBe(-15);
         expect(await stock(article.id)).toBe(0);
       },
     );
 
-    it('décision 3 : récolte 12 avec deux mouvements (+10 et +2, même article, même lot) : annulation −10 refusée, −12 acceptée', async () => {
+    it('décision 3, T10g décision 6 : récolte 12 avec deux mouvements (+10 et +2, même article, même lot) : annulation envoyée avec −10 acceptée, −12 écrit', async () => {
       const recolte = putRecolte(12);
       const article = putArticle();
       const dix = putMouvement(article.id, 10, recolte.id);
@@ -485,13 +513,10 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       expect(await lot([recolte, article, dix, deux])).toEqual({ refus: [] });
       expect(await stock(article.id)).toBe(12);
 
-      const annulationFausse = putRemplacement(recolte, 'annulation');
-      const moinsDix = putMouvement(article.id, -10, annulationFausse.id);
-      await refuseEnEntier([annulationFausse, moinsDix], moinsDix, 'ecriture_invalide');
-
       const annulation = putRemplacement(recolte, 'annulation');
-      const moinsDouze = putMouvement(article.id, -12, annulation.id);
-      expect(await lot([annulation, moinsDouze])).toEqual({ refus: [] });
+      const moinsDix = putMouvement(article.id, -10, annulation.id);
+      expect(await lot([annulation, moinsDix])).toEqual({ refus: [] });
+      expect(await quantiteEcrite(moinsDix.id)).toBe(-12);
       expect(await stock(article.id)).toBe(0);
     });
 

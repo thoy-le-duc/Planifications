@@ -11,7 +11,7 @@
  */
 import { estDateValide } from '../dates/index.ts';
 import type { ArticleStock, Id, MotifMouvementStock, MouvementStock, RemplacementEvenement, UniteRecolte } from '../domaine/index.ts';
-import { PLAFONDS_PROVISOIRES, type CodeErreurSaisie, type ErreurSaisie } from './index.ts';
+import { PLAFONDS_SAISIES, type CodeErreurSaisie, type ErreurSaisie } from './index.ts';
 
 export type ResultatLigneStock<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly erreur: ErreurSaisie };
 
@@ -140,7 +140,7 @@ export function validerArticleStock(entree: unknown): ResultatLigneStock<Article
 
 /**
  * Mouvement de stock saisi sur un téléphone (ligne au format PowerSync, avec son `id`) :
- * quantité (nombre, fini, non nul, |quantité| ≤ plafond provisoire des récoltes), date
+ * quantité (nombre, fini, non nul, |quantité| ≤ plafond des récoltes, PLAFONDS_SAISIES), date
  * 'AAAA-MM-JJ' dans [2000-01-01, 2100-12-31], motif `recolte` seulement (décision 5) et donc
  * `recolte_id` obligatoire. Le sens et la valeur exacte d'un mouvement rattaché à une
  * annulation ou une correction : `verifierMouvementRecolte`.
@@ -168,7 +168,7 @@ export function validerMouvementStock(entree: unknown): ResultatLigneStock<Mouve
     if (decimales(quantite) > DECIMALES_MAX_QUANTITE) {
       return echec(erreur('champ_invalide', 'quantite', `quantité : ${String(DECIMALES_MAX_QUANTITE)} décimales au plus`));
     }
-    const plafond = PLAFONDS_PROVISOIRES.recolteQuantite;
+    const plafond = PLAFONDS_SAISIES.recolteQuantite;
     if (Math.abs(quantite) > plafond) {
       return echec(erreur('plafond_depasse', 'quantite', `quantité au-delà du plafond (${String(plafond)} au plus, dans un sens ou dans l'autre)`));
     }

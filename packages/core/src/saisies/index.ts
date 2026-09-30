@@ -60,10 +60,10 @@ export const LIMITES_SAISIE = {
 } as const;
 
 /**
- * Plafonds métier par saisie, bornes comprises. PROVISOIRES : à valider par Théophane
- * (docs/questions.md). Ils arrêtent une faute de frappe (1e308 kg), pas une grosse journée.
+ * Plafonds métier par saisie, bornes comprises, validés par Théophane (Q13, docs/questions.md).
+ * Ils arrêtent une faute de frappe (1e308 kg), pas une grosse journée.
  */
-export const PLAFONDS_PROVISOIRES = {
+export const PLAFONDS_SAISIES = {
   /** recolte.quantite, quelle que soit l'unité. */
   recolteQuantite: 100_000,
   /** realise.quantiteReelle (graines ou plants). */
@@ -276,7 +276,7 @@ function cleInconnue(type: TypeEvenement, d: Objet): Verif {
   return null;
 }
 
-const P = PLAFONDS_PROVISOIRES;
+const P = PLAFONDS_SAISIES;
 
 /** Valeurs du détail selon le type (Detail* de T01). */
 function verifDetail(type: TypeEvenement, d: Objet): Verif {
