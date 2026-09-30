@@ -107,21 +107,66 @@ for (const variante of VARIANTES) {
   });
 }
 
+/** SQLite, PowerSync ou pages de mesure : ce que le démarrage de l'appli ne doit pas télécharger. */
+const MOTIF_SQLITE = /\.wasm(\?|$)|powersync|wa-sqlite|\/mesures\/|\/assets\/sqlite\//i;
+
+/**
+ * T07, adapté en T11 (décision du chef, hors ligne d'abord) : le service worker précache
+ * désormais PowerSync, son worker et son WASM (assets/sqlite/) pour que la base s'ouvre hors
+ * ligne. Ces téléchargements du service worker sont donc permis ; ce qui reste interdit :
+ *   1. que la PAGE demande SQLite, PowerSync ou une page de mesure au démarrage ;
+ *   2. que la page attende ces téléchargements : chacun commence après la marque de premier
+ *      affichage de l'appli (MARQUE_APP_PRETE).
+ * Mesure du point 2 : horloge murale des deux côtés, même machine. Côté page, l'instant de la
+ * marque = performance.timeOrigin + startTime ; côté service worker, le début de chaque requête
+ * (Request.timing().startTime, relevé par Chromium). Tolérance de TOLERANCE_HORLOGE_MS pour
+ * l'arrondi entre les deux relevés. Comparer les DÉBUTS est plus strict que comparer les fins.
+ */
+const TOLERANCE_HORLOGE_MS = 5;
+
 test('le WASM SQLite ne se charge pas au démarrage de l’appli', async ({ page, context }) => {
-  // Écoute au niveau du contexte : couvre aussi les requêtes du service worker (précache).
+  // Écoute au niveau du contexte : voit aussi les requêtes du service worker (précache), que
+  // l'on sépare ensuite de celles de la page.
   const requetes: Request[] = [];
+  const terminees = new Set<Request>();
   context.on('request', (r) => requetes.push(r));
+  context.on('requestfinished', (r) => terminees.add(r));
   await ralentirCpu(page);
   await page.goto('/');
-  await tempsAppPrete(page);
-  // Le service worker précache à son installation : on attend qu'il soit prêt, puis un instant.
+  const marqueMs = await tempsAppPrete(page);
+  const origine = await page.evaluate(() => performance.timeOrigin);
+  // Le service worker précache pendant son installation ; `ready` = installé puis actif, donc
+  // précache terminé. Un instant de plus pour que les derniers événements réseau arrivent.
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
   });
   await page.waitForTimeout(ATTENTE_PRECACHE_MS);
 
-  const suspectes = requetes
-    .map((r) => r.url())
-    .filter((url) => /\.wasm(\?|$)|powersync|wa-sqlite|\/mesures\/|\/assets\/sqlite\//i.test(url));
-  expect(suspectes, 'requêtes SQLite ou mesure au démarrage ou au précache').toEqual([]);
+  const dePage = requetes.filter((r) => r.serviceWorker() === null);
+  const duServiceWorker = requetes.filter((r) => r.serviceWorker() !== null);
+  const suspectesPage = dePage.map((r) => r.url()).filter((url) => MOTIF_SQLITE.test(url));
+  expect(suspectesPage, 'requêtes SQLite ou mesure faites par la page au démarrage').toEqual([]);
+
+  // Témoin : le service worker précache bien le WASM de SQLite (sinon le point 2 ne prouve rien).
+  const precache = duServiceWorker.filter((r) => MOTIF_SQLITE.test(r.url()));
+  expect(
+    precache.some((r) => /\.wasm(\?|$)/.test(r.url())),
+    'le service worker précache le WASM de SQLite',
+  ).toBe(true);
+  // Rien de la page de mesure dans le précache (globIgnores).
+  expect(precache.map((r) => r.url()).filter((url) => url.includes('/mesures/')), 'pages de mesure précachées').toEqual([]);
+
+  const marqueMurale = origine + marqueMs;
+  const avantLaMarque = precache
+    .filter((r) => terminees.has(r))
+    .map((r) => ({ url: r.url(), debut: r.timing().startTime }))
+    .filter((t) => t.debut < marqueMurale - TOLERANCE_HORLOGE_MS)
+    .map((t) => `${t.url} (${(t.debut - marqueMurale).toFixed(0)} ms)`);
+  expect(precache.every((r) => terminees.has(r)), 'précache terminé pendant l’attente').toBe(true);
+  expect(avantLaMarque, 'précache commencé avant le premier affichage de l’appli').toEqual([]);
+  const fin = Math.max(...precache.map((r) => r.timing().startTime + r.timing().responseEnd));
+  console.log(
+    `premier affichage à ${marqueMs.toFixed(0)} ms ; précache SQLite/PowerSync : ${String(precache.length)} fichiers, ` +
+      `terminé ${(fin - marqueMurale).toFixed(0)} ms après`,
+  );
 });

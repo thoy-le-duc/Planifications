@@ -62,7 +62,7 @@ import { ralentirCpu, surveillerCsp, tempsAppPrete } from './outils.ts';
 const BUDGET_MS = 300;
 const IMAGE_MAX_MS = 50;
 const MARQUE_PLAN = 'planif:plan-affiche';
-/** Remplir la base PowerSync (≈ 75 000 lignes) prend 6 à 8 s sans ralentissement (T07). */
+/** Remplir la base PowerSync (≈ 42 000 lignes, jeu de T07) prend quelques secondes sans ralentissement. */
 const DELAI_AMORCAGE_MS = 120_000;
 
 /** Chemin tenu dans une variable : le typage ne dépend pas du module pas encore écrit. */
@@ -86,7 +86,7 @@ function rgb(hex: string): string {
 }
 
 /** Le plan attendu, recalculé sous Node sur le même jeu (graine 7) par les calculs de l'écran. */
-async function planAttendu(): Promise<{ plan: Plan; calculs: ModuleCalculsPlan; utilisateurId: string; fermeId: string }> {
+async function planAttendu(): Promise<{ plan: Plan; calculs: ModuleCalculsPlan; utilisateurId: string; fermeId: string; lignes: number }> {
   const calculs = (await import(/* @vite-ignore */ CHEMIN_CALCULS)) as ModuleCalculsPlan;
   const base = creerBaseMemoire(SCHEMA_LOCAL);
   try {
@@ -96,7 +96,9 @@ async function planAttendu(): Promise<{ plan: Plan; calculs: ModuleCalculsPlan; 
     const saison = calculs.saisonParDefaut(await calculs.chargerSaisons(porte, jeu.principale.fermeId), aujourdhui);
     if (saison === null) throw new Error('jeu de T07 sans saison');
     const plan = await calculs.chargerPlan(porte, jeu.principale.fermeId, { saison, aujourdhui });
-    return { plan, calculs, utilisateurId: jeu.utilisateurId, fermeId: jeu.principale.fermeId };
+    // Total inséré par remplirJeuT07 : la page d'amorçage doit annoncer exactement ce nombre.
+    const lignes = Object.values(jeu.lignes).reduce((total, n) => total + n, 0);
+    return { plan, calculs, utilisateurId: jeu.utilisateurId, fermeId: jeu.principale.fermeId, lignes };
   } finally {
     base.fermer();
   }
@@ -145,7 +147,8 @@ test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, con
     expect(a.erreur, 'la page d’amorçage a signalé une erreur').toBeUndefined();
     expect(a.utilisateurId).toBe(attendu.utilisateurId);
     expect(a.fermeId).toBe(attendu.fermeId);
-    expect(a.lignes ?? 0).toBeGreaterThan(60_000);
+    expect(attendu.lignes, 'le jeu de T07 insère des lignes').toBeGreaterThan(0);
+    expect(a.lignes, 'lignes insérées : exactement le jeu de T07').toBe(attendu.lignes);
   });
 
   const violations = await surveillerCsp(page);

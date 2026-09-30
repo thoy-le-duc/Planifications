@@ -12,10 +12,17 @@
  *   1. JavaScript de démarrage = morceau d'entrée + ses imports statiques (récursivement) : il ne
  *      contient pas « Articles de stock » (texte de TABLES_EXPORTEES). La liste blanche et ses
  *      descriptions ne doivent jamais remonter au démarrage par le point d'entrée de @planif/core.
- *   2. Tout ce que l'import de l'écran charge (son morceau, ses imports statiques et dynamiques)
- *      ne contient aucun module de `@powersync/*` (ni `@journeyapps/*`) rendu, même
- *      indirectement : l'écran reçoit la porte, il n'a pas à tirer le schéma PowerSync
- *      (`@powersync/common`) que @planif/sync importe dans schema.ts.
+ *   2. L'écran d'export n'entraîne pas PowerSync (`@powersync/*`, `@journeyapps/*`) de lui-même :
+ *      l'écran reçoit la porte, il n'a pas à tirer le schéma PowerSync (`@powersync/common`) que
+ *      @planif/sync importe dans schema.ts. Deux vérifications :
+ *        a. son morceau et ses imports statiques (récursivement) ne contiennent aucun module
+ *           PowerSync rendu ;
+ *        b. ce que l'écran AJOUTE (tout ce qu'il atteint, imports dynamiques compris, moins ce
+ *           que l'entrée atteint déjà sans lui, statiquement et dynamiquement) n'en contient
+ *           aucun non plus.
+ *      Depuis T11, l'appli ouvre elle-même la base locale : l'entrée mène à `@powersync/web`
+ *      par import dynamique (exigé par ../plan/empaquetage.test.ts). Ce PowerSync-là est celui
+ *      de l'appli, pas celui de l'écran : on le retire du compte (décision du chef, T11).
  */
 import { fileURLToPath } from 'node:url';
 import { build, type Plugin, type Rollup } from 'vite';
@@ -55,9 +62,12 @@ beforeAll(async () => {
   for (const s of sorties) for (const f of s.output) if (f.type === 'chunk') morceaux.set(f.fileName, f);
 }, 60_000);
 
-/** Morceaux atteints depuis `depart` en suivant les imports statiques (et dynamiques si demandé). */
-function atteints(depart: readonly string[], dynamiques: boolean): Rollup.OutputChunk[] {
-  const vus = new Set<string>();
+/**
+ * Morceaux atteints depuis `depart` en suivant les imports statiques (et dynamiques si demandé),
+ * sans jamais entrer dans les morceaux de `exclus`.
+ */
+function atteints(depart: readonly string[], dynamiques: boolean, exclus: ReadonlySet<string> = new Set()): Rollup.OutputChunk[] {
+  const vus = new Set<string>(exclus);
   const pile = [...depart];
   while (pile.length > 0) {
     const nom = pile.pop();
@@ -67,7 +77,18 @@ function atteints(depart: readonly string[], dynamiques: boolean): Rollup.Output
     vus.add(nom);
     pile.push(...m.imports, ...(dynamiques ? m.dynamicImports : []));
   }
-  return [...vus].map((n) => morceaux.get(n)).filter((m): m is Rollup.OutputChunk => m !== undefined);
+  return [...vus]
+    .filter((n) => !exclus.has(n))
+    .map((n) => morceaux.get(n))
+    .filter((m): m is Rollup.OutputChunk => m !== undefined);
+}
+
+function modulesPowerSync(liste: readonly Rollup.OutputChunk[]): string[] {
+  return liste.flatMap((m) =>
+    Object.entries(m.modules)
+      .filter(([id, mod]) => MOTIF_POWERSYNC.test(id) && mod.renderedLength > 0)
+      .map(([id]) => `${m.fileName} : ${id.replace(/^.*node_modules[\\/]/, '')}`),
+  );
 }
 
 describe('T15 : empaquetage de l’écran d’export', () => {
@@ -91,12 +112,19 @@ describe('T15 : empaquetage de l’écran d’export', () => {
   it('l’écran d’export n’entraîne pas PowerSync (@powersync/common), même indirectement', () => {
     const ecran = [...morceaux.values()].find((m) => m.facadeModuleId === ECRAN);
     expect(ecran).toBeDefined();
-    const charges = atteints([ecran?.fileName ?? ''], true);
-    const powersync = charges.flatMap((m) =>
-      Object.entries(m.modules)
-        .filter(([id, mod]) => MOTIF_POWERSYNC.test(id) && mod.renderedLength > 0)
-        .map(([id]) => `${m.fileName} : ${id.replace(/^.*node_modules[\\/]/, '')}`),
-    );
-    expect(powersync).toEqual([]);
+    const nomEcran = ecran?.fileName ?? '';
+    // a. Ce que l'écran charge forcément avec lui : aucun PowerSync.
+    expect(modulesPowerSync(atteints([nomEcran], false)), 'imports statiques de l’écran').toEqual([]);
+    // b. Ce que l'écran ajoute à l'appli (dynamiques compris) : aucun PowerSync.
+    const entree = [...morceaux.values()].filter((m) => m.isEntry).map((m) => m.fileName);
+    const dejaAtteints = new Set(atteints(entree, true, new Set([nomEcran])).map((m) => m.fileName));
+    // Témoin : l'entrée sans l'écran atteint bien PowerSync (sinon la soustraction ne prouverait rien de plus).
+    expect(
+      modulesPowerSync([...dejaAtteints].map((n) => morceaux.get(n)).filter((m): m is Rollup.OutputChunk => m !== undefined)).length,
+      'l’entrée atteint PowerSync sans l’écran d’export',
+    ).toBeGreaterThan(0);
+    const ajoutes = atteints([nomEcran], true, dejaAtteints);
+    expect(ajoutes.map((m) => m.fileName), 'l’écran ajoute au moins son propre morceau').toContain(nomEcran);
+    expect(modulesPowerSync(ajoutes), 'ajouté par l’écran d’export').toEqual([]);
   });
 });
