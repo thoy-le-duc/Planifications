@@ -35,3 +35,10 @@ Interprétations du testeur retenues :
 6. Pas de suppression de type : on masque. Un type masqué reste affiché sur le travail qui l'utilise déjà.
 7. Le bandeau « Annuler » (10 s) vit dans l'écran des itinéraires et couvre aussi les types.
 8. L'e2e compare les textes du détail des barres de Planches avant et après.
+
+## Décisions du chef (après la relecture)
+
+9. **Annuler ne ramène que ce que l'écriture a changé** : colonne par colonne, et seulement si la valeur actuelle est encore celle que nous avions écrite ; sinon l'annulation de cette ligne est refusée avec un message (« modifié entre-temps sur un autre téléphone »). Vaut pour l'itinéraire, les séries et les occupations.
+10. **Série « à venir »** : exclut aussi une série qui a une intervention en vigueur (un travail déjà fait).
+11. **Revérification à l'écriture** : le caractère « à venir » est revérifié dans la transaction ; une série devenue commencée entre-temps n'est pas modifiée.
+12. **Lot trop gros** : si itinéraire + séries + occupations dépassent 500 écritures, la confirmation le dit avant d'écrire (« trop de séries en une fois, utilisez Itinéraire seul »), au lieu d'un refus générique.
