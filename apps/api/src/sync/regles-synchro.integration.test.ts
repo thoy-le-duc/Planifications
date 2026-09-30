@@ -287,6 +287,30 @@ decrire('T10 : règles de synchro (Sync Streams contre le service PowerSync)', {
     expect((await recu(url(), 'invite')).some((x) => x.id === nouvel)).toBe(false);
   });
 
+  it('T23 : les types d’intervention de la ferme descendent à ses membres seuls, la liste de départ à tous', async () => {
+    if (source === undefined) throw new Error('base source absente');
+    const typeFerme = randomUUID();
+    const typeVoisin = randomUUID();
+    await source.pool.query(
+      `INSERT INTO type_intervention (id, ferme_id, categorie, libelle) VALUES ($1, $2, 'entretien', 'binage'), ($3, $4, 'entretien', 'sarclage')`,
+      [typeFerme, ids.ferme, typeVoisin, ids.autreFerme],
+    );
+    const depart = await source.pool.query<{ id: string }>(`SELECT id::text AS id FROM type_intervention WHERE ferme_id IS NULL`);
+    expect(depart.rows.length, 'liste de départ en base (migration)').toBeGreaterThan(0);
+
+    const theo = await attendreSynchro(url(), gens.theo.jeton, (l) => l.some((x) => x.id === typeFerme));
+    const t = theo.find((x) => x.id === typeFerme);
+    expect(t?.table).toBe('type_intervention');
+    expect(t?.donnees).toMatchObject({ ferme_id: ids.ferme, categorie: 'entretien', libelle: 'binage' });
+    expect(theo.some((x) => x.id === typeVoisin)).toBe(false);
+    const recusParTheo = new Set(theo.filter((x) => x.table === 'type_intervention').map((x) => x.id));
+    for (const l of depart.rows) expect(recusParTheo, `type de départ ${l.id}`).toContain(l.id);
+
+    const voisin = await attendreSynchro(url(), gens.voisin.jeton, (l) => l.some((x) => x.id === typeVoisin));
+    expect(voisin.some((x) => x.id === typeFerme)).toBe(false);
+    for (const qui of ['invite', 'retire'] as const) expect((await recu(url(), qui)).some((x) => x.id === typeFerme), qui).toBe(false);
+  });
+
   it('un jeton d’une autre clé ou d’une autre audience est refusé', async () => {
     const autreCle = { active: await genererCleSignature('cle-inconnue'), precedentes: [] };
     const etranger = await emettreJetonAcces({ cles: autreCle, emetteur: EMETTEUR, audience: AUDIENCE }, gens.theo.id, new Date());

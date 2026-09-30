@@ -539,6 +539,19 @@ export const TYPES_INTERVENTION_PAR_DEFAUT = {
   entretien: ['désherbage', 'taille', 'palissage', 'effeuillage', 'éclaircissage', 'autre'],
 } as const satisfies Readonly<Record<CategorieIntervention, readonly string[]>>;
 
+/**
+ * Type d'intervention (T23, modèle de données section 5) : la liste de choix d'une catégorie.
+ * Les lignes à `fermeId` nul (en base) forment la liste de départ, en lecture seule ; une ferme
+ * y ajoute les siens. Les travaux prévus et les interventions recopient son `libelle` (texte
+ * libre de `TravailPrevu.type` et `DetailIntervention.type`) : un type déjà utilisé ne se
+ * supprime pas, il se masque (il disparaît des listes de choix, les travaux qui l'utilisent restent).
+ */
+export interface TypeIntervention extends LigneDeFerme<'TypeIntervention'> {
+  readonly categorie: CategorieIntervention;
+  readonly libelle: string;
+  readonly masque: boolean;
+}
+
 interface InterventionCommune {
   /** Libellé du type ('grelinette', 'compost'…), modifiable par la ferme. */
   readonly type: string;

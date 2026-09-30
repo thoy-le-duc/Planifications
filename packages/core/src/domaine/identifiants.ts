@@ -18,6 +18,8 @@ export type NomEntite =
   | 'Espece'
   | 'Variete'
   | 'Itineraire'
+  /** Type d'intervention de la ferme ou de la liste de départ (T23). */
+  | 'TypeIntervention'
   | 'Saison'
   | 'Serie'
   | 'Plantation'

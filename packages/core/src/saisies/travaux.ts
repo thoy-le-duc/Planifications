@@ -66,7 +66,7 @@ export const CATEGORIES_AVEC_PRODUIT: readonly CategorieIntervention[] = ['ferti
  * Caractères de contrôle et demi-paires de substitution : ils s'écrivent en JSON sur 6 octets
  * (\u0001), et casseraient la garantie des 8 192 octets de l'instantané. Aucun libellé n'en a besoin.
  */
-function texteInterdit(v: string): boolean {
+export function texteInterdit(v: string): boolean {
   for (let i = 0; i < v.length; i++) {
     const c = v.charCodeAt(i);
     if (c < 0x20 || c === 0x7f) return true;
@@ -104,6 +104,27 @@ function texte(v: unknown, champ: string, libelle: string): Lu<string> {
   if (v.length > P.texte) return echec(erreur('trop_long', champ, `${libelle} : ${String(P.texte)} caractères au plus`));
   if (texteInterdit(v)) return echec(erreur('champ_invalide', champ, `${libelle} : caractère invalide`));
   return lu(v);
+}
+
+/** Caractères de largeur nulle, invisibles à l'écran : deux libellés identiques à l'œil différeraient. */
+const LARGEUR_NULLE = /[\u200B-\u200D\u2060\uFEFF]/;
+/** Espaces de bord rognés : espace ASCII et espaces insécables. */
+const ESPACES_DE_BORD = /^[ \u00A0\u202F]+|[ \u00A0\u202F]+$/g;
+
+/**
+ * Libellé d'un type d'intervention (décision 10 du chef, T23) : le libellé d'un type et le `type`
+ * d'un travail prévu, qui le désigne. Caractères de contrôle et de largeur nulle refusés où
+ * qu'ils soient ; puis NFC, espaces de bord (ASCII et insécables) rognés ; non vide, de
+ * `P.texte` caractères au plus une fois rogné. La casse est gardée : la référence est exacte.
+ */
+export function libelleType(v: unknown, champ: string, libelle: string): Lu<string> {
+  if (absent(v)) return echec(erreur('champ_manquant', champ, `${libelle} manquant`));
+  if (typeof v !== 'string') return echec(erreur('champ_invalide', champ, `${libelle} : texte non vide attendu`));
+  if (texteInterdit(v) || LARGEUR_NULLE.test(v)) return echec(erreur('champ_invalide', champ, `${libelle} : caractère invalide`));
+  const n = v.normalize('NFC').replace(ESPACES_DE_BORD, '');
+  if (n === '') return echec(erreur('champ_invalide', champ, `${libelle} : texte non vide attendu`));
+  if (n.length > P.texte) return echec(erreur('trop_long', champ, `${libelle} : ${String(P.texte)} caractères au plus`));
+  return lu(n);
 }
 
 function repere(v: unknown, champ: string, libelle: string): Lu<RepereTravail> {
@@ -197,7 +218,7 @@ function lireTravail(v: Objet, options: OptionsTravaux): Lu<TravailPrevu> {
   if (absent(v.categorie)) return echec(erreur('champ_manquant', 'categorie', 'catégorie manquante'));
   if (!parmi(CATEGORIES, v.categorie)) return echec(erreur('champ_invalide', 'categorie', 'catégorie inconnue'));
   const categorie = v.categorie;
-  const type = texte(v.type, 'type', "type d'intervention");
+  const type = libelleType(v.type, 'type', "type d'intervention");
   if (!type.ok) return type;
   const types = options.typesIntervention;
   if (types !== undefined && !types.some((t) => t.categorie === categorie && t.type === type.valeur)) {

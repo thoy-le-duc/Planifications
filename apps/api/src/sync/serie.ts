@@ -194,6 +194,11 @@ async function reference(
 interface Changements {
   readonly saison: boolean;
   readonly culture: boolean;
+  /**
+   * La série est créée ou change d'itinéraire : l'itinéraire doit être actif. Sinon (décision 9
+   * du chef, T23), un itinéraire supprimé depuis ne bloque pas la série, qui garde son instantané.
+   */
+  readonly itineraire: boolean;
   readonly rotation: boolean;
 }
 
@@ -221,7 +226,7 @@ async function verifierReferencesSerie(tx: TransactionDb, s: Serie, c: Changemen
     }
     const itineraire = await reference(tx, 'itineraire', s.itineraireId, f, true, sql`, espece_id::text AS espece_id`);
     if (itineraire === undefined) return invalide('itinéraire introuvable', f);
-    if (itineraire.supprimee) return invalide('itinéraire supprimé', f);
+    if (itineraire.supprimee && c.itineraire) return invalide('itinéraire supprimé', f);
     if (itineraire.espece_id !== s.especeId) return invalide("itinéraire d'une autre espèce que celle de la série", f);
   }
   if (c.rotation && s.rotationAcceptee !== undefined) {
@@ -324,7 +329,7 @@ async function creer(
   }
 
   if (e.table === 'serie') {
-    const refus = await verifierReferencesSerie(tx, valeur as Serie, { saison: true, culture: true, rotation: true });
+    const refus = await verifierReferencesSerie(tx, valeur as Serie, { saison: true, culture: true, itineraire: true, rotation: true });
     if (refus !== null) return refus;
   } else {
     const refus = await verifierEmplacement(tx, valeur as Occupation);
@@ -408,6 +413,8 @@ async function modifier(
     const refus = await verifierReferencesSerie(tx, valeur as Serie, {
       saison: change('saison_id'),
       culture: change('espece_id') || change('variete_id') || change('itineraire_id'),
+      // Rétablissement compris : seul un changement réel d'itinéraire exige un itinéraire actif.
+      itineraire: JSON.stringify(ligne.itineraire_id ?? null) !== JSON.stringify(avant.itineraire_id ?? null),
       rotation: change('rotation_acceptee'),
     });
     if (refus !== null) return refus;
@@ -465,7 +472,8 @@ export async function fermesDesLignesVisees(
   fermes: ReadonlySet<string>,
 ): Promise<string[]> {
   const trouvees = new Set<string>();
-  for (const table of ['serie', 'occupation'] as const) {
+  // T23 : les itinéraires et les types d'intervention se modifient aussi, sous le même verrou.
+  for (const table of ['serie', 'occupation', 'itineraire', 'type_intervention'] as const) {
     const ids = [...new Set(ecritures.filter((e) => e.table === table && e.op === 'PATCH' && estUuid(e.id)).map((e) => e.id.toLowerCase()))];
     if (ids.length === 0) continue;
     const r = await tx.execute<{ ferme_id: string }>(

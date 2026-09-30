@@ -1,0 +1,2 @@
+DROP INDEX "type_intervention_libelle_actif_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "type_intervention_libelle_actif_idx" ON "type_intervention" USING btree ("ferme_id","categorie",lower("libelle")) WHERE "type_intervention"."supprime_le" IS NULL;

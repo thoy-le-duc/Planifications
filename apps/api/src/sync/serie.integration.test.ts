@@ -72,6 +72,14 @@
  *   suppression    PATCH qui passe supprime_le de NULL à une valeur : avant = la ligne avant,
  *                  apres = la ligne marquée supprimée. Rétablir (supprime_le → NULL) : 'modification'.
  *
+ * Modifié par T23 (décision 9 du chef, docs/backlog/T23-itineraires-synchro.md) : supprimer un
+ * itinéraire utilisé par une série est accepté, la série garde son instantané. Le refus
+ * « itinéraire supprimé » ne vaut plus qu'à la création d'une série ou quand son itineraire_id
+ * change. Le cas « itinéraire » du test « rétablissement refusé quand une référence a été
+ * supprimée » en est retiré, et remplacé par deux tests : rétablissement accepté, et PATCH qui
+ * ne touche pas itineraire_id accepté. Saison, espèce et variété restent revérifiées au
+ * rétablissement.
+ *
  * `serie.rotation_acceptee` (règle 6) : colonne jsonb NULLABLE, créée par une migration générée
  * de @planif/db ; validée par le cœur ; stockée en jsonb (objet, pas texte) ; présente d'elle-même
  * dans modification.apres (to_jsonb de la ligne).
@@ -1292,7 +1300,6 @@ decrireAvecBase('T10e')('T10e : POST /sync/upload accepte les séries des télé
         ['saison', 'saison', 'saison'],
         ['espèce', 'espece', 'espece'],
         ['variété', 'variete', 'variete'],
-        ['itinéraire', 'itineraire', 'itineraire'],
       ] as const)('série dont la référence « %s » a été supprimée entre-temps : rétablissement refusé, rien ne change', async (_nom, table, cle) => {
         const { serie, occupations, refs } = await serieSupprimee();
         await base.pool.query(`UPDATE ${table} SET supprime_le = $2 WHERE id = $1`, [refs[cle], MAINTENANT]);
@@ -1311,6 +1318,21 @@ decrireAvecBase('T10e')('T10e : POST /sync/upload accepte les séries des télé
         const retour = patch('occupation', occupation.id, { supprime_le: null });
         await refuseEnEntier([retour], retour, 'ecriture_invalide');
         expect((await ligne('occupation', occupation.id))?.supprime_le).not.toBeNull();
+      });
+
+      it('T23, décision 9 : itinéraire supprimé entre-temps, le rétablissement (itineraire_id inchangé) est accepté', async () => {
+        const { serie, occupations, refs } = await serieSupprimee();
+        await base.pool.query(`UPDATE itineraire SET supprime_le = $2 WHERE id = $1`, [refs.itineraire, MAINTENANT]);
+        expect(await lot(retablir(serie, occupations))).toEqual({ refus: [] });
+        expect((await ligne('serie', serie.id))?.supprime_le).toBeNull();
+      });
+
+      it('T23, décision 9 : série dont l’itinéraire a été supprimé, PATCH qui ne touche pas itineraire_id : accepté', async () => {
+        const espece = await especeEn(ferme, famille);
+        const itin = await itineraireEn(ferme, espece);
+        const { serie } = await serieAcceptee({ espece_id: espece, variete_id: null, itineraire_id: itin });
+        await base.pool.query(`UPDATE itineraire SET supprime_le = $2 WHERE id = $1`, [itin, MAINTENANT]);
+        expect(await lot([patch('serie', serie.id, { statut: 'en_cours' })])).toEqual({ refus: [] });
       });
 
       it('témoin : références toujours là, le rétablissement reste accepté', async () => {

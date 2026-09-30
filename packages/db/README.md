@@ -40,13 +40,16 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0010_*.sql` | Généré par drizzle-kit (T09b) : `jeton_renouvellement.famille_id`, `connexion_le`, `utilise_le` (rotation), schéma `securite` et table `demande_ip` (limite par IP). Seule retouche : les sessions existantes forment chacune leur famille |
 | `migrations/0008_*.sql` | Migration personnalisée (T10) : `refus_synchro` dans la publication `powersync`, et publication étendue à `truncate` (exigé par PowerSync 1.26, erreur PSYNC_S1142) |
 | `migrations/0012_*.sql` | Généré par drizzle-kit (T10d) : `mouvement_stock.quantite` en `numeric(12,6)`, six décimales au plus comme la règle de l'API |
+| `migrations/0015_*.sql` | Généré par drizzle-kit (T23) : table `type_intervention`, unicité (ferme, catégorie, libellé) parmi les types actifs, `modification.nom_table` accepte `TypeIntervention` |
+| `migrations/0017_*.sql` | Généré par drizzle-kit (T23, décision 11) : unicité des types actifs insensible à la casse (`lower(libelle)`) |
+| `migrations/0016_*.sql` | Migration personnalisée (T23) : `type_intervention` dans la publication `powersync`, et la liste de départ (`TYPES_INTERVENTION_PAR_DEFAUT`, `ferme_id` nul, identifiants tirés du couple) |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 
 ## Règles du schéma
 
 - **Noms** : tables et colonnes en français, snake_case en base, camelCase côté TypeScript.
-- **Colonnes communes** : `id` UUID v7 généré par le client (pas de défaut), `ferme_id` vers `ferme` (nul autorisé seulement pour la bibliothèque de référence : `famille`, `espece`, `variete`, `itineraire`, `produit_phyto`), `cree_le`, `modifie_le`, `supprime_le` (suppression douce).
+- **Colonnes communes** : `id` UUID v7 généré par le client (pas de défaut), `ferme_id` vers `ferme` (nul autorisé seulement pour la bibliothèque de référence : `famille`, `espece`, `variete`, `itineraire`, `produit_phyto`, et la liste de départ de `type_intervention`), `cree_le`, `modifie_le`, `supprime_le` (suppression douce).
 - **Types** : dates calendaires en `date` lues comme chaînes `AAAA-MM-JJ`, instants en `timestamptz`, longueurs et quantités en `numeric` lues comme nombres.
 - **Unions de T01** : `text` + CHECK, avec les valeurs exactes de T01. Plus simple à faire évoluer qu'un enum Postgres, et PowerSync les réplique en texte.
 - **Clés étrangères** : aucune en cascade. Supprimer physiquement une ligne référencée échoue ; on supprime en douceur (`supprime_le`).

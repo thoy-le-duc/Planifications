@@ -273,6 +273,15 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       rotation_acceptee: texte('alerte rouge de rotation acceptée, en JSON : famille en cause, délai de retour (ans), instant de la décision'),
       ...HORODATAGE,
     }),
+    // Les types de la ferme seulement : la liste de départ (ferme_id nul) est celle du logiciel,
+    // la même pour toutes les fermes, et les travaux exportés portent le libellé en clair.
+    type_intervention: table('Types d’intervention créés par la ferme, en plus de la liste de départ du logiciel (travail du sol, couverture, fertilisation, amendement, entretien).', {
+      ferme_id: FERME_ID,
+      categorie: texte('catégorie : travail du sol, couverture, fertilisation, amendement, entretien'),
+      libelle: texte('libellé du type, recopié dans les travaux prévus et les interventions'),
+      masque: entier('1 si le type est masqué des listes de choix (il reste valable dans les travaux qui l’utilisent), 0 sinon'),
+      ...HORODATAGE,
+    }),
     utilisateur: table('Personnes membres de la ferme (sans adresse e-mail).', {
       nom: texte('nom de la personne'),
       ...HORODATAGE,
