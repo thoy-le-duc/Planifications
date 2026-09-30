@@ -354,8 +354,9 @@ export const itineraire = pgTable(
  * Types d'intervention (T23, modèle de données section 5) : la liste de choix de chaque catégorie.
  * `ferme_id` nul : la liste de départ (TYPES_INTERVENTION_PAR_DEFAUT, insérée par migration), en
  * lecture seule comme la bibliothèque. Les travaux prévus et les interventions recopient le
- * libellé : un type utilisé ne se supprime pas, il se masque. (catégorie, libellé) est unique
- * parmi les types actifs d'une ferme ; l'API refuse aussi un doublon de la liste de départ.
+ * libellé : un type utilisé ne se supprime pas, il se masque. (catégorie, libellé) est unique,
+ * sans tenir compte de la casse, parmi les types actifs d'une ferme ; l'API refuse aussi un
+ * doublon de la liste de départ.
  */
 export const typeIntervention = pgTable(
   'type_intervention',
@@ -369,8 +370,9 @@ export const typeIntervention = pgTable(
   },
   (t) => [
     verif('type_intervention', 'categorie', parmi(t.categorie, CATEGORIES_INTERVENTION)),
+    // Décision 11 du chef (T23) : unicité insensible à la casse (« Grelinette » = « grelinette »).
     uniqueIndex('type_intervention_libelle_actif_idx')
-      .on(t.fermeId, t.categorie, t.libelle)
+      .on(t.fermeId, t.categorie, sql`lower(${t.libelle})`)
       .where(sql`${t.supprimeLe} IS NULL`),
   ],
 );
