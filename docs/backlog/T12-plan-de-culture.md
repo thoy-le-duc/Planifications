@@ -24,6 +24,8 @@
   - annuler une annulation = une nouvelle modification.
 - **Alerte rouge acceptée** : gardée dans `serie.rotation_acceptee` (T10e), donc visible dans l'historique.
 - **Plusieurs planches** : une occupation par planche, chacune avec sa longueur (par défaut la longueur de la planche).
+- **Plantations pérennes** (relecture T10e) : le serveur refuse toute modification d'une occupation qui n'est pas celle d'une série (plantation, couverture). L'écran ne propose donc jamais de modifier ou de supprimer ces occupations ; elles s'affichent en lecture seule.
+- **Instantané** (relecture T10e) : le serveur recalcule les dates à partir des paramètres envoyés. L'écran envoie donc l'instantané fidèle de l'itinéraire choisi, jamais des durées modifiées à la main.
 - **Gestes pour la batavia** : appui long, taper « bat », choisir Batavia, garder l'itinéraire proposé, choisir « récolte à partir de », régler la semaine, Enregistrer. Soit 7 gestes au plus.
 
 ## Critères d'acceptation

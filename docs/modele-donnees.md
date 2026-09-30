@@ -85,6 +85,7 @@ La bibliothèque de référence (base INRAE Pépinière-Mesclun) est en lecture 
 | Entité | Champs principaux | Remarques |
 | --- | --- | --- |
 | Saison | nom (« 2027 »), début, fin | Une série appartient à la saison de sa mise en place. |
+| Travail prévu d'itinéraire | type d'intervention, repère (semis en pépinière, mise en place, début ou fin de récolte), décalage en jours, répétition facultative (tous les N jours jusqu'à un repère), outil, produit et quantité facultatifs, temps estimé facultatif (min par 100 m ou par planche) | Rangé dans l'itinéraire (Q22, T22) et copié dans l'instantané de la série. Le semainier en tire les tâches ; un événement « intervention » du même type les solde. |
 | Série | espèce, variété, itinéraire, **instantané des paramètres**, ancre (semis, plantation ou début de récolte) + date d'ancre, dates prévues calculées (semis pépinière, mise en place, début et fin de récolte), longueur totale (m) ou nombre de plants, statut | L'instantané fige les paramètres de l'itinéraire à la création : modifier un itinéraire ne réécrit jamais une série passée. |
 | Plantation | espèce, variété, date de plantation, nombre de plants, date d'arrachage (vide tant qu'elle est en place) | Kiwis, asperges, pivoines, fraisiers conservés plusieurs années. |
 | Campagne | plantation, année, dates de récolte prévues, rendement prévu | Porte la taille, les récoltes et le rendement de l'année. |
