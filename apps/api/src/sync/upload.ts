@@ -59,7 +59,7 @@ import type { MotifRefus, Refus } from './motifs.ts';
 import { verifierCorrection, verifierReferences, verifierRemplacementRecolte, type TransactionDb } from './references.ts';
 import { ecrireItineraire, estTableItineraire, TABLES_ITINERAIRE } from './itineraire.ts';
 import { ecrireSerie, fermesDesLignesVisees, TABLES_SERIE, verifierFinDeLot, type SeriesTouchees } from './serie.ts';
-import { ecrireArticle, ecrireMouvement } from './stock.ts';
+import { completerStock, ecrireArticle, ecrireMouvement, type RemplacementEcrit } from './stock.ts';
 
 export type { MotifRefus } from './motifs.ts';
 
@@ -314,7 +314,12 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
    * Écrit l'événement et sa ligne d'historique, dans la transaction de l'appelant, après avoir
    * vérifié ses références (B1), gardées verrouillées jusqu'à la fin de la transaction.
    */
-  async function ecrireEvenement(tx: TransactionDb, l: LigneEvenement, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
+  async function ecrireEvenement(
+    tx: TransactionDb,
+    l: LigneEvenement,
+    auteurId: Id<'Utilisateur'>,
+    remplacements: RemplacementEcrit[],
+  ): Promise<Refus | null> {
     const maintenant = ctx.maintenant();
     const refusReference = (await verifierReferences(tx, l)) ?? (await verifierCorrection(tx, l)) ?? (await verifierRemplacementRecolte(tx, l));
     if (refusReference !== null) return { ...refusReference, fermeId: l.fermeId };
@@ -327,6 +332,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       // L'id existe déjà : renvoi identique (réponse perdue) ou tentative de réécriture.
       return (await identique(tx, l)) ? null : { motif: 'ajout_seul', fermeId: l.fermeId };
     }
+    // T10g, décision 8 : son stock est complété en fin de lot si le téléphone n'a pas envoyé de mouvement.
+    if (l.type === 'recolte' && l.remplaceSorte !== null) remplacements.push({ id: l.id, fermeId: l.fermeId, date: l.date, sorte: l.remplaceSorte });
     await tx.insert(modification).values({
       id: ctx.nouvelId(),
       fermeId: l.fermeId,
@@ -373,6 +380,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     fermes: ReadonlySet<string>,
     touchees: SeriesTouchees,
     index: number,
+    remplacements: RemplacementEcrit[],
   ): Promise<Refus | null> {
     const fermeDonnee = fermeDesDonnees(e);
     // e.table est lue ensuite comme nom de table SQL : seulement l'une de ces constantes.
@@ -397,7 +405,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       if (estUuid(auteur) && auteur.toLowerCase() !== utilisateurId) return { motif: 'auteur_invalide', fermeId: fermeDonnee };
       const lecture = lireEvenement(e.id, donnees);
       if (!lecture.ok) return { motif: 'ecriture_invalide', precision: lecture.raison, fermeId: fermeDonnee };
-      return ecrireEvenement(tx, lecture.valeur, utilisateurId);
+      return ecrireEvenement(tx, lecture.valeur, utilisateurId, remplacements);
     }
     if (e.table === 'serie' || e.table === 'occupation') {
       return ecrireSerie(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId, touchees, index);
@@ -421,6 +429,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
   ): Promise<{ readonly index: number; readonly refus: Refus } | null> {
     let courante = 0;
     const touchees: SeriesTouchees = new Map();
+    const remplacements: RemplacementEcrit[] = [];
     try {
       await db.transaction(async (tx) => {
         // Un seul verrou par ferme visée (relecture T10c, T10e), pris avant toute écriture, fermes
@@ -438,9 +447,11 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
         for (const ferme of verrous) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`ferme:${ferme}`}, 0))`);
         for (const [i, e] of ecritures.entries()) {
           courante = i;
-          const refus = await traiter(tx, e, utilisateurId, fermes, touchees, i);
+          const refus = await traiter(tx, e, utilisateurId, fermes, touchees, i, remplacements);
           if (refus !== null) throw new RefusDansLot(i, refus);
         }
+        // T10g, décision 8 : écart de stock des remplacements de récolte envoyés sans mouvement.
+        for (const r of remplacements) await completerStock(tx, ctx, r, utilisateurId);
         // T10e, décision 1 : la cohérence série ↔ occupations se vérifie une fois tout le lot écrit.
         const incoherence = await verifierFinDeLot(tx, touchees, fermes);
         if (incoherence !== null) throw new RefusDansLot(incoherence.index, incoherence.refus);

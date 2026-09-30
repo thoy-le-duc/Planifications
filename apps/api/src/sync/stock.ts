@@ -21,11 +21,13 @@ import {
   validerMouvementStock,
   verifierMouvementRecolte,
   type ArticleStock,
+  type DateCalendaire,
   type Id,
   type RemplacementEvenement,
 } from '@planif/core';
 import { articleStock, modification, mouvementStock } from '@planif/db';
 import { sql } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
 import type { Contexte } from '../dependances.ts';
 import type { Refus } from './motifs.ts';
 import { lireMaillons, maillonEnVigueur, PROFONDEUR_MAX_CHAINE, visibleParLaFerme, type TransactionDb } from './references.ts';
@@ -233,6 +235,14 @@ async function lireChaine(tx: TransactionDb, recolteId: string, fermeId: string)
 }
 
 /**
+ * Écart de stock d'un remplacement (T10g, décision 6) : quantité en vigueur de toute la chaîne
+ * (0 si elle est annulée) − somme des mouvements déjà écrits de la chaîne sur l'article.
+ */
+function ecartDeLaChaine(sorte: 'correction' | 'annulation', chaine: Chaine, somme: number): number {
+  return mouvementAttendu({ remplaceSorte: sorte, quantite: chaine.annulee ? 0 : chaine.quantiteEnVigueur }, somme) ?? 0;
+}
+
+/**
  * Article et récolte visés, dans la ferme du mouvement ; un seul article par chaîne, de l'unité
  * et de l'espèce de la récolte (B2) ; puis la quantité à écrire :
  *   - rattaché à la récolte d'origine : celle reçue, bornée (décision 3, B1) ;
@@ -241,10 +251,14 @@ async function lireChaine(tx: TransactionDb, recolteId: string, fermeId: string)
  *     retard) : quantité en vigueur de toute la chaîne (0 si elle est annulée) − somme des
  *     mouvements déjà écrits de la chaîne sur l'article (`mouvementAttendu`). Le stock de la
  *     chaîne vaut alors toujours la quantité en vigueur : jamais plus (non-inflation, T10c/T10d),
- *     jamais moins. Écart nul (annulation redondante, correction qui n'est pas en vigueur) :
- *     refusé, rien à reporter au stock (T10d).
+ *     jamais moins. Déjà un mouvement pour ce remplacement (décision 8 : celui du serveur, ou un
+ *     premier du téléphone) : accepté sans rien écrire. Écart nul : correction acceptée sans rien
+ *     écrire (décision 9) ; annulation redondante refusée (T10d).
  */
-async function verifierMouvement(tx: TransactionDb, m: MouvementLu): Promise<{ readonly refus: Refus } | { readonly quantite: number }> {
+async function verifierMouvement(
+  tx: TransactionDb,
+  m: MouvementLu,
+): Promise<{ readonly refus: Refus } | { readonly quantite: number } | { readonly rienAEcrire: true }> {
   const refuser = (precision: string) => ({ refus: invalide(precision, m.fermeId) });
   const article = await lireReference(tx, 'article_stock', m.articleStockId, m.fermeId, sql`, unite, espece_id::text AS espece_id`);
   if (article === undefined) return refuser('article de stock introuvable');
@@ -292,9 +306,16 @@ async function verifierMouvement(tx: TransactionDb, m: MouvementLu): Promise<{ r
     });
     return erreur === null ? { quantite: m.quantite } : refuser(erreur.message);
   }
-  const ecart = mouvementAttendu({ remplaceSorte: recolte.remplace_sorte, quantite: chaine.annulee ? 0 : chaine.quantiteEnVigueur }, somme) ?? 0;
-  if (ecart === 0) return refuser('rien à reporter au stock : il vaut déjà la quantité en vigueur de la récolte');
-  return { quantite: ecart };
+  // Décision 8 : l'écart de ce remplacement est déjà écrit (par le serveur, ou par un premier
+  // mouvement du téléphone) : un mouvement qui arrive plus tard est accepté sans rien écrire.
+  const deja = await tx.execute<{ n: number }>(sql`SELECT 1 AS n FROM mouvement_stock WHERE recolte_id = ${m.recolteId}::uuid LIMIT 1`);
+  if (deja.rows.length > 0) return { rienAEcrire: true };
+  const ecart = ecartDeLaChaine(recolte.remplace_sorte, chaine, somme);
+  if (ecart !== 0) return { quantite: ecart };
+  // Décision 9 : correction à la même quantité, rien à reporter ; annulation redondante qui
+  // porte un mouvement : refusée (T10d, inchangé).
+  if (recolte.remplace_sorte === 'correction') return { rienAEcrire: true };
+  return refuser('rien à reporter au stock : il vaut déjà la quantité en vigueur de la récolte');
 }
 
 /**
@@ -322,6 +343,7 @@ export async function ecrireMouvement(tx: TransactionDb, ctx: Contexte, e: PutRe
 
   const verifie = await verifierMouvement(tx, m);
   if ('refus' in verifie) return verifie.refus;
+  if ('rienAEcrire' in verifie) return null;
 
   const maintenant = ctx.maintenant();
   const [ecrit] = await tx
@@ -341,4 +363,61 @@ export async function ecrireMouvement(tx: TransactionDb, ctx: Contexte, e: PutRe
   if (ecrit === undefined) return (await mouvementIdentique(tx, m)) === true ? null : { motif: 'ajout_seul', fermeId: m.fermeId };
   await historiser(tx, ctx, 'mouvement_stock', m.id, m.fermeId, auteurId, maintenant);
   return null;
+}
+
+// ── Mouvement d'écart écrit par le serveur (T10g, décision 8) ────────────────────────────────
+
+/** Espace de noms des mouvements d'écart créés par le serveur (UUID v5, décision 8 de T10g). */
+export const ESPACE_MOUVEMENT_ECART = '675540a1-1589-4a49-9629-84b5d41e55d2';
+
+/** UUID v5 (RFC 4122, SHA-1) du nom `nom` (UTF-8) dans l'espace `espace`. */
+export function uuidV5(nom: string, espace: string): string {
+  const octetsEspace = Buffer.from(espace.replaceAll('-', ''), 'hex');
+  const h = createHash('sha1').update(octetsEspace).update(nom, 'utf8').digest().subarray(0, 16);
+  h[6] = ((h[6] ?? 0) & 0x0f) | 0x50;
+  h[8] = ((h[8] ?? 0) & 0x3f) | 0x80;
+  const x = h.toString('hex');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
+
+/** Remplacement de récolte écrit dans le lot, dont le serveur complète le stock en fin de lot. */
+export interface RemplacementEcrit {
+  readonly id: string;
+  readonly fermeId: Id<'Ferme'>;
+  readonly date: DateCalendaire;
+  readonly sorte: 'correction' | 'annulation';
+}
+
+/**
+ * Fin de lot (décision 8) : pour un remplacement de récolte accepté dans ce lot, sans mouvement
+ * rattaché (le téléphone n'en a pas envoyé), le serveur écrit lui-même l'écart, sous le verrou de
+ * la ferme, avec un id déterministe (uuidV5 de l'id de l'événement) : un renvoi ne le double pas.
+ * Rien si la chaîne n'a pas d'article (récolte sans stock) ou si l'écart est nul.
+ */
+export async function completerStock(tx: TransactionDb, ctx: Contexte, r: RemplacementEcrit, auteurId: Id<'Utilisateur'>): Promise<void> {
+  const deja = await tx.execute<{ n: number }>(sql`SELECT 1 AS n FROM mouvement_stock WHERE recolte_id = ${r.id}::uuid LIMIT 1`);
+  if (deja.rows.length > 0) return;
+  const chaine = await lireChaine(tx, r.id, r.fermeId);
+  if (chaine === null) return;
+  const [article] = [...chaine.sommes.keys()];
+  if (article === undefined) return;
+  const ecart = ecartDeLaChaine(r.sorte, chaine, chaine.sommes.get(article) ?? 0);
+  if (ecart === 0) return;
+  const id = uuidV5(r.id.toLowerCase(), ESPACE_MOUVEMENT_ECART);
+  const maintenant = ctx.maintenant();
+  const [ecrit] = await tx
+    .insert(mouvementStock)
+    .values({
+      id: id as Id<'MouvementStock'>,
+      fermeId: r.fermeId,
+      articleStockId: article as Id<'ArticleStock'>,
+      date: r.date,
+      quantite: ecart,
+      motif: 'recolte',
+      recolteId: r.id as Id<'Evenement'>,
+      creeLe: maintenant,
+    })
+    .onConflictDoNothing({ target: mouvementStock.id })
+    .returning({ id: mouvementStock.id });
+  if (ecrit !== undefined) await historiser(tx, ctx, 'mouvement_stock', id, r.fermeId, auteurId, maintenant);
 }
