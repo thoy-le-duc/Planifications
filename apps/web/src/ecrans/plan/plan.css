@@ -2,6 +2,8 @@
  * Écran « Planches » (T11, maquette Plan). Aucune couleur en dur : jetons seulement
  * (src/ui/jetons.ts). Dimensions reprises par EcranPlan.tsx (constantes en tête du fichier) :
  * lignes de 48 px, semaines de 36 px, colonne des codes de 92 px, en-tête de 28 px.
+ * Barres de 44 px de haut (cible tactile, relecture C6) ; une barre plus étroite que 44 px garde
+ * sa largeur dessinée (ses dates) et répond au doigt sur 44 px (pseudo-élément ::before).
  */
 
 /* Onglet Planches : la coquille tient dans l'écran, seul le plan défile (jamais la page). */
@@ -174,8 +176,8 @@
 /* Barres : réel plein (bande de la famille), prévu hachuré ; conflit bordé de rouge. */
 .barre {
   position: absolute;
-  top: 6px;
-  height: 36px;
+  top: 2px;
+  height: 44px;
   display: flex;
   align-items: center;
   padding: 0 6px;
@@ -185,12 +187,26 @@
   font-weight: 700;
   text-align: left;
   white-space: nowrap;
-  overflow: hidden;
 }
 
 .barre > span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Cible tactile d'au moins 44 px de large, centrée sur la barre, sous les dessins des barres
+   (z-index -1 dans la ligne) : elle ne vole jamais le toucher d'une barre voisine dessinée. */
+.barre::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  left: 50%;
+  width: 100%;
+  min-width: 44px;
+  transform: translateX(-50%);
+  z-index: -1;
 }
 
 .barre-reel {
