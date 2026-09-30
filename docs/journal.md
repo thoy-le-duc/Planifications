@@ -15,6 +15,19 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
   - Une série avec un travail déjà fait n'est plus « à venir ».
   - Au-delà de 500 écritures, on propose « Itinéraire seul ».
 - **Bloquant** : rien. Masquer un type de la liste de départ pour une seule ferme reste à concevoir.
+## 2026-09-30 — T10g : récoltes annulées, correction la plus récente, stock tenu par le serveur
+
+- **Fait** :
+  - Une récolte annulée ne se corrige plus : le serveur refuse avec « saisissez une nouvelle récolte » (Q20), et elle disparaît de l'historique du téléphone.
+  - Entre deux corrections hors ligne, la plus récente (heure du téléphone) gagne partout : serveur, vue en base et téléphone.
+  - Le serveur calcule et écrit lui-même l'écart de stock de chaque correction ou annulation, même sans mouvement du téléphone. Le stock suit toujours la quantité en vigueur.
+  - Plafonds de saisie définitifs (Q13).
+- **Décidé** :
+  - Une correction plus ancienne que celle en vigueur est refusée.
+  - Un écart nul est accepté sans écriture.
+  - Le mouvement créé par le serveur a un identifiant déterministe. S'il a été réservé d'avance par un autre mouvement, le lot est refusé.
+  - Trois relectures ont fermé trois failles de stock : correction sans mouvement, écart nul, id réservé.
+- **Bloquant** : rien. Suites dans T10h : la vue « en vigueur » est lente sur un gros journal (4 s sur 200 000 saisies), et la règle du semainier reste à aligner, avant tout export lu côté serveur.
 
 ## 2026-09-30 — T23 : le serveur accepte les itinéraires et les types d'intervention
 

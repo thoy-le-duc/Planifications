@@ -17,17 +17,20 @@
  */
 import {
   validerArticleStock,
+  mouvementAttendu,
   validerMouvementStock,
   verifierMouvementRecolte,
   type ArticleStock,
+  type DateCalendaire,
   type Id,
   type RemplacementEvenement,
 } from '@planif/core';
 import { articleStock, modification, mouvementStock } from '@planif/db';
 import { sql } from 'drizzle-orm';
+import { createHash } from 'node:crypto';
 import type { Contexte } from '../dependances.ts';
 import type { Refus } from './motifs.ts';
-import { PROFONDEUR_MAX_CHAINE, visibleParLaFerme, type TransactionDb } from './references.ts';
+import { lireMaillons, maillonEnVigueur, PROFONDEUR_MAX_CHAINE, visibleParLaFerme, type TransactionDb } from './references.ts';
 
 /** Écriture PUT reçue : id de l'écriture PowerSync et colonnes (lues sans confiance). */
 export interface PutRecu {
@@ -170,13 +173,20 @@ interface MouvementLu {
   readonly recolteId: string;
 }
 
-/** Le mouvement `m.id` existe-t-il déjà avec exactement ces valeurs ? null s'il n'existe pas. */
+/**
+ * Le mouvement `m.id` existe-t-il déjà avec exactement ces valeurs ? null s'il n'existe pas.
+ * Rattaché à une correction ou une annulation, la quantité n'est pas comparée (décision 6 de
+ * T10g : le serveur a écrit son propre écart, le téléphone renvoie le sien).
+ */
 async function mouvementIdentique(tx: TransactionDb, m: MouvementLu): Promise<boolean | null> {
   const r = await tx.execute<{ identique: boolean }>(
     sql`SELECT (ferme_id = ${m.fermeId}::uuid
                AND article_stock_id = ${m.articleStockId}::uuid
                AND date = ${m.date}::date
-               AND quantite = ${String(m.quantite)}::numeric
+               -- T10g, décision 6 : sur un remplacement, la quantité écrite est celle du serveur ;
+               -- le renvoi porte celle du téléphone, elle n'est pas comparée.
+               AND (quantite = ${String(m.quantite)}::numeric
+                    OR EXISTS (SELECT 1 FROM evenement r WHERE r.id = mouvement_stock.recolte_id AND r.remplace_sorte IS NOT NULL))
                AND motif = 'recolte'
                AND recolte_id IS NOT DISTINCT FROM ${m.recolteId}::uuid) AS identique
         FROM mouvement_stock WHERE id = ${m.id}::uuid`,
@@ -199,7 +209,7 @@ interface RecolteVisee {
 interface Chaine {
   /** Somme des mouvements de la chaîne, par article. */
   readonly sommes: ReadonlyMap<string, number>;
-  /** detail.quantite de la dernière correction (horodatage, puis id), sinon de l'origine. */
+  /** detail.quantite du maillon en vigueur (`maillonEnVigueur`) ; 0 si la chaîne est annulée. */
   readonly quantiteEnVigueur: number;
   readonly annulee: boolean;
 }
@@ -210,53 +220,49 @@ interface Chaine {
  * lots qui touchent le stock d'une même ferme passent l'un après l'autre, et le second voit les
  * mouvements du premier.
  */
-async function lireChaine(tx: TransactionDb, recolteId: string): Promise<Chaine | null> {
-  const racine = await tx.execute<{ id: string }>(
-    sql`WITH RECURSIVE montee(id, parent, profondeur) AS (
-          SELECT id, remplace_evenement_id, 0 FROM evenement WHERE id = ${recolteId}::uuid
-          UNION ALL
-          SELECT e.id, e.remplace_evenement_id, m.profondeur + 1
-          FROM evenement e JOIN montee m ON e.id = m.parent
-          WHERE m.profondeur < ${PROFONDEUR_MAX_CHAINE}
-        )
-        SELECT id::text AS id FROM montee WHERE parent IS NULL`,
-  );
-  const origine = racine.rows[0]?.id;
-  if (origine === undefined) return null;
-  const evenements = await tx.execute<{ id: string; remplace_sorte: string | null; quantite: number | null; profondeur: number }>(
-    sql`WITH RECURSIVE chaine(id, profondeur) AS (
-          SELECT ${origine}::uuid, 0
-          UNION ALL
-          SELECT e.id, c.profondeur + 1 FROM evenement e JOIN chaine c ON e.remplace_evenement_id = c.id
-          WHERE c.profondeur <= ${PROFONDEUR_MAX_CHAINE}
-        )
-        SELECT e.id::text AS id, e.remplace_sorte, c.profondeur,
-               CASE WHEN jsonb_typeof(e.detail -> 'quantite') = 'number' THEN (e.detail ->> 'quantite')::float8 END AS quantite
-        FROM chaine c JOIN evenement e ON e.id = c.id
-        ORDER BY (e.remplace_sorte IS NOT NULL), e.horodatage, e.id`,
-  );
-  const lignes = evenements.rows;
-  if (lignes.some((l) => l.profondeur > PROFONDEUR_MAX_CHAINE)) return null;
-  const enVigueur = [...lignes].reverse().find((l) => l.remplace_sorte === 'correction') ?? lignes.find((l) => l.remplace_sorte === null);
+async function lireChaine(tx: TransactionDb, recolteId: string, fermeId: string): Promise<Chaine | null> {
+  const maillons = await lireMaillons(tx, recolteId, fermeId);
+  if (maillons === null) return null;
   const sommes = await tx.execute<{ article: string; somme: number }>(
     sql`SELECT article_stock_id::text AS article, sum(quantite)::float8 AS somme FROM mouvement_stock
-        WHERE recolte_id = ANY(${sql.param(lignes.map((l) => l.id))}::uuid[]) GROUP BY article_stock_id`,
+        WHERE recolte_id = ANY(${sql.param(maillons.map((l) => l.id))}::uuid[]) GROUP BY article_stock_id`,
   );
   return {
     sommes: new Map(sommes.rows.map((r) => [r.article, r.somme])),
-    quantiteEnVigueur: enVigueur?.quantite ?? 0,
-    annulee: lignes.some((l) => l.remplace_sorte === 'annulation'),
+    quantiteEnVigueur: maillonEnVigueur(maillons)?.quantite ?? 0,
+    annulee: maillons.some((l) => l.remplace_sorte === 'annulation'),
   };
 }
 
 /**
- * Article et récolte visés, dans la ferme du mouvement ; un seul article par chaîne, de l'unité
- * et de l'espèce de la récolte (B2) ; puis le mouvement borné (décision 3, B1).
+ * Écart de stock d'un remplacement (T10g, décision 6) : quantité en vigueur de toute la chaîne
+ * (0 si elle est annulée) − somme des mouvements déjà écrits de la chaîne sur l'article.
  */
-async function verifierMouvement(tx: TransactionDb, m: MouvementLu): Promise<Refus | null> {
+function ecartDeLaChaine(sorte: 'correction' | 'annulation', chaine: Chaine, somme: number): number {
+  return mouvementAttendu({ remplaceSorte: sorte, quantite: chaine.annulee ? 0 : chaine.quantiteEnVigueur }, somme) ?? 0;
+}
+
+/**
+ * Article et récolte visés, dans la ferme du mouvement ; un seul article par chaîne, de l'unité
+ * et de l'espèce de la récolte (B2) ; puis la quantité à écrire :
+ *   - rattaché à la récolte d'origine : celle reçue, bornée (décision 3, B1) ;
+ *   - rattaché à une correction ou une annulation (T10g, décision 6) : l'écart calculé ici, sous
+ *     le verrou de la ferme, et non celui du téléphone (calculé sur sa chaîne locale, peut-être en
+ *     retard) : quantité en vigueur de toute la chaîne (0 si elle est annulée) − somme des
+ *     mouvements déjà écrits de la chaîne sur l'article (`mouvementAttendu`). Le stock de la
+ *     chaîne vaut alors toujours la quantité en vigueur : jamais plus (non-inflation, T10c/T10d),
+ *     jamais moins. Déjà un mouvement pour ce remplacement (décision 8 : celui du serveur, ou un
+ *     premier du téléphone) : accepté sans rien écrire. Écart nul : correction acceptée sans rien
+ *     écrire (décision 9) ; annulation redondante refusée (T10d).
+ */
+async function verifierMouvement(
+  tx: TransactionDb,
+  m: MouvementLu,
+): Promise<{ readonly refus: Refus } | { readonly quantite: number } | { readonly rienAEcrire: true }> {
+  const refuser = (precision: string) => ({ refus: invalide(precision, m.fermeId) });
   const article = await lireReference(tx, 'article_stock', m.articleStockId, m.fermeId, sql`, unite, espece_id::text AS espece_id`);
-  if (article === undefined) return invalide('article de stock introuvable', m.fermeId);
-  if (article.supprimee) return invalide('article de stock supprimé', m.fermeId);
+  if (article === undefined) return refuser('article de stock introuvable');
+  if (article.supprimee) return refuser('article de stock supprimé');
 
   // Ferme dans la requête du verrou (T10d) : la récolte d'une autre ferme n'est ni lue ni verrouillée.
   const r = await tx.execute<{
@@ -277,27 +283,39 @@ async function verifierMouvement(tx: TransactionDb, m: MouvementLu): Promise<Ref
         WHERE e.id = ${m.recolteId}::uuid AND e.ferme_id = ${m.fermeId}::uuid FOR SHARE OF e`,
   );
   const recolte: RecolteVisee | undefined = r.rows[0];
-  if (recolte === undefined) return invalide('récolte liée introuvable', m.fermeId);
-  if (recolte.type !== 'recolte' || recolte.quantite === null) return invalide("l'événement lié n'est pas une récolte", m.fermeId);
+  if (recolte === undefined) return refuser('récolte liée introuvable');
+  if (recolte.type !== 'recolte' || recolte.quantite === null) return refuser("l'événement lié n'est pas une récolte");
 
-  const chaine = await lireChaine(tx, m.recolteId);
-  if (chaine === null) return invalide(`chaîne de corrections trop longue (${String(PROFONDEUR_MAX_CHAINE)} au plus)`, m.fermeId);
+  const chaine = await lireChaine(tx, m.recolteId, m.fermeId);
+  if (chaine === null) return refuser(`chaîne de corrections trop longue (${String(PROFONDEUR_MAX_CHAINE)} au plus)`);
 
   // B2 : un seul article par chaîne ; le premier est de l'unité et de l'espèce de la récolte.
   const articlesDeLaChaine = [...chaine.sommes.keys()];
   if (articlesDeLaChaine.length > 0) {
-    if (!articlesDeLaChaine.includes(m.articleStockId)) return invalide("la récolte est déjà en stock sur un autre article", m.fermeId);
+    if (!articlesDeLaChaine.includes(m.articleStockId)) return refuser("la récolte est déjà en stock sur un autre article");
   } else {
-    if (article.unite !== recolte.unite) return invalide("article d'une autre unité que la récolte", m.fermeId);
-    if (recolte.espece_id !== null && article.espece_id !== recolte.espece_id) return invalide("article d'une autre espèce que la culture récoltée", m.fermeId);
+    if (article.unite !== recolte.unite) return refuser("article d'une autre unité que la récolte");
+    if (recolte.espece_id !== null && article.espece_id !== recolte.espece_id) return refuser("article d'une autre espèce que la culture récoltée");
   }
 
   const somme = chaine.sommes.get(m.articleStockId) ?? 0;
-  const erreur = verifierMouvementRecolte(m.quantite, { remplaceSorte: recolte.remplace_sorte, quantite: recolte.quantite }, somme, {
-    quantiteEnVigueur: chaine.quantiteEnVigueur,
-    annulee: chaine.annulee,
-  });
-  return erreur === null ? null : invalide(erreur.message, m.fermeId);
+  if (recolte.remplace_sorte === null) {
+    const erreur = verifierMouvementRecolte(m.quantite, { remplaceSorte: null, quantite: recolte.quantite }, somme, {
+      quantiteEnVigueur: chaine.quantiteEnVigueur,
+      annulee: chaine.annulee,
+    });
+    return erreur === null ? { quantite: m.quantite } : refuser(erreur.message);
+  }
+  // Décision 8 : l'écart de ce remplacement est déjà écrit (par le serveur, ou par un premier
+  // mouvement du téléphone) : un mouvement qui arrive plus tard est accepté sans rien écrire.
+  const deja = await tx.execute<{ n: number }>(sql`SELECT 1 AS n FROM mouvement_stock WHERE recolte_id = ${m.recolteId}::uuid LIMIT 1`);
+  if (deja.rows.length > 0) return { rienAEcrire: true };
+  const ecart = ecartDeLaChaine(recolte.remplace_sorte, chaine, somme);
+  if (ecart !== 0) return { quantite: ecart };
+  // Décision 9 : correction à la même quantité, rien à reporter ; annulation redondante qui
+  // porte un mouvement : refusée (T10d, inchangé).
+  if (recolte.remplace_sorte === 'correction') return { rienAEcrire: true };
+  return refuser('rien à reporter au stock : il vaut déjà la quantité en vigueur de la récolte');
 }
 
 /**
@@ -323,8 +341,9 @@ export async function ecrireMouvement(tx: TransactionDb, ctx: Contexte, e: PutRe
   const existant = await mouvementIdentique(tx, m);
   if (existant !== null) return existant ? null : { motif: 'ajout_seul', fermeId: m.fermeId };
 
-  const refus = await verifierMouvement(tx, m);
-  if (refus !== null) return refus;
+  const verifie = await verifierMouvement(tx, m);
+  if ('refus' in verifie) return verifie.refus;
+  if ('rienAEcrire' in verifie) return null;
 
   const maintenant = ctx.maintenant();
   const [ecrit] = await tx
@@ -334,7 +353,7 @@ export async function ecrireMouvement(tx: TransactionDb, ctx: Contexte, e: PutRe
       fermeId: v.fermeId,
       articleStockId: v.articleStockId,
       date: v.date,
-      quantite: v.quantite,
+      quantite: verifie.quantite,
       motif: 'recolte',
       recolteId: v.recolteId,
       creeLe: maintenant,
@@ -343,5 +362,74 @@ export async function ecrireMouvement(tx: TransactionDb, ctx: Contexte, e: PutRe
     .returning({ id: mouvementStock.id });
   if (ecrit === undefined) return (await mouvementIdentique(tx, m)) === true ? null : { motif: 'ajout_seul', fermeId: m.fermeId };
   await historiser(tx, ctx, 'mouvement_stock', m.id, m.fermeId, auteurId, maintenant);
+  return null;
+}
+
+// ── Mouvement d'écart écrit par le serveur (T10g, décision 8) ────────────────────────────────
+
+/** Espace de noms des mouvements d'écart créés par le serveur (UUID v5, décision 8 de T10g). */
+export const ESPACE_MOUVEMENT_ECART = '675540a1-1589-4a49-9629-84b5d41e55d2';
+
+/** UUID v5 (RFC 4122, SHA-1) du nom `nom` (UTF-8) dans l'espace `espace`. */
+export function uuidV5(nom: string, espace: string): string {
+  const octetsEspace = Buffer.from(espace.replaceAll('-', ''), 'hex');
+  const h = createHash('sha1').update(octetsEspace).update(nom, 'utf8').digest().subarray(0, 16);
+  h[6] = ((h[6] ?? 0) & 0x0f) | 0x50;
+  h[8] = ((h[8] ?? 0) & 0x3f) | 0x80;
+  const x = h.toString('hex');
+  return `${x.slice(0, 8)}-${x.slice(8, 12)}-${x.slice(12, 16)}-${x.slice(16, 20)}-${x.slice(20)}`;
+}
+
+/** Remplacement de récolte écrit dans le lot, dont le serveur complète le stock en fin de lot. */
+export interface RemplacementEcrit {
+  readonly id: string;
+  readonly fermeId: Id<'Ferme'>;
+  readonly date: DateCalendaire;
+  readonly sorte: 'correction' | 'annulation';
+  /** Rang de l'événement dans le lot (fautif si l'id du mouvement d'écart est déjà pris). */
+  readonly index: number;
+}
+
+/**
+ * Fin de lot (décision 8) : pour un remplacement de récolte accepté dans ce lot, sans mouvement
+ * rattaché (le téléphone n'en a pas envoyé), le serveur écrit lui-même l'écart, sous le verrou de
+ * la ferme, avec un id déterministe (uuidV5 de l'id de l'événement) : un renvoi ne le double pas.
+ * Rien si la chaîne n'a pas d'article (récolte sans stock) ou si l'écart est nul. Id déjà pris
+ * par un mouvement d'un autre événement (réservé d'avance par un téléphone) : refus
+ * 'ecriture_invalide' de l'événement, le lot entier est refusé. null si accepté.
+ */
+export async function completerStock(tx: TransactionDb, ctx: Contexte, r: RemplacementEcrit, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
+  const deja = await tx.execute<{ n: number }>(sql`SELECT 1 AS n FROM mouvement_stock WHERE recolte_id = ${r.id}::uuid LIMIT 1`);
+  if (deja.rows.length > 0) return null;
+  const chaine = await lireChaine(tx, r.id, r.fermeId);
+  if (chaine === null) return null;
+  const [article] = [...chaine.sommes.keys()];
+  if (article === undefined) return null;
+  const ecart = ecartDeLaChaine(r.sorte, chaine, chaine.sommes.get(article) ?? 0);
+  if (ecart === 0) return null;
+  const id = uuidV5(r.id.toLowerCase(), ESPACE_MOUVEMENT_ECART);
+  const maintenant = ctx.maintenant();
+  const [ecrit] = await tx
+    .insert(mouvementStock)
+    .values({
+      id: id as Id<'MouvementStock'>,
+      fermeId: r.fermeId,
+      articleStockId: article as Id<'ArticleStock'>,
+      date: r.date,
+      quantite: ecart,
+      motif: 'recolte',
+      recolteId: r.id as Id<'Evenement'>,
+      creeLe: maintenant,
+    })
+    .onConflictDoNothing({ target: mouvementStock.id })
+    .returning({ id: mouvementStock.id });
+  if (ecrit === undefined) {
+    // L'id est pris : seul le mouvement d'écart de CET événement est un renvoi légitime.
+    const pris = await tx.execute<{ sien: boolean }>(
+      sql`SELECT recolte_id IS NOT DISTINCT FROM ${r.id}::uuid AS sien FROM mouvement_stock WHERE id = ${id}::uuid`,
+    );
+    return pris.rows[0]?.sien === true ? null : invalide("identifiant du mouvement d'écart déjà pris par un autre mouvement", r.fermeId);
+  }
+  await historiser(tx, ctx, 'mouvement_stock', id, r.fermeId, auteurId, maintenant);
   return null;
 }

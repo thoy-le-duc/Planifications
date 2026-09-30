@@ -55,7 +55,7 @@ export interface RefusSynchro {
   readonly nomTable: string;
   readonly ligneId: string;
   readonly operation: 'PUT' | 'PATCH' | 'DELETE';
-  /** Code stable : 'ferme_interdite', 'ajout_seul', 'auteur_invalide', 'table_interdite', 'ecriture_invalide', 'lot_trop_gros'. */
+  /** Code stable : 'ferme_interdite', 'ajout_seul', 'auteur_invalide', 'table_interdite', 'ecriture_invalide', 'lot_trop_gros', 'recolte_annulee'. */
   readonly motif: string;
   /** Explication en français, affichée telle quelle sur le téléphone. */
   readonly message: string;
