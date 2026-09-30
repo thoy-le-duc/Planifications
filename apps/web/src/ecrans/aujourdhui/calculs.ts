@@ -73,7 +73,7 @@ export interface EvenementLu {
 }
 
 export interface TacheJour {
-  /** `<id de la série ou campagne>:<étape>`, ou `<id de la série>:travail:<indice>` (T22). */
+  /** `<id de la série ou campagne>:<étape>`, ou `<id de la série>:travail:<indice>:<date prévue>` (T22 : une clé par occurrence affichée). */
   readonly cle: string;
   readonly tache: TacheSemainier;
   readonly culture: Culture;
@@ -595,7 +595,7 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
     const cibleId = t.cible.sorte === 'serie' ? t.cible.serieId : t.cible.campagneId;
     const culture = cultures.get(cibleId);
     if (culture === undefined) continue;
-    const cle = t.etape === 'travail' ? `${cibleId}:travail:${String(t.travail.indice)}` : `${cibleId}:${t.etape}`;
+    const cle = t.etape === 'travail' ? `${cibleId}:travail:${String(t.travail.indice)}:${t.datePrevue}` : `${cibleId}:${t.etape}`;
     taches.push({ cle, tache: t, culture });
   }
 
