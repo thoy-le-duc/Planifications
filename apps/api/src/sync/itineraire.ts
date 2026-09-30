@@ -225,8 +225,9 @@ async function utilise(tx: TransactionDb, fermeId: string, categorie: string, li
 }
 
 /**
- * Décision 5 du chef : (catégorie, libellé) est unique parmi les types non supprimés de la ferme
- * et de la liste de départ. Un type supprimé n'est pas contrôlé (il ne compte pas).
+ * Décisions 5 et 11 du chef : (catégorie, libellé) est unique, sans tenir compte de la casse,
+ * parmi les types non supprimés de la ferme et de la liste de départ (le même lower() que l'index
+ * unique). Un type supprimé n'est pas contrôlé (il ne compte pas).
  */
 async function verifierUnicite(tx: TransactionDb, t: TypeInterventionEcrit): Promise<Refus | null> {
   if (t.supprimeLe !== null) return null;
@@ -234,7 +235,7 @@ async function verifierUnicite(tx: TransactionDb, t: TypeInterventionEcrit): Pro
     sql`SELECT EXISTS (
           SELECT 1 FROM type_intervention
           WHERE id <> ${t.id}::uuid AND supprime_le IS NULL AND ${visibleParLaFerme(t.fermeId, true)}
-            AND categorie = ${t.categorie} AND libelle = ${t.libelle}
+            AND categorie = ${t.categorie} AND lower(libelle) = lower(${t.libelle})
         ) AS existe`,
   );
   return r.rows[0]?.existe === true ? invalide('ce type d’intervention existe déjà dans cette catégorie', t.fermeId) : null;
@@ -277,6 +278,8 @@ async function historiser(
 async function verifierEnBase(tx: TransactionDb, v: Exclude<Validee, { refus: Refus }>, entree: Ligne, avant: Ligne | null): Promise<Refus | null> {
   if (v.table === 'itineraire') {
     const i = v.valeur;
+    // Décision 8 du chef : l'espèce d'un itinéraire est figée (pour une autre espèce, on duplique).
+    if (avant !== null && avant.espece_id !== i.especeId) return invalide("l'espèce d'un itinéraire ne change pas : dupliquez-le", i.fermeId);
     const retablie = avant?.supprime_le != null && i.supprimeLe === null;
     const cultureChange = avant === null || retablie || avant.espece_id !== i.especeId || (avant.variete_id ?? null) !== i.varieteId;
     if (cultureChange) {
