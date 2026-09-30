@@ -46,7 +46,7 @@ import { decrireSerie, ralentirCpu, repeterMesures, REPETITIONS_MESURE, surveill
  *   1. réouverture hors ligne sous 300 ms (marque app-prete) malgré l'ouverture de la base ;
  *   2. tap sur « Planches » → marque 'planif:plan-affiche' en moins de 300 ms (base déjà ouverte
  *      au démarrage), puis de nouveau après un aller-retour par « Ferme » ;
- *      (T20) 1 et 2 répétés 5 fois depuis le même état (rechargement hors ligne) : la médiane de
+ *      (T20) 1 et 2 répétés 5 fois (rechargement hors ligne, 1re répétition à froid) : la médiane de
  *      chaque temps est comparée au budget ; le journal donne les 5 valeurs ;
  *   3. un conflit du jeu (le premier du plan, recalculé sous Node par calculs.ts) est visible
  *      sur sa ligne et nommé (libellé court de sa sorte, relecture C1) ; sa barre a la bordure
@@ -175,10 +175,10 @@ test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, con
   await test.step('réouverture hors ligne puis tap sur « Planches », CPU ×4, 5 fois : médianes sous 300 ms', async () => {
     await context.setOffline(true);
     await ralentirCpu(page);
-    // T20 : 5 répétitions, médiane comparée au budget (inchangé). Chaque répétition part du même
-    // état : rechargement hors ligne (appli servie par le service worker), base locale rouverte à
-    // froid (worker dédié, recréé à chaque page), écran Aujourd'hui (l'onglet n'est pas gardé),
-    // module Planches pas encore chargé dans la page.
+    // T20 : 5 répétitions, médiane comparée au budget (inchangé). Chaque répétition part d'un
+    // rechargement hors ligne (appli servie par le service worker), base locale rouverte (worker
+    // dédié, recréé à chaque page), écran Aujourd'hui, module Planches pas encore chargé dans la
+    // page. La 1re suit l'installation, caches froids, et est comptée exprès (voir outils.ts).
     const series = await repeterMesures(REPETITIONS_MESURE, async () => {
       await page.reload();
       const reouverture = await tempsAppPrete(page);

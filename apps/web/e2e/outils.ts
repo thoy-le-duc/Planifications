@@ -78,8 +78,11 @@ export function mediane(valeurs: readonly number[]): number {
 /**
  * Répète `fois` fois une mesure qui relève plusieurs temps nommés (ms) à chaque répétition, et
  * renvoie, pour chaque nom, les valeurs et leur médiane. C'est à `mesure` de repartir du même
- * état à chaque répétition (rechargement, cache du service worker, base locale ouverte à froid) :
- * sinon la médiane mélange des situations différentes et ne veut plus rien dire.
+ * point à chaque répétition (rechargement, page servie par le service worker, base rouverte).
+ * La 1re répétition suit l'installation (caches du navigateur et de V8 encore froids) et est
+ * presque toujours la plus lente ; les suivantes sont à chaud. Elle est comptée exprès, sans
+ * chauffe cachée : la médiane reflète l'usage quotidien, premier lancement compris (décision
+ * du chef, T20).
  */
 export async function repeterMesures<K extends string>(
   fois: number,

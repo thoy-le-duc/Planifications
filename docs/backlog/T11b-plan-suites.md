@@ -19,6 +19,9 @@
 - **Focus rendu à la fermeture.** Quand la feuille des conflits ou le détail d'une série se ferme, le focus revient à l'étiquette ou à la barre qui l'a ouverte (ou à la ligne, si la virtualisation l'a retirée du DOM).
 - **Hauteur réservée testée.** Un test vérifie que la hauteur réservée pendant le début égale celle du plan complet (zone sans emplacement, emplacement inactif).
 
+- **Morceau introuvable après une mise à jour** (relecture T20) : une page restée ouverte sur l'ancienne version peut demander un écran dont le fichier a disparu. Écouter `vite:preloadError` et recharger la page, sans perdre une saisie en cours.
+- **Garde-fou en plus de la médiane** (relecture T20) : faire échouer une mesure si sa plus haute valeur dépasse 1,5 fois le budget.
+
 ## Critères d'acceptation
 
 - [ ] Un test par règle retenue.

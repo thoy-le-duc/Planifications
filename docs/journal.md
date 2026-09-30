@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T20 : main verte
+
+- **Fait** : la CI de main était rouge sur des mesures de temps. L'appli ne précharge plus ses fichiers hors ligne pendant son premier affichage : le service worker s'enregistre après, au repos. Les mesures d'écran prennent la médiane de 5 essais ; les budgets n'ont pas bougé (réouverture hors ligne 205 à 257 ms, Planches 169 à 215 ms). Un test instable de l'onglet Ferme est corrigé (6 échecs sur 30, puis 15 sur 15).
+- **Décidé** : la première réouverture, plus lente, compte dans la médiane, sans chauffe cachée. Le port des tests e2e est réglable (E2E_PORT_APPLI), pour que deux équipes testent en même temps.
+- **Bloquant** : aucun. Suites dans T11b (rechargement si un fichier a disparu après une mise à jour, garde-fou à 1,5 fois le budget).
+
 ## 2026-09-30 — T11 : vue 2D des planches et base locale
 
 - **Fait** : écran Planches (planches × semaines, réel plein et prévu hachuré, semaine en cours, conflits en libellés courts avec détail au toucher, saison au choix, barres de 44 px au doigt). La base du téléphone s'ouvre dans l'appli après la connexion et reste lisible hors ligne ; elle est effacée à la déconnexion. Relecture : un changement de données ne ramène plus le plan en haut. Ferme de 42 000 lignes : Planches en 0,1 à 0,3 s une fois la base ouverte, défilement fluide.

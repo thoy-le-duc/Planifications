@@ -8,9 +8,13 @@ import { decrireSerie, ralentirCpu, repeterMesure, REPETITIONS_MESURE, tempsAppP
  * tous les jours). Démarrage à froid (première visite) sous 1000 ms.
  *
  * T20 : chaque temps est mesuré REPETITIONS_MESURE (5) fois, et c'est la MÉDIANE qui est comparée
- * au budget (budgets inchangés) ; le journal donne les 5 valeurs. Chaque répétition repart du même
- * état : première visite = contexte de navigateur neuf (ni service worker, ni cache, ni stockage) ;
- * réouverture = rechargement hors ligne d'une page contrôlée par le service worker, CPU ×4.
+ * au budget (budgets inchangés) ; le journal donne les 5 valeurs. Première visite = contexte de
+ * navigateur neuf à chaque fois (ni service worker, ni cache, ni stockage) ; réouverture =
+ * rechargement hors ligne d'une page contrôlée par le service worker, CPU ×4.
+ * La 1re répétition suit l'installation (caches du navigateur et de V8 encore froids) et est
+ * presque toujours la plus lente ; les suivantes sont à chaud. Elle est comptée exprès, sans
+ * chauffe cachée : la médiane reflète l'usage quotidien, premier lancement compris (décision
+ * du chef, T20).
  */
 
 /**
@@ -94,8 +98,8 @@ test('réouverture hors ligne, connecté, sous 300 ms, CPU ralenti', async ({ pa
     const ms = await tempsAppPrete(page);
     await expect(navigation(page)).toBeVisible();
     expect(await controleeParLeServiceWorker(page), 'réouverture servie par le service worker').toBe(true);
-    // Même état au départ de chaque répétition : la base locale a fini de s'ouvrir avant le
-    // rechargement suivant (qui la rouvre à froid : worker dédié, recréé à chaque page).
+    // La base locale a fini de s'ouvrir avant le rechargement suivant (qui la rouvre : worker
+    // dédié, recréé à chaque page). Caches du navigateur chauds après la 1re répétition.
     await expect(page.getByTestId('app')).not.toHaveAttribute('data-base', 'ouverture', { timeout: 15_000 });
     return ms;
   });
