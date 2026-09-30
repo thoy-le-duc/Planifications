@@ -21,6 +21,15 @@ export type ResultatLigneStock<T> = { readonly ok: true; readonly valeur: T } | 
  */
 export const MOTIFS_MOUVEMENT_SAISIS = ['recolte'] as const satisfies readonly MotifMouvementStock[];
 
+/**
+ * Écritures au plus par envoi à POST /sync/upload, donc par transaction locale de la porte
+ * (@planif/sync, `ecrireEnsemble`) : une seule constante pour le téléphone et le serveur.
+ */
+export const ECRITURES_MAX_PAR_LOT = 500;
+
+/** Décimales au plus d'une quantité de stock (décision du chef, relecture T10c : le millionième). */
+export const DECIMALES_MAX_QUANTITE = 6;
+
 /** Catégorie d'un article (texte libre : 'extra', 'cat. II'…) : longueur au plus. */
 export const CATEGORIE_ARTICLE_CARACTERES = 100;
 
@@ -42,6 +51,16 @@ const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  */
 const ECHELLE = 1_000_000;
 const enMillioniemes = (q: number): number => Math.round(q * ECHELLE);
+
+/**
+ * Nombre de décimales de `q` dans son écriture la plus courte (celle de String, exacte au
+ * sens de l'aller-retour) : '12.123456' → 6, '1e-7' → 7, '1.5e-7' → 8.
+ */
+function decimales(q: number): number {
+  const m = /^(\d+)(?:\.(\d+))?(?:e([+-]\d+))?$/.exec(String(Math.abs(q)));
+  if (m === null) return Number.POSITIVE_INFINITY;
+  return Math.max(0, (m[2]?.length ?? 0) - Number(m[3] ?? '0'));
+}
 
 type Objet = Readonly<Record<string, unknown>>;
 type Lu<T> = ResultatLigneStock<T>;
@@ -146,6 +165,9 @@ export function validerMouvementStock(entree: unknown): ResultatLigneStock<Mouve
     if (absent(quantite)) return echec(erreur('champ_manquant', 'quantite', 'quantité manquante'));
     if (typeof quantite !== 'number' || !Number.isFinite(quantite)) return echec(erreur('champ_invalide', 'quantite', 'quantité : nombre attendu'));
     if (quantite === 0) return echec(erreur('champ_invalide', 'quantite', 'quantité nulle'));
+    if (decimales(quantite) > DECIMALES_MAX_QUANTITE) {
+      return echec(erreur('champ_invalide', 'quantite', `quantité : ${String(DECIMALES_MAX_QUANTITE)} décimales au plus`));
+    }
     const plafond = PLAFONDS_PROVISOIRES.recolteQuantite;
     if (Math.abs(quantite) > plafond) {
       return echec(erreur('plafond_depasse', 'quantite', `quantité au-delà du plafond (${String(plafond)} au plus, dans un sens ou dans l'autre)`));
@@ -201,21 +223,43 @@ export function mouvementAttendu(recolte: RecolteLiee, sommeChaine: number): num
 }
 
 /**
+ * Chaîne de la récolte d'origine (relecture T10c, B1) : de quoi borner un mouvement rattaché à
+ * l'origine.
+ */
+export interface ChaineRecolte {
+  /** `detail.quantite` en vigueur : celle de la dernière correction, sinon celle de l'origine. */
+  readonly quantiteEnVigueur: number;
+  /** La chaîne contient une annulation : plus aucune entrée sur l'origine. */
+  readonly annulee: boolean;
+}
+
+/**
  * Le mouvement de motif `recolte` est-il cohérent avec la récolte qu'il vise ? null si oui,
  * sinon la règle violée (message en français) :
  *   - rattaché à la récolte d'origine : entrée positive seulement (on ne vide pas le stock par
- *     une fausse récolte) ;
+ *     une fausse récolte) ; avec `chaine` (B1), refusée si la chaîne est annulée, et la somme
+ *     des mouvements de la chaîne, ce mouvement compris, ne dépasse pas la quantité en vigueur ;
  *   - rattaché à une annulation ou une correction : exactement `mouvementAttendu`.
  */
-export function verifierMouvementRecolte(quantite: number, recolte: RecolteLiee, sommeChaine: number): ErreurSaisie | null {
+export function verifierMouvementRecolte(
+  quantite: number,
+  recolte: RecolteLiee,
+  sommeChaine: number,
+  chaine?: ChaineRecolte,
+): ErreurSaisie | null {
   const attendu = mouvementAttendu(recolte, sommeChaine);
   if (attendu === null) {
-    return quantite > 0
-      ? null
-      : erreur('incoherent', 'quantite', 'sortie de stock rattachée à une récolte : seule une annulation ou une correction retire du stock');
+    if (quantite <= 0) {
+      return erreur('incoherent', 'quantite', 'sortie de stock rattachée à une récolte : seule une annulation ou une correction retire du stock');
+    }
+    if (chaine === undefined) return null;
+    if (chaine.annulee) return erreur('incoherent', 'recolte_id', 'récolte annulée : plus aucune entrée en stock sur elle');
+    if (enMillioniemes(sommeChaine) + enMillioniemes(quantite) > enMillioniemes(chaine.quantiteEnVigueur)) {
+      return erreur('incoherent', 'quantite', `entrée en stock au-delà de la récolte (${String(chaine.quantiteEnVigueur)} au plus en tout)`);
+    }
+    return null;
   }
   if (enMillioniemes(quantite) === enMillioniemes(attendu)) return null;
   const sorte = recolte.remplaceSorte === 'annulation' ? "l'annulation" : 'la correction';
   return erreur('incoherent', 'quantite', `mouvement de ${sorte} : ${String(attendu)} attendu sur cet article`);
 }
-
