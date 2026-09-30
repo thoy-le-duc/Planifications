@@ -1,9 +1,20 @@
 {
-  "maj": "30 septembre 2026, 4 h 30 UTC",
-  "resume": "Fusionnés cette nuit : **la vue des planches (T11)**, premier écran de planification au téléphone, qui marche hors ligne sur une ferme de 42 000 lignes, et **des tests de temps fiables (T19)**. Prochains : **saisie au champ (T13)** et **export branché dans l'onglet Ferme (T16b)**.",
+  "maj": "30 septembre 2026, 10 h 45 UTC",
+  "resume": "Fusionnés depuis ce matin : **la saisie au champ (T13)**, l'écran d'accueil où l'on coche « Fait » et note une récolte en trois gestes, hors ligne ; **l'export branché dans l'onglet Ferme (T16b)** ; **le stock synchronisé en sécurité (T10c)** ; et **main de nouveau verte (T20)**. En cours : **pages de test retirées du site en ligne (T11c)** et **suites de sécurité du stock (T10d)**.",
   "en_cours": {},
-  "attente": "Répondre à Q19 (premier tap avant l'ouverture des données : 0,7 à 0,8 s, acceptable ?), puis Q13 (plafonds des quantités), Q14 (fournisseur d'e-mail), Q15 (connexions au magasin), Q17 (délais de retour par famille) et Q18 (saison à cheval sur deux années).",
+  "attente": "Répondre à Q20 (corriger une récolte déjà annulée ; deux téléphones qui corrigent la même récolte), puis Q13 (plafonds des quantités), Q14 (fournisseur d'e-mail), Q15 (connexions au magasin), Q17 (délais de retour par famille) et Q18 (saison à cheval sur deux années).",
   "visuels": [
+    {
+      "titre": "Aujourd'hui : la saisie au champ",
+      "etat": "fait",
+      "images": [
+        "aujourdhui-rempli.png",
+        "recolte-pave.png",
+        "annuler.png"
+      ],
+      "alt": "Écran Aujourd'hui avec les tâches en retard, pavé de récolte, bandeau Annuler",
+      "texte": "T13. Les tâches de la semaine, en retard d'abord ; « Fait » en un geste ; récolte en trois gestes avec un pavé géant et la virgule ; « Annuler » pendant 10 s puis depuis l'historique. Tout marche sans réseau, le stock suit."
+    },
     {
       "titre": "Planches, sur le téléphone",
       "etat": "fait",
@@ -43,11 +54,6 @@
       "texte": "Plan des planches, conflits, semainier, rotation et semences calculés par le vrai code sur une ferme d'exemple.",
       "lien": "https://claude.ai/artifact/AUGp6QuNgwXiY4HdwUJDYG",
       "lien_texte": "Ouvrir l'aperçu"
-    },
-    {
-      "titre": "Saisie au champ hors ligne",
-      "etat": "à faire",
-      "texte": "T13, après validation des maquettes. Réalisés et récoltes en trois taps, sans réseau."
     }
   ]
 }
