@@ -29,8 +29,8 @@
  *     historique). Même id, autres valeurs → 'ajout_seul', la ligne ne change pas.
  *   - `ferme_id` d'une ferme dont l'utilisateur n'est pas membre actif → 'ferme_interdite'.
  *   - `article_stock_id` : article de la MÊME ferme (écrit avant, ou plus haut dans le même lot),
- *     non supprimé. D'une autre ferme → 'ferme_interdite' ; introuvable ou supprimé →
- *     'ecriture_invalide'.
+ *     non supprimé. Introuvable, supprimé ou d'une autre ferme → 'ecriture_invalide' (T10d : une
+ *     ligne d'une autre ferme se comporte comme une ligne inexistante, stock-suites.integration.test.ts).
  *   - `quantite` : un nombre (pas un texte), fini, non nul, |quantite| ≤
  *     PLAFONDS_PROVISOIRES.recolteQuantite (100 000, borne comprise ; Q13) → sinon
  *     'ecriture_invalide'.
@@ -40,7 +40,7 @@
  *     recolte_id nul → 'ecriture_invalide'.
  *   - `recolte_id` : événement de type 'recolte' (une récolte, ou son annulation ou sa correction,
  *     qui sont du même type) de la MÊME ferme, écrit avant ou plus haut dans le même lot.
- *     D'une autre ferme → 'ferme_interdite' ; introuvable ou d'un autre type → 'ecriture_invalide'.
+ *     Introuvable, d'un autre type ou d'une autre ferme (T10d) → 'ecriture_invalide'.
  *   - Quantité négative : acceptée seulement si recolte_id désigne une ANNULATION ou une
  *     CORRECTION (remplace_sorte non nul). Rattachée à la récolte d'origine → 'ecriture_invalide'.
  *   - Décision 3 du chef (mouvement borné), sinon 'ecriture_invalide' :
@@ -57,8 +57,8 @@
  * Règles de `article_stock` (création seule) :
  *   - PUT : espèce visible par la ferme (de la ferme, ou de la bibliothèque : ferme_id nul), non
  *     supprimée ; variété (facultative) visible de même ; unite ∈ kg | botte | piece | barquette.
- *     Espèce ou variété d'une autre ferme → 'ferme_interdite' ; introuvable ou supprimée, unité
- *     invalide → 'ecriture_invalide'.
+ *     Espèce ou variété introuvable, supprimée ou d'une autre ferme (T10d), unité invalide →
+ *     'ecriture_invalide'.
  *   - PUT identique (renvoi) : accepté sans rien écrire de plus. Même id, autres valeurs, PATCH,
  *     DELETE → refusés ('ajout_seul' ou 'table_interdite' : au choix du développeur, le message
  *     doit dire que la donnée ne se modifie pas depuis le téléphone). La ligne ne change pas.
@@ -557,7 +557,8 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       const recolte = putRecolte(12);
       const article = putArticle({ espece_id: especeVoisine });
       const mouvement = putMouvement(article.id, 12, recolte.id);
-      await refuseEnEntier([recolte, article, mouvement], article, 'ferme_interdite');
+      // T10d : une espèce d'une autre ferme se comporte comme une espèce inexistante.
+      await refuseEnEntier([recolte, article, mouvement], article, 'ecriture_invalide');
     });
 
     it('annulation valide mais mouvement inverse rattaché à la récolte d’origine : l’annulation n’est pas écrite', async () => {
@@ -650,9 +651,9 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       expect(await stock(articleVoisin)).toBe(0);
     });
 
-    it('article d’une autre ferme, sous le ferme_id de la sienne : ferme_interdite', async () => {
+    it('article d’une autre ferme, sous le ferme_id de la sienne : ecriture_invalide, comme un article inexistant (T10d)', async () => {
       const m = putMouvement(articleVoisin, 5, await recolteSeule(5));
-      expect((await lot([m])).refus).toEqual([{ table: 'mouvement_stock', id: m.id, motif: 'ferme_interdite' }]);
+      expect((await lot([m])).refus).toEqual([{ table: 'mouvement_stock', id: m.id, motif: 'ecriture_invalide' }]);
       expect(await mouvements(m.id)).toBe(0);
     });
 
@@ -664,12 +665,12 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       }
     });
 
-    it('recolte_id d’une récolte d’une autre ferme : ferme_interdite', async () => {
+    it('recolte_id d’une récolte d’une autre ferme : ecriture_invalide, comme une récolte inexistante (T10d)', async () => {
       const recolteVoisine = putRecolte(3, {}, voisin.id, autreFerme);
       expect(await lot([recolteVoisine], voisin.jeton)).toEqual({ refus: [] });
       const { article } = await recolteAcceptee(1);
       const m = putMouvement(article.id, 3, recolteVoisine.id);
-      expect((await lot([m])).refus).toEqual([{ table: 'mouvement_stock', id: m.id, motif: 'ferme_interdite' }]);
+      expect((await lot([m])).refus).toEqual([{ table: 'mouvement_stock', id: m.id, motif: 'ecriture_invalide' }]);
       expect(await mouvements(m.id)).toBe(0);
     });
 
@@ -799,9 +800,9 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       expect(await articles(a.id)).toBe(1);
     });
 
-    it('espèce ou variété d’une autre ferme : ferme_interdite', async () => {
+    it('espèce ou variété d’une autre ferme : ecriture_invalide, comme une espèce ou une variété inexistante (T10d)', async () => {
       for (const a of [putArticle({ espece_id: especeVoisine }), putArticle({ variete_id: varieteVoisine })]) {
-        expect((await lot([a])).refus).toEqual([{ table: 'article_stock', id: a.id, motif: 'ferme_interdite' }]);
+        expect((await lot([a])).refus).toEqual([{ table: 'article_stock', id: a.id, motif: 'ecriture_invalide' }]);
         expect(await articles(a.id)).toBe(0);
       }
     });

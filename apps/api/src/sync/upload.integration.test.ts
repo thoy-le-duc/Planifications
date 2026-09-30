@@ -66,14 +66,15 @@
  * ── Corrections de la relecture (T10) ───────────────────────────────────────────────────────
  *
  *   B1  Références : un PUT d'événement de la ferme A est refusé si un identifiant qu'il porte
- *       désigne une ligne d'une autre ferme → 'ferme_interdite' ; une ligne inexistante →
- *       'ecriture_invalide'. Rien d'écrit, 200, les autres écritures du lot passent.
+ *       désigne une ligne d'une autre ferme ou une ligne inexistante → 'ecriture_invalide', même
+ *       message dans les deux cas (T10d : aucun indice de l'existence d'une ligne d'une autre
+ *       ferme ; voir stock-suites.integration.test.ts). Rien d'écrit, 200, les autres écritures du lot passent.
  *       Identifiants vérifiés : serie_id (serie), campagne_id (campagne), chaque élément de
  *       emplacement_ids (emplacement), remplace_evenement_id (evenement), et dans `detail` :
  *       secteurIrrigationId (secteur_irrigation, type 'irrigation'), produitPhytoId
  *       (produit_phyto, type 'traitement'). Seuls ces deux identifiants existent dans les
  *       Detail* de T01. Produit phyto : accepté s'il est de la ferme A OU de la bibliothèque
- *       (ferme_id nul) ; autre ferme → 'ferme_interdite' ; inexistant → 'ecriture_invalide'.
+ *       (ferme_id nul) ; autre ferme ou inexistant → 'ecriture_invalide'.
  *   C1  Jamais de 500 à cause de ce que le téléphone envoie : un caractère nul (U+0000) dans
  *       `table`, `id` (PUT ou DELETE) ou un nom de colonne de `donnees` → 200 avec un refus
  *       (enregistré dans refus_synchro), et le même lot renvoyé passe encore en 200.
@@ -83,8 +84,9 @@
  *       `detail` > 8 Kio (8 192 octets UTF-8 de JSON.stringify du détail lu), clé inconnue dans
  *       `detail` (hors des clés du Detail* de T01 pour ce type) → 'ecriture_invalide'.
  *       Les bornes elles-mêmes (4 000, 20, 2 000) sont acceptées.
- *       Plus de 500 écritures dans un lot → 400 { erreur: 'requete_invalide' }, rien d'écrit
- *       (500 passent). Corps HTTP > 5 Mio (5 × 1 048 576 octets) → 413, rien d'écrit.
+ *       Plus de 500 écritures dans un lot, ou corps HTTP > 5 Mio (5 × 1 048 576 octets) → 200
+ *       avec un refus 'lot_trop_gros' pour chaque écriture, rien d'écrit (T10d : ni 400 ni 413,
+ *       qui bloqueraient la file PowerSync ; 500 écritures passent).
  *       `donnees` dont le JSON dépasse 16 Kio : le refus est enregistré, colonne donnees nulle.
  *   M1  Refus 'ferme_interdite' d'un utilisateur qui n'est pas membre actif de la ferme visée :
  *       ferme_id NUL dans refus_synchro (la ligne descend sur son téléphone : elle ne doit pas
@@ -579,15 +581,15 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
       ['remplace_evenement_id', () => ({ remplace_sorte: 'correction', remplace_evenement_id: evenementB })],
       ['detail.secteurIrrigationId', () => ({ type: 'irrigation', detail: JSON.stringify(irrigation(b.secteurIrrigation)) })],
       ['detail.produitPhytoId', () => ({ type: 'traitement', detail: JSON.stringify(traitement(b.produitPhyto)) })],
-    ])('%s d’une autre ferme : ferme_interdite, rien d’écrit, 200, le reste du lot passe', async (_cas, champs) => {
+    ])('%s d’une autre ferme : ecriture_invalide comme un id inexistant (T10d), rien d’écrit, 200, le reste du lot passe', async (_cas, champs) => {
       const mauvaise = putRecolte(theo.id, ferme, 1, champs());
       const bonne = putRecolte(theo.id, ferme, 2);
       const reponse = await lot([mauvaise, bonne], theo.jeton);
-      expect(reponse.refus).toEqual([{ table: 'evenement', id: mauvaise.id, motif: 'ferme_interdite' }]);
+      expect(reponse.refus).toEqual([{ table: 'evenement', id: mauvaise.id, motif: 'ecriture_invalide' }]);
       expect(await evenements(mauvaise.id)).toBe(0);
       expect(await modifications(mauvaise.id)).toBe(0);
       expect(await evenements(bonne.id)).toBe(1);
-      expect(await refusEnregistre(mauvaise.id)).toMatchObject({ utilisateur_id: theo.id, motif: 'ferme_interdite' });
+      expect(await refusEnregistre(mauvaise.id)).toMatchObject({ utilisateur_id: theo.id, motif: 'ecriture_invalide' });
     });
 
     it.each([
@@ -690,7 +692,7 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
       await refuse(putEvenement(theo.id, ferme, type, detail));
     });
 
-    it('lot de 500 écritures : traité ; de 501 : 400 requete_invalide, rien d’écrit', async () => {
+    it('lot de 500 écritures : traité ; de 501 : 200, un refus lot_trop_gros par écriture, rien d’écrit (T10d)', async () => {
       const u = await nouveauMembre();
       const cinqCents = Array.from({ length: 500 }, () => putRecolte(u.id, ferme, 1));
       const res500 = await envoyer({ ecritures: cinqCents }, u.jeton);
@@ -698,20 +700,23 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
 
       const cinqCentUn = Array.from({ length: 501 }, () => putRecolte(u.id, ferme, 1));
       const res501 = await envoyer({ ecritures: cinqCentUn }, u.jeton);
-      expect(res501.status).toBe(400);
-      expect(await res501.json()).toEqual({ erreur: 'requete_invalide' });
+      expect(res501.status).toBe(200);
+      const reponse = (await res501.json()) as ReponseUpload;
+      expect(reponse.refus).toHaveLength(501);
+      expect(reponse.refus.every((r) => r.motif === 'lot_trop_gros')).toBe(true);
       const ids = cinqCentUn.map((e) => e.id);
       expect(await compter(`SELECT 1 FROM evenement WHERE id = ANY($1::uuid[])`, [ids])).toBe(0);
-      expect(await refusDeLUtilisateur(u.id)).toBe(0);
+      expect(await refusDeLUtilisateur(u.id)).toBe(501);
     }, 60_000);
 
-    it('corps de plus de 5 Mio : 413, rien d’écrit', async () => {
+    it('corps de plus de 5 Mio : 200, refus lot_trop_gros, rien d’écrit (T10d)', async () => {
       const u = await nouveauMembre();
       const e = putRecolte(u.id, ferme, 1, { note: 'x'.repeat(5 * 1_048_576 + 1_000) });
       const res = await envoyer({ ecritures: [e] }, u.jeton);
-      expect(res.status).toBe(413);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ refus: [{ table: 'evenement', id: e.id, motif: 'lot_trop_gros' }] });
       expect(await evenements(e.id)).toBe(0);
-      expect(await refusDeLUtilisateur(u.id)).toBe(0);
+      expect(await refusDeLUtilisateur(u.id)).toBe(1);
     });
 
     it('donnees de plus de 16 Kio : refus enregistré sans elles (donnees nulle) ; en dessous, gardées', async () => {
