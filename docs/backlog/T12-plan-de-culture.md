@@ -36,3 +36,17 @@
 - [ ] Formulaire affiché en moins de 300 ms, recalcul en moins de 100 ms (CPU ralenti ×4).
 
 **Hors périmètre** : création de cultures et d'itinéraires (l'import T14 les fournit), plantations pérennes (ticket suivant).
+
+### Décisions du chef (après les tests)
+
+Les interprétations du testeur sont retenues :
+
+1. **Historique.** Une entrée par ligne `modification` de la série. Un changement qui ne touche que les occupations s'annule par le bandeau seulement.
+2. **Annuler une entrée ancienne** ramène à l'état d'avant son horodatage, donc défait aussi les entrées plus récentes. L'écran le dit avant de le faire.
+3. **`rotation_acceptee.delai_ans`** vaut le délai minimal de l'alerte.
+4. **Changer d'ancre** garde les dates. L'ancre tombe toujours le lundi de la semaine.
+5. **Libellés.** « Fermer » plutôt que « Annuler » ; « Planifier la série » en création, « Enregistrer » en modification.
+6. **Bouton « Nouvelle série »** sur Planches, pour l'accessibilité et la mesure des 300 ms.
+7. **Itinéraire** proposé une seule fois, au choix de la culture.
+8. **Planches seulement** pour l'instant : sans gouttières, avec `position_m` nul. Sans variété, la germination est comptée à 100 %.
+9. **Test de T11 modifié.** Le détail d'une barre de série porte « Modifier la série ». Justifié dans la PR.
