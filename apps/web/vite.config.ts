@@ -83,10 +83,30 @@ function nomFichierAnnexe(fichier: { names: readonly string[]; originalFileNames
   return 'assets/[name]-[hash][extname]';
 }
 
+/** Module qui enregistre le service worker, au repos, après le premier affichage (T20). */
+const MODULE_ENREGISTREMENT_SW = fileURLToPath(new URL('src/serviceWorker.ts', import.meta.url));
+
+/** Toute trace d'un enregistrement de service worker dans le code d'un morceau. */
+const MOTIF_APPEL_REGISTER = /serviceWorker\.register\b/;
+
+interface MorceauSortie {
+  readonly type: 'chunk';
+  readonly name: string;
+  readonly isEntry: boolean;
+  readonly code: string;
+  readonly moduleIds: readonly string[];
+  readonly imports: readonly string[];
+  readonly dynamicImports: readonly string[];
+}
+
 /**
- * vite-plugin-pwa injecte le manifeste et l'enregistrement du service worker dans chaque page HTML.
- * Sur une page de mesure, l'installation du service worker (précache de l'appli) fausserait les temps :
- * on les retire.
+ * Service worker : un seul chemin d'enregistrement, `src/serviceWorker.ts`, appelé au repos après
+ * le premier affichage (T20). vite-plugin-pwa n'injecte plus son script (`injectRegister: false`),
+ * qui enregistrait au `load` de la fenêtre ; on vérifie qu'il ne revient pas sans bruit.
+ *
+ * Pages de mesure et de diagnostic : jamais de service worker (l'installation, précache de
+ * l'appli, fausserait les temps). Leur manifeste est retiré, et aucun morceau qu'elles chargent,
+ * statiquement ou à la demande, n'enregistre de service worker : le build échoue sinon.
  */
 function pagesHorsAppliSansServiceWorker(): Plugin {
   return {
@@ -96,16 +116,39 @@ function pagesHorsAppliSansServiceWorker(): Plugin {
     transformIndexHtml: {
       order: 'post',
       handler(html, contexte) {
-        if (!PREFIXES_PAGES_HORS_APPLI.some((p) => contexte.path.startsWith(p))) return html;
-        let resultat = html;
-        for (const motif of [/<link rel="manifest"[^>]*>/g, /<script id="vite-plugin-pwa:register-sw"[^>]*><\/script>/g]) {
-          // Échec franc si vite-plugin-pwa change sa façon d'injecter : sinon le SW reviendrait sans bruit.
-          if (!motif.test(resultat)) throw new Error(`${contexte.path} : balise du service worker introuvable (${motif.source})`);
-          motif.lastIndex = 0;
-          resultat = resultat.replace(motif, '');
+        // Échec franc si vite-plugin-pwa se remet à injecter un enregistrement au load.
+        if (/vite-plugin-pwa:register-sw|registerSW\.js|serviceWorker\.register/.test(html)) {
+          throw new Error(`${contexte.path} : enregistrement du service worker injecté dans la page (attendu : src/serviceWorker.ts, au repos)`);
         }
-        return resultat;
+        if (!PREFIXES_PAGES_HORS_APPLI.some((p) => contexte.path.startsWith(p))) return html;
+        const manifeste = /<link rel="manifest"[^>]*>/g;
+        // Échec franc si vite-plugin-pwa change sa façon d'injecter le manifeste.
+        if (!manifeste.test(html)) throw new Error(`${contexte.path} : balise du manifeste introuvable (${manifeste.source})`);
+        manifeste.lastIndex = 0;
+        return html.replace(manifeste, '');
       },
+    },
+    generateBundle(_options, paquet) {
+      const morceaux = new Map<string, MorceauSortie>();
+      for (const [fichier, sortie] of Object.entries(paquet)) {
+        if (sortie.type === 'chunk') morceaux.set(fichier, sortie);
+      }
+      const entreesHorsAppli = [ENTREE_MESURE, ...ENTREES_DIAGNOSTIC];
+      for (const [fichierEntree, entree] of morceaux) {
+        if (!entree.isEntry || !entreesHorsAppli.includes(entree.name)) continue;
+        const aVoir = [fichierEntree];
+        const vus = new Set<string>();
+        for (let fichier = aVoir.pop(); fichier !== undefined; fichier = aVoir.pop()) {
+          if (vus.has(fichier)) continue;
+          vus.add(fichier);
+          const morceau = morceaux.get(fichier);
+          if (morceau === undefined) continue;
+          if (morceau.moduleIds.includes(MODULE_ENREGISTREMENT_SW) || MOTIF_APPEL_REGISTER.test(morceau.code)) {
+            throw new Error(`page hors appli « ${entree.name} » : ${fichier} enregistre un service worker`);
+          }
+          aVoir.push(...morceau.imports, ...morceau.dynamicImports);
+        }
+      }
     },
   };
 }
@@ -141,6 +184,9 @@ export default defineConfig(({ mode }) => {
       // Hors-ligne d'abord : le service worker met toute l'appli en cache dès la première visite.
       VitePWA({
         registerType: 'autoUpdate',
+        // T20 : pas d'enregistrement au load de la fenêtre ; src/serviceWorker.ts enregistre au
+        // repos, après le premier affichage de l'appli.
+        injectRegister: false,
         includeAssets: ['icone.svg'],
         manifest: {
           name: 'Planifications',
@@ -169,6 +215,10 @@ export default defineConfig(({ mode }) => {
             'assets/sqlite-annexe/**',
           ],
           navigateFallbackDenylist: [/^\/mesures\//, /^\/diagnostic\//],
+          // autoUpdate sans le module d'enregistrement de vite-plugin-pwa : la nouvelle version
+          // prend la main dès son installation, et la première visite est contrôlée sans recharger.
+          skipWaiting: true,
+          clientsClaim: true,
         },
       }),
       pagesHorsAppliSansServiceWorker(),
