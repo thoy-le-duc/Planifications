@@ -119,6 +119,12 @@ interface LectureTable {
  * IS NULL`) : il ne peut pas prendre l'index (ferme_id, date) des événements, et SQLite suit la
  * clé, page après page. Avec l'index, chaque page triait de nouveau tous les événements de la
  * ferme (mesuré : 2,4 s la première page, 150 à 500 ms les suivantes).
+ *
+ * Limite assumée (relecture T16b) : la lecture se fait en plusieurs requêtes, sans transaction
+ * (≈ 6 s sur la ferme de T07, CPU ×4). Une synchro qui écrit entre deux pages peut donner une
+ * archive où des références manquent (une ligne qui pointe vers une ligne arrivée après la
+ * lecture de sa table). Une transaction de lecture bloquerait les saisies pendant tout ce temps,
+ * ce qui est pire au champ. C'était déjà vrai avec les lectures parallèles d'avant T16b.
  */
 function lectureTable(table: string, colonnes: readonly string[], fermeId: string): LectureTable {
   const select = `SELECT ${colonnes.map((c) => `"${c}"`).join(', ')} FROM "${table}"`;
