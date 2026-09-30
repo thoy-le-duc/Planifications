@@ -5,6 +5,10 @@
  *
  * - Chaque écriture est traitée à part, dans sa propre transaction : un refus ne bloque ni les
  *   autres écritures du lot, ni la file du téléphone.
+ * - T10c : un lot qui contient une écriture de stock (article_stock, mouvement_stock ; stock.ts)
+ *   est UNE saisie : il s'écrit en une seule transaction, tout ou rien. Si une écriture est
+ *   refusée, rien n'est écrit, et chaque écriture du lot figure dans les refus (la fautive avec
+ *   son motif) : rien ne disparaît du téléphone en silence. Contrat : stock.integration.test.ts.
  * - Un refus métier répond 200 (une 4xx bloquerait la file de PowerSync) et s'enregistre dans
  *   `refus_synchro`, qui redescend sur le téléphone de son auteur par la synchro.
  * - Une panne (base injoignable…) lève : 500, PowerSync renverra le lot. Jamais de refus
@@ -36,13 +40,15 @@ import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
 import { lireCorps } from '../http.ts';
 import { lireEvenement } from './evenement.ts';
-import { verifierReferences } from './references.ts';
+import type { MotifRefus, Refus } from './motifs.ts';
+import { verifierReferences, type TransactionDb } from './references.ts';
+import { ecrireArticle, ecrireMouvement } from './stock.ts';
+
+export type { MotifRefus } from './motifs.ts';
 
 interface Env {
   Variables: VariablesAuthentifiees;
 }
-
-export type MotifRefus = 'ferme_interdite' | 'auteur_invalide' | 'ajout_seul' | 'table_interdite' | 'ecriture_invalide';
 
 /** Explication affichée telle quelle sur le téléphone. */
 const MESSAGES: Readonly<Record<MotifRefus, string>> = {
@@ -63,8 +69,15 @@ const LONGUEUR_MAX_TEXTE_REFUS = 200;
 /** `donnees` conservées dans refus_synchro jusqu'à cette taille (octets UTF-8 du JSON). */
 const TAILLE_MAX_DONNEES_REFUS = 16 * 1_024;
 
-/** Tables que le téléphone écrit (T10 : le journal ; les autres suivront avec leurs écrans). */
-const TABLES_ECRITES = new Set(['evenement']);
+/** Tables du stock (T10c) : un lot qui en écrit une est accepté ou refusé en entier. */
+const TABLES_STOCK = new Set(['article_stock', 'mouvement_stock']);
+/** Tables que le téléphone écrit (T10 : le journal ; T10c : le stock ; les autres suivront avec leurs écrans). */
+const TABLES_ECRITES = new Set(['evenement', ...TABLES_STOCK]);
+/** Tables en ajout seul : ni modification ni suppression (sinon : création seule, 'table_interdite'). */
+const TABLES_AJOUT_SEUL = new Set(['evenement', 'mouvement_stock']);
+
+/** Précision du refus des autres écritures d'une saisie refusée en entier. */
+const PRECISION_SAISIE_REFUSEE = 'saisie refusée en entier, une autre de ses écritures est refusée';
 
 /** Écriture telle que reçue, lue sans confiance. */
 interface EcritureRecue {
@@ -74,14 +87,6 @@ interface EcritureRecue {
   readonly donnees: Readonly<Record<string, unknown>> | null;
   /** `donnees` présent mais pas un objet. */
   readonly donneesIllisibles: boolean;
-}
-
-interface Refus {
-  readonly motif: MotifRefus;
-  /** Précision ajoutée au message (données invalides). */
-  readonly precision?: string;
-  /** Ferme visée, si connue. */
-  readonly fermeId?: string | null;
 }
 
 function lireEcriture(brut: unknown): EcritureRecue {
@@ -150,15 +155,32 @@ function pareil(colonne: AnyPgColumn, valeur: unknown): SQL {
   return valeur === null ? isNull(colonne) : eq(colonne, valeur);
 }
 
+/** Ferme nommée par les données reçues (non vérifiée), ou null. */
+function fermeDesDonnees(e: EcritureRecue): string | null {
+  return estUuid(e.donnees?.ferme_id) ? e.donnees.ferme_id.toLowerCase() : null;
+}
+
+/** Levée dans la transaction d'un lot pour l'annuler : l'écriture `index` est refusée. */
+class RefusDansLot extends Error {
+  readonly index: number;
+  readonly refus: Refus;
+
+  constructor(index: number, refus: Refus) {
+    super('écriture refusée : transaction annulée');
+    this.index = index;
+    this.refus = refus;
+  }
+}
+
 export function routesSynchro(ctx: Contexte): Hono<Env> {
   const { db } = ctx;
   const routes = new Hono<Env>();
   routes.use('/sync/*', garde(ctx));
 
   /** La ligne existante `id` a-t-elle exactement ces valeurs ? (renvoi d'un lot déjà écrit) */
-  async function identique(l: LigneEvenement): Promise<boolean> {
+  async function identique(tx: TransactionDb, l: LigneEvenement): Promise<boolean> {
     const e = evenement;
-    const lignes = await db
+    const lignes = await tx
       .select({ id: e.id })
       .from(e)
       .where(
@@ -184,71 +206,108 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
   }
 
   /**
-   * Écrit l'événement et sa ligne d'historique, dans une transaction qui vérifie d'abord ses
-   * références (B1) et les garde verrouillées jusqu'à l'écriture.
+   * Écrit l'événement et sa ligne d'historique, dans la transaction de l'appelant, après avoir
+   * vérifié ses références (B1), gardées verrouillées jusqu'à la fin de la transaction.
    */
-  async function ecrireEvenement(l: LigneEvenement, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
+  async function ecrireEvenement(tx: TransactionDb, l: LigneEvenement, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
     const maintenant = ctx.maintenant();
-    let issue: Refus | 'cree' | 'existe';
-    try {
-      issue = await db.transaction(async (tx) => {
-        const refusReference = await verifierReferences(tx, l);
-        if (refusReference !== null) return { ...refusReference, fermeId: l.fermeId };
-        const [ecrit] = await tx
-          .insert(evenement)
-          .values({ ...l, creeLe: maintenant })
-          .onConflictDoNothing({ target: evenement.id })
-          .returning();
-        if (ecrit === undefined) return 'existe';
-        await tx.insert(modification).values({
-          id: ctx.nouvelId(),
-          fermeId: l.fermeId,
-          nomTable: 'Evenement',
-          ligneId: l.id,
-          auteurId,
-          horodatage: maintenant,
-          operation: 'creation',
-          avant: null,
-          // La ligne écrite, telle que Postgres la rend en JSON (colonnes snake_case).
-          apres: sql`(SELECT to_jsonb(e) FROM evenement e WHERE e.id = ${l.id})`,
-          propositionId: null,
-          creeLe: maintenant,
-          modifieLe: maintenant,
-        });
-        return 'cree';
-      });
-    } catch (erreur) {
-      if (refusParLaBase(erreur)) return { motif: 'ecriture_invalide', precision: 'refusée par une règle de la base', fermeId: l.fermeId };
-      throw erreur;
+    const refusReference = await verifierReferences(tx, l);
+    if (refusReference !== null) return { ...refusReference, fermeId: l.fermeId };
+    const [ecrit] = await tx
+      .insert(evenement)
+      .values({ ...l, creeLe: maintenant })
+      .onConflictDoNothing({ target: evenement.id })
+      .returning({ id: evenement.id });
+    if (ecrit === undefined) {
+      // L'id existe déjà : renvoi identique (réponse perdue) ou tentative de réécriture.
+      return (await identique(tx, l)) ? null : { motif: 'ajout_seul', fermeId: l.fermeId };
     }
-    if (issue === 'cree') return null;
-    if (issue !== 'existe') return issue;
-    // L'id existe déjà : renvoi identique (réponse perdue) ou tentative de réécriture.
-    return (await identique(l)) ? null : { motif: 'ajout_seul', fermeId: l.fermeId };
+    await tx.insert(modification).values({
+      id: ctx.nouvelId(),
+      fermeId: l.fermeId,
+      nomTable: 'Evenement',
+      ligneId: l.id,
+      auteurId,
+      horodatage: maintenant,
+      operation: 'creation',
+      avant: null,
+      // La ligne écrite, telle que Postgres la rend en JSON (colonnes snake_case).
+      apres: sql`(SELECT to_jsonb(e) FROM evenement e WHERE e.id = ${l.id})`,
+      propositionId: null,
+      creeLe: maintenant,
+      modifieLe: maintenant,
+    });
+    return null;
   }
 
-  async function traiter(e: EcritureRecue, utilisateurId: Id<'Utilisateur'>, fermes: ReadonlySet<string>): Promise<Refus | null> {
-    const fermeDonnee = estUuid(e.donnees?.ferme_id) ? e.donnees.ferme_id.toLowerCase() : null;
+  /** PATCH ou DELETE : refusé (ajout seul, ou création seule pour un article). La ferme est celle de la ligne. */
+  async function modificationRefusee(tx: TransactionDb, e: EcritureRecue, fermes: ReadonlySet<string>): Promise<Refus> {
+    const [existant] = estUuid(e.id)
+      ? (
+          await tx.execute<{ ferme_id: string }>(
+            sql`SELECT ferme_id::text AS ferme_id FROM ${sql.identifier(e.table)} WHERE id = ${e.id.toLowerCase()}::uuid`,
+          )
+        ).rows
+      : [];
+    if (existant !== undefined && !fermes.has(existant.ferme_id)) return { motif: 'ferme_interdite', fermeId: existant.ferme_id };
+    return { motif: TABLES_AJOUT_SEUL.has(e.table) ? 'ajout_seul' : 'table_interdite', fermeId: existant?.ferme_id ?? null };
+  }
+
+  /** Une écriture, dans la transaction `tx` : null si acceptée, sinon le refus. */
+  async function traiter(tx: TransactionDb, e: EcritureRecue, utilisateurId: Id<'Utilisateur'>, fermes: ReadonlySet<string>): Promise<Refus | null> {
+    const fermeDonnee = fermeDesDonnees(e);
+    // e.table est lue ensuite comme nom de table SQL : seulement l'une de ces constantes.
     if (!TABLES_ECRITES.has(e.table)) return { motif: 'table_interdite', fermeId: fermeDonnee };
     if (e.op === null || e.id === '' || e.donneesIllisibles) {
       return { motif: 'ecriture_invalide', precision: 'écriture mal formée', fermeId: fermeDonnee };
     }
-
-    if (e.op !== 'PUT') {
-      // Journal en ajout seul : ni modification ni suppression. La ferme est celle de la ligne.
-      const [existant] = estUuid(e.id)
-        ? await db.select({ fermeId: evenement.fermeId }).from(evenement).where(eq(evenement.id, e.id.toLowerCase() as Id<'Evenement'>))
-        : [];
-      if (existant !== undefined && !fermes.has(existant.fermeId)) return { motif: 'ferme_interdite', fermeId: existant.fermeId };
-      return { motif: 'ajout_seul', fermeId: existant?.fermeId ?? null };
-    }
+    if (e.op !== 'PUT') return modificationRefusee(tx, e, fermes);
 
     if (fermeDonnee !== null && !fermes.has(fermeDonnee)) return { motif: 'ferme_interdite', fermeId: fermeDonnee };
-    const auteur = e.donnees?.auteur_id;
-    if (estUuid(auteur) && auteur.toLowerCase() !== utilisateurId) return { motif: 'auteur_invalide', fermeId: fermeDonnee };
-    const lecture = lireEvenement(e.id, e.donnees ?? {});
-    if (!lecture.ok) return { motif: 'ecriture_invalide', precision: lecture.raison, fermeId: fermeDonnee };
-    return ecrireEvenement(lecture.valeur, utilisateurId);
+    const donnees = e.donnees ?? {};
+    if (e.table === 'evenement') {
+      const auteur = donnees.auteur_id;
+      if (estUuid(auteur) && auteur.toLowerCase() !== utilisateurId) return { motif: 'auteur_invalide', fermeId: fermeDonnee };
+      const lecture = lireEvenement(e.id, donnees);
+      if (!lecture.ok) return { motif: 'ecriture_invalide', precision: lecture.raison, fermeId: fermeDonnee };
+      return ecrireEvenement(tx, lecture.valeur, utilisateurId);
+    }
+    // Stock : la ferme, validée par le cœur, est forcément celle de fermeDonnee (UUID de la ferme du jeton).
+    const ferme = fermeDonnee ?? '';
+    const put = { id: e.id, donnees };
+    return e.table === 'article_stock' ? ecrireArticle(tx, ctx, put, ferme, utilisateurId) : ecrireMouvement(tx, ctx, put, ferme, utilisateurId);
+  }
+
+  /**
+   * Écrit `ecritures` en UNE transaction, tout ou rien : null si toutes sont acceptées, sinon la
+   * première refusée (et rien n'est écrit). Une donnée refusée par la base est un refus de
+   * l'écriture en cours ; une panne lève (500, PowerSync renverra le lot).
+   */
+  async function ecrireEnsemble(
+    ecritures: readonly EcritureRecue[],
+    utilisateurId: Id<'Utilisateur'>,
+    fermes: ReadonlySet<string>,
+  ): Promise<{ readonly index: number; readonly refus: Refus } | null> {
+    let courante = 0;
+    try {
+      await db.transaction(async (tx) => {
+        for (const [i, e] of ecritures.entries()) {
+          courante = i;
+          const refus = await traiter(tx, e, utilisateurId, fermes);
+          if (refus !== null) throw new RefusDansLot(i, refus);
+        }
+      });
+      return null;
+    } catch (erreur) {
+      if (erreur instanceof RefusDansLot) return { index: erreur.index, refus: erreur.refus };
+      // Dernier recours : une donnée que la base refuse est un refus, jamais un 500.
+      if (!refusParLaBase(erreur)) throw erreur;
+      const e = ecritures[courante];
+      return {
+        index: courante,
+        refus: { motif: 'ecriture_invalide', precision: 'refusée par une règle de la base', fermeId: e === undefined ? null : fermeDesDonnees(e) },
+      };
+    }
   }
 
   /** Enregistre le refus (au plus une fois par utilisateur, ligne, opération et motif). */
@@ -299,20 +358,30 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     const utilisateurId = c.get('utilisateurId');
     // Droits relus en base à chaque lot (un membre retiré perd l'accès tout de suite).
     const fermes = new Set<string>(await fermesDeLUtilisateur(db, utilisateurId));
+    const ecritures = (brutes as unknown[]).map(lireEcriture);
     const refus: { table: string; id: string; motif: MotifRefus }[] = [];
-    for (const brute of brutes as unknown[]) {
-      const e = lireEcriture(brute);
-      let r: Refus | null;
-      try {
-        r = await traiter(e, utilisateurId, fermes);
-      } catch (erreur) {
-        // Dernier recours : une donnée que la base refuse est un refus, jamais un 500.
-        if (!refusParLaBase(erreur)) throw erreur;
-        r = { motif: 'ecriture_invalide', precision: 'refusée par la base' };
-      }
-      if (r === null) continue;
+    const refuser = async (e: EcritureRecue, r: Refus): Promise<void> => {
       await enregistrerRefus(e, utilisateurId, fermes, r);
       refus.push({ table: e.table, id: e.id, motif: r.motif });
+    };
+
+    if (ecritures.some((e) => TABLES_STOCK.has(e.table))) {
+      // T10c : une saisie de stock, tout ou rien. Chaque écriture d'un lot refusé a son refus.
+      const echec = await ecrireEnsemble(ecritures, utilisateurId, fermes);
+      if (echec !== null) {
+        for (const [i, e] of ecritures.entries()) {
+          await refuser(
+            e,
+            i === echec.index ? echec.refus : { motif: 'ecriture_invalide', precision: PRECISION_SAISIE_REFUSEE, fermeId: fermeDesDonnees(e) },
+          );
+        }
+      }
+    } else {
+      // T10 : chaque écriture à part, un refus ne bloque pas les autres.
+      for (const e of ecritures) {
+        const echec = await ecrireEnsemble([e], utilisateurId, fermes);
+        if (echec !== null) await refuser(e, echec.refus);
+      }
     }
     return c.json({ refus });
   });
