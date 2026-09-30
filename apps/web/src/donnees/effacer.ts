@@ -115,6 +115,53 @@ export async function baseLocaleExiste(utilisateurId: string): Promise<boolean> 
   }
 }
 
+/**
+ * Effacement de la base de l'utilisateur lancé par cette page et pas encore abouti (base gardée
+ * ouverte par un autre onglet), ou null. Tenue quand la demande aboutit ou échoue, jamais
+ * rejetée : l'appli l'attend avant de rouvrir la base (T11), sans quoi elle la recréerait ou
+ * bloquerait l'effacement.
+ */
+export function effacementEnCours(utilisateurId: string): Promise<void> | null {
+  let demande: Promise<void> | undefined;
+  try {
+    demande = fileDe(indexedDB).get(nomBaseLocale(utilisateurId));
+  } catch {
+    return null;
+  }
+  return demande === undefined
+    ? null
+    : demande.then(
+        () => undefined,
+        () => undefined,
+      );
+}
+
+/**
+ * Plus ancienne version de base IndexedDB que PowerSync sait reprendre : wa-sqlite
+ * (IDBBatchAtomicVFS) crée ses bases en version 6 et ne sait mettre à niveau que depuis 0 (base
+ * neuve) ou 5.
+ */
+export const VERSION_MIN_BASE_POWERSYNC = 5;
+
+/**
+ * Forme de la base locale de l'utilisateur, lue sans l'ouvrir (indexedDB.databases()) :
+ * 'absente' ; 'powersync' (version reprise par PowerSync) ; 'autre' (même nom, autre format :
+ * PowerSync ne saurait pas la reprendre, et l'ouvrir resterait bloqué si un autre onglet la
+ * garde) ; 'inconnue' si le navigateur ne permet pas de le savoir.
+ */
+export async function formatBaseLocale(utilisateurId: string): Promise<'absente' | 'powersync' | 'autre' | 'inconnue'> {
+  try {
+    const idb: Partial<Pick<IDBFactory, 'databases'>> | undefined = typeof indexedDB === 'undefined' ? undefined : indexedDB;
+    if (idb?.databases === undefined) return 'inconnue';
+    const nom = nomBaseLocale(utilisateurId);
+    const base = (await idb.databases()).find((b) => b.name === nom);
+    if (base === undefined) return 'absente';
+    return (base.version ?? 0) >= VERSION_MIN_BASE_POWERSYNC ? 'powersync' : 'autre';
+  } catch {
+    return 'inconnue';
+  }
+}
+
 /** Efface toute la base locale de l'utilisateur (données synchronisées et écritures en attente). */
 export function effacerDonneesLocales(utilisateurId: string): Promise<void> {
   return supprimerBaseIndexedDb(nomBaseLocale(utilisateurId));
