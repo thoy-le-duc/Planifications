@@ -28,7 +28,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T18](T18-mode-sombre.md) | Mode sombre | T16 | à faire |
 | [T11](T11-vue-2d.md) | Vue 2D planches × semaines (et base locale ouverte dans l'appli) | T03, T10, T16 | fait |
 | [T12](T12-plan-de-culture.md) | Plan de culture : créer et modifier une série | T04, T05, T11 | à faire |
-| [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T11, T16 | à faire |
+| [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T11, T16 | en cours |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16 | à faire |
 | [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | fait |
