@@ -103,3 +103,36 @@ export async function verifierReferences(tx: TransactionDb, l: LigneEvenement): 
   }
   return null;
 }
+
+/**
+ * T10d : une correction de récolte garde la série, la campagne et l'unité de la récolte
+ * d'ORIGINE de sa chaîne (l'événement sans remplace_evenement_id tout en haut). Corriger une
+ * récolte saisie sur la mauvaise série ou dans la mauvaise unité : on l'annule, puis on la
+ * ressaisit. À appeler après verifierReferences (l'événement remplacé est de la ferme). Les
+ * événements sont en ajout seul : la chaîne ne change pas, rien à verrouiller.
+ */
+export async function verifierCorrection(tx: TransactionDb, l: LigneEvenement): Promise<RefusReference | null> {
+  if (l.type !== 'recolte' || l.remplaceSorte !== 'correction' || l.remplaceEvenementId === null) return null;
+  const unite = 'unite' in l.detail && typeof l.detail.unite === 'string' ? l.detail.unite : null;
+  // Montée par la clé composée (ferme_id, remplace_evenement_id) : toute la chaîne est de la ferme.
+  const r = await tx.execute<{ garde: boolean }>(
+    sql`WITH RECURSIVE montee(id, parent, profondeur) AS (
+          SELECT id, remplace_evenement_id, 0 FROM evenement WHERE id = ${l.remplaceEvenementId}::uuid AND ferme_id = ${l.fermeId}::uuid
+          UNION ALL
+          SELECT e.id, e.remplace_evenement_id, m.profondeur + 1
+          FROM evenement e JOIN montee m ON e.id = m.parent
+          WHERE m.profondeur < ${PROFONDEUR_MAX_CHAINE}
+        )
+        SELECT (o.serie_id IS NOT DISTINCT FROM ${l.serieId}::uuid
+                AND o.campagne_id IS NOT DISTINCT FROM ${l.campagneId}::uuid
+                AND o.detail ->> 'unite' IS NOT DISTINCT FROM ${unite}::text) AS garde
+        FROM montee m JOIN evenement o ON o.id = m.id
+        WHERE m.parent IS NULL`,
+  );
+  const origine = r.rows[0];
+  if (origine === undefined) return { motif: 'ecriture_invalide', precision: "récolte d'origine introuvable" };
+  if (!origine.garde) {
+    return { motif: 'ecriture_invalide', precision: "une correction garde la série, la campagne et l'unité de la récolte : annulez-la puis ressaisissez-la" };
+  }
+  return null;
+}

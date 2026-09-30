@@ -44,7 +44,7 @@ import type { Contexte } from '../dependances.ts';
 import { lireCorps } from '../http.ts';
 import { lireEvenement } from './evenement.ts';
 import type { MotifRefus, Refus } from './motifs.ts';
-import { verifierReferences, type TransactionDb } from './references.ts';
+import { verifierCorrection, verifierReferences, type TransactionDb } from './references.ts';
 import { ecrireArticle, ecrireMouvement } from './stock.ts';
 
 export type { MotifRefus } from './motifs.ts';
@@ -214,7 +214,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
    */
   async function ecrireEvenement(tx: TransactionDb, l: LigneEvenement, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
     const maintenant = ctx.maintenant();
-    const refusReference = await verifierReferences(tx, l);
+    const refusReference = (await verifierReferences(tx, l)) ?? (await verifierCorrection(tx, l));
     if (refusReference !== null) return { ...refusReference, fermeId: l.fermeId };
     const [ecrit] = await tx
       .insert(evenement)
