@@ -267,6 +267,11 @@ function lireParametres(v: unknown): Lu<ParametresItineraire> {
       return echec({ ...travaux.erreur, champ });
     }
     relus.travauxPrevus = travaux.valeur;
+    // La normalisation complète les clés facultatives à null : l'instantané rangé doit encore
+    // tenir dans la limite (sinon le serveur rangerait plus de PARAMETRES_SERIE_OCTETS).
+    if (octetsUtf8(JSON.stringify(relus)) > PARAMETRES_SERIE_OCTETS) {
+      return echec(erreur('trop_volumineux', 'parametres', `paramètres trop volumineux une fois complétés (${String(PARAMETRES_SERIE_OCTETS)} octets au plus)`));
+    }
   }
   return lu(relus as unknown as ParametresItineraire);
 }
