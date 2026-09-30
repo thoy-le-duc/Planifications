@@ -21,7 +21,7 @@
  * - Limites : corps ≤ 5 Mio (413), lot ≤ 500 écritures (400), tailles de l'événement dans
  *   evenement.ts.
  */
-import type { Id } from '@planif/core';
+import { ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
 import {
   evenement,
   fermesDeLUtilisateur,
@@ -62,8 +62,8 @@ const MESSAGES: Readonly<Record<MotifRefus, string>> = {
 
 /** Corps HTTP au plus (au-delà : 413, rien d'écrit). */
 export const TAILLE_MAX_CORPS = 5 * 1_048_576;
-/** Écritures par lot au plus (au-delà : 400, rien d'écrit). */
-export const ECRITURES_MAX_PAR_LOT = 500;
+/** Écritures par lot au plus (au-delà : 400, rien d'écrit) : la même constante que la porte du téléphone. */
+export { ECRITURES_MAX_PAR_LOT } from '@planif/core';
 /** Longueur au plus de nom_table, ligne_id et message dans refus_synchro. */
 const LONGUEUR_MAX_TEXTE_REFUS = 200;
 /** `donnees` conservées dans refus_synchro jusqu'à cette taille (octets UTF-8 du JSON). */
@@ -289,8 +289,16 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     fermes: ReadonlySet<string>,
   ): Promise<{ readonly index: number; readonly refus: Refus } | null> {
     let courante = 0;
+    // Verrou du stock de chaque ferme visée (relecture T10c) : un seul verrou par ferme, pris
+    // avant toute écriture, fermes triées. Deux lots qui touchent le stock d'une même ferme
+    // passent l'un après l'autre (le second voit les mouvements du premier), sans interblocage.
+    // Seulement les fermes de l'utilisateur : personne ne bloque le stock d'une autre ferme.
+    const verrous = [
+      ...new Set(ecritures.filter((e) => TABLES_STOCK.has(e.table)).map(fermeDesDonnees).filter((f): f is string => f !== null && fermes.has(f))),
+    ].sort();
     try {
       await db.transaction(async (tx) => {
+        for (const ferme of verrous) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`stock:${ferme}`}, 0))`);
         for (const [i, e] of ecritures.entries()) {
           courante = i;
           const refus = await traiter(tx, e, utilisateurId, fermes);

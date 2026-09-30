@@ -36,7 +36,9 @@ export interface PutRecu {
 interface LigneReference {
   readonly ferme_id: string | null;
   readonly supprimee: boolean;
+  /** Colonnes lues en plus (`extra`) : espèce d'une variété ou d'un article, unité d'un article. */
   readonly espece_id?: string;
+  readonly unite?: string;
 }
 
 /** Profondeur au plus d'une chaîne de corrections (garde-fou : le journal n'a pas de cycle). */
@@ -60,7 +62,7 @@ async function lireReference(
   id: string,
   extra: ReturnType<typeof sql> = sql``,
 ): Promise<LigneReference | undefined> {
-  const r = await tx.execute<{ ferme_id: string | null; supprimee: boolean; espece_id?: string }>(
+  const r = await tx.execute<{ ferme_id: string | null; supprimee: boolean; espece_id?: string; unite?: string }>(
     sql`SELECT ferme_id::text AS ferme_id, supprime_le IS NOT NULL AS supprimee ${extra}
         FROM ${sql.identifier(table)} WHERE id = ${id}::uuid FOR SHARE`,
   );
@@ -189,15 +191,27 @@ interface RecolteVisee {
   readonly remplace_sorte: RemplacementEvenement['sorte'] | null;
   /** detail.quantite (nombre pour une récolte : CHECK de la base et règles du cœur). */
   readonly quantite: number | null;
+  readonly unite: string | null;
+  /** Espèce de la série ou de la campagne de la récolte, null sans culture. */
+  readonly espece_id: string | null;
+}
+
+/** Ce que la base sait de la chaîne d'une récolte (l'origine, ses corrections, leurs annulations). */
+interface Chaine {
+  /** Somme des mouvements de la chaîne, par article. */
+  readonly sommes: ReadonlyMap<string, number>;
+  /** detail.quantite de la dernière correction (horodatage, puis id), sinon de l'origine. */
+  readonly quantiteEnVigueur: number;
+  readonly annulee: boolean;
 }
 
 /**
- * Somme des mouvements déjà écrits sur `articleId` pour toute la chaîne de la récolte `recolteId`
- * (l'origine, ses corrections et leurs annulations). Verrou transactionnel sur la récolte
- * d'origine d'abord : deux lots qui annulent ou corrigent la même récolte passent l'un après
- * l'autre, et le second voit le mouvement du premier.
+ * Chaîne de la récolte `recolteId`, ou null si elle dépasse PROFONDEUR_MAX_CHAINE niveaux
+ * (refusée : jamais de somme partielle). Appelée sous le verrou de la ferme (upload.ts) : deux
+ * lots qui touchent le stock d'une même ferme passent l'un après l'autre, et le second voit les
+ * mouvements du premier.
  */
-async function sommeDeLaChaine(tx: TransactionDb, recolteId: string, articleId: string): Promise<number> {
+async function lireChaine(tx: TransactionDb, recolteId: string): Promise<Chaine | null> {
   const racine = await tx.execute<{ id: string }>(
     sql`WITH RECURSIVE montee(id, parent, profondeur) AS (
           SELECT id, remplace_evenement_id, 0 FROM evenement WHERE id = ${recolteId}::uuid
@@ -208,40 +222,84 @@ async function sommeDeLaChaine(tx: TransactionDb, recolteId: string, articleId: 
         )
         SELECT id::text AS id FROM montee WHERE parent IS NULL`,
   );
-  const origine = racine.rows[0]?.id ?? recolteId;
-  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`chaine-recolte:${origine}`}, 0))`);
-  const somme = await tx.execute<{ somme: number }>(
-    sql`WITH RECURSIVE chaine(id) AS (
-          SELECT ${origine}::uuid
-          UNION
-          SELECT e.id FROM evenement e JOIN chaine c ON e.remplace_evenement_id = c.id
+  const origine = racine.rows[0]?.id;
+  if (origine === undefined) return null;
+  const evenements = await tx.execute<{ id: string; remplace_sorte: string | null; quantite: number | null; profondeur: number }>(
+    sql`WITH RECURSIVE chaine(id, profondeur) AS (
+          SELECT ${origine}::uuid, 0
+          UNION ALL
+          SELECT e.id, c.profondeur + 1 FROM evenement e JOIN chaine c ON e.remplace_evenement_id = c.id
+          WHERE c.profondeur <= ${PROFONDEUR_MAX_CHAINE}
         )
-        SELECT coalesce(sum(m.quantite), 0)::float8 AS somme
-        FROM mouvement_stock m
-        WHERE m.recolte_id IN (SELECT id FROM chaine) AND m.article_stock_id = ${articleId}::uuid`,
+        SELECT e.id::text AS id, e.remplace_sorte, c.profondeur,
+               CASE WHEN jsonb_typeof(e.detail -> 'quantite') = 'number' THEN (e.detail ->> 'quantite')::float8 END AS quantite
+        FROM chaine c JOIN evenement e ON e.id = c.id
+        ORDER BY (e.remplace_sorte IS NOT NULL), e.horodatage, e.id`,
   );
-  return somme.rows[0]?.somme ?? 0;
+  const lignes = evenements.rows;
+  if (lignes.some((l) => l.profondeur > PROFONDEUR_MAX_CHAINE)) return null;
+  const enVigueur = [...lignes].reverse().find((l) => l.remplace_sorte === 'correction') ?? lignes.find((l) => l.remplace_sorte === null);
+  const sommes = await tx.execute<{ article: string; somme: number }>(
+    sql`SELECT article_stock_id::text AS article, sum(quantite)::float8 AS somme FROM mouvement_stock
+        WHERE recolte_id = ANY(${sql.param(lignes.map((l) => l.id))}::uuid[]) GROUP BY article_stock_id`,
+  );
+  return {
+    sommes: new Map(sommes.rows.map((r) => [r.article, r.somme])),
+    quantiteEnVigueur: enVigueur?.quantite ?? 0,
+    annulee: lignes.some((l) => l.remplace_sorte === 'annulation'),
+  };
 }
 
-/** Article et récolte visés, dans la ferme du mouvement ; puis le mouvement borné (décision 3). */
+/**
+ * Article et récolte visés, dans la ferme du mouvement ; un seul article par chaîne, de l'unité
+ * et de l'espèce de la récolte (B2) ; puis le mouvement borné (décision 3, B1).
+ */
 async function verifierMouvement(tx: TransactionDb, m: MouvementLu): Promise<Refus | null> {
-  const article = await lireReference(tx, 'article_stock', m.articleStockId);
+  const article = await lireReference(tx, 'article_stock', m.articleStockId, sql`, unite, espece_id::text AS espece_id`);
   if (article === undefined) return invalide('article de stock introuvable', m.fermeId);
   if (article.ferme_id !== m.fermeId) return { motif: 'ferme_interdite', precision: "article d'une autre ferme", fermeId: m.fermeId };
   if (article.supprimee) return invalide('article de stock supprimé', m.fermeId);
 
-  const r = await tx.execute<{ ferme_id: string; type: string; remplace_sorte: RecolteVisee['remplace_sorte']; quantite: number | null }>(
-    sql`SELECT ferme_id::text AS ferme_id, type, remplace_sorte,
-               CASE WHEN jsonb_typeof(detail -> 'quantite') = 'number' THEN (detail ->> 'quantite')::float8 END AS quantite
-        FROM evenement WHERE id = ${m.recolteId}::uuid FOR SHARE`,
+  const r = await tx.execute<{
+    ferme_id: string;
+    type: string;
+    remplace_sorte: RecolteVisee['remplace_sorte'];
+    quantite: number | null;
+    unite: string | null;
+    espece_id: string | null;
+  }>(
+    sql`SELECT e.ferme_id::text AS ferme_id, e.type, e.remplace_sorte,
+               CASE WHEN jsonb_typeof(e.detail -> 'quantite') = 'number' THEN (e.detail ->> 'quantite')::float8 END AS quantite,
+               e.detail ->> 'unite' AS unite,
+               coalesce(s.espece_id, p.espece_id)::text AS espece_id
+        FROM evenement e
+        LEFT JOIN serie s ON s.id = e.serie_id
+        LEFT JOIN campagne c ON c.id = e.campagne_id
+        LEFT JOIN plantation p ON p.id = c.plantation_id
+        WHERE e.id = ${m.recolteId}::uuid FOR SHARE OF e`,
   );
   const recolte: RecolteVisee | undefined = r.rows[0];
   if (recolte === undefined) return invalide('récolte liée introuvable', m.fermeId);
   if (recolte.ferme_id !== m.fermeId) return { motif: 'ferme_interdite', precision: "récolte d'une autre ferme", fermeId: m.fermeId };
   if (recolte.type !== 'recolte' || recolte.quantite === null) return invalide("l'événement lié n'est pas une récolte", m.fermeId);
 
-  const somme = recolte.remplace_sorte === null ? 0 : await sommeDeLaChaine(tx, m.recolteId, m.articleStockId);
-  const erreur = verifierMouvementRecolte(m.quantite, { remplaceSorte: recolte.remplace_sorte, quantite: recolte.quantite }, somme);
+  const chaine = await lireChaine(tx, m.recolteId);
+  if (chaine === null) return invalide(`chaîne de corrections trop longue (${String(PROFONDEUR_MAX_CHAINE)} au plus)`, m.fermeId);
+
+  // B2 : un seul article par chaîne ; le premier est de l'unité et de l'espèce de la récolte.
+  const articlesDeLaChaine = [...chaine.sommes.keys()];
+  if (articlesDeLaChaine.length > 0) {
+    if (!articlesDeLaChaine.includes(m.articleStockId)) return invalide("la récolte est déjà en stock sur un autre article", m.fermeId);
+  } else {
+    if (article.unite !== recolte.unite) return invalide("article d'une autre unité que la récolte", m.fermeId);
+    if (recolte.espece_id !== null && article.espece_id !== recolte.espece_id) return invalide("article d'une autre espèce que la culture récoltée", m.fermeId);
+  }
+
+  const somme = chaine.sommes.get(m.articleStockId) ?? 0;
+  const erreur = verifierMouvementRecolte(m.quantite, { remplaceSorte: recolte.remplace_sorte, quantite: recolte.quantite }, somme, {
+    quantiteEnVigueur: chaine.quantiteEnVigueur,
+    annulee: chaine.annulee,
+  });
   return erreur === null ? null : invalide(erreur.message, m.fermeId);
 }
 
