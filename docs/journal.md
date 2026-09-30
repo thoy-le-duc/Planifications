@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T11 : vue 2D des planches et base locale
+
+- **Fait** : écran Planches (planches × semaines, réel plein et prévu hachuré, semaine en cours, conflits en libellés courts avec détail au toucher, saison au choix, barres de 44 px au doigt). La base du téléphone s'ouvre dans l'appli après la connexion et reste lisible hors ligne ; elle est effacée à la déconnexion. Relecture : un changement de données ne ramène plus le plan en haut. Ferme de 42 000 lignes : Planches en 0,1 à 0,3 s une fois la base ouverte, défilement fluide.
+- **Décidé** : les fichiers de SQLite (2,8 Mio) sont mis en cache après le premier affichage, pour le hors-ligne ; budget de démarrage relevé à 71 Kio (contexte de la base et indicateur de synchro) ; trois tests adaptés (l'export ne compte que ce qu'il ajoute, SQLite ne compte que les requêtes de la page, taille exacte du jeu d'essai).
+- **Bloquant** : aucun. Question Q19 (premier tap avant l'ouverture de la base : 0,7 à 0,8 s) ; suites dans T11b (ouvrir la base plus tôt, pages de diagnostic hors production, marges de temps).
+
 ## 2026-09-30 — T19 : tests de temps robustes sous charge
 
 - **Fait** : les tests de temps de l'export et de l'import mesurent le calcul (min du temps mural et du temps CPU du processus) ; ils passent dix fois sur dix avec quatre cœurs occupés, et un export deux fois plus lent échoue toujours. L'export rend la main par `setImmediate` sous Node (la cause du « fil gelé » sous charge) ; rien ne change dans le navigateur, vérifié sur Chromium.

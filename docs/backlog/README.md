@@ -26,7 +26,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T16](T16-design.md) | Identité visuelle : système de design et habillage | T09b | fait |
 | [T16b](T16b-brancher-export.md) | Brancher l'export dans l'onglet Ferme | T11 | à faire |
 | [T18](T18-mode-sombre.md) | Mode sombre | T16 | à faire |
-| [T11](T11-vue-2d.md) | Vue 2D planches × semaines (et base locale ouverte dans l'appli) | T03, T10, T16 | en cours |
+| [T11](T11-vue-2d.md) | Vue 2D planches × semaines (et base locale ouverte dans l'appli) | T03, T10, T16 | fait |
 | [T12](T12-plan-de-culture.md) | Plan de culture : créer et modifier une série | T04, T05, T11 | à faire |
 | [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T11, T16 | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
@@ -53,3 +53,4 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 - Textes de l'interface en français ; noms de code en français comme dans le modèle (`serie`, `emplacement`, `occupation`).
 - Fin de ticket : trois lignes dans `docs/journal.md` et le statut mis à jour dans ce tableau.
 | [T19](T19-tests-de-temps.md) | Tests de temps robustes sous charge | — | fait |
+| [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | à faire |
