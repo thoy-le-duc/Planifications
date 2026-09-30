@@ -127,6 +127,13 @@
       "when": 1790792437754,
       "tag": "0017_type_intervention_casse",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790800711017,
+      "tag": "0018_evenements_en_vigueur_chaine",
+      "breakpoints": true
     }
   ]
 }
