@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T16b : export branché dans l'onglet Ferme
+
+- **Fait** : « Exporter toute ma ferme » lance vraiment l'export, hors ligne compris, avec une barre d'avancement et « Annuler ». L'écran ne se fige plus (plus longue tâche : 0 ms, contre 0,2 s avant) grâce à une lecture par pages et une compression dans un worker. Se déconnecter en plein export arrête l'export avant d'effacer les données : aucune archive ne sort après.
+- **Décidé** : borne provisoire de 15 s du tap au téléchargement (mesuré 11,5 à 13,3 s, 15,4 s une fois sous forte charge). La lecture de la base prend à elle seule environ 6 s. T15c ramènera sous 10 s en construisant l'archive pendant la lecture. Bouton désactivé, avec une explication, quand les données ne sont pas prêtes.
+- **Bloquant** : aucun. La borne de 15 s reste juste sous forte charge : à surveiller en CI jusqu'à T15c.
+
 ## 2026-09-30 — T10c : le serveur accepte le stock des téléphones
 
 - **Fait** : une récolte saisie hors ligne arrive au serveur avec son mouvement de stock, et son annulation aussi. Testé à deux téléphones : 12 kg notés puis annulés sur l'un, stock inchangé chez l'autre. Les règles du serveur :

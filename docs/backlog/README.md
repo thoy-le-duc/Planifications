@@ -26,7 +26,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10c](T10c-stock-synchro.md) | Synchro : le serveur accepte les saisies de stock des téléphones | T10, T10b | fait |
 | [T10d](T10d-stock-suites.md) | Stock synchronisé : suites des relectures | T10c | à faire |
 | [T16](T16-design.md) | Identité visuelle : système de design et habillage | T09b | fait |
-| [T16b](T16b-brancher-export.md) | Brancher l'export dans l'onglet Ferme | T11 | en cours |
+| [T16b](T16b-brancher-export.md) | Brancher l'export dans l'onglet Ferme | T11 | fait |
 | [T18](T18-mode-sombre.md) | Mode sombre | T16 | à faire |
 | [T11](T11-vue-2d.md) | Vue 2D planches × semaines (et base locale ouverte dans l'appli) | T03, T10, T16 | fait |
 | [T12](T12-plan-de-culture.md) | Plan de culture : créer et modifier une série | T04, T05, T11 | à faire |
@@ -36,6 +36,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | fait |
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
 | [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | fait |
+| [T15c](T15c-export-rapide.md) | Export : sous 10 secondes sur un téléphone moyen | T16b | à faire |
 
 T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 300 ms avec la base) : la boucle peut le prendre dès le début, en parallèle du moteur.
 
