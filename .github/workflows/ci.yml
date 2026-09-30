@@ -62,6 +62,8 @@ jobs:
         run: pnpm test
       - name: Build
         run: pnpm build
+      - name: Build des essais (appli de production et pages de test, servi par pnpm e2e)
+        run: pnpm build:essais
       - name: Budget de poids JavaScript
         run: pnpm budget
       - name: Installation de Chromium

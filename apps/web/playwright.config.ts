@@ -18,8 +18,10 @@ export default defineConfig({
     baseURL: `http://localhost:${port}`,
     launchOptions: executablePath ? { executablePath } : {},
   },
+  // T11c : le build des essais (dist-essais/ : l'appli de production et les pages de test),
+  // construit par `pnpm build` puis `pnpm build:essais`.
   webServer: {
-    command: `pnpm preview --port ${port} --strictPort`,
+    command: `pnpm preview --outDir dist-essais --port ${port} --strictPort`,
     url: `http://localhost:${port}`,
     reuseExistingServer: !process.env.CI,
   },
