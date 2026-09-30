@@ -8,3 +8,5 @@ export { envoyerEcritures, EchecEnvoi, SessionExpiree } from './envoi.ts';
 export { creerPorte } from './porte.ts';
 export { SCHEMA_LOCAL, TABLES_LOCALES, type NomTableLocale } from './schema.ts';
 export type * from './types.ts';
+/** Écritures au plus par transaction locale (`ecrireEnsemble`), comme par envoi à l'API (T10c). */
+export { ECRITURES_MAX_PAR_LOT } from '@planif/core';
