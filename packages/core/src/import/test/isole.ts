@@ -6,7 +6,7 @@
  * disant pourquoi (« delai » ou « memoire »).
  *
  * La durée rendue est celle de l'appel seul, mesurée dans le fil (le chargement du module n'y
- * compte pas).
+ * compte pas), en temps de calcul : min(mural, CPU du processus) (T19, ./temps-calcul.ts).
  *
  * T14c : si `--max-old-space-size` est fixé pour tout le processus (NODE_OPTIONS, comme dans le
  * conteneur de la boucle, ou ligne de commande), Node ignore le plafond `resourceLimits` des fils :

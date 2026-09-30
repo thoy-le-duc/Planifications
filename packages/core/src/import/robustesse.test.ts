@@ -5,7 +5,8 @@
  *
  * Chaque appel tourne dans un fil d'exécution à part (./test/isole.ts), tas plafonné à 512 Mo et
  * arrêté au-delà du délai : une implémentation fautive fait échouer le test (« delai »,
- * « memoire ») sans bloquer ni emporter la suite. La durée vérifiée est celle de l'appel seul.
+ * « memoire ») sans bloquer ni emporter la suite. La durée vérifiée est celle de l'appel seul,
+ * en temps de calcul : min(mural, CPU) (T19, ./test/temps-calcul.ts), stable sur machine chargée.
  * Les classeurs sont fabriqués ici (./test/classeur.ts) : aucun gros fichier n'est commité.
  */
 import { describe, expect, it } from 'vitest';
@@ -16,10 +17,19 @@ import { MOTIFS_ERREURS_NOMBREUSES, type ResumeErreursNombreuses } from './test/
 
 /** Marge pour démarrer le fil et charger le module (hors durée mesurée). */
 const CHARGEMENT_MS = 3_000;
+/**
+ * Arrêt du fil pour un appel dont la durée est vérifiée (T19) : 3 × le budget + le chargement.
+ * Le budget, lui, est vérifié sur `dureeMs`, temps de CALCUL (min(mural, CPU), voir
+ * ./test/temps-calcul.ts) et ne change pas. L'arrêt n'est qu'un garde-fou MURAL contre un appel
+ * qui ne finit pas (il fait échouer en « delai ») : sur une machine chargée, un appel dans son
+ * budget peut prendre deux à trois fois plus de temps mural, sans calculer plus ; un arrêt à
+ * budget + 3 s le coupait alors à tort.
+ */
+const arret = (budgetMs: number): number => 3 * budgetMs + CHARGEMENT_MS;
 const DELAI_TEST_MS = 20_000;
 
 async function lireIsole(octets: Uint8Array, budgetMs: number): Promise<Issue> {
-  return executerIsole('xlsx', ['lecteurXlsx', 'lire'], [octets], { arretMs: budgetMs + CHARGEMENT_MS, memoireMo: 512 });
+  return executerIsole('xlsx', ['lecteurXlsx', 'lire'], [octets], { arretMs: arret(budgetMs), memoireMo: 512 });
 }
 
 function attendreIllisible(r: Issue, budgetMs: number): void {
@@ -82,7 +92,7 @@ describe('temps linéaire sur une cellule de 100 Kio (moins de 200 ms par appel)
   const BUDGET_MS = 200;
 
   async function appeler(chemin: string, args: readonly unknown[]): Promise<Issue> {
-    return executerIsole('import', [chemin], args, { arretMs: BUDGET_MS + CHARGEMENT_MS, memoireMo: 256 });
+    return executerIsole('import', [chemin], args, { arretMs: arret(BUDGET_MS), memoireMo: 256 });
   }
 
   function attendre(r: Issue, valeur: unknown): void {
@@ -270,7 +280,7 @@ describe('plan d’import en temps linéaire : une même chaîne de 1 Mo dans 3 
   ] as const)(
     '%s : chaque ligne en erreur, texte_trop_long sur les textes, choix et références, aucune décision, < 2 s',
     async (type, entetes, erreurs) => {
-      const r = await executerIsole('scenarios', ['planChaineLongue'], [type, entetes, MO, 3_000], { arretMs: 2_000 + CHARGEMENT_MS, memoireMo: 512 });
+      const r = await executerIsole('scenarios', ['planChaineLongue'], [type, entetes, MO, 3_000], { arretMs: arret(2_000), memoireMo: 512 });
       expect(r).toMatchObject({ issue: 'resultat' });
       if (r.issue !== 'resultat') return;
       expect(r.valeur).toMatchObject({
@@ -298,7 +308,7 @@ describe('plan d’import en temps linéaire : une même chaîne de 1 Mo dans 3 
           'sharedStrings.xml': `<?xml version="1.0" encoding="UTF-8"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>${'a'.repeat(32_767)}</t></si></sst>`,
         },
       });
-      const r = await executerIsole('scenarios', ['planClasseur'], [octets, 'parcellaire'], { arretMs: 2_000 + CHARGEMENT_MS, memoireMo: 512 });
+      const r = await executerIsole('scenarios', ['planClasseur'], [octets, 'parcellaire'], { arretMs: arret(2_000), memoireMo: 512 });
       expect(r).toMatchObject({
         issue: 'resultat',
         valeur: { nombreLignes: 3_000, resume: { erreurs: 3_000 }, erreursPremiere: [trop('zone', 0), trop('emplacement', 1)], erreursDerniere: [trop('zone', 0), trop('emplacement', 1)] },
@@ -313,7 +323,7 @@ describe('lignes ignorées regroupées en plages (2e relecture, point 3)', () =>
   it(
     '1 000 000 de lignes vides entre deux planches → une seule plage, < 2 s ; les totaux qui se suivent → une plage',
     async () => {
-      const r = await executerIsole('scenarios', ['planLignesVides'], [1_000_000], { arretMs: 2_000 + CHARGEMENT_MS, memoireMo: 512 });
+      const r = await executerIsole('scenarios', ['planLignesVides'], [1_000_000], { arretMs: arret(2_000), memoireMo: 512 });
       expect(r).toMatchObject({
         issue: 'resultat',
         valeur: {
@@ -335,7 +345,7 @@ describe('lireCsv : plafond de 5 millions de cases, lignes vides de fin non cré
   const MO = 1024 * 1024;
 
   async function lireCsvIsole(texte: string): Promise<Issue> {
-    return executerIsole('scenarios', ['resumerCsv'], [utf8(texte)], { arretMs: 2_000 + CHARGEMENT_MS, memoireMo: 512 });
+    return executerIsole('scenarios', ['resumerCsv'], [utf8(texte)], { arretMs: arret(2_000), memoireMo: 512 });
   }
 
   function attendreCsv(r: Issue, valeur: unknown): void {
@@ -506,7 +516,7 @@ describe('appliquerModele en temps linéaire (3e relecture)', () => {
       const n = 400_000;
       const entetes: string[] = Array.from({ length: n }, () => '');
       const modele = { version: 1, type: 'parcellaire', colonnes: entetes.map(() => ({ entete: '', champ: null, unite: null })), choix: [] };
-      const r = await executerIsole('import', ['appliquerModele'], [modele, entetes], { arretMs: 1_000 + CHARGEMENT_MS, memoireMo: 512 });
+      const r = await executerIsole('import', ['appliquerModele'], [modele, entetes], { arretMs: arret(1_000), memoireMo: 512 });
       expect(r).toMatchObject({ issue: 'resultat' });
       if (r.issue !== 'resultat') return;
       const c = r.valeur as { type: string; colonnes: readonly unknown[] };

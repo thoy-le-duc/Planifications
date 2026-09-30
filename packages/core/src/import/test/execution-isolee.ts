@@ -5,6 +5,8 @@
  * directement par Node (≥ 22.18), types de Node retrouvés dynamiquement avec un type local.
  */
 
+import { chronometre } from './temps-calcul.ts';
+
 interface PortParent {
   postMessage(message: unknown): void;
 }
@@ -25,8 +27,6 @@ interface Demande {
 }
 
 const MODULE_FILS = 'node:worker_threads';
-/** Présent dans Node, absent des types du cœur (lib ES2023 seule). */
-const { performance } = globalThis as unknown as { readonly performance: { now(): number } };
 
 const estObjet = (v: unknown): v is Record<string, unknown> => (typeof v === 'object' || typeof v === 'function') && v !== null;
 
@@ -54,7 +54,8 @@ for (const k of demande.chemin) {
 }
 if (typeof cible !== 'function') throw new Error(`pas une fonction : ${demande.chemin.join('.')}`);
 const fonction = cible as (this: unknown, ...args: unknown[]) => unknown;
-const debut = performance.now();
+// T19 : durée de calcul, min(mural, CPU du processus) (./temps-calcul.ts) ; une machine chargée ne l'allonge plus.
+const duree = chronometre();
 const valeur = await Promise.resolve(fonction.apply(parent, [...demande.args]));
-const dureeMs = performance.now() - debut;
+const dureeMs = duree();
 envoyer({ issue: 'resultat', valeur, dureeMs });
