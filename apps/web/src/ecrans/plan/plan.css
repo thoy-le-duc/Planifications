@@ -405,6 +405,10 @@
   font-weight: 700;
 }
 
+.plan-detail-conflits li + li {
+  margin-top: 8px;
+}
+
 .plan-fermer {
   min-height: 56px;
   border: 0;
