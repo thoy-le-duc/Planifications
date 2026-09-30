@@ -7,7 +7,7 @@
  * saisies vont dans la base du téléphone et partent avec la synchro. L'écran suit la base : une
  * saisie arrivée d'un autre téléphone s'y voit.
  */
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useId, useRef, useState } from 'react';
 import type { EtapeRealisee, UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import './aujourdhui.css';
@@ -45,6 +45,10 @@ export const MARQUE_AUJOURDHUI_AFFICHE = 'planif:aujourdhui-affiche';
  * séries anciennes, jamais marquées faites, traînent en retard par centaines.
  */
 const TACHES_PAR_GROUPE = 25;
+
+/** Saisies de l'historique dessinées avant « Voir les autres » (une grosse journée de récolte). */
+const SAISIES_HISTORIQUE = 20;
+const AUCUNE_SAISIE: readonly EntreeHistorique[] = [];
 
 /** Durée d'affichage du bouton « Annuler » après une saisie. */
 export const DELAI_ANNULATION_MS = 10_000;
@@ -175,6 +179,11 @@ interface ProprietesHistorique {
 
 function Historique({ id, entrees, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
   const idTitre = useId();
+  const [tout, setTout] = useState(false);
+  // Dessinées en tâche de fond (interruptible) : l'historique, en bas de l'écran, ne retarde ni
+  // l'affichage des tâches ni un tap sur un autre onglet.
+  const differees = useDeferredValue(entrees, AUCUNE_SAISIE);
+  const montrees = tout ? differees : differees.slice(0, SAISIES_HISTORIQUE);
   return (
     <section id={id} aria-labelledby={idTitre} className="auj-historique">
       <div className="auj-historique-tete">
@@ -189,12 +198,12 @@ function Historique({ id, entrees, aujourdhui, surAnnuler, surChangerDate }: Pro
         <p className="auj-historique-vide">Aucune saisie ces 7 derniers jours.</p>
       ) : (
         <ul>
-          {entrees.map((h, i) => {
+          {montrees.map((h, i) => {
             const e = h.evenement;
             const codes = h.culture === null ? null : codesEmplacements(h.culture.emplacements);
             // Deux saisies identiques le même jour : leurs boutons gardent des noms distincts.
             const base = nomSaisie(h, aujourdhui);
-            const rang = entrees.slice(0, i).filter((x) => nomSaisie(x, aujourdhui) === base).length;
+            const rang = montrees.slice(0, i).filter((x) => nomSaisie(x, aujourdhui) === base).length;
             const nom = rang === 0 ? base : `${base} (${String(rang + 1)})`;
             return (
               <li key={e.id} data-testid="saisie-historique" data-evenement={e.id} data-type={e.detail.type} className="auj-entree">
@@ -233,6 +242,17 @@ function Historique({ id, entrees, aujourdhui, surAnnuler, surChangerDate }: Pro
             );
           })}
         </ul>
+      )}
+      {montrees.length < differees.length && (
+        <button
+          type="button"
+          className="auj-bouton-secondaire"
+          onClick={() => {
+            setTout(true);
+          }}
+        >
+          Voir les {differees.length - montrees.length} autres saisies
+        </button>
       )}
     </section>
   );
