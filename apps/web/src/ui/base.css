@@ -139,3 +139,14 @@ p {
   font-size: 18px;
   color: var(--couleur-secondaire);
 }
+
+/* Indicateur de synchro (T11), dans l'en-tête de chaque onglet. */
+.etat-synchro {
+  padding: 4px 10px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-foret-clair);
+  color: var(--couleur-sur-foret);
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}

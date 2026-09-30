@@ -1,7 +1,8 @@
 /**
  * Effacement de la base locale d'un utilisateur (T09b, déconnexion sur un téléphone partagé),
- * SANS charger PowerSync : hors ligne, les fichiers de PowerSync (hors précache) sont
- * injoignables, et la déconnexion doit aboutir quand même.
+ * SANS charger PowerSync : ses fichiers sont dans le précache, mais les charger pour effacer
+ * coûterait du temps et pourrait échouer (précache pas encore installé, base illisible), et la
+ * déconnexion doit aboutir quand même, hors ligne compris.
  *
  * La base locale vit dans IndexedDB : PowerSync web (2.4) range SQLite par le VFS
  * IDBBatchAtomicVFS, son défaut, dans une base IndexedDB qui porte le nom du fichier
@@ -112,6 +113,53 @@ export async function baseLocaleExiste(utilisateurId: string): Promise<boolean> 
     return bases.some((b) => b.name === nom);
   } catch {
     return true;
+  }
+}
+
+/**
+ * Effacement de la base de l'utilisateur lancé par cette page et pas encore abouti (base gardée
+ * ouverte par un autre onglet), ou null. Tenue quand la demande aboutit ou échoue, jamais
+ * rejetée : l'appli l'attend avant de rouvrir la base (T11), sans quoi elle la recréerait ou
+ * bloquerait l'effacement.
+ */
+export function effacementEnCours(utilisateurId: string): Promise<void> | null {
+  let demande: Promise<void> | undefined;
+  try {
+    demande = fileDe(indexedDB).get(nomBaseLocale(utilisateurId));
+  } catch {
+    return null;
+  }
+  return demande === undefined
+    ? null
+    : demande.then(
+        () => undefined,
+        () => undefined,
+      );
+}
+
+/**
+ * Plus ancienne version de base IndexedDB que PowerSync sait reprendre : wa-sqlite
+ * (IDBBatchAtomicVFS) crée ses bases en version 6 et ne sait mettre à niveau que depuis 0 (base
+ * neuve) ou 5.
+ */
+export const VERSION_MIN_BASE_POWERSYNC = 5;
+
+/**
+ * Forme de la base locale de l'utilisateur, lue sans l'ouvrir (indexedDB.databases()) :
+ * 'absente' ; 'powersync' (version reprise par PowerSync) ; 'autre' (même nom, autre format :
+ * PowerSync ne saurait pas la reprendre, et l'ouvrir resterait bloqué si un autre onglet la
+ * garde) ; 'inconnue' si le navigateur ne permet pas de le savoir.
+ */
+export async function formatBaseLocale(utilisateurId: string): Promise<'absente' | 'powersync' | 'autre' | 'inconnue'> {
+  try {
+    const idb: Partial<Pick<IDBFactory, 'databases'>> | undefined = typeof indexedDB === 'undefined' ? undefined : indexedDB;
+    if (idb?.databases === undefined) return 'inconnue';
+    const nom = nomBaseLocale(utilisateurId);
+    const base = (await idb.databases()).find((b) => b.name === nom);
+    if (base === undefined) return 'absente';
+    return (base.version ?? 0) >= VERSION_MIN_BASE_POWERSYNC ? 'powersync' : 'autre';
+  } catch {
+    return 'inconnue';
   }
 }
 

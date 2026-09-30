@@ -5,12 +5,20 @@
  * demande (budget de poids, apps/web/budget.json) :
  *   - la carte de connexion (utile une fois par téléphone) et la reprise des effacements en
  *     attente : ecrans/accueil/Accueil.tsx ;
- *   - l'écran Ferme (export, déconnexion) : ecrans/ferme/EcranFerme.tsx.
- * Les deux sont dans le précache du service worker : ils s'ouvrent aussi hors ligne.
+ *   - l'écran Ferme (export, déconnexion) : ecrans/ferme/EcranFerme.tsx ;
+ *   - l'écran Planches (T11) : ecrans/plan/.
+ * Tous sont dans le précache du service worker : ils s'ouvrent aussi hors ligne.
+ *
+ * T11 : connecté, l'appli ouvre la base locale (src/donnees/appli.ts, chargé à la demande, puis
+ * PowerSync s'il y a une base à ouvrir), la garde ouverte pour les écrans et la ferme à la
+ * déconnexion, avant l'effacement. Les écrans reçoivent la ferme par ContexteFerme.
  */
-import { useEffect, useState, type ComponentType } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { lireSession, stockageNavigateur, surveillerSession, type SessionConnexion } from './connexion/session.ts';
 import './connexion/connexion.css';
+import { ContexteFerme } from './donnees/contexte.ts';
+import { ETAT_DONNEES_INITIAL, type EtatDonnees, type FermeOuverte, type PoigneeDonnees } from './donnees/etat-appli.ts';
+import { libelleSynchro } from './donnees/libelle-synchro.ts';
 import { marquerAppPrete } from './perf.ts';
 import { BarreNavigation, EnTete, ONGLETS, type Onglet } from './ui/composants.tsx';
 
@@ -72,6 +80,8 @@ function differe<P extends object>(charger: () => Promise<{ default: ComponentTy
 
 const accueil = differe(() => import('./ecrans/accueil/Accueil.tsx'));
 const ferme = differe(() => import('./ecrans/ferme/EcranFerme.tsx'));
+const chargerPlanches = () => import('./ecrans/plan/index.ts');
+const planches = differe(chargerPlanches);
 /**
  * À attendre avant le premier rendu (main.tsx) : sans session, la carte de connexion est le
  * premier écran, son chargement part tout de suite et l'appli s'affiche d'un coup, carte
@@ -81,12 +91,25 @@ export function avantPremierRendu(): Promise<unknown> {
   return lireSession(stockageNavigateur()) === null ? accueil.precharger() : Promise.resolve();
 }
 
-/** Onglets pas encore construits : un écran d'attente propre (T11, T13, phase 2). */
-const BIENTOT: Readonly<Record<Exclude<Onglet, 'ferme'>, string>> = {
+/** Onglets pas encore construits : un écran d'attente propre (T13, phase 2). */
+const BIENTOT: Readonly<Record<Exclude<Onglet, 'ferme' | 'planches'>, string>> = {
   aujourdhui: 'Bientôt : les tâches du jour, ce qui est en retard d’abord.',
-  planches: 'Bientôt : le plan des planches, ce qui y pousse et ce qui vient.',
   dicter: 'Bientôt : dicter une récolte ou une tâche ; l’appli propose, vous validez.',
 };
+
+/** Onglet Planches sans ferme ouverte : ce qui se passe, dit franchement. */
+const ATTENTE_PLANCHES: Readonly<Record<Exclude<EtatDonnees['base'], 'prete'>, string>> = {
+  ouverture: 'Ouverture des données de ce téléphone…',
+  'sans-ferme': 'Aucune ferme sur ce téléphone pour l’instant : le plan s’affichera après la première synchronisation.',
+  echec: 'Les données de ce téléphone n’ont pas pu s’ouvrir. Rechargez l’appli ; si cela recommence, signalez-le.',
+};
+
+/** L'écran Planches sur la ferme du contexte (fournie par la coquille). */
+function OngletPlanches({ base }: { readonly base: EtatDonnees['base'] }) {
+  const ouverte = useContext(ContexteFerme);
+  if (ouverte === null) return <p className="attente">{ATTENTE_PLANCHES[base === 'prete' ? 'ouverture' : base]}</p>;
+  return <planches.Composant key={ouverte.fermeId} porte={ouverte.porte} fermeId={ouverte.fermeId} />;
+}
 
 /**
  * Date de l'en-tête d'Aujourd'hui : « MAR. 29 SEPTEMBRE ». Formatée à l'affichage : créer un
@@ -128,8 +151,60 @@ export function App() {
     setSession(null);
   }
 
-  // Déconnexion, ou autre compte, dans un autre onglet : écran de connexion, sans rechargement.
+  // Base locale de l'utilisateur connecté : ouverte à la demande, gardée pour les écrans,
+  // fermée à la déconnexion (EcranFerme l'attend avant d'effacer) ou au changement de compte.
   const utilisateurId = session?.utilisateurId;
+  const [donnees, setDonnees] = useState<EtatDonnees>(ETAT_DONNEES_INITIAL);
+  const poignee = useRef<PoigneeDonnees | null>(null);
+  useEffect(() => {
+    if (utilisateurId === undefined) return undefined;
+    let fermee = false;
+    let ouverte: PoigneeDonnees | null = null;
+    const p: PoigneeDonnees = {
+      compterEnAttente: () => ouverte?.compterEnAttente() ?? Promise.resolve(null),
+      async fermer() {
+        fermee = true;
+        await ouverte?.fermer();
+      },
+    };
+    poignee.current = p;
+    // L'écran Planches se charge pendant que la base s'ouvre ; dès la ferme connue, le début de
+    // son plan se prépare (avant même le rendu) : un tap sur « Planches » l'affiche tout de suite.
+    const planches = chargerPlanches();
+    let prechargee: FermeOuverte | null = null;
+    const surEtat = (e: EtatDonnees) => {
+      if (fermee) return;
+      setDonnees(e);
+      const f = e.ferme;
+      if (f !== null && f !== prechargee) {
+        prechargee = f;
+        // Échec : l'écran lira le plan lui-même à l'ouverture.
+        planches.then((m) => m.prechargerPlan(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
+      }
+    };
+    import('./donnees/appli.ts').then(
+      (m) => {
+        if (!fermee) ouverte = m.ouvrirDonneesAppli(utilisateurId, surEtat);
+      },
+      (erreur: unknown) => {
+        console.error('Données impossibles à charger', erreur);
+        if (!fermee) setDonnees({ ...ETAT_DONNEES_INITIAL, base: 'echec' });
+      },
+    );
+    return () => {
+      void p.fermer();
+      setDonnees(ETAT_DONNEES_INITIAL);
+    };
+  }, [utilisateurId]);
+  const baseLocale = useMemo<PoigneeDonnees>(
+    () => ({
+      compterEnAttente: () => poignee.current?.compterEnAttente() ?? Promise.resolve(null),
+      fermer: () => poignee.current?.fermer() ?? Promise.resolve(),
+    }),
+    [],
+  );
+
+  // Déconnexion, ou autre compte, dans un autre onglet : écran de connexion, sans rechargement.
   useEffect(() => {
     if (utilisateurId === undefined) return undefined;
     return surveillerSession({
@@ -171,14 +246,22 @@ export function App() {
 
   const titre = ONGLETS.find((o) => o.id === onglet)?.libelle ?? '';
   return (
-    <main data-testid="app" className="coquille">
-      <EnTete titre={titre} {...(onglet === 'aujourdhui' ? { surtitre: jourAffiche() } : {})} />
+    <main data-testid="app" data-base={donnees.base} className={onglet === 'planches' ? 'coquille coquille-plan' : 'coquille'}>
+      <EnTete titre={titre} {...(onglet === 'aujourdhui' ? { surtitre: jourAffiche() } : {})}>
+        <span data-testid="etat-synchro" role="status" className="etat-synchro">
+          {libelleSynchro(donnees.synchro, donnees.enAttente)}
+        </span>
+      </EnTete>
       <div className="coquille-contenu">
-        {onglet === 'ferme' ? (
-          <ferme.Composant session={session} surDeconnecte={finDeSession} />
-        ) : (
-          <p className="attente">{BIENTOT[onglet]}</p>
-        )}
+        <ContexteFerme value={donnees.ferme}>
+          {onglet === 'ferme' ? (
+            <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} />
+          ) : onglet === 'planches' ? (
+            <OngletPlanches base={donnees.base} />
+          ) : (
+            <p className="attente">{BIENTOT[onglet]}</p>
+          )}
+        </ContexteFerme>
       </div>
       <BarreNavigation actif={onglet} surChoix={setOnglet} />
     </main>

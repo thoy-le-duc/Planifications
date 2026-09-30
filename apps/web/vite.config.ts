@@ -12,37 +12,73 @@ import { COULEURS } from './src/ui/jetons.ts';
  */
 const PREFIXES_PAGES_HORS_APPLI = ['/mesures/', '/diagnostic/'];
 
-/** Code de la base locale (PowerSync, wa-sqlite) : rangé à part pour rester hors du précache. */
+/** Code de la base locale (PowerSync, wa-sqlite) : rangé à part, dans `assets/sqlite/`. */
 const MOTIF_SQLITE = /node_modules\/(\.pnpm\/[^/]+\/node_modules\/)?(@powersync|@journeyapps)\//;
+
+/**
+ * Ce dont l'appli se sert pour ouvrir sa base (T11), dans le worker : SQLite asynchrone sans
+ * chiffrement et le VFS IndexedDB (IDBBatchAtomicVFS, sur FacadeVFS). Ces fichiers restent dans
+ * `assets/sqlite/`, avec PowerSync et son worker, et entrent dans le précache : la base s'ouvre
+ * hors ligne (principe 4).
+ */
+const MOTIF_SQLITE_UTILISE = /@journeyapps\/wa-sqlite\/(dist\/wa-sqlite-async\.mjs|src\/examples\/IDBBatchAtomicVFS\.js|src\/FacadeVFS\.js)/;
+
+/**
+ * Variantes que l'appli ne charge pas (SQLite chiffré ou synchrone, VFS OPFS ou mémoire,
+ * WebSocket, SQLite dans la page plutôt que dans un worker) : `assets/sqlite-annexe/`, hors
+ * précache. Les pages de mesure (T07) s'en servent ; l'appli jamais.
+ */
+const MOTIF_SQLITE_ANNEXE = /@journeyapps\/wa-sqlite\/(dist\/|src\/examples\/|src\/FacadeVFS\.js)|[\\/]websockets[\\/.]/;
 
 const ENTREE_MESURE = 'mesureSqlite';
 const ENTREE_DIAGNOSTIC = 'diagnosticSynchro';
+const ENTREE_AMORCAGE = 'diagnosticAmorcage';
+const ENTREES_DIAGNOSTIC: readonly string[] = [ENTREE_DIAGNOSTIC, ENTREE_AMORCAGE];
 
-function nomSortie(dossier: string): string {
-  return `assets/${dossier}/[name]-[hash][extname]`;
+function nomSortie(dossier: string, extension = '[extname]'): string {
+  return `assets/${dossier}/[name]-[hash]${extension}`;
+}
+
+interface MorceauNomme {
+  readonly name: string;
+  readonly isEntry: boolean;
+  readonly moduleIds: readonly string[];
 }
 
 /**
- * Range les morceaux JS : l'entrée de mesure dans `assets/mesures/`, les morceaux SQLite (hors entrées)
- * dans `assets/sqlite/`. Une entrée n'est jamais classée « SQLite » : si l'appli importe un jour
- * PowerSync (T10), `index-*.js` doit rester dans le précache.
+ * Range les morceaux JS de la page : l'entrée de mesure dans `assets/mesures/`, celles de
+ * diagnostic dans `assets/diagnostic/`, PowerSync dans `assets/sqlite/`. SQLite lui-même ne
+ * tourne jamais dans la page de l'appli (worker dédié) : ses copies de la page vont dans
+ * `assets/sqlite-annexe/`. Une entrée n'est jamais classée « SQLite » : `index-*.js` reste dans
+ * le précache.
  */
-function nomMorceau(morceau: { name: string; isEntry: boolean; moduleIds: readonly string[] }): string {
+function nomMorceau(morceau: MorceauNomme): string {
   if (morceau.isEntry) {
-    if (morceau.name === ENTREE_MESURE) return nomSortie('mesures').replace('[extname]', '.js');
-    if (morceau.name === ENTREE_DIAGNOSTIC) return nomSortie('diagnostic').replace('[extname]', '.js');
+    if (morceau.name === ENTREE_MESURE) return nomSortie('mesures', '.js');
+    if (ENTREES_DIAGNOSTIC.includes(morceau.name)) return nomSortie('diagnostic', '.js');
     return 'assets/[name]-[hash].js';
   }
-  if (morceau.moduleIds.some((id) => MOTIF_SQLITE.test(id))) return nomSortie('sqlite').replace('[extname]', '.js');
+  if (morceau.moduleIds.some((id) => MOTIF_SQLITE_ANNEXE.test(id))) return nomSortie('sqlite-annexe', '.js');
+  if (morceau.moduleIds.some((id) => MOTIF_SQLITE.test(id))) return nomSortie('sqlite', '.js');
   return 'assets/[name]-[hash].js';
 }
 
+/** Morceaux du worker de PowerSync : ce que l'appli charge dans `assets/sqlite/`, le reste en annexe. */
+function nomMorceauWorker(morceau: MorceauNomme): string {
+  if (morceau.isEntry || morceau.moduleIds.some((id) => MOTIF_SQLITE_UTILISE.test(id))) return nomSortie('sqlite', '.js');
+  if (morceau.moduleIds.some((id) => MOTIF_SQLITE_ANNEXE.test(id))) return nomSortie('sqlite-annexe', '.js');
+  return nomSortie('sqlite', '.js');
+}
+
 /**
- * Le WASM de SQLite rejoint `assets/sqlite/`, la feuille de style de la page de diagnostic
- * `assets/diagnostic/` (hors précache, comme la page).
+ * Le WASM de SQLite : celui que l'appli charge (wa-sqlite-async, sans chiffrement) dans
+ * `assets/sqlite/`, les autres dans `assets/sqlite-annexe/` ; la feuille de style des pages de
+ * diagnostic dans `assets/diagnostic/` (hors précache, comme les pages).
  */
 function nomFichierAnnexe(fichier: { names: readonly string[]; originalFileNames?: readonly string[] }): string {
-  if (fichier.names.some((n) => n.endsWith('.wasm'))) return nomSortie('sqlite');
+  if (fichier.names.some((n) => n.endsWith('.wasm'))) {
+    return fichier.names.includes('wa-sqlite-async.wasm') ? nomSortie('sqlite') : nomSortie('sqlite-annexe');
+  }
   if ((fichier.originalFileNames ?? []).some((n) => n.startsWith('diagnostic/'))) return nomSortie('diagnostic');
   return 'assets/[name]-[hash][extname]';
 }
@@ -117,17 +153,20 @@ export default defineConfig(({ mode }) => {
           icons: [{ src: 'icone.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
         },
         workbox: {
-          // Polices (T16) comprises : l'appli hors ligne garde ses polices.
+          // Polices (T16) comprises : l'appli hors ligne garde ses polices. Base locale comprise
+          // (T11) : PowerSync, son worker et son WASM (assets/sqlite/), la base s'ouvre hors ligne.
           globPatterns: ['**/*.{js,wasm,css,html,woff2}'],
-          // Pages de mesure et de diagnostic, et base locale (PowerSync, workers, WASM) hors du
-          // précache : l'installation de l'appli ne s'alourdit pas tant que l'appli ne s'en sert pas.
+          // Le WASM de SQLite pèse 2,2 Mo (0,8 Mo compressé) : au-delà de la limite par défaut (2 Mio).
+          maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+          // Pages de mesure et de diagnostic, et variantes de SQLite dont l'appli ne se sert pas,
+          // hors du précache.
           globIgnores: [
             '**/node_modules/**',
             'mesures/**',
             'diagnostic/**',
             'assets/mesures/**',
             'assets/diagnostic/**',
-            'assets/sqlite/**',
+            'assets/sqlite-annexe/**',
           ],
           navigateFallbackDenylist: [/^\/mesures\//, /^\/diagnostic\//],
         },
@@ -145,6 +184,8 @@ export default defineConfig(({ mode }) => {
           index: fileURLToPath(new URL('index.html', import.meta.url)),
           [ENTREE_MESURE]: fileURLToPath(new URL('mesures/sqlite.html', import.meta.url)),
           [ENTREE_DIAGNOSTIC]: fileURLToPath(new URL('diagnostic/synchro.html', import.meta.url)),
+          // T11 : amorçage de la base locale pour les tests de bout en bout (e2e/plan.e2e.ts).
+          [ENTREE_AMORCAGE]: fileURLToPath(new URL('diagnostic/amorcer.html', import.meta.url)),
         },
         output: {
           entryFileNames: nomMorceau,
@@ -160,8 +201,8 @@ export default defineConfig(({ mode }) => {
       // Les workers de PowerSync ne servent qu'à la base locale.
       rollupOptions: {
         output: {
-          entryFileNames: nomSortie('sqlite').replace('[extname]', '.js'),
-          chunkFileNames: nomSortie('sqlite').replace('[extname]', '.js'),
+          entryFileNames: nomSortie('sqlite', '.js'),
+          chunkFileNames: nomMorceauWorker,
           assetFileNames: nomFichierAnnexe,
         },
       },

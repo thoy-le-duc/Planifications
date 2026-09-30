@@ -238,6 +238,10 @@ Les kiwis sont exclus (liane pérenne). La rotation a-t-elle un sens pour la fra
 
 Question : dans un tableur, une série semée en S40 et plantée en S2 : faut-il comprendre que la plantation est l'année suivante ? Pour l'instant, ces lignes sont signalées en erreur (`dates_incoherentes`) plutôt que devinées.
 
+### Q19 — Premier tap juste après l'ouverture de l'appli (posée le 2026-09-30, T11)
+
+Question : si tu ouvres l'appli et tapes tout de suite sur Planches, l'écran met 0,7 à 0,8 s à s'afficher (téléphone moyen simulé), le temps que les données du téléphone s'ouvrent. Une fois ouvertes, c'est 0,1 à 0,3 s. Est-ce acceptable pour l'instant, avec « Ouverture des données… » affiché, ou faut-il en faire une priorité (T11b) ?
+
 ### À suivre
 
 

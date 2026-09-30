@@ -16,7 +16,13 @@
  * objet, un booléen ou `undefined` lève une erreur, comme il faudrait les sérialiser en texte
  * JSON pour PowerSync.
  */
-import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
+import type { SQLInputValue } from 'node:sqlite';
+
+/**
+ * `node:sqlite` chargé à l'exécution (T11) : les tests d'écran tournent dans un DOM simulé
+ * (happy-dom), où Vite refuse d'empaqueter un module intégré de Node importé statiquement.
+ */
+const { DatabaseSync } = process.getBuiltinModule('node:sqlite');
 
 /** Ce que le double lit du schéma local : le nom de chaque table et de ses colonnes. */
 export interface DescriptionSchema {

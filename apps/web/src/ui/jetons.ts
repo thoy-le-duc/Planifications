@@ -38,6 +38,11 @@ export const COULEURS = {
   texteOrange: '#9A4A0F',
   /** Texte posé sur l'orange. */
   surOrange: '#1B0F05',
+  /**
+   * Conflits de place (T11) : nom du conflit, bordure des barres en cause. Rouge sombre, distinct
+   * de la bande des solanacées (#C0392B) et lisible en texte sur le fond et la surface.
+   */
+  conflit: '#B3001B',
 } as const satisfies Record<string, string>;
 
 export type CleCouleur = keyof typeof COULEURS;
@@ -122,11 +127,17 @@ export const PAIRES_CONTRASTE: readonly PaireContraste[] = [
   { texte: 'surForetDoux', fond: 'foret', usage: 'texte' },
   { texte: 'surForet', fond: 'foretClair', usage: 'texte' },
   { texte: 'surOrange', fond: 'orange', usage: 'texte' },
+  // Nom du conflit sur la ligne du plan (T11), texte de 11 px au moins : seuil du texte courant.
+  { texte: 'conflit', fond: 'surface', usage: 'texte' },
+  { texte: 'conflit', fond: 'fond', usage: 'texte' },
   // Contours : bouton secondaire, case active du code, bande d'alerte, bord des champs.
   { texte: 'foret', fond: 'fond', usage: 'contour' },
   { texte: 'foret', fond: 'surface', usage: 'contour' },
   { texte: 'orange', fond: 'surface', usage: 'contour' },
   { texte: 'tertiaire', fond: 'surface', usage: 'contour' },
+  // Bordure des barres en conflit (T11).
+  { texte: 'conflit', fond: 'surface', usage: 'contour' },
+  { texte: 'conflit', fond: 'fond', usage: 'contour' },
 ];
 
 function kebab(cle: string): string {
