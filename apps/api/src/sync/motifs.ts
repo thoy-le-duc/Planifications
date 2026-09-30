@@ -1,6 +1,6 @@
-/** Motifs de refus d'une écriture du téléphone (T10, T10c), partagés par upload.ts et stock.ts. */
+/** Motifs de refus d'une écriture du téléphone (T10, T10c, T10d), partagés par upload.ts et stock.ts. */
 
-export type MotifRefus = 'ferme_interdite' | 'auteur_invalide' | 'ajout_seul' | 'table_interdite' | 'ecriture_invalide';
+export type MotifRefus = 'ferme_interdite' | 'auteur_invalide' | 'ajout_seul' | 'table_interdite' | 'ecriture_invalide' | 'lot_trop_gros';
 
 export interface Refus {
   readonly motif: MotifRefus;

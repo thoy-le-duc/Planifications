@@ -926,7 +926,7 @@ export const refusSynchro = pgTable(
     nomTable: text('nom_table').notNull(),
     ligneId: text('ligne_id').notNull(),
     operation: text('operation', { enum: OPERATIONS_SYNCHRO }).notNull(),
-    /** Code stable : 'ferme_interdite', 'ajout_seul', 'auteur_invalide', 'table_interdite', 'ecriture_invalide'. */
+    /** Code stable : 'ferme_interdite', 'ajout_seul', 'auteur_invalide', 'table_interdite', 'ecriture_invalide', 'lot_trop_gros'. */
     motif: text('motif').notNull(),
     /** Explication en français, affichée telle quelle sur le téléphone. */
     message: text('message').notNull(),

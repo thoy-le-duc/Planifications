@@ -18,8 +18,10 @@
  *   n'est pas recopié (contrainte refus_synchro_sans_doublon).
  * - Rien de ce que le téléphone envoie ne donne un 500 : textes du refus nettoyés (U+0000) et
  *   tronqués, données trop grosses non conservées, erreur de données de la base = refus.
- * - Limites : corps ≤ 5 Mio (413), lot ≤ 500 écritures (400), tailles de l'événement dans
- *   evenement.ts.
+ * - Limites (T10d) : plus de 500 écritures ou corps de plus de 5 Mio → 200, chaque écriture
+ *   refusée 'lot_trop_gros' (avant toute autre règle), rien d'écrit : la file PowerSync avance
+ *   toujours. Au-delà de 32 Mio (limite dure) → 413, sans lire plus loin. Tailles de
+ *   l'événement dans evenement.ts.
  * - T10d : une ligne d'une autre ferme (référence, PATCH, DELETE) se comporte exactement comme
  *   une ligne inexistante ; seul un ferme_id étranger déclaré par l'écriture elle-même donne
  *   'ferme_interdite'.
@@ -37,11 +39,9 @@ import {
 import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { Hono } from 'hono';
-import { bodyLimit } from 'hono/body-limit';
 import { garde, type VariablesAuthentifiees } from '../auth/garde.ts';
 import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
-import { lireCorps } from '../http.ts';
 import { lireEvenement } from './evenement.ts';
 import type { MotifRefus, Refus } from './motifs.ts';
 import { verifierCorrection, verifierReferences, type TransactionDb } from './references.ts';
@@ -61,16 +61,23 @@ const MESSAGES: Readonly<Record<MotifRefus, string>> = {
     'Un événement enregistré ne se modifie pas et ne se supprime pas : saisissez plutôt une correction ou une annulation.',
   table_interdite: 'Modification refusée : cette donnée ne se modifie pas depuis le téléphone.',
   ecriture_invalide: 'Saisie non enregistrée, données invalides',
+  lot_trop_gros:
+    'Saisie non enregistrée : envoi trop volumineux (plus de 500 saisies ou de 5 Mio en une fois). Ressaisissez-la.',
 };
 
-/** Corps HTTP au plus (au-delà : 413, rien d'écrit). */
+/** Corps HTTP au plus (au-delà : 200, chaque écriture refusée 'lot_trop_gros', rien d'écrit). */
 export const TAILLE_MAX_CORPS = 5 * 1_048_576;
-/** Écritures par lot au plus (au-delà : 400, rien d'écrit) : la même constante que la porte du téléphone. */
+/** Limite dure du corps HTTP (au-delà : 413, le serveur cesse de lire ; rien d'écrit, aucun refus). */
+export const TAILLE_MAX_CORPS_DURE = 32 * 1_048_576;
+/** Écritures par lot au plus (au-delà : 'lot_trop_gros' comme un corps trop gros) : la même constante que la porte du téléphone. */
 export { ECRITURES_MAX_PAR_LOT } from '@planif/core';
 /** Longueur au plus de nom_table, ligne_id et message dans refus_synchro. */
 const LONGUEUR_MAX_TEXTE_REFUS = 200;
 /** `donnees` conservées dans refus_synchro jusqu'à cette taille (octets UTF-8 du JSON). */
 const TAILLE_MAX_DONNEES_REFUS = 16 * 1_024;
+
+/** Refus écrits par requête (lot trop gros : 500 écritures et plus, ou quelques-unes très lourdes). */
+const REFUS_PAR_REQUETE = 100;
 
 /** Tables du stock (T10c) : un lot qui en écrit une est accepté ou refusé en entier. */
 const TABLES_STOCK = new Set(['article_stock', 'mouvement_stock']);
@@ -172,6 +179,48 @@ class RefusDansLot extends Error {
     super('écriture refusée : transaction annulée');
     this.index = index;
     this.refus = refus;
+  }
+}
+
+/**
+ * Corps de la requête, lu au plus jusqu'à `max` octets : null au-delà (413). Refusé dès
+ * l'en-tête Content-Length s'il annonce plus ; sinon le flux est lu morceau par morceau et
+ * abandonné dès qu'il dépasse `max` : jamais tout un corps énorme en mémoire.
+ */
+async function lireCorpsBorne(requete: Request, max: number): Promise<Uint8Array | null> {
+  const annonce = requete.headers.get('content-length');
+  if (annonce !== null && /^\d+$/.test(annonce.trim()) && Number(annonce.trim()) > max) return null;
+  if (requete.body === null) return new Uint8Array(0);
+  // Le corps d'une Request est un flux d'octets (Uint8Array), typé ReadableStream<any> par la bibliothèque DOM.
+  const lecteur = (requete.body as ReadableStream<Uint8Array>).getReader();
+  const morceaux: Uint8Array[] = [];
+  let taille = 0;
+  for (;;) {
+    const { done, value } = await lecteur.read();
+    if (done) break;
+    taille += value.byteLength;
+    if (taille > max) {
+      await lecteur.cancel();
+      return null;
+    }
+    morceaux.push(value);
+  }
+  const octets = new Uint8Array(taille);
+  let position = 0;
+  for (const m of morceaux) {
+    octets.set(m, position);
+    position += m.byteLength;
+  }
+  return octets;
+}
+
+/** Objet JSON lu dans `octets` (UTF-8), ou null (illisible, tableau, valeur simple). */
+function lireJson(octets: Uint8Array): Record<string, unknown> | null {
+  try {
+    const corps: unknown = JSON.parse(new TextDecoder().decode(octets));
+    return typeof corps === 'object' && corps !== null && !Array.isArray(corps) ? (corps as Record<string, unknown>) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -325,13 +374,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     }
   }
 
-  /** Enregistre le refus (au plus une fois par utilisateur, ligne, opération et motif). */
-  async function enregistrerRefus(
-    e: EcritureRecue,
-    utilisateurId: Id<'Utilisateur'>,
-    fermes: ReadonlySet<string>,
-    refus: Refus,
-  ): Promise<void> {
+  /** Ligne de refus_synchro pour l'écriture `e`. */
+  function ligneRefus(e: EcritureRecue, utilisateurId: Id<'Utilisateur'>, fermes: ReadonlySet<string>, refus: Refus) {
     const message = refus.precision === undefined ? MESSAGES[refus.motif] : `${MESSAGES[refus.motif]} : ${refus.precision}.`;
     const fermeVisee = refus.fermeId ?? null;
     const ligne = {
@@ -348,54 +392,73 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       donnees: donneesRefus(e.donnees),
       creeLe: ctx.maintenant(),
     };
-    try {
-      await db.insert(refusSynchro).values(ligne).onConflictDoNothing();
-    } catch (erreur) {
-      // Dernier recours : des données que jsonb refuse ne bloquent pas la file, le refus est gardé sans elles.
-      if (!refusParLaBase(erreur)) throw erreur;
-      await db
-        .insert(refusSynchro)
-        .values({ ...ligne, donnees: null })
-        .onConflictDoNothing();
+    return ligne;
+  }
+
+  /**
+   * Enregistre les refus, par paquets d'une requête (au plus une ligne par utilisateur, ligne,
+   * opération et motif : les doublons, même dans un paquet, sont ignorés).
+   */
+  async function enregistrerRefus(
+    refus: readonly (readonly [EcritureRecue, Refus])[],
+    utilisateurId: Id<'Utilisateur'>,
+    fermes: ReadonlySet<string>,
+  ): Promise<void> {
+    for (let debut = 0; debut < refus.length; debut += REFUS_PAR_REQUETE) {
+      const lignes = refus.slice(debut, debut + REFUS_PAR_REQUETE).map(([e, r]) => ligneRefus(e, utilisateurId, fermes, r));
+      try {
+        await db.insert(refusSynchro).values(lignes).onConflictDoNothing();
+      } catch (erreur) {
+        // Dernier recours : des données que jsonb refuse ne bloquent pas la file, les refus sont gardés sans elles.
+        if (!refusParLaBase(erreur)) throw erreur;
+        await db
+          .insert(refusSynchro)
+          .values(lignes.map((l) => ({ ...l, donnees: null })))
+          .onConflictDoNothing();
+      }
     }
   }
 
-  const limiteCorps = bodyLimit({
-    maxSize: TAILLE_MAX_CORPS,
-    onError: (c) => c.json({ erreur: 'corps_trop_volumineux' }, 413),
-  });
-
-  routes.post('/sync/upload', limiteCorps, async (c) => {
-    const corps = await lireCorps(c);
+  routes.post('/sync/upload', async (c) => {
+    const octets = await lireCorpsBorne(c.req.raw, TAILLE_MAX_CORPS_DURE);
+    if (octets === null) return c.json({ erreur: 'corps_trop_volumineux' }, 413);
+    const corps = lireJson(octets);
     const brutes = corps?.ecritures;
-    if (!Array.isArray(brutes) || brutes.length > ECRITURES_MAX_PAR_LOT) return c.json({ erreur: 'requete_invalide' }, 400);
+    if (!Array.isArray(brutes)) return c.json({ erreur: 'requete_invalide' }, 400);
 
     const utilisateurId = c.get('utilisateurId');
     // Droits relus en base à chaque lot (un membre retiré perd l'accès tout de suite).
     const fermes = new Set<string>(await fermesDeLUtilisateur(db, utilisateurId));
     const ecritures = (brutes as unknown[]).map(lireEcriture);
     const refus: { table: string; id: string; motif: MotifRefus }[] = [];
-    const refuser = async (e: EcritureRecue, r: Refus): Promise<void> => {
-      await enregistrerRefus(e, utilisateurId, fermes, r);
-      refus.push({ table: e.table, id: e.id, motif: r.motif });
+    const refuser = async (liste: readonly (readonly [EcritureRecue, Refus])[]): Promise<void> => {
+      await enregistrerRefus(liste, utilisateurId, fermes);
+      for (const [e, r] of liste) refus.push({ table: e.table, id: e.id, motif: r.motif });
     };
+
+    if (ecritures.length > ECRITURES_MAX_PAR_LOT || octets.byteLength > TAILLE_MAX_CORPS) {
+      // T10d : lot trop gros, avant toute autre règle. Rien d'écrit ; chaque écriture a son refus
+      // (200 : la file PowerSync avance, rien ne disparaît du téléphone en silence).
+      await refuser(ecritures.map((e) => [e, { motif: 'lot_trop_gros', fermeId: fermeDesDonnees(e) }] as const));
+      return c.json({ refus });
+    }
 
     if (ecritures.some((e) => TABLES_STOCK.has(e.table))) {
       // T10c : une saisie de stock, tout ou rien. Chaque écriture d'un lot refusé a son refus.
       const echec = await ecrireEnsemble(ecritures, utilisateurId, fermes);
       if (echec !== null) {
-        for (const [i, e] of ecritures.entries()) {
-          await refuser(
-            e,
-            i === echec.index ? echec.refus : { motif: 'ecriture_invalide', precision: PRECISION_SAISIE_REFUSEE, fermeId: fermeDesDonnees(e) },
-          );
-        }
+        await refuser(
+          ecritures.map(
+            (e, i) =>
+              [e, i === echec.index ? echec.refus : { motif: 'ecriture_invalide', precision: PRECISION_SAISIE_REFUSEE, fermeId: fermeDesDonnees(e) }] as const,
+          ),
+        );
       }
     } else {
       // T10 : chaque écriture à part, un refus ne bloque pas les autres.
       for (const e of ecritures) {
         const echec = await ecrireEnsemble([e], utilisateurId, fermes);
-        if (echec !== null) await refuser(e, echec.refus);
+        if (echec !== null) await refuser([[e, echec.refus]]);
       }
     }
     return c.json({ refus });
