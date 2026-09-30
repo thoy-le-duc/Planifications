@@ -33,6 +33,11 @@ export const PLAFONDS_TRAVAUX = {
   tousLesJours: 60,
   /** Temps estimé, en minutes par 100 m ou par planche (10 h). */
   minutes: 600,
+  /**
+   * Occurrences au plus d'un travail dans une série (datesTravailPrevu garde les premières) : un
+   * travail quotidien sur près de trois ans ; borne le travail et la mémoire d'une série forgée.
+   */
+  occurrences: 1_000,
 } as const;
 
 export interface OptionsTravaux {

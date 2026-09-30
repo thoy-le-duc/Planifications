@@ -7,6 +7,7 @@ import { dateDepuisJourAbsolu, jourAbsolu } from '../dates/index.ts';
 import type { DateCalendaire } from '../dates/index.ts';
 import { verifierExhaustif } from '../domaine/index.ts';
 import type { Itineraire, ParametresItineraire, RepereTravail, TailleSerie, TempsEstime, TravailPrevu } from '../domaine/index.ts';
+import { PLAFONDS_TRAVAUX } from '../saisies/travaux.ts';
 import type { DatesSerie, EtapeSerie } from './dates-serie.ts';
 import type { TacheSemainier } from './semainier.ts';
 
@@ -28,7 +29,8 @@ export function etapeDuRepere(repere: RepereTravail): EtapeSerie {
 
 /**
  * Jours absolus des occurrences d'un travail, croissants : repère + décalage, puis tous les N
- * jours tant que la date ne dépasse pas le repère de fin (compris). Repère absent des dates
+ * jours tant que la date ne dépasse pas le repère de fin (compris), au plus
+ * `PLAFONDS_TRAVAUX.occurrences` (les premières, sans erreur). Repère absent des dates
  * (semis pépinière d'un semis direct) : aucune occurrence.
  */
 export function joursTravailPrevu(travail: TravailPrevu, dates: DatesSerie): readonly number[] {
@@ -43,7 +45,7 @@ export function joursTravailPrevu(travail: TravailPrevu, dates: DatesSerie): rea
   if (fin === undefined || !Number.isSafeInteger(pas) || pas < 1) return [];
   const jourFin = jourAbsolu(fin);
   const jours: number[] = [];
-  for (let j = debut; j <= jourFin; j += pas) jours.push(j);
+  for (let j = debut; j <= jourFin && jours.length < PLAFONDS_TRAVAUX.occurrences; j += pas) jours.push(j);
   return jours;
 }
 
