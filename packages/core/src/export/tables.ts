@@ -269,6 +269,8 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       longueur_m: reel('longueur totale en mètres'),
       nombre_plants: entier('nombre de plants'),
       statut: texte('statut de la série : prévue, en cours, terminée…'),
+      // Texte JSON tel que le téléphone le garde (règle de type par nom de colonne de T15).
+      rotation_acceptee: texte('alerte rouge de rotation acceptée, en JSON : famille en cause, délai de retour (ans), instant de la décision'),
       ...HORODATAGE,
     }),
     utilisateur: table('Personnes membres de la ferme (sans adresse e-mail).', {
