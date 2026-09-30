@@ -8,7 +8,7 @@
  * relance une après elle (la dernière voit le dernier changement).
  */
 import type { PorteDonnees } from '@planif/sync';
-import { calculerJournee, lireJournee, TABLES_AUJOURDHUI, type Journee, type LignesJournee } from './calculs.ts';
+import { calculerJournee, LectureAbandonnee, lireJournee, TABLES_AUJOURDHUI, type Journee, type LignesJournee } from './calculs.ts';
 
 interface Suivi {
   /** Dernières lignes lues ; la journée n'en est calculée que pour un écran qui la montre. */
@@ -19,9 +19,6 @@ interface Suivi {
   readonly abonnes: Set<(j: Journee) => void>;
   arreter: (() => void) | null;
 }
-
-/** Préparation abandonnée : aucun écran ne l'attendait plus. */
-class LectureAbandonnee extends Error {}
 
 const suivis = new WeakMap<PorteDonnees, Map<string, Suivi>>();
 
@@ -52,7 +49,6 @@ function journeeDe(s: Suivi, jour: string): Journee | null {
  * sans calcul : aucun travail sur la page pendant qu'un autre écran défile.
  */
 function relire(porte: PorteDonnees, fermeId: string, jour: string, s: Suivi, apres?: Promise<unknown>): Promise<LignesJournee> {
-  const differee = apres !== undefined;
   if (s.enCours !== null) {
     s.sale = true;
     return s.enCours;
@@ -60,9 +56,9 @@ function relire(porte: PorteDonnees, fermeId: string, jour: string, s: Suivi, ap
   s.sale = false;
   const lecture = (apres ?? Promise.resolve())
     .catch(() => undefined)
-    // Préparation dont l'écran a été quitté avant son tour : rien à lire pour personne (la base
-    // sert l'écran affiché) ; le prochain affichage lira.
-    .then(() => (differee && s.abonnes.size === 0 ? Promise.reject(new LectureAbandonnee()) : lireJournee(porte, fermeId, jour, new Date())));
+    // Écran quitté (avant le tour de la préparation, ou pendant la lecture) : la lecture
+    // s'arrête et laisse la base à l'écran affiché ; le prochain affichage relira.
+    .then(() => lireJournee(porte, fermeId, jour, new Date(), () => s.abonnes.size > 0));
   s.enCours = lecture;
   lecture.then(
     (lignes) => {
@@ -101,6 +97,9 @@ export function suivreJournee(
 ): () => void {
   const s = suiviDe(porte, fermeId, jour);
   s.abonnes.add(rappel);
+  const echec = (e: unknown) => {
+    if (!(e instanceof LectureAbandonnee)) surEchec(e);
+  };
   if (s.arreter === null) {
     // Le premier appel (immédiat) lance la lecture, ou attend celle qui est déjà en cours (rien
     // n'a changé) ; chaque changement ensuite en relance une.
@@ -108,10 +107,10 @@ export function suivreJournee(
     s.arreter = porte.surveiller({ sql: 'SELECT 1 AS temoin', tables: TABLES_AUJOURDHUI }, () => {
       const enCours = premier ? s.enCours : null;
       premier = false;
-      (enCours ?? relire(porte, fermeId, jour, s)).catch(surEchec);
+      (enCours ?? relire(porte, fermeId, jour, s)).catch(echec);
     });
   } else {
-    relire(porte, fermeId, jour, s).catch(surEchec);
+    relire(porte, fermeId, jour, s).catch(echec);
   }
   return () => {
     s.abonnes.delete(rappel);

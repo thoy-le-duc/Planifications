@@ -196,7 +196,12 @@ export function enVigueur(evenements: readonly EvenementLu[]): EvenementLu[] {
 
 // ── Requêtes ─────────────────────────────────────────────────────────────────────────────────
 
-const SERIES_ACTIVES = `SELECT id FROM serie WHERE ferme_id = ? AND supprime_le IS NULL AND statut IN ('prevue', 'en_cours')`;
+/**
+ * Séries que le semainier peut planifier : prévues ou en cours, avec un mode d'itinéraire valide
+ * (sans lui, pas de dates d'étapes : `calculerJournee` les écarterait, autant ne pas les lire).
+ */
+const FILTRE_SERIES_ACTIVES = `s.statut IN ('prevue', 'en_cours') AND json_extract(s.parametres, '$.mode') IN ('semis_direct', 'plant_maison', 'plant_achete')`;
+const SERIES_ACTIVES = `SELECT s.id FROM serie s WHERE s.ferme_id = ? AND s.supprime_le IS NULL AND ${FILTRE_SERIES_ACTIVES}`;
 const CAMPAGNES_ACTIVES = `SELECT id FROM campagne WHERE ferme_id = ? AND supprime_le IS NULL AND (fin_recolte_prevue IS NULL OR fin_recolte_prevue >= ?)`;
 /** `?, ?, ?` : un paramètre par identifiant. */
 const marques = (n: number) => Array.from({ length: n }, () => '?').join(', ');
@@ -228,7 +233,7 @@ const sqlOccupations = (filtre: string) => `SELECT o.serie_id, o.plantation_id, 
   LEFT JOIN zone z ON z.id = em.zone_id
   WHERE o.ferme_id = ? AND o.supprime_le IS NULL AND ${filtre}`;
 
-const SQL_SERIES = sqlSeries(`s.statut IN ('prevue', 'en_cours')`);
+const SQL_SERIES = sqlSeries(FILTRE_SERIES_ACTIVES);
 const SQL_CAMPAGNES = sqlCampagnes('(c.fin_recolte_prevue IS NULL OR c.fin_recolte_prevue >= ?)');
 const SQL_OCCUPATIONS = sqlOccupations(
   `(o.serie_id IN (${SERIES_ACTIVES}) OR o.plantation_id IN (SELECT plantation_id FROM campagne WHERE id IN (${CAMPAGNES_ACTIVES})))`,
@@ -285,27 +290,43 @@ export function bornesHistorique(aujourdhui: string, maintenant: Date): { readon
   };
 }
 
-/** Lit ce dont la journée a besoin : cinq requêtes en parallèle, bornées aux cultures actives. */
-export async function lireJournee(porte: PorteDonnees, fermeId: string, aujourdhui: string, maintenant: Date): Promise<LignesJournee> {
+/** Lecture abandonnée entre deux requêtes : plus aucun écran ne l'attend. */
+export class LectureAbandonnee extends Error {}
+
+/**
+ * Lit ce dont la journée a besoin, bornée aux cultures actives. Une requête à la fois (la base
+ * n'en sert qu'une à la fois de toute façon) : entre deux, `continuer()` dit si un écran attend
+ * encore la journée ; sinon la lecture s'arrête (LectureAbandonnee) et laisse la base à l'écran
+ * affiché (le plan d'une grande ferme se lit en plusieurs secondes).
+ */
+export async function lireJournee(
+  porte: PorteDonnees,
+  fermeId: string,
+  aujourdhui: string,
+  maintenant: Date,
+  continuer: () => boolean = () => true,
+): Promise<LignesJournee> {
   const { depuis, horodatageDepuis } = bornesHistorique(aujourdhui, maintenant);
-  const [series, campagnes, occupations, realises, recents] = await Promise.all([
-    porte.lire<Ligne>(SQL_SERIES, [fermeId]),
-    porte.lire<Ligne>(SQL_CAMPAGNES, [fermeId, aujourdhui]),
-    porte.lire<Ligne>(SQL_OCCUPATIONS, [fermeId, fermeId, fermeId, aujourdhui]),
-    porte.lire<Ligne>(SQL_REALISES, [fermeId, fermeId, fermeId, aujourdhui, fermeId, fermeId, fermeId]),
-    porte.lire<Ligne>(SQL_RECENTS, [fermeId, depuis, horodatageDepuis]),
-  ]);
+  const lire = async (sql: string, parametres: readonly unknown[]): Promise<Ligne[]> => {
+    if (!continuer()) throw new LectureAbandonnee();
+    return porte.lire<Ligne>(sql, parametres);
+  };
+  const series = await lire(SQL_SERIES, [fermeId]);
+  const campagnes = await lire(SQL_CAMPAGNES, [fermeId, aujourdhui]);
+  const occupations = await lire(SQL_OCCUPATIONS, [fermeId, fermeId, fermeId, aujourdhui]);
+  const realises = await lire(SQL_REALISES, [fermeId, fermeId, fermeId, aujourdhui, fermeId, fermeId, fermeId]);
+  const recents = await lire(SQL_RECENTS, [fermeId, depuis, horodatageDepuis]);
   // Historique : les cultures terminées ou passées qu'il nomme, lues en plus (rarement).
   const connues = new Set([...series, ...campagnes].map((l) => texte(l.id)));
   const autresSeries = [...new Set(recents.map((l) => texte(l.serie_id)).filter((x) => x !== '' && !connues.has(x)))];
   const autresCampagnes = [...new Set(recents.map((l) => texte(l.campagne_id)).filter((x) => x !== '' && !connues.has(x)))];
   if (autresSeries.length === 0 && autresCampagnes.length === 0) return { series, campagnes, occupations, realises, recents };
   const [s2, c2] = await Promise.all([
-    autresSeries.length === 0 ? [] : porte.lire<Ligne>(sqlSeries(`s.id IN (${marques(autresSeries.length)})`), [fermeId, ...autresSeries]),
-    autresCampagnes.length === 0 ? [] : porte.lire<Ligne>(sqlCampagnes(`c.id IN (${marques(autresCampagnes.length)})`), [fermeId, ...autresCampagnes]),
+    autresSeries.length === 0 ? [] : lire(sqlSeries(`s.id IN (${marques(autresSeries.length)})`), [fermeId, ...autresSeries]),
+    autresCampagnes.length === 0 ? [] : lire(sqlCampagnes(`c.id IN (${marques(autresCampagnes.length)})`), [fermeId, ...autresCampagnes]),
   ]);
   const plantations = c2.map((l) => texte(l.plantation_id));
-  const o2 = await porte.lire<Ligne>(
+  const o2 = await lire(
     sqlOccupations(`(o.serie_id IN (${marques(autresSeries.length)}) OR o.plantation_id IN (${marques(plantations.length)}))`),
     [fermeId, ...autresSeries, ...plantations],
   );
