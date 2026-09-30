@@ -47,3 +47,8 @@
 - [ ] Migration : les travaux prévus sont rangés dans l'itinéraire (jsonb validé) et copiés dans l'instantané de la série.
 
 **Hors périmètre** : les écrans (T24) et l'écriture serveur (T23).
+
+### Décision du chef (2e passe des tests)
+
+- En fertilisation et amendement, le **produit est obligatoire** dans un travail prévu (et non plus facultatif) : sans lui, l'intervention écrite par « Marquer fait » serait refusée par `validerSaisie`, qui exige produit et quantité.
+- La tâche de travail porte `travail.indice` (position dans `travauxPrevus`), clé stable à l'écran.
