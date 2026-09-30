@@ -76,6 +76,9 @@
 .auj-noter {
   flex: 1 1 auto;
   min-width: 0;
+  padding: 0 12px;
+  font-size: clamp(16px, 4.8vw, 19px);
+  white-space: nowrap;
 }
 
 .auj-vers-historique {
