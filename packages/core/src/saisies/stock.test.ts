@@ -2,9 +2,13 @@
  * Règles pures d'une saisie de stock (T10c) : article, mouvement, mouvement inverse borné.
  * Les tests d'acceptation côté serveur sont dans apps/api/src/sync/stock.integration.test.ts ;
  * ceux-ci fixent les règles du cœur, sans base.
+ *
+ * T10g (Q13) : test adapté. `PLAFONDS_PROVISOIRES` est renommé `PLAFONDS_SAISIES` (valeurs
+ * inchangées) ; le plafond est lu sous le nouveau nom, par le contrat (chemin dynamique, comme
+ * saisies.test.ts, pour que le typage ne dépende pas du renommage pas encore fait).
  */
 import { describe, expect, it } from 'vitest';
-import { PLAFONDS_PROVISOIRES } from './index.ts';
+import { chargerSaisies } from './test/contrat.ts';
 import { mouvementAttendu, validerArticleStock, validerMouvementStock, verifierMouvementRecolte } from './stock.ts';
 
 const ID = '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b10';
@@ -12,7 +16,7 @@ const FERME = '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b20';
 const ESPECE = '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b30';
 const ARTICLE = '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b40';
 const RECOLTE = '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b50';
-const PLAFOND = PLAFONDS_PROVISOIRES.recolteQuantite;
+const PLAFOND = (await chargerSaisies()).PLAFONDS_SAISIES.recolteQuantite;
 
 const article = (autres: Record<string, unknown> = {}) => ({
   id: ID,

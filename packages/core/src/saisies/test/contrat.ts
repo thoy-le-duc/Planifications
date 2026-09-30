@@ -99,9 +99,10 @@
  *
  * L'id vient de l'écriture PowerSync ; un `id` glissé dans les données → refus « colonne inconnue : id ».
  *
- * ── Plafonds métier (PROVISOIRES, à valider par Théophane : docs/questions.md) ──────────────
+ * ── Plafonds métier (définitifs depuis Q13, 2026-09-30 : docs/questions.md ; T10g) ─────────
  *
- * `PLAFONDS_PROVISOIRES` borne chaque quantité (borne comprise) ; au-delà → 'plafond_depasse'.
+ * `PLAFONDS_SAISIES` (T10g : ancien `PLAFONDS_PROVISOIRES`, renommé sans alias, valeurs
+ * inchangées) borne chaque quantité (borne comprise) ; au-delà → 'plafond_depasse'.
  * Aujourd'hui une quantité de 1e308 est acceptée. Les tests lisent les valeurs dans la constante :
  * les changer ne demande de modifier que le test qui les fige (« valeurs proposées »).
  */
@@ -131,7 +132,7 @@ export type CodeErreurSaisie =
   | 'trop_volumineux'
   /** Clé hors du Detail* du type. */
   | 'cle_inconnue'
-  /** Quantité au-delà de PLAFONDS_PROVISOIRES. */
+  /** Quantité au-delà de PLAFONDS_SAISIES. */
   | 'plafond_depasse';
 
 export interface ErreurSaisie {
@@ -178,7 +179,7 @@ export interface PlafondsSaisie {
 export interface ModuleSaisies {
   validerSaisie(entree: unknown): ResultatSaisie;
   readonly LIMITES_SAISIE: LimitesSaisie;
-  readonly PLAFONDS_PROVISOIRES: PlafondsSaisie;
+  readonly PLAFONDS_SAISIES: PlafondsSaisie;
 }
 
 /** Chemins tenus dans des variables : TypeScript ne résout pas un module avant qu'il existe. */

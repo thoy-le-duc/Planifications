@@ -3,6 +3,10 @@
  *
  * Contrat de l'API (validerSaisie, codes d'erreur, format d'entrée et de sortie, plafonds) :
  * voir ./test/contrat.ts. Aucune base, aucun réseau : des valeurs en entrée, un résultat en sortie.
+ *
+ * T10g (Q13, 2026-09-30) : test adapté. Théophane a validé les plafonds : `PLAFONDS_PROVISOIRES`
+ * est renommé `PLAFONDS_SAISIES`, valeurs inchangées. Les tests des plafonds lisent le nouveau
+ * nom ; les valeurs figées ne bougent pas ; l'ancien nom ne doit plus être exporté (pas d'alias).
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { chargerCoeur, chargerSaisies, type CodeErreurSaisie, type ModuleSaisies, type ResultatSaisie } from './test/contrat.ts';
@@ -135,11 +139,18 @@ function imbrique(niveaux: number): Detail {
 // ── Module ───────────────────────────────────────────────────────────────────────────────────
 
 describe('module', () => {
-  it('@planif/core exporte validerSaisie, LIMITES_SAISIE et PLAFONDS_PROVISOIRES', async () => {
+  it('@planif/core exporte validerSaisie, LIMITES_SAISIE et PLAFONDS_SAISIES', async () => {
     const coeur = await chargerCoeur();
     expect(typeof coeur.validerSaisie).toBe('function');
     expect(coeur.LIMITES_SAISIE).toBeDefined();
-    expect(coeur.PLAFONDS_PROVISOIRES).toBeDefined();
+    expect(coeur.PLAFONDS_SAISIES).toBeDefined();
+  });
+
+  it('T10g (Q13) : PLAFONDS_PROVISOIRES n’est plus exporté, ni par le module des saisies ni par @planif/core (renommé, sans alias)', async () => {
+    const coeur: Readonly<Record<string, unknown>> = await chargerCoeur();
+    const module: Readonly<Record<string, unknown>> = { ...m };
+    expect(coeur.PLAFONDS_PROVISOIRES).toBeUndefined();
+    expect(module.PLAFONDS_PROVISOIRES).toBeUndefined();
   });
 
   it('limites de T10', () => {
@@ -629,11 +640,11 @@ describe('détail : valeurs par type', () => {
   });
 });
 
-// ── Plafonds métier provisoires ──────────────────────────────────────────────────────────────
+// ── Plafonds métier (définitifs, Q13) ────────────────────────────────────────────────────────
 
-describe('plafonds provisoires (à valider par Théophane, docs/questions.md)', () => {
-  it('valeurs proposées — à changer ici seulement si Théophane en décide d’autres', () => {
-    expect(m.PLAFONDS_PROVISOIRES).toEqual({
+describe('plafonds des saisies (validés par Théophane, Q13 ; T10g)', () => {
+  it('valeurs validées — à changer ici seulement si Théophane en décide d’autres', () => {
+    expect(m.PLAFONDS_SAISIES).toEqual({
       recolteQuantite: 100_000,
       realiseQuantite: 10_000_000,
       interventionQuantite: 1_000_000,
@@ -658,7 +669,7 @@ describe('plafonds provisoires (à valider par Théophane, docs/questions.md)', 
   ];
 
   const plafond = (nom: string): number => {
-    const v: unknown = (m.PLAFONDS_PROVISOIRES as unknown as Record<string, unknown>)[nom];
+    const v: unknown = (m.PLAFONDS_SAISIES as unknown as Record<string, unknown>)[nom];
     if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) throw new Error(`plafond ${nom} absent ou invalide`);
     return v;
   };

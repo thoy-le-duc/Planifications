@@ -3,6 +3,10 @@
  * Postgres (même amorçage que upload.integration.test.ts : DATABASE_URL, base jetable
  * `t10c_stock_…` supprimée à la fin ; sans DATABASE_URL, échec en CI et saut signalé en local).
  *
+ * T10g (Q13) : test adapté. `PLAFONDS_PROVISOIRES` est renommé `PLAFONDS_SAISIES` (valeurs
+ * inchangées) ; le plafond est lu sous le nouveau nom, par son nom (le typage ne dépend pas du
+ * renommage). Rien d'autre ne change dans ce fichier.
+ *
  * ── Rôle ────────────────────────────────────────────────────────────────────────────────────
  *
  * Une récolte saisie au champ (T13) part du téléphone en UNE transaction PowerSync, donc en UN
@@ -32,7 +36,7 @@
  *     non supprimé. Introuvable, supprimé ou d'une autre ferme → 'ecriture_invalide' (T10d : une
  *     ligne d'une autre ferme se comporte comme une ligne inexistante, stock-suites.integration.test.ts).
  *   - `quantite` : un nombre (pas un texte), fini, non nul, |quantite| ≤
- *     PLAFONDS_PROVISOIRES.recolteQuantite (100 000, borne comprise ; Q13) → sinon
+ *     PLAFONDS_SAISIES.recolteQuantite (100 000, borne comprise ; Q13) → sinon
  *     'ecriture_invalide'.
  *   - `date` : 'AAAA-MM-JJ' existante dans [2000-01-01, 2100-12-31] (comme un événement).
  *   - `motif` : 'recolte' SEULEMENT depuis un téléphone (décision 5 du chef : vente, perte,
@@ -76,7 +80,8 @@
  *   écriture de stock garde la règle de T10 (chaque écriture à part) : les tests de T10 ne
  *   changent pas.
  */
-import { creerGenerateurId, PLAFONDS_PROVISOIRES } from '@planif/core';
+import * as coeur from '@planif/core';
+import { creerGenerateurId } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -87,7 +92,14 @@ import { ajouterMembre, creerBaseJetable, creerFerme, creerUtilisateur, decrireA
 const EMETTEUR = 'https://api.planif.test';
 const AUDIENCE = 'powersync-planif';
 const MAINTENANT = new Date('2026-10-01T06:00:00Z');
-const PLAFOND = PLAFONDS_PROVISOIRES.recolteQuantite;
+/** T10g : `PLAFONDS_SAISIES.recolteQuantite`, lu par son nom ; NaN s'il manque (les tests du plafond échouent). */
+function plafondRecolte(): number {
+  const plafonds: unknown = Reflect.get(coeur, 'PLAFONDS_SAISIES');
+  if (typeof plafonds !== 'object' || plafonds === null) return Number.NaN;
+  const v: unknown = Reflect.get(plafonds, 'recolteQuantite');
+  return typeof v === 'number' ? v : Number.NaN;
+}
+const PLAFOND = plafondRecolte();
 
 interface EcritureEnvoyee {
   readonly op: 'PUT' | 'PATCH' | 'DELETE';
