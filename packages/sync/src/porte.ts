@@ -61,7 +61,7 @@ function refusDepuisLigne(l: LigneRefus): RefusSynchro {
   };
 }
 
-export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnees & Required<Pick<PorteDonnees, 'ecrireEnsemble' | 'preparerSaisie'>> {
+export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnees {
   const maintenant = options.maintenant ?? (() => new Date());
   const nouvelId =
     options.nouvelId ??

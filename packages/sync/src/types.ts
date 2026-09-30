@@ -120,11 +120,8 @@ export interface PorteDonnees {
    * ferme, horodatage, auteur), pour l'écrire avec d'autres lignes en une transaction
    * (`ecrireEnsemble` : récolte + mouvement de stock). Rend la ligne (format local, celui que
    * `validerSaisie` lit) et l'ordre SQL qui l'insère.
-   *
-   * Toujours présente sur la porte de `creerPorte` ; facultative dans le type parce que des
-   * doublures de tests écrites avant T13 (écran d'export) ne l'ont pas.
    */
-  preparerSaisie?(saisie: SaisieEvenement): EvenementPrepare;
+  preparerSaisie(saisie: SaisieEvenement): EvenementPrepare;
   /** Refus de l'utilisateur de la porte, du plus récent au plus ancien ; même contrat que `surveiller`. */
   surveillerRefus(rappel: (refus: RefusSynchro[]) => void): () => void;
 }
