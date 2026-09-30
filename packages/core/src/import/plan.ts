@@ -120,44 +120,61 @@ function couper(t: string, n: number): string {
   return `${t.slice(0, fin)}…`;
 }
 
-function extrait(c: Cellule | undefined): string {
-  return couper(c === null || c === undefined ? '' : String(c).trim(), 40);
-}
-
 function libelle(type: PlanImport['type'], c: CleChamp | null): string {
   if (c === null) return '';
   return CHAMPS_IMPORT[type].find((d) => d.cle === c)?.libelle ?? c;
 }
 
-function message(code: CodeErreurImport, nomChamp: string, cellule: Cellule | undefined, detail = ''): string {
-  const v = `« ${extrait(cellule)} »`;
+/**
+ * Message d'une erreur. Il ne cite pas la cellule (T14c) : elle se relit dans
+ * `lignes[ligne - 1][colonne]`, et une même erreur peut ainsi être partagée par toutes les lignes
+ * (400 000 lignes à 5 erreurs tiennent dans 512 Mo). Seul l'ordre des dates cite les deux dates.
+ */
+function message(code: CodeErreurImport, nomChamp: string, detail = ''): string {
   const m = (() => {
     switch (code) {
       case 'nombre_invalide':
-        return `${nomChamp} : ${v} n’est pas un nombre${detail}.`;
+        return `${nomChamp} : la valeur n’est pas un nombre${detail}.`;
       case 'unite_inconnue':
-        return `${nomChamp} : unité non reconnue dans ${v} (m, cm, kg ou g).`;
+        return `${nomChamp} : unité non reconnue (m, cm, kg ou g).`;
       case 'date_invalide':
-        return `${nomChamp} : ${v} n’est pas une date valide (JJ/MM/AAAA, AAAA-MM-JJ ou semaine S14).`;
+        return `${nomChamp} : la valeur n’est pas une date valide (JJ/MM/AAAA, AAAA-MM-JJ ou semaine S14).`;
       case 'annee_manquante':
-        return `${nomChamp} : ${v} est une semaine ; indiquez l’année de la saison.`;
+        return `${nomChamp} : la valeur est une semaine ; indiquez l’année de la saison.`;
       case 'champ_manquant':
         return detail !== '' ? detail : `${nomChamp} : valeur obligatoire manquante.`;
       case 'valeur_inconnue':
-        return `${nomChamp} : ${v} n’est pas une valeur reconnue${detail}.`;
+        return `${nomChamp} : valeur non reconnue${detail}.`;
       case 'hors_bornes':
-        return `${nomChamp} : ${v} est hors des limites${detail}.`;
+        return `${nomChamp} : valeur hors des limites${detail}.`;
       case 'dates_incoherentes':
-        return `${nomChamp} : ${v} précède ${detail} ; les dates d’une série doivent se suivre (semis, plantation, début puis fin de récolte).`;
+        return `${nomChamp} : ${detail} ; les dates d’une série doivent se suivre (semis, plantation, début puis fin de récolte).`;
       case 'colonnes_en_trop':
-        return `Cellule ${v} hors des colonnes de l’en-tête (colonne ${detail}) : ajoutez-lui un en-tête ou effacez-la.`;
+        return `Cellule hors des colonnes de l’en-tête (colonne ${detail}) : ajoutez-lui un en-tête ou effacez-la.`;
       case 'texte_trop_long':
-        return `${nomChamp} : ${v} est trop long (${String(LONGUEUR_MAX_CELLULE)} caractères au plus).`;
+        return `${nomChamp} : texte trop long (${String(LONGUEUR_MAX_CELLULE)} caractères au plus).`;
       case 'champ_en_double':
         return `${nomChamp} : associé à plusieurs colonnes (${detail}) ; n’en gardez qu’une dans la correspondance.`;
     }
   })();
   return couper(m, 200);
+}
+
+/**
+ * Erreurs d'un plan, partagées : une même erreur (code, champ, colonne, détail) est un seul objet
+ * gelé pour toutes les lignes qui l'ont.
+ */
+function erreursPartagees(type: PlanImport['type']): (code: CodeErreurImport, champ: CleChamp | null, colonne: number | null, detail?: string) => ErreurImport {
+  const memoire = new Map<string, ErreurImport>();
+  return (code, champ, colonne, detail = '') => {
+    const k = `${code}\u0001${champ ?? ''}\u0001${colonne === null ? '' : String(colonne)}\u0001${detail}`;
+    let e = memoire.get(k);
+    if (e === undefined) {
+      e = Object.freeze({ code, champ, colonne, message: message(code, libelle(type, champ), detail) });
+      memoire.set(k, e);
+    }
+    return e;
+  };
 }
 
 /** Lettre de colonne du tableur : 0 → A, 26 → AA. */
@@ -330,11 +347,15 @@ function cleMemorisee(): (t: string) => string {
  * chaîne partagée de 32 767 caractères répétée sur 100 000 lignes n'est nettoyée qu'une fois.
  * Toutes les lectures retirent ces espaces : le résultat ne change pas, seul le temps baisse.
  */
+const NETTOYAGE_SANS_MEMOIRE = 256;
+
 function nettoyageMemorise(): (c: Cellule | undefined) => Cellule {
   const memoire = new Map<string, string>();
   return (c) => {
     if (c === undefined) return null;
-    if (typeof c !== 'string') return c;
+    // Chaîne courte : la nettoyer coûte moins que la retenir (400 000 lignes aux valeurs toutes
+    // différentes ne remplissent pas la mémoire, T14c).
+    if (typeof c !== 'string' || c.length <= NETTOYAGE_SANS_MEMOIRE) return typeof c === 'string' ? c.trim() : c;
     let t = memoire.get(c);
     if (t === undefined) {
       t = c.trim();
@@ -379,6 +400,7 @@ export function preparerImport(entree: EntreeImport): PlanImport {
   const { correspondance, bibliotheque, anneeSaison } = entree;
   const cleDe = cleMemorisee();
   const nettoyer = nettoyageMemorise();
+  const erreur = erreursPartagees(correspondance.type);
   const systemeDates: SystemeDates = entree.systemeDates === 1904 ? 1904 : 1900;
   const type = correspondance.type;
   const definitions = CHAMPS_IMPORT[type];
@@ -470,6 +492,11 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     if (NATURES[col.champ].sorte === 'date') optionsDates.set(col.indice, { ordre: ordreColonne(entree.lignes, debut, col.indice, nettoyer), systemeDates });
   }
   const optionsParDefaut: OptionsDate = { systemeDates };
+  // Erreurs de la correspondance, les mêmes pour chaque ligne.
+  const erreursDeCorrespondance: readonly ErreurImport[] = [
+    ...nonAssocies.map((c) => erreur('champ_manquant', c, null, `${libelle(type, c)} : aucune colonne du fichier n’y est associée.`)),
+    ...enDouble.map((d) => erreur('champ_en_double', d.champ, d.indices[1] ?? null, d.indices.map(lettreColonne).join(', '))),
+  ];
 
   for (let i = debut; i < entree.lignes.length; i++) {
     // Cellules nettoyées une fois par chaîne (toutes les lectures retirent les espaces autour).
@@ -505,62 +532,45 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     }
 
     const valeurs: Partial<Record<CleChamp, ValeurImport>> = {};
-    const erreurs: ErreurImport[] = [];
-    for (const c of nonAssocies) {
-      erreurs.push({ code: 'champ_manquant', champ: c, colonne: null, message: `${libelle(type, c)} : aucune colonne du fichier n’y est associée.` });
-    }
-    for (const d of enDouble) {
-      const deuxieme = d.indices[1] ?? null;
-      const lettres = d.indices.map(lettreColonne).join(', ');
-      erreurs.push({ code: 'champ_en_double', champ: d.champ, colonne: deuxieme, message: message('champ_en_double', libelle(type, d.champ), null, lettres) });
-    }
+    const erreurs: ErreurImport[] = [...erreursDeCorrespondance];
     const ctxBase = { anneeSaison, referencer };
     for (const col of colonnes) {
       const cellule = remplacees.get(col.indice) ?? brute[col.indice] ?? null;
       const lu = lireCellule(NATURES[col.champ], cellule, { ...ctxBase, unite: col.unite, optionsDate: optionsDates.get(col.indice) ?? optionsParDefaut });
-      const nom = libelle(type, col.champ);
       if (!lu.ok) {
-        erreurs.push({ code: lu.code, champ: col.champ, colonne: col.indice, message: message(lu.code, nom, cellule, lu.detail) });
+        erreurs.push(erreur(lu.code, col.champ, col.indice, lu.detail));
         continue;
       }
       valeurs[col.champ] = lu.valeur;
-      if (lu.valeur === null && obligatoires.includes(col.champ)) {
-        erreurs.push({ code: 'champ_manquant', champ: col.champ, colonne: col.indice, message: message('champ_manquant', nom, cellule) });
-      }
+      if (lu.valeur === null && obligatoires.includes(col.champ)) erreurs.push(erreur('champ_manquant', col.champ, col.indice));
     }
 
     // Règles de ligne : une date au moins pour une série, dans l'ordre ; un lieu et une culture
     // pour l'assolement ; rien au-delà des colonnes de l'en-tête.
     const vide = (c: CleChamp) => (valeurs[c] ?? null) === null && !erreurs.some((e) => e.champ === c);
     if (type === 'series' && DATES.every(vide)) {
-      erreurs.push({ code: 'champ_manquant', champ: null, colonne: null, message: 'Il faut au moins une date : semis, plantation, début ou fin de récolte.' });
+      erreurs.push(erreur('champ_manquant', null, null, 'Il faut au moins une date : semis, plantation, début ou fin de récolte.'));
     }
     if (type === 'series') {
       const desordre = datesDansLeDesordre(valeurs);
       if (desordre !== null) {
         const colonne = colonneDe.get(desordre.champ) ?? null;
-        const detail = `${libelle(type, desordre.precedent).toLowerCase()} (${desordre.datePrecedente})`;
-        erreurs.push({
-          code: 'dates_incoherentes',
-          champ: desordre.champ,
-          colonne,
-          message: message('dates_incoherentes', libelle(type, desordre.champ), desordre.date, detail),
-        });
+        erreurs.push(erreur('dates_incoherentes', desordre.champ, colonne, `${desordre.date} précède ${libelle(type, desordre.precedent).toLowerCase()} (${desordre.datePrecedente})`));
       }
     }
     if (type === 'assolement') {
       if (vide('zone') && vide('emplacement')) {
-        erreurs.push({ code: 'champ_manquant', champ: null, colonne: null, message: 'Il faut une zone ou un emplacement.' });
+        erreurs.push(erreur('champ_manquant', null, null, 'Il faut une zone ou un emplacement.'));
       }
       if (vide('famille') && vide('espece')) {
-        erreurs.push({ code: 'champ_manquant', champ: null, colonne: null, message: 'Il faut une famille ou une culture.' });
+        erreurs.push(erreur('champ_manquant', null, null, 'Il faut une famille ou une culture.'));
       }
     }
 
     if (largeur !== null) {
       for (let j = largeur; j < brute.length; j++) {
         if (celluleVide(brute[j])) continue;
-        erreurs.push({ code: 'colonnes_en_trop', champ: null, colonne: j, message: message('colonnes_en_trop', '', brute[j], lettreColonne(j)) });
+        erreurs.push(erreur('colonnes_en_trop', null, j, lettreColonne(j)));
         break;
       }
     }
