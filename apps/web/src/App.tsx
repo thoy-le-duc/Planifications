@@ -255,7 +255,7 @@ export function App() {
       <div className="coquille-contenu">
         <ContexteFerme value={donnees.ferme}>
           {onglet === 'ferme' ? (
-            <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} />
+            <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} etatBase={donnees.base} />
           ) : onglet === 'planches' ? (
             <OngletPlanches base={donnees.base} />
           ) : (
