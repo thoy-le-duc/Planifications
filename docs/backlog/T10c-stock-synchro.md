@@ -36,6 +36,20 @@
 6. **Modifier ou effacer un article** : refusé, motif `ajout_seul` ou `table_interdite`.
 7. **Banc `e2e:synchro`** : le nom du projet compose et le port de la page sont paramétrables, pour que deux équipes puissent le lancer en même temps.
 
+## Décisions du chef après la relecture (2026-09-30)
+
+- **B1, récolte d'origine bornée.** Un mouvement rattaché à la récolte d'origine vérifie 0 < q et somme(chaîne) + q ≤ quantité en vigueur de la récolte. Il est refusé si la chaîne contient une annulation.
+- **B2, un seul article par chaîne.** Un mouvement sur un autre article que celui déjà présent dans la chaîne est refusé. Au premier mouvement, l'unité de l'article est celle du détail de la récolte, et son espèce celle de la série ou de la campagne.
+- **Verrou unique par ferme** (`pg_advisory_xact_lock` sur la ferme), pris avant la première écriture de stock du lot : il supprime l'interblocage entre deux chaînes.
+- **Précision** : une quantité à plus de 6 décimales est refusée (`champ_invalide`).
+- **Chaîne de plus de 1 000 niveaux** : refusée, sans repli sur une somme partielle.
+- **`ecrireEnsemble` bornée** : la porte rejette au-delà de `ECRITURES_MAX_PAR_LOT` ordres, avant d'écrire. Un lot trop gros ne doit jamais bloquer la file d'envoi.
+- **Suite** (ticket ultérieur) :
+  - vérifier la ferme dans la même requête que le verrou `FOR SHARE` (ici et dans `references.ts`) ;
+  - répondre 200 avec des refus pour un lot trop gros ;
+  - faire trancher par Théophane si l'on peut corriger une annulation (accepté aujourd'hui, cohérent) ;
+  - fixer l'échelle `numeric(12,6)`.
+
 ## Critères d'acceptation
 
 - [ ] Un test par règle, côté API (intégration Postgres), y compris :
