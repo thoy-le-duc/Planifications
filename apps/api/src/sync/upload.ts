@@ -319,6 +319,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     l: LigneEvenement,
     auteurId: Id<'Utilisateur'>,
     remplacements: RemplacementEcrit[],
+    index: number,
   ): Promise<Refus | null> {
     const maintenant = ctx.maintenant();
     const refusReference = (await verifierReferences(tx, l)) ?? (await verifierCorrection(tx, l)) ?? (await verifierRemplacementRecolte(tx, l));
@@ -333,7 +334,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       return (await identique(tx, l)) ? null : { motif: 'ajout_seul', fermeId: l.fermeId };
     }
     // T10g, décision 8 : son stock est complété en fin de lot si le téléphone n'a pas envoyé de mouvement.
-    if (l.type === 'recolte' && l.remplaceSorte !== null) remplacements.push({ id: l.id, fermeId: l.fermeId, date: l.date, sorte: l.remplaceSorte });
+    if (l.type === 'recolte' && l.remplaceSorte !== null) remplacements.push({ id: l.id, fermeId: l.fermeId, date: l.date, sorte: l.remplaceSorte, index });
     await tx.insert(modification).values({
       id: ctx.nouvelId(),
       fermeId: l.fermeId,
@@ -405,7 +406,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       if (estUuid(auteur) && auteur.toLowerCase() !== utilisateurId) return { motif: 'auteur_invalide', fermeId: fermeDonnee };
       const lecture = lireEvenement(e.id, donnees);
       if (!lecture.ok) return { motif: 'ecriture_invalide', precision: lecture.raison, fermeId: fermeDonnee };
-      return ecrireEvenement(tx, lecture.valeur, utilisateurId, remplacements);
+      return ecrireEvenement(tx, lecture.valeur, utilisateurId, remplacements, index);
     }
     if (e.table === 'serie' || e.table === 'occupation') {
       return ecrireSerie(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId, touchees, index);
@@ -451,7 +452,10 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
           if (refus !== null) throw new RefusDansLot(i, refus);
         }
         // T10g, décision 8 : écart de stock des remplacements de récolte envoyés sans mouvement.
-        for (const r of remplacements) await completerStock(tx, ctx, r, utilisateurId);
+        for (const r of remplacements) {
+          const refus = await completerStock(tx, ctx, r, utilisateurId);
+          if (refus !== null) throw new RefusDansLot(r.index, refus);
+        }
         // T10e, décision 1 : la cohérence série ↔ occupations se vérifie une fois tout le lot écrit.
         const incoherence = await verifierFinDeLot(tx, touchees, fermes);
         if (incoherence !== null) throw new RefusDansLot(incoherence.index, incoherence.refus);

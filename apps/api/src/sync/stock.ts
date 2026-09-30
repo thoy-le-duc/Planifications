@@ -386,23 +386,27 @@ export interface RemplacementEcrit {
   readonly fermeId: Id<'Ferme'>;
   readonly date: DateCalendaire;
   readonly sorte: 'correction' | 'annulation';
+  /** Rang de l'événement dans le lot (fautif si l'id du mouvement d'écart est déjà pris). */
+  readonly index: number;
 }
 
 /**
  * Fin de lot (décision 8) : pour un remplacement de récolte accepté dans ce lot, sans mouvement
  * rattaché (le téléphone n'en a pas envoyé), le serveur écrit lui-même l'écart, sous le verrou de
  * la ferme, avec un id déterministe (uuidV5 de l'id de l'événement) : un renvoi ne le double pas.
- * Rien si la chaîne n'a pas d'article (récolte sans stock) ou si l'écart est nul.
+ * Rien si la chaîne n'a pas d'article (récolte sans stock) ou si l'écart est nul. Id déjà pris
+ * par un mouvement d'un autre événement (réservé d'avance par un téléphone) : refus
+ * 'ecriture_invalide' de l'événement, le lot entier est refusé. null si accepté.
  */
-export async function completerStock(tx: TransactionDb, ctx: Contexte, r: RemplacementEcrit, auteurId: Id<'Utilisateur'>): Promise<void> {
+export async function completerStock(tx: TransactionDb, ctx: Contexte, r: RemplacementEcrit, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
   const deja = await tx.execute<{ n: number }>(sql`SELECT 1 AS n FROM mouvement_stock WHERE recolte_id = ${r.id}::uuid LIMIT 1`);
-  if (deja.rows.length > 0) return;
+  if (deja.rows.length > 0) return null;
   const chaine = await lireChaine(tx, r.id, r.fermeId);
-  if (chaine === null) return;
+  if (chaine === null) return null;
   const [article] = [...chaine.sommes.keys()];
-  if (article === undefined) return;
+  if (article === undefined) return null;
   const ecart = ecartDeLaChaine(r.sorte, chaine, chaine.sommes.get(article) ?? 0);
-  if (ecart === 0) return;
+  if (ecart === 0) return null;
   const id = uuidV5(r.id.toLowerCase(), ESPACE_MOUVEMENT_ECART);
   const maintenant = ctx.maintenant();
   const [ecrit] = await tx
@@ -419,5 +423,13 @@ export async function completerStock(tx: TransactionDb, ctx: Contexte, r: Rempla
     })
     .onConflictDoNothing({ target: mouvementStock.id })
     .returning({ id: mouvementStock.id });
-  if (ecrit !== undefined) await historiser(tx, ctx, 'mouvement_stock', id, r.fermeId, auteurId, maintenant);
+  if (ecrit === undefined) {
+    // L'id est pris : seul le mouvement d'écart de CET événement est un renvoi légitime.
+    const pris = await tx.execute<{ sien: boolean }>(
+      sql`SELECT recolte_id IS NOT DISTINCT FROM ${r.id}::uuid AS sien FROM mouvement_stock WHERE id = ${id}::uuid`,
+    );
+    return pris.rows[0]?.sien === true ? null : invalide("identifiant du mouvement d'écart déjà pris par un autre mouvement", r.fermeId);
+  }
+  await historiser(tx, ctx, 'mouvement_stock', id, r.fermeId, auteurId, maintenant);
+  return null;
 }
