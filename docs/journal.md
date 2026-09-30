@@ -2,6 +2,20 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-09-30 — T23 : le serveur accepte les itinéraires et les types d'intervention
+
+- **Fait** :
+  - Nouvelle table des types d'intervention de la ferme, avec une liste de départ commune de 20 types. Elle descend sur les téléphones et part dans l'export complet.
+  - Les itinéraires et les types créés ou modifiés au téléphone, même hors ligne, arrivent au serveur. Un lot est accepté ou refusé en entier, avec les séries. Le serveur écrit l'historique.
+  - Scénario vérifié à deux téléphones.
+- **Décidé** :
+  - La bibliothèque commune est en lecture seule : on la duplique pour l'adapter.
+  - Un type utilisé se masque, ne se supprime pas et ne se renomme pas.
+  - Les noms de type sont nettoyés (espaces de bord, accents unifiés, caractères invisibles refusés) et uniques sans tenir compte des majuscules.
+  - L'espèce d'un itinéraire est figée.
+  - Supprimer un itinéraire utilisé est permis : la série garde sa copie.
+- **Bloquant** : rien. À retenir pour la mise en ligne : la base de production doit être créée en locale UTF-8, sinon l'unicité sans majuscules ne vaut que pour l'ASCII.
+
 ## 2026-09-30 — T22b : « Fait » sur un travail en retard solde la bonne occurrence
 
 - **Fait** : « Marquer fait » sur une carte de travail écrit la date de cette carte (`occurrenceVisee`) dans l'intervention. Elle solde cette occurrence et les précédentes, jamais la suivante (Q24). Le désherbage du 31 reste à faire quand on rattrape celui du 17.

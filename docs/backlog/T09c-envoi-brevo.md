@@ -16,3 +16,7 @@
 - Configuration SMTP de Brevo documentée (hôte, port, TLS), vérifiée au démarrage de l'API.
 - Message du code en français, texte brut et HTML sobre, expéditeur au nom de l'appli.
 - Test : l'envoi passe par le transport configuré ; en l'absence de configuration, seul le mode console de développement démarre.
+
+## Note de mise en ligne (T23)
+
+- La base Postgres de production doit être créée en locale UTF-8 (par exemple `C.UTF-8` ou `fr_FR.UTF-8`) : l'index unique des types d'intervention repose sur `lower(libelle)`, qui ne met en minuscules que l'ASCII en locale `C` pure.
