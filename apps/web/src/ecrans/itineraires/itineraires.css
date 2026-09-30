@@ -1,0 +1,1101 @@
+/*
+ * Écran « Mes itinéraires » et formulaire d'un itinéraire (T24). Aucune couleur en dur : jetons
+ * seulement (src/ui/jetons.ts, variables CSS). Vert forêt pour ce qui se touche, orange pour ce
+ * qui presse. Toute commande fait au moins 56 × 56 px (gants), textes au contraste AA ; à 360 px
+ * de large, rien ne déborde.
+ */
+
+.itin-voile {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  background: var(--couleur-fond);
+}
+
+.itin-voile-formulaire {
+  z-index: 32;
+}
+
+.itin-feuille {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  outline: none;
+}
+
+/* ── En-tête ─────────────────────────────────────────────────────────────────────────────── */
+
+.itin-tete {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: max(18px, env(safe-area-inset-top)) 16px 10px;
+}
+
+.itin-tete-ecran {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.itin-tete-textes {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.itin-surtitre {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.itin-tete h2 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 28px;
+  line-height: 1.05;
+  outline: none;
+}
+
+.itin-bouton-fermer {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: var(--ombre-carte);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Corps (défile seul) ─────────────────────────────────────────────────────────────────── */
+
+.itin-corps {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 12px 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.itin-voile-formulaire .itin-corps {
+  padding-bottom: 20px;
+}
+
+.itin-aide {
+  margin: 0;
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+  overflow-wrap: anywhere;
+}
+
+.itin-chargement {
+  margin: var(--espace-xl) 4px;
+  font-size: 17px;
+}
+
+.itin-invisible {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── Sections de l'écran ─────────────────────────────────────────────────────────────────── */
+
+.itin-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.itin-section + .itin-section {
+  margin-top: 12px;
+}
+
+.itin-section-tete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 0 4px;
+}
+
+.itin-section-tete h3 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 21px;
+}
+
+.itin-bouton-nouveau {
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 18px 0 14px;
+  border: 0;
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  box-shadow: var(--ombre-basse);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 17px;
+}
+
+.itin-culture-groupe {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-surface);
+  box-shadow: var(--ombre-carte);
+  min-width: 0;
+}
+
+.itin-culture-groupe h4 {
+  margin: 0 4px 2px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+.itin-culture-groupe h4 span {
+  font-family: var(--police-texte);
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.itin-culture-groupe ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.itin-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.itin-item-bouton {
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 12px 10px 16px;
+  border: 0;
+  border-left: 6px solid var(--couleur-foret);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.itin-item-bibliotheque .itin-item-bouton {
+  border-left-color: var(--couleur-trait);
+}
+
+.itin-item-bouton:active {
+  background: var(--couleur-trait);
+}
+
+.itin-item-textes {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.itin-item-textes strong {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.itin-item-textes > span {
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.itin-pastille {
+  padding: 2px 8px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-surface);
+  font-style: normal;
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.itin-item-action {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--couleur-foret);
+}
+
+.itin-bouton-adapter {
+  align-self: stretch;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.itin-bouton-adapter:active {
+  background: var(--couleur-fond);
+}
+
+/* ── Types d'intervention ────────────────────────────────────────────────────────────────── */
+
+.itin-categorie {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-surface);
+  box-shadow: var(--ombre-carte);
+  min-width: 0;
+}
+
+.itin-categorie h4 {
+  margin: 0 2px;
+  font-family: var(--police-titre);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.itin-types-ferme {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.itin-type {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 14px;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-fond);
+  min-width: 0;
+}
+
+.itin-type-textes {
+  flex: 1 1 120px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-wrap: anywhere;
+}
+
+.itin-type-textes strong {
+  font-size: 17px;
+}
+
+.itin-type-textes span {
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.itin-type-masque .itin-type-textes strong {
+  color: var(--couleur-secondaire);
+  text-decoration: line-through;
+}
+
+.itin-type-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.itin-types-depart {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.itin-puce {
+  padding: 6px 12px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-fond);
+  font-size: 15px;
+  color: var(--couleur-encre);
+  overflow-wrap: anywhere;
+}
+
+.itin-puce-utilisee {
+  background: var(--couleur-sur-foret-doux);
+}
+
+.itin-ajout-type .itin-bouton-ajouter {
+  margin-top: 2px;
+}
+
+/* ── Cartes et champs ────────────────────────────────────────────────────────────────────── */
+
+.itin-carte {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  background: var(--couleur-surface);
+  border-radius: var(--rayon-carte);
+  box-shadow: var(--ombre-carte);
+  min-width: 0;
+}
+
+.itin-titre-carte {
+  margin: 0;
+}
+
+.itin-etiquette {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.itin-grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  align-items: end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.itin-champ-bloc {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.itin-large {
+  grid-column: 1 / -1;
+}
+
+.itin-champ-cadre {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.itin-champ {
+  display: block;
+  width: 100%;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 2px solid var(--couleur-tertiaire);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font: inherit;
+  font-size: 18px;
+}
+
+.itin-champ:focus-visible {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: 1px;
+  border-color: var(--couleur-foret);
+}
+
+.itin-champ:disabled {
+  border-color: var(--couleur-trait);
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  opacity: 1;
+}
+
+.itin-champ-nombre {
+  padding-right: 38px;
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.itin-suffixe {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+  pointer-events: none;
+}
+
+select.itin-liste {
+  appearance: none;
+  padding-right: 40px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--couleur-encre) 50%), linear-gradient(135deg, var(--couleur-encre) 50%, transparent 50%);
+  background-position: calc(100% - 22px) 50%, calc(100% - 16px) 50%;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+}
+
+.itin-culture {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.itin-culture strong {
+  font-size: 20px;
+}
+
+/* ── Mode (radios en segments) ───────────────────────────────────────────────────────────── */
+
+.itin-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 18px;
+  background: var(--couleur-fond);
+}
+
+.itin-mode {
+  position: relative;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 4px 6px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.15;
+  color: var(--couleur-encre);
+  background: var(--couleur-fond);
+  cursor: pointer;
+}
+
+.itin-mode input,
+.itin-case input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+.itin-mode-choisi {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.itin-mode-inactif {
+  cursor: default;
+}
+
+.itin-mode:has(input:focus-visible),
+.itin-case:has(input:focus-visible) {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: 2px;
+}
+
+/* ── Travaux prévus ──────────────────────────────────────────────────────────────────────── */
+
+.itin-travail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 2px solid var(--couleur-trait);
+  border-left: 6px solid var(--couleur-foret);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  min-width: 0;
+}
+
+.itin-travail-jamais {
+  border-left-color: var(--couleur-orange);
+}
+
+.itin-travail-tete {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.itin-travail-tete .itin-champ-bloc {
+  flex: 1 1 auto;
+}
+
+.itin-numero {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin-bottom: 10px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--police-code);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.itin-case {
+  position: relative;
+  align-self: flex-start;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 18px 0 12px;
+  border: 2px solid var(--couleur-trait);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.itin-case-cochee {
+  border-color: var(--couleur-foret);
+}
+
+.itin-case-inactive {
+  cursor: default;
+}
+
+.itin-case-marque {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--couleur-tertiaire);
+  border-radius: 7px;
+  background: var(--couleur-surface);
+}
+
+.itin-case-cochee .itin-case-marque {
+  border-color: var(--couleur-foret);
+  background: var(--couleur-foret);
+}
+
+/* Coche dessinée en CSS (la CSP n'autorise aucune image data:). */
+.itin-case-cochee .itin-case-marque::after {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 2px;
+  width: 7px;
+  height: 13px;
+  border: solid var(--couleur-sur-foret);
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
+}
+
+.itin-jamais {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--rayon-etiquette);
+  border-left: 6px solid var(--couleur-orange);
+  background: var(--couleur-fond);
+  color: var(--couleur-texte-orange);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.itin-jamais svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.itin-bouton-retirer {
+  align-self: flex-start;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.itin-bouton-ajouter {
+  width: 100%;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 2px dashed var(--couleur-foret);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.itin-bouton-ajouter:disabled {
+  border-style: solid;
+  border-color: var(--couleur-trait);
+  background: var(--couleur-fond);
+  color: var(--couleur-tertiaire);
+}
+
+/* ── Aperçu ──────────────────────────────────────────────────────────────────────────────── */
+
+.itin-apercu {
+  border: 2px solid var(--couleur-sur-foret-doux);
+}
+
+.itin-apercu .itin-aide strong {
+  color: var(--couleur-encre);
+}
+
+.itin-etapes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 8px;
+}
+
+@media (min-width: 480px) {
+  .itin-etapes {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.itin-etape {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.itin-etape i {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--couleur-sur-foret-doux);
+}
+
+.itin-etape-miseEnPlace i {
+  background: var(--famille-salades);
+}
+
+.itin-etape-debutRecolte i {
+  background: var(--famille-cruciferes);
+}
+
+.itin-etape-finRecolte i {
+  background: var(--famille-cruciferes);
+  opacity: 0.5;
+}
+
+.itin-etape span {
+  font-size: 13px;
+  color: var(--couleur-secondaire);
+}
+
+.itin-etape strong {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.itin-apercu-travaux {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.itin-apercu-travaux li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: var(--rayon-etiquette);
+  border-left: 4px solid var(--couleur-foret);
+  background: var(--couleur-fond);
+  overflow-wrap: anywhere;
+}
+
+.itin-apercu-travaux li span {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.itin-apercu-travaux li.itin-apercu-jamais {
+  border-left-color: var(--couleur-orange);
+}
+
+.itin-apercu-travaux li.itin-apercu-jamais span {
+  color: var(--couleur-texte-orange);
+}
+
+/* ── Pied : Fermer, Enregistrer ──────────────────────────────────────────────────────────── */
+
+.itin-pied {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px max(16px, env(safe-area-inset-bottom));
+  background: var(--couleur-fond);
+  box-shadow: 0 -1px 0 var(--couleur-trait);
+}
+
+.itin-aide-pied {
+  text-align: center;
+}
+
+.itin-erreur {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 6px solid var(--couleur-conflit);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-conflit);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.itin-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.itin-bouton-principal,
+.itin-bouton-secondaire {
+  min-width: 56px;
+  min-height: 60px;
+  padding: 0 14px;
+  border-radius: var(--rayon-bouton);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.itin-bouton-secondaire {
+  flex: 1 1 0;
+  border: 0;
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: var(--ombre-carte);
+}
+
+.itin-bouton-principal {
+  flex: 2 1 0;
+  border: 0;
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 18px;
+  box-shadow: var(--ombre-basse);
+}
+
+.itin-bouton-principal:disabled {
+  background: var(--couleur-trait);
+  color: var(--couleur-encre);
+  box-shadow: none;
+}
+
+.itin-bouton-leger {
+  flex-shrink: 0;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 2px solid var(--couleur-trait);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* ── Confirmation, renommer ──────────────────────────────────────────────────────────────── */
+
+.itin-voile-confirmation {
+  position: fixed;
+  z-index: 34;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in srgb, var(--couleur-encre) 45%, transparent);
+}
+
+.itin-confirmation {
+  width: 100%;
+  max-width: 600px;
+  max-height: 92%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 16px max(20px, env(safe-area-inset-bottom));
+  border-radius: var(--rayon-feuille) var(--rayon-feuille) 0 0;
+  background: var(--couleur-surface);
+  overflow-wrap: anywhere;
+}
+
+.itin-confirmation h3 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 23px;
+  line-height: 1.15;
+}
+
+.itin-confirmation p {
+  margin: 0;
+  font-size: 16px;
+  color: var(--couleur-secondaire);
+}
+
+.itin-confirmation .itin-erreur {
+  color: var(--couleur-conflit);
+}
+
+.itin-series {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.itin-series li {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: var(--rayon-case);
+  border-left: 6px solid var(--couleur-orange);
+  background: var(--couleur-fond);
+}
+
+.itin-series li strong {
+  font-size: 17px;
+}
+
+.itin-series li span {
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.itin-confirmation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.itin-confirmation-actions > button {
+  flex: 1 1 140px;
+}
+
+.itin-confirmation-actions .itin-bouton-principal {
+  flex-basis: 100%;
+}
+
+.itin-confirmation-actions .itin-bouton-secondaire {
+  border: 2px solid var(--couleur-trait);
+  box-shadow: none;
+}
+
+/* ── Bandeau « Annuler » ─────────────────────────────────────────────────────────────────── */
+
+.itin-bandeau {
+  position: absolute;
+  z-index: 2;
+  left: 12px;
+  right: 12px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  gap: var(--espace-m);
+  padding: 10px 10px 14px 16px;
+  overflow: hidden;
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  box-shadow: var(--ombre-basse);
+  animation: itin-apparition 160ms ease-out;
+}
+
+.itin-bandeau-texte {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 15px;
+  color: var(--couleur-sur-foret-doux);
+  overflow-wrap: anywhere;
+}
+
+.itin-bandeau-texte strong {
+  font-size: 16px;
+  color: var(--couleur-sur-foret);
+}
+
+.itin-bandeau-annuler {
+  flex-shrink: 0;
+  min-width: 96px;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.itin-bandeau-temps {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  width: 100%;
+  background: var(--couleur-pousse);
+  transform-origin: left center;
+  animation: itin-compte-a-rebours 10s linear forwards;
+}
+
+.itin-bandeau-echec {
+  background: var(--couleur-conflit);
+}
+
+.itin-bandeau-echec .itin-bandeau-texte,
+.itin-bandeau-echec .itin-bandeau-texte strong {
+  color: var(--couleur-surface);
+}
+
+.itin-bandeau-echec .itin-bandeau-annuler {
+  min-width: 56px;
+  color: var(--couleur-conflit);
+}
+
+@keyframes itin-compte-a-rebours {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes itin-apparition {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .itin-bandeau {
+    animation: none;
+  }
+}

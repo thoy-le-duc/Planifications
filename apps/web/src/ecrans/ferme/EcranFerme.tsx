@@ -14,6 +14,10 @@
  * base n'est fermée qu'une fois toutes les lectures de l'export terminées (relecture T16b), ou
  * au plus tard après DELAI_FERMETURE_MS : une lecture qui ne revient jamais (worker planté,
  * verrou d'un autre onglet) ne doit pas empêcher d'effacer le téléphone.
+ *
+ * Mes itinéraires (T24) : une ligne, active quand la base est prête et la ferme connue. Un tap
+ * charge l'écran (`import('../itineraires/index.ts')`, jamais un import statique : ni l'entrée
+ * ni ce morceau ne le portent ; préchargé au repos) et le montre avec la porte du contexte.
  */
 import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { urlApi } from '../../connexion/client.ts';
@@ -47,6 +51,10 @@ export interface ProprietesEcranFerme {
 
 /** L'écran d'export, chargé à la demande (morceau à part). */
 const chargerExport = () => import('../export/index.ts');
+
+/** L'écran des itinéraires (T24), chargé à la demande (morceau à part). */
+const chargerItineraires = () => import('../itineraires/index.ts');
+type ModuleItineraires = Awaited<ReturnType<typeof chargerItineraires>>;
 
 /** Pourquoi le bouton d'export est désactivé, dit en clair. */
 const EXPLICATION_EXPORT: Readonly<Record<Exclude<EtatBase, 'prete'>, string>> = {
@@ -187,6 +195,47 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
   );
 
   const exportPossible = etatBase === 'prete' && ouverte !== null && !deconnexionEnCours;
+  const itinerairesPossibles = etatBase === 'prete' && ouverte !== null && !deconnexionEnCours;
+  const [itineraires, setItineraires] = useState<ModuleItineraires | null>(null);
+  const [itinerairesOuverts, setItinerairesOuverts] = useState(false);
+
+  // Écran des itinéraires : son code est chargé au repos, pour que le tap ne paie que le rendu.
+  useEffect(() => {
+    if (!itinerairesPossibles) return;
+    let actif = true;
+    const g = globalThis as { requestIdleCallback?: (f: () => void) => number; cancelIdleCallback?: (id: number) => void };
+    const precharger = () => {
+      chargerItineraires().then(
+        (m) => {
+          if (actif) setItineraires(m);
+        },
+        () => undefined,
+      );
+    };
+    if (g.requestIdleCallback === undefined || g.cancelIdleCallback === undefined) {
+      const minuterie = setTimeout(precharger, 300);
+      return () => {
+        actif = false;
+        clearTimeout(minuterie);
+      };
+    }
+    const id = g.requestIdleCallback(precharger);
+    const annuler = g.cancelIdleCallback;
+    return () => {
+      actif = false;
+      annuler(id);
+    };
+  }, [itinerairesPossibles]);
+
+  function ouvrirItineraires(): void {
+    if (!itinerairesPossibles) return;
+    setItinerairesOuverts(true);
+    if (itineraires !== null) return;
+    chargerItineraires().then(setItineraires, (e: unknown) => {
+      console.error('Écran des itinéraires introuvable', e);
+      setItinerairesOuverts(false);
+    });
+  }
 
   // Export possible : son code est chargé au repos, après l'affichage de l'écran, pour que le tap
   // ne paie pas l'évaluation du morceau (observé : une tâche d'≈ 50 ms, CPU ×4, juste après le tap).
@@ -343,6 +392,25 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
   return (
     <>
       {effacementEnAttente && <AlerteOrange>{ALERTE_EFFACEMENT}</AlerteOrange>}
+      <Carte titre="Ma façon de cultiver">
+        <Ligne
+          nom="Mes itinéraires"
+          detail="Itinéraires par culture, travaux prévus, types d’intervention"
+          signe="›"
+          couleur="var(--couleur-foret)"
+          desactivee={!itinerairesPossibles}
+          surTap={ouvrirItineraires}
+        />
+      </Carte>
+      {itinerairesOuverts && itineraires !== null && ouverte !== null && (
+        <itineraires.EcranItineraires
+          porte={ouverte.porte}
+          fermeId={ouverte.fermeId}
+          surFermer={() => {
+            setItinerairesOuverts(false);
+          }}
+        />
+      )}
       <Carte titre="Mes données">
         <Ligne
           nom="Exporter toute ma ferme"
