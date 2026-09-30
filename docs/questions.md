@@ -242,6 +242,8 @@ Question : dans un tableur, une série semée en S40 et plantée en S2 : faut-il
 
 Question : si tu ouvres l'appli et tapes tout de suite sur Planches, l'écran met 0,7 à 0,8 s à s'afficher (téléphone moyen simulé), le temps que les données du téléphone s'ouvrent. Une fois ouvertes, c'est 0,1 à 0,3 s. Est-ce acceptable pour l'instant, avec « Ouverture des données… » affiché, ou faut-il en faire une priorité (T11b) ?
 
+Réponse (2026-09-30) : « ok pour l'instant ». La correction reste dans T11b, sans priorité.
+
 ### Q20 — Corriger une récolte déjà annulée (posée le 2026-09-30, T10c)
 
 Question : quand une récolte a été annulée, peut-on encore la corriger, par exemple pour dire « finalement c'était 40 kg » ? Aujourd'hui c'est accepté et le stock revient à la quantité corrigée. L'autre choix est de refuser : pour rétablir, on saisit une nouvelle récolte. Même question quand deux téléphones corrigent la même récolte hors ligne : faut-il garder la correction la plus récente (heure du téléphone) ou la dernière arrivée ?

@@ -1,0 +1,797 @@
+/*
+ * Écran « Aujourd'hui » (T13, maquettes Main et Saisie). Aucune couleur en dur : jetons
+ * seulement (src/ui/jetons.ts, variables CSS). Toute commande fait au moins 56 × 56 px
+ * (utilisable avec des gants), textes au contraste AA (voir PAIRES_CONTRASTE).
+ */
+
+.auj {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+}
+
+/* Le bandeau « Annuler » est posé en bas de l'écran : la fin de la liste reste atteignable. */
+.auj-avec-bandeau {
+  padding-bottom: 96px;
+}
+
+/* ── Résumé et bouton de récolte ─────────────────────────────────────────────────────────── */
+
+.auj-resume {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-s);
+}
+
+.auj-semaine {
+  align-self: center;
+  margin-right: 2px;
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.auj-pastille {
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  box-shadow: var(--ombre-carte);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 7px 12px;
+  border-radius: var(--rayon-pastille);
+}
+
+.auj-pastille-urgente {
+  background: var(--couleur-orange);
+  color: var(--couleur-sur-orange);
+  box-shadow: none;
+}
+
+.auj-bouton-principal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 64px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 19px;
+  box-shadow: var(--ombre-basse);
+}
+
+.auj-actions {
+  display: flex;
+  gap: var(--espace-s);
+}
+
+.auj-noter {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 12px;
+  font-size: clamp(16px, 4.8vw, 19px);
+  white-space: nowrap;
+}
+
+.auj-vers-historique {
+  flex-shrink: 0;
+  width: 84px;
+  min-height: 64px;
+  border: 0;
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  box-shadow: var(--ombre-carte);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.auj-historique {
+  scroll-margin-top: var(--espace-l);
+}
+
+.auj-bouton-secondaire {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 56px;
+  min-width: 56px;
+  padding: 0 16px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.auj-erreur {
+  background: var(--couleur-surface);
+  border-left: 8px solid var(--couleur-orange);
+  border-radius: var(--rayon-carte);
+  padding: 12px 14px;
+  font-size: 16px;
+  color: var(--couleur-encre);
+}
+
+.auj-chargement,
+.auj-vide {
+  margin: var(--espace-s) 6px 0;
+  font-size: 18px;
+  color: var(--couleur-secondaire);
+}
+
+/* ── Tâches (maquette Main) ──────────────────────────────────────────────────────────────── */
+
+.auj-groupe {
+  margin: 6px 6px 0;
+  font-family: var(--police-titre);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.auj-groupe-retard {
+  color: var(--couleur-texte-orange);
+}
+
+.auj-taches,
+.auj-choix,
+.auj-historique ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+}
+
+.auj-tache {
+  display: flex;
+  align-items: stretch;
+  min-height: 96px;
+  background: var(--couleur-surface);
+  border-radius: var(--rayon-carte);
+  box-shadow: var(--ombre-carte);
+  overflow: hidden;
+}
+
+.auj-bande {
+  width: 8px;
+  flex-shrink: 0;
+  align-self: stretch;
+  background: var(--couleur-trait);
+}
+
+.auj-bande-retard {
+  background: var(--couleur-orange);
+}
+
+.auj-bande-salades {
+  background: var(--famille-salades);
+}
+
+.auj-bande-solanacees {
+  background: var(--famille-solanacees);
+}
+
+.auj-bande-cruciferes {
+  background: var(--famille-cruciferes);
+}
+
+.auj-bande-racines {
+  background: var(--famille-racines);
+}
+
+.auj-tache-corps {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 12px 12px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-wrap: anywhere;
+}
+
+.auj-tache-verbe {
+  font-family: var(--police-titre);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--couleur-foret);
+}
+
+.auj-tache-titre {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.auj-tache-detail {
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.auj-tache-pied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--espace-s);
+  margin-top: 4px;
+}
+
+.auj-code {
+  flex-shrink: 0;
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 14px;
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  padding: 4px 8px;
+  border-radius: var(--rayon-etiquette);
+}
+
+.auj-retard {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--couleur-texte-orange);
+}
+
+.auj-action {
+  width: 76px;
+  min-height: 56px;
+  flex-shrink: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.auj-action-fait {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.auj-action-peser {
+  background: var(--couleur-fond);
+  color: var(--couleur-foret);
+}
+
+.auj-action:focus-visible {
+  outline-color: var(--couleur-sur-foret);
+  outline-offset: -5px;
+}
+
+.auj-action-peser:focus-visible {
+  outline-color: var(--couleur-foret);
+}
+
+/* ── Historique ─────────────────────────────────────────────────────────────────────────── */
+
+.auj-historique {
+  margin-top: var(--espace-s);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+}
+
+.auj-historique-tete {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--espace-s);
+  margin-right: 6px;
+}
+
+.auj-historique-compte {
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.auj-historique-vide {
+  margin: 0 6px;
+  color: var(--couleur-secondaire);
+}
+
+.auj-entree {
+  background: var(--couleur-surface);
+  border-radius: var(--rayon-carte);
+  box-shadow: var(--ombre-carte);
+  padding: 12px 12px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auj-entree-texte {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.auj-entree-quoi {
+  font-family: var(--police-titre);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--couleur-foret);
+}
+
+.auj-entree-culture {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.auj-entree-quand {
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.auj-entree-retiree {
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.auj-entree-actions {
+  display: flex;
+  gap: var(--espace-s);
+}
+
+.auj-entree-actions > button {
+  flex: 1 1 0;
+  padding: 0 10px;
+}
+
+/* ── Bandeau « Annuler » (10 s) ─────────────────────────────────────────────────────────── */
+
+.auj-bandeau {
+  position: fixed;
+  z-index: 15;
+  left: 12px;
+  right: 12px;
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--espace-m);
+  padding: 10px 10px 14px 14px;
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--couleur-encre) 30%, transparent);
+  overflow: hidden;
+  animation: auj-apparition 160ms ease-out;
+}
+
+.auj-bandeau-icone {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-foret-clair);
+  color: var(--couleur-pousse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auj-bandeau-texte {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 15px;
+  color: var(--couleur-sur-foret-doux);
+  overflow-wrap: anywhere;
+}
+
+.auj-bandeau-texte strong {
+  font-size: 16px;
+  color: var(--couleur-sur-foret);
+}
+
+.auj-bandeau-annuler {
+  flex-shrink: 0;
+  min-width: 96px;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+/* Temps restant pour annuler : la barre se vide en 10 s (DELAI_ANNULATION_MS). */
+.auj-bandeau-temps {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  width: 100%;
+  background: var(--couleur-pousse);
+  transform-origin: left center;
+  animation: auj-compte-a-rebours 10s linear forwards;
+}
+
+@keyframes auj-compte-a-rebours {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes auj-apparition {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auj-bandeau {
+    animation: none;
+  }
+}
+
+/* ── Dialogues ───────────────────────────────────────────────────────────────────────────── */
+
+.auj-voile {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in srgb, var(--couleur-encre) 45%, transparent);
+}
+
+.auj-voile-plein {
+  align-items: stretch;
+  background: var(--couleur-fond);
+}
+
+.auj-feuille {
+  width: 100%;
+  max-width: 560px;
+  max-height: 100%;
+  overflow: auto;
+  background: var(--couleur-fond);
+  border-radius: var(--rayon-feuille) var(--rayon-feuille) 0 0;
+  padding: 22px 16px max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+}
+
+.auj-feuille-titre {
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 24px;
+}
+
+.auj-feuille-texte {
+  font-size: 16px;
+  color: var(--couleur-secondaire);
+}
+
+.auj-champ-libelle {
+  font-weight: 700;
+}
+
+.auj-champ {
+  min-height: 56px;
+  min-width: 56px;
+  padding: 0 14px;
+  border: 2px solid var(--couleur-tertiaire);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font-size: 18px;
+}
+
+/* ── Récolte (maquette Saisie) ───────────────────────────────────────────────────────────── */
+
+.auj-recolte {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 14px max(18px, env(safe-area-inset-bottom));
+  gap: 12px;
+}
+
+.auj-recolte-tete {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auj-retour {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  box-shadow: var(--ombre-carte);
+  color: var(--couleur-encre);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auj-recolte-titres {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.auj-recolte-sur {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+  overflow-wrap: anywhere;
+}
+
+.auj-recolte-titre {
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.05;
+}
+
+.auj-recolte-vide {
+  margin: var(--espace-s) 6px;
+  font-size: 17px;
+  color: var(--couleur-secondaire);
+}
+
+.auj-choix-bouton {
+  width: 100%;
+  min-height: 72px;
+  padding: 0 14px 0 0;
+  border: 0;
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: var(--ombre-carte);
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  text-align: left;
+}
+
+.auj-choix-bouton .auj-code {
+  align-self: center;
+}
+
+.auj-choix-corps {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow-wrap: anywhere;
+}
+
+.auj-choix-nom {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.auj-choix-variete {
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.auj-recolte-carte {
+  background: var(--couleur-surface);
+  border-radius: 20px;
+  box-shadow: var(--ombre-carte);
+  padding: 14px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auj-unites {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--couleur-fond);
+}
+
+.auj-unite {
+  flex: 1 1 0;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--couleur-secondaire);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.auj-unite[aria-checked='true'] {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.auj-unite:focus-visible {
+  outline-offset: -4px;
+}
+
+.auj-unite[aria-checked='true']:focus-visible {
+  outline-color: var(--couleur-sur-foret);
+}
+
+.auj-quantite-ligne {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  min-height: 92px;
+  padding: 4px 0 0;
+}
+
+.auj-quantite {
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 84px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.auj-quantite-longue {
+  font-size: 68px;
+}
+
+.auj-quantite-tres-longue {
+  font-size: 56px;
+}
+
+.auj-quantite-vide {
+  color: var(--couleur-tertiaire);
+}
+
+.auj-quantite-unite {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--couleur-secondaire);
+}
+
+.auj-recolte-rappel {
+  text-align: center;
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.auj-pave {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(56px, 1fr));
+  grid-auto-rows: minmax(60px, 1fr);
+  gap: 8px;
+}
+
+.auj-touche {
+  min-width: 56px;
+  min-height: 60px;
+  border: 0;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: var(--ombre-carte);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--police-titre);
+  font-weight: 700;
+  font-size: 30px;
+  touch-action: manipulation;
+}
+
+.auj-touche:active {
+  background: var(--couleur-trait);
+}
+
+.auj-touche-annexe {
+  background: var(--couleur-trait);
+  box-shadow: none;
+}
+
+.auj-touche-annexe:active {
+  background: var(--couleur-surface);
+}
+
+.auj-recolte-pied {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auj-valider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 68px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 20px;
+  box-shadow: var(--ombre-basse);
+}
+
+.auj-recolte-note {
+  text-align: center;
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+/* Petit téléphone ou écran bas : le pavé se resserre, tout reste au-dessus de 56 px. */
+@media (max-height: 700px) {
+  .auj-quantite-ligne {
+    min-height: 76px;
+  }
+
+  .auj-quantite {
+    font-size: 68px;
+  }
+
+  .auj-pave {
+    grid-auto-rows: 56px;
+  }
+
+  .auj-touche {
+    min-height: 56px;
+  }
+}
