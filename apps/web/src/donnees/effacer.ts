@@ -1,7 +1,8 @@
 /**
  * Effacement de la base locale d'un utilisateur (T09b, déconnexion sur un téléphone partagé),
- * SANS charger PowerSync : hors ligne, les fichiers de PowerSync (hors précache) sont
- * injoignables, et la déconnexion doit aboutir quand même.
+ * SANS charger PowerSync : ses fichiers sont dans le précache, mais les charger pour effacer
+ * coûterait du temps et pourrait échouer (précache pas encore installé, base illisible), et la
+ * déconnexion doit aboutir quand même, hors ligne compris.
  *
  * La base locale vit dans IndexedDB : PowerSync web (2.4) range SQLite par le VFS
  * IDBBatchAtomicVFS, son défaut, dans une base IndexedDB qui porte le nom du fichier

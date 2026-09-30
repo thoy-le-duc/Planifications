@@ -118,7 +118,10 @@ export interface OptionsPlan {
 
 // ── Constantes ───────────────────────────────────────────────────────────────────────────────
 
-/** Hauteur de chaque ligne (maquette Plan : 44 px, une cible touchable avec des gants). */
+/**
+ * Hauteur de chaque ligne : 48 px (la maquette Plan en dessinait 44), la cible de l'étiquette
+ * d'une planche en conflit, touchable avec des gants.
+ */
 export const HAUTEUR_LIGNE_PX = 48;
 
 /** Nom de chaque sorte de conflit de T03, tel que l'écran le montre. */

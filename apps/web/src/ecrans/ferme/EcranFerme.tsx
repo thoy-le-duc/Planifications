@@ -174,7 +174,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte }: Propr
       </Carte>
       {exportDemande && (
         <AlerteOrange titre="Pas encore branché">
-          Bientôt : l’export lira les données de ce téléphone dès que l’appli les ouvrira (premiers écrans de planches).
+          L’appli ouvre maintenant les données de ce téléphone, mais l’export n’y est pas encore relié. Il le sera dans une prochaine version.
         </AlerteOrange>
       )}
 
