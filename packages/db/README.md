@@ -39,6 +39,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0007_*.sql` | Généré par drizzle-kit (T10) : `refus_synchro` |
 | `migrations/0010_*.sql` | Généré par drizzle-kit (T09b) : `jeton_renouvellement.famille_id`, `connexion_le`, `utilise_le` (rotation), schéma `securite` et table `demande_ip` (limite par IP). Seule retouche : les sessions existantes forment chacune leur famille |
 | `migrations/0008_*.sql` | Migration personnalisée (T10) : `refus_synchro` dans la publication `powersync`, et publication étendue à `truncate` (exigé par PowerSync 1.26, erreur PSYNC_S1142) |
+| `migrations/0012_*.sql` | Généré par drizzle-kit (T10d) : `mouvement_stock.quantite` en `numeric(12,6)`, six décimales au plus comme la règle de l'API |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 
