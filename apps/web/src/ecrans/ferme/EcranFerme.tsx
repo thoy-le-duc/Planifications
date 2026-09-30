@@ -215,6 +215,10 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     setExportActif(true);
     const fin = (async () => {
       try {
+        // Le rendu du tap (barre, « Annuler », focus) d'abord, le lancement dans une tâche à part :
+        // observé sous charge, les deux ensemble faisaient une tâche de ≈ 54 ms (CPU ×4).
+        await new Promise((suite) => setTimeout(suite, 0));
+        signal.throwIfAborted();
         const { lancerExport, telechargerDansLeNavigateur } = await chargerExport();
         signal.throwIfAborted();
         const archive = await lancerExport({
