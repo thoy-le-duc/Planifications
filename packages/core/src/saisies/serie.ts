@@ -32,9 +32,9 @@ import { octetsUtf8, texteJson } from './outils.ts';
 export type ResultatLigneSerie<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly erreur: ErreurSaisie };
 
 /**
- * Plafonds d'une série et d'une occupation, bornes comprises. PROVISOIRES comme
- * PLAFONDS_PROVISOIRES (Q13, à valider par Théophane) : ils arrêtent une faute de frappe
- * (1e308 m), pas une grande série. 10 km de planches, un million de plants.
+ * Plafonds d'une série et d'une occupation, bornes comprises, validés par Théophane (Q21,
+ * 2026-09-30) : 10 000 m de planche et 1 000 000 de plants. Ils arrêtent une faute de frappe
+ * (1e308 m), pas une grande série.
  */
 export const PLAFONDS_SERIE = {
   /** longueur_m d'une série ou d'une occupation. */

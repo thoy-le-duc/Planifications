@@ -248,6 +248,8 @@ Réponse (2026-09-30) : « ok pour l'instant ». La correction reste dans T11b, 
 
 Question : le serveur refusera une série trop grande. Proposition provisoire : 10 000 m de planche et 1 000 000 de plants au plus. Est-ce que ça te va, ou faut-il d'autres chiffres ? (Même esprit que Q13 pour les quantités.)
 
+Réponse (2026-09-30) : « ok pour 10 000 m et 1 000 000 plants ».
+
 ### Q20 — Corriger une récolte déjà annulée (posée le 2026-09-30, T10c)
 
 Question : quand une récolte a été annulée, peut-on encore la corriger, par exemple pour dire « finalement c'était 40 kg » ? Aujourd'hui c'est accepté et le stock revient à la quantité corrigée. L'autre choix est de refuser : pour rétablir, on saisit une nouvelle récolte. Même question quand deux téléphones corrigent la même récolte hors ligne : faut-il garder la correction la plus récente (heure du téléphone) ou la dernière arrivée ?
