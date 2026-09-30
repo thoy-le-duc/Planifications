@@ -3,7 +3,7 @@
  * locale. Aucun réseau ici : une écriture change l'écran tout de suite, et part dans la file
  * d'envoi de PowerSync (voir envoi.ts) au retour du réseau.
  */
-import { creerGenerateurId, type Id } from '@planif/core';
+import { creerGenerateurId, ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
 import type { BaseLocale, OptionsPorte, OrdreEcriture, PorteDonnees, RefusSynchro, RequeteSurveillee, SaisieEvenement } from './types.ts';
 
 const COLONNES_EVENEMENT = [
@@ -107,6 +107,11 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     async ecrireEnsemble(ordres: readonly OrdreEcriture[]) {
       // Liste vide : rien à écrire, aucune transaction (donc rien dans la file d'envoi).
       if (ordres.length === 0) return;
+      // Une transaction trop grosse serait refusée par le serveur (400) et bloquerait la file
+      // d'envoi : rejet avant d'ouvrir quoi que ce soit.
+      if (ordres.length > ECRITURES_MAX_PAR_LOT) {
+        throw new Error(`${String(ordres.length)} écritures en une transaction : ${String(ECRITURES_MAX_PAR_LOT)} au plus`);
+      }
       // Une seule transaction locale : PowerSync l'envoie en un seul lot, que le serveur accepte ou
       // refuse en entier. Un ordre qui échoue rejette la promesse et annule tout.
       await base.writeTransaction(async (tx) => {
