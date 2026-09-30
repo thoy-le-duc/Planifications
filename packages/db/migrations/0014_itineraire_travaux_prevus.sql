@@ -1,0 +1,2 @@
+ALTER TABLE "itineraire" ADD CONSTRAINT "itineraire_travaux_prevus" CHECK (NOT ("itineraire"."parametres" ? 'travauxPrevus') OR jsonb_typeof("itineraire"."parametres" -> 'travauxPrevus') = 'array');--> statement-breakpoint
+ALTER TABLE "serie" ADD CONSTRAINT "serie_travaux_prevus" CHECK (NOT ("serie"."parametres" ? 'travauxPrevus') OR jsonb_typeof("serie"."parametres" -> 'travauxPrevus') = 'array');

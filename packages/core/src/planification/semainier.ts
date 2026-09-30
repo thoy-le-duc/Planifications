@@ -4,10 +4,11 @@
  * Fonction pure. Les dates d'une série sont recalées par ses réalisés (`appliquerRealises`, T02) ;
  * toute l'arithmétique passe par le jour absolu de `dates/`, sans objet `Date`.
  */
-import { jourAbsolu, lundiDeSemaine } from '../dates/index.ts';
+import { dateDepuisJourAbsolu, jourAbsolu, lundiDeSemaine } from '../dates/index.ts';
 import type { DateCalendaire, SemaineIso } from '../dates/index.ts';
 import { verifierExhaustif } from '../domaine/index.ts';
 import type {
+  CategorieIntervention,
   CultureConcernee,
   DatesPrevuesSerie,
   EtapeRealisee,
@@ -15,9 +16,11 @@ import type {
   ModeItineraire,
   StatutSerie,
   TailleSerie,
+  TravailPrevu,
 } from '../domaine/index.ts';
 import { ETAPES_SERIE, appliquerRealises } from './dates-serie.ts';
-import type { EtapeSerie, RealisesSerie } from './dates-serie.ts';
+import type { DatesSerie, EtapeSerie, RealisesSerie } from './dates-serie.ts';
+import { etapeDuRepere, joursTravailPrevu, tempsEstimeMinutes } from './travaux.ts';
 
 export interface EmplacementConcerne {
   readonly id: Id<'Emplacement'>;
@@ -38,6 +41,8 @@ export interface SerieSemainier {
   readonly datesPrevues: DatesPrevuesSerie;
   readonly taille: TailleSerie;
   readonly emplacements: readonly EmplacementConcerne[];
+  /** T22 : travaux prévus de l'instantané de la série ; absente = aucun. */
+  readonly travauxPrevus?: readonly TravailPrevu[];
 }
 
 /** Vue d'une campagne de pérenne et de sa plantation. */
@@ -59,11 +64,25 @@ export interface CampagneSemainier {
 export interface RealisesSemainier {
   readonly series: ReadonlyMap<Id<'Serie'>, RealisesSerie>;
   readonly campagnes: ReadonlyMap<Id<'Campagne'>, DateCalendaire>;
+  /**
+   * T22 : événements « intervention » en vigueur de chaque série (corrections et annulations
+   * déjà appliquées par l'appelant) ; absente = aucune.
+   */
+  readonly interventions?: ReadonlyMap<Id<'Serie'>, readonly InterventionRealisee[]>;
+}
+
+/** Intervention réalisée sur une série : ce qui solde un travail prévu du même type. */
+export interface InterventionRealisee {
+  readonly date: DateCalendaire;
+  readonly categorie: CategorieIntervention;
+  /** Libellé du type, comparé au texte près au type du travail prévu. */
+  readonly type: string;
 }
 
 export type EtapeTache = EtapeRealisee | 'debut_recolte';
 
-export interface TacheSemainier {
+/** Tâche d'une étape de série ou de campagne (T06). */
+export interface TacheEtape {
   readonly etape: EtapeTache;
   readonly cible: CultureConcernee;
   readonly culture: string;
@@ -78,6 +97,29 @@ export interface TacheSemainier {
   /** 0 quand la tâche n'est pas en retard. */
   readonly joursDeRetard: number;
 }
+
+/** Travail prévu d'une tâche : le travail de l'instantané et sa position dans `travauxPrevus`. */
+export type TravailDeTache = TravailPrevu & { readonly indice: number };
+
+/** Tâche d'un travail prévu d'itinéraire (T22) : mêmes champs qu'une étape de série. */
+export interface TacheTravail {
+  readonly etape: 'travail';
+  readonly cible: CultureConcernee;
+  readonly culture: string;
+  readonly variete: string | null;
+  /** Les planches de la série, triées par zone puis par code. */
+  readonly emplacements: readonly EmplacementConcerne[];
+  readonly taille: TailleSerie;
+  /** Date de l'occurrence (dates de la série recalées par les réalisés). */
+  readonly datePrevue: DateCalendaire;
+  readonly enRetard: boolean;
+  readonly joursDeRetard: number;
+  readonly travail: TravailDeTache;
+  /** Temps estimé pour la série, en minutes ; `null` sans estimation. */
+  readonly tempsEstimeMinutes: number | null;
+}
+
+export type TacheSemainier = TacheEtape | TacheTravail;
 
 /**
  * Rang de tri d'une étape à date et emplacement égaux : l'arrachage d'abord (on libère la planche
@@ -117,13 +159,21 @@ function trierEmplacements(emplacements: readonly EmplacementConcerne[]): readon
   return emplacements.length < 2 ? [...emplacements] : [...emplacements].sort(comparerEmplacements);
 }
 
+/**
+ * Rang d'un travail prévu à date et emplacement égaux : après l'arrachage, avant le semis et la
+ * plantation (on prépare la planche avant de semer).
+ */
+const RANG_TRAVAIL = 0.5;
+
 /** Tâche en construction, avec ses clés de tri. */
 interface Candidate {
   readonly tache: TacheSemainier;
   readonly jour: number;
   readonly rangEtape: number;
-  /** Identifiant de la série ou de la campagne : départage final. */
+  /** Identifiant de la série ou de la campagne. */
   readonly idCible: string;
+  /** Indice du travail prévu (0 pour une étape) : départage final. */
+  readonly indice: number;
 }
 
 /** Bornes de la semaine et date du jour, en jours absolus, calculées une seule fois. */
@@ -173,7 +223,8 @@ function comparerCandidates(a: Candidate, b: Candidate): number {
     return a.rangEtape - b.rangEtape;
   }
   // Ordre des chaînes (pas de collator) : le résultat ne dépend jamais de l'ordre d'entrée.
-  return a.idCible < b.idCible ? -1 : a.idCible > b.idCible ? 1 : 0;
+  if (a.idCible !== b.idCible) return a.idCible < b.idCible ? -1 : 1;
+  return a.indice - b.indice;
 }
 
 /**
@@ -189,7 +240,110 @@ function realisesCoherents(prevues: DatesPrevuesSerie, realises: RealisesSerie):
   return reste;
 }
 
-function ajouterSerie(serie: SerieSemainier, realises: RealisesSerie | undefined, fenetre: Fenetre, sortie: Candidate[]): void {
+/** Emplacements distincts (par identifiant). */
+function nombreDistincts(emplacements: readonly EmplacementConcerne[]): number {
+  if (emplacements.length < 2) return emplacements.length;
+  return new Set(emplacements.map((e) => e.id)).size;
+}
+
+/**
+ * Nombre d'occurrences de `jours` soldées par les interventions : chacune solde l'occurrence la
+ * plus proche de sa date (à égalité, la plus ancienne) et toutes les précédentes (Q11).
+ */
+function occurrencesSoldees(jours: readonly number[], travail: TravailPrevu, interventions: readonly InterventionRealisee[]): number {
+  let soldees = 0;
+  for (const i of interventions) {
+    if (i.categorie !== travail.categorie || i.type !== travail.type) continue;
+    const jour = jourAbsolu(i.date);
+    // Première occurrence au jour de l'intervention ou après (recherche dichotomique).
+    let bas = 0;
+    let haut = jours.length;
+    while (bas < haut) {
+      const milieu = (bas + haut) >>> 1;
+      if ((jours[milieu] ?? 0) < jour) bas = milieu + 1;
+      else haut = milieu;
+    }
+    const apres = jours[bas];
+    const avant = jours[bas - 1];
+    let plusProche = bas;
+    if (apres === undefined || (avant !== undefined && jour - avant <= apres - jour)) plusProche = bas - 1;
+    if (plusProche + 1 > soldees) soldees = plusProche + 1;
+  }
+  return soldees;
+}
+
+/**
+ * Tâches des travaux prévus d'une série (T22). `dates` : recalées par les réalisés ;
+ * `dernierRealise` : index (ETAPES_SERIE) de la dernière étape réalisée, −1 sans réalisé.
+ */
+function ajouterTravaux(
+  serie: SerieSemainier,
+  travaux: readonly TravailPrevu[],
+  dates: DatesSerie,
+  dernierRealise: number,
+  interventions: readonly InterventionRealisee[],
+  fenetre: Fenetre,
+  emplacementsTries: () => readonly EmplacementConcerne[],
+  sortie: Candidate[],
+): void {
+  for (const [indice, travail] of travaux.entries()) {
+    const jours = joursTravailPrevu(travail, dates);
+    if (jours.length === 0) continue;
+    let premiere = interventions.length === 0 ? 0 : occurrencesSoldees(jours, travail, interventions);
+    // Caducité (Q23) : l'étape repère réalisée (ou rendue faite par une étape postérieure, Q11)
+    // efface les occurrences datées avant elle, même sans intervention.
+    const etapeRepere = etapeDuRepere(travail.repere);
+    const repere = dates[etapeRepere];
+    if (repere !== undefined && ETAPES_SERIE.indexOf(etapeRepere) <= dernierRealise) {
+      const jourRepere = jourAbsolu(repere);
+      while (premiere < jours.length && (jours[premiere] ?? 0) < jourRepere) premiere++;
+    }
+    let retardRetenu: { jour: number; retard: number } | null = null;
+    const semaine: { jour: number; retard: number }[] = [];
+    for (let k = premiere; k < jours.length; k++) {
+      const jour = jours[k] ?? 0;
+      if (jour > fenetre.dimanche) break;
+      const retard = retardSiDansLaSemaine(jour, fenetre);
+      if (retard === null) continue;
+      // Une seule ligne en retard par travail : la plus récente (les dates sont croissantes).
+      if (retard > 0) retardRetenu = { jour, retard };
+      else semaine.push({ jour, retard });
+    }
+    const occurrences = retardRetenu === null ? semaine : [retardRetenu, ...semaine];
+    if (occurrences.length === 0) continue;
+    const tempsMinutes = tempsEstimeMinutes(travail.tempsEstime, { taille: serie.taille, nombreEmplacements: nombreDistincts(serie.emplacements) });
+    const travailDeTache: TravailDeTache = { ...travail, indice };
+    for (const { jour, retard } of occurrences) {
+      sortie.push({
+        jour,
+        rangEtape: RANG_TRAVAIL,
+        idCible: serie.id,
+        indice,
+        tache: {
+          etape: 'travail',
+          cible: { sorte: 'serie', serieId: serie.id },
+          culture: serie.culture,
+          variete: serie.variete,
+          emplacements: emplacementsTries(),
+          taille: serie.taille,
+          datePrevue: dateDepuisJourAbsolu(jour),
+          enRetard: retard > 0,
+          joursDeRetard: retard,
+          travail: travailDeTache,
+          tempsEstimeMinutes: tempsMinutes,
+        },
+      });
+    }
+  }
+}
+
+function ajouterSerie(
+  serie: SerieSemainier,
+  realises: RealisesSerie | undefined,
+  interventions: readonly InterventionRealisee[],
+  fenetre: Fenetre,
+  sortie: Candidate[],
+): void {
   const prevues = serie.datesPrevues;
   const coherents = realises === undefined ? undefined : realisesCoherents(prevues, realises);
   const dates = coherents === undefined ? prevues : appliquerRealises(prevues, coherents);
@@ -221,6 +375,7 @@ function ajouterSerie(serie: SerieSemainier, realises: RealisesSerie | undefined
       jour,
       rangEtape: RANG_TRI[etape],
       idCible: serie.id,
+      indice: 0,
       tache: {
         etape: etapeTache(etape, serie.mode),
         cible: { sorte: 'serie', serieId: serie.id },
@@ -233,6 +388,11 @@ function ajouterSerie(serie: SerieSemainier, realises: RealisesSerie | undefined
         joursDeRetard: retard,
       },
     });
+  }
+  const travaux = serie.travauxPrevus;
+  if (travaux !== undefined && travaux.length > 0) {
+    const tries = () => (emplacements ??= trierEmplacements(serie.emplacements));
+    ajouterTravaux(serie, travaux, dates, dernierRealise, interventions, fenetre, tries, sortie);
   }
 }
 
@@ -251,6 +411,7 @@ function ajouterCampagne(campagne: CampagneSemainier, fenetre: Fenetre, sortie: 
     jour,
     rangEtape: RANG_TRI.debutRecolte,
     idCible: campagne.id,
+    indice: 0,
     tache: {
       etape: 'debut_recolte',
       cible: { sorte: 'campagne', campagneId: campagne.id },
@@ -278,6 +439,11 @@ function ajouterCampagne(campagne: CampagneSemainier, fenetre: Fenetre, sortie: 
  *   sans limite dans le temps.
  * - Une seule tâche en retard par série (Q12) : la plus ancienne étape non faite. Les tâches de
  *   la semaine pas encore en retard restent listées.
+ * - T22 : les travaux prévus d'une série deviennent des tâches 'travail' (dates de
+ *   `datesTravailPrevu` sur les dates recalées), soldées par une intervention du même type sur
+ *   la série (l'occurrence la plus proche et les précédentes), caduques avant leur repère une
+ *   fois celui-ci réalisé (Q23) ; une seule ligne en retard par travail, la plus récente, hors
+ *   de la règle Q12 des étapes.
  * - RangeError si la semaine n'existe pas (S53 d'une année qui n'en a que 52).
  */
 export function semainier(
@@ -291,9 +457,10 @@ export function semainier(
   const fenetre: Fenetre = { lundi, dimanche: lundi + 6, aujourdhui: jourAbsolu(dateDuJour) };
 
   const candidates: Candidate[] = [];
+  const aucune: readonly InterventionRealisee[] = [];
   for (const serie of series) {
     if (serie.statut === 'prevue' || serie.statut === 'en_cours') {
-      ajouterSerie(serie, realises.series.get(serie.id), fenetre, candidates);
+      ajouterSerie(serie, realises.series.get(serie.id), realises.interventions?.get(serie.id) ?? aucune, fenetre, candidates);
     }
   }
   for (const campagne of campagnes) {

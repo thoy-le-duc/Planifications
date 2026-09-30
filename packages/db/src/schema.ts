@@ -344,6 +344,8 @@ export const itineraire = pgTable(
   (t) => [
     verif('itineraire', 'mode', parmi(t.mode, MODES_ITINERAIRE)),
     verif('itineraire', 'parametres_du_mode', sql`${t.parametres} ->> 'mode' = ${t.mode}`),
+    // T22 : travaux prévus (détail validé par le cœur) : clé absente ou tableau jsonb.
+    verif('itineraire', 'travaux_prevus', sql`NOT (${t.parametres} ? 'travauxPrevus') OR jsonb_typeof(${t.parametres} -> 'travauxPrevus') = 'array'`),
     index('itineraire_espece_idx').on(t.especeId),
   ],
 );
@@ -412,6 +414,7 @@ export const serie = pgTable(
     verif('serie', 'ancre_type', parmi(t.ancreType, TYPES_ANCRE)),
     verif('serie', 'statut', parmi(t.statut, STATUTS_SERIE)),
     verif('serie', 'parametres', sql`jsonb_typeof(${t.parametres}) = 'object'`),
+    verif('serie', 'travaux_prevus', sql`NOT (${t.parametres} ? 'travauxPrevus') OR jsonb_typeof(${t.parametres} -> 'travauxPrevus') = 'array'`),
     verif('serie', 'rotation_acceptee', sql`${t.rotationAcceptee} IS NULL OR jsonb_typeof(${t.rotationAcceptee}) = 'object'`),
     verif('serie', 'une_taille', sql`num_nonnulls(${t.longueurM}, ${t.nombrePlants}) = 1`),
     verif(

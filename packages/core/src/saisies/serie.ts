@@ -28,6 +28,7 @@ import type {
 import { calculerDatesSerie, ETAPES_SERIE, type DatesSerie } from '../planification/dates-serie.ts';
 import type { CodeErreurSaisie, ErreurSaisie } from './index.ts';
 import { octetsUtf8, texteJson } from './outils.ts';
+import { validerTravauxPrevus } from './travaux.ts';
 
 export type ResultatLigneSerie<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly erreur: ErreurSaisie };
 
@@ -256,7 +257,18 @@ function lireParametres(v: unknown): Lu<ParametresItineraire> {
     dureeJours(p, 'fenetreRecolteJours', 'fenêtre de récolte');
   if (e !== null) return echec(e);
   // Relu depuis le texte : une copie JSON pure, sans valeur non sérialisable (undefined…).
-  return lu(JSON.parse(ecrit.texte) as ParametresItineraire);
+  const relus = JSON.parse(ecrit.texte) as Record<string, unknown>;
+  // T22 : les travaux prévus de l'instantané, validés avec le mode des paramètres, sans liste de
+  // types (une série garde les types de son instantané, même masqués ensuite par la ferme).
+  if (relus.travauxPrevus !== undefined) {
+    const travaux = validerTravauxPrevus(relus.travauxPrevus, { mode: p.mode });
+    if (!travaux.ok) {
+      const champ = travaux.erreur.champ === null ? 'parametres.travauxPrevus' : `parametres.travauxPrevus.${travaux.erreur.champ}`;
+      return echec({ ...travaux.erreur, champ });
+    }
+    relus.travauxPrevus = travaux.valeur;
+  }
+  return lu(relus as unknown as ParametresItineraire);
 }
 
 /** Dates de T02 depuis les paramètres et l'ancre, bornées à [2000, 2100] ; jamais d'exception. */
