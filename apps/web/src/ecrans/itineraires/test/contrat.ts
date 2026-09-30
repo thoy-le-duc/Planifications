@@ -185,6 +185,18 @@
  *     exactement à leurs valeurs d'avant (hors modifie_le) ;
  *   - type ajouté : supprime_le posé ; type renommé ou masqué : valeurs d'avant.
  *
+ * ── Décisions du chef après la relecture (tests : ../relecture.test.tsx) ─────────────────────
+ *
+ * 9.  « Annuler » ne ramène que les colonnes que l'écriture a changées, et seulement si leur valeur
+ *     actuelle est encore celle que nous avions écrite ; sinon l'annulation de CETTE ligne est
+ *     refusée (les autres lignes sont défaites) et un message role="alert" (ou status) dit
+ *     « modifié entre-temps sur un autre téléphone ». Itinéraire, séries et occupations.
+ * 10. Série « à venir » : aucune intervention en vigueur non plus (un travail déjà fait).
+ * 11. « À venir » revérifié dans la transaction : une série commencée entre-temps n'est pas écrite.
+ * 12. 1 (itinéraire) + séries + occupations > ECRITURES_MAX_PAR_LOT : la confirmation contient
+ *     « trop de séries » et « Itinéraire seul » avant toute écriture ; « Appliquer aux séries »
+ *     n'écrit rien (désactivé ou sans effet) ; « Itinéraire seul » reste possible.
+ *
  * ── Types d'intervention (DOM) ───────────────────────────────────────────────────────────────
  *
  * Région nommée « Types d’intervention » :
