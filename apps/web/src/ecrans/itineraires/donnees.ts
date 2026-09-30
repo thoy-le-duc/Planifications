@@ -47,20 +47,27 @@ const EN_VIGUEUR = `(ev.remplace_sorte IS NULL OR ev.remplace_sorte <> 'annulati
         WHERE ferme_id = ? AND remplace_sorte = 'correction' GROUP BY remplace_evenement_id)))`;
 
 /**
- * Séries À VENIR d'un itinéraire : non supprimées, prévues, sans réalisé ni récolte en vigueur,
- * et dont la première date prévue (semis en pépinière, sinon mise en place) n'est pas passée.
+ * Condition « à venir » d'une série d'alias `s` (décisions 10 et 11) : non supprimée, prévue,
+ * première date prévue (semis en pépinière, sinon mise en place) pas passée, et aucun réalisé,
+ * aucune récolte ni aucune intervention en vigueur. Paramètres : `parametresAVenir`.
  */
+export const conditionAVenir = (s: string): string => `${s}.supprime_le IS NULL AND ${s}.statut = 'prevue'
+    AND COALESCE(${s}.prevu_semis_pepiniere, ${s}.prevu_mise_en_place) >= ?
+    AND NOT EXISTS (
+      SELECT 1 FROM evenement ev
+      WHERE ev.ferme_id = ? AND ev.serie_id = ${s}.id AND ev.type IN ('realise', 'recolte', 'intervention') AND ${EN_VIGUEUR})`;
+
+export const parametresAVenir = (fermeId: string, aujourdhui: string): string[] => [aujourdhui, fermeId, fermeId, fermeId, fermeId];
+
+/** Séries À VENIR d'un itinéraire, par mise en place. */
 const SQL_A_VENIR = `SELECT s.id, s.prevu_mise_en_place, e.nom AS nom_espece,
     (SELECT group_concat(code, ', ') FROM (
       SELECT em.code AS code FROM occupation o JOIN emplacement em ON em.id = o.emplacement_id
-      WHERE o.serie_id = s.id AND o.supprime_le IS NULL ORDER BY em.code)) AS codes
+      WHERE o.serie_id = s.id AND o.supprime_le IS NULL ORDER BY em.code)) AS codes,
+    (SELECT COUNT(*) FROM occupation o2 WHERE o2.serie_id = s.id AND o2.supprime_le IS NULL) AS nb_occupations
   FROM serie s
   LEFT JOIN espece e ON e.id = s.espece_id
-  WHERE s.ferme_id = ? AND s.itineraire_id = ? AND s.supprime_le IS NULL AND s.statut = 'prevue'
-    AND COALESCE(s.prevu_semis_pepiniere, s.prevu_mise_en_place) >= ?
-    AND NOT EXISTS (
-      SELECT 1 FROM evenement ev
-      WHERE ev.ferme_id = ? AND ev.serie_id = s.id AND ev.type IN ('realise', 'recolte') AND ${EN_VIGUEUR})
+  WHERE s.ferme_id = ? AND s.itineraire_id = ? AND ${conditionAVenir('s')}
   ORDER BY s.prevu_mise_en_place, s.id`;
 
 export interface SerieAVenir {
@@ -68,14 +75,17 @@ export interface SerieAVenir {
   readonly miseEnPlace: string;
   readonly culture: string;
   readonly planches: string;
+  /** Occupations actives : chacune est une écriture de plus (plafond du lot, décision 12). */
+  readonly occupations: number;
 }
 
 export async function lireSeriesAVenir(porte: PorteDonnees, fermeId: string, itineraireId: string, aujourdhui: string): Promise<SerieAVenir[]> {
-  const lignes = await porte.lire<Readonly<Record<string, unknown>>>(SQL_A_VENIR, [fermeId, itineraireId, aujourdhui, fermeId, fermeId, fermeId, fermeId]);
+  const lignes = await porte.lire<Readonly<Record<string, unknown>>>(SQL_A_VENIR, [fermeId, itineraireId, ...parametresAVenir(fermeId, aujourdhui)]);
   return lignes.map((l) => ({
     id: String(l.id),
     miseEnPlace: typeof l.prevu_mise_en_place === 'string' ? l.prevu_mise_en_place : '',
     culture: typeof l.nom_espece === 'string' ? l.nom_espece : 'Culture',
     planches: typeof l.codes === 'string' ? l.codes : '',
+    occupations: typeof l.nb_occupations === 'number' ? l.nb_occupations : 0,
   }));
 }
