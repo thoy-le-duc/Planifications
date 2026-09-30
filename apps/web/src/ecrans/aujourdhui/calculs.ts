@@ -189,26 +189,61 @@ function evenementLu(l: Ligne): EvenementLu | null {
 }
 
 /**
- * Événements en vigueur (vue evenements_en_vigueur de @planif/db) : ni les annulations, ni un
- * événement annulé ou corrigé ; d'une correction, seule la plus récente (horodatage, puis id)
- * reste, et aucune si l'événement corrigé est annulé.
+ * Événements en vigueur (vue evenements_en_vigueur de @planif/db, T10g) : on regroupe chaque
+ * événement avec sa chaîne (l'origine, ses corrections, les corrections de ses corrections, et
+ * toutes leurs annulations). Une chaîne qui contient une annulation n'a plus rien en vigueur ;
+ * sinon une seule saisie reste : la correction la plus récente de TOUTE la chaîne (horodatage,
+ * puis id le plus grand), à défaut l'origine. Même règle que `lireChaine` du serveur, même quand
+ * la chaîne se ramifie. Un parent absent de la liste (origine plus ancienne que l'historique lu) :
+ * son id sert de clé de chaîne, pour que deux corrections d'une même origine absente se
+ * départagent quand même.
  */
 export function enVigueur(evenements: readonly EvenementLu[]): EvenementLu[] {
-  const remplaces = new Set<string>();
-  const parCible = new Map<string, EvenementLu[]>();
-  for (const e of evenements) {
-    if (e.remplaceEvenementId === null) continue;
-    remplaces.add(e.remplaceEvenementId);
-    const freres = parCible.get(e.remplaceEvenementId);
-    if (freres === undefined) parCible.set(e.remplaceEvenementId, [e]);
-    else freres.push(e);
-  }
+  const parId = new Map(evenements.map((e) => [e.id, e]));
+  const origines = new Map<string, string>();
+  const origineDe = (e: EvenementLu): string => {
+    const connue = origines.get(e.id);
+    if (connue !== undefined) return connue;
+    // Montée jusqu'au plus haut connu ; `vus` protège d'un cycle (données corrompues).
+    const chemin: string[] = [];
+    const vus = new Set<string>();
+    let courant = e;
+    for (;;) {
+      if (origines.has(courant.id)) break;
+      chemin.push(courant.id);
+      vus.add(courant.id);
+      const parent = courant.remplaceEvenementId === null ? undefined : parId.get(courant.remplaceEvenementId);
+      if (parent === undefined || vus.has(parent.id)) break;
+      courant = parent;
+    }
+    let origine = origines.get(courant.id);
+    if (origine === undefined) {
+      const parent = courant.remplaceEvenementId;
+      origine = parent !== null && !parId.has(parent) ? parent : courant.id;
+    }
+    for (const id of chemin) origines.set(id, origine);
+    return origine;
+  };
   const plusRecent = (a: EvenementLu, b: EvenementLu) => a.horodatage > b.horodatage || (a.horodatage === b.horodatage && a.id > b.id);
+  const annulees = new Set<string>();
+  /** Par chaîne : la correction la plus récente, sinon l'origine (la première sans remplacement vue). */
+  const retenue = new Map<string, EvenementLu>();
+  for (const e of evenements) {
+    const o = origineDe(e);
+    if (e.remplaceSorte === 'annulation') {
+      annulees.add(o);
+      continue;
+    }
+    const actuelle = retenue.get(o);
+    if (actuelle === undefined) {
+      retenue.set(o, e);
+    } else if (e.remplaceSorte === 'correction' && (actuelle.remplaceSorte !== 'correction' || plusRecent(e, actuelle))) {
+      retenue.set(o, e);
+    }
+  }
   return evenements.filter((e) => {
-    if (e.remplaceSorte === 'annulation' || remplaces.has(e.id)) return false;
-    if (e.remplaceSorte !== 'correction' || e.remplaceEvenementId === null) return true;
-    const freres = parCible.get(e.remplaceEvenementId) ?? [];
-    return !freres.some((s) => s !== e && (s.remplaceSorte === 'annulation' || plusRecent(s, e)));
+    const o = origineDe(e);
+    return !annulees.has(o) && retenue.get(o) === e;
   });
 }
 
@@ -266,7 +301,10 @@ const SQL_OCCUPATIONS = sqlOccupations(
 /**
  * Règle « en vigueur » de la vue evenements_en_vigueur (@planif/db), en SQL, pour l'alias `e` :
  * ni une annulation, ni un événement annulé ou corrigé ; une correction seulement si c'est la
- * plus récente de son événement et qu'il n'est pas annulé. Même règle que `enVigueur`.
+ * plus récente de son événement et qu'il n'est pas annulé. Règle d'avant T10g, par événement
+ * remplacé : elle ne diffère de `enVigueur` (toute la chaîne) que pour une chaîne ramifiée ou une
+ * correction annulée qui a des sœurs, sans effet sur les premières dates du semainier en usage
+ * normal. L'historique, lui, passe par `enVigueur`.
  */
 const EN_VIGUEUR = `(e.remplace_sorte IS NULL OR e.remplace_sorte <> 'annulation')
     AND e.id NOT IN (SELECT remplace_evenement_id FROM evenement WHERE ferme_id = ? AND remplace_evenement_id IS NOT NULL)
