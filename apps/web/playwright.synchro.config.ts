@@ -5,7 +5,9 @@ import { defineConfig, devices } from '@playwright/test';
  * Postgres, le service PowerSync et l'API (voir l'en-tête de e2e-synchro/synchro.e2e.ts).
  *
  * La page de diagnostic est construite avec les URL de l'API et du service (VITE_API_URL,
- * VITE_POWERSYNC_URL, figées au build) dans `dist-synchro/`, puis servie sur le port
+ * VITE_POWERSYNC_URL, figées au build) dans `dist-synchro/`, selon la recette du build des essais
+ * (T11c : build de production, puis pages de test versées à côté, voir scripts/build-essais.ts),
+ * puis servie sur le port
  * E2E_PORT_PAGE (4174 par défaut, T10c : deux bancs peuvent tourner en même temps). Sans API_URL
  * ni POWERSYNC_URL, aucun serveur n'est lancé et les tests se sautent (hors CI).
  */
@@ -41,7 +43,7 @@ export default defineConfig({
   ...(servicesPresents && process.env.SYNCHRO_BASE_URL === undefined
     ? {
         webServer: {
-          command: `pnpm exec vite build --outDir dist-synchro && pnpm exec vite preview --outDir dist-synchro --port ${String(portPage)} --strictPort`,
+          command: `pnpm exec vite build --outDir dist-synchro && node scripts/build-essais.ts --depuis dist-synchro --vers dist-synchro && pnpm exec vite preview --outDir dist-synchro --port ${String(portPage)} --strictPort`,
           url: baseURL,
           timeout: 180_000,
           reuseExistingServer: !process.env.CI,

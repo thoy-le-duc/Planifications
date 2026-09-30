@@ -9,8 +9,16 @@ import { COULEURS } from './src/ui/jetons.ts';
 /**
  * Pages de mesure (T07) et de diagnostic (T10) : hors navigation, hors service worker, jamais
  * chargées par l'appli.
+ *
+ * T11c : elles n'existent que dans le build des essais (`vite build --mode essais`, lancé par
+ * scripts/build-essais.ts), jamais dans le build de production (`vite build`, le site mis en
+ * ligne). Le build des essais ne construit QUE ces pages, sans vite-plugin-pwa : il est versé à
+ * côté d'une copie du build de production, sans rien y écraser (même appli, même `sw.js`).
  */
 const PREFIXES_PAGES_HORS_APPLI = ['/mesures/', '/diagnostic/'];
+
+/** Mode du build des essais (pages de test seules). */
+const MODE_ESSAIS = 'essais';
 
 /** Code de la base locale (PowerSync, wa-sqlite) : rangé à part, dans `assets/sqlite/`. */
 const MOTIF_SQLITE = /node_modules\/(\.pnpm\/[^/]+\/node_modules\/)?(@powersync|@journeyapps)\//;
@@ -105,10 +113,12 @@ interface MorceauSortie {
  * qui enregistrait au `load` de la fenêtre ; on vérifie qu'il ne revient pas sans bruit.
  *
  * Pages de mesure et de diagnostic : jamais de service worker (l'installation, précache de
- * l'appli, fausserait les temps). Leur manifeste est retiré, et aucun morceau qu'elles chargent,
- * statiquement ou à la demande, n'enregistre de service worker : le build échoue sinon.
+ * l'appli, fausserait les temps). Construites sans vite-plugin-pwa (build des essais), elles ne
+ * portent pas le manifeste, et aucun morceau qu'elles chargent, statiquement ou à la demande,
+ * n'enregistre de service worker : le build échoue sinon. Le build de production, lui, échoue
+ * s'il contient une page hors appli.
  */
-function pagesHorsAppliSansServiceWorker(): Plugin {
+function pagesHorsAppliSansServiceWorker(essais: boolean): Plugin {
   return {
     name: 'planif:pages-hors-appli-sans-sw',
     apply: 'build',
@@ -120,12 +130,11 @@ function pagesHorsAppliSansServiceWorker(): Plugin {
         if (/vite-plugin-pwa:register-sw|registerSW\.js|serviceWorker\.register/.test(html)) {
           throw new Error(`${contexte.path} : enregistrement du service worker injecté dans la page (attendu : src/serviceWorker.ts, au repos)`);
         }
-        if (!PREFIXES_PAGES_HORS_APPLI.some((p) => contexte.path.startsWith(p))) return html;
-        const manifeste = /<link rel="manifest"[^>]*>/g;
-        // Échec franc si vite-plugin-pwa change sa façon d'injecter le manifeste.
-        if (!manifeste.test(html)) throw new Error(`${contexte.path} : balise du manifeste introuvable (${manifeste.source})`);
-        manifeste.lastIndex = 0;
-        return html.replace(manifeste, '');
+        const horsAppli = PREFIXES_PAGES_HORS_APPLI.some((p) => contexte.path.startsWith(p));
+        if (!essais && horsAppli) throw new Error(`${contexte.path} : page de test dans le build de production (T11c)`);
+        if (essais && !horsAppli) throw new Error(`${contexte.path} : le build des essais ne construit que les pages de test (T11c)`);
+        if (essais && /<link\b[^>]*\brel="manifest"/.test(html)) throw new Error(`${contexte.path} : manifeste dans une page de test`);
+        return html;
       },
     },
     generateBundle(_options, paquet) {
@@ -135,7 +144,9 @@ function pagesHorsAppliSansServiceWorker(): Plugin {
       }
       const entreesHorsAppli = [ENTREE_MESURE, ...ENTREES_DIAGNOSTIC];
       for (const [fichierEntree, entree] of morceaux) {
-        if (!entree.isEntry || !entreesHorsAppli.includes(entree.name)) continue;
+        if (!entree.isEntry) continue;
+        if (!essais && entreesHorsAppli.includes(entree.name)) throw new Error(`entrée de test « ${entree.name} » dans le build de production (T11c)`);
+        if (!essais) continue;
         const aVoir = [fichierEntree];
         const vus = new Set<string>();
         for (let fichier = aVoir.pop(); fichier !== undefined; fichier = aVoir.pop()) {
@@ -176,12 +187,27 @@ function cspEnBalise(options: OptionsCsp): Plugin {
   };
 }
 
+/** Entrées du build : l'appli seule en production, les pages de test seules pour les essais. */
+function entrees(essais: boolean): Record<string, string> {
+  const chemin = (fichier: string): string => fileURLToPath(new URL(fichier, import.meta.url));
+  if (!essais) return { index: chemin('index.html') };
+  return {
+    [ENTREE_MESURE]: chemin('mesures/sqlite.html'),
+    [ENTREE_DIAGNOSTIC]: chemin('diagnostic/synchro.html'),
+    // T11 : amorçage de la base locale pour les tests de bout en bout (e2e/plan.e2e.ts).
+    [ENTREE_AMORCAGE]: chemin('diagnostic/amorcer.html'),
+  };
+}
+
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, import.meta.dirname, 'VITE_');
+  const essais = mode === MODE_ESSAIS;
   return {
     plugins: [
       react(),
       // Hors-ligne d'abord : le service worker met toute l'appli en cache dès la première visite.
+      // Pas dans le build des essais : il écrirait un autre `sw.js` (T11c).
+      !essais &&
       VitePWA({
         registerType: 'autoUpdate',
         // T20 : pas d'enregistrement au load de la fenêtre ; src/serviceWorker.ts enregistre au
@@ -221,7 +247,7 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,
         },
       }),
-      pagesHorsAppliSansServiceWorker(),
+      pagesHorsAppliSansServiceWorker(essais),
       cspEnBalise({ urlApi: env.VITE_API_URL, urlPowerSync: env.VITE_POWERSYNC_URL }),
     ],
     build: {
@@ -229,14 +255,10 @@ export default defineConfig(({ mode }) => {
       // les mêmes fichiers se chargent sans préchargement. Le polyfill n'était que du JavaScript de
       // démarrage en plus (T16, budget de poids).
       modulePreload: { polyfill: false },
+      // Build des essais : public/ est déjà dans la copie du build de production.
+      copyPublicDir: !essais,
       rollupOptions: {
-        input: {
-          index: fileURLToPath(new URL('index.html', import.meta.url)),
-          [ENTREE_MESURE]: fileURLToPath(new URL('mesures/sqlite.html', import.meta.url)),
-          [ENTREE_DIAGNOSTIC]: fileURLToPath(new URL('diagnostic/synchro.html', import.meta.url)),
-          // T11 : amorçage de la base locale pour les tests de bout en bout (e2e/plan.e2e.ts).
-          [ENTREE_AMORCAGE]: fileURLToPath(new URL('diagnostic/amorcer.html', import.meta.url)),
-        },
+        input: entrees(essais),
         output: {
           entryFileNames: nomMorceau,
           chunkFileNames: nomMorceau,

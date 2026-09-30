@@ -7,8 +7,9 @@
  *   2. migrations de @planif/db ;
  *   3. le service PowerSync (configuration powersync/), qui réplique cette base ;
  *   4. l'API (apps/api) avec une clé de signature jetable et CORS pour la page de diagnostic ;
- *   5. playwright -c playwright.synchro.config.ts, qui construit la page avec VITE_API_URL et
- *      VITE_POWERSYNC_URL (figées au build) et la sert sur le port E2E_PORT_PAGE (4174).
+ *   5. playwright -c playwright.synchro.config.ts, qui construit l'appli et les pages de test
+ *      (recette du build des essais, T11c) avec VITE_API_URL et VITE_POWERSYNC_URL (figées au
+ *      build) dans apps/web/dist-synchro/, et la sert sur le port E2E_PORT_PAGE (4174).
  *
  * Variables facultatives : POSTGRES_IMAGE, POWERSYNC_IMAGE (miroir si Docker Hub est limité ;
  * l'image de PowerSync est figée en 1.26.1 dans docker-compose.yml), CHROMIUM_PATH (Chromium

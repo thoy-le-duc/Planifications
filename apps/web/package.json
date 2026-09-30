@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:essais": "node scripts/build-essais.ts",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "budget": "node scripts/budget.ts",
