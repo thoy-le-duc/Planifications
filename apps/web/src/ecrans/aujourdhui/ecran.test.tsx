@@ -275,6 +275,24 @@ async function recolter(cibleId: string, chiffres: string): Promise<void> {
   await attendre(() => dialogue('Récolte') === undefined, 'la récolte se ferme après Valider');
 }
 
+/** Ouvre la récolte et choisit la tomate : le dialogue, au pavé. */
+async function ouvrirPaveTomate(): Promise<HTMLElement> {
+  await rendre();
+  await toucher(bouton(/^Noter une récolte/));
+  await attendre(() => dialogue('Récolte') !== undefined, 'la récolte s’ouvre');
+  const d = dialogue('Récolte');
+  const tomate = d?.querySelector<HTMLElement>(`[data-testid="choix-recolte"][data-cible="${SERIE.tomate}"]`);
+  if (d === undefined || tomate === null || tomate === undefined) throw new Error('récolte de tomate indisponible');
+  await toucher(tomate);
+  return d;
+}
+
+/** Touche virgule : texte « , », nom accessible « , » ou « Virgule ». */
+const virgule = (d: HTMLElement): HTMLElement => bouton(/^(,|Virgule)$/, d);
+
+/** Chiffres affichés par data-testid="quantite", sans l'unité ni les espaces. */
+const quantiteAffichee = (d: HTMLElement): string => texte(d.querySelector('[data-testid="quantite"]')).replace(/[^0-9,]/g, '');
+
 // ── Tests ────────────────────────────────────────────────────────────────────────────────────
 
 describe('T13 : écran Aujourd’hui, semainier de la semaine en cours', () => {
@@ -558,6 +576,46 @@ describe('T13 : récolte en trois gestes', () => {
     // Le début de récolte est réalisé : la tâche quitte la liste.
     await attendre(() => tache(cle) === undefined, 'la tâche de début de récolte quitte la liste');
     verifierAjoutSeul();
+  });
+
+  it('touche virgule : 1, 2, « , », 5 → « 12,5 » ; Valider écrit 12.5 et un mouvement de +12.5', async () => {
+    const d = await ouvrirPaveTomate();
+    for (const c of ['1', '2']) await toucher(bouton(c, d));
+    await toucher(virgule(d));
+    await toucher(bouton('5', d));
+    expect(quantiteAffichee(d)).toBe('12,5');
+    const valider = bouton(/^Valider/, d);
+    expect(nomAccessible(valider)).toBe('Valider 12,5 kg');
+    await toucher(valider);
+    await attendre(() => nouveauxMouvements().length > 0, 'mouvement écrit');
+    const e = nouveauxEvenements()[0];
+    expect(nouveauxEvenements()).toHaveLength(1);
+    if (e === undefined) return;
+    expect(detail(e)).toEqual({ quantite: 12.5, unite: 'kg', categorie: null });
+    verifierValide(e);
+    expect(nouveauxMouvements()[0]).toMatchObject({ article_stock_id: ARTICLE_TOMATE, quantite: 12.5, motif: 'recolte', recolte_id: e.id });
+    expect(stock(ARTICLE_TOMATE)).toBe(STOCK_TOMATE_INITIAL + 12.5);
+  });
+
+  it('touche virgule : une deuxième virgule est ignorée ; « , » en premier donne « 0, » ; deux décimales au plus', async () => {
+    const d = await ouvrirPaveTomate();
+    await toucher(virgule(d));
+    expect(quantiteAffichee(d)).toBe('0,');
+    await toucher(bouton('5', d));
+    await toucher(virgule(d));
+    expect(quantiteAffichee(d), 'deuxième virgule ignorée').toBe('0,5');
+    await toucher(bouton('7', d));
+    await toucher(bouton('3', d));
+    expect(quantiteAffichee(d), 'troisième décimale ignorée').toBe('0,57');
+    expect(nomAccessible(bouton(/^Valider/, d))).toBe('Valider 0,57 kg');
+    await toucher(bouton('Effacer', d));
+    await toucher(bouton('Effacer', d));
+    await toucher(bouton('Effacer', d));
+    expect(quantiteAffichee(d), 'Effacer retire aussi la virgule').toMatch(/^0?$/);
+    expect(desactive(bouton(/^Valider/, d)), 'quantité nulle : Valider désactivé').toBe(true);
+    await toucher(bouton('Retour', d));
+    await attendre(() => dialogue('Récolte') === undefined, 'la récolte se ferme');
+    expect(nouveauxEvenements()).toEqual([]);
   });
 
   it('« Retour » ferme la récolte sans rien écrire ; « Effacer » corrige le dernier chiffre', async () => {

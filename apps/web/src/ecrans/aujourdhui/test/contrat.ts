@@ -84,11 +84,19 @@
  *         code) ;
  *       étape 2 : la culture choisie est écrite dans le dialogue (maquette : « T2-P01 · RADIS
  *         FLAMBOYANT ») ; affichage data-testid="quantite" (les chiffres tapés), pavé : boutons nommés
- *         « 0 » … « 9 » et « Effacer » ; unité : role="radiogroup" nommé « Unité », un radio par
+ *         « 0 » … « 9 », « Effacer » et la virgule (bouton de texte « , », nom accessible « , » ou
+ *         « Virgule », à la place du micro de la maquette) ; unité : role="radiogroup" nommé « Unité », un radio par
  *         unité, nommés « kg », « Bottes », « Pièces », « Barquettes », coché d'après la culture ;
  *         bouton de validation nommé « Valider <quantité> <unité> » (« Valider 12 kg »), désactivé
  *         tant que la quantité est vide ou nulle. Valider écrit tout de suite, sans confirmation,
  *         et ferme la récolte ;
+ *       virgule : décimale à la française. 1, 2, « , », 5 affiche « 12,5 », bouton « Valider
+ *         12,5 kg », écrit detail.quantite = 12.5 et un mouvement de +12.5. Une deuxième virgule
+ *         est ignorée ; « , » en premier affiche « 0, » ; deux décimales au plus, les chiffres
+ *         suivants sont ignorés (1,234 → « 1,23 ») : le centième de kilo (10 g) est la
+ *         résolution des balances de terrain, et couvre les bottes ou pièces sans gêner (on y
+ *         tape rarement une virgule). La quantité écrite est le nombre décimal exact de ce qui
+ *         est affiché (jamais 12.499999…) ;
  *   - après chaque saisie (Fait, récolte) : data-testid="saisie-annulable", role="status", texte
  *     qui dit la saisie (culture ; « 12 kg » pour une récolte), avec un bouton « Annuler » ; il
  *     disparaît 10 s après la saisie (compté avec setTimeout / setInterval ou Date.now : les
