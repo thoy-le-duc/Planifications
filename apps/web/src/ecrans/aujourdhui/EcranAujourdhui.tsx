@@ -39,6 +39,12 @@ export interface ProprietesEcranAujourdhui {
 /** Marque de performance posée quand les tâches (ou « rien à faire ») sont dessinées. */
 export const MARQUE_AUJOURDHUI_AFFICHE = 'planif:aujourdhui-affiche';
 
+/**
+ * Tâches dessinées par groupe avant « Voir les autres » : l'écran s'affiche vite même quand des
+ * séries anciennes, jamais marquées faites, traînent en retard par centaines.
+ */
+const TACHES_PAR_GROUPE = 25;
+
 /** Durée d'affichage du bouton « Annuler » après une saisie. */
 export const DELAI_ANNULATION_MS = 10_000;
 
@@ -271,9 +277,6 @@ function evenementEcrit(id: string, culture: Culture, date: string, detail: Even
     horodatage: new Date().toISOString(),
     serieId: culture.cible.sorte === 'serie' ? culture.cible.serieId : null,
     campagneId: culture.cible.sorte === 'campagne' ? culture.cible.campagneId : null,
-    emplacementIds: culture.emplacements.map((e) => e.id),
-    note: null,
-    photos: [],
     remplaceSorte: null,
     remplaceEvenementId: null,
     detail,
@@ -288,6 +291,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
   const [annulable, setAnnulable] = useState<Annulable | null>(null);
   const [dialogue, setDialogue] = useState<Dialogue>(null);
   const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
+  const [toutVoir, setToutVoir] = useState(false);
   /** Une écriture à la fois : un double appui n'écrit pas deux fois. */
   const occupe = useRef(false);
   const numero = useRef(0);
@@ -388,6 +392,11 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
   const enRetard = taches.filter((t) => t.tache.enRetard);
   const semaine = taches.filter((t) => !t.tache.enRetard);
   const recoltes = journee?.recoltesEnCours ?? [];
+  const peser = (x: TacheJour) => {
+    setDialogue({ sorte: 'recolte', culture: x.culture });
+  };
+  const cachees = toutVoir ? 0 : Math.max(0, enRetard.length - TACHES_PAR_GROUPE) + Math.max(0, semaine.length - TACHES_PAR_GROUPE);
+  const groupe = (liste: readonly TacheJour[]) => (toutVoir ? liste : liste.slice(0, TACHES_PAR_GROUPE));
 
   return (
     <div data-testid="aujourdhui" className={annulable === null ? 'auj' : 'auj auj-avec-bandeau'}>
@@ -429,8 +438,8 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
             <>
               <h2 className="auj-groupe auj-groupe-retard">En retard</h2>
               <ul className="auj-taches">
-                {enRetard.map((t) => (
-                  <CarteTache key={t.cle} tache={t} aujourdhui={jour} surFait={surFait} surPeser={(x) => { setDialogue({ sorte: 'recolte', culture: x.culture }); }} />
+                {groupe(enRetard).map((t) => (
+                  <CarteTache key={t.cle} tache={t} aujourdhui={jour} surFait={surFait} surPeser={peser} />
                 ))}
               </ul>
             </>
@@ -439,11 +448,22 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
             <>
               <h2 className="auj-groupe">Cette semaine</h2>
               <ul className="auj-taches">
-                {semaine.map((t) => (
-                  <CarteTache key={t.cle} tache={t} aujourdhui={jour} surFait={surFait} surPeser={(x) => { setDialogue({ sorte: 'recolte', culture: x.culture }); }} />
+                {groupe(semaine).map((t) => (
+                  <CarteTache key={t.cle} tache={t} aujourdhui={jour} surFait={surFait} surPeser={peser} />
                 ))}
               </ul>
             </>
+          )}
+          {cachees > 0 && (
+            <button
+              type="button"
+              className="auj-bouton-secondaire"
+              onClick={() => {
+                setToutVoir(true);
+              }}
+            >
+              Voir les {cachees} autres tâches
+            </button>
           )}
         </>
       )}

@@ -202,9 +202,11 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
                 </span>
                 <span className="auj-quantite-unite">{libelleUnite}</span>
               </div>
-              <span className="auj-recolte-rappel">
-                {derniere === undefined ? 'Première récolte notée sur ce téléphone.' : `Dernière récolte : ${quantiteAvecUnite(derniere.quantite, derniere.unite)} le ${dateCourte(derniere.date)}`}
-              </span>
+              {derniere !== undefined && (
+                <span className="auj-recolte-rappel">
+                  Dernière récolte : {quantiteAvecUnite(derniere.quantite, derniere.unite)} le {dateCourte(derniere.date)}
+                </span>
+              )}
             </div>
 
             <div className="auj-pave">

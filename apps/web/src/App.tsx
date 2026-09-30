@@ -189,8 +189,9 @@ export function App() {
       if (f !== null && f !== prechargee) {
         prechargee = f;
         // Échec : l'écran lira le plan lui-même à l'ouverture.
-        planches.then((m) => m.prechargerPlan(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
-        ecranDuJour.then((m) => m.prechargerJournee(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
+        const plan = planches.then((m) => m.prechargerPlan(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
+        // La journée ensuite (l'écran l'attend) : le début du plan passe d'abord à la base.
+        ecranDuJour.then((m) => m.prechargerJournee(f.porte, f.fermeId, m.jourDuTelephone(), plan)).catch(() => undefined);
       }
     };
     import('./donnees/appli.ts').then(

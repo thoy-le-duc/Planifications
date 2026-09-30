@@ -24,7 +24,7 @@ import {
   type UniteRecolte,
 } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees, SaisieEvenement } from '@planif/sync';
-import type { Culture, EvenementLu } from './calculs.ts';
+import { listeTextes, type Culture, type EvenementLu } from './calculs.ts';
 
 const nouvelId = creerGenerateurId({
   horloge: () => Date.now(),
@@ -146,8 +146,15 @@ export async function noterRecolte(ctx: ContexteEcriture, culture: Culture, quan
   return e.id;
 }
 
-/** Saisie qui remplace `ev` : même type, même culture et emplacements, détail repris. */
-function remplacement(ev: EvenementLu, sorte: RemplacementEvenement['sorte'], date: string): SaisieEvenement {
+const SQL_ORIGINAL = 'SELECT emplacement_ids, note, photos FROM evenement WHERE id = ?';
+
+/**
+ * Saisie qui remplace `ev` : même type, même culture, emplacements, note et photos (relus dans la
+ * base), détail repris.
+ */
+async function remplacement(ctx: ContexteEcriture, ev: EvenementLu, sorte: RemplacementEvenement['sorte'], date: string): Promise<SaisieEvenement> {
+  const original = (await ctx.porte.lire<{ emplacement_ids: string | null; note: string | null; photos: string | null }>(SQL_ORIGINAL, [ev.id]))[0];
+  if (original === undefined) throw new Error('saisie introuvable sur ce téléphone');
   const commun = {
     date: date as DateCalendaire,
     source: 'tap' as const,
@@ -157,9 +164,9 @@ function remplacement(ev: EvenementLu, sorte: RemplacementEvenement['sorte'], da
         : ev.campagneId !== null
           ? { sorte: 'campagne' as const, campagneId: ev.campagneId as Id<'Campagne'> }
           : null,
-    emplacementIds: ev.emplacementIds as Id<'Emplacement'>[],
-    note: ev.note,
-    photos: ev.photos,
+    emplacementIds: listeTextes(original.emplacement_ids) as Id<'Emplacement'>[],
+    note: original.note,
+    photos: listeTextes(original.photos),
     remplaceEvenement: { sorte, evenementId: ev.id as Id<'Evenement'> },
   };
   const d = ev.detail;
@@ -194,7 +201,7 @@ async function mouvementDuRemplacement(
 
 /** Annule `ev` (en vigueur) : événement d'annulation et, pour une récolte, le mouvement inverse. */
 export async function annulerSaisie(ctx: ContexteEcriture, ev: EvenementLu, culture: Culture | null): Promise<Id<'Evenement'>> {
-  const e = evenement(ctx.porte, remplacement(ev, 'annulation', ev.date));
+  const e = evenement(ctx.porte, await remplacement(ctx, ev, 'annulation', ev.date));
   const stock = await mouvementDuRemplacement(ctx, ev, 'annulation', e.id, culture);
   await ctx.porte.ecrireEnsemble([...stock.articles, e.ordre, ...stock.mouvements]);
   return e.id;
@@ -202,7 +209,7 @@ export async function annulerSaisie(ctx: ContexteEcriture, ev: EvenementLu, cult
 
 /** Change la date de `ev` (en vigueur) : une correction, même détail, nouvelle date. */
 export async function changerDate(ctx: ContexteEcriture, ev: EvenementLu, date: string, culture: Culture | null): Promise<Id<'Evenement'>> {
-  const e = evenement(ctx.porte, remplacement(ev, 'correction', date));
+  const e = evenement(ctx.porte, await remplacement(ctx, ev, 'correction', date));
   const stock = await mouvementDuRemplacement(ctx, ev, 'correction', e.id, culture);
   await ctx.porte.ecrireEnsemble([...stock.articles, e.ordre, ...stock.mouvements]);
   return e.id;
