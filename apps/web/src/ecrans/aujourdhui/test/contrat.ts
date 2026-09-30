@@ -132,6 +132,34 @@
  *   ecrireFermeDuJour(base, date) si la ferme n'y est pas déjà ; puis window.__amorcage =
  *   { utilisateurId, fermeId, lignes } (lignes = FermeDuJour.total). Sans paramètre `jeu` : le
  *   jeu de T07, inchangé (e2e/plan.e2e.ts).
+ *
+ * ── Corrections de la relecture (tests : ../relecture.test.tsx, e2e/aujourdhui.e2e.ts,
+ *    e2e/habillage.e2e.ts) ────────────────────────────────────────────────────────────────────
+ *
+ * B1 — Culture retirée (série ou campagne supprimée, culture === null) : l'entrée de
+ *   l'historique n'a ni « Annuler » ni « Changer la date », et porte le texte
+ *   TEXTE_CULTURE_RETIREE.
+ * B2 — Emplacements : seuls les emplacements actifs (supprime_le nul, actif_du ≤ jour, actif_au
+ *   nul ou > jour) sont écrits. Nouvelle saisie : occupations non supprimées d'emplacements
+ *   actifs. Annulation, correction : les emplacements de l'événement remplacé, relus dans la
+ *   base locale, moins ceux qui ne sont plus actifs. Aucun actif : liste vide (validerSaisie
+ *   l'accepte).
+ * B3 — Jour du téléphone : recalculé à chaque écriture (date d'un « Fait », d'une récolte, borne
+ *   de « Changer la date ») ; au retour au premier plan (visibilitychange, document visible),
+ *   l'écran passe au nouveau jour (semainier, date par défaut).
+ * Double « Fait » : la tâche quitte la liste, ou son bouton est désactivé, dès le tap, sans
+ *   attendre l'écriture ni la relecture ; un second tap n'écrit rien.
+ * Récolte sans aucun mouvement dans sa chaîne (saisie d'avant T13) : changer sa date n'écrit
+ *   que la correction, ni article ni mouvement. (Son annulation n'en écrit pas non plus.)
+ * Focus : les dialogues « Récolte » et « Changer la date » prennent le focus à l'ouverture, le
+ *   gardent (Tab sur le dernier élément focalisable → le premier ; Maj+Tab sur le premier → le
+ *   dernier) et le rendent à l'élément qui les a ouverts à la fermeture.
+ * Noms accessibles : dans l'historique, « Annuler : <saisie> » et « Changer la date : <saisie> »,
+ *   où <saisie> nomme le type, la quantité et la culture (« Annuler : Récolte 12 kg, Tomate »,
+ *   « Annuler : Plantation, Chou pointu ») ; deux entrées n'ont jamais le même nom. Le bouton du
+ *   bandeau reste « Annuler ».
+ * e2e : temps des taps en médiane de 5 (repeterMesure, décision T20) ; la mesure « appli prête »
+ *   est celle de e2e/demarrage.e2e.ts, pas répétée ici.
  */
 import type { PorteDonnees } from '@planif/sync';
 import type { ReactElement } from 'react';
@@ -161,3 +189,6 @@ export const LIBELLES_UNITES: Readonly<Record<'kg' | 'botte' | 'piece' | 'barque
 
 /** Durée d'affichage du bouton « Annuler » après une saisie. */
 export const DELAI_ANNULATION_MS = 10_000;
+
+/** Texte d'une saisie de l'historique dont la culture est retirée (relecture B1). */
+export const TEXTE_CULTURE_RETIREE = 'Culture retirée : correction impossible depuis le téléphone';

@@ -414,7 +414,7 @@ describe('T13 : « Fait » en un geste', () => {
     expect(entree?.dataset.type).toBe('realise');
     expect(texte(entree)).toMatch(/chou pointu/i);
     remiseAZero();
-    await toucher(bouton('Changer la date', entree));
+    await toucher(bouton(/^Changer la date/, entree));
     await attendre(() => dialogue('Changer la date') !== undefined, 'dialogue « Changer la date »');
     const d = dialogue('Changer la date');
     const champ = [...(d?.querySelectorAll<HTMLInputElement>('input') ?? [])].find((i) => nomAccessible(i) === 'Date');

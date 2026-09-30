@@ -3,7 +3,7 @@ import { CLE_SESSION } from '../src/connexion/session.ts';
 import { LIBELLES_UNITES, MARQUE_AUJOURDHUI_ATTENDUE } from '../src/ecrans/aujourdhui/test/contrat.ts';
 import { cleTache, fermeDuJour, SERIE } from '../src/ecrans/aujourdhui/test/ferme-du-jour.ts';
 import { COULEURS } from '../src/ui/jetons.ts';
-import { ralentirCpu, surveillerCsp, tempsAppPrete } from './outils.ts';
+import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp } from './outils.ts';
 
 /**
  * T13 — saisie terrain hors ligne, de bout en bout, sur le build de production servi par
@@ -17,7 +17,8 @@ import { ralentirCpu, surveillerCsp, tempsAppPrete } from './outils.ts';
  * Critère principal du ticket : marquer une plantation comme faite, noter 12 kg de tomates,
  * recharger l'appli toujours hors ligne, les deux saisies sont là. En plus :
  *   - écran « Aujourd'hui » affiché en moins de 300 ms (tap sur l'onglet, base ouverte : même
- *     méthode que T11) ; le premier affichage après un lancement à froid est mesuré et journalisé ;
+ *     méthode que T11), médiane de 5 taps (décision T20) ; le premier affichage après un
+ *     lancement à froid est journalisé ; « appli prête » est mesuré par e2e/demarrage.e2e.ts ;
  *   - « Annuler » visible 10 s après la saisie, puis annulable depuis l'historique ;
  *   - indicateur des saisies en attente d'envoi (file de PowerSync, ps_crud : une saisie = une
  *     transaction) : 1, 2, puis 3 après l'annulation, et toujours là après rechargement ;
@@ -189,13 +190,11 @@ test('saisie terrain hors ligne : Fait, 12 kg de tomates, rechargement, annulati
     await expect(ecran(page)).toBeVisible();
   });
 
-  await test.step('réouverture hors ligne, CPU ×4 : appli sous 300 ms, puis les tâches de la semaine, en retard d’abord', async () => {
+  await test.step('réouverture hors ligne, CPU ×4 : les tâches de la semaine, en retard d’abord', async () => {
     await context.setOffline(true);
     await ralentirCpu(page);
     await page.reload();
-    const ms = await tempsAppPrete(page);
-    console.log(`réouverture hors ligne : appli prête en ${ms.toFixed(0)} ms (budget ${String(BUDGET_MS)} ms)`);
-    expect(ms).toBeLessThan(BUDGET_MS);
+    // « Appli prête sous 300 ms » : mesuré par e2e/demarrage.e2e.ts (médiane de 5), pas ici.
     await page.waitForFunction((marque) => performance.getEntriesByName(marque, 'mark').length > 0, MARQUE_AUJOURDHUI_ATTENDUE, { timeout: 15_000 });
     const froid = await page.evaluate((marque) => performance.getEntriesByName(marque, 'mark')[0]?.startTime ?? Number.NaN, MARQUE_AUJOURDHUI_ATTENDUE);
     // Lancement à froid : ouverture de la base comprise (Q8 : 500 ms visés ; Q19 : accepté au-delà pour l'instant, T11b).
@@ -209,15 +208,16 @@ test('saisie terrain hors ligne : Fait, 12 kg de tomates, rechargement, annulati
     await expect(tache(page, chou)).toContainText('7 jours de retard');
   });
 
-  await test.step('tap sur « Aujourd’hui » : écran affiché en moins de 300 ms (base ouverte)', async () => {
-    for (const tour of ['premier retour', 'second retour']) {
+  await test.step('tap sur « Aujourd’hui » : écran affiché en moins de 300 ms (base ouverte), médiane de 5', async () => {
+    const serie = await repeterMesure(REPETITIONS_MESURE, async () => {
       await onglet(page, 'Planches').click();
       await expect(page.getByRole('heading', { level: 1, name: 'Planches' })).toBeVisible();
       const ms = await tapJusquAAujourdhui(page);
-      console.log(`Aujourd’hui, ${tour} : ${ms.toFixed(0)} ms (budget ${String(BUDGET_MS)} ms)`);
-      expect(ms).toBeLessThan(BUDGET_MS);
       await expect(tache(page, chou)).toBeVisible();
-    }
+      return ms;
+    });
+    console.log(decrireSerie('Aujourd’hui, tap depuis Planches', serie, BUDGET_MS));
+    expect(serie.mediane).toBeLessThan(BUDGET_MS);
   });
 
   await test.step('fidélité à la maquette : bande orange du retard, « Fait » sur la forêt', async () => {

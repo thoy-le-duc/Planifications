@@ -283,8 +283,10 @@ test('coquille : barre de navigation basse, onglets, écrans d’attente', async
   await expect(nav.locator('[aria-current="page"]')).toHaveCount(1);
   await expect(onglet(page, /Aujourd['’]hui/)).toHaveAttribute('aria-current', 'page');
   await enTeteVert(page, /Aujourd['’]hui/, 34);
-  // T13 : Aujourd'hui n'est plus un écran d'attente (e2e/aujourdhui.e2e.ts).
+  // T13 : Aujourd'hui n'est plus un écran d'attente (e2e/aujourdhui.e2e.ts). Sans ferme sur ce
+  // téléphone, il le dit (relecture T13) : jamais un écran vide.
   await expect(page.getByText(/^Bientôt : .+/)).toHaveCount(0);
+  await expect(page.getByText(/^(Aucune ferme sur ce téléphone|Ouverture des données de ce téléphone)/)).toBeVisible();
   await sansDefilementHorizontal(page);
   await capturer(page, 'aujourdhui');
 
