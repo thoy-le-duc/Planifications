@@ -4,7 +4,17 @@
  * d'envoi de PowerSync (voir envoi.ts) au retour du réseau.
  */
 import { creerGenerateurId, ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
-import type { BaseLocale, OptionsPorte, OrdreEcriture, PorteDonnees, RefusSynchro, RequeteSurveillee, SaisieEvenement } from './types.ts';
+import type {
+  BaseLocale,
+  EvenementPrepare,
+  LigneEvenementLocale,
+  OptionsPorte,
+  OrdreEcriture,
+  PorteDonnees,
+  RefusSynchro,
+  RequeteSurveillee,
+  SaisieEvenement,
+} from './types.ts';
 
 const COLONNES_EVENEMENT = [
   'id',
@@ -51,7 +61,7 @@ function refusDepuisLigne(l: LigneRefus): RefusSynchro {
   };
 }
 
-export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnees & Required<Pick<PorteDonnees, 'ecrireEnsemble'>> {
+export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnees {
   const maintenant = options.maintenant ?? (() => new Date());
   const nouvelId =
     options.nouvelId ??
@@ -95,6 +105,28 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     };
   }
 
+  function preparerSaisie(saisie: SaisieEvenement): EvenementPrepare {
+    const id = nouvelId<'Evenement'>();
+    const ligne: LigneEvenementLocale = {
+      id,
+      ferme_id: options.fermeId,
+      type: saisie.type,
+      date: saisie.date,
+      horodatage: maintenant().toISOString(),
+      auteur_id: options.utilisateurId,
+      source: saisie.source,
+      serie_id: saisie.culture?.sorte === 'serie' ? saisie.culture.serieId : null,
+      campagne_id: saisie.culture?.sorte === 'campagne' ? saisie.culture.campagneId : null,
+      emplacement_ids: JSON.stringify(saisie.emplacementIds),
+      note: saisie.note,
+      photos: JSON.stringify(saisie.photos),
+      remplace_sorte: saisie.remplaceEvenement?.sorte ?? null,
+      remplace_evenement_id: saisie.remplaceEvenement?.evenementId ?? null,
+      detail: JSON.stringify(saisie.detail),
+    };
+    return { id, ligne, ordre: { sql: SQL_SAISIE, parametres: COLONNES_EVENEMENT.map((c) => ligne[c]) } };
+  }
+
   return {
     lire: <T>(sql: string, parametres?: readonly unknown[]) => base.getAll<T>(sql, parametres ?? []),
 
@@ -122,32 +154,14 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     surveiller,
 
     async saisirEvenement(saisie: SaisieEvenement): Promise<Id<'Evenement'>> {
-      const id = nouvelId<'Evenement'>();
-      const valeurs: Record<(typeof COLONNES_EVENEMENT)[number], string | null> = {
-        id,
-        ferme_id: options.fermeId,
-        type: saisie.type,
-        date: saisie.date,
-        horodatage: maintenant().toISOString(),
-        auteur_id: options.utilisateurId,
-        source: saisie.source,
-        serie_id: saisie.culture?.sorte === 'serie' ? saisie.culture.serieId : null,
-        campagne_id: saisie.culture?.sorte === 'campagne' ? saisie.culture.campagneId : null,
-        emplacement_ids: JSON.stringify(saisie.emplacementIds),
-        note: saisie.note,
-        photos: JSON.stringify(saisie.photos),
-        remplace_sorte: saisie.remplaceEvenement?.sorte ?? null,
-        remplace_evenement_id: saisie.remplaceEvenement?.evenementId ?? null,
-        detail: JSON.stringify(saisie.detail),
-      };
+      const { id, ordre } = preparerSaisie(saisie);
       await base.writeTransaction(async (tx) => {
-        await tx.execute(
-          SQL_SAISIE,
-          COLONNES_EVENEMENT.map((c) => valeurs[c]),
-        );
+        await tx.execute(ordre.sql, ordre.parametres);
       });
       return id;
     },
+
+    preparerSaisie,
 
     surveillerRefus(rappel) {
       return surveiller<RefusSynchro>(

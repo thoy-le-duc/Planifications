@@ -1,7 +1,11 @@
 /**
  * T11 — page `/diagnostic/amorcer.html`, pour les tests de bout en bout (e2e/plan.e2e.ts, contrat
  * en tête) : remplit la base locale PowerSync de l'utilisateur de TEST du jeu de T07 (ferme
- * d'exemple, 400 emplacements), sans serveur. Hors navigation, hors service worker et hors
+ * d'exemple, 400 emplacements), sans serveur.
+ *
+ * T13 — `?jeu=aujourdhui&date=AAAA-MM-JJ` : la ferme du jour à la place (src/ecrans/aujourdhui/
+ * test/ferme-du-jour.ts, datée relativement à `date`), dans la base de SON utilisateur de test ;
+ * contrat : src/ecrans/aujourdhui/test/contrat.ts, « Amorçage ». Hors navigation, hors service worker et hors
  * précache, jamais liée depuis l'appli, comme /diagnostic/synchro.html.
  *
  * Garde-fous : seule la base de l'utilisateur du jeu (identifiant de test, jamais un vrai compte)
@@ -10,6 +14,7 @@
  */
 import type { BaseLocale } from '@planif/sync';
 import { remplirJeuT07, type JeuT07 } from '../../../../packages/sync/src/test/jeu-t07.ts';
+import { ecrireFermeDuJour, fermeDuJour } from '../ecrans/aujourdhui/test/ferme-du-jour.ts';
 import { ouvrirBaseLocale } from './ouvrir.ts';
 
 interface Amorcage {
@@ -33,21 +38,44 @@ async function jeuSansEcrire(): Promise<JeuT07> {
   return remplirJeuT07(nulle);
 }
 
-async function amorcer(): Promise<Amorcage> {
-  const jeu = await jeuSansEcrire();
-  const { base, fermer } = ouvrirBaseLocale(jeu.utilisateurId);
+/**
+ * Ouvre la base de `utilisateurId`, la remplit par `remplir` si la ferme n'y est pas déjà, vide la
+ * file d'envoi : rien d'un jeu ne doit partir vers un serveur, ni compter comme saisie en attente.
+ */
+async function remplirBase(utilisateurId: string, fermeId: string, remplir: (base: BaseLocale) => Promise<unknown>): Promise<void> {
+  const { base, fermer } = ouvrirBaseLocale(utilisateurId);
   try {
-    const deja = await base.getAll<{ id: string }>('SELECT id FROM ferme WHERE id = ?', [jeu.principale.fermeId]);
-    if (deja.length === 0) await remplirJeuT07(base);
-    // Rien de ce jeu ne doit partir vers un serveur, ni compter comme saisie en attente.
+    const deja = await base.getAll<{ id: string }>('SELECT id FROM ferme WHERE id = ?', [fermeId]);
+    if (deja.length === 0) await remplir(base);
     await base.writeTransaction(async (tx) => {
       await tx.execute('DELETE FROM ps_crud');
     });
   } finally {
     await fermer();
   }
+}
+
+async function amorcerT07(): Promise<Amorcage> {
+  const jeu = await jeuSansEcrire();
+  await remplirBase(jeu.utilisateurId, jeu.principale.fermeId, (base) => remplirJeuT07(base));
   const lignes = Object.values(jeu.lignes).reduce((total, n) => total + n, 0);
   return { utilisateurId: jeu.utilisateurId, fermeId: jeu.principale.fermeId, lignes };
+}
+
+/** T13 : la ferme du jour, datée relativement à `date` ('AAAA-MM-JJ'). */
+async function amorcerAujourdhui(date: string): Promise<Amorcage> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`date invalide : « ${date} » (AAAA-MM-JJ attendu)`);
+  const ferme = fermeDuJour(date);
+  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermeDuJour(base, date));
+  return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
+}
+
+function amorcer(): Promise<Amorcage> {
+  const parametres = new URLSearchParams(location.search);
+  const jeu = parametres.get('jeu');
+  if (jeu === null) return amorcerT07();
+  if (jeu === 'aujourdhui') return amorcerAujourdhui(parametres.get('date') ?? '');
+  return Promise.reject(new Error(`jeu inconnu : « ${jeu} »`));
 }
 
 amorcer().then(publier, (erreur: unknown) => {

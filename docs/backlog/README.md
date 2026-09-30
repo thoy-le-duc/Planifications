@@ -30,7 +30,8 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T18](T18-mode-sombre.md) | Mode sombre | T16 | à faire |
 | [T11](T11-vue-2d.md) | Vue 2D planches × semaines (et base locale ouverte dans l'appli) | T03, T10, T16 | fait |
 | [T12](T12-plan-de-culture.md) | Plan de culture : créer et modifier une série | T04, T05, T11 | à faire |
-| [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T10c, T11, T16 | en cours |
+| [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T10c, T11, T16 | fait |
+| [T13b](T13b-aujourdhui-grande-ferme.md) | Aujourd'hui : rapide sur une grande ferme | T13 | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16 | à faire |
 | [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | fait |
@@ -57,4 +58,5 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 - Fin de ticket : trois lignes dans `docs/journal.md` et le statut mis à jour dans ce tableau.
 | [T19](T19-tests-de-temps.md) | Tests de temps robustes sous charge | — | fait |
 | [T20](T20-main-verte.md) | Main verte : service worker après le premier affichage, mesures e2e stables | T11 | fait |
+| [T11c](T11c-diagnostic-hors-prod.md) | Pages de test hors du site en production | T11, T10c | fait |
 | [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | à faire |

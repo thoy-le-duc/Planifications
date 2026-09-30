@@ -63,6 +63,33 @@ export interface RefusSynchro {
   readonly creeLe: string;
 }
 
+/** Ligne `evenement` telle que la porte l'écrit (colonnes du schéma local, sans `cree_le`). */
+export type LigneEvenementLocale = Readonly<Record<
+  | 'id'
+  | 'ferme_id'
+  | 'type'
+  | 'date'
+  | 'horodatage'
+  | 'auteur_id'
+  | 'source'
+  | 'serie_id'
+  | 'campagne_id'
+  | 'emplacement_ids'
+  | 'note'
+  | 'photos'
+  | 'remplace_sorte'
+  | 'remplace_evenement_id'
+  | 'detail',
+  string | null
+>>;
+
+/** Événement préparé par `preparerSaisie`, pas encore écrit. */
+export interface EvenementPrepare {
+  readonly id: Id<'Evenement'>;
+  readonly ligne: LigneEvenementLocale;
+  readonly ordre: OrdreEcriture;
+}
+
 /** Ordre SQL d'écriture (paramètres `?`), pour `ecrireEnsemble`. */
 export interface OrdreEcriture {
   readonly sql: string;
@@ -88,6 +115,13 @@ export interface PorteDonnees {
   surveiller<T>(requete: RequeteSurveillee<T>, rappel: (lignes: T[]) => void): () => void;
   /** Écrit l'événement dans la base locale et rend son id. Aucun réseau. */
   saisirEvenement(saisie: SaisieEvenement): Promise<Id<'Evenement'>>;
+  /**
+   * T13 : prépare l'événement sans l'écrire, complété comme par `saisirEvenement` (id UUID v7,
+   * ferme, horodatage, auteur), pour l'écrire avec d'autres lignes en une transaction
+   * (`ecrireEnsemble` : récolte + mouvement de stock). Rend la ligne (format local, celui que
+   * `validerSaisie` lit) et l'ordre SQL qui l'insère.
+   */
+  preparerSaisie(saisie: SaisieEvenement): EvenementPrepare;
   /** Refus de l'utilisateur de la porte, du plus récent au plus ancien ; même contrat que `surveiller`. */
   surveillerRefus(rappel: (refus: RefusSynchro[]) => void): () => void;
 }

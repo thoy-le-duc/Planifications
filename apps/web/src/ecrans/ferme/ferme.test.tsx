@@ -144,6 +144,7 @@ function porteControlee(): {
     saisirEvenement: interdit('saisirEvenement'),
     surveillerRefus: interdit('surveillerRefus'),
     ecrireEnsemble: interdit('ecrireEnsemble'),
+    preparerSaisie: interdit('preparerSaisie'),
   };
   return {
     porte,
