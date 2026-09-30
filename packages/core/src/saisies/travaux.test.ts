@@ -547,3 +547,46 @@ describe('validerSerie : les travaux prévus de l’instantané', () => {
     expect(r.ok).toBe(true);
   });
 });
+
+// ── Relecture : la limite de taille s'applique à l'instantané NORMALISÉ ─────────────────────────
+
+/**
+ * Correctif de relecture (T22, problème 2) : `validerSerie` mesurait `parametres` AVANT de
+ * normaliser `travauxPrevus`. La normalisation ajoute les clés facultatives absentes à `null`
+ * (« repetition », « outil », « produit », « tempsEstime » : environ 60 octets par travail), si
+ * bien qu'une série acceptée pouvait être rangée avec plus de PARAMETRES_SERIE_OCTETS. Propriété
+ * attendue : tout `parametres` accepté, une fois normalisé (`valeur.parametres`), tient dans la
+ * limite. Refus : 'trop_volumineux', champ 'parametres' (le code existant de T10e).
+ */
+describe('validerSerie : la limite de 8 192 octets vaut pour l’instantané normalisé (relecture)', () => {
+  /** 12 travaux sans aucune clé facultative : la normalisation en ajoute 4 à chacun. */
+  const minimaux = Array.from({ length: 12 }, () => GRELINETTE);
+  const octets = (v: unknown): number => octetsUtf8(JSON.stringify(v));
+
+  /** Paramètres de la batavia avec les travaux minimaux, bourrés à `taille` octets par une clé libre. */
+  function bourres(taille: number): Record<string, unknown> {
+    const base = { ...BATAVIA, travauxPrevus: minimaux, bourrage: '' };
+    return { ...base, bourrage: 'x'.repeat(Math.max(0, taille - octets(base))) };
+  }
+
+  it('sous la limite avant normalisation, au-dessus après : refusé (trop_volumineux)', () => {
+    const parametres = bourres(m.PARAMETRES_SERIE_OCTETS - 100);
+    expect(octets(parametres), 'le jeu tient dans la limite tel qu’il est écrit').toBeLessThanOrEqual(m.PARAMETRES_SERIE_OCTETS);
+    const normalise = { ...parametres, travauxPrevus: minimaux.map((t) => ({ repetition: null, outil: null, produit: null, tempsEstime: null, ...t })) };
+    expect(octets(normalise), 'mais la normalisation le fait dépasser').toBeGreaterThan(m.PARAMETRES_SERIE_OCTETS);
+
+    const r = m.validerSerie(serie(parametres));
+    expect(r.ok ? `acceptée, instantané rangé de ${String(octets(r.valeur.parametres))} octets` : null).toBeNull();
+    expect(code(r)).toBe('trop_volumineux');
+    expect(champ(r)).toBe('parametres');
+  });
+
+  it('propriété : tout instantané accepté tient, normalisé, dans PARAMETRES_SERIE_OCTETS', () => {
+    const trop: string[] = [];
+    for (let taille = m.PARAMETRES_SERIE_OCTETS - 1_000; taille <= m.PARAMETRES_SERIE_OCTETS; taille += 20) {
+      const r = m.validerSerie(serie(bourres(taille)));
+      if (r.ok && octets(r.valeur.parametres) > m.PARAMETRES_SERIE_OCTETS) trop.push(`${String(taille)} → ${String(octets(r.valeur.parametres))}`);
+    }
+    expect(trop, 'écrit → rangé (octets)').toEqual([]);
+  });
+});

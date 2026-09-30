@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import { LIBELLES_UNITES, MARQUE_AUJOURDHUI_ATTENDUE } from '../src/ecrans/aujourdhui/test/contrat.ts';
-import { cleTache, cleTravail, fermeDuJour, LIBELLES_CATEGORIES, SERIE, texteCharge, texteDuree } from '../src/ecrans/aujourdhui/test/ferme-du-jour.ts';
+import { cleTache, fermeDuJour, LIBELLES_CATEGORIES, SERIE, texteCharge, texteDuree } from '../src/ecrans/aujourdhui/test/ferme-du-jour.ts';
 import { COULEURS } from '../src/ui/jetons.ts';
 import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp } from './outils.ts';
 
@@ -332,7 +332,7 @@ test('travaux prévus : tâche, charge de la semaine, « Fait » sur la grelinet
   test.setTimeout(DELAI_AMORCAGE_MS + 60_000);
   const aujourdhui = jourLocal(new Date());
   const ferme = fermeDuJour(aujourdhui, { travaux: true });
-  const grelinette = cleTravail(SERIE.batavia, 0);
+  const grelinette = ferme.attendu.cles.grelinette ?? '';
 
   await test.step('amorcer la ferme du jour avec travaux prévus', async () => {
     await page.goto(`/diagnostic/amorcer.html?jeu=aujourdhui-travaux&date=${aujourdhui}`);

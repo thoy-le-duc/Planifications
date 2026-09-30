@@ -6,6 +6,14 @@
  * de la semaine s'affiche en pastille. Même harnais que ./ecran.test.tsx (T13), sur la ferme du
  * jour AVEC travaux (./test/ferme-du-jour.ts, `{ travaux: true }`, aujourd'hui = 2026-09-30).
  * Contrat : ./test/contrat.ts (section T22) et packages/core/src/planification/test/contrat-travaux.ts.
+ *
+ * Amendement de la relecture (décision du chef) : la clé d'une tâche de travail devient
+ * `<série>:travail:<indice>:<AAAA-MM-JJ, date prévue de l'occurrence>` (était
+ * `<série>:travail:<indice>`). Un travail répété peut avoir deux cartes à l'écran (sa ligne en
+ * retard et une occurrence plus loin dans la semaine) : avec l'ancienne clé, elles portaient la
+ * même, et « Marquer fait » sur la carte en retard masquait les deux. Les attendus des tests
+ * ci-dessous ne changent pas, seules leurs clés gagnent la date (J = 2026-09-30) ; le cas des
+ * deux cartes a son test (« relecture : deux occurrences du même travail »).
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -230,10 +238,12 @@ const entrees = (h: HTMLElement): HTMLElement[] => [...h.querySelectorAll<HTMLEl
 
 // ── Tests T22 ────────────────────────────────────────────────────────────────────────────────
 
-const GRELINETTE = cleTravail(SERIE.batavia, 0);
-const COMPOST = cleTravail(SERIE.batavia, 1);
-const DESHERBAGE = cleTravail(SERIE.tomate, 0);
-const PALISSAGE = cleTravail(SERIE.tomate, 1);
+// Dates prévues des occurrences affichées : grelinette J−12, compost J−3, désherbage J−6 (sa
+// ligne en retard la plus récente), palissage le dimanche de la semaine.
+const GRELINETTE = cleTravail(SERIE.batavia, 0, '2026-09-18');
+const COMPOST = cleTravail(SERIE.batavia, 1, '2026-09-27');
+const DESHERBAGE = cleTravail(SERIE.tomate, 0, '2026-09-24');
+const PALISSAGE = cleTravail(SERIE.tomate, 1, '2026-10-04');
 
 const pastille = (): HTMLElement | null => conteneur.querySelector<HTMLElement>('[data-testid="charge-semaine"]');
 
@@ -449,6 +459,68 @@ describe('T22 : « Annuler » une intervention (10 s, puis l’historique), en a
     verifierValide(annulation);
     expect(transactions).toBe(1);
     await attendre(() => tache(DESHERBAGE) !== undefined, 'le désherbage annulé redevient à faire');
+    verifierAjoutSeul();
+  });
+});
+
+describe('T22 (relecture) : deux occurrences du même travail, deux cartes, deux clés', () => {
+  // Arrosage de la tomate tous les 3 jours (mise en place J−90, +2) : occurrences J−4, J−1, J+2,
+  // J+5… Une seule ligne en retard (J−1 = 2026-09-29) et l'occurrence de vendredi (J+2 =
+  // 2026-10-02) : l'exemple de la relecture (05-18 en retard, 05-21) sur la ferme du jour.
+  const ARROSAGE_RETARD = cleTravail(SERIE.tomate, 2, '2026-09-29');
+  const ARROSAGE_SEMAINE = cleTravail(SERIE.tomate, 2, '2026-10-02');
+
+  beforeEach(async () => {
+    base.fermer();
+    base = creerBaseMemoire(SCHEMA_LOCAL);
+    ferme = await ecrireFermeDuJour(base, AUJOURDHUI, { travaux: true, arrosage: true });
+    porte = creerPorte(base, { utilisateurId: UTILISATEUR as Id<'Utilisateur'>, fermeId: FERME as Id<'Ferme'> });
+    remiseAZero();
+  });
+
+  it('les deux cartes s’affichent, chacune avec sa clé ; aucune clé en double', async () => {
+    expect(ferme.attendu.cles.arrosageRetard).toBe(ARROSAGE_RETARD);
+    expect(ferme.attendu.cles.arrosageSemaine).toBe(ARROSAGE_SEMAINE);
+    await rendre();
+    const cles = taches().map((t) => String(t.dataset.cle));
+    expect(cles.filter((c, i) => cles.indexOf(c) !== i), 'clés en double').toEqual([]);
+    expect(cles).toEqual(ferme.attendu.taches);
+
+    const enRetard = tacheOuEchec(ARROSAGE_RETARD);
+    expect(enRetard.dataset.retard).toBe('oui');
+    expect(texte(enRetard)).toMatch(/arrosage/i);
+    expect(texte(enRetard)).toContain('1 jour de retard');
+    const semaine = tacheOuEchec(ARROSAGE_SEMAINE);
+    expect(semaine.dataset.retard).toBe('non');
+    expect(texte(semaine)).toMatch(/arrosage/i);
+    expect(semaine.querySelector('[data-testid="temps-estime"]'), 'arrosage sans temps estimé').toBeNull();
+    // Charge inchangée : l'arrosage n'a pas de temps estimé.
+    expect(texte(pastille())).toBe('1 h 24 de travail');
+  });
+
+  it('« Marquer fait » sur la carte en retard ne masque que celle-là ; l’occurrence de vendredi reste', async () => {
+    await rendre();
+    const semaineAvant = tacheOuEchec(ARROSAGE_SEMAINE);
+    expect(semaineAvant).toBeDefined();
+    await toucher(bouton(/^Marquer fait/, tacheOuEchec(ARROSAGE_RETARD)));
+    // Dès le tap (masquage immédiat, « double Fait » de T13) : la carte de vendredi est toujours là.
+    expect(tache(ARROSAGE_SEMAINE), 'la carte de vendredi n’est pas masquée par le tap').toBeDefined();
+
+    await attendre(() => nouveauxEvenements().length > 0, 'une intervention écrite');
+    const nouveaux = nouveauxEvenements();
+    expect(nouveaux).toHaveLength(1);
+    const e = nouveaux[0];
+    if (e === undefined) return;
+    expect(e).toMatchObject({ type: 'intervention', date: AUJOURDHUI, serie_id: SERIE.tomate });
+    expect(detail(e)).toStrictEqual({ categorie: 'entretien', type: 'arrosage', outil: null });
+    verifierValide(e);
+
+    // L'intervention du jour solde l'occurrence la plus proche (J−1) et les précédentes, pas J+2.
+    await attendre(() => tache(ARROSAGE_RETARD) === undefined, 'la carte en retard quitte la liste');
+    for (let k = 0; k < 10; k++) await unTour();
+    expect(tache(ARROSAGE_SEMAINE), 'l’arrosage de vendredi reste à faire').toBeDefined();
+    expect(tache(ARROSAGE_SEMAINE)?.dataset.retard).toBe('non');
+    expect(taches().map((t) => t.dataset.cle)).toEqual(ferme.attendu.taches.filter((c) => c !== ARROSAGE_RETARD));
     verifierAjoutSeul();
   });
 });

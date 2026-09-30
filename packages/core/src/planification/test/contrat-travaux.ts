@@ -87,9 +87,10 @@
  *
  * ── PLAFONDS_TRAVAUX ────────────────────────────────────────────────────────────────────────
  *
- *   { nombre, texte, decalageJours, tousLesJours, minutes }, bornes comprises. Ils arrêtent une
- *   faute de frappe, pas une vraie ferme : nombre ≥ 12, texte ≥ 30, decalageJours ≥ 180,
- *   tousLesJours ≥ 30, minutes ≥ 240. Et le pire cas valide (nombre travaux, tous les champs
+ *   { nombre, texte, decalageJours, tousLesJours, minutes, occurrences }, bornes comprises. Ils
+ *   arrêtent une faute de frappe, pas une vraie ferme : nombre ≥ 12, texte ≥ 30, decalageJours ≥
+ *   180, tousLesJours ≥ 30, minutes ≥ 240, et 400 ≤ occurrences ≤ 2 000 (relecture, problème 3 :
+ *   voir « Dates » ci-dessous). Et le pire cas valide (nombre travaux, tous les champs
  *   remplis, textes à la longueur maximale en caractères de 3 octets) ajouté aux paramètres de
  *   la batavia tient dans PARAMETRES_SERIE_OCTETS : un itinéraire valide donne toujours une
  *   série acceptée par le serveur. Le développeur choisit les valeurs (ou relève la limite de
@@ -108,6 +109,16 @@
  *   - repère (de début ou de fin) absent des dates (semis pépinière d'un semis direct ou d'un
  *     plant acheté) → [] : ignoré sans lever, comme les réalisés incohérents du semainier ; la
  *     validation l'a déjà refusé à l'écriture.
+ *   - PLAFOND (correctif de relecture, problème 3) : au plus PLAFONDS_TRAVAUX.occurrences dates,
+ *     les PREMIÈRES dans l'ordre chronologique ; les suivantes sont ignorées sans lever. Une
+ *     série forgée (pas d'un jour, 70 ans de récolte) donnerait sinon ≈ 25 000 occurrences par
+ *     travail, calculées et gardées en mémoire à chaque semainier. 400 couvre un travail
+ *     quotidien sur plus d'un an (de la pépinière à la fin de récolte d'une vraie série) ; 2 000
+ *     borne le pire cas à 12 × 2 000 dates par série. Le semainier lit ces dates : dans les
+ *     semaines couvertes par le plafond, il rend les mêmes tâches qu'avec une série bornée.
+ *     Choix du testeur : un plafond documenté plutôt qu'un seul test de temps, parce qu'une
+ *     série forgée coûte aujourd'hui ≈ 5 ms au semainier (sous tout budget raisonnable) et
+ *     qu'un test de temps ne montrerait rien ; c'est la mémoire et le travail inutile qu'on borne.
  *
  * ── Instantané : instantaneItineraire(itineraire) ───────────────────────────────────────────
  *
@@ -204,6 +215,8 @@ export interface PlafondsTravaux {
   readonly decalageJours: number;
   readonly tousLesJours: number;
   readonly minutes: number;
+  /** Occurrences au plus d'un travail prévu dans une série (datesTravailPrevu), relecture T22. */
+  readonly occurrences: number;
 }
 
 export interface DatesSerieLues {

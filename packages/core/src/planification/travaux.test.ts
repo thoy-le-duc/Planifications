@@ -587,3 +587,72 @@ describe('performance', () => {
     expect(meilleure).toBeLessThan(60);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Relecture : nombre d'occurrences borné (problème 3)
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Correctif de relecture (T22, problème 3) : `datesTravailPrevu` ne plafonnait pas le nombre
+ * d'occurrences. Une série forgée (pas d'un jour, 70 ans de récolte) en donnait ≈ 25 600 par
+ * travail. Forme choisie (la plus simple, voir contrat-travaux.ts, « Dates ») : un plafond
+ * documenté, PLAFONDS_TRAVAUX.occurrences (400 à 2 000), les premières dates gardées. Le temps
+ * seul ne montre rien (≈ 5 ms aujourd'hui pour 12 travaux de ce genre) : il est vérifié en garde,
+ * avec l'égalité des tâches de la semaine face à une série bornée.
+ */
+describe('datesTravailPrevu : nombre d’occurrences plafonné (relecture)', () => {
+  /** Mise en place 2027-05-03, fin de récolte 70 ans plus tard. */
+  const DATES_FORGEES: DatesSerieLues = { ...DATES_ETE, finRecolte: '2097-05-31' };
+  /** Même série, fin de récolte ramenée à la fin de l'été : ce qu'une vraie série donnerait. */
+  const DATES_BORNEES: DatesSerieLues = { ...DATES_ETE, finRecolte: '2027-09-30' };
+  const quotidien = (i: number): TravailPrevuLu =>
+    travail({
+      categorie: 'entretien',
+      type: `arrosage ${String(i)}`,
+      repere: 'mise_en_place',
+      decalageJours: 0,
+      repetition: { tousLesJours: 1, repereFin: 'fin_recolte' },
+      tempsEstime: { minutes: 5, par: 'planche' },
+    });
+  const DOUZE = Array.from({ length: 12 }, (_, i) => quotidien(i));
+
+  it('PLAFONDS_TRAVAUX.occurrences : entier documenté, entre 400 et 2 000', () => {
+    const plafond = m.PLAFONDS_TRAVAUX.occurrences;
+    expect(Number.isInteger(plafond), `PLAFONDS_TRAVAUX.occurrences = ${String(plafond)}`).toBe(true);
+    expect(plafond).toBeGreaterThanOrEqual(400);
+    expect(plafond).toBeLessThanOrEqual(2000);
+  });
+
+  it('pas d’un jour sur 70 ans : au plus PLAFONDS_TRAVAUX.occurrences dates, les premières', () => {
+    const plafond = m.PLAFONDS_TRAVAUX.occurrences;
+    const dates = m.datesTravailPrevu(quotidien(0), DATES_FORGEES);
+    expect(dates.length, `${String(dates.length)} occurrences rendues`).toBeLessThanOrEqual(plafond);
+    expect(dates.length).toBe(plafond);
+    expect(dates[0]).toBe('2027-05-03');
+    expect(dates[1]).toBe('2027-05-04');
+    expect(dates.at(-1)).toBe(m.datesTravailPrevu(quotidien(0), { ...DATES_ETE, finRecolte: '2035-12-31' })[plafond - 1]);
+  });
+
+  it('sous le plafond, rien ne change : la saison bornée donne toutes ses dates', () => {
+    // 2027-05-03 → 2027-09-30 : 151 dates, sous tout plafond admis (≥ 400).
+    expect(m.datesTravailPrevu(quotidien(0), DATES_BORNEES)).toHaveLength(151);
+  });
+
+  it('semainier : 12 travaux quotidiens sur 70 ans, mêmes tâches de la semaine qu’une série bornée, en moins de 50 ms', () => {
+    const forgee = serie({ id: 'forgee', statut: 'en_cours', datesPrevues: DATES_FORGEES, travauxPrevus: DOUZE });
+    const bornee = serie({ id: 'forgee', statut: 'en_cours', datesPrevues: DATES_BORNEES, travauxPrevus: DOUZE });
+    const r = realises([['forgee', [intervention('2027-05-10', 'arrosage 0', 'entretien')]]]);
+    const semaine = s(2027, 20);
+    for (let i = 0; i < 3; i++) m.semainier(semaine, [forgee], [], r, '2027-05-19');
+    let meilleure = Number.POSITIVE_INFINITY;
+    let taches: readonly TacheLue[] = [];
+    for (let i = 0; i < 5; i++) {
+      const t0 = performance.now();
+      taches = m.semainier(semaine, [forgee], [], r, '2027-05-19');
+      meilleure = Math.min(meilleure, performance.now() - t0);
+    }
+    expect(travaux(taches)).toStrictEqual(travaux(m.semainier(semaine, [bornee], [], r, '2027-05-19')));
+    expect(travaux(taches).length).toBeGreaterThan(0);
+    expect(meilleure).toBeLessThan(50);
+  });
+});

@@ -169,8 +169,16 @@
  *   série (RealisesSemainier.interventions : date, detail.categorie, detail.type ; ni annulées,
  *   ni corrigées, ni les annulations elles-mêmes) ; aucune règle réécrite dans l'écran
  *   (retards, soldes, caducité, temps : le cœur, contrat-travaux.ts).
- * Tâche de travail : data-testid="tache", data-cle="<id série>:travail:<indice>" (cleTravail),
- *   data-retard comme T13, dans l'ordre du semainier, mêlée aux étapes. Elle montre :
+ * Tâche de travail : data-testid="tache", data-cle="<id série>:travail:<indice>:<AAAA-MM-JJ>"
+ *   (cleTravail ; la date est la date prévue de l'occurrence affichée, `datePrevue` de la tâche
+ *   du semainier, celle de la ligne en retard pour une tâche en retard), data-retard comme T13,
+ *   dans l'ordre du semainier, mêlée aux étapes. Deux cartes n'ont jamais la même clé.
+ *   Amendement de la relecture (décision du chef) : l'ancienne clé `<id série>:travail:<indice>`
+ *   était la même pour les deux cartes d'un travail répété (sa ligne en retard et une occurrence
+ *   plus loin dans la semaine) ; « Marquer fait » sur l'une masquait les deux. « Marquer fait »
+ *   sur la carte en retard ne masque que celle-là : l'intervention du jour solde l'occurrence la
+ *   plus proche et les précédentes, l'occurrence à venir reste (ferme du jour { travaux: true,
+ *   arrosage: true } : arrosage de la tomate, J−1 en retard et J+2). Elle montre :
  *   - la catégorie en surtitre : élément data-testid="surtitre", texte LIBELLES_CATEGORIES
  *     (« Travail du sol », « Amendement », « Entretien »…) ;
  *   - le libellé du type (« grelinette »), la culture, le(s) code(s) d'emplacement ;
