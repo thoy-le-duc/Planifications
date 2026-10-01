@@ -23,6 +23,7 @@ import {
   libelleCulture,
   libelleDate,
   lireLongueur,
+  lundiDe,
   modeDe,
   nombreLisible,
   objetJson,
@@ -32,13 +33,14 @@ import {
   type ChoixCulture,
   type Saisie,
 } from './calculs.ts';
-import { entreeAnnulable, lireBibliotheque, lireEtatSerie, requeteHistorique, type EtatSerie, type Modification } from './donnees.ts';
-import { annulerEntree, creerSerie, modifierSerie, ramenerSerie, SerieRefusee, type ContexteEcriture, type SerieAEcrire } from './ecritures.ts';
+import { entreeAnnulable, lireBibliotheque, lireEtatSerie, lireVarieteDeSerie, requeteHistorique, type EtatSerie, type Modification } from './donnees.ts';
+import { SelecteurSemaine } from './SelecteurSemaine.tsx';
+import { annulerEntree, creerSerie, defaireSerie, modifierSerie, SerieRefusee, supprimerSerieCreee, type ContexteEcriture, type SerieAEcrire } from './ecritures.ts';
 
 /** Marque de performance posée quand le formulaire est utilisable (e2e/serie.e2e.ts). */
 export const MARQUE_SERIE_AFFICHEE = 'planif:serie-affichee';
 
-/** D'où part le formulaire. `semaine` : 'AAAA-Www' (valeur d'un <input type="week">). */
+/** D'où part le formulaire. `semaine` : 'AAAA-Www' (semaine ISO, comme `data-semaine` du sélecteur). */
 export type DepartSerie =
   | {
       readonly sorte: 'creation';
@@ -51,7 +53,11 @@ export type DepartSerie =
 /** Saisie enregistrée, que le bandeau de l'écran Planches peut défaire. */
 export interface SaisieSerieAnnulable {
   readonly texte: string;
-  annuler(): Promise<void>;
+  /**
+   * Défait la saisie, en une transaction (N5, règle de T24) : null si tout a été défait, sinon le
+   * message à montrer, qui contient « modifié entre-temps ».
+   */
+  annuler(): Promise<string | null>;
 }
 
 export interface ProprietesFormulaireSerie {
@@ -127,6 +133,12 @@ function cultureDe(bib: Bibliotheque, especeId: string, varieteId: string | null
   return { especeId, varieteId: variete?.id ?? null, nomEspece: espece.nom, nomVariete: variete?.nom ?? null };
 }
 
+/** Ancre d'une série importée qui n'est pas un lundi (T12b, N1), sinon null. */
+function ancreHorsLundi(v: unknown): DateCalendaire | null {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  return lundiDe(semaineDe(v)) === v ? null : (v as DateCalendaire);
+}
+
 function saisieInitiale(bib: Bibliotheque, depart: DepartSerie, etat: EtatSerie | null, jour: string): Saisie {
   if (depart.sorte === 'modification' && etat !== null) {
     const s = etat.serie;
@@ -136,6 +148,7 @@ function saisieInitiale(bib: Bibliotheque, depart: DepartSerie, etat: EtatSerie 
       parametresTexte: typeof s.parametres === 'string' ? s.parametres : null,
       ancre: s.ancre_type === 'semis' || s.ancre_type === 'debut_recolte' ? s.ancre_type : 'plantation',
       semaine: semaineDe(String(s.ancre_date)),
+      ancreGardee: ancreHorsLundi(s.ancre_date),
       emplacements: etat.occupations.filter((o) => o.supprime_le === null).map((o) => ({ id: String(o.emplacement_id), longueur: String(o.longueur_m ?? '') })),
     };
   }
@@ -147,6 +160,7 @@ function saisieInitiale(bib: Bibliotheque, depart: DepartSerie, etat: EtatSerie 
     parametresTexte: null,
     ancre: 'plantation',
     semaine: creation.semaine ?? semaineParDefaut(bib, jour, creation.saisonId),
+    ancreGardee: null,
     emplacements: planche === undefined ? [] : [{ id: planche.id, longueur: String(planche.longueurM) }],
   };
 }
@@ -284,6 +298,8 @@ export function FormulaireSerie({
   const [occupe, setOccupe] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [historique, setHistorique] = useState<Modification[]>([]);
+  const [varieteGardee, setVarieteGardee] = useState<string | null>(null);
+  const [varieteRetiree, setVarieteRetiree] = useState<string | null>(null);
 
   const idTitre = useId();
   const idCulture = useId();
@@ -301,15 +317,23 @@ export function FormulaireSerie({
   // Lecture à l'ouverture : bibliothèque, et la série en modification.
   useEffect(() => {
     let actif = true;
-    const lectures = Promise.all([lireBibliotheque(porte, fermeId, jour), serieId === null ? Promise.resolve(null) : lireEtatSerie(porte, serieId)]);
+    const lectures = Promise.all([
+      lireBibliotheque(porte, fermeId, jour),
+      serieId === null ? Promise.resolve(null) : lireEtatSerie(porte, serieId),
+      serieId === null ? Promise.resolve(null) : lireVarieteDeSerie(porte, serieId),
+    ]);
     lectures.then(
-      ([b, e]) => {
+      ([lue, e, variete]) => {
         if (!actif) return;
         if (serieId !== null && !serieActive(e)) {
           setIntrouvable(true);
           return;
         }
+        // Variété de la série supprimée de la bibliothèque depuis : gardée pour cette série
+        // (affichée, germination comptée), jamais proposée à la recherche (N2).
+        const b = variete === null || lue.varietes.some((v) => v.id === variete.id) ? lue : { ...lue, varietes: [...lue.varietes, variete] };
         setBib(b);
+        setVarieteGardee(variete !== null && b !== lue ? variete.id : null);
         setEtat(e);
         setSaisie(saisieInitiale(b, depart, e, jour));
       },
@@ -346,7 +370,7 @@ export function FormulaireSerie({
 
   const exclure = useMemo(() => new Set((etat?.occupations ?? []).map((o) => String(o.id))), [etat]);
   const calcul = useMemo(() => (bib === null || saisie === null ? null : calculer({ bib, exclure }, saisie)), [bib, saisie, exclure]);
-  const cultures = useMemo(() => (bib === null ? [] : culturesDe(bib)), [bib]);
+  const cultures = useMemo(() => (bib === null ? [] : culturesDe(bib).filter((c) => varieteGardee === null || c.varieteId !== varieteGardee)), [bib, varieteGardee]);
   const trouvees = useMemo(() => chercherCultures(cultures, recherche), [cultures, recherche]);
   const cultureChoisie = saisie?.culture ?? null;
   const itineraires = useMemo(() => (bib === null || cultureChoisie === null ? [] : itinerairesDe(bib, cultureChoisie)), [bib, cultureChoisie]);
@@ -363,14 +387,18 @@ export function FormulaireSerie({
   function choisirCulture(c: ChoixCulture): void {
     if (bib === null) return;
     const itineraire = itinerairePropose(itinerairesDe(bib, c), saisie?.semaine ?? '');
+    const ancre = ancreParDefaut(modeDe(objetJson(itineraire?.parametresTexte ?? null)));
     changer((s) => ({
       ...s,
       culture: c,
       itineraireId: itineraire?.id ?? null,
       parametresTexte: itineraire?.parametresTexte ?? null,
-      ancre: ancreParDefaut(modeDe(objetJson(itineraire?.parametresTexte ?? null))),
+      ancre,
+      // Une autre sorte d'ancre ne garde pas la date d'origine (N1).
+      ancreGardee: ancre === s.ancre ? s.ancreGardee : null,
     }));
     setRecherche('');
+    setVarieteRetiree(null);
   }
 
   function choisirItineraire(id: string): void {
@@ -379,14 +407,30 @@ export function FormulaireSerie({
     const origine = etat !== null && String(etat.serie.itineraire_id) === id && typeof etat.serie.parametres === 'string' ? etat.serie.parametres : null;
     const texte = origine ?? it?.parametresTexte ?? null;
     const nouveauMode = modeDe(objetJson(texte));
-    changer((s) => ({ ...s, itineraireId: it?.id ?? null, parametresTexte: texte, ancre: s.ancre === 'semis' && nouveauMode === 'plant_achete' ? 'plantation' : s.ancre }));
+    // Variété supprimée de la bibliothèque : le serveur la revérifie si l'itinéraire change. Elle
+    // est alors retirée, et le formulaire le dit avant d'écrire ; de retour sur l'itinéraire
+    // d'origine, elle revient (décision 8).
+    const c = saisie?.culture ?? null;
+    const surOrigine = etat !== null && String(etat.serie.itineraire_id) === id;
+    let culture = c;
+    if (c !== null && varieteGardee !== null && c.varieteId === varieteGardee && !surOrigine) {
+      culture = { ...c, varieteId: null, nomVariete: null };
+      setVarieteRetiree(c.nomVariete);
+    } else if (c !== null && varieteRetiree !== null && surOrigine && c.varieteId === null && c.especeId === etat.serie.espece_id) {
+      culture = (bib === null ? null : cultureDe(bib, c.especeId, varieteGardee)) ?? c;
+      setVarieteRetiree(null);
+    }
+    changer((s) => {
+      const ancre = s.ancre === 'semis' && nouveauMode === 'plant_achete' ? 'plantation' : s.ancre;
+      return { ...s, culture, itineraireId: it?.id ?? null, parametresTexte: texte, ancre, ancreGardee: ancre === s.ancre ? s.ancreGardee : null };
+    });
   }
 
   /** Changer d'ancre garde les dates : la semaine devient celle de l'étape choisie. */
   function choisirAncre(ancre: TypeAncreSerie): void {
     const d = calcul?.dates ?? null;
     const date = d === null ? undefined : d[etapeDeLAncre(ancre, mode)];
-    changer((s) => ({ ...s, ancre, semaine: date === undefined ? s.semaine : semaineDe(date) }));
+    changer((s) => ({ ...s, ancre, semaine: date === undefined ? s.semaine : semaineDe(date), ancreGardee: null }));
   }
 
   function ajouterPlanche(id: string): void {
@@ -399,6 +443,19 @@ export function FormulaireSerie({
 
   const ctx: ContexteEcriture = { porte, fermeId, maintenant };
 
+  /**
+   * Décision de rotation de la série, si elle vaut encore (N3) : même espèce, et une alerte rouge
+   * de la famille décidée toujours là. Sinon null : elle est effacée à l'enregistrement.
+   */
+  function decisionEnCours(): string | null {
+    const texte = etat !== null && typeof etat.serie.rotation_acceptee === 'string' ? etat.serie.rotation_acceptee : null;
+    const especeId = saisie?.culture?.especeId;
+    if (texte === null || especeId === undefined || especeId !== etat?.serie.espece_id) return null;
+    const famille = bib?.especes.find((e) => e.id === especeId)?.familleId;
+    const rouge = calcul?.alertes.some((a) => a.niveau === 'rouge') ?? false;
+    return rouge && famille !== undefined && objetJson(texte)?.famille === famille ? texte : null;
+  }
+
   function aEcrire(rotation: string | null | undefined): SerieAEcrire | null {
     if (saisie?.culture == null || calcul?.dates == null || calcul.ancreDate === null) return null;
     if (saisie.itineraireId === null || saisie.parametresTexte === null) return null;
@@ -408,7 +465,6 @@ export function FormulaireSerie({
       setErreur('Aucune saison de la ferme ne couvre cette mise en place : ajoute la saison d’abord.');
       return null;
     }
-    const gardee = etat === null ? null : typeof etat.serie.rotation_acceptee === 'string' ? etat.serie.rotation_acceptee : null;
     return {
       saisonId,
       especeId: saisie.culture.especeId,
@@ -420,7 +476,7 @@ export function FormulaireSerie({
       dates: calcul.dates,
       emplacements: saisie.emplacements.map((e) => ({ id: e.id, longueurM: lireLongueur(e.longueur) ?? 0 })),
       longueurTotale: calcul.longueurTotale,
-      rotationAcceptee: rotation === undefined ? gardee : rotation,
+      rotationAcceptee: rotation === undefined ? decisionEnCours() : rotation,
     };
   }
 
@@ -432,10 +488,10 @@ export function FormulaireSerie({
     try {
       if (serieId === null) {
         const id = await creerSerie(ctx, s);
-        surEnregistree?.({ texte, annuler: () => ramenerSerie(ctx, id, null) });
+        surEnregistree?.({ texte, annuler: () => supprimerSerieCreee(ctx, id) });
       } else {
-        const avant = await modifierSerie(ctx, serieId, s);
-        surEnregistree?.({ texte, annuler: () => ramenerSerie(ctx, serieId, avant) });
+        const ecrit = await modifierSerie(ctx, serieId, s);
+        surEnregistree?.({ texte, annuler: () => defaireSerie(ctx, ecrit) });
       }
       surFermer();
     } catch (e) {
@@ -455,9 +511,7 @@ export function FormulaireSerie({
       return;
     }
     // Décision déjà prise pour cette famille (modification) : pas de nouvelle question.
-    const gardee = objetJson(etat !== null && typeof etat.serie.rotation_acceptee === 'string' ? etat.serie.rotation_acceptee : null);
-    const famille = bib?.especes.find((e) => e.id === saisie?.culture?.especeId)?.familleId;
-    if (gardee !== null && gardee.famille === famille) {
+    if (decisionEnCours() !== null) {
       void ecrire(undefined);
       return;
     }
@@ -474,8 +528,8 @@ export function FormulaireSerie({
     const texte = libelleCulture(saisie.culture);
     setOccupe(true);
     try {
-      const avant = await annulerEntree(ctx, serieId, entree);
-      surEnregistree?.({ texte, annuler: () => ramenerSerie(ctx, serieId, avant) });
+      const ecrit = await annulerEntree(ctx, serieId, entree);
+      surEnregistree?.({ texte, annuler: () => defaireSerie(ctx, ecrit) });
       surFermer();
     } catch (e) {
       console.error('Annulation impossible', e);
@@ -569,6 +623,7 @@ export function FormulaireSerie({
                 type="button"
                 className="serie-bouton-leger"
                 onClick={() => {
+                  setVarieteRetiree(null);
                   changer((s) => ({ ...s, culture: null, itineraireId: null, parametresTexte: null }));
                 }}
               >
@@ -596,6 +651,11 @@ export function FormulaireSerie({
                 </option>
               ))}
             </select>
+            {varieteRetiree !== null && (
+              <p role="status" className="serie-retiree">
+                Variété {varieteRetiree} retirée : supprimée de la bibliothèque, elle ne suit pas un autre itinéraire.
+              </p>
+            )}
             {itineraires.length === 0 && <p className="serie-aide">Aucun itinéraire pour cette culture : l’import de la bibliothèque les fournit.</p>}
           </section>
         )}
@@ -623,15 +683,14 @@ export function FormulaireSerie({
               );
             })}
           </div>
-          <Etiquette htmlFor={idSemaine}>Semaine</Etiquette>
-          <input
-            id={idSemaine}
-            type="week"
-            className="serie-champ serie-champ-semaine"
-            value={saisie.semaine}
-            onChange={(e) => {
-              const semaine = e.target.value;
-              changer((s) => ({ ...s, semaine }));
+          <Etiquette id={idSemaine}>Semaine</Etiquette>
+          <SelecteurSemaine
+            semaine={saisie.semaine}
+            aujourdhui={jour}
+            idEtiquette={idSemaine}
+            surChoisir={(semaine) => {
+              // Semaine touchée : l'ancre passe au lundi de la semaine choisie (N1).
+              changer((s) => ({ ...s, semaine, ancreGardee: null }));
             }}
           />
           {mode === 'plant_achete' && <p className="serie-aide">Plant acheté : pas de semis à la ferme.</p>}

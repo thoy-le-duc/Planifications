@@ -36,11 +36,12 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T18](T18-mode-sombre.md) | Mode sombre | T16 | à faire |
 | [T11](T11-vue-2d.md) | Vue 2D planches × semaines (et base locale ouverte dans l'appli) | T03, T10, T16 | fait |
 | [T12](T12-plan-de-culture.md) | Plan de culture : créer et modifier une série | T04, T05, T10e, T11 | fait |
-| [T12b](T12b-serie-suites.md) | Formulaire de série : sélecteur de semaine maison et suites de relecture | T12 | à faire |
+| [T12b](T12b-serie-suites.md) | Formulaire de série : sélecteur de semaine maison et suites de relecture | T12 | fait |
 | [T22](T22-travaux-itineraire.md) | Itinéraires : les travaux prévus (cœur) | T02, T06, T13 | fait |
 | [T22b](T22b-fait-en-retard.md) | « Fait » sur un travail répété en retard (Q24) | T22 | fait |
 | [T23](T23-itineraires-synchro.md) | Synchro : le serveur accepte les itinéraires et les types d'intervention | T10e, T22 | fait |
 | [T24](T24-ecran-itineraires.md) | Écran : mes itinéraires et mes types d'intervention | T22, T23 | fait |
+| [T24b](T24b-annuler-serie-supprimee.md) | « Annuler » des itinéraires : série supprimée ailleurs | T24 | à faire |
 | [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T10c, T11, T16 | fait |
 | [T13b](T13b-aujourdhui-grande-ferme.md) | Aujourd'hui : rapide sur une grande ferme | T13 | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
@@ -71,4 +72,5 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T19](T19-tests-de-temps.md) | Tests de temps robustes sous charge | — | fait |
 | [T20](T20-main-verte.md) | Main verte : service worker après le premier affichage, mesures e2e stables | T11 | fait |
 | [T11c](T11c-diagnostic-hors-prod.md) | Pages de test hors du site en production | T11, T10c | fait |
+| [T11d](T11d-defilement-plan-fiable.md) | Mesure du défilement du plan : fiable sans relever la limite | T11, T20 | à faire |
 | [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | à faire |

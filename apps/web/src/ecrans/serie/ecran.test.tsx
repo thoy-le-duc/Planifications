@@ -11,6 +11,12 @@
  * les transactions d'écriture : une saisie = une transaction. Les lignes `modification` que le
  * serveur renverrait sont simulées par base.recevoir (comme une synchro), au format de Postgres
  * (to_jsonb).
+ *
+ * Modifié par T12b (sélecteur de semaine maison, docs/backlog/T12b-serie-suites.md, N8) : le
+ * champ <input type="week"> n'existe plus. Seule la façon de lire et de poser la semaine change,
+ * pas ce qui est vérifié : `semaine()` lit data-semaine du sélecteur (au lieu de la valeur du
+ * champ) et chaque `remplir(semaine(), …)` devient `choisirSemaine(formulaire(), …)` (flèche ou
+ * choix rapide, ./test/outils.ts). Mêmes semaines, mêmes attendus.
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -45,6 +51,7 @@ import {
   AUJOURDHUI,
   bouton,
   champ,
+  choisirSemaine,
   liste,
   coche,
   creerBanc,
@@ -67,6 +74,7 @@ import {
   toucher,
   toutesOccupations,
   unTour,
+  valeurSemaine,
   verifierOrdres,
   type Banc,
   type Ligne,
@@ -181,7 +189,8 @@ const conflits = (): HTMLElement[] => [...formulaire().querySelectorAll<HTMLElem
 const emplacementsChoisis = (): string[] =>
   [...formulaire().querySelectorAll<HTMLElement>('[data-testid="emplacement-serie"]')].map((e) => e.dataset.emplacement ?? '');
 const boutonEnregistrer = (): HTMLElement => bouton(/^(Planifier la série|Enregistrer)$/, formulaire());
-const semaine = (): HTMLInputElement => champ('Semaine', formulaire());
+/** Semaine choisie dans le sélecteur maison (T12b). */
+const semaine = (): string => valeurSemaine(formulaire());
 
 /** Dates de T02 au format d'affichage (étapes présentes seulement). */
 function datesT02(parametres: Readonly<Record<string, unknown>>, ancre: { type: 'semis' | 'plantation' | 'debut_recolte'; date: string }): Dates {
@@ -264,7 +273,7 @@ describe('T12 : formulaire de création', () => {
     expect(emplacementsChoisis()).toEqual([EMPLACEMENT.t2p01]);
     expect(texte(d.querySelector(`[data-testid="emplacement-serie"][data-emplacement="${EMPLACEMENT.t2p01}"]`))).toContain('T2-P01');
     expect(champ('Longueur T2-P01', d).value).toBe('30');
-    expect(semaine().value).toBe('2027-W14');
+    expect(semaine()).toBe('2027-W14');
     expect(d.contains(document.activeElement), 'le focus est dans le formulaire').toBe(true);
     expect(desactive(boutonEnregistrer()), 'enregistrer désactivé sans culture').toBe(true);
     expect(aBouton(/calculer/i, d), 'pas de bouton « calculer »').toBe(false);
@@ -317,10 +326,10 @@ describe('T12 : formulaire de création', () => {
     }
 
     await toucher(radio('Récolte à partir de', formulaire()));
-    expect(semaine().value, 'changer d’ancre garde les dates : récolte en S21').toBe('2027-W21');
+    expect(semaine(), 'changer d’ancre garde les dates : récolte en S21').toBe('2027-W21');
     await attendreDates(ATTENDU.bataviaPlantationS14, 'dates inchangées');
 
-    await remplir(semaine(), '2027-W22');
+    await choisirSemaine(formulaire(), '2027-W22');
     await attendreDates(ATTENDU.bataviaRecolteS22, 'dates de T02, ligne 2, sans bouton « calculer »');
   });
 
@@ -395,7 +404,7 @@ describe('T12 : créer une série', () => {
     await ouvrir({ sorte: 'creation', emplacementId: EMPLACEMENT.t2p01, semaine: '2027-W14', saisonId: SAISON.s2027 });
     await choisirCulture('bat', ESPECE.batavia, VARIETE.grenobloise);
     await toucher(radio('Récolte à partir de', formulaire()));
-    await remplir(semaine(), '2027-W22');
+    await choisirSemaine(formulaire(), '2027-W22');
     await attendreDates(ATTENDU.bataviaRecolteS22, 'dates de T02, ligne 2');
     expect(alertes(), 'aucune alerte de rotation sur T2-P01').toEqual([]);
     b.remiseAZero();
@@ -500,9 +509,9 @@ describe('T12 : alertes de rotation (jeu de T04, chapelle C3)', () => {
     expect(texte(rouge)).toContain('2023');
     expect(texte(rouge)).toContain('C3');
 
-    await remplir(semaine(), '2027-W02');
+    await choisirSemaine(formulaire(), '2027-W02');
     await attendre(() => alertes()[0]?.dataset.niveau === 'orange', 'orange en 2027 (écart 4, entre 4 et 6)');
-    await remplir(semaine(), '2029-W02');
+    await choisirSemaine(formulaire(), '2029-W02');
     await attendre(() => alertes().length === 0, 'aucune alerte en 2029 (écart 6)');
   });
 
@@ -579,7 +588,7 @@ describe('T12 : modifier une série, puis annuler', () => {
   /** Ouvre SERIE_LAITUE, décale la plantation en S16 et réduit à 20 m, enregistre. */
   async function modifierLaitue(): Promise<void> {
     await ouvrir({ sorte: 'modification', serieId: SERIE_LAITUE });
-    await remplir(semaine(), '2027-W16');
+    await choisirSemaine(formulaire(), '2027-W16');
     await remplir(champ('Longueur T2-P02', formulaire()), '20');
     const attendues = datesT02(PARAMETRES.bataviaPrintemps, { type: 'plantation', date: '2027-04-19' });
     await attendreDates(attendues, 'dates recalculées');
@@ -593,7 +602,7 @@ describe('T12 : modifier une série, puis annuler', () => {
     expect(texte(d.querySelector('[data-testid="culture-choisie"]'))).toMatch(/Batavia.*Grenobloise/);
     expect(liste('Itinéraire', d).value).toBe(ITINERAIRE.bataviaPrintemps);
     expect(coche(radio('Plantation', d))).toBe(true);
-    expect(semaine().value).toBe('2027-W14');
+    expect(semaine()).toBe('2027-W14');
     expect(emplacementsChoisis()).toEqual([EMPLACEMENT.t2p02]);
     expect(champ('Longueur T2-P02', d).value).toBe('30');
     await attendreDates(ATTENDU.bataviaPlantationS14, 'dates de la série');

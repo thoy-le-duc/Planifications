@@ -2,6 +2,18 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T12b : sélecteur de semaine et annulation sûre dans le formulaire de série
+
+- **Fait** :
+  - Sélecteur de semaine maison, qui marche aussi sur iPhone : flèches « Semaine précédente / suivante » et grille des 52 ou 53 semaines de l'année, libellé « S22 · 31 mai 2027 », cibles de 56 px.
+  - L'ancre importée hors lundi est gardée ; la variété supprimée est gardée ; la décision de rotation périmée est effacée.
+  - « Annuler » ne défait que ce qu'on a écrit, et seulement si le résultat sera accepté par le serveur. Sinon la série reste telle quelle, avec le message « modifié entre-temps ».
+  - Mesures : formulaire en 98 ms, recalcul en 1 ms (CPU ×4).
+- **Décidé** :
+  - Règle générale de l'annulation (décision 10) : avant d'écrire, l'état après annulation est vérifié comme la fin de lot du serveur (références, rétablissement, emplacements, occupations sous série supprimée).
+  - Si l'itinéraire change sur une série dont la variété a été supprimée, la variété est retirée et l'appli le dit.
+- **Bloquant** : rien. Suites : T24b (le même trou d'annulation dans « Mes itinéraires ») et T11d (le test de défilement du plan échoue au hasard pile à 50 ms).
+
 ## 2026-10-01 — T04b : pas d'alerte de rotation sur le hors-sol
 
 - **Fait** : plus aucune alerte de rotation sur une gouttière ni sur un emplacement d'une zone hors-sol (Q17). Une culture passée sur du hors-sol ne compte plus dans l'historique d'une planche de pleine terre, même par le lien « remplace ». Le formulaire de série transmet la sorte et l'abri au moteur.

@@ -7,7 +7,7 @@
 import type { DateCalendaire, Emplacement, HierarchieParcellaire, Id, Instant, OccupationHistorique, TypeAbri } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { versEmplacement, versOccupation } from '../plan/calculs.ts';
-import { comparerNoms, libelleCulture, versAssolement, type Bibliotheque, type EspeceLue, type FamilleLue, type OccupationLue, type PlancheLue } from './calculs.ts';
+import { comparerNoms, libelleCulture, versAssolement, type Bibliotheque, type EspeceLue, type FamilleLue, type OccupationLue, type PlancheLue, type VarieteLue } from './calculs.ts';
 
 export type LigneLocale = Readonly<Record<string, string | number | null>>;
 
@@ -49,6 +49,27 @@ function remplaces(v: unknown): Id<'Emplacement'>[] {
   }
 }
 
+const versVariete = (v: LigneLocale): VarieteLue => ({
+  id: texte(v.id),
+  especeId: texte(v.espece_id),
+  nom: texte(v.nom),
+  pmgG: nombreOuNul(v.poids_mille_graines_g),
+  germination: nombreOuNul(v.taux_germination),
+});
+
+/**
+ * Variété d'une série, même supprimée de la bibliothèque depuis (T12b, N2) : la série la garde,
+ * le formulaire l'affiche et compte sa germination. null si la série n'a pas de variété.
+ */
+export async function lireVarieteDeSerie(porte: PorteDonnees, serieId: string): Promise<VarieteLue | null> {
+  const l = await porte.lire<LigneLocale>(
+    'SELECT v.id, v.espece_id, v.nom, v.poids_mille_graines_g, v.taux_germination FROM variete v JOIN serie s ON s.variete_id = v.id WHERE s.id = ?',
+    [serieId],
+  );
+  const v = l[0];
+  return v === undefined ? null : versVariete(v);
+}
+
 const TYPES_ABRI: readonly TypeAbri[] = ['plein_champ', 'tunnel', 'serre', 'hors_sol'];
 
 /** Type d'abri lu ; valeur inconnue : absent (le moteur la traite comme de la pleine terre). */
@@ -82,15 +103,7 @@ export async function lireBibliotheque(porte: PorteDonnees, fermeId: string, auj
   }
   const especesLues: EspeceLue[] = especes.map((e) => ({ id: texte(e.id), nom: texte(e.nom), familleId: texte(e.famille_id), delais: delais(e) }));
   const especesParId = new Map(especesLues.map((e) => [e.id, e]));
-  const varietesLues = varietes
-    .filter((v) => especesParId.has(texte(v.espece_id)))
-    .map((v) => ({
-      id: texte(v.id),
-      especeId: texte(v.espece_id),
-      nom: texte(v.nom),
-      pmgG: nombreOuNul(v.poids_mille_graines_g),
-      germination: nombreOuNul(v.taux_germination),
-    }));
+  const varietesLues = varietes.filter((v) => especesParId.has(texte(v.espece_id))).map(versVariete);
   const varietesParId = new Map(varietesLues.map((v) => [v.id, v]));
   const nomsZones = new Map(zones.map((z) => [texte(z.id), texte(z.nom)]));
 
