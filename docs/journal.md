@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T24d : « Annuler » bloqué, le maraîcher est prévenu
+
+- **Fait** : après « Annuler » dans « Mes itinéraires », l'appli relit les lignes défaites (une requête par table) ; une ligne qu'une synchro arrivée entre la lecture et l'écriture a empêchée de revenir est comptée, et l'écran affiche « modifié entre-temps sur un autre téléphone, gardé tel quel (n lignes) » au lieu de laisser croire que tout est défait.
+- **Décidé** : relecture hors transaction, pour l'affichage seulement (avec PowerSync, la synchro attend les écritures locales : fenêtre quasi nulle) ; une ligne que la synchro a remise exactement comme avant n'est pas comptée, rien n'est perdu ; une relecture impossible ne fait pas passer l'annulation pour un échec. Une relecture, rien de bloquant, petits points corrigés.
+- **Bloquant** : rien.
+
 ## 2026-10-01 — T10h : « en vigueur » rapide et aligné partout
 
 - **Fait** :
