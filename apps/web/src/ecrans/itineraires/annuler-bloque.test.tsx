@@ -44,8 +44,9 @@ const b = () => h.banc();
 const AILLEURS = '2026-09-30T09:30:00.000Z';
 const MODIFIER_BATAVIA = `Modifier ${NOMS_ITINERAIRES.bataviaFerme}`;
 
-/** Même forme que `messageModifieAilleurs` (ecritures.ts), quel que soit le nombre de lignes laissées. */
-const MESSAGE_MODIFIE_AILLEURS = /ce qui a été modifié entre-temps sur un autre téléphone est gardé tel quel \(\d+ lignes?\)/;
+/** Même texte que `messageModifieAilleurs` (ecritures.ts) pour `n` lignes laissées. */
+const messageAttendu = (n: number): string =>
+  `ce qui a été modifié entre-temps sur un autre téléphone est gardé tel quel (${String(n)} ${n > 1 ? 'lignes' : 'ligne'})`;
 
 /** Texte de tous les messages de l'écran (alertes et statuts). */
 const messages = (): string =>
@@ -55,6 +56,11 @@ const messages = (): string =>
 function recevoirUpdate(banc: Banc, table: string, id: string, valeurs: Readonly<Record<string, string | number | null>>): void {
   const cles = Object.keys(valeurs);
   banc.base.recevoir(`UPDATE ${table} SET ${cles.map((c) => `${c} = ?`).join(', ')}, modifie_le = ? WHERE id = ?`, [...cles.map((c) => valeurs[c] ?? null), AILLEURS, id]);
+}
+
+/** Attend le message « modifié entre-temps » avec le compte exact de lignes laissées. */
+async function attendreMessage(n: number): Promise<void> {
+  await attendre(() => messages().includes(messageAttendu(n)), `message « ${messageAttendu(n)} » (vus : ${messages()})`);
 }
 
 async function annuler(): Promise<void> {
@@ -67,6 +73,7 @@ async function annuler(): Promise<void> {
 const brute = (liste: readonly Ligne[], id: string): Ligne | undefined => liste.find((l) => l.id === id);
 
 interface Avant {
+  readonly itineraireBrut: Ligne | undefined;
   readonly itineraire: Record<string, unknown>;
   readonly series: Ligne[];
   readonly occupations: Ligne[];
@@ -75,7 +82,7 @@ interface Avant {
 /** Batavia de la ferme : « Avant récolte » passe à 56 jours, appliqué aux deux séries à venir. Rend l'état d'avant. */
 async function modifierBatavia(): Promise<Avant> {
   await h.ouvrir();
-  const avant = { itineraire: etat(itineraire(b(), ITINERAIRE.bataviaFerme)), series: series(b()), occupations: occupations(b()) };
+  const avant = { itineraireBrut: itineraire(b(), ITINERAIRE.bataviaFerme), itineraire: etat(itineraire(b(), ITINERAIRE.bataviaFerme)), series: series(b()), occupations: occupations(b()) };
   await ouvrirFormulaire(ITINERAIRE.bataviaFerme, MODIFIER_BATAVIA);
   await remplir(champ('Avant récolte (jours)', formulaire()), '56');
   await enregistrer();
@@ -141,7 +148,8 @@ describe('T24d : « Annuler » bloqué par la garde du WHERE affiche « modifié
     expect(o?.prevu_du, 'occupation d’aVenir1 : prevu_du écrit ailleurs reste').toBe(serieAilleurs.prevu_mise_en_place);
     expect(o?.prevu_au, 'occupation d’aVenir1 : prevu_au écrit ailleurs reste').toBe(serieAilleurs.prevu_fin_recolte);
 
-    await attendre(() => MESSAGE_MODIFIE_AILLEURS.test(messages()), `message « modifié entre-temps » (vus : ${messages()})`);
+    // Bloquées : l'itinéraire, aVenir1 et son occupation (changés ailleurs). aVenir2 et son occupation sont défaites.
+    await attendreMessage(3);
   });
 
   it('cas N3, une partie seulement bloquée : aVenir2 (intacte ailleurs) est bien défaite ET le message s’affiche', async () => {
@@ -150,7 +158,8 @@ describe('T24d : « Annuler » bloqué par la garde du WHERE affiche « modifié
 
     serieDefaite(avant, SERIE.aVenir2, OCCUPATION.aVenir2);
     occupationsValides(b(), SERIE.aVenir2);
-    await attendre(() => MESSAGE_MODIFIE_AILLEURS.test(messages()), `message « modifié entre-temps » (vus : ${messages()})`);
+    // Bloquées : l'itinéraire, aVenir1 et son occupation ; aVenir2 et la sienne ne comptent pas.
+    await attendreMessage(3);
   });
 
   it('cas N3 bis : occupation passée dans une autre série pendant l’annulation → message « modifié entre-temps », l’occupation reçue reste', async () => {
@@ -191,7 +200,10 @@ describe('T24d : « Annuler » bloqué par la garde du WHERE affiche « modifié
     // L'itinéraire, intact ailleurs, est bien défait (pas de tout ou rien).
     expect(etat(itineraire(banc, ITINERAIRE.bataviaFerme)), 'l’itinéraire : défait').toEqual(avant.itineraire);
 
-    await attendre(() => MESSAGE_MODIFIE_AILLEURS.test(messages()), `message « modifié entre-temps » (vus : ${messages()})`);
+    // aVenir1 (intacte ailleurs, sans occupation depuis le départ de O) est défaite elle aussi.
+    expect(etat(serie(banc, SERIE.aVenir1)), 'aVenir1 : défaite').toEqual(etat(brute(avant.series, SERIE.aVenir1)));
+    // Bloquées : O, aVenir2 et son occupation (changées ailleurs). L'itinéraire et aVenir1 sont défaits.
+    await attendreMessage(3);
   });
 
   it('témoin : rien n’a bougé ailleurs, tout est défait en une transaction, sans message « modifié entre-temps »', async () => {
@@ -205,5 +217,83 @@ describe('T24d : « Annuler » bloqué par la garde du WHERE affiche « modifié
     serieDefaite(avant, SERIE.aVenir1, OCCUPATION.aVenir1);
     serieDefaite(avant, SERIE.aVenir2, OCCUPATION.aVenir2);
     expect(messages()).not.toMatch(/modifié entre-temps/);
+  });
+});
+
+describe('T24d : la synchro a remis ailleurs les valeurs d’avant — rien n’est perdu, pas de message pour cette ligne', () => {
+  /** Colonnes de l'itinéraire que la modification a changées, remises par l'autre téléphone à leur valeur d'avant. */
+  function valeursDAvant(avant: Avant): Record<string, string | number | null> {
+    const l = avant.itineraireBrut;
+    const courant = itineraire(b(), ITINERAIRE.bataviaFerme);
+    if (l === undefined || courant === undefined) throw new Error('Batavia absente');
+    const r: Record<string, string | number | null> = {};
+    for (const [c, v] of Object.entries(l)) if (c !== 'modifie_le' && v !== courant[c]) r[c] = v;
+    expect(Object.keys(r), 'la modification a changé les paramètres de l’itinéraire').toContain('parametres');
+    return r;
+  }
+
+  /** Espionne la transaction d'écriture de l'annulation et y injecte `synchro` une seule fois. */
+  function injecter(banc: Banc, synchro: () => void): () => boolean {
+    let recu = false;
+    const original = banc.base.writeTransaction.bind(banc.base);
+    vi.spyOn(banc.base, 'writeTransaction').mockImplementation((fn) => {
+      if (!recu) {
+        recu = true;
+        synchro();
+      }
+      return original(fn);
+    });
+    return () => recu;
+  }
+
+  it('seul l’itinéraire est bloqué, l’autre téléphone l’ayant déjà défait : valeurs d’avant, tout le reste défait, aucun message', async () => {
+    const avant = await modifierBatavia();
+    const banc = b();
+    const recu = injecter(banc, () => {
+      recevoirUpdate(banc, 'itineraire', ITINERAIRE.bataviaFerme, valeursDAvant(avant));
+    });
+
+    banc.remiseAZero();
+    await annuler();
+    await attendre(recu, 'synchro reçue pendant l’annulation');
+    await attendre(() => banc.transactions() === 1, 'annulation en une transaction');
+    await laisserFiler();
+    verifierOrdres(banc);
+
+    const l = itineraire(banc, ITINERAIRE.bataviaFerme);
+    expect(l?.modifie_le, 'la garde a bloqué l’UPDATE : la ligne est celle reçue').toBe(AILLEURS);
+    expect(etat(l), 'l’itinéraire : valeurs d’avant').toEqual(avant.itineraire);
+    serieDefaite(avant, SERIE.aVenir1, OCCUPATION.aVenir1);
+    serieDefaite(avant, SERIE.aVenir2, OCCUPATION.aVenir2);
+    expect(messages()).not.toMatch(/modifié entre-temps/);
+  });
+
+  it('itinéraire remis ailleurs aux valeurs d’avant et aVenir1 recalée ailleurs : seules aVenir1 et son occupation comptent (2 lignes)', async () => {
+    const avant = await modifierBatavia();
+    const banc = b();
+    const serieAilleurs = {
+      ancre_date: '2026-11-16',
+      prevu_semis_pepiniere: '2026-10-19',
+      prevu_mise_en_place: '2026-11-16',
+      prevu_debut_recolte: '2027-01-11',
+      prevu_fin_recolte: '2027-01-25',
+    };
+    const recu = injecter(banc, () => {
+      recevoirUpdate(banc, 'itineraire', ITINERAIRE.bataviaFerme, valeursDAvant(avant));
+      recevoirUpdate(banc, 'serie', SERIE.aVenir1, serieAilleurs);
+      recevoirUpdate(banc, 'occupation', OCCUPATION.aVenir1, { prevu_du: serieAilleurs.prevu_mise_en_place, prevu_au: serieAilleurs.prevu_fin_recolte });
+    });
+
+    banc.remiseAZero();
+    await annuler();
+    await attendre(recu, 'synchro reçue pendant l’annulation');
+    await laisserFiler();
+    verifierOrdres(banc);
+
+    expect(etat(itineraire(banc, ITINERAIRE.bataviaFerme)), 'l’itinéraire : valeurs d’avant').toEqual(avant.itineraire);
+    const s = serie(banc, SERIE.aVenir1);
+    for (const [c, v] of Object.entries(serieAilleurs)) expect(s?.[c], `aVenir1.${c} écrit ailleurs reste`).toBe(v);
+    serieDefaite(avant, SERIE.aVenir2, OCCUPATION.aVenir2);
+    await attendreMessage(2);
   });
 });
