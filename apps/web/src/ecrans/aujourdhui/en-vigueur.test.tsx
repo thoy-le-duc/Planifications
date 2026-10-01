@@ -23,6 +23,12 @@
  *    dans l'historique ni dans la dernière récolte de la culture (le serveur refuserait ensuite
  *    toute correction, Q20).
  *
+ * 3. Décision 3 du chef après la relecture (N3 — chaînes profondes) : `EN_VIGUEUR` se sert de
+ *    `origine_id` quand la ligne l'a (lignes reçues du serveur) et ne remonte la chaîne que pour
+ *    les saisies locales pas encore synchronisées. Une chaîne de 1 000 corrections reçue du
+ *    serveur : `lireJournee` répond en moins de 100 ms (médiane de 5, node:sqlite) et donne la
+ *    bonne valeur en vigueur ; une correction locale (sans `origine_id`) posée dessus l'emporte.
+ *
  * Banc : la ferme du jour (./test/ferme-du-jour.ts) dans une base mémoire, aujourd'hui =
  * 2026-09-30 ; les saisies des autres téléphones arrivent par la synchro (`recevoir`).
  */
@@ -74,6 +80,8 @@ interface Recu {
   readonly serieId: string;
   readonly remplace: Remplace;
   readonly detail: Record<string, unknown>;
+  /** T10h, décision 3 : ligne reçue du serveur, qui porte l'origine de sa chaîne. */
+  readonly origineId?: string;
 }
 
 function recevoir(e: Recu): void {
@@ -94,6 +102,7 @@ function recevoir(e: Recu): void {
     remplace_evenement_id: e.remplace?.de ?? null,
     detail: JSON.stringify(e.detail),
     cree_le: e.horodatage,
+    origine_id: e.origineId ?? null,
   };
   const c = Object.keys(ligne);
   base.recevoir(`INSERT INTO evenement (${c.join(', ')}) VALUES (${c.map(() => '?').join(', ')})`, c.map((k) => ligne[k] ?? null));
@@ -334,5 +343,86 @@ describe('T10h : historique partiel, la récolte annulée n’apparaît pas', ()
         .filter((n) => /^(Corriger|Changer la date)/.test(n) && /4[137] kg/.test(n));
       expect(corrections).toEqual([]);
     });
+  });
+});
+
+// ── 3. Décision 3 : chaîne profonde reçue du serveur ─────────────────────────────────────────
+
+const CORRECTIONS_CHAINE_PROFONDE = 1_000;
+const BUDGET_LECTURE_MS = 100;
+
+/**
+ * Semis direct de la carotte : origine (J−5) puis 1 000 corrections en ligne (chacune corrige la
+ * précédente), toutes reçues du serveur avec `origine_id` = l'origine. Les 999 premières datées
+ * J−4, la dernière J−2 : seule la dernière est en vigueur.
+ */
+function chaineProfonde(): Recu[] {
+  const O = idTest(0x1000);
+  const chaine: Recu[] = [{ id: O, type: 'realise', date: j(-5), horodatage: heure(j(-5), '06:00'), serieId: SERIE.carotte, remplace: null, detail: SEMIS_DIRECT, origineId: O }];
+  const debut = Date.parse(heure(j(-4), '06:00'));
+  for (let k = 1; k <= CORRECTIONS_CHAINE_PROFONDE; k++) {
+    const precedent = chaine[k - 1];
+    if (precedent === undefined) throw new Error('chaîne');
+    chaine.push({
+      id: idTest(0x1000 + k),
+      type: 'realise',
+      date: k === CORRECTIONS_CHAINE_PROFONDE ? j(-2) : j(-4),
+      horodatage: new Date(debut + k * 1_000).toISOString(),
+      serieId: SERIE.carotte,
+      remplace: { sorte: 'correction', de: precedent.id },
+      detail: SEMIS_DIRECT,
+      origineId: O,
+    });
+  }
+  return chaine;
+}
+
+const medianeDe = (valeurs: readonly number[]): number => [...valeurs].sort((a, b) => a - b)[Math.floor(valeurs.length / 2)] ?? Number.NaN;
+
+describe('T10h, décision 3 : chaîne de 1 000 corrections reçue du serveur (origine_id)', { timeout: 120_000 }, () => {
+  it('lireJournee en moins de 100 ms (médiane de 5) ; une seule saisie en vigueur, la dernière correction (J−2)', async () => {
+    const chaine = chaineProfonde();
+    for (const e of chaine) recevoir(e);
+    const derniere = chaine[chaine.length - 1];
+    if (derniere === undefined) throw new Error('chaîne');
+
+    await lireJournee(porte, FERME, AUJOURDHUI, MAINTENANT);
+    const serie: number[] = [];
+    for (let k = 0; k < 5; k++) {
+      const t0 = performance.now();
+      await lireJournee(porte, FERME, AUJOURDHUI, MAINTENANT);
+      serie.push(Math.round(performance.now() - t0));
+    }
+    expect(medianeDe(serie), `lireJournee : ${serie.join(' / ')} ms`).toBeLessThan(BUDGET_LECTURE_MS);
+
+    const lignes = await lireJournee(porte, FERME, AUJOURDHUI, MAINTENANT);
+    expect(lignes.realises.filter((l) => l.serie_id === SERIE.carotte).map((l) => ligneTexte(l.date))).toEqual([j(-2)]);
+    const ids = new Set(chaine.map((e) => e.id));
+    expect(calculerJournee(lignes, AUJOURDHUI).historique.map((h) => h.evenement.id).filter((id) => ids.has(id))).toEqual([derniere.id]);
+  });
+
+  it('témoin : une correction locale sans origine_id (pas encore synchronisée) sur la chaîne profonde l’emporte (J−1)', async () => {
+    const chaine = chaineProfonde();
+    for (const e of chaine) recevoir(e);
+    const derniere = chaine[chaine.length - 1];
+    if (derniere === undefined) throw new Error('chaîne');
+    const locale = idTest(0x1fff);
+    recevoir({ id: locale, type: 'realise', date: j(-1), horodatage: heure(j(-1), '09:00'), serieId: SERIE.carotte, remplace: { sorte: 'correction', de: derniere.id }, detail: SEMIS_DIRECT });
+
+    const lignes = await lireJournee(porte, FERME, AUJOURDHUI, MAINTENANT);
+    expect(lignes.realises.filter((l) => l.serie_id === SERIE.carotte).map((l) => ligneTexte(l.date))).toEqual([j(-1)]);
+    const ids = new Set([...chaine.map((e) => e.id), locale]);
+    expect(calculerJournee(lignes, AUJOURDHUI).historique.map((h) => h.evenement.id).filter((id) => ids.has(id))).toEqual([locale]);
+  });
+
+  it('témoin : une annulation locale sans origine_id de l’origine d’une chaîne profonde : plus rien en vigueur', async () => {
+    const chaine = chaineProfonde();
+    for (const e of chaine) recevoir(e);
+    const origine = chaine[0];
+    if (origine === undefined) throw new Error('chaîne');
+    recevoir({ id: idTest(0x1ffe), type: 'realise', date: j(-5), horodatage: heure(j(-1), '09:00'), serieId: SERIE.carotte, remplace: { sorte: 'annulation', de: origine.id }, detail: SEMIS_DIRECT });
+
+    const lignes = await lireJournee(porte, FERME, AUJOURDHUI, MAINTENANT);
+    expect(lignes.realises.filter((l) => l.serie_id === SERIE.carotte)).toEqual([]);
   });
 });
