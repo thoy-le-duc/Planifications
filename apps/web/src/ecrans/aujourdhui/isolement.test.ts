@@ -1,10 +1,13 @@
 /**
  * Test d'acceptation T13c (contre-relecture de T13b) — isolement entre fermes des NOMS de la
  * journée : emplacements, espèces et variétés sont lus par identifiant (`SQL_EMPLACEMENTS`,
- * `SQL_ESPECES`, `SQL_VARIETES`, jointures de `sqlCampagnes`), sans filtre de ferme. Une ligne
+ * `SQL_ESPECES`, `SQL_VARIETES`, jointures de `sqlCampagnes`), sans filtre de ferme ; de même
+ * les zones (jointes aux emplacements) et les familles (jointes aux espèces). Décision du chef
+ * (T13c) : zones et familles sont filtrées aussi, zéro faille. Une ligne
  * d'une AUTRE ferme présente dans la base locale, dont l'identifiant est référencé par une
  * occupation, une série ou une plantation de la ferme affichée, ne doit jamais apparaître dans la
- * journée : ni code d'emplacement (ni son identifiant), ni nom d'espèce, ni nom de variété ;
+ * journée : ni code d'emplacement (ni son identifiant), ni nom d'espèce, ni nom de variété, ni
+ * nom de zone, ni famille (la clé de famille qui colore la bande de la carte) ;
  * dans les tâches, les récoltes en cours, les dernières récoltes ou l'historique.
  *
  * Témoin : les mêmes lignes rangées dans la ferme affichée apparaissent bien (le relevé de la
@@ -19,7 +22,7 @@ import { creerPorte, SCHEMA_LOCAL, type PorteDonnees } from '@planif/sync';
 import type { Id } from '@planif/core';
 import { calculerJournee, lireJournee, type Journee } from './calculs.ts';
 import { creerBasePowerSync, type BasePowerSync, type SchemaJson } from './test/base-powersync.ts';
-import { cleTache, CAMPAGNE, ecrireFermeDuJour, FERME, PLANTATION, SERIE, UTILISATEUR } from './test/ferme-du-jour.ts';
+import { cleTache, CAMPAGNE, ecrireFermeDuJour, EMPLACEMENT, ESPECE, FERME, PLANTATION, SERIE, UTILISATEUR } from './test/ferme-du-jour.ts';
 
 const AUJOURDHUI = '2026-09-30';
 const MAINTENANT = new Date('2026-09-30T10:00:00.000Z');
@@ -34,6 +37,15 @@ const VARIETE_ETRANGERE = idTest(0x3);
 const CODE_ETRANGER = 'ZZ-P99';
 const NOM_ESPECE_ETRANGERE = 'Espèce de l’autre ferme';
 const NOM_VARIETE_ETRANGERE = 'Variété de l’autre ferme';
+const ZONE_ETRANGERE = idTest(0x4);
+const FAMILLE_ETRANGERE = idTest(0x5);
+const NOM_ZONE_ETRANGERE = 'Zone de l’autre ferme';
+/**
+ * Nom de la famille de l'autre ferme : un nom que l'écran reconnaît (clé « solanacees »), que
+ * n'ont ni le chou (brassicacées) ni le fraisier (rosacées) de la ferme affichée.
+ */
+const NOM_FAMILLE_ETRANGERE = 'Solanacées';
+const CLE_FAMILLE_ETRANGERE = 'solanacees';
 
 let base: BasePowerSync;
 let porte: PorteDonnees;
@@ -72,9 +84,9 @@ const horo = { cree_le: C, modifie_le: C, supprime_le: null };
  *   - la variété : celle de la série de radis (semis cette semaine), de la plantation de
  *     fraisiers et de la série de tomates (récolte en cours, récoltes dans l'historique).
  */
-type Reference = 'emplacement' | 'espece' | 'variete';
+type Reference = 'emplacement' | 'espece' | 'variete' | 'zone' | 'famille';
 
-function lignesReferencees(fermeDesLignes: string, quoi: readonly Reference[] = ['emplacement', 'espece', 'variete']): void {
+function lignesReferencees(fermeDesLignes: string, quoi: readonly Reference[] = ['emplacement', 'espece', 'variete', 'zone', 'famille']): void {
   if (quoi.includes('emplacement')) {
     recevoir('emplacement', {
       id: EMPLACEMENT_ETRANGER,
@@ -142,6 +154,17 @@ function lignesReferencees(fermeDesLignes: string, quoi: readonly Reference[] = 
     base.recevoir('UPDATE serie SET espece_id = ? WHERE id = ?', [ESPECE_ETRANGERE, SERIE.chou]);
     base.recevoir('UPDATE plantation SET espece_id = ? WHERE id = ?', [ESPECE_ETRANGERE, PLANTATION.fraise]);
   }
+  if (quoi.includes('zone')) {
+    // Zone de l'autre ferme, rangée sous des emplacements de la ferme affichée : T2-P03 (chou),
+    // S1-G01 (fraisiers).
+    recevoir('zone', { id: ZONE_ETRANGERE, ferme_id: fermeDesLignes, nom: NOM_ZONE_ETRANGERE, zone_parente_id: null, type_abri: 'tunnel', surface_m2: 400, ...horo });
+    base.recevoir('UPDATE emplacement SET zone_id = ? WHERE id IN (?, ?)', [ZONE_ETRANGERE, EMPLACEMENT.t2p03, EMPLACEMENT.s1g01]);
+  }
+  if (quoi.includes('famille')) {
+    // Famille de l'autre ferme, celle d'espèces de la ferme affichée : chou, fraisier.
+    recevoir('famille', { id: FAMILLE_ETRANGERE, ferme_id: fermeDesLignes, nom: NOM_FAMILLE_ETRANGERE, delai_retour_minimal_ans: 3, delai_retour_conseille_ans: 4, ...horo });
+    base.recevoir('UPDATE espece SET famille_id = ? WHERE id IN (?, ?)', [FAMILLE_ETRANGERE, ESPECE.chou, ESPECE.fraise]);
+  }
   if (quoi.includes('variete')) {
     base.recevoir('UPDATE plantation SET variete_id = ? WHERE id = ?', [VARIETE_ETRANGERE, PLANTATION.fraise]);
     base.recevoir('UPDATE serie SET variete_id = ? WHERE id IN (?, ?)', [VARIETE_ETRANGERE, SERIE.radis, SERIE.tomate]);
@@ -161,13 +184,23 @@ function fuites(j: Journee): string[] {
     [EMPLACEMENT_ETRANGER, 'identifiant d’emplacement'],
     [NOM_ESPECE_ETRANGERE, 'nom d’espèce'],
     [NOM_VARIETE_ETRANGERE, 'nom de variété'],
+    [NOM_ZONE_ETRANGERE, 'nom de zone'],
   ]
     .filter(([x]) => t.includes(x ?? ''))
-    .map(([x, quoi]) => `${quoi ?? ''} « ${x ?? ''} »`);
+    .map(([x, quoi]) => `${quoi ?? ''} « ${x ?? ''} »`)
+    .concat(famillesEtrangeres(j));
 }
 
-describe('T13c : emplacement, espèce et variété d’une autre ferme jamais dans la journée', () => {
-  it('référencés par une occupation, une série ou une plantation de la ferme affichée : ni code, ni nom d’espèce, ni nom de variété', async () => {
+/** Cultures du chou et des fraisiers qui portent la famille de l'autre ferme. */
+function famillesEtrangeres(j: Journee): string[] {
+  return [...j.cultures.values()]
+    .filter((c) => (c.especeId === ESPECE.chou || c.especeId === ESPECE.fraise) && c.famille === CLE_FAMILLE_ETRANGERE)
+    .map((c) => `famille « ${NOM_FAMILLE_ETRANGERE} » (${c.espece})`)
+    .sort();
+}
+
+describe('T13c : emplacement, zone, espèce, famille et variété d’une autre ferme jamais dans la journée', () => {
+  it('référencés par la ferme affichée (occupation, série, plantation, emplacement, espèce) : ni code, ni zone, ni espèce, ni famille, ni variété', async () => {
     lignesReferencees(AUTRE_FERME);
     const j = await journee();
     // Les cultures concernées sont bien dans la journée (sinon le test ne prouverait rien).
@@ -201,7 +234,36 @@ describe('T13c : emplacement, espèce et variété d’une autre ferme jamais da
     expect(radis?.culture.variete ?? null, 'nom de variété du radis').not.toBe(NOM_VARIETE_ETRANGERE);
   });
 
-  it('témoin : les mêmes lignes rangées dans la ferme affichée apparaissent (code, espèce, variété)', async () => {
+  it('la zone seule (emplacements du chou et des fraisiers) : pas le nom de la zone de l’autre ferme', async () => {
+    lignesReferencees(AUTRE_FERME, ['zone']);
+    const chou = (await journee()).taches.find((t) => t.cle === cleTache(SERIE.chou, 'plantation'));
+    expect(chou, 'tâche du chou').toBeDefined();
+    expect(
+      chou?.culture.emplacements.map((e) => e.zone),
+      'zones des emplacements du chou',
+    ).not.toContain(NOM_ZONE_ETRANGERE);
+    expect(fuites(await journee()), 'lignes de l’autre ferme montrées dans la journée').toEqual([]);
+  });
+
+  it('la famille seule (espèces du chou et du fraisier) : pas la famille de l’autre ferme', async () => {
+    lignesReferencees(AUTRE_FERME, ['famille']);
+    const j = await journee();
+    const chou = j.taches.find((t) => t.cle === cleTache(SERIE.chou, 'plantation'));
+    expect(chou, 'tâche du chou').toBeDefined();
+    expect(chou?.culture.famille, 'famille du chou').not.toBe(CLE_FAMILLE_ETRANGERE);
+    expect(famillesEtrangeres(j)).toEqual([]);
+  });
+
+  it('témoin : zone et famille rangées dans la ferme affichée apparaissent', async () => {
+    lignesReferencees(FERME, ['zone', 'famille']);
+    const j = await journee();
+    const chou = j.taches.find((t) => t.cle === cleTache(SERIE.chou, 'plantation'));
+    expect(chou?.culture.emplacements.map((e) => e.zone)).toContain(NOM_ZONE_ETRANGERE);
+    expect(chou?.culture.famille).toBe(CLE_FAMILLE_ETRANGERE);
+  });
+
+  it('témoin : les mêmes lignes rangées dans la ferme affichée apparaissent (code, espèce, variété, zone)', async () => {
+    // La famille a son témoin à part : ici, le chou et les fraisiers prennent l'espèce rangée.
     lignesReferencees(FERME);
     const j = await journee();
     expect(fuites(j).sort()).toEqual(
@@ -210,6 +272,7 @@ describe('T13c : emplacement, espèce et variété d’une autre ferme jamais da
         `identifiant d’emplacement « ${EMPLACEMENT_ETRANGER} »`,
         `nom d’espèce « ${NOM_ESPECE_ETRANGERE} »`,
         `nom de variété « ${NOM_VARIETE_ETRANGERE} »`,
+        `nom de zone « ${NOM_ZONE_ETRANGERE} »`,
       ].sort(),
     );
   });

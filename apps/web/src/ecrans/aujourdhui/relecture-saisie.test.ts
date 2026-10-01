@@ -29,11 +29,12 @@ const REPETITIONS = 5;
  * T13c : 130 / 136 / 183 / 186 / 161 ms puis 137 / 190 / 138 / 140 / 147 ms (médianes 161 et
  * 140 ms) : la relecture relit TOUTE la journée (`lireJournee`, ≈ 120 ms, T13b) et la recalcule
  * entièrement. Dans le navigateur, CPU ×4, la même relecture mesurait ≈ 884 ms (T13b, e2e) :
- * un rapport navigateur/Node d'environ 6. Le budget de 500 ms du ticket donne donc ≈ 83 ms sous
- * Node, arrondi à 80 ms. L'e2e (aujourdhui-grande-ferme.e2e.ts) reste l'arbitre du critère ;
- * ce test-ci dit tout de suite, sans navigateur, si la relecture a été allégée.
+ * un rapport navigateur/Node d'environ 6, qui donnerait ≈ 83 ms sous Node pour les 500 ms du
+ * ticket. Décision du chef (T13c) : 100 ms, car ce rapport ne vient que d'une seule mesure ;
+ * l'e2e à 500 ms (aujourdhui-grande-ferme.e2e.ts) reste l'arbitre du critère. Ce test-ci dit
+ * tout de suite, sans navigateur, si la relecture a été allégée.
  */
-const BUDGET_RELECTURE_MS = 80;
+const BUDGET_RELECTURE_MS = 100;
 
 const mediane = (valeurs: readonly number[]): number => [...valeurs].sort((a, b) => a - b)[Math.floor(valeurs.length / 2)] ?? Number.NaN;
 
