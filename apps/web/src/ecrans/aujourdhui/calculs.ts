@@ -285,18 +285,28 @@ const sqlSeries = (filtre: string) => `SELECT s.id, s.statut, s.parametres, s.pr
   FROM serie s
   WHERE s.ferme_id = ? AND s.supprime_le IS NULL AND ${filtre}`;
 
-/** Espèces des séries lues, avec le nom de leur famille. */
-const SQL_ESPECES = `SELECT e.id, e.nom, e.unite_recolte, f.nom AS famille FROM espece e LEFT JOIN famille f ON f.id = e.famille_id WHERE e.id IN (${DANS})`;
-const SQL_VARIETES = `SELECT id, nom FROM variete WHERE id IN (${DANS})`;
+/**
+ * Isolement entre fermes (T13c) : espèces, familles, variétés, emplacements et zones sont lus
+ * par identifiant, et seulement ceux de la ferme affichée. Une ligne d'une autre ferme présente
+ * dans la base locale (utilisateur membre de deux fermes), référencée par erreur, ne prête jamais
+ * son nom à la journée : la culture s'affiche alors sans (« Culture », sans variété, sans
+ * famille, sans cet emplacement).
+ */
+
+/** Espèces des séries lues (liste JSON, puis la ferme), avec le nom de leur famille. */
+const SQL_ESPECES = `SELECT e.id, e.nom, e.unite_recolte, f.nom AS famille FROM espece e
+  LEFT JOIN famille f ON f.id = e.famille_id AND f.ferme_id = e.ferme_id
+  WHERE e.id IN (${DANS}) AND e.ferme_id = ?`;
+const SQL_VARIETES = `SELECT id, nom FROM variete WHERE id IN (${DANS}) AND ferme_id = ?`;
 
 /** Campagnes jointes à leur plantation ; `filtre` sur l'alias `c`. */
 const sqlCampagnes = (filtre: string) => `SELECT c.id, c.debut_recolte_prevu, c.fin_recolte_prevue, p.id AS plantation_id, p.nombre_plants,
     p.date_arrachage, p.espece_id, p.variete_id, e.nom AS espece, e.unite_recolte, f.nom AS famille, v.nom AS variete
   FROM campagne c
   JOIN plantation p ON p.id = c.plantation_id
-  LEFT JOIN espece e ON e.id = p.espece_id
-  LEFT JOIN famille f ON f.id = e.famille_id
-  LEFT JOIN variete v ON v.id = p.variete_id
+  LEFT JOIN espece e ON e.id = p.espece_id AND e.ferme_id = c.ferme_id
+  LEFT JOIN famille f ON f.id = e.famille_id AND f.ferme_id = c.ferme_id
+  LEFT JOIN variete v ON v.id = p.variete_id AND v.ferme_id = c.ferme_id
   WHERE c.ferme_id = ? AND c.supprime_le IS NULL AND p.supprime_le IS NULL AND ${filtre}`;
 
 /** Occupations non supprimées des séries et des plantations données (deux listes JSON). */
@@ -304,12 +314,13 @@ const SQL_OCCUPATIONS = `SELECT o.serie_id, o.plantation_id, o.emplacement_id FR
   WHERE o.ferme_id = ? AND o.supprime_le IS NULL AND (o.serie_id IN (${DANS}) OR o.plantation_id IN (${DANS}))`;
 
 /**
- * Emplacements occupés, avec leur zone. Seuls les emplacements actifs le jour donné (deux
- * derniers paramètres) : jamais un emplacement supprimé ou retiré recopié dans une saisie (le
- * serveur le refuserait).
+ * Emplacements occupés (liste JSON, puis la ferme), avec leur zone. Seuls les emplacements actifs
+ * le jour donné (deux derniers paramètres) : jamais un emplacement supprimé ou retiré recopié
+ * dans une saisie (le serveur le refuserait).
  */
-const SQL_EMPLACEMENTS = `SELECT em.id, em.code, z.nom AS zone FROM emplacement em LEFT JOIN zone z ON z.id = em.zone_id
-  WHERE em.id IN (${DANS}) AND em.supprime_le IS NULL AND em.actif_du <= ? AND (em.actif_au IS NULL OR em.actif_au > ?)`;
+const SQL_EMPLACEMENTS = `SELECT em.id, em.code, z.nom AS zone FROM emplacement em
+  LEFT JOIN zone z ON z.id = em.zone_id AND z.ferme_id = em.ferme_id
+  WHERE em.id IN (${DANS}) AND em.ferme_id = ? AND em.supprime_le IS NULL AND em.actif_du <= ? AND (em.actif_au IS NULL OR em.actif_au > ?)`;
 
 /**
  * Chaînes du journal local (paramètre : la ferme). Une ligne reçue du serveur porte l'origine de
@@ -509,11 +520,11 @@ interface Noms {
 }
 
 /** Espèces (avec leur famille) et variétés des séries lues par `sqlSeries`. */
-async function lireNoms(lire: Lire, series: readonly Ligne[]): Promise<Noms> {
+async function lireNoms(lire: Lire, fermeId: string, series: readonly Ligne[]): Promise<Noms> {
   if (series.length === 0) return { especes: [], varietes: [] };
-  const especes = await lire(SQL_ESPECES, [listeJson(series.map((s) => texte(s.espece_id)))]);
+  const especes = await lire(SQL_ESPECES, [listeJson(series.map((s) => texte(s.espece_id))), fermeId]);
   const idsVarietes = series.map((s) => texte(s.variete_id)).filter((x) => x !== '');
-  const varietes = idsVarietes.length === 0 ? [] : await lire(SQL_VARIETES, [listeJson(idsVarietes)]);
+  const varietes = idsVarietes.length === 0 ? [] : await lire(SQL_VARIETES, [listeJson(idsVarietes), fermeId]);
   return { especes, varietes };
 }
 
@@ -522,7 +533,7 @@ async function lireOccupations(lire: Lire, fermeId: string, series: readonly str
   if (series.length === 0 && plantations.length === 0) return [];
   const occupations = await lire(SQL_OCCUPATIONS, [fermeId, listeJson(series), listeJson(plantations)]);
   if (occupations.length === 0) return [];
-  const emplacements = await lire(SQL_EMPLACEMENTS, [listeJson(occupations.map((o) => texte(o.emplacement_id))), aujourdhui, aujourdhui]);
+  const emplacements = await lire(SQL_EMPLACEMENTS, [listeJson(occupations.map((o) => texte(o.emplacement_id))), fermeId, aujourdhui, aujourdhui]);
   const parId = new Map(emplacements.map((em) => [texte(em.id), em]));
   const lignes: Ligne[] = [];
   for (const o of occupations) {
@@ -551,7 +562,7 @@ export async function lireJournee(
     return porte.lire<Ligne>(sql, parametres);
   };
   const series = (await lire(sqlSeries(FILTRE_SERIES_ACTIVES), [fermeId])).filter((s) => parametresDe(texte(s.id), s.parametres).mode !== null);
-  const noms = await lireNoms(lire, series);
+  const noms = await lireNoms(lire, fermeId, series);
   const campagnes = await lire(sqlCampagnes('(c.fin_recolte_prevue IS NULL OR c.fin_recolte_prevue >= ?)'), [fermeId, aujourdhui]);
   const idsSeries = series.map((s) => texte(s.id));
   const idsCampagnes = campagnes.map((c) => texte(c.id));
@@ -572,7 +583,7 @@ export async function lireJournee(
   const autresCampagnes = [...new Set(recents.map((l) => texte(l.campagne_id)).filter((x) => x !== '' && !connues.has(x)))];
   if (autresSeries.length === 0 && autresCampagnes.length === 0) return { series, ...noms, campagnes, occupations, realises, interventions, recents };
   const s2 = autresSeries.length === 0 ? [] : await lire(sqlSeries(`s.id IN (${DANS})`), [fermeId, listeJson(autresSeries)]);
-  const noms2 = await lireNoms(lire, s2);
+  const noms2 = await lireNoms(lire, fermeId, s2);
   const c2 = autresCampagnes.length === 0 ? [] : await lire(sqlCampagnes(`c.id IN (${DANS})`), [fermeId, listeJson(autresCampagnes)]);
   const o2 = await lireOccupations(lire, fermeId, autresSeries, c2.map((l) => texte(l.plantation_id)), aujourdhui);
   return {
