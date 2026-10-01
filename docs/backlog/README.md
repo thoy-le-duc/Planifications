@@ -14,7 +14,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T02](T02-dates-serie.md) | Dates d'une série, planification à rebours et décalage | T01 | fait |
 | [T03](T03-occupations-conflits.md) | Occupations et conflits de place | T02 | fait |
 | [T04](T04-rotation.md) | Alertes de rotation | T03 | fait |
-| [T04b](T04b-rotation-hors-sol.md) | Pas d'alerte de rotation sur le hors-sol (Q17) | T04 | en cours |
+| [T04b](T04b-rotation-hors-sol.md) | Pas d'alerte de rotation sur le hors-sol (Q17) | T04 | fait |
 | [T05](T05-besoins-semences.md) | Besoins en semences et en plants | T01 | fait |
 | [T06](T06-semainier.md) | Semainier | T02 | fait |
 | [T06b](T06b-retards-semainier.md) | Semainier : une seule ligne en retard par série | T06 | fait |
