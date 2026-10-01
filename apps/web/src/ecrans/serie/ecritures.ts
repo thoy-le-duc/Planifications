@@ -328,6 +328,42 @@ export async function ramenerSerie(ctx: ContexteEcriture, serieId: string, cible
   return { serieId, lignes };
 }
 
+/** Références d'une série, revérifiées par le serveur quand l'une d'elles change. */
+const REFERENCES_SERIE = [
+  { colonne: 'espece_id', table: 'espece' },
+  { colonne: 'variete_id', table: 'variete' },
+  { colonne: 'itineraire_id', table: 'itineraire' },
+  { colonne: 'saison_id', table: 'saison' },
+] as const;
+
+/**
+ * L'état d'une série après une écriture, vérifié comme la fin de lot du serveur
+ * (apps/api/src/sync/serie.ts ; décision 10 de T12b) :
+ *   - la série passe validerSerie ;
+ *   - si l'espèce, la variété, l'itinéraire ou la saison change par rapport à `avant`, chacune de
+ *     ces références existe et n'est pas supprimée sur ce téléphone (le serveur les revérifie
+ *     alors toutes ; inchangées, une variété supprimée depuis reste acceptée, N2) ;
+ *   - aucune occupation active sous une série supprimée ;
+ *   - chaque occupation active passe validerOccupation avec la série d'après.
+ */
+export async function etatSerieValide(porte: PorteDonnees, avant: Ligne, serie: Ligne, occupations: readonly Ligne[]): Promise<boolean> {
+  const r = validerSerie({ ...serie });
+  if (!r.ok) return false;
+  const actives = occupations.filter((o) => o.supprime_le === null);
+  if (r.valeur.supprimeLe !== null) return actives.length === 0;
+  if (!actives.every((o) => validerOccupation({ ...o }, r.valeur, { datesDeLaSerie: true }).ok)) return false;
+  if (REFERENCES_SERIE.every(({ colonne }) => (serie[colonne] ?? null) === (avant[colonne] ?? null))) return true;
+  const presentes = await Promise.all(
+    REFERENCES_SERIE.map(async ({ colonne, table }) => {
+      const id = serie[colonne] ?? null;
+      if (id === null) return colonne === 'variete_id';
+      const l = await porte.lire<Ligne>(`SELECT id FROM ${table} WHERE id = ? AND supprime_le IS NULL`, [id]);
+      return l.length > 0;
+    }),
+  );
+  return presentes.every(Boolean);
+}
+
 /** Message d'une annulation incomplète (N5, règle de T24) : contient « modifié entre-temps ». */
 export function messageModifieAilleurs(n: number): string {
   return `ce qui a été modifié entre-temps sur un autre téléphone est gardé tel quel (${String(n)} ${n > 1 ? 'lignes' : 'ligne'})`;
@@ -339,10 +375,9 @@ export function messageModifieAilleurs(n: number): string {
  *     nous avions écrit et que personne ne l'a supprimée (ni ressuscitée) ; ramenée, seules ces
  *     colonnes reprennent leur valeur d'avant (ce qu'un autre téléphone a changé ailleurs reste) ;
  *   - une ligne que notre écriture n'a finalement pas changée (elle vaut déjà l'avant) est ignorée ;
- *   - la série n'est ramenée que si toutes ses occupations actives d'après l'annulation (celles
- *     écrites ailleurs, celles laissées, celles ramenées) collent encore à ses dates ; sinon elle
- *     reste telle quelle, et ses occupations aussi ;
- *   - tout ce qui reste passe validerSerie / validerOccupation.
+ *   - l'état d'après l'annulation (série et toutes ses occupations : écrites ailleurs, laissées,
+ *     ramenées) doit passer `etatSerieValide`, comme en fin de lot au serveur ; sinon la série
+ *     reste telle quelle, et ses occupations aussi (décisions 3, 7 et 10).
  * Rend le message à montrer si des lignes ont été laissées, sinon null.
  */
 export async function defaireSerie(ctx: ContexteEcriture, ecriture: EcritureSerie): Promise<string | null> {
@@ -367,32 +402,21 @@ export async function defaireSerie(ctx: ContexteEcriture, ecriture: EcritureSeri
 
   const indexSerie = ecriture.lignes.findIndex((l) => l.table === 'serie');
   const decisionSerie = indexSerie < 0 ? null : decisions[indexSerie];
-  let serieLaissee = decisionSerie === 'laissee';
-  // Série inactive après l'annulation (supprimée ailleurs) : aucune occupation n'y redevient active (décision 7).
-  let serieInactive = serieLaissee ? courant.serie.supprime_le !== null : false;
-  if (!serieLaissee) {
-    // La série telle qu'elle sera, et chacune de ses occupations actives d'après l'annulation.
-    const cible = { ...courant.serie, ...aRemettre(decisionSerie) };
-    const r = validerSerie({ ...cible });
-    if (!r.ok) serieLaissee = true;
-    else if (r.valeur.supprimeLe !== null) serieInactive = true;
-    else {
-      const serie = r.valeur;
-      const apres = courant.occupations.map((o) => {
-        const i = ecriture.lignes.findIndex((l) => l.table === 'occupation' && l.id === o.id);
-        return i < 0 ? o : { ...o, ...aRemettre(decisions[i]) };
-      });
-      serieLaissee = !apres.every((o) => o.supprime_le !== null || validerOccupation({ ...o }, serie, { datesDeLaSerie: true }).ok);
-    }
-  }
+  // La série et ses occupations telles qu'elles seraient après l'annulation, vérifiées comme la
+  // fin de lot du serveur (décision 10) ; sinon tout reste tel quel.
+  const serieApres = { ...courant.serie, ...aRemettre(decisionSerie) };
+  const occupationsApres = courant.occupations.map((o) => {
+    const i = ecriture.lignes.findIndex((l) => l.table === 'occupation' && l.id === o.id);
+    return i < 0 ? o : { ...o, ...aRemettre(decisions[i]) };
+  });
+  const serieLaissee = decisionSerie === 'laissee' || !(await etatSerieValide(ctx.porte, courant.serie, serieApres, occupationsApres));
 
   const ordres: OrdreEcriture[] = [];
   let laissees = 0;
   ecriture.lignes.forEach((l, i) => {
     const d = decisions[i];
     if (d === null || d === undefined) return;
-    const reactivee = serieInactive && l.table === 'occupation' && d !== 'laissee' && d.supprime_le === null;
-    if (d === 'laissee' || serieLaissee || reactivee) {
+    if (d === 'laissee' || serieLaissee) {
       laissees++;
       return;
     }
