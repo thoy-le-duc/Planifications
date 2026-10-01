@@ -138,6 +138,14 @@ const POUSSES: readonly (readonly [number, number, number, number])[] = [
   [290, 120, 5, 0.6],
 ];
 
+/**
+ * Au lancement, la lecture de la journée attend au plus ce délai le début du plan (T13c). Mesuré
+ * (e2e, CPU ×4) : sans aucune attente, la journée et le plan se disputent la base et le tap sur
+ * « Planches » juste après l'ouverture passe de ≈ 140 ms à ≈ 650 ms (budget 300 ms) ; avec
+ * l'attente bornée, ≈ 110 ms, et Aujourd'hui s'affiche même si le plan ne finit jamais.
+ */
+const ATTENTE_PLAN_MAX_MS = 400;
+
 export function App() {
   // Session gardée sur le téléphone : lue une fois, sans réseau.
   const [session, setSession] = useState<SessionConnexion | null>(() => lireSession(stockageNavigateur()));
@@ -188,10 +196,16 @@ export function App() {
       const f = e.ferme;
       if (f !== null && f !== prechargee) {
         prechargee = f;
-        // Échec : l'écran lira le plan lui-même à l'ouverture.
+        // Échec : l'écran lira le plan (ou la journée) lui-même à l'ouverture. Le début du plan
+        // passe d'abord à la base (un tap sur « Planches » juste après l'ouverture l'affiche
+        // tout de suite) ; la journée le suit, mais ne l'attend jamais plus de
+        // ATTENTE_PLAN_MAX_MS (T13c) : Aujourd'hui, écran d'accueil, ne reste pas bloqué
+        // derrière le plan d'une grande ferme ou d'un téléphone lent.
         const plan = planches.then((m) => m.prechargerPlan(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
-        // La journée ensuite (l'écran l'attend) : le début du plan passe d'abord à la base.
-        ecranDuJour.then((m) => m.prechargerJournee(f.porte, f.fermeId, m.jourDuTelephone(), plan)).catch(() => undefined);
+        const auPlusTard = new Promise<void>((tenir) => {
+          setTimeout(tenir, ATTENTE_PLAN_MAX_MS);
+        });
+        ecranDuJour.then((m) => m.prechargerJournee(f.porte, f.fermeId, m.jourDuTelephone(), Promise.race([plan, auPlusTard]))).catch(() => undefined);
       }
     };
     import('./donnees/appli.ts').then(

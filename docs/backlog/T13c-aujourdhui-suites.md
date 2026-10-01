@@ -14,10 +14,17 @@
 
 - **Isolement (contre-relecture T13b, déjà vrai sur `main`)** : emplacements, espèces et variétés de la journée sont lus par identifiant, sans filtre de ferme. Filtrer par la ferme affichée.
 
+## Décisions (chef, 2026-10-01)
+
+- Lancement : Aujourd'hui attend le début du préchargement de Planches **au plus 400 ms** (`ATTENTE_PLAN_MAX_MS`). Sans aucune attente, les deux lectures se disputent la base et le premier tap sur Planches passe de 140 à ~700 ms (budget 300 ms).
+- Relecture incrémentale : chaque saisie de l'écran annonce sa culture ; seule cette culture est relue. Une synchro (changement non annoncé) relit tout ; une relecture complète de sécurité suit 4 s après la dernière saisie. Dans le cas rare d'une synchro arrivée dans le même avis qu'une saisie, une tâche faite ailleurs peut rester affichée jusqu'à la première pause de 4 s.
+- Dernière récolte à date égale : la dernière saisie (horodatage, puis id), au lieu de l'ordre des lignes lues.
+- Une campagne dont la plantation appartient à une autre ferme est masquée.
+
 ## Critères d'acceptation
 
-- [ ] Grand jeu de T13b, CPU ×4 : relecture après une saisie en moins de 500 ms.
-- [ ] Au lancement, Aujourd'hui s'affiche sans attendre Planches (test).
-- [ ] Un réalisé annulé ailleurs fait revenir la tâche dès la journée relue (test).
-- [ ] Après « Changer la date », le focus est sur l'entrée corrigée (test).
-- [ ] Un emplacement, une espèce ou une variété d'une autre ferme n'apparaît jamais dans la journée (test).
+- [x] Grand jeu de T13b, CPU ×4 : relecture après une saisie en moins de 500 ms.
+- [x] Au lancement, Aujourd'hui s'affiche sans attendre Planches (test).
+- [x] Un réalisé annulé ailleurs fait revenir la tâche dès la journée relue (test).
+- [x] Après « Changer la date », le focus est sur l'entrée corrigée (test).
+- [x] Un emplacement, une espèce ou une variété d'une autre ferme n'apparaît jamais dans la journée (test).

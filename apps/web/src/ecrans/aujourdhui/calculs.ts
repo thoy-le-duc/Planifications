@@ -25,7 +25,6 @@ import {
   type Id,
   type InterventionRealisee,
   type ModeItineraire,
-  type RealisesSerie,
   type SerieSemainier,
   type StatutSerie,
   type TacheSemainier,
@@ -285,18 +284,32 @@ const sqlSeries = (filtre: string) => `SELECT s.id, s.statut, s.parametres, s.pr
   FROM serie s
   WHERE s.ferme_id = ? AND s.supprime_le IS NULL AND ${filtre}`;
 
-/** Espèces des séries lues, avec le nom de leur famille. */
-const SQL_ESPECES = `SELECT e.id, e.nom, e.unite_recolte, f.nom AS famille FROM espece e LEFT JOIN famille f ON f.id = e.famille_id WHERE e.id IN (${DANS})`;
-const SQL_VARIETES = `SELECT id, nom FROM variete WHERE id IN (${DANS})`;
+/**
+ * Isolement entre fermes (T13c) : espèces, familles, variétés, emplacements et zones sont lus
+ * par identifiant, et seulement ceux de la ferme affichée. Une ligne d'une autre ferme présente
+ * dans la base locale (utilisateur membre de deux fermes), référencée par erreur, ne prête jamais
+ * son nom à la journée : la culture s'affiche alors sans (« Culture », sans variété, sans
+ * famille, sans cet emplacement).
+ */
 
-/** Campagnes jointes à leur plantation ; `filtre` sur l'alias `c`. */
+/** Espèces des séries lues (liste JSON, puis la ferme), avec le nom de leur famille. */
+const SQL_ESPECES = `SELECT e.id, e.nom, e.unite_recolte, f.nom AS famille FROM espece e
+  LEFT JOIN famille f ON f.id = e.famille_id AND f.ferme_id = e.ferme_id
+  WHERE e.id IN (${DANS}) AND e.ferme_id = ?`;
+const SQL_VARIETES = `SELECT id, nom FROM variete WHERE id IN (${DANS}) AND ferme_id = ?`;
+
+/**
+ * Campagnes jointes à leur plantation ; `filtre` sur l'alias `c`. Une campagne dont la
+ * plantation est d'une autre ferme est masquée (décision du chef, T13c) : elle n'en reprend ni
+ * le nombre de plants ni la date d'arrachage.
+ */
 const sqlCampagnes = (filtre: string) => `SELECT c.id, c.debut_recolte_prevu, c.fin_recolte_prevue, p.id AS plantation_id, p.nombre_plants,
     p.date_arrachage, p.espece_id, p.variete_id, e.nom AS espece, e.unite_recolte, f.nom AS famille, v.nom AS variete
   FROM campagne c
-  JOIN plantation p ON p.id = c.plantation_id
-  LEFT JOIN espece e ON e.id = p.espece_id
-  LEFT JOIN famille f ON f.id = e.famille_id
-  LEFT JOIN variete v ON v.id = p.variete_id
+  JOIN plantation p ON p.id = c.plantation_id AND p.ferme_id = c.ferme_id
+  LEFT JOIN espece e ON e.id = p.espece_id AND e.ferme_id = c.ferme_id
+  LEFT JOIN famille f ON f.id = e.famille_id AND f.ferme_id = c.ferme_id
+  LEFT JOIN variete v ON v.id = p.variete_id AND v.ferme_id = c.ferme_id
   WHERE c.ferme_id = ? AND c.supprime_le IS NULL AND p.supprime_le IS NULL AND ${filtre}`;
 
 /** Occupations non supprimées des séries et des plantations données (deux listes JSON). */
@@ -304,12 +317,13 @@ const SQL_OCCUPATIONS = `SELECT o.serie_id, o.plantation_id, o.emplacement_id FR
   WHERE o.ferme_id = ? AND o.supprime_le IS NULL AND (o.serie_id IN (${DANS}) OR o.plantation_id IN (${DANS}))`;
 
 /**
- * Emplacements occupés, avec leur zone. Seuls les emplacements actifs le jour donné (deux
- * derniers paramètres) : jamais un emplacement supprimé ou retiré recopié dans une saisie (le
- * serveur le refuserait).
+ * Emplacements occupés (liste JSON, puis la ferme), avec leur zone. Seuls les emplacements actifs
+ * le jour donné (deux derniers paramètres) : jamais un emplacement supprimé ou retiré recopié
+ * dans une saisie (le serveur le refuserait).
  */
-const SQL_EMPLACEMENTS = `SELECT em.id, em.code, z.nom AS zone FROM emplacement em LEFT JOIN zone z ON z.id = em.zone_id
-  WHERE em.id IN (${DANS}) AND em.supprime_le IS NULL AND em.actif_du <= ? AND (em.actif_au IS NULL OR em.actif_au > ?)`;
+const SQL_EMPLACEMENTS = `SELECT em.id, em.code, z.nom AS zone FROM emplacement em
+  LEFT JOIN zone z ON z.id = em.zone_id AND z.ferme_id = em.ferme_id
+  WHERE em.id IN (${DANS}) AND em.ferme_id = ? AND em.supprime_le IS NULL AND em.actif_du <= ? AND (em.actif_au IS NULL OR em.actif_au > ?)`;
 
 /**
  * Chaînes du journal local (paramètre : la ferme). Une ligne reçue du serveur porte l'origine de
@@ -469,6 +483,21 @@ export interface LignesJournee {
   readonly interventions: readonly Ligne[];
   /** Événements récents (bornesHistorique), tels quels, avec `en_vigueur` (0 / 1, toute la chaîne). */
   readonly recents: readonly Ligne[];
+  /** Ce qu'il faut pour relire ensuite quelques cultures seulement (`lireCultures`, T13c). */
+  readonly contexte: ContexteLecture;
+}
+
+/** Contexte d'une lecture complète de la journée, repris par les relectures incrémentales. */
+export interface ContexteLecture {
+  readonly fermeId: string;
+  readonly aujourdhui: string;
+  /** Chaînes du journal (`SQL_CHAINES`) : origines et gagnants, deux tableaux JSON pour `EN_VIGUEUR`. */
+  readonly vigueur: readonly [string, string];
+  /** Séries actives (celles dont les réalisés et interventions sont lus), en tableau JSON. */
+  readonly jsonSeries: string;
+  readonly series: ReadonlySet<string>;
+  /** Campagnes en cours (celles dont les réalisés sont lus). */
+  readonly campagnes: ReadonlySet<string>;
 }
 
 /** Bornes de l'historique : date du journal, et instant de saisie (7 jours avant maintenant). */
@@ -509,11 +538,11 @@ interface Noms {
 }
 
 /** Espèces (avec leur famille) et variétés des séries lues par `sqlSeries`. */
-async function lireNoms(lire: Lire, series: readonly Ligne[]): Promise<Noms> {
+async function lireNoms(lire: Lire, fermeId: string, series: readonly Ligne[]): Promise<Noms> {
   if (series.length === 0) return { especes: [], varietes: [] };
-  const especes = await lire(SQL_ESPECES, [listeJson(series.map((s) => texte(s.espece_id)))]);
+  const especes = await lire(SQL_ESPECES, [listeJson(series.map((s) => texte(s.espece_id))), fermeId]);
   const idsVarietes = series.map((s) => texte(s.variete_id)).filter((x) => x !== '');
-  const varietes = idsVarietes.length === 0 ? [] : await lire(SQL_VARIETES, [listeJson(idsVarietes)]);
+  const varietes = idsVarietes.length === 0 ? [] : await lire(SQL_VARIETES, [listeJson(idsVarietes), fermeId]);
   return { especes, varietes };
 }
 
@@ -522,7 +551,7 @@ async function lireOccupations(lire: Lire, fermeId: string, series: readonly str
   if (series.length === 0 && plantations.length === 0) return [];
   const occupations = await lire(SQL_OCCUPATIONS, [fermeId, listeJson(series), listeJson(plantations)]);
   if (occupations.length === 0) return [];
-  const emplacements = await lire(SQL_EMPLACEMENTS, [listeJson(occupations.map((o) => texte(o.emplacement_id))), aujourdhui, aujourdhui]);
+  const emplacements = await lire(SQL_EMPLACEMENTS, [listeJson(occupations.map((o) => texte(o.emplacement_id))), fermeId, aujourdhui, aujourdhui]);
   const parId = new Map(emplacements.map((em) => [texte(em.id), em]));
   const lignes: Ligne[] = [];
   for (const o of occupations) {
@@ -551,15 +580,15 @@ export async function lireJournee(
     return porte.lire<Ligne>(sql, parametres);
   };
   const series = (await lire(sqlSeries(FILTRE_SERIES_ACTIVES), [fermeId])).filter((s) => parametresDe(texte(s.id), s.parametres).mode !== null);
-  const noms = await lireNoms(lire, series);
+  const noms = await lireNoms(lire, fermeId, series);
   const campagnes = await lire(sqlCampagnes('(c.fin_recolte_prevue IS NULL OR c.fin_recolte_prevue >= ?)'), [fermeId, aujourdhui]);
   const idsSeries = series.map((s) => texte(s.id));
   const idsCampagnes = campagnes.map((c) => texte(c.id));
   const occupations = await lireOccupations(lire, fermeId, idsSeries, campagnes.map((c) => texte(c.plantation_id)), aujourdhui);
 
-  const [chaines] = await lire(SQL_CHAINES, [fermeId]);
-  const vigueur = [texte(chaines?.origines) || '[]', texte(chaines?.gagnants) || '[]'];
+  const vigueur = await lireChaines(lire, fermeId);
   const jsonSeries = listeJson(idsSeries);
+  const contexte: ContexteLecture = { fermeId, aujourdhui, vigueur, jsonSeries, series: new Set(idsSeries), campagnes: new Set(idsCampagnes) };
   const realises = [
     ...(await lire(SQL_REALISES_SERIES, [jsonSeries, fermeId, ...vigueur, jsonSeries, fermeId, ...vigueur])),
     ...(idsCampagnes.length === 0 ? [] : await lire(SQL_REALISES_CAMPAGNES, [listeJson(idsCampagnes), jsonSeries, fermeId, ...vigueur])),
@@ -570,9 +599,9 @@ export async function lireJournee(
   const connues = new Set([...idsSeries, ...idsCampagnes]);
   const autresSeries = [...new Set(recents.map((l) => texte(l.serie_id)).filter((x) => x !== '' && !connues.has(x)))];
   const autresCampagnes = [...new Set(recents.map((l) => texte(l.campagne_id)).filter((x) => x !== '' && !connues.has(x)))];
-  if (autresSeries.length === 0 && autresCampagnes.length === 0) return { series, ...noms, campagnes, occupations, realises, interventions, recents };
+  if (autresSeries.length === 0 && autresCampagnes.length === 0) return { series, ...noms, campagnes, occupations, realises, interventions, recents, contexte };
   const s2 = autresSeries.length === 0 ? [] : await lire(sqlSeries(`s.id IN (${DANS})`), [fermeId, listeJson(autresSeries)]);
-  const noms2 = await lireNoms(lire, s2);
+  const noms2 = await lireNoms(lire, fermeId, s2);
   const c2 = autresCampagnes.length === 0 ? [] : await lire(sqlCampagnes(`c.id IN (${DANS})`), [fermeId, listeJson(autresCampagnes)]);
   const o2 = await lireOccupations(lire, fermeId, autresSeries, c2.map((l) => texte(l.plantation_id)), aujourdhui);
   return {
@@ -584,7 +613,85 @@ export async function lireJournee(
     realises,
     interventions,
     recents,
+    contexte,
   };
+}
+
+/** Chaînes du journal : [origines, gagnants] en JSON, pour `EN_VIGUEUR`. */
+async function lireChaines(lire: Lire, fermeId: string): Promise<readonly [string, string]> {
+  const [chaines] = await lire(SQL_CHAINES, [fermeId]);
+  return [texte(chaines?.origines) || '[]', texte(chaines?.gagnants) || '[]'];
+}
+
+/**
+ * Saisies récentes de quelques séries (`colonne` = 'serie_id') ou campagnes ('campagne_id') : la
+ * même fenêtre et les mêmes colonnes que `SQL_RECENTS`, par l'index de la culture (`serie`,
+ * `campagne`) au lieu de celui de la date. Paramètres : comme `SQL_RECENTS`, la liste JSON des
+ * cultures avant la ferme dans chaque partie.
+ */
+const sqlRecentsDe = (colonne: 'serie_id' | 'campagne_id') => `${sqlRecents(`e.${colonne} IN (${DANS}) AND +e.ferme_id = ? AND +e.date >= ?`)}
+  UNION ALL
+  ${sqlRecents(`e.${colonne} IN (${DANS}) AND +e.ferme_id = ? AND +e.horodatage >= ? AND (+e.date < ? OR e.date IS NULL)`)}`;
+const SQL_RECENTS_SERIES = sqlRecentsDe('serie_id');
+const SQL_RECENTS_CAMPAGNES = sqlRecentsDe('campagne_id');
+
+/** Lignes du journal de quelques cultures, relues après une saisie (T13c). */
+export interface LignesCultures {
+  /** Séries et campagnes relues : toutes leurs lignes ci-dessous remplacent les anciennes. */
+  readonly series: readonly string[];
+  readonly campagnes: readonly string[];
+  /** Chaînes du journal, relues si une saisie remplace une autre (correction, annulation). */
+  readonly vigueur: readonly [string, string];
+  readonly realises: readonly Ligne[];
+  readonly interventions: readonly Ligne[];
+  readonly recents: readonly Ligne[];
+  /** Fenêtre de l'historique à l'instant de cette lecture. */
+  readonly bornes: ReturnType<typeof bornesHistorique>;
+}
+
+/**
+ * Relit le journal de quelques cultures seulement, après une saisie sur elles (T13c) : leurs
+ * réalisés, interventions et saisies récentes, par les mêmes requêtes que `lireJournee` bornées à
+ * ces cultures. Les chaînes du journal ne sont relues que si `chaines` (une saisie en remplace
+ * une autre) : un « Fait » ou une récolte ouvre une chaîne nouvelle, en vigueur, sans toucher
+ * aux autres. Séries, campagnes, emplacements et noms ne changent pas par une saisie : ils ne
+ * sont pas relus. Une lecture à la fois, comme `lireJournee` (`continuer`).
+ */
+export async function lireCultures(
+  porte: PorteDonnees,
+  contexte: ContexteLecture,
+  cultures: { readonly series: readonly string[]; readonly campagnes: readonly string[] },
+  chaines: boolean,
+  maintenant: Date,
+  continuer: () => boolean = () => true,
+): Promise<LignesCultures> {
+  const { fermeId } = contexte;
+  const bornes = bornesHistorique(contexte.aujourdhui, maintenant);
+  const lire: Lire = async (sql, parametres) => {
+    if (!continuer()) throw new LectureAbandonnee();
+    return porte.lire<Ligne>(sql, parametres);
+  };
+  const vigueur = chaines ? await lireChaines(lire, fermeId) : contexte.vigueur;
+  const { depuis, horodatageDepuis } = bornes;
+  const actives = listeJson(cultures.series.filter((id) => contexte.series.has(id)));
+  const campagnesEnCours = listeJson(cultures.campagnes.filter((id) => contexte.campagnes.has(id)));
+  const realises: Ligne[] = [];
+  const interventions: Ligne[] = [];
+  const recents: Ligne[] = [];
+  if (actives !== '[]') {
+    realises.push(...(await lire(SQL_REALISES_SERIES, [actives, fermeId, ...vigueur, actives, fermeId, ...vigueur])));
+    interventions.push(...(await lire(SQL_INTERVENTIONS, [actives, fermeId, ...vigueur])));
+  }
+  if (campagnesEnCours !== '[]') realises.push(...(await lire(SQL_REALISES_CAMPAGNES, [campagnesEnCours, contexte.jsonSeries, fermeId, ...vigueur])));
+  for (const [sql, ids] of [
+    [SQL_RECENTS_SERIES, cultures.series],
+    [SQL_RECENTS_CAMPAGNES, cultures.campagnes],
+  ] as const) {
+    if (ids.length === 0) continue;
+    const json = listeJson(ids);
+    recents.push(...(await lire(sql, [...vigueur, json, fermeId, depuis, ...vigueur, json, fermeId, horodatageDepuis, depuis])).map(ligneRecente));
+  }
+  return { series: cultures.series, campagnes: cultures.campagnes, vigueur, realises, interventions, recents, bornes };
 }
 
 // ── Calcul de la journée ─────────────────────────────────────────────────────────────────────
@@ -675,10 +782,55 @@ function parametresDe(serieId: string, v: Valeur): ParametresLus {
   return lus;
 }
 
-/** Calcule la journée depuis les lignes lues. Pure. */
-export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Journee {
-  const J = aujourdhui as DateCalendaire;
+interface CampagneLue {
+  readonly semainier: CampagneSemainier;
+  readonly arrachee: boolean;
+}
 
+/**
+ * Ce que la journée tire des lignes qu'une saisie ne change pas (séries, campagnes, emplacements,
+ * noms) : gardé tel quel d'une relecture incrémentale à l'autre (T13c).
+ */
+interface Socle {
+  readonly aujourdhui: string;
+  readonly jour: DateCalendaire;
+  readonly semaine: ReturnType<typeof semaineIso>;
+  readonly cultures: ReadonlyMap<string, Culture>;
+  readonly series: ReadonlyMap<string, SerieLue>;
+  readonly campagnes: ReadonlyMap<string, CampagneLue>;
+  /** Séries que le semainier planifie, dans l'ordre de lecture. */
+  readonly actives: readonly SerieSemainier[];
+  /** Campagnes, dans l'ordre de lecture. */
+  readonly listeCampagnes: readonly CampagneLue[];
+  /**
+   * Rang de chaque culture dans l'ordre de lecture (séries actives, puis campagnes) : départage
+   * final des récoltes en cours, comme le tri stable de la liste lue dans cet ordre.
+   */
+  readonly rangs: ReadonlyMap<string, number>;
+}
+
+/** Réalisés (premières dates) et interventions en vigueur, au format du semainier. */
+interface RealisesLus {
+  readonly series: Map<Id<'Serie'>, Partial<Record<EtapeSerie, DateCalendaire>>>;
+  readonly campagnes: Map<Id<'Campagne'>, DateCalendaire>;
+  readonly interventions: Map<Id<'Serie'>, InterventionRealisee[]>;
+}
+
+/**
+ * Journée calculée et ce qu'il faut pour la recalculer culture par culture après une saisie
+ * (`recalculerCultures`, T13c), sans relire ni recalculer le reste de la ferme.
+ */
+export interface EtatJournee {
+  readonly journee: Journee;
+  readonly contexte: ContexteLecture;
+  readonly socle: Socle;
+  readonly realises: RealisesLus;
+  /** Lignes de `SQL_RECENTS` (toutes cultures), pour vérifier la fenêtre de l'historique. */
+  readonly recents: readonly Ligne[];
+}
+
+function socleDe(lignes: LignesJournee, aujourdhui: string): Socle {
+  const J = aujourdhui as DateCalendaire;
   const parSerie = new Map<string, EmplacementConcerne[]>();
   const parPlantation = new Map<string, EmplacementConcerne[]>();
   for (const o of lignes.occupations) {
@@ -745,7 +897,8 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
     series.set(id, { semainier: pourSemainier, active, finPrevue: finRecolte });
   }
 
-  const campagnes: { readonly semainier: CampagneSemainier; readonly arrachee: boolean }[] = [];
+  const listeCampagnes: CampagneLue[] = [];
+  const campagnes = new Map<string, CampagneLue>();
   for (const c of lignes.campagnes) {
     const id = texte(c.id);
     const emplacements = trierEmplacements(parPlantation.get(texte(c.plantation_id)) ?? []);
@@ -762,7 +915,7 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
     };
     cultures.set(id, culture);
     const arrachage = texteOuNul(c.date_arrachage);
-    campagnes.push({
+    const lue: CampagneLue = {
       arrachee: arrachage !== null && arrachage <= aujourdhui,
       semainier: {
         id: id as Id<'Campagne'>,
@@ -773,13 +926,21 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
         nombrePlants: nombreOuNul(c.nombre_plants) ?? 0,
         emplacements,
       },
-    });
+    };
+    listeCampagnes.push(lue);
+    campagnes.set(id, lue);
   }
 
-  // Réalisés des séries et des campagnes (agrégés dans la base).
-  const realisesSeries = new Map<Id<'Serie'>, Partial<Record<EtapeSerie, DateCalendaire>>>();
-  const realisesCampagnes = new Map<Id<'Campagne'>, DateCalendaire>();
-  for (const l of lignes.realises) {
+  const actives = [...series.values()].map((s) => s.semainier).filter((s): s is SerieSemainier => s !== null);
+  const rangs = new Map<string, number>();
+  for (const [i, s] of actives.entries()) if (!rangs.has(s.id)) rangs.set(s.id, i);
+  for (const [i, c] of listeCampagnes.entries()) if (!rangs.has(c.semainier.id)) rangs.set(c.semainier.id, actives.length + i);
+  return { aujourdhui, jour: J, semaine: semaineIso(J), cultures, series, campagnes, actives, listeCampagnes, rangs };
+}
+
+/** Ajoute des lignes de réalisés (`SQL_REALISES_*`) aux réalisés lus. */
+function ajouterRealises(realises: RealisesLus, lignes: readonly Ligne[]): void {
+  for (const l of lignes) {
     const date = texte(l.date);
     const serieId = texteOuNul(l.serie_id);
     const campagneId = texteOuNul(l.campagne_id);
@@ -789,16 +950,18 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
       if (l.type === 'recolte') etape = 'debutRecolte';
       else if ((ETAPES as readonly string[]).includes(etapeRealisee)) etape = etapeSerie(etapeRealisee as EtapeRealisee);
       if (etape === null) continue;
-      const r = realisesSeries.get(serieId as Id<'Serie'>) ?? {};
+      const r = realises.series.get(serieId as Id<'Serie'>) ?? {};
       r[etape] = plusTot(r[etape], date);
-      realisesSeries.set(serieId as Id<'Serie'>, r);
+      realises.series.set(serieId as Id<'Serie'>, r);
     } else if (campagneId !== null && l.type === 'recolte') {
-      realisesCampagnes.set(campagneId as Id<'Campagne'>, plusTot(realisesCampagnes.get(campagneId as Id<'Campagne'>), date));
+      realises.campagnes.set(campagneId as Id<'Campagne'>, plusTot(realises.campagnes.get(campagneId as Id<'Campagne'>), date));
     }
   }
-  // T22 : interventions en vigueur, par série (elles soldent les travaux prévus).
-  const interventions = new Map<Id<'Serie'>, InterventionRealisee[]>();
-  for (const l of lignes.interventions) {
+}
+
+/** T22 : ajoute des interventions en vigueur (`SQL_INTERVENTIONS`), par série (elles soldent les travaux prévus). */
+function ajouterInterventions(realises: RealisesLus, lignes: readonly Ligne[]): void {
+  for (const l of lignes) {
     const serieId = texteOuNul(l.serie_id);
     const c = categorie(l.categorie);
     const date = texte(l.date);
@@ -807,70 +970,245 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
     // existe, comme '2026-02-31' : saisie libre, soldée par sa date réelle).
     const visee = texteOuNul(l.occurrence_visee);
     const occurrenceVisee = visee !== null && estDateValide(visee) ? visee : null;
-    ajouterA(interventions, serieId as Id<'Serie'>, { date: date as DateCalendaire, categorie: c, type: texte(l.type_intervention), occurrenceVisee });
+    ajouterA(realises.interventions, serieId as Id<'Serie'>, { date: date as DateCalendaire, categorie: c, type: texte(l.type_intervention), occurrenceVisee });
   }
-  const realises = {
-    series: realisesSeries as ReadonlyMap<Id<'Serie'>, RealisesSerie>,
-    campagnes: realisesCampagnes,
-    interventions: interventions as ReadonlyMap<Id<'Serie'>, readonly InterventionRealisee[]>,
-  };
+}
 
-  // Saisies récentes en vigueur (règle jugée par la base sur toute la chaîne, comme le
-  // semainier) : historique et dernières récoltes.
-  const vigueur: EvenementLu[] = [];
-  for (const l of lignes.recents) {
-    const e = l.en_vigueur === 1 ? evenementLu(l) : null;
-    if (e !== null) vigueur.push(e);
-  }
-  const dernieresRecoltes = new Map<string, DerniereRecolte>();
-  for (const e of vigueur) {
-    const cible = e.serieId ?? e.campagneId;
-    if (e.detail.type === 'recolte' && cible !== null) {
-      const avant = dernieresRecoltes.get(cible);
-      if (avant === undefined || e.date >= avant.date) dernieresRecoltes.set(cible, { date: e.date, quantite: e.detail.quantite, unite: e.detail.unite });
-    }
-  }
-
-  // Semainier de la semaine (T06), dans l'ordre du moteur.
-  const actives = [...series.values()].map((s) => s.semainier).filter((s): s is SerieSemainier => s !== null);
-  const semaine = semaineIso(J);
+/** Tâches du semainier (T06) de ces séries et campagnes, dans l'ordre du moteur. */
+function tachesDe(socle: Socle, realises: RealisesLus, series: readonly SerieSemainier[], campagnes: readonly CampagneLue[]): TacheJour[] {
   const brutes = semainier(
-    semaine,
-    actives,
+    socle.semaine,
+    series,
     campagnes.filter((c) => !c.arrachee).map((c) => c.semainier),
     realises,
-    J,
+    socle.jour,
   );
   const taches: TacheJour[] = [];
   for (const t of brutes) {
     const cibleId = t.cible.sorte === 'serie' ? t.cible.serieId : t.cible.campagneId;
-    const culture = cultures.get(cibleId);
+    const culture = socle.cultures.get(cibleId);
     if (culture === undefined) continue;
     const cle = t.etape === 'travail' ? `${cibleId}:travail:${String(t.travail.indice)}:${t.datePrevue}` : `${cibleId}:${t.etape}`;
     taches.push({ cle, tache: t, culture });
   }
+  return taches;
+}
+
+/** Tâches du semainier de ces cultures seules (séries actives, campagnes). */
+function tachesDesCultures(socle: Socle, realises: RealisesLus, cibles: Iterable<string>): TacheJour[] {
+  const series: SerieSemainier[] = [];
+  const campagnes: CampagneLue[] = [];
+  for (const id of cibles) {
+    const s = socle.series.get(id)?.semainier;
+    if (s !== undefined && s !== null) series.push(s);
+    const c = socle.campagnes.get(id);
+    if (c !== undefined) campagnes.push(c);
+  }
+  return tachesDe(socle, realises, series, campagnes);
+}
+
+/**
+ * La tâche `x` vient-elle avant la tâche `y` (de deux cultures différentes) dans l'ordre du
+ * semainier ? Le moteur en est seul juge : son ordre ne dépend jamais de l'ordre d'entrée, on lui
+ * demande donc les tâches de ces deux cultures seules. Aucune règle de tri réécrite ici.
+ */
+function vientAvant(socle: Socle, realises: RealisesLus, x: TacheJour, y: TacheJour): boolean {
+  const cles = tachesDesCultures(socle, realises, [x.culture.cibleId, y.culture.cibleId]).map((t) => t.cle);
+  return cles.indexOf(x.cle) < cles.indexOf(y.cle);
+}
+
+/** Insère `x` à sa place dans `liste`, triée par `avant` (recherche dichotomique). */
+function inserer<T>(liste: T[], x: T, avant: (a: T, b: T) => boolean): void {
+  let bas = 0;
+  let haut = liste.length;
+  while (bas < haut) {
+    const milieu = (bas + haut) >>> 1;
+    const m = liste[milieu] as T;
+    if (avant(x, m)) haut = milieu;
+    else bas = milieu + 1;
+  }
+  liste.splice(bas, 0, x);
+}
+
+/** Culture en récolte aujourd'hui (la fenêtre de récolte contient aujourd'hui), ou null. */
+function enRecolte(socle: Socle, realises: RealisesLus, id: string): Culture | null {
+  const J = socle.jour;
+  const culture = socle.cultures.get(id);
+  if (culture === undefined) return null;
+  const s = socle.series.get(id)?.semainier;
+  if (s !== undefined && s !== null) {
+    const r = realises.series.get(s.id);
+    if (r?.finRecolte !== undefined) return null;
+    const debut = r === undefined ? s.datesPrevues.debutRecolte : appliquerRealises(s.datesPrevues, r).debutRecolte;
+    return debut <= J && J <= s.datesPrevues.finRecolte ? culture : null;
+  }
+  const c = socle.campagnes.get(id);
+  if (c === undefined) return null;
+  const { debutRecoltePrevu: debut, finRecoltePrevue: fin } = c.semainier;
+  return !c.arrachee && debut !== null && debut <= J && (fin === null || J <= fin) ? culture : null;
+}
+
+/** Ordre des récoltes en cours : espèce, premier emplacement, puis ordre de lecture. */
+function comparerRecoltes(socle: Socle, a: Culture, b: Culture): number {
+  return (
+    COLLATEUR.compare(a.espece, b.espece) ||
+    COLLATEUR.compare(a.emplacements[0]?.code ?? '', b.emplacements[0]?.code ?? '') ||
+    (socle.rangs.get(a.cibleId) ?? 0) - (socle.rangs.get(b.cibleId) ?? 0)
+  );
+}
+
+/** Ordre de l'historique : la saisie la plus récente d'abord (horodatage, puis id). */
+function avantDansHistorique(a: EvenementLu, b: EvenementLu): boolean {
+  return a.horodatage === b.horodatage ? a.id > b.id : a.horodatage > b.horodatage;
+}
+
+/** Saisies en vigueur parmi ces lignes récentes (règle jugée par la base sur toute la chaîne). */
+function vigueurDe(recents: readonly Ligne[]): EvenementLu[] {
+  const vigueur: EvenementLu[] = [];
+  for (const l of recents) {
+    const e = l.en_vigueur === 1 ? evenementLu(l) : null;
+    if (e !== null) vigueur.push(e);
+  }
+  return vigueur;
+}
+
+/**
+ * Dernière récolte en vigueur de chaque culture : la plus récente par date ; à date égale, la
+ * dernière saisie (horodatage, puis id). Ne dépend pas de l'ordre des lignes (T13c).
+ */
+function ajouterDernieresRecoltes(dernieres: Map<string, DerniereRecolte>, vigueur: readonly EvenementLu[]): void {
+  const retenues = new Map<string, EvenementLu>();
+  for (const e of vigueur) {
+    const cible = e.serieId ?? e.campagneId;
+    if (e.detail.type !== 'recolte' || cible === null) continue;
+    const avant = retenues.get(cible);
+    if (avant === undefined || e.date > avant.date || (e.date === avant.date && !avantDansHistorique(avant, e))) retenues.set(cible, e);
+  }
+  for (const [cible, e] of retenues) {
+    if (e.detail.type === 'recolte') dernieres.set(cible, { date: e.date, quantite: e.detail.quantite, unite: e.detail.unite });
+  }
+}
+
+/** Calcule la journée depuis les lignes lues, et l'état qui permet de la recalculer ensuite. Pure. */
+export function calculerEtat(lignes: LignesJournee, aujourdhui: string): EtatJournee {
+  const socle = socleDe(lignes, aujourdhui);
+
+  // Réalisés des séries et des campagnes (agrégés dans la base), interventions en vigueur.
+  const realises: RealisesLus = { series: new Map(), campagnes: new Map(), interventions: new Map() };
+  ajouterRealises(realises, lignes.realises);
+  ajouterInterventions(realises, lignes.interventions);
+
+  // Saisies récentes en vigueur (règle jugée par la base sur toute la chaîne, comme le
+  // semainier) : historique et dernières récoltes.
+  const vigueur = vigueurDe(lignes.recents);
+  const dernieresRecoltes = new Map<string, DerniereRecolte>();
+  ajouterDernieresRecoltes(dernieresRecoltes, vigueur);
+
+  // Semainier de la semaine (T06), dans l'ordre du moteur.
+  const taches = tachesDe(socle, realises, socle.actives, socle.listeCampagnes);
 
   // Récoltes en cours : la fenêtre de récolte contient aujourd'hui.
   const recoltesEnCours: Culture[] = [];
-  for (const s of actives) {
-    const r = realises.series.get(s.id);
-    if (r?.finRecolte !== undefined) continue;
-    const debut = r === undefined ? s.datesPrevues.debutRecolte : appliquerRealises(s.datesPrevues, r).debutRecolte;
-    const culture = cultures.get(s.id);
-    if (culture !== undefined && debut <= J && J <= s.datesPrevues.finRecolte) recoltesEnCours.push(culture);
+  for (const s of socle.actives) {
+    const c = enRecolte(socle, realises, s.id);
+    if (c !== null) recoltesEnCours.push(c);
   }
-  for (const c of campagnes) {
-    const { debutRecoltePrevu: debut, finRecoltePrevue: fin, id } = c.semainier;
-    const culture = cultures.get(id);
-    if (!c.arrachee && culture !== undefined && debut !== null && debut <= J && (fin === null || J <= fin)) recoltesEnCours.push(culture);
+  for (const c of socle.listeCampagnes) {
+    const culture = enRecolte(socle, realises, c.semainier.id);
+    if (culture !== null) recoltesEnCours.push(culture);
   }
-  recoltesEnCours.sort((a, b) => COLLATEUR.compare(a.espece, b.espece) || COLLATEUR.compare(a.emplacements[0]?.code ?? '', b.emplacements[0]?.code ?? ''));
+  recoltesEnCours.sort((a, b) => comparerRecoltes(socle, a, b));
 
   const historique: EntreeHistorique[] = vigueur
-    .sort((a, b) => (a.horodatage === b.horodatage ? (a.id < b.id ? 1 : -1) : a.horodatage < b.horodatage ? 1 : -1))
-    .map((evenement) => ({ evenement, culture: cultures.get(evenement.serieId ?? evenement.campagneId ?? '') ?? null }));
+    .sort((a, b) => (avantDansHistorique(a, b) ? -1 : 1))
+    .map((evenement) => ({ evenement, culture: socle.cultures.get(evenement.serieId ?? evenement.campagneId ?? '') ?? null }));
 
-  return { aujourdhui, semaine: semaine.semaine, taches, recoltesEnCours, historique, cultures, dernieresRecoltes };
+  return {
+    journee: { aujourdhui, semaine: socle.semaine.semaine, taches, recoltesEnCours, historique, cultures: socle.cultures, dernieresRecoltes },
+    contexte: lignes.contexte,
+    socle,
+    realises,
+    recents: lignes.recents,
+  };
+}
+
+/** Calcule la journée depuis les lignes lues. Pure. */
+export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Journee {
+  return calculerEtat(lignes, aujourdhui).journee;
+}
+
+/** La ligne récente est-elle dans la fenêtre de l'historique (même règle que `SQL_RECENTS`) ? */
+function dansLaFenetre(l: Ligne, bornes: ReturnType<typeof bornesHistorique>): boolean {
+  const date = typeof l.date === 'string' ? l.date : null;
+  if (date !== null && date >= bornes.depuis) return true;
+  return typeof l.horodatage === 'string' && l.horodatage >= bornes.horodatageDepuis && (date === null || date < bornes.depuis);
+}
+
+/**
+ * Recalcule la journée après une saisie sur quelques cultures (T13c) : seules leurs lignes du
+ * journal ont été relues (`lireCultures`) ; le reste de la journée est repris de `etat`, les
+ * tâches et saisies de ces cultures remises à leur place (ordre du moteur, de l'historique). Même
+ * résultat qu'un `calculerEtat` sur une relecture complète.
+ *
+ * Rend null quand ce n'est pas sûr (culture inconnue de la journée, saisie sortie de la fenêtre
+ * de l'historique depuis la dernière lecture complète) : il faut alors tout relire.
+ */
+export function recalculerCultures(etat: EtatJournee, lues: LignesCultures): EtatJournee | null {
+  const { socle } = etat;
+  const cibles = new Set([...lues.series, ...lues.campagnes]);
+  for (const id of cibles) if (!socle.cultures.has(id)) return null;
+  const series = new Set(lues.series);
+  const campagnes = new Set(lues.campagnes);
+  const deLaCulture = (l: Ligne) => series.has(texte(l.serie_id)) || campagnes.has(texte(l.campagne_id));
+
+  // Les autres saisies récentes doivent rester dans la fenêtre (elle glisse avec l'heure).
+  const recents: Ligne[] = [];
+  for (const l of etat.recents) {
+    if (deLaCulture(l)) continue;
+    if (!dansLaFenetre(l, lues.bornes)) return null;
+    recents.push(l);
+  }
+  recents.push(...lues.recents);
+
+  const realises: RealisesLus = {
+    series: new Map(etat.realises.series),
+    campagnes: new Map(etat.realises.campagnes),
+    interventions: new Map(etat.realises.interventions),
+  };
+  for (const id of series) {
+    realises.series.delete(id as Id<'Serie'>);
+    realises.interventions.delete(id as Id<'Serie'>);
+  }
+  for (const id of campagnes) realises.campagnes.delete(id as Id<'Campagne'>);
+  ajouterRealises(realises, lues.realises);
+  ajouterInterventions(realises, lues.interventions);
+
+  const j = etat.journee;
+  const taches = j.taches.filter((t) => !cibles.has(t.culture.cibleId));
+  for (const t of tachesDesCultures(socle, realises, cibles)) inserer(taches, t, (a, b) => vientAvant(socle, realises, a, b));
+
+  const recoltesEnCours = j.recoltesEnCours.filter((c) => !cibles.has(c.cibleId));
+  for (const id of cibles) {
+    const c = enRecolte(socle, realises, id);
+    if (c !== null) inserer(recoltesEnCours, c, (a, b) => comparerRecoltes(socle, a, b) < 0);
+  }
+
+  const vigueur = vigueurDe(lues.recents);
+  const historique = j.historique.filter((h) => !cibles.has(h.evenement.serieId ?? h.evenement.campagneId ?? ''));
+  for (const evenement of vigueur) {
+    inserer(historique, { evenement, culture: socle.cultures.get(evenement.serieId ?? evenement.campagneId ?? '') ?? null }, (a, b) => avantDansHistorique(a.evenement, b.evenement));
+  }
+  const dernieresRecoltes = new Map(j.dernieresRecoltes);
+  for (const id of cibles) dernieresRecoltes.delete(id);
+  ajouterDernieresRecoltes(dernieresRecoltes, vigueur);
+
+  return {
+    journee: { aujourdhui: j.aujourdhui, semaine: j.semaine, taches, recoltesEnCours, historique, cultures: socle.cultures, dernieresRecoltes },
+    contexte: { ...etat.contexte, vigueur: lues.vigueur },
+    socle,
+    realises,
+    recents,
+  };
 }
 
 // ── Textes ───────────────────────────────────────────────────────────────────────────────────

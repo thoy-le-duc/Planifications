@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T13c : Aujourd'hui, relecture rapide et suites
+
+- **Fait** : après une saisie, seule la culture touchée est relue : 799 → ~210 ms sur la grande ferme (CPU ×4), journée identique à une relecture complète (empreintes, nombreux cas limites) ; Aujourd'hui n'attend plus Planches que 400 ms au plus au lancement ; « Fait » redevient possible après une annulation venue d'ailleurs ; le focus reste sur l'entrée corrigée après « Changer la date », sans jamais être repris ensuite ; emplacements, zones, espèces, familles, variétés et plantations d'une autre ferme n'apparaissent plus.
+- **Décidé** : attente bornée à 400 ms (sinon Planches dépasse son budget) ; relecture complète de sécurité 4 s après la dernière saisie ; dernière récolte à date égale = dernière saisie ; campagne sur une plantation d'une autre ferme masquée. Deux relectures : un focus volé à chaque relecture (bloquant) corrigé et testé.
+- **Bloquant** : rien. Suite : T13e (« Fait » en double sur une relecture tardive, rare, déjà possible avant).
+
 ## 2026-10-01 — T10f : la synchro protégée des abus
 
 - **Fait** : la porte du téléphone refuse une transaction de plus de 5 Mio avant d'écrire ; le serveur limite chaque utilisateur à 120 envois par minute (429, la file reprend plus tard, rien de perdu) ; un client muet est coupé après 10 s sans données, des en-têtes incomplets après 15 s, sans gêner un téléphone lent mais régulier.
