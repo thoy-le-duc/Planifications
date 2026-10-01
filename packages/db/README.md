@@ -25,6 +25,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | --- | --- |
 | `src/schema.ts` | Les 21 tables du modèle v1, les 4 tables de comptes (T09) et `refus_synchro` (T10), clés étrangères, CHECK, index |
 | `src/securite.ts` | Schéma `securite` (T09b), données du serveur seul : `demande_ip`. Hors du point d’entrée (`@planif/db/securite`), pour que `@planif/sync` n’en dérive rien |
+| `src/interne.ts` | Schéma `interne` (T10h), état dérivé tenu par la base seule : `chaine_evenement` (une ligne par chaîne d'événements, la règle « en vigueur » déjà appliquée). Hors du point d’entrée, jamais publié |
 | `src/comptes.ts` | `fermesDeLUtilisateur`, `roleDansLaFerme`, `ROLES_MEMBRE`, `ETATS_MEMBRE` (T09) |
 | `src/valeurs.ts` | Valeurs des unions de T01, vérifiées à la compilation contre `@planif/core` |
 | `src/conversions.ts` | `ligneDepuisX` / `xDepuisLigne` pour Serie, Occupation, Emplacement, Evenement |
@@ -44,6 +45,9 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0017_*.sql` | Généré par drizzle-kit (T23, décision 11) : unicité des types actifs insensible à la casse (`lower(libelle)`) |
 | `migrations/0016_*.sql` | Migration personnalisée (T23) : `type_intervention` dans la publication `powersync`, et la liste de départ (`TYPES_INTERVENTION_PAR_DEFAUT`, `ferme_id` nul, identifiants tirés du couple) |
 | `migrations/0018_*.sql` | Migration personnalisée (T10g) : `evenements_en_vigueur` suit toute la chaîne (une annulation retire tout, sinon la correction la plus récente de la chaîne) |
+| `migrations/0019_*.sql` | Généré par drizzle-kit (T10h) : `evenement.origine_id`, schéma `interne` et table `chaine_evenement` |
+| `migrations/0020_*.sql` | Migration personnalisée (T10h) : déclencheurs qui remplissent `origine_id` et tiennent `interne.chaine_evenement` à chaque insertion, reprise des lignes existantes, `evenements_en_vigueur` lue sur la chaîne tenue (sans récursion) |
+| `migrations/0021_*.sql` | Généré par drizzle-kit (T10h) : CHECK `evenement_origine_remplie` |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 
@@ -106,6 +110,13 @@ Il n'y a pas de tables Récolte, Intervention et Traitement : le détail est dan
 - toute la chaîne d'un événement annulé : la chaîne, c'est l'origine, ses corrections, les corrections de ses corrections, et toutes leurs annulations ; une seule annulation, de l'origine ou de n'importe quelle correction, retire toute la chaîne (T10g) ;
 - sinon, toute la chaîne sauf UNE ligne : la correction la plus récente de toute la chaîne (`horodatage` le plus grand, puis `id` le plus grand), à défaut l'origine. Une chaîne ramifiée n'a qu'une ligne en vigueur (T10g, migration 0018 ; même règle que le stock et le téléphone).
 
+**Tenue à l'écriture (T10h).** La base remplit elle-même, à chaque insertion et quel que soit l'écrivain (API ou SQL brut) :
+
+- `evenement.origine_id` : l'événement lui-même s'il ne remplace rien, sinon l'origine de l'événement remplacé (déclencheur `evenement_origine`, avant insertion ; CHECK `evenement_origine_remplie`). Une valeur envoyée par l'appelant est écrasée ;
+- `interne.chaine_evenement` : par chaîne, `annulee` et `en_vigueur_id` (déclencheur `evenement_chaine`, après insertion : une ligne écartée par `ON CONFLICT DO NOTHING` n'y touche pas). Deux remplacements simultanés d'une même chaîne passent l'un après l'autre sur le verrou de sa ligne.
+
+`evenements_en_vigueur` n'est plus qu'une jointure sur cette table : un filtre par ferme ou par id descend jusqu'aux index (200 000 événements : quelques ms en base, contre 4,2 s pour `WHERE id = …` avec la récursion de 0018 ; voir `en-vigueur.integration.test.ts`).
+
 Conséquences à connaître :
 
 - **Annuler une correction retire la saisie** : toute la chaîne est annulée. Une récolte annulée ne se corrige plus (l'API refuse, motif `recolte_annulee`) : pour la rétablir, on saisit une nouvelle récolte.
@@ -115,7 +126,7 @@ Des CHECK contrôlent le détail à l'insertion (erreur `23514`), pour qu'un `SE
 
 Limites de maintenance :
 
-- **`SELECT e.*`** : `evenements_en_vigueur` fige la liste des colonnes à sa création. Ajouter une colonne à `evenement` oblige à recréer la vue (`CREATE OR REPLACE VIEW`) dans la même migration, sinon elle ne l'expose pas.
+- **Colonnes nommées** : depuis 0020, `evenements_en_vigueur` liste ses colonnes (celles d'avant `origine_id`). Exposer une nouvelle colonne de `evenement` oblige à recréer la vue (`CREATE OR REPLACE VIEW`, colonnes ajoutées à la fin).
 - **Pas de `security_invoker`** : les vues s'exécutent avec les droits de leur propriétaire, donc elles contourneraient une RLS posée sur `evenement`. À revoir avec la RLS (`WITH (security_invoker = true)`), dans un ticket suivant.
 
 ## Écarts assumés avec le ticket et le modèle v1

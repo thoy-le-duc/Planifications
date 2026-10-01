@@ -636,6 +636,13 @@ export const evenement = pgTable(
     /** Le Detail* de T01 tel quel (clés camelCase), choisi par `type`. */
     detail: jsonb('detail').$type<Evenement['detail']>().notNull(),
     creeLe: creeLe(),
+    /**
+     * Origine de la chaîne (T10h) : l'événement lui-même s'il ne remplace rien, sinon l'origine
+     * de celui qu'il remplace. Remplie par la BASE à l'insertion (déclencheur
+     * `evenement_origine`), jamais par l'appelant ; toujours présente (contrainte
+     * `evenement_origine_remplie`). Sert à tenir `interne.chaine_evenement` sans récursion.
+     */
+    origineId: idDe<'Evenement'>('origine_id'),
   },
   (t) => [
     verif('evenement', 'type', parmi(t.type, TYPES_EVENEMENT)),
@@ -649,6 +656,8 @@ export const evenement = pgTable(
     ),
     verif('evenement', 'ne_se_remplace_pas', sql`${t.remplaceEvenementId} IS DISTINCT FROM ${t.id}`),
     verif('evenement', 'detail_objet', sql`jsonb_typeof(${t.detail}) = 'object'`),
+    /** Remplie par le déclencheur evenement_origine, qui passe avant ce contrôle (T10h). */
+    verif('evenement', 'origine_remplie', sql`${t.origineId} IS NOT NULL`),
     // Les CASE garantissent l'ordre d'évaluation : pas de conversion d'une valeur non numérique.
     // Détail jsonb : un champ absent, une date impossible ou une valeur non numérique est
     // refusé (23514). `IS TRUE` : une condition inconnue (champ absent → NULL) refuse aussi.

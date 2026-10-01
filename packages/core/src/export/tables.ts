@@ -121,6 +121,7 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       remplace_evenement_id: texte('événement corrigé ou annulé par celui-ci'),
       detail: json('détails propres au type (quantité récoltée, produit, dose, durée…), en JSON'),
       cree_le: CREE_LE,
+      origine_id: texte('premier événement de la chaîne de corrections (lui-même s’il ne corrige ni n’annule rien)'),
     }),
     famille: table(
       'Familles botaniques, pour les règles de rotation.',

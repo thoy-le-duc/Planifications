@@ -1,0 +1,1 @@
+ALTER TABLE "evenement" ADD CONSTRAINT "evenement_origine_remplie" CHECK ("evenement"."origine_id" IS NOT NULL);

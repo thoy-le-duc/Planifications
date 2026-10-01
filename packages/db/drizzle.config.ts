@@ -4,7 +4,7 @@ import { defineConfig } from 'drizzle-kit';
 // Aucune connexion n'est nécessaire pour générer.
 export default defineConfig({
   dialect: 'postgresql',
-  schema: ['./src/schema.ts', './src/securite.ts'],
+  schema: ['./src/schema.ts', './src/securite.ts', './src/interne.ts'],
   out: './migrations',
   strict: true,
   verbose: true,
