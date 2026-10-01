@@ -4,6 +4,10 @@
  * L'historique d'un emplacement E réunit ses occupations passées, celles des emplacements qu'il
  * remplace (de proche en proche), et l'assolement passé posé sur ces emplacements, sur leurs
  * zones ou sur les zones parentes de celles-ci. Fonctions pures : aucune donnée lue ailleurs.
+ *
+ * Hors-sol (T04b) : un emplacement est hors-sol s'il est une gouttière, ou si sa zone directe a
+ * l'abri `hors_sol`. Pas de sol, pas de fatigue de sol : aucune alerte sur un emplacement
+ * hors-sol, et une culture passée en hors-sol ne compte jamais dans l'historique.
  */
 import { ajouterJours } from '../dates/index.ts';
 import type { DateCalendaire } from '../dates/index.ts';
@@ -17,6 +21,8 @@ import type {
   Id,
   Occupation,
   Saison,
+  SorteEmplacement,
+  TypeAbri,
   Zone,
 } from '../domaine/index.ts';
 import { periodeOccupation } from './occupations.ts';
@@ -44,10 +50,14 @@ export interface HistoriqueRotation {
   readonly saisons: readonly Pick<Saison, 'id' | 'fin'>[];
 }
 
-type EmplacementParcellaire = Pick<Emplacement, 'id' | 'zoneId' | 'remplace'>;
+/** `sorte` absente : traité comme une planche ou un rang (pleine terre). */
+type EmplacementParcellaire = Pick<Emplacement, 'id' | 'zoneId' | 'remplace'> & { readonly sorte?: SorteEmplacement };
+
+/** `typeAbri` absent : abri inconnu, traité comme de la pleine terre. */
+type ZoneParcellaire = Pick<Zone, 'id' | 'zoneParenteId'> & { readonly typeAbri?: TypeAbri };
 
 export interface HierarchieParcellaire {
-  readonly zones: readonly Pick<Zone, 'id' | 'zoneParenteId'>[];
+  readonly zones: readonly ZoneParcellaire[];
   readonly emplacements: readonly EmplacementParcellaire[];
 }
 
@@ -125,6 +135,19 @@ function delaisApplicables(culture: CulturePrevue): DelaisApplicables | null {
   return applicables;
 }
 
+/** Zone d'abri `hors_sol`, d'après la hiérarchie ; zone inconnue ou abri absent : non. */
+function zoneHorsSol(zoneId: Id<'Zone'>, abris: ReadonlyMap<Id<'Zone'>, TypeAbri | undefined>): boolean {
+  return abris.get(zoneId) === 'hors_sol';
+}
+
+/** Gouttière, ou emplacement dont la zone directe a l'abri `hors_sol`. */
+function emplacementHorsSol(
+  emplacement: EmplacementParcellaire,
+  abris: ReadonlyMap<Id<'Zone'>, TypeAbri | undefined>,
+): boolean {
+  return emplacement.sorte === 'gouttiere' || zoneHorsSol(emplacement.zoneId, abris);
+}
+
 /** E puis les emplacements qu'il remplace, de proche en proche ; chaque sommet une seule fois. */
 function emplacementsRetenus(
   emplacement: EmplacementParcellaire,
@@ -160,16 +183,30 @@ function zonesRetenues(
 
 /**
  * Lieux de E : E et les emplacements qu'il remplace ; la zone de E et celles des emplacements
- * remplacés connus (c'est le même sol), avec toutes leurs parentes.
+ * remplacés connus (c'est le même sol), avec toutes leurs parentes. Les emplacements remplacés
+ * hors-sol sont écartés, avec leur zone : leurs cultures n'ont pas touché le sol. Les zones
+ * d'abri `hors_sol` sont écartées aussi (pas d'assolement qui compte sur elles).
  */
-function lieuxRetenus(emplacement: EmplacementParcellaire, hierarchie: HierarchieParcellaire): LieuxRetenus {
+function lieuxRetenus(
+  emplacement: EmplacementParcellaire,
+  hierarchie: HierarchieParcellaire,
+  abris: ReadonlyMap<Id<'Zone'>, TypeAbri | undefined>,
+): LieuxRetenus {
   const parId = new Map(hierarchie.emplacements.map((e) => [e.id, e]));
-  const emplacements = emplacementsRetenus(emplacement, parId);
-  const zonesRemplacees = [...emplacements].flatMap((id) => {
-    const connu = parId.get(id);
-    return connu === undefined ? [] : [connu.zoneId];
-  });
-  return { emplacements, zones: zonesRetenues([emplacement.zoneId, ...zonesRemplacees], hierarchie) };
+  const parcourus = emplacementsRetenus(emplacement, parId);
+  const emplacements = new Set<Id<'Emplacement'>>();
+  const zonesRemplacees: Id<'Zone'>[] = [];
+  for (const id of parcourus) {
+    const connu = id === emplacement.id ? emplacement : parId.get(id);
+    if (connu === undefined) {
+      emplacements.add(id);
+    } else if (!emplacementHorsSol(connu, abris)) {
+      emplacements.add(id);
+      zonesRemplacees.push(connu.zoneId);
+    }
+  }
+  const zones = new Set([...zonesRetenues(zonesRemplacees, hierarchie)].filter((z) => !zoneHorsSol(z, abris)));
+  return { emplacements, zones };
 }
 
 /**
@@ -301,8 +338,12 @@ export function alertesRotation(
     return [];
   }
   const { delais, origine } = applicables;
+  const abris = new Map(hierarchie.zones.map((z) => [z.id, z.typeAbri]));
+  if (emplacementHorsSol(emplacement, abris)) {
+    return [];
+  }
   const familleId = culturePrevue.espece.familleId;
-  const lieux = lieuxRetenus(emplacement, hierarchie);
+  const lieux = lieuxRetenus(emplacement, hierarchie, abris);
   const lignes = [
     ...lignesOccupations(historique, familleId, lieux, anneeMiseEnPlace, exclure),
     ...lignesAssolements(historique, familleId, lieux, anneeMiseEnPlace),
