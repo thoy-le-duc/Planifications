@@ -278,9 +278,228 @@ select.serie-champ {
   outline-offset: 2px;
 }
 
-.serie-champ-semaine {
+/* ── Sélecteur de semaine (T12b) : ‹ S22 · 31 mai 2027 › ─────────────────────────────────── */
+
+.semaine {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 56px;
+  gap: 6px;
+  min-width: 0;
+}
+
+.semaine-fleche {
+  width: 56px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--couleur-trait);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  touch-action: manipulation;
+}
+
+.semaine-fleche:active:not(:disabled) {
+  background: var(--couleur-fond);
+}
+
+.semaine-fleche:disabled {
+  color: var(--couleur-tertiaire);
+  border-color: var(--couleur-fond);
+}
+
+.semaine-choisie {
+  min-width: 56px;
+  min-height: 56px;
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.semaine-choisie svg {
+  flex-shrink: 0;
+  color: var(--couleur-sur-foret-doux);
+}
+
+.semaine-libelle {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.semaine-libelle strong {
   font-family: var(--police-code);
-  font-weight: 600;
+  font-weight: 700;
+  font-size: 21px;
+}
+
+.semaine-libelle > span:last-child {
+  font-size: 15px;
+  color: var(--couleur-sur-foret);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* « · » lu par les lecteurs d'écran, la date passe à la ligne. */
+.semaine-point {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Choix rapide : feuille du bas, une case par semaine ISO de l'année. */
+.semaine-voile {
+  position: fixed;
+  z-index: 32;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in srgb, var(--couleur-encre) 45%, transparent);
+}
+
+.semaine-feuille {
+  width: 100%;
+  max-width: 560px;
+  max-height: 86dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px max(16px, env(safe-area-inset-bottom));
+  border-radius: var(--rayon-feuille) var(--rayon-feuille) 0 0;
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.semaine-feuille-tete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.semaine-feuille-tete h3 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 22px;
+}
+
+.semaine-fermer {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+}
+
+.semaine-annees {
+  display: grid;
+  grid-template-columns: 56px 1fr 56px;
+  align-items: center;
+  gap: 8px;
+}
+
+.semaine-annee {
+  text-align: center;
+  font-family: var(--police-code);
+  font-weight: 700;
+  font-size: 22px;
+}
+
+.semaine-grille {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+
+.semaine-case {
+  min-width: 56px;
+  min-height: 56px;
+  padding: 4px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  line-height: 1.1;
+  touch-action: manipulation;
+}
+
+.semaine-case strong {
+  font-family: var(--police-code);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.semaine-case span {
+  font-size: 13px;
+  color: var(--couleur-secondaire);
+  white-space: nowrap;
+}
+
+/* La semaine du jour : liseré orange (ce qui presse). */
+.semaine-case-jour {
+  border-color: var(--couleur-orange);
+}
+
+.semaine-case-choisie {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.semaine-case-choisie span {
+  color: var(--couleur-sur-foret);
+}
+
+.semaine-case:focus-visible,
+.semaine-choisie:focus-visible,
+.semaine-fleche:focus-visible,
+.semaine-fermer:focus-visible {
+  outline: 3px solid var(--couleur-orange);
+  outline-offset: 2px;
+}
+
+.semaine-legende {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.semaine-legende i {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--couleur-orange);
+  border-radius: 6px;
 }
 
 /* ── Planches ────────────────────────────────────────────────────────────────────────────── */

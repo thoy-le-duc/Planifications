@@ -7,6 +7,7 @@
  * préparer leurs entrées (conversion au bord) et mettre leurs sorties en mots.
  */
 import {
+  ajouterJours,
   alertesRotation,
   besoinsSerie,
   calculerDatesSerie,
@@ -145,6 +146,34 @@ export function lundiDe(semaine: string): DateCalendaire | null {
   return lundiDeSemaine(annee, numero);
 }
 
+/** Années que le sélecteur de semaine propose (comme `lundiDe`). */
+export const ANNEE_MIN = 2000;
+export const ANNEE_MAX = 2100;
+
+/** La semaine `ecart` semaines plus loin (passage d'année ISO compris), ou null hors des années proposées. */
+export function semaineDecalee(semaine: string, ecart: number): string | null {
+  const lundi = lundiDe(semaine);
+  if (lundi === null) return null;
+  const s = semaineIso(ajouterJours(lundi, ecart * 7));
+  return s.annee < ANNEE_MIN || s.annee > ANNEE_MAX ? null : `${String(s.annee)}-W${deux(s.semaine)}`;
+}
+
+/** Les semaines ISO d'une année (52 ou 53), avec leur lundi. */
+export function semainesDeLAnnee(annee: number): { readonly semaine: string; readonly numero: number; readonly lundi: DateCalendaire }[] {
+  return Array.from({ length: nombreSemainesIso(annee) }, (_, i) => ({
+    semaine: `${String(annee)}-W${deux(i + 1)}`,
+    numero: i + 1,
+    lundi: lundiDeSemaine(annee, i + 1),
+  }));
+}
+
+/** Libellé d'une semaine 'AAAA-Www' : « S22 », « 31 mai 2027 » (lundi, mois court, année du lundi). */
+export function libelleSemaine(semaine: string): { readonly numero: string; readonly lundi: string } | null {
+  const lundi = lundiDe(semaine);
+  if (lundi === null) return null;
+  return { numero: `S${semaine.slice(6)}`, lundi: `${dateCourte(lundi)} ${lundi.slice(0, 4)}` };
+}
+
 /** Numéro de semaine ISO de 'AAAA-Www', ou null. */
 function numeroSemaine(semaine: string): number | null {
   const m = /^\d{4}-W(\d{2})$/.exec(semaine);
@@ -279,6 +308,11 @@ export interface Saisie {
   readonly ancre: TypeAncreSerie;
   /** 'AAAA-Www'. */
   readonly semaine: string;
+  /**
+   * Ancre d'origine d'une série modifiée qui n'est pas un lundi (import) : gardée telle quelle
+   * tant que la semaine et l'ancre ne sont pas touchées (T12b, N1). Sinon null : le lundi de `semaine`.
+   */
+  readonly ancreGardee: DateCalendaire | null;
   readonly emplacements: readonly EmplacementSaisi[];
 }
 
@@ -484,7 +518,7 @@ function alertesSur(ctx: ContexteCalcul, culture: ChoixCulture, planche: Planche
 /** Tout ce que le formulaire affiche, recalculé à chaque changement de champ. */
 export function calculer(ctx: ContexteCalcul, s: Saisie): Calcul {
   const parametres = objetJson(s.parametresTexte);
-  const ancreDate = lundiDe(s.semaine);
+  const ancreDate = s.ancreGardee ?? lundiDe(s.semaine);
   const d = parametres === null || ancreDate === null ? null : dates(parametres, s.ancre, ancreDate);
   const longueurs = s.emplacements.map((e) => lireLongueur(e.longueur));
   const valides = longueurs.every((l): l is number => l !== null && l > 0 && l <= 10_000);

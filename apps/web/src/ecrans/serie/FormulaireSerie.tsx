@@ -23,6 +23,7 @@ import {
   libelleCulture,
   libelleDate,
   lireLongueur,
+  lundiDe,
   modeDe,
   nombreLisible,
   objetJson,
@@ -33,12 +34,13 @@ import {
   type Saisie,
 } from './calculs.ts';
 import { entreeAnnulable, lireBibliotheque, lireEtatSerie, requeteHistorique, type EtatSerie, type Modification } from './donnees.ts';
+import { SelecteurSemaine } from './SelecteurSemaine.tsx';
 import { annulerEntree, creerSerie, modifierSerie, ramenerSerie, SerieRefusee, type ContexteEcriture, type SerieAEcrire } from './ecritures.ts';
 
 /** Marque de performance posée quand le formulaire est utilisable (e2e/serie.e2e.ts). */
 export const MARQUE_SERIE_AFFICHEE = 'planif:serie-affichee';
 
-/** D'où part le formulaire. `semaine` : 'AAAA-Www' (valeur d'un <input type="week">). */
+/** D'où part le formulaire. `semaine` : 'AAAA-Www' (semaine ISO, comme `data-semaine` du sélecteur). */
 export type DepartSerie =
   | {
       readonly sorte: 'creation';
@@ -127,6 +129,12 @@ function cultureDe(bib: Bibliotheque, especeId: string, varieteId: string | null
   return { especeId, varieteId: variete?.id ?? null, nomEspece: espece.nom, nomVariete: variete?.nom ?? null };
 }
 
+/** Ancre d'une série importée qui n'est pas un lundi (T12b, N1), sinon null. */
+function ancreHorsLundi(v: unknown): DateCalendaire | null {
+  if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+  return lundiDe(semaineDe(v)) === v ? null : (v as DateCalendaire);
+}
+
 function saisieInitiale(bib: Bibliotheque, depart: DepartSerie, etat: EtatSerie | null, jour: string): Saisie {
   if (depart.sorte === 'modification' && etat !== null) {
     const s = etat.serie;
@@ -136,6 +144,7 @@ function saisieInitiale(bib: Bibliotheque, depart: DepartSerie, etat: EtatSerie 
       parametresTexte: typeof s.parametres === 'string' ? s.parametres : null,
       ancre: s.ancre_type === 'semis' || s.ancre_type === 'debut_recolte' ? s.ancre_type : 'plantation',
       semaine: semaineDe(String(s.ancre_date)),
+      ancreGardee: ancreHorsLundi(s.ancre_date),
       emplacements: etat.occupations.filter((o) => o.supprime_le === null).map((o) => ({ id: String(o.emplacement_id), longueur: String(o.longueur_m ?? '') })),
     };
   }
@@ -147,6 +156,7 @@ function saisieInitiale(bib: Bibliotheque, depart: DepartSerie, etat: EtatSerie 
     parametresTexte: null,
     ancre: 'plantation',
     semaine: creation.semaine ?? semaineParDefaut(bib, jour, creation.saisonId),
+    ancreGardee: null,
     emplacements: planche === undefined ? [] : [{ id: planche.id, longueur: String(planche.longueurM) }],
   };
 }
@@ -363,12 +373,15 @@ export function FormulaireSerie({
   function choisirCulture(c: ChoixCulture): void {
     if (bib === null) return;
     const itineraire = itinerairePropose(itinerairesDe(bib, c), saisie?.semaine ?? '');
+    const ancre = ancreParDefaut(modeDe(objetJson(itineraire?.parametresTexte ?? null)));
     changer((s) => ({
       ...s,
       culture: c,
       itineraireId: itineraire?.id ?? null,
       parametresTexte: itineraire?.parametresTexte ?? null,
-      ancre: ancreParDefaut(modeDe(objetJson(itineraire?.parametresTexte ?? null))),
+      ancre,
+      // Une autre sorte d'ancre ne garde pas la date d'origine (N1).
+      ancreGardee: ancre === s.ancre ? s.ancreGardee : null,
     }));
     setRecherche('');
   }
@@ -379,14 +392,17 @@ export function FormulaireSerie({
     const origine = etat !== null && String(etat.serie.itineraire_id) === id && typeof etat.serie.parametres === 'string' ? etat.serie.parametres : null;
     const texte = origine ?? it?.parametresTexte ?? null;
     const nouveauMode = modeDe(objetJson(texte));
-    changer((s) => ({ ...s, itineraireId: it?.id ?? null, parametresTexte: texte, ancre: s.ancre === 'semis' && nouveauMode === 'plant_achete' ? 'plantation' : s.ancre }));
+    changer((s) => {
+      const ancre = s.ancre === 'semis' && nouveauMode === 'plant_achete' ? 'plantation' : s.ancre;
+      return { ...s, itineraireId: it?.id ?? null, parametresTexte: texte, ancre, ancreGardee: ancre === s.ancre ? s.ancreGardee : null };
+    });
   }
 
   /** Changer d'ancre garde les dates : la semaine devient celle de l'étape choisie. */
   function choisirAncre(ancre: TypeAncreSerie): void {
     const d = calcul?.dates ?? null;
     const date = d === null ? undefined : d[etapeDeLAncre(ancre, mode)];
-    changer((s) => ({ ...s, ancre, semaine: date === undefined ? s.semaine : semaineDe(date) }));
+    changer((s) => ({ ...s, ancre, semaine: date === undefined ? s.semaine : semaineDe(date), ancreGardee: null }));
   }
 
   function ajouterPlanche(id: string): void {
@@ -623,15 +639,14 @@ export function FormulaireSerie({
               );
             })}
           </div>
-          <Etiquette htmlFor={idSemaine}>Semaine</Etiquette>
-          <input
-            id={idSemaine}
-            type="week"
-            className="serie-champ serie-champ-semaine"
-            value={saisie.semaine}
-            onChange={(e) => {
-              const semaine = e.target.value;
-              changer((s) => ({ ...s, semaine }));
+          <Etiquette id={idSemaine}>Semaine</Etiquette>
+          <SelecteurSemaine
+            semaine={saisie.semaine}
+            aujourdhui={jour}
+            idEtiquette={idSemaine}
+            surChoisir={(semaine) => {
+              // Semaine touchée : l'ancre passe au lundi de la semaine choisie (N1).
+              changer((s) => ({ ...s, semaine, ancreGardee: null }));
             }}
           />
           {mode === 'plant_achete' && <p className="serie-aide">Plant acheté : pas de semis à la ferme.</p>}
