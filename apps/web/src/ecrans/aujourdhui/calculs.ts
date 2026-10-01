@@ -10,6 +10,7 @@
 import {
   ajouterJours,
   appliquerRealises,
+  estDateValide,
   semaineIso,
   semainier,
   validerTravauxPrevus,
@@ -627,9 +628,10 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
     const c = categorie(l.categorie);
     const date = texte(l.date);
     if (serieId === null || c === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-    // T22b : l'occurrence visée par « Fait » (null si absente ou illisible : saisie libre).
+    // T22b : l'occurrence visée par « Fait » (null si absente, ou si ce n'est pas une date qui
+    // existe, comme '2026-02-31' : saisie libre, soldée par sa date réelle).
     const visee = texteOuNul(l.occurrence_visee);
-    const occurrenceVisee = visee !== null && /^\d{4}-\d{2}-\d{2}$/.test(visee) ? (visee as DateCalendaire) : null;
+    const occurrenceVisee = visee !== null && estDateValide(visee) ? visee : null;
     ajouterA(interventions, serieId as Id<'Serie'>, { date: date as DateCalendaire, categorie: c, type: texte(l.type_intervention), occurrenceVisee });
   }
   const realises = {
