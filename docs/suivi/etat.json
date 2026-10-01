@@ -1,6 +1,6 @@
 {
-  "maj": "1er octobre 2026, 2 h UTC",
-  "resume": "Cette fenêtre : **le sélecteur de semaine maison du formulaire de série (T12b)**, qui marche aussi sur iPhone (flèches et grille des semaines de l'année), avec un « Annuler » qui ne touche jamais au travail d'un autre téléphone et vérifie d'abord que le serveur acceptera ; et **plus d'alerte de rotation sur le hors-sol (T04b, ta réponse Q17)**. Prochains : T24b (même garde-fou d'annulation dans « Mes itinéraires »), T11d (test de défilement du plan fiable), T10h (vitesse de la vue « en vigueur »).",
+  "maj": "1er octobre 2026, 9 h UTC",
+  "resume": "Cette fenêtre : **« Annuler » des itinéraires sûr face à un autre téléphone (T24b)**, avec la même vérification que le formulaire de série, désormais partagée ; **le test de fluidité du défilement du plan fiable (T11d)**, sans relever la limite. Nouvelles règles de sobriété en jetons (deux relectures au plus, modèle léger pour les tickets sans risque). Prochains : T24c (suites de l'annulation des itinéraires), T10h (vitesse de la vue « en vigueur »), T13b (Aujourd'hui rapide sur une grande ferme).",
   "en_cours": {},
   "attente": "Rien de bloquant côté questions. Pour la mise en ligne : créer le compte Brevo et choisir le domaine d'envoi (T09c) ; la base de production devra être en locale UTF-8.",
   "visuels": [
