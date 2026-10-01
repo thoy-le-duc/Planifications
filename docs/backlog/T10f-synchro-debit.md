@@ -16,6 +16,13 @@
 
 Aucun écran du téléphone n'affiche encore les refus de synchro (critère de T10 jamais coché). La règle « ligne récapitulative d'un lot trop gros » part dans T10i, qui crée cet affichage. T10f garde les trois règles côté serveur et porte.
 
+## Décisions (chef, 2026-10-01)
+
+- Taille : la porte refuse au-delà de 5 Mio (octets UTF-8 des ordres), sur toutes ses écritures ; le serveur accepte jusqu'à 6 Mio de corps envoyé (marge du format PowerSync, environ 230 Ko au pire mesuré), répond `lot_trop_gros` au-delà et 413 au-delà de 8 Mio.
+- Débit : 120 envois par minute et par utilisateur sur `/sync/upload` (une file de 300 saisies au retour du réseau est ralentie, jamais perdue) ; les requêtes invalides comptent ; compteur en mémoire, par processus (v1).
+- Délais : coupure après 10 s sans données pendant la lecture du corps (un téléphone lent mais régulier passe), en-têtes en 15 s au plus, durée totale de 300 s (EDGE dans une serre).
+- Le délai de lecture s'appuie sur un mécanisme interne de Node 22 : la production tourne sur la version de `.node-version`, comme la CI.
+
 ## Critères d'acceptation
 
 - [ ] Un test par règle.
