@@ -361,7 +361,8 @@ function conditionSerieInchangee(serie: Ligne, occupations: readonly Ligne[], is
  * lectures précèdent la transaction d'écriture : chaque UPDATE porte donc dans son WHERE les
  * conditions vérifiées (valeurs encore celles écrites, types vivants, série inchangée, règles
  * des types), et ne touche rien si une synchro reçue entre-temps les a changées (N3). Rend le
- * message à montrer si des lignes ont été laissées, sinon null.
+ * message à montrer si des lignes ont été laissées, sinon null. T24d : les lignes ramenées sont
+ * relues après l'écriture ; celles qu'une garde a bloquées comptent parmi les laissées.
  */
 export async function ramener(ctx: ContexteEcriture, etat: EtatAvant): Promise<string | null> {
   const iso = ctx.maintenant().toISOString();
@@ -451,6 +452,7 @@ export async function ramener(ctx: ContexteEcriture, etat: EtatAvant): Promise<s
   );
 
   const ordres: OrdreEcriture[] = [];
+  const ramenees: { readonly table: Table; readonly id: string; readonly valeurs: Readonly<Record<string, Valeur>> }[] = [];
   let laissees = 0;
   const ordreTables: readonly Table[] = ['itineraire', 'serie', 'occupation', 'type_intervention'];
   for (const table of ordreTables) {
@@ -466,8 +468,13 @@ export async function ramener(ctx: ContexteEcriture, etat: EtatAvant): Promise<s
       const garde = serieId === null ? undefined : gardesSerie.get(serieId);
       const c = garde === undefined ? d.condition : et(d.condition, garde);
       ordres.push(ordreDe({ ...l, apres: d.valeurs }, iso, c.sql, c.parametres));
+      ramenees.push({ table: l.table, id: l.id, valeurs: d.valeurs });
     });
   }
   await ctx.porte.ecrireEnsemble(ordres);
+  // T24d : une ligne bloquée par la garde de son WHERE (synchro reçue entre les lectures et
+  // l'écriture) n'a pas repris ses valeurs d'avant ; relue, elle compte parmi les laissées.
+  const relues = await Promise.all(ramenees.map((r) => lireLigne(ctx.porte, r.table, r.id)));
+  laissees += ramenees.filter((r, i) => !vaut(relues[i] ?? {}, r.valeurs)).length;
   return laissees === 0 ? null : messageModifieAilleurs(laissees);
 }
