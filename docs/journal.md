@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T13b : Aujourd'hui rapide sur une grande ferme
+
+- **Fait** : sur une ferme de 3 000 séries en cours (~50 000 saisies), la lecture de la journée passe de 854 ms à environ 120 ms (stockage du téléphone simulé), à résultats identiques ; nouveaux index locaux, requêtes allégées, règle « en vigueur » calculée une fois ; une saisie au `detail` corrompu n'empêche plus l'écran de s'afficher ; une date d'occurrence invalide est ignorée. Au tap : 30 ms. À froid, CPU ×4 : 8,8 s → 5,3 s.
+- **Décidé** : le budget de 1 s à froid n'est pas tenable par les requêtes seules (lecture à froid des pages SQLite dans le navigateur) : il part dans T13d (instantané de la journée au lancement) ; la lecture sous Node garde un garde-fou de 250 ms. Découpage : T13c reprend la relecture après saisie (884 ms), le lancement sans attendre Planches, le masque, le focus. Une relecture a trouvé un filtre de ferme retiré (isolement) : remis et testé, contre-relecture sans faille.
+- **Bloquant** : rien. À savoir : les index ajoutent environ un tiers à la place de la base locale et allongent la première synchro.
+
 ## 2026-10-01 — T24d : « Annuler » bloqué, le maraîcher est prévenu
 
 - **Fait** : après « Annuler » dans « Mes itinéraires », l'appli relit les lignes défaites (une requête par table) ; une ligne qu'une synchro arrivée entre la lecture et l'écriture a empêchée de revenir est comptée, et l'écran affiche « modifié entre-temps sur un autre téléphone, gardé tel quel (n lignes) » au lieu de laisser croire que tout est défait.
