@@ -24,7 +24,7 @@ import { creerPorte, SCHEMA_LOCAL, type BaseLocale, type PorteDonnees } from '@p
 import type { Id } from '@planif/core';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
 import type { ModuleEcranAujourdhui } from './test/contrat.ts';
-import { cleTache, ecrireFermeDuJour, FERME, SERIE, UTILISATEUR } from './test/ferme-du-jour.ts';
+import { cleTache, ecrireFermeDuJour, EVENEMENT, FERME, SERIE, UTILISATEUR } from './test/ferme-du-jour.ts';
 
 /** Chemin tenu dans une variable, comme ecran.test.tsx. */
 const CHEMIN_ECRAN = './index.ts';
@@ -326,6 +326,34 @@ describe('T13c, focus après « Changer la date »', () => {
     for (let k = 0; k < 5; k++) await unTour();
     expect(document.activeElement, `focus : ${decrireFocus()}`).not.toBe(document.body);
     expect(e.contains(document.activeElement), `focus dans l’entrée corrigée (focus : ${decrireFocus()})`).toBe(true);
+  });
+
+  it('focus placé une seule fois : perdu ensuite (tap dans une zone vide), une relecture ne le reprend pas', async () => {
+    await rendre();
+    const fait = await faitSurChou();
+    remiseAZero();
+    await changerDate(fait.id, '2026-09-29');
+    await attendre(() => nouveauxEvenements().length === 1, 'correction écrite');
+    const correction = nouveauxEvenements()[0];
+    if (correction === undefined) return;
+    const e = await entree(correction.id);
+    await attendre(() => e.contains(document.activeElement), `focus placé sur l’entrée corrigée (focus : ${decrireFocus()})`);
+
+    // L'utilisateur touche une zone vide : le focus retombe sur body.
+    act(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    expect(document.activeElement, 'focus perdu par l’utilisateur').toBe(document.body);
+
+    // Puis des relectures arrivent (synchro) : un autre téléphone annule les deux récoltes de tomates du journal.
+    for (const id of [EVENEMENT.recolteTomate2, EVENEMENT.recolteTomate1]) {
+      const cible = evenements().find((x) => x.id === id);
+      if (cible === undefined) throw new Error(`récolte ${id} absente`);
+      annulationRecue(cible);
+      await attendre(() => entreeHistorique(id) === null, `journée relue : la récolte ${id} annulée quitte l’historique`);
+      for (let k = 0; k < 5; k++) await unTour();
+      expect(document.activeElement, `après la relecture, le focus n’est pas repris (focus : ${decrireFocus()})`).toBe(document.body);
+    }
   });
 
   it('entrée disparue (chaîne annulée ailleurs juste après la correction) : le focus va au titre de l’historique, jamais sur body', async () => {

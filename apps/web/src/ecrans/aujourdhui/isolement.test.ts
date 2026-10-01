@@ -277,3 +277,66 @@ describe('T13c : emplacement, zone, espèce, famille et variété d’une autre 
     );
   });
 });
+
+// ── Relecture du chef (T13c) : campagne dont la plantation est d'une autre ferme ─────────────
+
+const PLANTATION_ETRANGERE = idTest(0x6);
+/** Nombre de plants reconnaissable, que n'a aucune culture de la ferme du jour. */
+const PLANTS_ETRANGERS = 87_654;
+
+/**
+ * Range une plantation de `fermeDeLaPlantation` (mêmes espèce et variété que les fraisiers de la
+ * ferme affichée) et y fait pointer la campagne de fraises de la ferme affichée.
+ */
+function campagneSurPlantation(fermeDeLaPlantation: string, nombrePlants: number, dateArrachage: string | null): void {
+  const fraise = base.lireDirect<{ espece_id: string; variete_id: string | null }>('SELECT espece_id, variete_id FROM plantation WHERE id = ?', [PLANTATION.fraise])[0];
+  recevoir('plantation', {
+    id: PLANTATION_ETRANGERE,
+    ferme_id: fermeDeLaPlantation,
+    espece_id: fraise?.espece_id ?? null,
+    variete_id: fraise?.variete_id ?? null,
+    date_plantation: '2024-11-01',
+    nombre_plants: nombrePlants,
+    date_arrachage: dateArrachage,
+    ...horo,
+  });
+  base.recevoir('UPDATE campagne SET plantation_id = ? WHERE id = ?', [PLANTATION_ETRANGERE, CAMPAGNE.fraise]);
+}
+
+/** Change la plantation rangée (synchro). */
+function plantationRecue(nombrePlants: number, dateArrachage: string | null): void {
+  base.recevoir('UPDATE plantation SET nombre_plants = ?, date_arrachage = ? WHERE id = ?', [nombrePlants, dateArrachage, PLANTATION_ETRANGERE]);
+}
+
+const plantsDeLaCampagne = (j: Journee): number[] =>
+  j.taches.filter((t) => t.culture.cibleId === CAMPAGNE.fraise).map((t) => (t.tache.taille.unite === 'plants' ? t.tache.taille.nombrePlants : Number.NaN));
+
+describe('T13c : une campagne qui pointe vers la plantation d’une autre ferme n’en reprend rien', () => {
+  it('ni son nombre de plants', async () => {
+    campagneSurPlantation(AUTRE_FERME, PLANTS_ETRANGERS, null);
+    const j = await journee();
+    expect(plantsDeLaCampagne(j), 'plants de la campagne de fraises').not.toContain(PLANTS_ETRANGERS);
+    expect(enTexte(j), 'nombre de plants de l’autre ferme dans la journée').not.toContain(String(PLANTS_ETRANGERS));
+    // Le nombre de plants de l'autre ferme ne change rien à la journée.
+    plantationRecue(12, null);
+    expect(enTexte(await journee())).toBe(enTexte(j));
+  });
+
+  it('ni sa date d’arrachage : la journée est la même, plantation arrachée ou non', async () => {
+    campagneSurPlantation(AUTRE_FERME, 400, null);
+    const nonArrachee = enTexte(await journee());
+    plantationRecue(400, '2026-09-01');
+    expect(enTexte(await journee()), 'date d’arrachage de l’autre ferme sans effet sur la journée').toBe(nonArrachee);
+  });
+
+  it('témoin : plantation de la ferme affichée, son nombre de plants est repris et son arrachage retire la campagne', async () => {
+    campagneSurPlantation(FERME, PLANTS_ETRANGERS, null);
+    const j = await journee();
+    expect(plantsDeLaCampagne(j)).toContain(PLANTS_ETRANGERS);
+    expect(j.taches.some((t) => t.cle === cleTache(CAMPAGNE.fraise, 'debut_recolte'))).toBe(true);
+    plantationRecue(PLANTS_ETRANGERS, '2026-09-01');
+    const arrachee = await journee();
+    expect(arrachee.taches.some((t) => t.culture.cibleId === CAMPAGNE.fraise), 'campagne arrachée : plus de tâche').toBe(false);
+    expect(arrachee.recoltesEnCours.some((c) => c.cibleId === CAMPAGNE.fraise), 'campagne arrachée : plus en récolte').toBe(false);
+  });
+});

@@ -11,14 +11,14 @@
  * la synchro : relue en entier.
  */
 import { createHash } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { creerPorte, SCHEMA_LOCAL, type PorteDonnees } from '@planif/sync';
 import type { Id } from '@planif/core';
 import { suivreJournee } from './cache.ts';
-import { calculerJournee, lireJournee, type Journee } from './calculs.ts';
+import { calculerJournee, lireJournee, type EvenementLu, type Journee, type TacheJour } from './calculs.ts';
 import { annulerSaisie, changerDate, marquerFait, marquerTravailFait, noterRecolte, type ContexteEcriture } from './ecritures.ts';
 import { creerBasePowerSync, type BasePowerSync, type SchemaJson } from './test/base-powersync.ts';
-import { ecrireGrandeFerme, FERME_GRANDE, UTILISATEUR_GRANDE } from './test/grande-ferme.ts';
+import { ecrireGrandeFerme, FERME_GRANDE, idSerie, UTILISATEUR_GRANDE } from './test/grande-ferme.ts';
 
 const AUJOURDHUI = '2026-09-30';
 
@@ -26,6 +26,8 @@ let base: BasePowerSync;
 let porte: PorteDonnees;
 /** Lectures des séries (`sqlSeries`, première requête d'une relecture complète) depuis la dernière remise à zéro. */
 let lecturesCompletes = 0;
+/** Posé : la prochaine écriture de l'écran échoue (T13c, relecture : annonce retirée). */
+let echouerEcriture = false;
 
 beforeAll(async () => {
   base = creerBasePowerSync(SCHEMA_LOCAL.toJSON() as SchemaJson);
@@ -36,6 +38,13 @@ beforeAll(async () => {
     lire: <T,>(sql: string, parametres?: readonly unknown[]) => {
       if (/FROM serie s\b/.test(sql)) lecturesCompletes++;
       return vraie.lire<T>(sql, parametres);
+    },
+    ecrireEnsemble: (ordres) => {
+      if (echouerEcriture) {
+        echouerEcriture = false;
+        return Promise.reject(new Error('écriture impossible (simulée)'));
+      }
+      return vraie.ecrireEnsemble(ordres);
     },
   };
 }, 120_000);
@@ -155,6 +164,222 @@ describe('T13c : relecture incrémentale identique à une relecture complète (g
       expect(empreinte(j)).toBe(empreinte(await complete()));
     } finally {
       arreter();
+    }
+  });
+});
+
+// ── Relecture du chef (T13c) : cas limites de la relecture incrémentale ──────────────────────
+
+/** Suit la journée de la grande ferme ; `prochaine(condition)` attend la prochaine journée remise qui la remplit. */
+function suivre() {
+  let derniere: Journee | null = null;
+  let attente: { condition: (j: Journee) => boolean; tenir: (j: Journee) => void } | null = null;
+  const arreter = suivreJournee(
+    porte,
+    FERME_GRANDE,
+    AUJOURDHUI,
+    (j) => {
+      derniere = j;
+      const a = attente;
+      if (a?.condition(j) === true) {
+        attente = null;
+        a.tenir(j);
+      }
+    },
+    (e) => {
+      throw e;
+    },
+  );
+  const prochaine = (condition: (j: Journee) => boolean) =>
+    new Promise<Journee>((tenir) => {
+      const d = derniere;
+      if (d !== null && condition(d)) tenir(d);
+      else attente = { condition, tenir };
+    });
+  return { prochaine, arreter, derniere: () => derniere };
+}
+
+type Suivi = ReturnType<typeof suivre>;
+
+/** Saisie de l'écran, journée remise qui la montre (relecture incrémentale), comparée à la relecture complète. */
+async function verifier(suivi: Suivi, nom: string, saisir: () => Promise<string>, vue: (j: Journee, id: string) => boolean): Promise<{ readonly j: Journee; readonly id: string }> {
+  const avant = suivi.derniere();
+  lecturesCompletes = 0;
+  const id = await saisir();
+  const j = await suivi.prochaine((x) => x !== avant && vue(x, id));
+  expect(lecturesCompletes, `${nom} : relecture incrémentale (séries non relues)`).toBe(0);
+  expect(empreinte(j), `${nom} : journée incrémentale = relecture complète`).toBe(empreinte(await complete()));
+  return { j, id };
+}
+
+const enTete = (j: Journee, id: string) => j.historique[0]?.evenement.id === id;
+const dansHistorique = (j: Journee, id: string) => j.historique.some((h) => h.evenement.id === id);
+
+function evenement(j: Journee, id: string): EvenementLu {
+  const e = j.historique.find((h) => h.evenement.id === id)?.evenement;
+  if (e === undefined) throw new Error(`saisie ${id} absente de l’historique`);
+  return e;
+}
+
+/** Une étape (ni début de récolte ni travail) à marquer faite, hors des clés déjà prises. */
+function etapeAFaire(j: Journee, prises: ReadonlySet<string>): TacheJour & { readonly tache: { readonly etape: 'semis_pepiniere' | 'semis_direct' | 'plantation' | 'arrachage' } } {
+  const t = j.taches.find((x) => x.tache.etape !== 'debut_recolte' && x.tache.etape !== 'travail' && !prises.has(x.cle));
+  if (t === undefined || t.tache.etape === 'debut_recolte' || t.tache.etape === 'travail') throw new Error('aucune étape à faire');
+  return t as TacheJour & { readonly tache: { readonly etape: 'semis_pepiniere' | 'semis_direct' | 'plantation' | 'arrachage' } };
+}
+
+let recus = 0;
+/** Intervention saisie sur un autre téléphone, reçue par la synchro (changement non annoncé). */
+function interventionRecue(serieId: string, date: string, horodatage: string): string {
+  const id = `0192f0c1-13c2-7000-8000-0000000c${(++recus).toString(16).padStart(4, '0')}`;
+  const ligne: Record<string, string | null> = {
+    id,
+    ferme_id: FERME_GRANDE,
+    type: 'intervention',
+    date,
+    horodatage,
+    auteur_id: UTILISATEUR_GRANDE,
+    source: 'tap',
+    serie_id: serieId,
+    campagne_id: null,
+    emplacement_ids: '[]',
+    note: null,
+    photos: '[]',
+    remplace_sorte: null,
+    remplace_evenement_id: null,
+    detail: JSON.stringify({ categorie: 'entretien', type: 'binage (autre téléphone)', outil: null }),
+    cree_le: horodatage,
+    origine_id: id,
+  };
+  const c = Object.keys(ligne);
+  base.recevoir(
+    `INSERT INTO evenement (${c.join(', ')}) VALUES (${c.map(() => '?').join(', ')})`,
+    c.map((k) => ligne[k] ?? null),
+  );
+  return id;
+}
+
+describe('T13c, relecture : cas limites de la relecture incrémentale (grande ferme)', { timeout: 120_000 }, () => {
+  afterEach(() => {
+    echouerEcriture = false;
+    vi.useRealTimers();
+  });
+
+  it('« Fait » puis annulation de ce « Fait » : la tâche revient à sa place, journée identique à une relecture complète', async () => {
+    const suivi = suivre();
+    try {
+      const j0 = await suivi.prochaine(() => true);
+      const t = etapeAFaire(j0, new Set());
+      const place = j0.taches.findIndex((x) => x.cle === t.cle);
+      const etape = t.tache.etape;
+      const { j: j1, id } = await verifier(
+        suivi,
+        '« Fait »',
+        () => marquerFait(ctx, t.culture, etape),
+        (x, i) => enTete(x, i) && !x.taches.some((y) => y.cle === t.cle),
+      );
+      const fait = evenement(j1, id);
+      const { j: j2 } = await verifier(
+        suivi,
+        'annulation du « Fait »',
+        () => annulerSaisie(ctx, fait),
+        (x) => !dansHistorique(x, id) && x.taches.some((y) => y.cle === t.cle),
+      );
+      expect(
+        j2.taches.findIndex((x) => x.cle === t.cle),
+        'la tâche revient à sa place',
+      ).toBe(place);
+      expect(empreinte(j2), 'même journée qu’avant le « Fait »').toBe(empreinte(await complete()));
+    } finally {
+      suivi.arreter();
+    }
+  });
+
+  it('correction, correction de la correction, annulation d’une correction : chaque fois identique à une relecture complète', async () => {
+    const suivi = suivre();
+    try {
+      const j0 = await suivi.prochaine(() => true);
+      const t = etapeAFaire(j0, new Set());
+      const etape = t.tache.etape;
+      const { j: j1, id: fait } = await verifier(suivi, '« Fait »', () => marquerFait(ctx, t.culture, etape), enTete);
+      const { j: j2, id: c1 } = await verifier(
+        suivi,
+        'correction',
+        () => changerDate(ctx, evenement(j1, fait), '2026-09-29'),
+        (x, i) => dansHistorique(x, i) && !dansHistorique(x, fait),
+      );
+      const { j: j3, id: c2 } = await verifier(
+        suivi,
+        'correction de la correction',
+        () => changerDate(ctx, evenement(j2, c1), '2026-09-28'),
+        (x, i) => dansHistorique(x, i) && !dansHistorique(x, c1),
+      );
+      expect(evenement(j3, c2).date).toBe('2026-09-28');
+      await verifier(
+        suivi,
+        'annulation d’une correction',
+        () => annulerSaisie(ctx, evenement(j3, c2)),
+        (x) => !dansHistorique(x, c2) && !dansHistorique(x, c1) && !dansHistorique(x, fait),
+      );
+    } finally {
+      suivi.arreter();
+    }
+  });
+
+  it('écriture qui échoue : l’annonce est retirée, la synchro suivante relit tout (identique à une relecture complète)', async () => {
+    const suivi = suivre();
+    try {
+      const j0 = await suivi.prochaine(() => true);
+      const t = etapeAFaire(j0, new Set());
+      const etape = t.tache.etape;
+      echouerEcriture = true;
+      await expect(marquerFait(ctx, t.culture, etape)).rejects.toThrow('écriture impossible');
+      // Une ligne d'une AUTRE culture arrive par la synchro : avec l'annonce restée, la relecture
+      // ne relirait que la culture de la saisie ratée et manquerait celle-ci.
+      const autre = j0.taches.find((x) => x.culture.cible.sorte === 'serie' && x.culture.cibleId !== t.culture.cibleId)?.culture.cibleId ?? idSerie(7);
+      lecturesCompletes = 0;
+      const avant = suivi.derniere();
+      const recu = interventionRecue(autre, AUJOURDHUI, new Date().toISOString());
+      const j = await suivi.prochaine((x) => x !== avant && dansHistorique(x, recu));
+      expect(lecturesCompletes, 'synchro après une écriture ratée : relecture complète').toBeGreaterThan(0);
+      expect(
+        j.taches.some((x) => x.cle === t.cle),
+        'la tâche de la saisie ratée reste à faire',
+      ).toBe(true);
+      expect(empreinte(j)).toBe(empreinte(await complete()));
+    } finally {
+      suivi.arreter();
+    }
+  });
+
+  it('fenêtre de 7 jours qui glisse (recalculerCultures rend null) : relecture complète, identique à une relecture complète', async () => {
+    // Horloge simulée (Date seule) : la fenêtre de l'historique glisse sans attendre.
+    const debut = Date.now();
+    vi.useFakeTimers({ toFake: ['Date'], now: debut });
+    const suivi = suivre();
+    try {
+      const j0 = await suivi.prochaine(() => true);
+      // Saisie d'une autre culture, datée d'avant la fenêtre mais saisie il y a presque 7 jours :
+      // dans l'historique pour 5 s encore.
+      const autre = j0.taches.find((x) => x.culture.cible.sorte === 'serie')?.culture.cibleId ?? idSerie(11);
+      const limite = new Date(debut - 7 * 86_400_000 + 5_000).toISOString();
+      const avant = suivi.derniere();
+      const recu = interventionRecue(autre, '2026-09-01', limite);
+      const j1 = await suivi.prochaine((x) => x !== avant && dansHistorique(x, recu));
+      expect(empreinte(j1)).toBe(empreinte(await complete()));
+
+      // 10 s plus tard, elle sort de la fenêtre ; « Fait » sur une autre culture.
+      vi.setSystemTime(debut + 10_000);
+      const t = etapeAFaire(j1, new Set(j1.taches.filter((x) => x.culture.cibleId === autre).map((x) => x.cle)));
+      expect(t.culture.cibleId, 'la saisie touche une autre culture que la ligne reçue').not.toBe(autre);
+      const etape = t.tache.etape;
+      lecturesCompletes = 0;
+      await marquerFait(ctx, t.culture, etape);
+      const j2 = await suivi.prochaine((x) => x !== j1 && !x.taches.some((y) => y.cle === t.cle) && !dansHistorique(x, recu));
+      expect(lecturesCompletes, 'saisie sortie de la fenêtre : relecture complète').toBeGreaterThan(0);
+      expect(empreinte(j2), 'journée identique à une relecture complète').toBe(empreinte(await complete()));
+    } finally {
+      suivi.arreter();
     }
   });
 });
