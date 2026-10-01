@@ -38,7 +38,7 @@
  *   puis id) est refusée ; le serveur écrit lui-même l'écart de stock d'un remplacement
  *   (references.ts, stock.ts). Contrat : recoltes-annulees.integration.test.ts.
  */
-import { ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
+import { ECRITURES_MAX_PAR_LOT, TAILLE_MAX_PAR_LOT, type Id } from '@planif/core';
 import {
   evenement,
   fermesDeLUtilisateur,
@@ -80,8 +80,8 @@ const MESSAGES: Readonly<Record<MotifRefus, string>> = {
   recolte_annulee: 'Cette récolte a été annulée : elle ne se corrige plus. Pour la rétablir, saisissez une nouvelle récolte.',
 };
 
-/** Corps HTTP au plus (au-delà : 200, chaque écriture refusée 'lot_trop_gros', rien d'écrit). */
-export const TAILLE_MAX_CORPS = 5 * 1_048_576;
+/** Corps HTTP au plus, la même borne que la porte du téléphone (au-delà : 200, chaque écriture refusée 'lot_trop_gros', rien d'écrit). */
+export const TAILLE_MAX_CORPS = TAILLE_MAX_PAR_LOT;
 /** Limite dure du corps HTTP (au-delà : 413, le serveur cesse de lire ; rien d'écrit, aucun refus). */
 export const TAILLE_MAX_CORPS_DURE = 8 * 1_048_576;
 /**

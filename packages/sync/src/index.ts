@@ -10,3 +10,5 @@ export { SCHEMA_LOCAL, TABLES_LOCALES, type NomTableLocale } from './schema.ts';
 export type * from './types.ts';
 /** Écritures au plus par transaction locale (`ecrireEnsemble`), comme par envoi à l'API (T10c). */
 export { ECRITURES_MAX_PAR_LOT } from '@planif/core';
+/** Octets UTF-8 au plus de `JSON.stringify(ordres)` par transaction locale, comme le corps d'un envoi (T10f). */
+export { TAILLE_MAX_PAR_LOT } from '@planif/core';

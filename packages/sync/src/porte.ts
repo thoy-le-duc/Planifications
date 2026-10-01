@@ -3,7 +3,7 @@
  * locale. Aucun réseau ici : une écriture change l'écran tout de suite, et part dans la file
  * d'envoi de PowerSync (voir envoi.ts) au retour du réseau.
  */
-import { creerGenerateurId, ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
+import { creerGenerateurId, ECRITURES_MAX_PAR_LOT, TAILLE_MAX_PAR_LOT, type Id } from '@planif/core';
 import type {
   BaseLocale,
   EvenementPrepare,
@@ -143,6 +143,12 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       // d'envoi : rejet avant d'ouvrir quoi que ce soit.
       if (ordres.length > ECRITURES_MAX_PAR_LOT) {
         throw new Error(`${String(ordres.length)} écritures en une transaction : ${String(ECRITURES_MAX_PAR_LOT)} au plus`);
+      }
+      // Même règle pour le poids : au-delà de 5 Mio, le serveur refuserait le lot (et au-delà de
+      // 8 Mio, son 413 bloquerait la file). Mesure en octets UTF-8, comme le serveur.
+      const octets = new TextEncoder().encode(JSON.stringify(ordres)).length;
+      if (octets > TAILLE_MAX_PAR_LOT) {
+        throw new Error(`transaction de ${String(octets)} octets : ${String(TAILLE_MAX_PAR_LOT)} au plus`);
       }
       // Une seule transaction locale : PowerSync l'envoie en un seul lot, que le serveur accepte ou
       // refuse en entier. Un ordre qui échoue rejette la promesse et annule tout.
