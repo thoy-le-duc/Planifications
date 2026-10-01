@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T24b : « Annuler » des itinéraires sûr face à une série supprimée ailleurs
+
+- **Fait** : « Annuler » dans « Mes itinéraires » vérifie, pour chaque série touchée, l'état d'après annulation comme la fin de lot du serveur, même quand la ligne série n'est pas ramenée. Plus aucune occupation n'est réactivée sous une série supprimée ailleurs.
+- **Décidé** : la vérification `etatSerieValide` est partagée entre le formulaire de série et l'écran des itinéraires (`apps/web/src/donnees/etat-serie.ts`), chargée à la demande.
+- **Bloquant** : rien. Suites dans T24c, des défauts antérieurs vus en relecture : types d'intervention changés ailleurs pendant les 10 s d'annulation, et course entre lecture et écriture.
+
 ## 2026-10-01 — T12b : sélecteur de semaine et annulation sûre dans le formulaire de série
 
 - **Fait** :
