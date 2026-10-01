@@ -301,24 +301,27 @@ const SQL_OCCUPATIONS = sqlOccupations(
 
 /**
  * Chaînes du journal local, en tête de chaque requête qui applique `EN_VIGUEUR` (paramètre : la
- * ferme). Seuls les remplacements (corrections, annulations : peu de lignes) montent jusqu'à leur
- * origine, par l'identifiant ; un parent absent de la base locale sert de clé de chaîne, comme
- * dans `enVigueur`. Profondeur bornée (données corrompues : jamais de boucle sans fin).
+ * ferme). Une ligne reçue du serveur porte l'origine de sa chaîne (`origine_id`, tenue par la
+ * base, T10h) : elle est lue telle quelle. Seules les saisies locales pas encore synchronisées
+ * (sans `origine_id`) montent, par l'identifiant, jusqu'au premier parent qui la porte ou jusqu'à
+ * l'origine (décision 3 du chef : une chaîne de 1 000 corrections ne se remonte pas). Un parent
+ * absent de la base locale sert de clé de chaîne, comme dans `enVigueur`. Profondeur bornée
+ * (données corrompues : jamais de boucle sans fin).
  *   - `remplacement` : chaque correction ou annulation, avec l'origine de sa chaîne ;
  *   - `gagnant` : par chaîne sans annulation, la clé (horodatage|id) de la correction la plus
  *     récente.
  */
-const CHAINES = `WITH RECURSIVE montee(id, sorte, horodatage, origine, profondeur) AS (
-    SELECT id, remplace_sorte, horodatage, remplace_evenement_id, 0 FROM evenement
+const CHAINES = `WITH RECURSIVE montee(id, sorte, horodatage, origine, fini, profondeur) AS (
+    SELECT id, remplace_sorte, horodatage, coalesce(origine_id, remplace_evenement_id), origine_id IS NOT NULL, 0 FROM evenement
     WHERE ferme_id = ? AND remplace_evenement_id IS NOT NULL
     UNION ALL
-    SELECT m.id, m.sorte, m.horodatage, p.remplace_evenement_id, m.profondeur + 1
+    SELECT m.id, m.sorte, m.horodatage, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL, m.profondeur + 1
     FROM montee m JOIN evenement p ON p.id = m.origine
-    WHERE p.remplace_evenement_id IS NOT NULL AND m.profondeur < 1000
+    WHERE NOT m.fini AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL) AND m.profondeur < 1000
   ),
   remplacement AS (
     SELECT m.id, m.sorte, m.horodatage, m.origine FROM montee m LEFT JOIN evenement p ON p.id = m.origine
-    WHERE p.remplace_evenement_id IS NULL
+    WHERE m.fini OR (p.origine_id IS NULL AND p.remplace_evenement_id IS NULL)
   ),
   gagnant AS (
     SELECT MAX(horodatage || '|' || id) AS cle FROM remplacement
