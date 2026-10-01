@@ -84,7 +84,8 @@
  *       `detail` > 8 Kio (8 192 octets UTF-8 de JSON.stringify du détail lu), clé inconnue dans
  *       `detail` (hors des clés du Detail* de T01 pour ce type) → 'ecriture_invalide'.
  *       Les bornes elles-mêmes (4 000, 20, 2 000) sont acceptées.
- *       Plus de 500 écritures dans un lot, ou corps HTTP > 5 Mio (5 × 1 048 576 octets) → 200
+ *       Plus de 500 écritures dans un lot, ou corps HTTP > 6 Mio (6 × 1 048 576 octets ; 5 Mio avant
+ *       T10f, qui laisse une marge au-dessus des 5 Mio de la porte) → 200
  *       avec un refus 'lot_trop_gros' pour chaque écriture, rien d'écrit (T10d : ni 400 ni 413,
  *       qui bloqueraient la file PowerSync ; 500 écritures passent).
  *       `donnees` dont le JSON dépasse 16 Kio : le refus est enregistré, colonne donnees nulle.
@@ -712,9 +713,9 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
       expect(await refusDeLUtilisateur(u.id)).toBe(501);
     }, 60_000);
 
-    it('corps de plus de 5 Mio : 200, refus lot_trop_gros, rien d’écrit (T10d)', async () => {
+    it('corps de plus de 6 Mio (T10f, 5 Mio en T10d) : 200, refus lot_trop_gros, rien d’écrit (T10d)', async () => {
       const u = await nouveauMembre();
-      const e = putRecolte(u.id, ferme, 1, { note: 'x'.repeat(5 * 1_048_576 + 1_000) });
+      const e = putRecolte(u.id, ferme, 1, { note: 'x'.repeat(6 * 1_048_576 + 1_000) });
       const res = await envoyer({ ecritures: [e] }, u.jeton);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ refus: [{ table: 'evenement', id: e.id, motif: 'lot_trop_gros' }] });

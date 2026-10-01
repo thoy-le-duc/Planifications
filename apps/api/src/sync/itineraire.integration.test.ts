@@ -268,7 +268,7 @@ decrireAvecBase('T23')('T23 : POST /sync/upload accepte les itinéraires et les 
   beforeAll(async () => {
     base = await creerBaseJetable('t23_itineraire');
     cles = { active: await genererCleSignature('cle-t23'), precedentes: [] };
-    app = creerApp({ db: drizzle(base.pool), expediteur: expediteurMuet, cles, emetteur: EMETTEUR, audience: AUDIENCE, maintenant });
+    app = creerApp({ db: drizzle(base.pool), expediteur: expediteurMuet, cles, emetteur: EMETTEUR, audience: AUDIENCE, maintenant, envoisMaxParMinute: 1_000_000 });
     ferme = await creerFerme(base.pool, 'Jardins de Garonne');
     secondeFerme = await creerFerme(base.pool, 'Second site de Théophane');
     autreFerme = await creerFerme(base.pool, 'Ferme voisine');

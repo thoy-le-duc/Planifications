@@ -3,7 +3,7 @@
  * locale. Aucun réseau ici : une écriture change l'écran tout de suite, et part dans la file
  * d'envoi de PowerSync (voir envoi.ts) au retour du réseau.
  */
-import { creerGenerateurId, ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
+import { creerGenerateurId, ECRITURES_MAX_PAR_LOT, TAILLE_MAX_PAR_LOT, type Id } from '@planif/core';
 import type {
   BaseLocale,
   EvenementPrepare,
@@ -59,6 +59,20 @@ function refusDepuisLigne(l: LigneRefus): RefusSynchro {
     message: l.message,
     creeLe: l.cree_le,
   };
+}
+
+/**
+ * Rejette une transaction locale plus lourde que TAILLE_MAX_PAR_LOT (octets UTF-8 de
+ * `JSON.stringify(ordres)`), avant d'ouvrir quoi que ce soit. Le serveur refuse un corps de plus
+ * de 6 Mio ('lot_trop_gros', saisie perdue) et coupe au-delà de 8 Mio (413, file bloquée) ; le
+ * corps envoyé peut peser plus que les ordres (PowerSync y range toutes les colonnes de la
+ * ligne) : la porte s'arrête donc à 5 Mio, pour garder la marge.
+ */
+function verifierTaille(ordres: readonly OrdreEcriture[]): void {
+  const octets = new TextEncoder().encode(JSON.stringify(ordres)).length;
+  if (octets > TAILLE_MAX_PAR_LOT) {
+    throw new Error(`transaction de ${String(octets)} octets : ${String(TAILLE_MAX_PAR_LOT)} au plus`);
+  }
 }
 
 export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnees {
@@ -131,6 +145,7 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     lire: <T>(sql: string, parametres?: readonly unknown[]) => base.getAll<T>(sql, parametres ?? []),
 
     async ecrire(sql, parametres) {
+      verifierTaille([{ sql, parametres: parametres ?? [] }]);
       await base.writeTransaction(async (tx) => {
         await tx.execute(sql, parametres ?? []);
       });
@@ -144,6 +159,8 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       if (ordres.length > ECRITURES_MAX_PAR_LOT) {
         throw new Error(`${String(ordres.length)} écritures en une transaction : ${String(ECRITURES_MAX_PAR_LOT)} au plus`);
       }
+      // Même règle pour le poids (verifierTaille).
+      verifierTaille(ordres);
       // Une seule transaction locale : PowerSync l'envoie en un seul lot, que le serveur accepte ou
       // refuse en entier. Un ordre qui échoue rejette la promesse et annule tout.
       await base.writeTransaction(async (tx) => {
@@ -155,6 +172,7 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
 
     async saisirEvenement(saisie: SaisieEvenement): Promise<Id<'Evenement'>> {
       const { id, ordre } = preparerSaisie(saisie);
+      verifierTaille([ordre]);
       await base.writeTransaction(async (tx) => {
         await tx.execute(ordre.sql, ordre.parametres);
       });

@@ -24,7 +24,7 @@
  *   n'est pas recopié (contrainte refus_synchro_sans_doublon).
  * - Rien de ce que le téléphone envoie ne donne un 500 : textes du refus nettoyés (U+0000) et
  *   tronqués, données trop grosses non conservées, erreur de données de la base = refus.
- * - Limites (T10d) : plus de 500 écritures ou corps de plus de 5 Mio → 200, refus
+ * - Limites (T10d, T10f) : plus de 500 écritures ou corps de plus de 6 Mio → 200, refus
  *   'lot_trop_gros' (avant toute autre règle), rien d'écrit : la file PowerSync avance toujours.
  *   Un refus par écriture plausible (dédupliqué), une seule ligne récapitulative pour le reste :
  *   un envoi forgé ne se multiplie pas en milliers de refus (relecture de sécurité).
@@ -33,6 +33,8 @@
  * - T10d : une ligne d'une autre ferme (référence, PATCH, DELETE) se comporte exactement comme
  *   une ligne inexistante ; seul un ferme_id étranger déclaré par l'écriture elle-même donne
  *   'ferme_interdite'.
+ * - T10f : au plus ENVOIS_MAX_PAR_MINUTE envois par utilisateur et par minute glissante ; au-delà,
+ *   429 avec Retry-After, rien d'écrit ni de refus enregistré. Contrat : debit.integration.test.ts.
  * - T10g (Q20) : une récolte annulée ne se corrige plus, et une annulation ne s'annule pas
  *   ('recolte_annulee') ; une correction plus ancienne que celle en vigueur (heure du téléphone,
  *   puis id) est refusée ; le serveur écrit lui-même l'écart de stock d'un remplacement
@@ -54,6 +56,7 @@ import { Hono } from 'hono';
 import { garde, type VariablesAuthentifiees } from '../auth/garde.ts';
 import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
+import { creerLimiteMemoire } from '../limites.ts';
 import { lireEvenement } from './evenement.ts';
 import type { MotifRefus, Refus } from './motifs.ts';
 import { verifierCorrection, verifierReferences, verifierRemplacementRecolte, type TransactionDb } from './references.ts';
@@ -76,12 +79,16 @@ const MESSAGES: Readonly<Record<MotifRefus, string>> = {
   table_interdite: 'Modification refusée : cette donnée ne se modifie pas depuis le téléphone.',
   ecriture_invalide: 'Saisie non enregistrée, données invalides',
   lot_trop_gros:
-    'Saisie non enregistrée : envoi trop volumineux (plus de 500 saisies ou de 5 Mio en une fois). Ressaisissez-la.',
+    'Saisie non enregistrée : envoi trop volumineux (plus de 500 saisies ou de 6 Mio en une fois). Ressaisissez-la.',
   recolte_annulee: 'Cette récolte a été annulée : elle ne se corrige plus. Pour la rétablir, saisissez une nouvelle récolte.',
 };
 
-/** Corps HTTP au plus (au-delà : 200, chaque écriture refusée 'lot_trop_gros', rien d'écrit). */
-export const TAILLE_MAX_CORPS = 5 * 1_048_576;
+/**
+ * Corps HTTP au plus (au-delà : 200, chaque écriture refusée 'lot_trop_gros', rien d'écrit). La
+ * porte du téléphone s'arrête à 5 Mio d'ordres (TAILLE_MAX_PAR_LOT) ; le corps envoyé peut peser
+ * plus (PowerSync y range toutes les colonnes de la ligne) : 6 Mio laissent la marge (T10f).
+ */
+export const TAILLE_MAX_CORPS = 6 * 1_048_576;
 /** Limite dure du corps HTTP (au-delà : 413, le serveur cesse de lire ; rien d'écrit, aucun refus). */
 export const TAILLE_MAX_CORPS_DURE = 8 * 1_048_576;
 /**
@@ -91,6 +98,13 @@ export const TAILLE_MAX_CORPS_DURE = 8 * 1_048_576;
 export const ECRITURES_MAX_DURES = 2_000;
 /** Écritures par lot au plus (au-delà : 'lot_trop_gros' comme un corps trop gros) : la même constante que la porte du téléphone. */
 export { ECRITURES_MAX_PAR_LOT } from '@planif/core';
+/**
+ * Envois au plus par utilisateur et par minute glissante (T10f). Un téléphone normal n'en fait que
+ * quelques-uns ; en vidant une longue file au retour du réseau, il est ralenti, jamais bloqué
+ * (429 : PowerSync renvoie plus tard). Compté en mémoire, par processus d'API.
+ */
+export const ENVOIS_MAX_PAR_MINUTE = 120;
+const MINUTE = 60_000;
 /** Longueur au plus de nom_table, ligne_id et message dans refus_synchro. */
 const LONGUEUR_MAX_TEXTE_REFUS = 200;
 /** `donnees` conservées dans refus_synchro jusqu'à cette taille (octets UTF-8 du JSON). */
@@ -286,6 +300,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
   const { db } = ctx;
   const routes = new Hono<Env>();
   routes.use('/sync/*', garde(ctx));
+  // Par utilisateur authentifié (pas par jeton ni par adresse), propre à cette application.
+  const debit = creerLimiteMemoire(ctx.envoisMaxParMinute, MINUTE);
 
   /** La ligne existante `id` a-t-elle exactement ces valeurs ? (renvoi d'un lot déjà écrit) */
   async function identique(tx: TransactionDb, l: LigneEvenement): Promise<boolean> {
@@ -525,6 +541,13 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
   }
 
   routes.post('/sync/upload', async (c) => {
+    // T10f : avant de lire le corps, pour que toute requête compte (un corps invalide aussi).
+    // Rien d'écrit, aucun refus : la file du téléphone renverra la même transaction.
+    const attente = debit.enregistrer(c.get('utilisateurId'), ctx.maintenant().getTime());
+    if (attente !== null) {
+      c.header('Retry-After', String(Math.min(attente, 60)));
+      return c.json({ erreur: 'trop_de_requetes' }, 429);
+    }
     const octets = await lireCorpsBorne(c.req.raw, TAILLE_MAX_CORPS_DURE);
     if (octets === null) return c.json({ erreur: 'corps_trop_volumineux' }, 413);
     const corps = lireJson(octets);
