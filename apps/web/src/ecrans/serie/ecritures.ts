@@ -328,40 +328,54 @@ export async function ramenerSerie(ctx: ContexteEcriture, serieId: string, cible
   return { serieId, lignes };
 }
 
-/** Références d'une série, revérifiées par le serveur quand l'une d'elles change. */
-const REFERENCES_SERIE = [
-  { colonne: 'espece_id', table: 'espece' },
-  { colonne: 'variete_id', table: 'variete' },
-  { colonne: 'itineraire_id', table: 'itineraire' },
-  { colonne: 'saison_id', table: 'saison' },
-] as const;
+/** Une ligne de `table` existe sur ce téléphone et n'est pas supprimée. */
+async function vivante(porte: PorteDonnees, table: 'espece' | 'variete' | 'itineraire' | 'saison' | 'emplacement', id: Valeur): Promise<boolean> {
+  if (id === null) return false;
+  const l = await porte.lire<Ligne>(`SELECT id FROM ${table} WHERE id = ? AND supprime_le IS NULL`, [id]);
+  return l.length > 0;
+}
 
 /**
- * L'état d'une série après une écriture, vérifié comme la fin de lot du serveur
- * (apps/api/src/sync/serie.ts ; décision 10 de T12b) :
+ * L'état d'une série après une écriture (`apres`), à partir de l'état actuel (`avant`), vérifié
+ * comme le serveur (apps/api/src/sync/serie.ts : `modifier`, `verifierReferencesSerie`,
+ * `verifierEmplacement`, fin de lot ; décision 10 de T12b) :
  *   - la série passe validerSerie ;
- *   - si l'espèce, la variété, l'itinéraire ou la saison change par rapport à `avant`, chacune de
- *     ces références existe et n'est pas supprimée sur ce téléphone (le serveur les revérifie
- *     alors toutes ; inchangées, une variété supprimée depuis reste acceptée, N2) ;
+ *   - références : un rétablissement (supprime_le non nul → nul) compte comme un changement de
+ *     toutes (B5). Saison changée : elle vit. Espèce, variété ou itinéraire changé : l'espèce et la
+ *     variété vivent, l'itinéraire existe, et vit s'il change vraiment (inchangées, une variété
+ *     supprimée depuis reste acceptée, N2) ;
  *   - aucune occupation active sous une série supprimée ;
- *   - chaque occupation active passe validerOccupation avec la série d'après.
+ *   - chaque occupation active passe validerOccupation avec la série d'après, et son emplacement
+ *     vit si elle en change ou redevient active (B6).
  */
-export async function etatSerieValide(porte: PorteDonnees, avant: Ligne, serie: Ligne, occupations: readonly Ligne[]): Promise<boolean> {
-  const r = validerSerie({ ...serie });
+export async function etatSerieValide(porte: PorteDonnees, avant: EtatSerie, apres: EtatSerie): Promise<boolean> {
+  const r = validerSerie({ ...apres.serie });
   if (!r.ok) return false;
-  const actives = occupations.filter((o) => o.supprime_le === null);
+  const actives = apres.occupations.filter((o) => o.supprime_le === null);
   if (r.valeur.supprimeLe !== null) return actives.length === 0;
   if (!actives.every((o) => validerOccupation({ ...o }, r.valeur, { datesDeLaSerie: true }).ok)) return false;
-  if (REFERENCES_SERIE.every(({ colonne }) => (serie[colonne] ?? null) === (avant[colonne] ?? null))) return true;
-  const presentes = await Promise.all(
-    REFERENCES_SERIE.map(async ({ colonne, table }) => {
-      const id = serie[colonne] ?? null;
-      if (id === null) return colonne === 'variete_id';
-      const l = await porte.lire<Ligne>(`SELECT id FROM ${table} WHERE id = ? AND supprime_le IS NULL`, [id]);
-      return l.length > 0;
-    }),
-  );
-  return presentes.every(Boolean);
+
+  const s = apres.serie;
+  const retablie = (avant.serie.supprime_le ?? null) !== null;
+  const change = (c: string) => retablie || (s[c] ?? null) !== (avant.serie[c] ?? null);
+  const verifications: Promise<boolean>[] = [];
+  if (change('saison_id')) verifications.push(vivante(porte, 'saison', s.saison_id ?? null));
+  if (change('espece_id') || change('variete_id') || change('itineraire_id')) {
+    verifications.push(vivante(porte, 'espece', s.espece_id ?? null));
+    if ((s.variete_id ?? null) !== null) verifications.push(vivante(porte, 'variete', s.variete_id ?? null));
+    const itineraireChange = (s.itineraire_id ?? null) !== (avant.serie.itineraire_id ?? null);
+    verifications.push(
+      itineraireChange
+        ? vivante(porte, 'itineraire', s.itineraire_id ?? null)
+        : porte.lire<Ligne>('SELECT id FROM itineraire WHERE id = ?', [s.itineraire_id ?? null]).then((l) => l.length > 0),
+    );
+  }
+  for (const o of actives) {
+    const avantO = avant.occupations.find((x) => x.id === o.id);
+    const redevient = avantO?.supprime_le !== null;
+    if (redevient || o.emplacement_id !== avantO.emplacement_id) verifications.push(vivante(porte, 'emplacement', o.emplacement_id ?? null));
+  }
+  return (await Promise.all(verifications)).every(Boolean);
 }
 
 /** Message d'une annulation incomplète (N5, règle de T24) : contient « modifié entre-temps ». */
@@ -409,7 +423,7 @@ export async function defaireSerie(ctx: ContexteEcriture, ecriture: EcritureSeri
     const i = ecriture.lignes.findIndex((l) => l.table === 'occupation' && l.id === o.id);
     return i < 0 ? o : { ...o, ...aRemettre(decisions[i]) };
   });
-  const serieLaissee = decisionSerie === 'laissee' || !(await etatSerieValide(ctx.porte, courant.serie, serieApres, occupationsApres));
+  const serieLaissee = decisionSerie === 'laissee' || !(await etatSerieValide(ctx.porte, courant, { serie: serieApres, occupations: occupationsApres }));
 
   const ordres: OrdreEcriture[] = [];
   let laissees = 0;
