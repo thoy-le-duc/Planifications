@@ -128,7 +128,7 @@ import {
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { creerApp } from '../app.ts';
-import { demarrerSmtpFactice } from './test/smtp-factice.ts';
+import { MARQUEUR_RELAIS, demarrerSmtpFactice } from './test/smtp-factice.ts';
 import {
   expediteurSmtp,
   genererCleSignature,
@@ -407,6 +407,50 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
         for (const forme of formes) {
           expect(journaux.includes(forme), `mot de passe visible dans les journaux :\n${journaux}`).toBe(false);
           expect(corps.includes(forme), `mot de passe visible dans la réponse :\n${corps}`).toBe(false);
+        }
+      } finally {
+        for (const e of espions) e.mockRestore();
+        await relais.fermer();
+      }
+    });
+
+    // Contre-relecture T09c : la réponse du serveur n'est jamais recopiée dans ce que onError
+    // journalise. Un refus de destinataire (550) qui répète l'adresse ne doit faire apparaître
+    // ni l'adresse ni le texte libre du relais (MARQUEUR_RELAIS) dans les journaux.
+    it('contre-relecture T09c : /auth/code, destinataire refusé (550) : ni l’adresse ni le texte du relais dans les journaux', async () => {
+      const relais = await demarrerSmtpFactice({ refuserDestinataire: true });
+      const espions = (['error', 'warn', 'log', 'info', 'debug'] as const).map((niveau) =>
+        vi.spyOn(console, niveau).mockImplementation(() => undefined),
+      );
+      const email = emailNeuf();
+      try {
+        const app = creerApp({
+          db: drizzle(pool),
+          expediteur: expediteurSmtp({
+            hote: '127.0.0.1',
+            port: relais.port,
+            securite: 'aucune',
+            expediteur: 'Planifications <connexion@planif.fr>',
+            delaiMs: 3_000,
+          }),
+          cles: { active: cleA, precedentes: [] },
+          emetteur: EMETTEUR,
+          audience: AUDIENCE,
+          maintenant,
+        });
+        const res = await app.request('/auth/code', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const corps = await res.text();
+        expect(relais.commandes).toContain('RCPT');
+        const journaux = espions.flatMap((e) => e.mock.calls.map((args) => args.map((a) => inspect(a, { depth: 5 })).join(' '))).join('\n');
+        // Le refus a bien été journalisé (sinon le test ne prouverait rien).
+        expect(journaux).toMatch(/SMTP/);
+        for (const interdit of [email, MARQUEUR_RELAIS]) {
+          expect(journaux.includes(interdit), `« ${interdit} » visible dans les journaux :\n${journaux}`).toBe(false);
+          expect(corps.includes(interdit), `« ${interdit} » visible dans la réponse :\n${corps}`).toBe(false);
         }
       } finally {
         for (const e of espions) e.mockRestore();

@@ -150,6 +150,37 @@ describe('preparerExpediteur (T09c)', () => {
     expect(relais.authentifications).toHaveLength(0);
   });
 
+  // Contre-relecture T09c : un journal défaillant (sortie d'erreur fermée, journal qui lève)
+  // ne doit pas produire de promesse rejetée non gérée : Node arrêterait l'API.
+  it('contre-relecture T09c : journal qui lève, aucune promesse rejetée non gérée, l’expéditeur est rendu', async () => {
+    const nonGerees: unknown[] = [];
+    const ecouter = (raison: unknown): void => {
+      nonGerees.push(raison);
+    };
+    // Retire temporairement les écouteurs de Vitest : ce test mesure lui-même les rejets non gérés.
+    const precedents = process.listeners('unhandledRejection');
+    process.removeAllListeners('unhandledRejection');
+    process.on('unhandledRejection', ecouter);
+    try {
+      const port = await portFerme();
+      let appels = 0;
+      const expediteur = await preparerExpediteur(smtp(port), () => {
+        appels += 1;
+        throw new Error('journal en panne');
+      });
+      expect(typeof expediteur.envoyer).toBe('function');
+      await vi.waitFor(() => {
+        expect(appels).toBeGreaterThanOrEqual(1);
+      });
+      // Laisse à Node le temps de signaler un rejet non géré.
+      await new Promise((fin) => setTimeout(fin, 200));
+      expect(nonGerees.map((r) => (r instanceof Error ? r.message : String(r)))).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', ecouter);
+      for (const p of precedents) process.on('unhandledRejection', p);
+    }
+  });
+
   it('console : aucun relais contacté', async () => {
     const relais = await serveur();
     const { lignes, journal } = journalEspion();

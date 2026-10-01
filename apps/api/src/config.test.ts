@@ -309,6 +309,18 @@ describe('relecture T09c : SMTP_EXPEDITEUR est UNE adresse', () => {
   });
 });
 
+describe('contre-relecture T09c : SMTP_MOT_DE_PASSE d’au moins 12 caractères', () => {
+  it.each(['a', 'court', '12345678901', 'onze-carac!'])('« %s » (moins de 12) refusé en nommant la variable, sans afficher la valeur', async (mdp) => {
+    const erreur = lireConfig({ ...ENV_SMTP, SMTP_MOT_DE_PASSE: mdp });
+    await expect(erreur).rejects.toThrow(/SMTP_MOT_DE_PASSE/);
+    await expect(erreur).rejects.toSatisfy((e: unknown) => e instanceof Error && !e.message.includes(`« ${mdp} »`) && !(mdp.length >= 5 && e.message.includes(mdp)));
+  });
+
+  it.each(['123456789012', 'mot-de-passe-de-test'])('témoin : « %s » (12 ou plus) accepté', async (mdp) => {
+    expect((await lireConfig({ ...ENV_SMTP, SMTP_MOT_DE_PASSE: mdp })).courriel).toMatchObject({ type: 'smtp', motDePasse: mdp });
+  });
+});
+
 describe('lireConfig : PROXY_DE_CONFIANCE (T09b)', () => {
   it('absente, vide ou 0 : l’adresse IP est celle de la socket', async () => {
     expect((await lireConfig(ENV_DEV)).proxyDeConfiance).toBe(false);

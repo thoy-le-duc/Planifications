@@ -9,10 +9,15 @@
  *   muet                 accepte la connexion mais n'envoie jamais la bannière 220
  *   sansAuth             n'annonce pas AUTH dans la réponse à EHLO
  *   mecanismes           mécanismes AUTH annoncés (défaut « PLAIN LOGIN ») : force PLAIN ou LOGIN
- *   authEcho             (T09c) refuse l'authentification par « 535 » en RÉPÉTANT la dernière
- *                        ligne reçue (base64) et sa version décodée : un relais bavard ou
- *                        malveillant. Sert à vérifier que le mot de passe ne fuit dans aucune
- *                        erreur.
+ *   authEcho             (T09c) refuse l'authentification par « 535 » en RÉPÉTANT ce qu'il a
+ *                        reçu, suivi de MARQUEUR_RELAIS : un relais bavard ou malveillant. Sert
+ *                        à vérifier que ni le mot de passe ni le texte libre du serveur ne
+ *                        fuient dans une erreur. Formes :
+ *                          true | 'ligne'   la ligne reçue (base64) et sa version décodée
+ *                          'sans-egal'      le base64 sans « = » final
+ *                          'deux-lignes'    le base64 coupé en deux, réponse « 535-… » puis « 535 … »
+ *                          'hex'            les octets décodés en hexadécimal
+ *   refuserDestinataire  la réponse 550 répète l'adresse refusée, suivie de MARQUEUR_RELAIS
  */
 import { createServer, type Socket } from 'node:net';
 import type { AddressInfo } from 'node:net';
@@ -48,8 +53,11 @@ export interface OptionsSmtpFactice {
   readonly muet?: boolean;
   readonly sansAuth?: boolean;
   readonly mecanismes?: 'PLAIN' | 'LOGIN' | 'PLAIN LOGIN';
-  readonly authEcho?: boolean;
+  readonly authEcho?: boolean | 'ligne' | 'sans-egal' | 'deux-lignes' | 'hex';
 }
+
+/** Texte libre unique que le relais factice insère dans ses réponses d'erreur (T09c). */
+export const MARQUEUR_RELAIS = 'MARQUEUR-RELAIS-q8Zt3';
 
 function decoder64(b64: string): string {
   return Buffer.from(b64.trim(), 'base64').toString('utf8');
@@ -92,10 +100,27 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
 
     /** Fin d'une authentification : 235, ou 535 qui répète la ligne reçue (authEcho). */
     const finAuth = (ligneRecue: string) => {
-      if (options.authEcho === true) {
-        const decode = decoder64(ligneRecue.split(' ').at(-1) ?? '').replaceAll('\u0000', ' ');
-        repondre(`535 5.7.8 refus pour <${ligneRecue}> (${decode})`);
-        return;
+      const forme = options.authEcho === true ? 'ligne' : options.authEcho;
+      if (forme !== undefined && forme !== false) {
+        const jeton = ligneRecue.split(' ').at(-1) ?? '';
+        const octets = Buffer.from(jeton.trim(), 'base64');
+        switch (forme) {
+          case 'ligne':
+            repondre(`535 5.7.8 refus pour <${ligneRecue}> (${octets.toString('utf8').replaceAll('\u0000', ' ')}) ${MARQUEUR_RELAIS}`);
+            return;
+          case 'sans-egal':
+            repondre(`535 5.7.8 refus pour <${jeton.replace(/=+$/, '')}> ${MARQUEUR_RELAIS}`);
+            return;
+          case 'deux-lignes': {
+            const milieu = Math.floor(jeton.length / 2);
+            repondre(`535-5.7.8 refus pour <${jeton.slice(0, milieu)}`);
+            repondre(`535 5.7.8 ${jeton.slice(milieu)}> ${MARQUEUR_RELAIS}`);
+            return;
+          }
+          case 'hex':
+            repondre(`535 5.7.8 refus pour <${octets.toString('hex')}> ${MARQUEUR_RELAIS}`);
+            return;
+        }
       }
       repondre('235 2.7.0 Authentification reussie');
     };
@@ -179,7 +204,7 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
           return;
         case 'RCPT':
           if (options.refuserDestinataire === true) {
-            repondre('550 5.1.1 Destinataire refuse');
+            repondre(`550 5.1.1 <${sansChevrons(argument.replace(/^TO:/i, ''))}> refuse ${MARQUEUR_RELAIS}`);
             return;
           }
           rcptTo.push(sansChevrons(argument.replace(/^TO:/i, '')));

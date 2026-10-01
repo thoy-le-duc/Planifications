@@ -59,6 +59,7 @@ import {
   lireEnTetes,
   lireHtml,
   lireTexte,
+  MARQUEUR_RELAIS,
   portFerme,
   typesDesParties,
   type ServeurSmtpFactice,
@@ -414,4 +415,76 @@ describe('relecture T09c : aucune fuite du mot de passe dans les erreurs SMTP', 
       expect(smtp.messages).toHaveLength(0);
     });
   }
+});
+
+// ── Contre-relecture T09c : la réponse du serveur n'est JAMAIS recopiée dans l'erreur ─────────
+//
+// Nettoyer le mot de passe à la main ne suffit pas : le relais peut le répéter sous une forme
+// imprévue (base64 sans « = », coupé sur deux lignes de réponse, hexadécimal…). Règle : l'erreur
+// rejetée par verifier() ou envoyer() ne recopie RIEN du texte libre de la réponse du serveur.
+// Elle peut nommer le relais (hôte:port) et le code (« 535 », « EAUTH », « 550 »…), rien d'autre
+// venu du serveur. Mesuré par util.inspect(erreur, { depth: 5 }) : ni MARQUEUR_RELAIS (texte
+// libre que le relais factice insère dans chaque réponse d'erreur), ni aucune forme du secret,
+// ni (refus de destinataire) l'adresse refusée.
+
+describe('contre-relecture T09c : rien de la réponse du serveur dans l’erreur', () => {
+  const UTILISATEUR = 'relais-planif';
+  // 16 caractères : les formes base64 ont un « = » final, que le relais va retirer.
+  const SECRET = 'Mdp-Brevo-T09c-x';
+  const plain = Buffer.from(`\u0000${UTILISATEUR}\u0000${SECRET}`);
+  const seul = Buffer.from(SECRET);
+  const INTERDITS = [
+    ['marqueur du relais', MARQUEUR_RELAIS],
+    ['mot de passe en clair', SECRET],
+    ['base64 PLAIN', plain.toString('base64')],
+    ['base64 PLAIN sans =', plain.toString('base64').replace(/=+$/, '')],
+    ['base64 du mot de passe', seul.toString('base64')],
+    ['base64 du mot de passe sans =', seul.toString('base64').replace(/=+$/, '')],
+    ['hex PLAIN', plain.toString('hex')],
+    ['hex du mot de passe', seul.toString('hex')],
+    // Deux moitiés du base64 coupé : la première suffit à trahir la fuite.
+    ['moitié de base64 PLAIN', plain.toString('base64').slice(0, Math.floor(plain.toString('base64').length / 2))],
+    ['moitié de base64 du mot de passe', seul.toString('base64').slice(0, Math.floor(seul.toString('base64').length / 2))],
+  ] as const;
+
+  async function erreurDe(action: () => Promise<void>): Promise<unknown> {
+    try {
+      await action();
+    } catch (erreur) {
+      return erreur;
+    }
+    throw new Error('l’action devait échouer (le relais refuse)');
+  }
+
+  function rienDuServeur(erreur: unknown, port: number, autres: readonly (readonly [string, string])[] = []): void {
+    const vu = inspect(erreur, { depth: 5 });
+    expect(erreur).toBeInstanceOf(Error);
+    expect(vu).toContain(`127.0.0.1:${String(port)}`);
+    for (const [nom, valeur] of [...INTERDITS, ...autres]) {
+      expect(vu.includes(valeur), `${nom} visible dans l’erreur :\n${vu}`).toBe(false);
+    }
+  }
+
+  for (const mecanisme of ['PLAIN', 'LOGIN'] as const) {
+    for (const forme of ['ligne', 'sans-egal', 'deux-lignes', 'hex'] as const) {
+      for (const action of ['verifier', 'envoyer'] as const) {
+        it(`${action}() : AUTH ${mecanisme} refusée, réponse « ${forme} » : ni texte du serveur ni secret`, async () => {
+          const smtp = await serveur({ authEcho: forme, mecanismes: mecanisme });
+          const expediteur = await expediteurSmtp(options(smtp.port, { utilisateur: UTILISATEUR, motDePasse: SECRET }));
+          const erreur = await erreurDe(() => (action === 'verifier' ? expediteur.verifier() : envoyer(expediteur, MESSAGE)));
+          expect(smtp.authentifications).toEqual([{ utilisateur: UTILISATEUR, motDePasse: SECRET }]);
+          rienDuServeur(erreur, smtp.port);
+          expect(inspect(erreur, { depth: 5 })).toMatch(/535|EAUTH/);
+        });
+      }
+    }
+  }
+
+  it('envoyer() : destinataire refusé (550 qui répète l’adresse) : ni l’adresse ni le texte du serveur', async () => {
+    const smtp = await serveur({ refuserDestinataire: true });
+    const expediteur = await expediteurSmtp(options(smtp.port));
+    const a = 'destinataire-unique-t09c@ferme.fr';
+    const erreur = await erreurDe(() => envoyer(expediteur, { ...MESSAGE, a }));
+    rienDuServeur(erreur, smtp.port, [['adresse refusée', a]]);
+  });
 });
