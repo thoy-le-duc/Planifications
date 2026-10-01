@@ -2,6 +2,19 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T10h : « en vigueur » rapide et aligné partout
+
+- **Fait** :
+  - La base tient elle-même l'origine de chaque saisie (`origine_id`) et un résumé par chaîne de corrections (schéma `interne`, non synchronisé), à l'aide de déclencheurs.
+  - La vue « en vigueur » passe de 4,2 s à moins de 2 ms pour une saisie, et à environ 36 ms pour une ferme de 10 000 saisies sur 200 000.
+  - Le téléphone applique la même règle dans le semainier et l'historique : une récolte annulée dont l'origine est ancienne n'apparaît plus.
+  - Une chaîne de 1 000 corrections se lit en 15 ms.
+- **Décidé** :
+  - Un parent dont l'origine est illisible est refusé (23503) plutôt que deviné.
+  - Le verrou de ferme vaut pour toute correction ou annulation, et plus seulement pour les récoltes.
+  - Deux relectures strictes (stock) ; la règle est confirmée sur des milliers de cas tirés au hasard, ainsi que sur la reprise de 446 000 saisies.
+- **Bloquant** : rien. À retenir pour la mise en ligne : la migration réécrit toute la table des saisies (23 s sur 446 000 lignes), note dans T09c.
+
 ## 2026-10-01 — T24c : « Annuler » des itinéraires sûr face aux types changés ailleurs
 
 - **Fait** : « Annuler » dans « Mes itinéraires » relit les types d'intervention au moment d'annuler. Il ne remet jamais un type supprimé ailleurs, ne défait pas un renommage devenu impossible (nouveau libellé utilisé ou ancien recréé) et n'écrase plus une valeur reçue entre sa lecture et son écriture, grâce à une condition dans chaque UPDATE, qui vérifie aussi la série d'une occupation.
