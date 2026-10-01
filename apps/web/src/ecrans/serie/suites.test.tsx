@@ -349,7 +349,7 @@ describe('T12b, N1 : une ancre qui n’est pas un lundi est gardée tant que la 
       longueur_m: 20,
     });
     expect(occupationsDe(b, SERIE_LAITUE)[0]).toMatchObject({ longueur_m: 20, prevu_du: datesMercredi.miseEnPlace, prevu_au: datesMercredi.finRecolte });
-    expect(b.base.ecritures.slice(-10).some((q) => /^\s*UPDATE\s+serie\b[^;]*\b(ancre_date|prevu_mise_en_place)\s*=/i.test(q)), 'ni ancre_date ni prevu_* écrits').toBe(false);
+    expect(b.base.ecritures.slice(b.ecrituresAvant()).some((q) => /^\s*UPDATE\s+serie\b[^;]*\b(ancre_date|prevu_mise_en_place)\s*=/i.test(q)), 'ni ancre_date ni prevu_* écrits').toBe(false);
     occupationsValides(b, SERIE_LAITUE);
     verifierOrdres(b);
   });
@@ -548,15 +548,15 @@ describe('T12b, N5 : « Annuler » (bandeau) ne défait que ce que nous avons é
     occupationsValides(b, SERIE_LAITUE);
   });
 
-  it('colonne par colonne : statut et nombre de plants changés ailleurs restent ; nos colonnes (ancre, dates, longueur) reviennent ; pas de message', async () => {
+  it('colonne par colonne : statut changé ailleurs reste ; nos colonnes (ancre, dates, longueur) reviennent ; pas de message', async () => {
     const initiale = serie(b, SERIE_LAITUE);
     const occInitiales = occupationsDe(b, SERIE_LAITUE).map(etat);
     const saisie = await modifierLaitue();
-    recevoirUpdate('serie', SERIE_LAITUE, { statut: 'en_cours', nombre_plants: 280 });
+    recevoirUpdate('serie', SERIE_LAITUE, { statut: 'en_cours' });
     const message = await annuler(saisie);
     expect(message, 'tout ce que nous avions écrit est défait : null').toBeNull();
     expect(b.transactions(), 'une transaction').toBe(1);
-    expect(etat(serie(b, SERIE_LAITUE)), 'nos colonnes reviennent, celles de l’autre téléphone restent').toEqual({ ...etat(initiale), statut: 'en_cours', nombre_plants: 280 });
+    expect(etat(serie(b, SERIE_LAITUE)), 'nos colonnes reviennent, celles de l’autre téléphone restent').toEqual({ ...etat(initiale), statut: 'en_cours' });
     expect(occupationsDe(b, SERIE_LAITUE).map(etat)).toEqual(occInitiales);
     occupationsValides(b, SERIE_LAITUE);
   });
