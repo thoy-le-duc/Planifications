@@ -220,6 +220,7 @@ decrireAvecBase('T10c')('T10c : POST /sync/upload accepte le stock des télépho
       emetteur: EMETTEUR,
       audience: AUDIENCE,
       maintenant: () => MAINTENANT,
+      envoisMaxParMinute: 1_000_000, // T10f : la suite envoie bien plus de 120 lots par minute pour un même utilisateur
     });
     ferme = await creerFerme(base.pool, 'Jardins de Garonne');
     autreFerme = await creerFerme(base.pool, 'Ferme voisine');
