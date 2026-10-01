@@ -43,7 +43,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T24](T24-ecran-itineraires.md) | Écran : mes itinéraires et mes types d'intervention | T22, T23 | fait |
 | [T24b](T24b-annuler-serie-supprimee.md) | « Annuler » des itinéraires : série supprimée ailleurs | T24 | fait |
 | [T24c](T24c-annuler-types-suites.md) | « Annuler » des itinéraires : types d'intervention et course lecture/écriture | T24b | fait |
-| [T24d](T24d-annuler-bloque-message.md) | « Annuler » bloqué en silence : prévenir le maraîcher | T24c | à faire |
+| [T24d](T24d-annuler-bloque-message.md) | « Annuler » bloqué en silence : prévenir le maraîcher | T24c | en revue |
 | [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T10c, T11, T16 | fait |
 | [T13b](T13b-aujourdhui-grande-ferme.md) | Aujourd'hui : rapide sur une grande ferme | T13 | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
