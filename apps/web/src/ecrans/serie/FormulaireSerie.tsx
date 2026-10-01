@@ -424,6 +424,19 @@ export function FormulaireSerie({
 
   const ctx: ContexteEcriture = { porte, fermeId, maintenant };
 
+  /**
+   * Décision de rotation de la série, si elle vaut encore (N3) : même espèce, et une alerte rouge
+   * de la famille décidée toujours là. Sinon null : elle est effacée à l'enregistrement.
+   */
+  function decisionEnCours(): string | null {
+    const texte = etat !== null && typeof etat.serie.rotation_acceptee === 'string' ? etat.serie.rotation_acceptee : null;
+    const especeId = saisie?.culture?.especeId;
+    if (texte === null || especeId === undefined || especeId !== etat?.serie.espece_id) return null;
+    const famille = bib?.especes.find((e) => e.id === especeId)?.familleId;
+    const rouge = calcul?.alertes.some((a) => a.niveau === 'rouge') ?? false;
+    return rouge && famille !== undefined && objetJson(texte)?.famille === famille ? texte : null;
+  }
+
   function aEcrire(rotation: string | null | undefined): SerieAEcrire | null {
     if (saisie?.culture == null || calcul?.dates == null || calcul.ancreDate === null) return null;
     if (saisie.itineraireId === null || saisie.parametresTexte === null) return null;
@@ -433,7 +446,6 @@ export function FormulaireSerie({
       setErreur('Aucune saison de la ferme ne couvre cette mise en place : ajoute la saison d’abord.');
       return null;
     }
-    const gardee = etat === null ? null : typeof etat.serie.rotation_acceptee === 'string' ? etat.serie.rotation_acceptee : null;
     return {
       saisonId,
       especeId: saisie.culture.especeId,
@@ -445,7 +457,7 @@ export function FormulaireSerie({
       dates: calcul.dates,
       emplacements: saisie.emplacements.map((e) => ({ id: e.id, longueurM: lireLongueur(e.longueur) ?? 0 })),
       longueurTotale: calcul.longueurTotale,
-      rotationAcceptee: rotation === undefined ? gardee : rotation,
+      rotationAcceptee: rotation === undefined ? decisionEnCours() : rotation,
     };
   }
 
@@ -480,9 +492,7 @@ export function FormulaireSerie({
       return;
     }
     // Décision déjà prise pour cette famille (modification) : pas de nouvelle question.
-    const gardee = objetJson(etat !== null && typeof etat.serie.rotation_acceptee === 'string' ? etat.serie.rotation_acceptee : null);
-    const famille = bib?.especes.find((e) => e.id === saisie?.culture?.especeId)?.familleId;
-    if (gardee !== null && gardee.famille === famille) {
+    if (decisionEnCours() !== null) {
       void ecrire(undefined);
       return;
     }
