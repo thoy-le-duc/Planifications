@@ -155,7 +155,7 @@ const mediane = (valeurs: readonly number[]): number => [...valeurs].sort((a, b)
 /**
  * Garde-fou de régression, plus le critère de vitesse du ticket (décision du chef, T13b).
  * Le ticket visait 100 ms ; mesuré sur ce banc (stockage PowerSync, node:sqlite) :
- * 854 ms avant T13b (832 / 901 / 835 / 854 / 916), 117 à 165 ms après l'allègement (index,
+ * 854 ms avant T13b (832 / 901 / 835 / 854 / 916), 102 à 126 ms après l'allègement (120 / 123 / 105 / 126 / 102, médiane 120 ; index,
  * requêtes réécrites), à résultats identiques (test 4). Le reste ne se gagne pas par les
  * requêtes seules : le budget du lancement à froid (1 s, e2e) part dans T13d (instantané de la
  * journée affiché au lancement, puis rafraîchi). Budget relevé à 250 ms : une marge sur la

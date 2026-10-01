@@ -18,7 +18,7 @@ import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure } from './
  *   - tap sur « Aujourd'hui » depuis Planches, base ouverte : écran affiché en moins de 300 ms ;
  *   - lancement à froid hors ligne (rechargement) : MESURÉ, non bloquant (console). Le budget
  *     de 1 s (tâches affichées 1 s après le début de la navigation, ouverture de la base
- *     comprise) part dans T13d, décision du chef : 8 835 ms avant T13b, 5 686 ms après ; le reste
+ *     comprise) part dans T13d, décision du chef : médiane 8 835 ms avant T13b, 5 264 ms après ; le reste
  *     est la lecture à froid des pages SQLite dans le navigateur et l'attente de Planches (T13c),
  *     que les requêtes seules ne rattrapent pas. T13d : instantané de la journée au lancement ;
  *   - relecture après une saisie « Fait » : MESURÉE, non bloquante (console), notée dans la PR ;
