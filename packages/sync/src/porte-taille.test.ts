@@ -14,8 +14,11 @@
  *     corps JSON : un accent compte deux octets, pas un caractère ;
  *   - exactement TAILLE_MAX_PAR_LOT : accepté ; un octet de plus : la promesse est rejetée, AUCUNE
  *     transaction ouverte, rien d'écrit (tout ou rien), comme la limite des 500 ordres.
+ *   - Relecture (décision du chef) : `porte.ecrire(sql, parametres)` et `porte.saisirEvenement`
+ *     refusent aussi au-delà de TAILLE_MAX_PAR_LOT, avant d'écrire (leur ordre unique mesuré de
+ *     la même façon : octets UTF-8 de `JSON.stringify([{ sql, parametres }])`).
  */
-import type { Id } from '@planif/core';
+import type { DateCalendaire, Id } from '@planif/core';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { creerBaseMemoire, type BaseMemoire } from './test/base-memoire.ts';
 import { chargerSync, type BaseLocale, type ModuleSync, type PorteDonnees } from './test/contrat.ts';
@@ -117,6 +120,36 @@ describe('T10f : la porte refuse une transaction de plus de 5 Mio, avant d’éc
     await expect(ecrireEnsemble([article(1, 'x'.repeat(9 * MIO))])).rejects.toThrow();
     expect(transactions).toBe(0);
     expect(compter()).toBe(0);
+  });
+
+  it('relecture : porte.ecrire au-delà de 5 Mio (une catégorie de 6 Mio) : rejet, aucune transaction, rien d’écrit', async () => {
+    const lourd = article(1, 'x'.repeat(6 * MIO));
+    await expect(porte.ecrire(lourd.sql, lourd.parametres)).rejects.toThrow();
+    expect(transactions, 'rien n’est ouvert').toBe(0);
+    expect(compter()).toBe(0);
+    const leger = article(2, 'légumes');
+    await porte.ecrire(leger.sql, leger.parametres);
+    expect(compter()).toBe(1);
+  });
+
+  it('relecture : porte.saisirEvenement avec une note de 6 Mio : rejet, aucune transaction, rien d’écrit', async () => {
+    const saisie = (note: string) => ({
+      type: 'recolte' as const,
+      date: '2026-10-01' as DateCalendaire,
+      source: 'tap' as const,
+      culture: null,
+      emplacementIds: [],
+      note,
+      photos: [],
+      remplaceEvenement: null,
+      detail: { quantite: 3, unite: 'kg' as const, categorie: null },
+    });
+    const evenements = (): number => base.lireDirect<{ n: number }>('SELECT count(*) AS n FROM evenement')[0]?.n ?? -1;
+    await expect(porte.saisirEvenement(saisie('x'.repeat(6 * MIO)))).rejects.toThrow();
+    expect(transactions, 'rien n’est ouvert').toBe(0);
+    expect(evenements()).toBe(0);
+    await porte.saisirEvenement(saisie('rang du fond'));
+    expect(evenements()).toBe(1);
   });
 
   it('après un rejet, la porte reste utilisable : une saisie normale passe', async () => {
