@@ -19,3 +19,12 @@
 - [ ] Sélecteur de semaine maison, testé à 360 px, sans champ `type=week`.
 - [ ] Un test par constat N1, N2, N3 et N5.
 - [ ] Formulaire toujours en moins de 300 ms, recalcul en moins de 100 ms (CPU ×4).
+
+## Décisions du chef (après les tests)
+
+1. **Libellé « Récolte à partir de »** : le constat venait de la capture (carte passée sous l'en-tête fixe), pas d'un débordement. Rien à corriger ; le test e2e reste comme garde-fou.
+2. **N2** : la variété supprimée est gardée sur la série (le serveur l'accepte : `variete_id` n'est revérifié que s'il change) ; elle n'est plus proposée à la recherche.
+3. **N5, occupation modifiée ailleurs** : sa série reste aussi telle quelle, pour que tout reste valide.
+4. **N5, création modifiée ailleurs puis « Annuler »** : la série créée est quand même supprimée doucement (comme T24 : c'est sa propre saisie, dans les 10 s).
+5. **N1** : revenir à la semaine d'origine après l'avoir changée donne le lundi (pas de mémoire de l'ancre d'origine) ; non testé.
+6. **Libellé de semaine** : « S22 · 31 mai 2027 », mois court et année.
