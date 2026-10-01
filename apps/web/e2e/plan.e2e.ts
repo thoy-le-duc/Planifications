@@ -65,7 +65,8 @@ import {
  *   5. semaine courante marquée et visible à l'ouverture (si aujourd'hui est dans la saison) ;
  *   6. changement de saison sans rechargement ;
  *   7. défilement de haut en bas à ~40 px par image, 5 passages : échec si 4 passages ou plus
- *      perdent, au moins une fois, plus de 2 images d'affilée (à 60 Hz) ; à chaque passage,
+ *      perdent, au moins une fois, plus de 2 images d'affilée (à 60 Hz), ou si plus de 6
+ *      intervalles au total dépassent cette limite ; à chaque passage,
  *      jamais 60 lignes ou plus dans le DOM et la dernière ligne atteinte ; un témoin
  *      volontairement saccadé doit échouer à la même mesure (T11d, ci-dessous) ;
  *   8. à 360 px de large : pas de défilement horizontal de la page, plan et barre de navigation
@@ -82,25 +83,39 @@ import {
  *   - la limite est comptée en images : chaque intervalle est arrondi à l'image à 60 Hz la plus
  *     proche (imagesPerdues, outils.ts) ; « au plus 2 images perdues d'affilée » est la même
  *     limite que 50 ms, sans la frontière : 50,1 ms compte 2 images perdues, 66,7 ms en compte 3.
- *     La limite n'est pas relevée ;
+ *     L'arrondi à l'image la plus proche place la frontière réelle vers 58 ms (3,5 images) :
+ *     tout intervalle mesuré entre ~50 et ~58 ms compte encore 2 images perdues. Ce n'est vrai
+ *     que si les horodatages de requestAnimationFrame sont alignés sur une synchro à 60 Hz, ce
+ *     qui est le cas du Chromium headless des e2e (intervalles observés : 16,7, 33,4, 50,0,
+ *     66,7 ms…, jamais entre deux). La limite n'est pas relevée ;
  *   - un passage est « saccadé » s'il dépasse cette limite au moins une fois (le pire intervalle,
  *     comme avant : un seul gel suffit à marquer le passage) ;
  *   - 5 passages (comme les 5 répétitions de T20) ; le défilement ÉCHOUE SI 4 PASSAGES OU PLUS
- *     SONT SACCADÉS. Un saccadement de l'appli (rendu trop lourd, lignes non virtualisées, mise
- *     en page forcée, travail lancé à intervalles) se reproduit d'un passage à l'autre ; une
- *     rafale due à la machine tombe au hasard.
- * Pourquoi « 4 sur 5 » et pas la médiane des 5 pires (3 sur 5), essayée d'abord : 20 exécutions
- * sous charge (un second e2e en parallèle, deux agents sur une machine à 4 cœurs) ont donné
+ *     SONT SACCADÉS, OU SI PLUS DE 6 INTERVALLES AU TOTAL (sur les 5 passages) DÉPASSENT LA
+ *     LIMITE. Un saccadement de l'appli (rendu trop lourd, lignes non virtualisées, mise en page
+ *     forcée, travail lancé à intervalles) se reproduit d'un passage à l'autre ; une rafale due
+ *     à la machine tombe au hasard.
+ * Pourquoi « 4 sur 5 » et pas la médiane des 5 pires (3 sur 5), essayée d'abord : 19 exécutions
+ * menées jusqu'au défilement (une 20e a échoué avant, sur une médiane de temps de T20) sous charge (un second e2e en parallèle, deux agents sur une machine à 4 cœurs) ont donné
  * 17 passages saccadés sur 95 (18 %), toujours par 1 à 3 intervalles isolés sur ~500 : la
  * machine, pas l'appli. À 18 % par passage, la médiane échoue au hasard environ 1 fois sur 23
  * (observé : 1 sur 19) ; « 4 sur 5 » environ 1 fois sur 200 (sur ces 19 exécutions : au plus
  * 3 passages saccadés, aucun échec). Le témoin ci-dessous, lui, a été saccadé dans 100 passages
  * sur 100 (20 exécutions sous charge) : « 4 sur 5 » le voit à chaque fois.
- * On a écarté le 95e centile des intervalles et le compte de rafales : un gel rare de l'appli
- * (2 à 4 par passage, moins de 1 % des images) y passerait inaperçu, ou se confondrait avec le
- * bruit de la machine (0 à 3 rafales par passage). Ce que « 4 sur 5 » laisse passer, en
- * connaissance de cause : un gel de l'appli qui ne survient que dans 3 passages sur 5 ou moins
- * (par exemple un ramasse-miettes occasionnel). C'est le prix d'un test qui ne crie pas au loup.
+ * Pourquoi, en plus, le total des intervalles fautifs (relecture) : « 4 sur 5 » seul laisse
+ * passer un gel de l'appli présent dans 3 passages sur 5 seulement. Avec le total, un tel gel
+ * est détecté dès 7 intervalles fautifs sur les 5 passages (par exemple 3 gels par passage
+ * dans 3 passages : 9). Bruit observé sous charge : sur les 19 exécutions ci-dessus, au plus
+ * 3 intervalles fautifs dans un passage et 3 au total ; sur la série finale (20 exécutions,
+ * second e2e en parallèle), au plus 1 au total ; mais dans une série plus chargée (deux agents
+ * et un second e2e, 4 exécutions), un passage en a compté 5 et une exécution 6 au total : le
+ * seuil de 6 est donc au ras de ce bruit-là, pas au-dessus avec de la marge. Le témoin
+ * ci-dessous en compte 28 au moins.
+ * On a écarté le 95e centile des intervalles : un gel rare de l'appli (2 à 4 par passage,
+ * moins de 1 % des images) y passerait inaperçu. Ce que la règle laisse encore passer, en
+ * connaissance de cause : un gel qui ne survient que dans 3 passages sur 5 ou moins ET au plus
+ * 6 fois en tout (par exemple un ramasse-miettes occasionnel). C'est le prix d'un test qui ne
+ * crie pas au loup.
  * Les contraintes qui ne sont pas des temps restent exigées à CHAQUE passage : moins de 60
  * lignes dans le DOM, dernière ligne atteinte, une image par pas de 40 px.
  * Témoin : les 5 mêmes passages, avec un travail bloquant injecté dans la page, doivent être
@@ -117,10 +132,12 @@ const BUDGET_MS = 300;
 /**
  * T11d — limite de fluidité du défilement, en images à 60 Hz : au plus 2 images perdues d'affilée
  * (un intervalle de 3 images, 50 ms, comme l'ancienne limite IMAGE_MAX_MS = 50). Échec si au moins
- * PASSAGES_SACCADES_ECHEC passages sur REPETITIONS_MESURE (5) la dépassent. Justification en tête.
+ * PASSAGES_SACCADES_ECHEC passages sur REPETITIONS_MESURE (5) la dépassent, ou si plus de
+ * RAFALES_TOTAL_MAX intervalles, sur les 5 passages, la dépassent. Justification en tête.
  */
 const IMAGES_PERDUES_MAX = 2;
 const PASSAGES_SACCADES_ECHEC = 4;
+const RAFALES_TOTAL_MAX = 6;
 /** Défilement à ~40 px par image (2,4 px/ms à 60 Hz : un balayage rapide du pouce). */
 const PAS_DEFILEMENT_PX = 40;
 /**
@@ -433,9 +450,9 @@ test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, con
     await expect(page.getByTestId('barre').first()).toBeVisible();
   });
 
-  await test.step('défilement de haut en bas, 5 passages : moins de 4 passages perdent plus de 2 images d’affilée, < 60 lignes dans le DOM', async () => {
+  await test.step('défilement de haut en bas, 5 passages : moins de 4 passages et au plus 6 intervalles au-delà de 2 images perdues, < 60 lignes dans le DOM', async () => {
     const passages = await repeterDefilement(page);
-    const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC);
+    const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
     console.log(decrireDefilement('défilement', verdict));
     for (const [i, p] of passages.entries()) {
       console.log(`  passage ${String(i + 1)} : ${String(p.images)} images, ${String(p.lignesMax)} lignes au plus dans le DOM`);
@@ -445,6 +462,7 @@ test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, con
       expect(p.derniere, `passage ${String(i + 1)} : dernière ligne`).toBe(plan.lignes.at(-1)?.id ?? '');
     }
     expect(verdict.passagesSaccades, 'passages qui perdent plus de 2 images d’affilée').toBeLessThan(PASSAGES_SACCADES_ECHEC);
+    expect(verdict.rafalesTotal, 'intervalles au-delà de 2 images perdues, sur les 5 passages').toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
     expect(verdict.fluide).toBe(true);
   });
 
@@ -467,10 +485,12 @@ test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, con
     );
     try {
       const passages = await repeterDefilement(page);
-      const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC);
+      const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
       console.log(decrireDefilement('témoin saccadé', verdict));
       expect(verdict.fluide, 'le défilement saccadé doit échouer à la mesure').toBe(false);
       expect(verdict.passagesSaccades).toBeGreaterThanOrEqual(PASSAGES_SACCADES_ECHEC);
+      // Chacun des deux critères, seul, doit suffire à le voir.
+      expect(verdict.rafalesTotal).toBeGreaterThan(RAFALES_TOTAL_MAX);
     } finally {
       await page.evaluate(() => {
         window.clearInterval((window as unknown as { __saccade?: number }).__saccade);

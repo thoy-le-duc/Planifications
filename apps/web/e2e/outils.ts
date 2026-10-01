@@ -147,20 +147,26 @@ export interface VerdictDefilement {
   readonly passagesSaccades: number;
   readonly limiteImagesPerdues: number;
   readonly passagesPourEchec: number;
-  /** Faux dès que `passagesPourEchec` passages au moins sont saccadés. */
+  /** Total, sur tous les passages, des intervalles au-delà de la limite (somme de rafalesParPassage). */
+  readonly rafalesTotal: number;
+  readonly rafalesTotalMax: number;
+  /** Faux dès que `passagesPourEchec` passages au moins sont saccadés, OU que `rafalesTotal` dépasse `rafalesTotalMax`. */
   readonly fluide: boolean;
 }
 
 /**
  * Juge un défilement mesuré en plusieurs passages. Un passage est « saccadé » s'il a perdu, au
  * moins une fois, plus de `limiteImagesPerdues` images d'affilée. Le défilement échoue si au
- * moins `passagesPourEchec` passages sont saccadés : un saccadement de l'appli se reproduit d'un
- * passage à l'autre, une rafale due à la machine non (justification : plan.e2e.ts, T11d).
+ * moins `passagesPourEchec` passages sont saccadés (un saccadement de l'appli se reproduit d'un
+ * passage à l'autre, une rafale due à la machine non), OU si le total des intervalles au-delà de
+ * la limite, sur tous les passages, dépasse `rafalesTotalMax` (un gel répété dans moins de
+ * passages, mais plusieurs fois par passage). Justification chiffrée : plan.e2e.ts, T11d.
  */
 export function jugerDefilement(
   passages: readonly PassageDefilement[],
   limiteImagesPerdues: number,
   passagesPourEchec: number,
+  rafalesTotalMax: number,
 ): VerdictDefilement {
   if (passages.length === 0) throw new Error('jugerDefilement : aucun passage');
   if (passagesPourEchec < 1 || passagesPourEchec > passages.length) throw new Error('jugerDefilement : seuil de passages hors bornes');
@@ -169,6 +175,7 @@ export function jugerDefilement(
   const rafalesParPassage = passages.map((p) => p.intervalles.filter((i) => imagesPerdues(i) > limiteImagesPerdues).length);
   const intervallesParPassage = passages.map((p) => p.intervalles.length);
   const passagesSaccades = pirePerduesParPassage.filter((n) => n > limiteImagesPerdues).length;
+  const rafalesTotal = rafalesParPassage.reduce((total, n) => total + n, 0);
   return {
     pirePerduesParPassage,
     pireMsParPassage,
@@ -177,13 +184,16 @@ export function jugerDefilement(
     passagesSaccades,
     limiteImagesPerdues,
     passagesPourEchec,
-    fluide: passagesSaccades < passagesPourEchec,
+    rafalesTotal,
+    rafalesTotalMax,
+    fluide: passagesSaccades < passagesPourEchec && rafalesTotal <= rafalesTotalMax,
   };
 }
 
 /**
  * Ligne de journal : « libellé : pire rafale 1, 2, 1, 3, 1 images perdues (33.4, 50.0, …) ;
- * au-delà de 2 : 0, 0, 0, 1, 0 intervalles sur 500 → 1 passage saccadé sur 5 (échec à 4) ».
+ * au-delà de 2 : 0, 0, 0, 1, 0 intervalles sur 500 → 1 passage saccadé sur 5 (échec à 4),
+ * 1 intervalle fautif au total (échec au-delà de 6) ».
  */
 export function decrireDefilement(libelle: string, v: VerdictDefilement): string {
   const perdues = v.pirePerduesParPassage.join(', ');
@@ -193,6 +203,7 @@ export function decrireDefilement(libelle: string, v: VerdictDefilement): string
   const n = v.pirePerduesParPassage.length;
   return (
     `${libelle} : pire rafale ${perdues} images perdues (${ms} ms) ; au-delà de ${String(v.limiteImagesPerdues)} : ${rafales} intervalles sur ${String(total)}` +
-    ` → ${String(v.passagesSaccades)} passage(s) saccadé(s) sur ${String(n)} (échec à ${String(v.passagesPourEchec)})`
+    ` → ${String(v.passagesSaccades)} passage(s) saccadé(s) sur ${String(n)} (échec à ${String(v.passagesPourEchec)}),` +
+    ` ${String(v.rafalesTotal)} intervalle(s) fautif(s) au total (échec au-delà de ${String(v.rafalesTotalMax)})`
   );
 }
