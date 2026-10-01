@@ -41,6 +41,14 @@ Dans chaque session, la session elle-même est le **chef d'équipe** ; les autre
 
 Déroulé d'un ticket : testeur → développeur → relecteur → corrections du développeur → nouvelle relecture si le relecteur a trouvé un problème bloquant → PR.
 
+**Sobriété** (décision de Théophane, 2026-10-01) : économiser les jetons sans rogner sur ce qui garde `main` vert.
+
+- **Deux passages de relecture au plus par ticket** : une relecture, puis une contre-relecture des correctifs. Ce que le second passage trouve encore part dans un ticket de suite, sauf s'il touche au stock, à la sécurité ou à l'isolement entre fermes : là, on continue jusqu'à zéro faille.
+- **Modèle léger pour les tickets sans risque** : testeur, développeur et relecteur peuvent tourner sur un modèle plus léger (Sonnet) pour un ticket qui ne touche ni la synchro, ni le stock, ni l'annulation, ni les données d'une autre ferme. Le chef le note dans la PR. En cas de doute, modèle complet.
+- **Suivi des PR léger** : le chef vérifie la CI par un point de contrôle programmé plutôt qu'en s'abonnant à chaque événement de la PR.
+- **Tickets petits et bornés** : un ticket = une règle ou un écran ; les cas limites qu'on découvre deviennent des tickets de suite plutôt que d'agrandir le ticket en cours.
+- **On ne coupe jamais** : les tests écrits d'abord, la relecture, `pnpm verif` avant la PR.
+
 **Parallélisme** : deux tickets indépendants au plus en même temps, chacun dans sa propre copie de travail et sur sa propre branche. Des tickets qui dépendent l'un de l'autre passent l'un après l'autre, sur des branches empilées. Plus d'agents en parallèle ne rendrait pas la boucle plus sûre : les conflits coûteraient plus que le temps gagné.
 
 Un conflit sur `docs/journal.md` ou `docs/backlog/README.md` entre deux PR se résout à la session suivante, en gardant les deux entrées.

@@ -23,6 +23,7 @@ import {
 } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees } from '@planif/sync';
 import { typesPermis, type Ligne, type TypeLu, type Valeur } from './calculs.ts';
+import { etatSerieValide } from '../../donnees/etat-serie.ts';
 import { conditionAVenir, parametresAVenir } from './donnees.ts';
 
 /** Écriture refusée avant l'envoi (règle du serveur), avec un message clair. */
@@ -261,63 +262,88 @@ export function messageModifieAilleurs(n: number): string {
  * Défait une écriture, en UNE transaction, colonne par colonne et ligne par ligne (décision 9) :
  * une ligne n'est ramenée que si chaque colonne que nous avions changée vaut encore ce que nous
  * avions écrit, et que personne ne l'a supprimée ; ramenée, seules ces colonnes reprennent leur
- * valeur d'avant (ce qu'un autre téléphone a changé ailleurs reste). Sinon la ligne est laissée
- * telle quelle (et les occupations d’une série laissée aussi) ; une série n’est pas ramenée non
- * plus si une planche ajoutée ailleurs ne collerait plus à ses dates. Une ligne que notre écriture n’a
- * finalement pas touchée (revérification, décision 11) est ignorée. Rend le message à montrer
- * si des lignes ont été laissées, sinon null.
+ * valeur d'avant (ce qu'un autre téléphone a changé ailleurs reste). Une ligne que notre écriture
+ * n'a finalement pas touchée (elle vaut déjà l'avant, revérification, décision 11) est ignorée.
+ *
+ * Chaque série touchée (par sa ligne ou par une de ses occupations) est vérifiée APRÈS
+ * l'annulation, même si sa ligne n'est pas ramenée (T24b ; T12b décision 10) : série et toutes
+ * ses occupations (écrites ailleurs, laissées, ramenées) passent `etatSerieValide`, comme en fin
+ * de lot au serveur. Sinon, ou si la ligne série est laissée, la série et ses occupations
+ * restent telles quelles. Rend le message à montrer si des lignes ont été laissées, sinon null.
  */
 export async function ramener(ctx: ContexteEcriture, etat: EtatAvant, types: readonly TypeLu[]): Promise<string | null> {
   const iso = ctx.maintenant().toISOString();
-  const ordres: OrdreEcriture[] = [];
-  const courantes = await Promise.all(etat.lignes.map((l) => lireLigne(ctx.porte, l.table, l.id)));
-  const laissees = new Set<string>();
-  const seriesRamenees = new Map<string, Serie>();
-  let refusees = 0;
-  // Occupations actives des séries écrites : une planche ajoutée ailleurs doit rester cohérente
-  // avec la série ramenée, sinon la série n'est pas ramenée.
-  const ecrites = new Set(etat.lignes.map((l) => l.id));
-  const seriesIds = etat.lignes.filter((l) => l.table === 'serie').map((l) => l.id);
-  const autresOccupations =
-    seriesIds.length === 0
-      ? []
-      : (
-          await ctx.porte.lire<Ligne>(
-            `SELECT * FROM occupation WHERE serie_id IN (${seriesIds.map(() => '?').join(', ')}) AND supprime_le IS NULL`,
-            seriesIds,
-          )
-        ).filter((o) => !ecrites.has(String(o.id)));
   const vaut = (c: Ligne, valeurs: Readonly<Record<string, Valeur>>) => Object.keys(valeurs).every((k) => (c[k] ?? null) === (valeurs[k] ?? null));
+  const serieDe = (l: LigneEcrite): string | null => (l.table === 'serie' ? l.id : l.table === 'occupation' ? l.serieId : null);
+
+  // Séries touchées : leur ligne et TOUTES leurs occupations (supprimées comprises), lues ensemble.
+  const seriesIds = [...new Set(etat.lignes.map(serieDe).filter((x): x is string => x !== null))];
+  const marques = seriesIds.map(() => '?').join(', ');
+  const [seriesLues, occupationsLues, autres] = await Promise.all([
+    seriesIds.length === 0 ? [] : ctx.porte.lire<Ligne>(`SELECT * FROM serie WHERE id IN (${marques})`, seriesIds),
+    seriesIds.length === 0 ? [] : ctx.porte.lire<Ligne>(`SELECT * FROM occupation WHERE serie_id IN (${marques}) ORDER BY id`, seriesIds),
+    Promise.all(etat.lignes.map((l) => (l.table === 'serie' || l.table === 'occupation' ? Promise.resolve(null) : lireLigne(ctx.porte, l.table, l.id)))),
+  ]);
+  const courante = (l: LigneEcrite, i: number): Ligne | null =>
+    l.table === 'serie'
+      ? (seriesLues.find((x) => x.id === l.id) ?? null)
+      : l.table === 'occupation'
+        ? (occupationsLues.find((x) => x.id === l.id) ?? null)
+        : (autres[i] ?? null);
+
+  // Ce que chaque ligne deviendrait : null = ignorée (déjà comme avant), 'laissee', ou les valeurs à remettre.
+  type Decision = Readonly<Record<string, Valeur>> | 'laissee' | null;
+  const decisions = etat.lignes.map((l, i): Decision => {
+    const c = courante(l, i);
+    if (c === null) return 'laissee';
+    if (vaut(c, l.avant)) return null;
+    const intacte = vaut(c, l.apres) && (c.supprime_le ?? null) === l.supprimeLe;
+    if (!intacte) return 'laissee';
+    if (l.table === 'itineraire') return validerItineraire({ ...c, ...l.avant }, { typesIntervention: typesPermis(types) }).ok ? l.avant : 'laissee';
+    if (l.table === 'type_intervention') return validerTypeIntervention({ ...c, ...l.avant }).ok ? l.avant : 'laissee';
+    return l.avant;
+  });
+  const aRemettre = (d: Decision | undefined): Readonly<Record<string, Valeur>> => (d === null || d === undefined || d === 'laissee' ? {} : d);
+
+  // Chaque série touchée, telle qu'elle serait après l'annulation, vérifiée comme la fin de lot du serveur.
+  const seriesLaissees = new Set<string>();
+  await Promise.all(
+    seriesIds.map(async (id) => {
+      const serie = seriesLues.find((x) => x.id === id);
+      const indexSerie = etat.lignes.findIndex((l) => l.table === 'serie' && l.id === id);
+      const decisionSerie = indexSerie < 0 ? null : decisions[indexSerie];
+      if (serie === undefined || decisionSerie === 'laissee') {
+        seriesLaissees.add(id);
+        return;
+      }
+      const occupations = occupationsLues.filter((o) => o.serie_id === id);
+      const apres = {
+        serie: { ...serie, ...aRemettre(decisionSerie) },
+        occupations: occupations.map((o) => {
+          const i = etat.lignes.findIndex((l) => l.table === 'occupation' && l.id === o.id);
+          return i < 0 ? o : { ...o, ...aRemettre(decisions[i]) };
+        }),
+      };
+      if (!(await etatSerieValide(ctx.porte, { serie, occupations }, apres))) seriesLaissees.add(id);
+    }),
+  );
+
+  const ordres: OrdreEcriture[] = [];
+  let laissees = 0;
   const ordreTables: readonly Table[] = ['itineraire', 'serie', 'occupation', 'type_intervention'];
   for (const table of ordreTables) {
     etat.lignes.forEach((l, i) => {
       if (l.table !== table) return;
-      const c = courantes[i] ?? null;
-      if (c !== null && vaut(c, l.avant)) return; // pas touchée par nous
-      const intacte = c !== null && vaut(c, l.apres) && (c.supprime_le ?? null) === l.supprimeLe && !(l.serieId !== null && laissees.has(l.serieId));
-      let valide = intacte;
-      if (c !== null && intacte) {
-        const ramenee = { ...c, ...l.avant };
-        if (table === 'itineraire') valide = validerItineraire({ ...ramenee }, { typesIntervention: typesPermis(types) }).ok;
-        else if (table === 'type_intervention') valide = validerTypeIntervention({ ...ramenee }).ok;
-        else if (table === 'serie') {
-          const r = validerSerie({ ...ramenee });
-          const serie = r.ok ? r.valeur : null;
-          valide = serie !== null && autresOccupations.every((o) => o.serie_id !== l.id || validerOccupation({ ...o }, serie, { datesDeLaSerie: true }).ok);
-          if (serie !== null && valide) seriesRamenees.set(l.id, serie);
-        } else {
-          const serie = l.serieId === null ? undefined : seriesRamenees.get(l.serieId);
-          valide = serie === undefined || ramenee.supprime_le !== null || validerOccupation({ ...ramenee }, serie, { datesDeLaSerie: true }).ok;
-        }
-      }
-      if (c === null || !valide) {
-        refusees++;
-        laissees.add(l.id);
+      const d = decisions[i];
+      if (d === null || d === undefined) return;
+      const serieId = serieDe(l);
+      if (d === 'laissee' || (serieId !== null && seriesLaissees.has(serieId))) {
+        laissees++;
         return;
       }
-      ordres.push(ordreDe({ ...l, apres: l.avant }, iso));
+      ordres.push(ordreDe({ ...l, apres: d }, iso));
     });
   }
   await ctx.porte.ecrireEnsemble(ordres);
-  return refusees === 0 ? null : messageModifieAilleurs(refusees);
+  return laissees === 0 ? null : messageModifieAilleurs(laissees);
 }

@@ -6,6 +6,7 @@
  */
 import type { DateCalendaire, Emplacement, HierarchieParcellaire, Id, Instant, OccupationHistorique, TypeAbri } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
+import type { EtatSerie } from '../../donnees/etat-serie.ts';
 import { versEmplacement, versOccupation } from '../plan/calculs.ts';
 import { comparerNoms, libelleCulture, versAssolement, type Bibliotheque, type EspeceLue, type FamilleLue, type OccupationLue, type PlancheLue, type VarieteLue } from './calculs.ts';
 
@@ -171,11 +172,7 @@ export async function lireBibliotheque(porte: PorteDonnees, fermeId: string, auj
 
 // ── Série modifiée ───────────────────────────────────────────────────────────────────────────
 
-/** Une série et ses occupations (toutes, supprimées comprises), lignes locales. */
-export interface EtatSerie {
-  readonly serie: LigneLocale;
-  readonly occupations: readonly LigneLocale[];
-}
+export type { EtatSerie } from '../../donnees/etat-serie.ts';
 
 export async function lireEtatSerie(porte: PorteDonnees, serieId: string): Promise<EtatSerie | null> {
   const [series, occupations] = await Promise.all([
