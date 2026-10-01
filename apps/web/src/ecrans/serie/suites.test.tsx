@@ -11,7 +11,8 @@
  *   - N5 : « Annuler » (bandeau) ne passe pas par-dessus un autre téléphone (règle de T24,
  *     décision 9 : colonne par colonne, ligne laissée sinon, message « modifié entre-temps »).
  * Le message vu sur l'écran Planches est dans ./plan.test.tsx (dernier bloc).
- * Ajouts après la relecture (décisions 7 à 9 du chef) : derniers blocs du fichier.
+ * Ajouts après la relecture (décisions 7 à 9 du chef) et la contre-relecture (décision 10,
+ * règle générale de l'annulation : B3, B4, témoin) : derniers blocs du fichier.
  *
  * Même banc que ./ecran.test.tsx : ferme du plan (./test/ferme-serie.ts), base mémoire par test,
  * aujourd'hui = 2026-09-30. Les écritures « d'un autre téléphone » (ou d'un import) arrivent par
@@ -178,7 +179,7 @@ function datesT02(parametres: Readonly<Record<string, unknown>>, ancre: { type: 
 }
 
 /** UPDATE reçu par la synchro (autre téléphone, import). */
-function recevoirUpdate(table: 'serie' | 'occupation' | 'variete', id: string, valeurs: Readonly<Record<string, string | number | null>>): void {
+function recevoirUpdate(table: 'serie' | 'occupation' | 'variete' | 'itineraire', id: string, valeurs: Readonly<Record<string, string | number | null>>): void {
   const cles = Object.keys(valeurs);
   b.base.recevoir(`UPDATE ${table} SET ${cles.map((c) => `${c} = ?`).join(', ')}, modifie_le = ? WHERE id = ?`, [...cles.map((c) => valeurs[c] ?? null), AILLEURS, id]);
 }
@@ -746,5 +747,140 @@ describe('T12b, décision 9 : choix rapide, focus et liseré de la semaine du jo
         expect(contraste(bord, fond), `${selecteur} : contraste du liseré sur ${ou} (${bord} / ${fond})`).toBeGreaterThanOrEqual(3);
       }
     }
+  });
+});
+
+// ── Décision 10 (contre-relecture) : règle générale de l'annulation ──────────────────────────
+
+/** Ligne au format de Postgres (to_jsonb) : jsonb en objets, instants avec « +00:00 ». */
+function versJsonb(l: Ligne | undefined): Record<string, unknown> {
+  if (l === undefined) throw new Error('ligne absente');
+  const r: Record<string, unknown> = {};
+  for (const [c, v] of Object.entries(l)) {
+    if ((c === 'parametres' || c === 'rotation_acceptee') && typeof v === 'string') r[c] = JSON.parse(v) as unknown;
+    else if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(v)) r[c] = v.replace(/\.(\d{3})Z$/, '.$1+00:00');
+    else r[c] = v;
+  }
+  return r;
+}
+
+let prochaineModification = 0xb00;
+
+/** Ligne `modification` écrite par le serveur et redescendue par la synchro. */
+function recevoirModification(m: {
+  readonly table: 'Serie' | 'Occupation';
+  readonly ligneId: string;
+  readonly operation: 'creation' | 'modification' | 'suppression';
+  readonly horodatage: string;
+  readonly avant: Record<string, unknown> | null;
+  readonly apres: Record<string, unknown>;
+}): void {
+  const id = `0192f0c1-1212-7000-8000-${(prochaineModification++).toString(16).padStart(12, '0')}`;
+  b.base.recevoir(
+    `INSERT INTO modification (id, ferme_id, nom_table, ligne_id, auteur_id, horodatage, operation, avant, apres, proposition_id, cree_le, modifie_le, supprime_le)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL)`,
+    [id, FERME, m.table, m.ligneId, '0192f0c1-1212-7000-8000-000000000001', m.horodatage, m.operation, m.avant === null ? null : JSON.stringify(m.avant), JSON.stringify(m.apres), m.horodatage, m.horodatage],
+  );
+}
+
+async function annulerSaisie(saisie: SaisieSerieAnnulable): Promise<string | null> {
+  b.remiseAZero();
+  const rendu: { message: string | null } = { message: null };
+  await act(async () => {
+    rendu.message = await saisie.annuler();
+  });
+  verifierOrdres(b);
+  return rendu.message;
+}
+
+describe('T12b, décision 10 (B3) : annuler un rétablissement ne laisse pas une planche active sous une série supprimée', () => {
+  it('série supprimée ailleurs puis rétablie depuis l’historique ; planche ajoutée ailleurs sur T2-P01 ; « Annuler » : la série reste rétablie, la planche reste active, message', async () => {
+    const initiale = serie(b, SERIE_LAITUE);
+    const occInitiale = occupationsDe(b, SERIE_LAITUE)[0];
+    await ouvrir({ sorte: 'modification', serieId: SERIE_LAITUE });
+
+    // Formulaire ouvert : un autre téléphone supprime la série ; le serveur l'inscrit dans l'historique.
+    const SUPPRIME = '2026-09-30T08:00:03.000Z';
+    recevoirUpdate('serie', SERIE_LAITUE, { supprime_le: SUPPRIME });
+    recevoirUpdate('occupation', OCCUPATION_LAITUE, { supprime_le: SUPPRIME });
+    recevoirModification({ table: 'Serie', ligneId: SERIE_LAITUE, operation: 'suppression', horodatage: SUPPRIME, avant: versJsonb(initiale), apres: versJsonb(serie(b, SERIE_LAITUE)) });
+    recevoirModification({
+      table: 'Occupation',
+      ligneId: OCCUPATION_LAITUE,
+      operation: 'suppression',
+      horodatage: '2026-09-30T08:00:03.004Z',
+      avant: versJsonb(occInitiale),
+      apres: versJsonb(occupationsDe(b, SERIE_LAITUE)[0]),
+    });
+    const trouverEntree = () =>
+      [...formulaire().querySelectorAll<HTMLElement>('[data-testid="modification-historique"]')].find((e) => e.dataset.operation === 'suppression');
+    await attendre(() => trouverEntree() !== undefined, 'entrée « Suppression » dans l’historique');
+    const entree = trouverEntree();
+    if (entree === undefined) return;
+    await toucher(bouton(/^Annuler/, entree));
+    await attendre(() => serie(b, SERIE_LAITUE)?.supprime_le === null, 'la série est rétablie depuis l’historique');
+    expect(occupationsDe(b, SERIE_LAITUE).find((o) => o.id === OCCUPATION_LAITUE)?.supprime_le ?? null, 'son occupation aussi').toBeNull();
+    const saisie = enregistrees.at(-1);
+    if (saisie === undefined) throw new Error('le rétablissement n’a pas donné de saisie annulable');
+
+    // Un autre téléphone ajoute une planche active (T2-P01) aux dates de la série rétablie.
+    const modele = occupationsDe(b, SERIE_LAITUE).find((o) => o.id === OCCUPATION_LAITUE);
+    if (modele === undefined) throw new Error('occupation absente');
+    const AJOUTEE = '0192f0c1-1212-7000-8000-000000000b51';
+    recevoirInsert('occupation', { ...modele, id: AJOUTEE, emplacement_id: EMPLACEMENT.t2p01, cree_le: AILLEURS, modifie_le: AILLEURS, supprime_le: null });
+    occupationsValides(b, SERIE_LAITUE);
+    const retablie = serie(b, SERIE_LAITUE);
+
+    const message = await annulerSaisie(saisie);
+    expect(serie(b, SERIE_LAITUE), 'la série reste rétablie, telle quelle').toEqual(retablie);
+    expect(occupationsDe(b, SERIE_LAITUE).find((o) => o.id === AJOUTEE)?.supprime_le ?? null, 'la planche ajoutée reste active').toBeNull();
+    expect(occupationsDe(b, SERIE_LAITUE).filter((o) => o.supprime_le === null).length > 0 ? serie(b, SERIE_LAITUE)?.supprime_le ?? null : null, 'aucune occupation active sous une série supprimée').toBeNull();
+    occupationsValides(b, SERIE_LAITUE);
+    expect(message ?? '').toContain('modifié entre-temps');
+  });
+});
+
+describe('T12b, décision 10 (B4) : « Annuler » ne remet pas une référence supprimée', () => {
+  /** Ouvre SERIE_LAITUE, passe sur « Batavia d'été », enregistre ; rend la saisie et la ligne enregistrée. */
+  async function changerItineraire(): Promise<{ saisie: SaisieSerieAnnulable; enregistree: Ligne | undefined; occ: Ligne[] }> {
+    await ouvrir({ sorte: 'modification', serieId: SERIE_LAITUE });
+    await remplir(liste('Itinéraire', formulaire()), ITINERAIRE.bataviaEte);
+    await enregistrer();
+    expect(serie(b, SERIE_LAITUE)?.itineraire_id).toBe(ITINERAIRE.bataviaEte);
+    const saisie = enregistrees[0];
+    if (saisie === undefined) throw new Error('aucune saisie annulable');
+    return { saisie, enregistree: serie(b, SERIE_LAITUE), occ: occupationsDe(b, SERIE_LAITUE) };
+  }
+
+  it('variété supprimée, retirée au changement d’itinéraire : « Annuler » ne la remet pas ; la série garde l’état enregistré ; message', async () => {
+    recevoirUpdate('variete', VARIETE.grenobloise, { supprime_le: AILLEURS });
+    const { saisie, enregistree, occ } = await changerItineraire();
+    expect(enregistree?.variete_id ?? null, 'variété retirée à l’enregistrement (décision 8)').toBeNull();
+    const message = await annulerSaisie(saisie);
+    expect(serie(b, SERIE_LAITUE)?.variete_id ?? null, 'la variété supprimée n’est pas remise').toBeNull();
+    expect(serie(b, SERIE_LAITUE), 'la série garde l’état enregistré').toEqual(enregistree);
+    expect(occupationsDe(b, SERIE_LAITUE), 'ses occupations aussi').toEqual(occ);
+    expect(message ?? '').toContain('modifié entre-temps');
+  });
+
+  it('itinéraire d’origine supprimé entre-temps : « Annuler » ne le remet pas ; la série garde l’état enregistré ; message', async () => {
+    const { saisie, enregistree, occ } = await changerItineraire();
+    recevoirUpdate('itineraire', ITINERAIRE.bataviaPrintemps, { supprime_le: AILLEURS });
+    const message = await annulerSaisie(saisie);
+    expect(serie(b, SERIE_LAITUE)?.itineraire_id, 'l’itinéraire supprimé n’est pas remis').toBe(ITINERAIRE.bataviaEte);
+    expect(serie(b, SERIE_LAITUE), 'la série garde l’état enregistré').toEqual(enregistree);
+    expect(occupationsDe(b, SERIE_LAITUE), 'ses occupations aussi').toEqual(occ);
+    expect(message ?? '').toContain('modifié entre-temps');
+  });
+
+  it('témoin : toutes les références vivantes, changer d’itinéraire puis « Annuler » défait tout, sans message', async () => {
+    const initiale = etat(serie(b, SERIE_LAITUE));
+    const occInitiales = occupationsDe(b, SERIE_LAITUE).map(etat);
+    const { saisie } = await changerItineraire();
+    const message = await annulerSaisie(saisie);
+    expect(message).toBeNull();
+    expect(b.transactions()).toBe(1);
+    expect(etat(serie(b, SERIE_LAITUE))).toEqual(initiale);
+    expect(occupationsDe(b, SERIE_LAITUE).map(etat)).toEqual(occInitiales);
   });
 });
