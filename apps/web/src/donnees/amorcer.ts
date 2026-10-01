@@ -13,6 +13,10 @@
  * src/ecrans/serie/test/contrat.ts, « Amorçage ». Hors navigation, hors service worker et hors
  * précache, jamais liée depuis l'appli, comme /diagnostic/synchro.html.
  *
+ * T13b — `?jeu=aujourdhui-grande-ferme&date=AAAA-MM-JJ` : la grande ferme d'Aujourd'hui
+ * (src/ecrans/aujourdhui/test/grande-ferme.ts : 3 000 séries actives, ≈ 51 000 événements, datée
+ * relativement à `date`), dans la base de SON utilisateur de test (e2e/aujourdhui-grande-ferme.e2e.ts).
+ *
  * T24 — `?jeu=itineraires&date=AAAA-MM-JJ` : la ferme des itinéraires
  * (src/ecrans/itineraires/test/ferme-itineraires.ts, datée relativement à `date`), dans la base
  * de SON utilisateur de test ; contrat : src/ecrans/itineraires/test/contrat.ts, « Amorçage ».
@@ -24,6 +28,7 @@
 import type { BaseLocale } from '@planif/sync';
 import { remplirJeuT07, type JeuT07 } from '../../../../packages/sync/src/test/jeu-t07.ts';
 import { ecrireFermeDuJour, fermeDuJour } from '../ecrans/aujourdhui/test/ferme-du-jour.ts';
+import { ecrireGrandeFerme, grandeFerme } from '../ecrans/aujourdhui/test/grande-ferme.ts';
 import { ecrireFermeItineraires, fermeItineraires } from '../ecrans/itineraires/test/ferme-itineraires.ts';
 import { ecrireFermeSerie, fermeSerie } from '../ecrans/serie/test/ferme-serie.ts';
 import { ouvrirBaseLocale } from './ouvrir.ts';
@@ -85,6 +90,14 @@ async function amorcerAujourdhui(date: string, travaux: boolean): Promise<Amorca
   return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
 }
 
+/** T13b : la grande ferme d'Aujourd'hui, datée relativement à `date` ('AAAA-MM-JJ'). */
+async function amorcerGrandeFerme(date: string): Promise<Amorcage> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`date invalide : « ${date} » (AAAA-MM-JJ attendu)`);
+  const ferme = grandeFerme(date);
+  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireGrandeFerme(base, date));
+  return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
+}
+
 /** T12 : la ferme du plan (dates fixes). */
 async function amorcerSerie(): Promise<Amorcage> {
   const ferme = fermeSerie();
@@ -106,6 +119,7 @@ function amorcer(): Promise<Amorcage> {
   if (jeu === null) return amorcerT07();
   if (jeu === 'aujourdhui') return amorcerAujourdhui(parametres.get('date') ?? '', false);
   if (jeu === 'aujourdhui-travaux') return amorcerAujourdhui(parametres.get('date') ?? '', true);
+  if (jeu === 'aujourdhui-grande-ferme') return amorcerGrandeFerme(parametres.get('date') ?? '');
   if (jeu === 'serie') return amorcerSerie();
   if (jeu === 'itineraires') return amorcerItineraires(parametres.get('date') ?? '');
   return Promise.reject(new Error(`jeu inconnu : « ${jeu} »`));
