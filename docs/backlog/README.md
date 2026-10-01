@@ -22,7 +22,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T08](T08-schema-postgres.md) | Schéma PostgreSQL et migrations | T01 | fait |
 | [T09](T09-comptes-jetons.md) | Comptes, fermes et jetons | T08 | fait |
 | [T09b](T09b-durcissement-connexion.md) | Connexion : durcissement avant la mise en production | T09 | fait |
-| [T09c](T09c-envoi-brevo.md) | Envoi des codes de connexion par Brevo (Q14) | T09b | à faire |
+| [T09c](T09c-envoi-brevo.md) | Envoi des codes de connexion par Brevo (Q14) | T09b | fait |
 | [T10](T10-synchro.md) | Synchro de bout en bout | T07, T08, T09 | fait |
 | [T10b](T10b-regles-saisies-coeur.md) | Règles des saisies dans le cœur | T10 | fait |
 | [T10c](T10c-stock-synchro.md) | Synchro : le serveur accepte les saisies de stock des téléphones | T10, T10b | fait |

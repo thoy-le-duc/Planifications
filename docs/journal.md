@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T09c : codes de connexion par Brevo, côté code
+
+- **Fait** : le code de connexion part en texte et en HTML sobre (sans image ni lien), expéditeur « Planifications » ; la connexion au relais Brevo est vérifiée au démarrage, en tâche de fond ; configuration Brevo documentée dans `config.ts`. Trois relectures de sécurité : aucune forme du mot de passe SMTP ni du texte du serveur n'atteint plus les journaux, le mode console (codes en clair) n'existe qu'en développement, l'adresse d'expéditeur et la longueur du mot de passe sont contrôlées.
+- **Décidé** : une panne de Brevo n'empêche jamais l'API ni la synchro de démarrer ; un échec d'envoi répond 503 ; l'invitation reste en texte.
+- **Bloquant** : la mise en ligne attend Théophane : compte Brevo, domaine d'envoi (SPF, DKIM, DMARC), identifiants dans les secrets de production, suivi des ouvertures désactivé.
+
 ## 2026-10-01 — T13b : Aujourd'hui rapide sur une grande ferme
 
 - **Fait** : sur une ferme de 3 000 séries en cours (~50 000 saisies), la lecture de la journée passe de 854 ms à environ 120 ms (stockage du téléphone simulé), à résultats identiques ; nouveaux index locaux, requêtes allégées, règle « en vigueur » calculée une fois ; une saisie au `detail` corrompu n'empêche plus l'écran de s'afficher ; une date d'occurrence invalide est ignorée. Au tap : 30 ms. À froid, CPU ×4 : 8,8 s → 5,3 s.

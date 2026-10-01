@@ -235,6 +235,92 @@ describe('lireConfig : expéditeur SMTP (T09b)', () => {
   });
 });
 
+// ── T09c : relais Brevo ─────────────────────────────────────────────────────────────────────
+
+describe('lireConfig : relais SMTP de Brevo (T09c)', () => {
+  // Témoin : les variables de T09b suffisent pour Brevo (smtp-relay.brevo.com, 587, STARTTLS).
+  it('témoin : smtp-relay.brevo.com en STARTTLS, port 587 par défaut', async () => {
+    const config = await lireConfig({ ...ENV_SMTP, SMTP_HOTE: 'smtp-relay.brevo.com', SMTP_PORT: undefined, SMTP_SECURITE: undefined });
+    expect(config.courriel).toEqual({
+      type: 'smtp',
+      hote: 'smtp-relay.brevo.com',
+      port: 587,
+      securite: 'starttls',
+      expediteur: 'Planifications <connexion@planif.fr>',
+      utilisateur: 'relais-planif',
+      motDePasse: 'mot-de-passe-de-test',
+    });
+  });
+
+  it('témoin : configuration Brevo incomplète refusée en nommant la variable, sans le mot de passe', async () => {
+    const brevo = { ...ENV_SMTP, SMTP_HOTE: 'smtp-relay.brevo.com' };
+    for (const [manque, nom] of [
+      ['SMTP_EXPEDITEUR', /SMTP_EXPEDITEUR/],
+      ['SMTP_UTILISATEUR', /SMTP_UTILISATEUR/],
+      ['SMTP_MOT_DE_PASSE', /SMTP_MOT_DE_PASSE/],
+    ] as const) {
+      const erreur = lireConfig({ ...brevo, [manque]: undefined });
+      await expect(erreur).rejects.toThrow(nom);
+      await expect(erreur).rejects.toSatisfy((e: unknown) => e instanceof Error && !e.message.includes('mot-de-passe-de-test'));
+    }
+  });
+});
+
+// ── Relecture T09c ──────────────────────────────────────────────────────────────────────────
+
+describe('relecture T09c : COURRIEL_CONSOLE=1 seulement si NODE_ENV=development exactement', () => {
+  // Même règle que SMTP_SECURITE=aucune (T09b) : liste blanche, pas liste noire. Une faute de
+  // frappe ou un NODE_ENV oublié en production ne doit jamais écrire les codes dans les journaux.
+  it('témoin : NODE_ENV=development accepte le mode console', async () => {
+    expect((await lireConfig(ENV_DEV)).courriel).toEqual({ type: 'console' });
+  });
+
+  it.each([undefined, '', 'prod', 'Production', 'production ', 'PRODUCTION', 'staging', 'test', 'Development', 'dev', 'development '])(
+    'NODE_ENV %j : COURRIEL_CONSOLE=1 refusé en nommant COURRIEL_CONSOLE et NODE_ENV',
+    async (nodeEnv) => {
+      const erreur = lireConfig({ ...ENV_DEV, NODE_ENV: nodeEnv });
+      await expect(erreur).rejects.toThrow(/COURRIEL_CONSOLE/);
+      await expect(erreur).rejects.toThrow(/NODE_ENV/);
+    },
+  );
+
+  it('NODE_ENV absent : refus même si un relais SMTP est aussi configuré (pas de repli silencieux)', async () => {
+    await expect(lireConfig({ ...ENV_SMTP, NODE_ENV: undefined, COURRIEL_CONSOLE: '1' })).rejects.toThrow(/COURRIEL_CONSOLE/);
+  });
+});
+
+describe('relecture T09c : SMTP_EXPEDITEUR est UNE adresse', () => {
+  it.each(['connexion@planif.fr', 'Planifications <connexion@planif.fr>', '"Ferme du Bois" <connexion@ferme.fr>'])(
+    'témoin : « %s » accepté',
+    async (expediteur) => {
+      expect((await lireConfig({ ...ENV_SMTP, SMTP_EXPEDITEUR: expediteur })).courriel).toMatchObject({ type: 'smtp', expediteur });
+    },
+  );
+
+  it.each([
+    'a@x.fr,b@y.fr',
+    'a@x.fr, b@y.fr',
+    'a@x.fr b@y.fr',
+    'a@x.fr;b@y.fr',
+    'Planifications <a@x.fr>, b@y.fr',
+    'Planifications <a@x.fr> <b@y.fr>',
+  ])('« %s » refusé en nommant SMTP_EXPEDITEUR', async (expediteur) => {
+    await expect(lireConfig({ ...ENV_SMTP, SMTP_EXPEDITEUR: expediteur })).rejects.toThrow(/SMTP_EXPEDITEUR/);
+  });
+});
+
+describe('contre-relecture T09c : SMTP_MOT_DE_PASSE d’au moins 12 caractères', () => {
+  it.each(['a', 'court', '12345678901', 'onze-carac!'])('« %s » (moins de 12) refusé en nommant la variable, sans afficher la valeur', async (mdp) => {
+    const erreur = lireConfig({ ...ENV_SMTP, SMTP_MOT_DE_PASSE: mdp });
+    await expect(erreur).rejects.toThrow(/SMTP_MOT_DE_PASSE/);
+    await expect(erreur).rejects.toSatisfy((e: unknown) => e instanceof Error && !e.message.includes(`« ${mdp} »`) && !(mdp.length >= 5 && e.message.includes(mdp)));
+  });
+
+  it.each(['123456789012', 'mot-de-passe-de-test'])('témoin : « %s » (12 ou plus) accepté', async (mdp) => {
+    expect((await lireConfig({ ...ENV_SMTP, SMTP_MOT_DE_PASSE: mdp })).courriel).toMatchObject({ type: 'smtp', motDePasse: mdp });
+  });
+});
+
 describe('lireConfig : PROXY_DE_CONFIANCE (T09b)', () => {
   it('absente, vide ou 0 : l’adresse IP est celle de la socket', async () => {
     expect((await lireConfig(ENV_DEV)).proxyDeConfiance).toBe(false);

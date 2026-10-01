@@ -10,15 +10,30 @@
  *   JWT_AUDIENCE       claim aud, celle configurée dans PowerSync (obligatoire)
  *   PORT               3000 par défaut
  *   COURRIEL_CONSOLE   « 1 » pour écrire les e-mails dans la console (développement seulement :
- *                      les codes y apparaissent en clair, refusé si NODE_ENV=production). Prime
- *                      sur SMTP_* hors production.
+ *                      les codes y apparaissent en clair, refusé sauf NODE_ENV=development
+ *                      exactement). Prime alors sur SMTP_*.
  *   SMTP_HOTE          relais SMTP du fournisseur d'e-mail (T09b) ; sans lui ni COURRIEL_CONSOLE,
  *                      l'API ne démarre pas
  *   SMTP_SECURITE      tls | starttls | aucune, défaut starttls ; « aucune » refusée sauf
  *                      NODE_ENV=development exactement
  *   SMTP_PORT          défaut 465 (tls), 587 (starttls), 25 (aucune)
- *   SMTP_EXPEDITEUR    en-tête From (obligatoire avec SMTP_HOTE)
- *   SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE   identifiants du relais : les deux ou aucun
+ *   SMTP_EXPEDITEUR    en-tête From (obligatoire avec SMTP_HOTE) : une seule adresse, nue ou
+ *                      « Nom <adresse> » / « "Nom" <adresse> » ; une liste est refusée
+ *   SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE   identifiants du relais : les deux ou aucun ; mot de
+ *                      passe d'au moins 12 caractères
+ *
+ *   Production : relais SMTP de Brevo (T09c, hébergé en UE, Q14) :
+ *     SMTP_HOTE=smtp-relay.brevo.com   SMTP_PORT=587 (défaut de starttls)
+ *     SMTP_SECURITE=starttls (défaut ; TLS obligatoire, rien ne part sans lui)
+ *     SMTP_EXPEDITEUR=adresse du domaine d'envoi validé chez Brevo (SPF, DKIM, DMARC) ; une
+ *                      adresse nue reçoit le nom « Planifications »
+ *     SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE = identifiant et clé SMTP donnés par Brevo (la clé
+ *                      fait bien plus de 12 caractères, le minimum exigé)
+ *   Identifiants : dans les secrets de production uniquement, jamais dans le dépôt, un fichier
+ *   versionné ou une session Claude. Le relais est vérifié au démarrage (demarrage.ts) ; s'il ne
+ *   répond pas, l'API démarre quand même (la vérification se fait après l'écoute, sans la
+ *   retarder) et l'erreur est écrite sur la sortie d'erreur.
+ *
  *   PROXY_DE_CONFIANCE « 1 » derrière exactement un proxy de confiance (production) : l'adresse IP
  *                      du client (limite par IP) est la dernière valeur de X-Forwarded-For, si
  *                      c'est une adresse IP valide. Sinon « 0 » ou absente :
@@ -110,6 +125,9 @@ export function lireConfig(env: Environnement): Config {
   };
 }
 
+/** Une clé SMTP de fournisseur (Brevo : bien plus longue) ; en dessous, une faute de saisie. */
+const LONGUEUR_MIN_MOT_DE_PASSE_SMTP = 12;
+
 const PORTS_SMTP: Readonly<Record<SecuriteSmtp, number>> = { tls: 465, starttls: 587, aucune: 25 };
 
 function estSecuriteSmtp(v: string): v is SecuriteSmtp {
@@ -127,11 +145,12 @@ function facultative(env: Environnement, nom: string): string | undefined {
  * d'erreur ne contient SMTP_MOT_DE_PASSE.
  */
 function lireCourriel(env: Environnement): ConfigCourriel {
-  const production = env.NODE_ENV === 'production';
   if (env.COURRIEL_CONSOLE === '1') {
-    if (production) {
+    // Liste blanche, comme SMTP_SECURITE=aucune : NODE_ENV=development exactement. Absente, vide,
+    // « production », « prod », « test »… : refus, jamais de repli silencieux sur SMTP.
+    if (env.NODE_ENV !== 'development') {
       throw new Error(
-        'COURRIEL_CONSOLE=1 refusé en production : les codes de connexion apparaîtraient en clair dans les journaux.',
+        'COURRIEL_CONSOLE=1 refusé hors NODE_ENV=development : les codes de connexion apparaîtraient en clair dans les journaux.',
       );
     }
     return { type: 'console' };
@@ -165,11 +184,22 @@ function lireCourriel(env: Environnement): ConfigCourriel {
 
   const expediteur = obligatoire(env, 'SMTP_EXPEDITEUR');
   if (/[\r\n]/.test(expediteur)) throw new Error('SMTP_EXPEDITEUR refusé : retour à la ligne (injection d’en-tête).');
+  if (!estAdresseExpediteur(expediteur)) {
+    throw new Error(
+      `SMTP_EXPEDITEUR invalide : « ${expediteur} » (une seule adresse, ex. connexion@planif.fr ou Planifications <connexion@planif.fr>).`,
+    );
+  }
 
   const utilisateur = facultative(env, 'SMTP_UTILISATEUR');
   const motDePasse = facultative(env, 'SMTP_MOT_DE_PASSE');
   if ((utilisateur === undefined) !== (motDePasse === undefined)) {
     throw new Error('SMTP_UTILISATEUR et SMTP_MOT_DE_PASSE vont ensemble : les deux ou aucun.');
+  }
+  // Jamais la valeur dans le message : seulement le nom de la variable et la règle.
+  if (motDePasse !== undefined && motDePasse.length < LONGUEUR_MIN_MOT_DE_PASSE_SMTP) {
+    throw new Error(
+      `SMTP_MOT_DE_PASSE refusé : il en faut au moins ${String(LONGUEUR_MIN_MOT_DE_PASSE_SMTP)} caractères (clé SMTP du fournisseur).`,
+    );
   }
   return {
     type: 'smtp',
@@ -179,6 +209,17 @@ function lireCourriel(env: Environnement): ConfigCourriel {
     expediteur,
     ...(utilisateur === undefined || motDePasse === undefined ? {} : { utilisateur, motDePasse }),
   };
+}
+
+/** Adresse simple, sans espace, virgule, point-virgule, chevron ni guillemet. */
+const ADRESSE = String.raw`[^\s@<>",;()]+@[^\s@<>",;()]+`;
+const EXPEDITEUR_NU = new RegExp(`^${ADRESSE}$`);
+/** « Nom <adresse> » (nom sans chevron, guillemet, virgule ni point-virgule) ou « "Nom" <adresse> ». */
+const EXPEDITEUR_NOMME = new RegExp(`^(?:[^<>",;@]+|"[^"<>]+") <${ADRESSE}>$`);
+
+/** SMTP_EXPEDITEUR : UNE adresse, éventuellement précédée d'un nom d'affichage ; jamais une liste. */
+function estAdresseExpediteur(valeur: string): boolean {
+  return EXPEDITEUR_NU.test(valeur) || EXPEDITEUR_NOMME.test(valeur);
 }
 
 /** PROXY_DE_CONFIANCE : « 1 », sinon absente, vide ou « 0 » ; une faute de frappe est refusée. */

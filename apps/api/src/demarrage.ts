@@ -1,0 +1,35 @@
+/**
+ * Préparation de l'expéditeur d'e-mail au démarrage de l'API (T09c). Sans effet de bord à
+ * l'import : index.ts appelle `preparerExpediteur(config.courriel)`.
+ *
+ * Une panne du relais SMTP (Brevo en production) ne doit jamais empêcher ni retarder le
+ * démarrage de l'API, donc de la synchro : la vérification part en tâche de fond, son échec est
+ * écrit dans le journal, et l'envoi d'un code échouera ensuite normalement. Seule une configuration
+ * incomplète (lireConfig) arrête le processus. Contrat : demarrage.test.ts.
+ */
+import { expediteurConsole, expediteurSmtp, type ExpediteurCourriel } from './auth/index.ts';
+import type { ConfigCourriel } from './config.ts';
+
+export function preparerExpediteur(
+  courriel: ConfigCourriel,
+  journal: (ligne: string) => void = console.error,
+): Promise<ExpediteurCourriel> {
+  if (courriel.type === 'console') return Promise.resolve(expediteurConsole());
+  const expediteur = expediteurSmtp(courriel);
+  // Tâche de fond, jamais attendue : un relais muet (jusqu'à DELAI_SMTP_MS) ne retarde pas
+  // l'écoute de l'API, donc la synchro.
+  void expediteur.verifier().catch((erreur: unknown) => {
+    // verifier() nomme déjà l'hôte et le port, message nettoyé de tout secret.
+    const detail = erreur instanceof Error ? erreur.message : String(erreur);
+    try {
+      journal(
+        `Avertissement : vérification du relais SMTP ${courriel.hote}:${String(courriel.port)} en échec, ` +
+          `l'API tourne mais les codes de connexion ne partiront pas tant qu'il ne répond pas. ${detail}`,
+      );
+    } catch {
+      // Journal en panne (sortie d'erreur fermée…) : rien, surtout pas un rejet non géré qui
+      // arrêterait l'API.
+    }
+  });
+  return Promise.resolve(expediteur);
+}

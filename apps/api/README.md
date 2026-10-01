@@ -8,7 +8,7 @@ API Hono sur Node. Depuis T09 : comptes, fermes et jetons (contrat : en-tête de
 export DATABASE_URL=postgres://planif:planif@localhost:5432/planif
 export JWT_CLES_PRIVEES="$(pnpm --silent --filter @planif/api cles)"
 export JWT_EMETTEUR=http://localhost:3000 JWT_AUDIENCE=powersync-planif
-COURRIEL_CONSOLE=1 pnpm --filter @planif/api dev
+COURRIEL_CONSOLE=1 pnpm --filter @planif/api dev   # le script dev pose NODE_ENV=development
 ```
 
 | Variable | Rôle |
@@ -17,11 +17,11 @@ COURRIEL_CONSOLE=1 pnpm --filter @planif/api dev
 | `JWT_CLES_PRIVEES` | JWKS de clés privées RS256 ; la première signe, les suivantes vérifient seulement |
 | `JWT_EMETTEUR`, `JWT_AUDIENCE` | Claims `iss` et `aud` (l'audience est celle configurée dans PowerSync) |
 | `PORT` | 3000 par défaut |
-| `COURRIEL_CONSOLE` | `1` : les e-mails (et donc les codes) s'écrivent dans la console. Développement seulement : refusé si `NODE_ENV=production` |
+| `COURRIEL_CONSOLE` | `1` : les e-mails (et donc les codes) s'écrivent dans la console. Développement seulement : refusé sauf si `NODE_ENV=development` exactement (le script `dev` le pose ; absente, `production`, `test`… → refus) |
 | `SMTP_HOTE` | Relais SMTP du fournisseur d'e-mail (T09b). Sans lui ni `COURRIEL_CONSOLE=1`, l'API refuse de démarrer |
 | `SMTP_SECURITE` | `tls` (port 465), `starttls` (défaut, port 587 : STARTTLS obligatoire, rien ne part en clair) ou `aucune` (en clair : refusé sauf si `NODE_ENV=development` exactement ; absente, `test`, `staging`… → refus) |
 | `SMTP_PORT` | Défaut selon `SMTP_SECURITE` |
-| `SMTP_EXPEDITEUR` | En-tête From, ex. `Planifications <connexion@planif.fr>` (obligatoire avec `SMTP_HOTE`) |
+| `SMTP_EXPEDITEUR` | En-tête From : une seule adresse, nue (`connexion@planif.fr`, le nom « Planifications » est alors ajouté) ou nommée (`Planifications <connexion@planif.fr>`) ; une liste est refusée (obligatoire avec `SMTP_HOTE`) |
 | `SMTP_UTILISATEUR`, `SMTP_MOT_DE_PASSE` | Identifiants du relais, les deux ou aucun ; le mot de passe n'apparaît dans aucun message d'erreur |
 | `PROXY_DE_CONFIANCE` | `1` derrière **exactement un** proxy de confiance (celui de production) : l'adresse du client est la **dernière** valeur de `X-Forwarded-For` (celle que ce proxy ajoute) ; si elle n'est pas une adresse IP valide, c'est l'adresse de la socket qui compte. Derrière deux proxys chaînés, la dernière valeur serait celle du premier proxy : ne pas l'utiliser ainsi. Absente ou `0` : adresse de la socket, en-têtes ignorés. Toute autre valeur est refusée |
 | `CORS_ORIGINES` | Origines autorisées à appeler l'API depuis un navigateur, séparées par des virgules (`https://app.planif.fr,http://localhost:4174`). Origines exactes, sans `/` final ; aucune par défaut (même origine seulement) |
@@ -101,7 +101,7 @@ export DATABASE_URL=postgres://planif:planif@localhost:5432/planif
 pnpm --filter @planif/db migrer
 export JWT_CLES_PRIVEES="$(pnpm --silent --filter @planif/api cles)"
 export JWT_EMETTEUR=http://localhost:3000 JWT_AUDIENCE=powersync-planif CORS_ORIGINES=http://localhost:5173
-COURRIEL_CONSOLE=1 pnpm --filter @planif/api dev          # dans un autre terminal
+COURRIEL_CONSOLE=1 pnpm --filter @planif/api dev          # autre terminal ; dev pose NODE_ENV=development
 docker compose up -d --wait powersync                    # lit le JWKS de l'API sur host.docker.internal:3000
 VITE_API_URL=http://localhost:3000 VITE_POWERSYNC_URL=http://localhost:8080 pnpm --filter @planif/web dev
 ```
