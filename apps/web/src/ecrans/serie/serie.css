@@ -396,6 +396,7 @@ select.serie-champ {
 }
 
 .semaine-feuille-tete h3 {
+  outline: none;
   margin: 0;
   font-family: var(--police-titre);
   font-weight: 800;
@@ -466,7 +467,7 @@ select.serie-champ {
 
 /* La semaine du jour : liseré orange (ce qui presse). */
 .semaine-case-jour {
-  border-color: var(--couleur-orange);
+  border-color: var(--couleur-texte-orange);
 }
 
 .semaine-case-choisie {
@@ -498,7 +499,7 @@ select.serie-champ {
 .semaine-legende i {
   width: 18px;
   height: 18px;
-  border: 2px solid var(--couleur-orange);
+  border: 2px solid var(--couleur-texte-orange);
   border-radius: 6px;
 }
 

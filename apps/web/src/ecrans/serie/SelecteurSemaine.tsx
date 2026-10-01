@@ -43,6 +43,8 @@ export function SelecteurSemaine({ semaine, surChoisir, aujourdhui, idEtiquette 
   const [annee, setAnnee] = useState<number | null>(null);
   const ouvrirChoix = useRef<HTMLButtonElement>(null);
   const choisie = useRef<HTMLButtonElement>(null);
+  const titre = useRef<HTMLHeadingElement>(null);
+  const feuille = useRef<HTMLDivElement>(null);
   const idTitre = useId();
   const ouvert = annee !== null;
 
@@ -51,10 +53,14 @@ export function SelecteurSemaine({ semaine, surChoisir, aujourdhui, idEtiquette 
   const suivante = semaineDecalee(semaine, 1);
   const semaineDuJour = semaineDe(aujourdhui);
 
-  // À l'ouverture : le focus va sur la semaine choisie (le défilement suit).
+  // À l'ouverture : le focus va sur la semaine choisie (le défilement suit), sinon sur le titre
+  // de la feuille ; d'une année à l'autre, il ne sort jamais de la feuille (décision 9).
   useEffect(() => {
-    if (ouvert) choisie.current?.focus();
+    if (ouvert) (choisie.current ?? titre.current)?.focus();
   }, [ouvert]);
+  useEffect(() => {
+    if (annee !== null && feuille.current?.contains(document.activeElement) === false) titre.current?.focus();
+  }, [annee]);
 
   function fermer(): void {
     setAnnee(null);
@@ -141,9 +147,11 @@ export function SelecteurSemaine({ semaine, surChoisir, aujourdhui, idEtiquette 
             if (e.target === e.currentTarget) fermer();
           }}
         >
-          <div role="dialog" aria-modal="true" aria-labelledby={idTitre} data-testid="choix-semaines" data-annee={annee} className="semaine-feuille" onKeyDown={clavier}>
+          <div ref={feuille} role="dialog" aria-modal="true" aria-labelledby={idTitre} data-testid="choix-semaines" data-annee={annee} className="semaine-feuille" onKeyDown={clavier}>
             <div className="semaine-feuille-tete">
-              <h3 id={idTitre}>Choisir la semaine</h3>
+              <h3 ref={titre} id={idTitre} tabIndex={-1}>
+                Choisir la semaine
+              </h3>
               <button type="button" aria-label="Fermer le choix de semaine" className="semaine-fermer" onClick={fermer}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" aria-hidden="true">
                   <path d="M6 6l12 12M18 6L6 18" />
