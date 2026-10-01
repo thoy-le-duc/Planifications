@@ -16,13 +16,17 @@ import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure } from './
  *
  * Critères (médiane de 5, décision T20) :
  *   - tap sur « Aujourd'hui » depuis Planches, base ouverte : écran affiché en moins de 300 ms ;
- *   - lancement à froid hors ligne (rechargement) : tâches affichées moins de 1 s après le début
- *     de la navigation (ouverture de la base comprise) ;
+ *   - lancement à froid hors ligne (rechargement) : MESURÉ, non bloquant (console). Le budget
+ *     de 1 s (tâches affichées 1 s après le début de la navigation, ouverture de la base
+ *     comprise) part dans T13d, décision du chef : 8 835 ms avant T13b, 5 686 ms après ; le reste
+ *     est la lecture à froid des pages SQLite dans le navigateur et l'attente de Planches (T13c),
+ *     que les requêtes seules ne rattrapent pas. T13d : instantané de la journée au lancement ;
  *   - relecture après une saisie « Fait » : MESURÉE, non bloquante (console), notée dans la PR ;
  *     au-delà de 500 ms, c'est T13c qui la traite.
  */
 
 const BUDGET_TAP_MS = 300;
+/** Budget visé par T13d, rappelé dans le journal de la mesure (non bloquant ici). */
 const BUDGET_FROID_MS = 1_000;
 const SEUIL_RELECTURE_MS = 500;
 const DELAI_AMORCAGE_MS = 240_000;
@@ -114,15 +118,14 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
   await context.setOffline(true);
   await ralentirCpu(page);
 
-  await test.step(`lancement à froid hors ligne, CPU ×4 : tâches affichées en moins de ${String(BUDGET_FROID_MS)} ms, médiane de 5`, async () => {
+  await test.step('lancement à froid hors ligne, CPU ×4 : mesure non bloquante, médiane de 5 (budget de 1 s : T13d)', async () => {
     const serie = await repeterMesure(REPETITIONS_MESURE, async () => {
       const ms = await lancementAFroid(page);
       await expect(taches(page).first()).toBeVisible();
       return ms;
     });
-    console.log(decrireSerie('Aujourd’hui (grande ferme), lancement à froid hors ligne', serie, BUDGET_FROID_MS));
-    // Souple : la mesure du tap et celle de la relecture sont relevées même si ce budget saute.
-    expect.soft(serie.mediane).toBeLessThan(BUDGET_FROID_MS);
+    // Non bloquant (décision du chef) : le budget de 1 s est l'objet de T13d.
+    console.log(`${decrireSerie('Aujourd’hui (grande ferme), lancement à froid hors ligne', serie, BUDGET_FROID_MS)} : non bloquant, voir T13d`);
   });
 
   await test.step(`tap sur « Aujourd’hui » depuis Planches : écran affiché en moins de ${String(BUDGET_TAP_MS)} ms (base ouverte), médiane de 5`, async () => {
@@ -134,7 +137,7 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
       return ms;
     });
     console.log(decrireSerie('Aujourd’hui (grande ferme), tap depuis Planches', serie, BUDGET_TAP_MS));
-    expect.soft(serie.mediane).toBeLessThan(BUDGET_TAP_MS);
+    expect(serie.mediane).toBeLessThan(BUDGET_TAP_MS);
   });
 
   await test.step('relecture après « Fait » (mesure non bloquante, notée dans la PR)', async () => {

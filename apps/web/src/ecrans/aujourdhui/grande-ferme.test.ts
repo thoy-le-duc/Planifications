@@ -14,7 +14,8 @@
  *    (index ferme_date contraint par la seule ferme). Avant T13b : la montée de `CHAINES`,
  *    `SQL_REALISES`, `SQL_INTERVENTIONS` et `SQL_RECENTS` parcourent tout le journal de la ferme.
  *
- * 3. Vitesse : `lireJournee` en moins de 100 ms, médiane de 5, après une lecture de chauffe.
+ * 3. Vitesse : `lireJournee` en moins de 250 ms, médiane de 5, après une lecture de chauffe :
+ *    garde-fou de régression (décision du chef, voir le test).
  *
  * 4. Équivalence : la journée calculée (`calculerJournee(lireJournee(…))`) est identique à la
  *    référence figée ci-dessous, relevée sur le code AVANT l'allègement (commit a1a0cbc) :
@@ -32,7 +33,7 @@ import { ecrireGrandeFerme, FERME_GRANDE, SERIES_ACTIVES, UTILISATEUR_GRANDE, ty
 
 const AUJOURDHUI = '2026-09-30';
 const MAINTENANT = new Date('2026-09-30T10:00:00.000Z');
-const BUDGET_LECTURE_MS = 100;
+const BUDGET_LECTURE_MS = 250;
 const REPETITIONS = 5;
 
 const SCHEMA = SCHEMA_LOCAL.toJSON() as SchemaJson;
@@ -151,6 +152,15 @@ describe('T13b : les requêtes de la journée se servent des index du journal', 
 
 const mediane = (valeurs: readonly number[]): number => [...valeurs].sort((a, b) => a - b)[Math.floor(valeurs.length / 2)] ?? Number.NaN;
 
+/**
+ * Garde-fou de régression, plus le critère de vitesse du ticket (décision du chef, T13b).
+ * Le ticket visait 100 ms ; mesuré sur ce banc (stockage PowerSync, node:sqlite) :
+ * 854 ms avant T13b (832 / 901 / 835 / 854 / 916), 117 à 165 ms après l'allègement (index,
+ * requêtes réécrites), à résultats identiques (test 4). Le reste ne se gagne pas par les
+ * requêtes seules : le budget du lancement à froid (1 s, e2e) part dans T13d (instantané de la
+ * journée affiché au lancement, puis rafraîchi). Budget relevé à 250 ms : une marge sur la
+ * mesure actuelle, et un échec net si la lecture repart vers les parcours complets du journal.
+ */
 describe('T13b : lecture de la journée sur la grande ferme', { timeout: 120_000 }, () => {
   it(`lireJournee en moins de ${String(BUDGET_LECTURE_MS)} ms (médiane de ${String(REPETITIONS)}, après une lecture de chauffe)`, async () => {
     await lireJournee(porte, FERME_GRANDE, AUJOURDHUI, MAINTENANT);
