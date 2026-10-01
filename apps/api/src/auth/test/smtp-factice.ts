@@ -8,6 +8,11 @@
  *   refuserDestinataire  RCPT TO répond 550 (adresse refusée par le fournisseur)
  *   muet                 accepte la connexion mais n'envoie jamais la bannière 220
  *   sansAuth             n'annonce pas AUTH dans la réponse à EHLO
+ *   mecanismes           mécanismes AUTH annoncés (défaut « PLAIN LOGIN ») : force PLAIN ou LOGIN
+ *   authEcho             (T09c) refuse l'authentification par « 535 » en RÉPÉTANT la dernière
+ *                        ligne reçue (base64) et sa version décodée : un relais bavard ou
+ *                        malveillant. Sert à vérifier que le mot de passe ne fuit dans aucune
+ *                        erreur.
  */
 import { createServer, type Socket } from 'node:net';
 import type { AddressInfo } from 'node:net';
@@ -42,6 +47,8 @@ export interface OptionsSmtpFactice {
   readonly refuserDestinataire?: boolean;
   readonly muet?: boolean;
   readonly sansAuth?: boolean;
+  readonly mecanismes?: 'PLAIN' | 'LOGIN' | 'PLAIN LOGIN';
+  readonly authEcho?: boolean;
 }
 
 function decoder64(b64: string): string {
@@ -83,6 +90,16 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
     let lignesDonnees: string[] = [];
     let utilisateurLogin = '';
 
+    /** Fin d'une authentification : 235, ou 535 qui répète la ligne reçue (authEcho). */
+    const finAuth = (ligneRecue: string) => {
+      if (options.authEcho === true) {
+        const decode = decoder64(ligneRecue.split(' ').at(-1) ?? '').replaceAll('\u0000', ' ');
+        repondre(`535 5.7.8 refus pour <${ligneRecue}> (${decode})`);
+        return;
+      }
+      repondre('235 2.7.0 Authentification reussie');
+    };
+
     const traiterLigne = (ligne: string) => {
       if (etat === 'donnees') {
         if (ligne === '.') {
@@ -100,7 +117,7 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
       if (etat === 'auth-plain') {
         authentifications.push(identifiantsPlain(ligne));
         etat = 'commande';
-        repondre('235 2.7.0 Authentification reussie');
+        finAuth(ligne);
         return;
       }
       if (etat === 'auth-login-utilisateur') {
@@ -112,7 +129,7 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
       if (etat === 'auth-login-mot-de-passe') {
         authentifications.push({ utilisateur: utilisateurLogin, motDePasse: decoder64(ligne) });
         etat = 'commande';
-        repondre('235 2.7.0 Authentification reussie');
+        finAuth(ligne);
         return;
       }
 
@@ -123,7 +140,7 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
       switch (verbe) {
         case 'EHLO':
           repondre('250-smtp.factice.test');
-          if (options.sansAuth !== true) repondre('250-AUTH PLAIN LOGIN');
+          if (options.sansAuth !== true) repondre(`250-AUTH ${options.mecanismes ?? 'PLAIN LOGIN'}`);
           repondre('250-8BITMIME');
           repondre('250 SMTPUTF8');
           return;
@@ -138,7 +155,7 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
               repondre('334 ');
             } else {
               authentifications.push(identifiantsPlain(initial));
-              repondre('235 2.7.0 Authentification reussie');
+              finAuth(ligne);
             }
             return;
           }

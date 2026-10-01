@@ -266,6 +266,49 @@ describe('lireConfig : relais SMTP de Brevo (T09c)', () => {
   });
 });
 
+// ── Relecture T09c ──────────────────────────────────────────────────────────────────────────
+
+describe('relecture T09c : COURRIEL_CONSOLE=1 seulement si NODE_ENV=development exactement', () => {
+  // Même règle que SMTP_SECURITE=aucune (T09b) : liste blanche, pas liste noire. Une faute de
+  // frappe ou un NODE_ENV oublié en production ne doit jamais écrire les codes dans les journaux.
+  it('témoin : NODE_ENV=development accepte le mode console', async () => {
+    expect((await lireConfig(ENV_DEV)).courriel).toEqual({ type: 'console' });
+  });
+
+  it.each([undefined, '', 'prod', 'Production', 'production ', 'PRODUCTION', 'staging', 'test', 'Development', 'dev', 'development '])(
+    'NODE_ENV %j : COURRIEL_CONSOLE=1 refusé en nommant COURRIEL_CONSOLE et NODE_ENV',
+    async (nodeEnv) => {
+      const erreur = lireConfig({ ...ENV_DEV, NODE_ENV: nodeEnv });
+      await expect(erreur).rejects.toThrow(/COURRIEL_CONSOLE/);
+      await expect(erreur).rejects.toThrow(/NODE_ENV/);
+    },
+  );
+
+  it('NODE_ENV absent : refus même si un relais SMTP est aussi configuré (pas de repli silencieux)', async () => {
+    await expect(lireConfig({ ...ENV_SMTP, NODE_ENV: undefined, COURRIEL_CONSOLE: '1' })).rejects.toThrow(/COURRIEL_CONSOLE/);
+  });
+});
+
+describe('relecture T09c : SMTP_EXPEDITEUR est UNE adresse', () => {
+  it.each(['connexion@planif.fr', 'Planifications <connexion@planif.fr>', '"Ferme du Bois" <connexion@ferme.fr>'])(
+    'témoin : « %s » accepté',
+    async (expediteur) => {
+      expect((await lireConfig({ ...ENV_SMTP, SMTP_EXPEDITEUR: expediteur })).courriel).toMatchObject({ type: 'smtp', expediteur });
+    },
+  );
+
+  it.each([
+    'a@x.fr,b@y.fr',
+    'a@x.fr, b@y.fr',
+    'a@x.fr b@y.fr',
+    'a@x.fr;b@y.fr',
+    'Planifications <a@x.fr>, b@y.fr',
+    'Planifications <a@x.fr> <b@y.fr>',
+  ])('« %s » refusé en nommant SMTP_EXPEDITEUR', async (expediteur) => {
+    await expect(lireConfig({ ...ENV_SMTP, SMTP_EXPEDITEUR: expediteur })).rejects.toThrow(/SMTP_EXPEDITEUR/);
+  });
+});
+
 describe('lireConfig : PROXY_DE_CONFIANCE (T09b)', () => {
   it('absente, vide ou 0 : l’adresse IP est celle de la socket', async () => {
     expect((await lireConfig(ENV_DEV)).proxyDeConfiance).toBe(false);

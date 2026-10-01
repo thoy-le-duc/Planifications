@@ -110,6 +110,7 @@
  * plafonné à 365 jours après la connexion, même renouvelé régulièrement.
  */
 import { randomUUID } from 'node:crypto';
+import { inspect } from 'node:util';
 import { fermesDeLUtilisateur, appliquerMigrations, roleDansLaFerme } from '@planif/db';
 import type { Id } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -125,9 +126,11 @@ import {
   type JSONWebKeySet,
 } from 'jose';
 import pg from 'pg';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { creerApp } from '../app.ts';
+import { demarrerSmtpFactice } from './test/smtp-factice.ts';
 import {
+  expediteurSmtp,
   genererCleSignature,
   type CleSignature,
   type ExpediteurCourriel,
@@ -363,6 +366,52 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
       const attendu = module.messageCode(email, api.expediteur.dernierCode(email));
       expect(api.expediteur.messages[0]).toEqual(attendu);
       expect(attendu.html).toBeTruthy();
+    });
+
+    // Relecture T09c : un relais qui refuse l'AUTH en répétant la ligne reçue (mot de passe en
+    // base64, et décodé) ne doit faire apparaître le mot de passe ni dans les journaux (console.*,
+    // y compris le gestionnaire d'erreur par défaut de Hono) ni dans la réponse HTTP.
+    it('relecture T09c : /auth/code avec un relais qui répète l’AUTH ne journalise pas le mot de passe', async () => {
+      const utilisateur = 'relais-planif';
+      const secret = 'Mdp-Brevo-T09c-x7Q';
+      const formes = [secret, Buffer.from(`\u0000${utilisateur}\u0000${secret}`).toString('base64'), Buffer.from(secret).toString('base64')];
+      const relais = await demarrerSmtpFactice({ authEcho: true, mecanismes: 'PLAIN' });
+      const espions = (['error', 'warn', 'log', 'info', 'debug'] as const).map((niveau) =>
+        vi.spyOn(console, niveau).mockImplementation(() => undefined),
+      );
+      try {
+        const app = creerApp({
+          db: drizzle(pool),
+          expediteur: expediteurSmtp({
+            hote: '127.0.0.1',
+            port: relais.port,
+            securite: 'aucune',
+            expediteur: 'Planifications <connexion@planif.fr>',
+            utilisateur,
+            motDePasse: secret,
+            delaiMs: 3_000,
+          }),
+          cles: { active: cleA, precedentes: [] },
+          emetteur: EMETTEUR,
+          audience: AUDIENCE,
+          maintenant,
+        });
+        const res = await app.request('/auth/code', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: emailNeuf() }),
+        });
+        const corps = await res.text();
+        expect(relais.authentifications).toEqual([{ utilisateur, motDePasse: secret }]);
+        const journaux = espions.flatMap((e) => e.mock.calls.map((args) => args.map((a) => inspect(a, { depth: 5 })).join(' '))).join('\n');
+        for (const forme of formes) {
+          expect(journaux.includes(forme), `mot de passe visible dans les journaux :\n${journaux}`).toBe(false);
+          expect(corps.includes(forme), `mot de passe visible dans la réponse :\n${corps}`).toBe(false);
+        }
+      } finally {
+        for (const e of espions) e.mockRestore();
+        await relais.fermer();
+      }
     });
 
     it('stocke le code haché, avec une expiration à 10 minutes', async () => {

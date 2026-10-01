@@ -11,8 +11,10 @@
  *   preparerExpediteur(courriel: ConfigCourriel, journal?: (ligne: string) => void):
  *     Promise<ExpediteurCourriel>
  *     - { type: 'console' } → expediteurConsole(), sans aucune connexion réseau ;
- *     - { type: 'smtp', … } → expediteurSmtp(courriel), puis `await verifier()`
- *       (courriel-smtp.test.ts, T09c) : connexion, STARTTLS si exigé, AUTH, rien n'est envoyé.
+ *     - { type: 'smtp', … } → expediteurSmtp(courriel), et verifier() (courriel-smtp.test.ts,
+ *       T09c) : connexion, STARTTLS si exigé, AUTH, rien n'est envoyé. Relecture T09c : la
+ *       vérification peut partir en tâche de fond (la promesse peut se résoudre avant qu'elle
+ *       finisse) ; ces tests attendent son effet (vi.waitFor) plutôt que la résolution.
  *     Décision du 2026-10-01 : une panne du relais ne doit JAMAIS arrêter l'API (ni la synchro).
  *     Si verifier() échoue, preparerExpediteur NE REJETTE PAS : elle appelle `journal` (par
  *     défaut console.error) avec un message en français qui contient « SMTP », l'hôte et le
@@ -20,9 +22,12 @@
  *     échouera ensuite normalement). Si verifier() réussit, `journal` n'est pas appelé.
  *     L'expéditeur rendu envoie par ce relais (« l'envoi passe par le transport configuré »).
  *
- * apps/api/src/index.ts appelle `await preparerExpediteur(config.courriel)` AVANT d'écouter :
- * relais joignable, la connexion est vérifiée avant « à l'écoute » ; relais injoignable, l'API
- * démarre quand même et l'erreur SMTP est sur la sortie d'erreur, sans le mot de passe. Seule
+ * apps/api/src/index.ts (relecture T09c, décision du chef d'équipe : une panne de Brevo ne doit
+ * jamais RETARDER la synchro) : l'API écoute d'abord, la vérification du relais part en tâche
+ * de fond. Relais muet : « à l'écoute » en moins de 2 s, l'avertissement SMTP arrive plus tard
+ * sur la sortie d'erreur. Relais joignable : connexion + AUTH ont lieu après le démarrage.
+ * Relais injoignable : l'API démarre et l'erreur SMTP est sur la sortie d'erreur, sans le mot
+ * de passe. Seule
  * une configuration incomplète (lireConfig) arrête le processus en code 1. Testé ici en lançant
  * vraiment `node src/index.ts` (Postgres n'est pas nécessaire : le pool ne se connecte qu'à la
  * première requête).
@@ -36,7 +41,7 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { exportJWK, generateKeyPair } from 'jose';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ExpediteurCourriel } from './auth/index.ts';
 import { demarrerSmtpFactice, lireTexte, portFerme, type ServeurSmtpFactice } from './auth/test/smtp-factice.ts';
 import type { ConfigCourriel } from './config.ts';
@@ -109,10 +114,13 @@ describe('preparerExpediteur (T09c)', () => {
     const { lignes, journal } = journalEspion();
     const expediteur = await preparerExpediteur(smtp(relais.port), journal);
 
-    expect(lignes).toEqual([]);
-    expect(relais.connexions()).toBeGreaterThanOrEqual(1);
-    expect(relais.authentifications).toContainEqual({ utilisateur: 'relais-planif', motDePasse: MOT_DE_PASSE });
+    await vi.waitFor(() => {
+      expect(relais.authentifications).toContainEqual({ utilisateur: 'relais-planif', motDePasse: MOT_DE_PASSE });
+    });
     expect(relais.messages).toHaveLength(0);
+    // Laisse finir la vérification avant de constater qu'elle n'a rien signalé.
+    await new Promise((fin) => setTimeout(fin, 200));
+    expect(lignes).toEqual([]);
 
     await expediteur.envoyer(MESSAGE);
     expect(relais.messages).toHaveLength(1);
@@ -125,7 +133,9 @@ describe('preparerExpediteur (T09c)', () => {
     const { lignes, journal } = journalEspion();
     const expediteur = await preparerExpediteur(smtp(port), journal);
 
-    attendreSignalement(lignes, port);
+    await vi.waitFor(() => {
+      attendreSignalement(lignes, port);
+    });
     await expect(expediteur.envoyer(MESSAGE)).rejects.toThrow();
   });
 
@@ -134,7 +144,9 @@ describe('preparerExpediteur (T09c)', () => {
     const { lignes, journal } = journalEspion();
     await preparerExpediteur(smtp(relais.port, { securite: 'starttls' }), journal);
 
-    attendreSignalement(lignes, relais.port);
+    await vi.waitFor(() => {
+      attendreSignalement(lignes, relais.port);
+    });
     expect(relais.authentifications).toHaveLength(0);
   });
 
@@ -161,15 +173,26 @@ interface Sortie {
   readonly stderr: string;
   /** Vrai si le processus tournait encore (à l'écoute, ou au bout du délai) : il a été arrêté. */
   readonly toujoursEnVie: boolean;
+  /** Délai entre le lancement et « à l'écoute » (ms), ou undefined s'il n'est jamais venu. */
+  readonly ecouteApresMs: number | undefined;
+}
+
+interface OptionsDemarrer {
+  /** Après « à l'écoute », continue jusqu'à ce que cette condition soit vraie (ou le délai). */
+  readonly jusqua?: (sortie: { readonly stdout: string; readonly stderr: string }) => boolean;
+  /** Délai total avant arrêt forcé ; 15 s par défaut. */
+  readonly delaiMs?: number;
 }
 
 /**
  * Lance l'API avec cet environnement (rien hérité de process.env sauf PATH), attend qu'elle
- * sorte ou écrive « à l'écoute », puis l'arrête. Après « à l'écoute », un court délai de grâce
- * laisse arriver ce qui a été écrit sur la sortie d'erreur (deux tubes, ordre non garanti).
+ * sorte ou écrive « à l'écoute », puis l'arrête. Après « à l'écoute », attend en plus `jusqua`
+ * (vérifiée à chaque sortie et toutes les 50 ms), ou au moins un délai de grâce de 500 ms
+ * (deux tubes, ordre non garanti).
  */
-function demarrer(env: Record<string, string>, delaiMs = 15_000): Promise<Sortie> {
+function demarrer(env: Record<string, string>, options: OptionsDemarrer = {}): Promise<Sortie> {
   return new Promise((fin) => {
+    const debut = Date.now();
     const enfant = spawn(process.execPath, [INDEX], {
       cwd: DOSSIER_API,
       env: { PATH: process.env.PATH ?? '', ...env },
@@ -178,24 +201,40 @@ function demarrer(env: Record<string, string>, delaiMs = 15_000): Promise<Sortie
     let stdout = '';
     let stderr = '';
     let enVie = false;
+    let ecouteApresMs: number | undefined;
+    let sondage: ReturnType<typeof setInterval> | undefined;
     const arreter = (): void => {
+      if (enVie) return;
       enVie = true;
+      clearInterval(sondage);
       enfant.kill('SIGKILL');
     };
-    const minuterie = setTimeout(arreter, delaiMs);
+    const minuterie = setTimeout(arreter, options.delaiMs ?? 15_000);
+    const verifier = (): void => {
+      if (ecouteApresMs === undefined || options.jusqua === undefined) return;
+      if (options.jusqua({ stdout, stderr })) arreter();
+    };
     enfant.stdout.on('data', (d: Buffer) => {
       stdout += d.toString();
-      if (stdout.includes("à l'écoute")) {
-        clearTimeout(minuterie);
-        setTimeout(arreter, GRACE_MS);
+      if (ecouteApresMs === undefined && stdout.includes("à l'écoute")) {
+        ecouteApresMs = Date.now() - debut;
+        if (options.jusqua === undefined) {
+          clearTimeout(minuterie);
+          setTimeout(arreter, GRACE_MS);
+        } else {
+          sondage = setInterval(verifier, 50);
+        }
       }
+      verifier();
     });
     enfant.stderr.on('data', (d: Buffer) => {
       stderr += d.toString();
+      verifier();
     });
     enfant.on('exit', (code) => {
       clearTimeout(minuterie);
-      fin({ code, stdout, stderr, toujoursEnVie: enVie });
+      clearInterval(sondage);
+      fin({ code, stdout, stderr, toujoursEnVie: enVie, ecouteApresMs });
     });
   });
 }
@@ -233,7 +272,7 @@ async function envSmtp(port: number): Promise<Record<string, string>> {
 describe('démarrage de l’API : node src/index.ts (T09c)', () => {
   it('relais SMTP injoignable : l’API démarre quand même, l’erreur SMTP est sur la sortie d’erreur, sans le mot de passe', async () => {
     const port = await portFerme();
-    const sortie = await demarrer(await envSmtp(port));
+    const sortie = await demarrer(await envSmtp(port), { jusqua: ({ stderr }) => stderr.includes(String(port)) });
 
     // Une panne du relais n'arrête jamais l'API (ni la synchro) : seule la config incomplète le fait.
     expect(sortie.stdout, `l’API n’a pas démarré (code ${String(sortie.code)}) :\n${sortie.stderr}`).toMatch(ECOUTE);
@@ -243,9 +282,11 @@ describe('démarrage de l’API : node src/index.ts (T09c)', () => {
     expect(sortie.stdout + sortie.stderr).not.toContain(MOT_DE_PASSE);
   }, 30_000);
 
-  it('relais SMTP joignable : la connexion est vérifiée avant d’écouter', async () => {
+  // Relecture T09c : remplace « relais joignable : la connexion est vérifiée avant d'écouter »
+  // (décision du chef d'équipe : une panne de Brevo ne doit jamais retarder la synchro).
+  it('relais SMTP joignable : la vérification a lieu (connexion + AUTH) après le démarrage', async () => {
     const relais = await serveur();
-    const sortie = await demarrer(await envSmtp(relais.port));
+    const sortie = await demarrer(await envSmtp(relais.port), { jusqua: () => relais.authentifications.length > 0 });
 
     expect(sortie.stdout, sortie.stderr).toMatch(ECOUTE);
     expect(relais.connexions()).toBeGreaterThanOrEqual(1);
@@ -253,6 +294,21 @@ describe('démarrage de l’API : node src/index.ts (T09c)', () => {
     expect(relais.messages).toHaveLength(0);
     expect(sortie.stdout + sortie.stderr).not.toContain(MOT_DE_PASSE);
   }, 30_000);
+
+  it('relecture T09c : relais MUET, l’API écoute en moins de 2 s, l’avertissement SMTP arrive ensuite', async () => {
+    const relais = await serveur({ muet: true });
+    const sortie = await demarrer(await envSmtp(relais.port), {
+      jusqua: ({ stderr }) => stderr.includes('SMTP'),
+      delaiMs: 25_000,
+    });
+
+    expect(sortie.stdout, `l’API n’a pas démarré :\n${sortie.stderr}`).toMatch(ECOUTE);
+    expect(sortie.ecouteApresMs ?? Infinity).toBeLessThan(2_000);
+    expect(relais.connexions()).toBeGreaterThanOrEqual(1);
+    expect(sortie.stderr).toMatch(/SMTP/);
+    expect(sortie.stderr).toContain(String(relais.port));
+    expect(sortie.stdout + sortie.stderr).not.toContain(MOT_DE_PASSE);
+  }, 40_000);
 
   it('témoin : sans SMTP_HOTE ni COURRIEL_CONSOLE, refus en code 1 en nommant les deux', async () => {
     const sortie = await demarrer(await envBase());

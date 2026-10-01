@@ -50,6 +50,7 @@
  * Le module est chargé par un chemin dynamique pour que ce test type avant que l'export
  * n'existe ; il échoue alors sur « expediteurSmtp n'est pas une fonction ».
  */
+import { inspect } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ExpediteurCourriel, MessageCourriel } from './index.ts';
 import {
@@ -357,4 +358,60 @@ describe('expediteurSmtp.verifier : connexion au relais sans rien envoyer (T09c)
     await expect(expediteur.verifier()).rejects.toSatisfy(messageClair(smtp.port));
     expect(smtp.authentifications).toHaveLength(0);
   });
+});
+
+// ── Relecture T09c : le mot de passe ne fuit dans aucune erreur ───────────────────────────────
+//
+// Un relais bavard (ou malveillant) peut répéter dans sa réponse d'erreur la ligne AUTH reçue :
+// base64(« \0utilisateur\0motDePasse ») en PLAIN, base64(motDePasse) en LOGIN. Ni le mot de passe
+// en clair, ni ces deux formes base64 ne doivent apparaître dans l'erreur rejetée par verifier()
+// ou envoyer(), où que ce soit : message, pile, cause, et les champs que nodemailer ajoute
+// (response, command…). Mesuré par util.inspect(erreur, { depth: 5 }).
+
+describe('relecture T09c : aucune fuite du mot de passe dans les erreurs SMTP', () => {
+  const UTILISATEUR = 'relais-planif';
+  const SECRET = 'Mdp-Brevo-T09c-x7Q';
+  const FORMES = [
+    ['en clair', SECRET],
+    ['base64 PLAIN', Buffer.from(`\u0000${UTILISATEUR}\u0000${SECRET}`).toString('base64')],
+    ['base64 du mot de passe', Buffer.from(SECRET).toString('base64')],
+  ] as const;
+
+  async function erreurDe(action: () => Promise<void>): Promise<unknown> {
+    try {
+      await action();
+    } catch (erreur) {
+      return erreur;
+    }
+    throw new Error('l’action devait échouer (le relais refuse l’authentification)');
+  }
+
+  function sansSecret(erreur: unknown): void {
+    const vu = inspect(erreur, { depth: 5 });
+    for (const [forme, valeur] of FORMES) {
+      expect(vu.includes(valeur), `mot de passe (${forme}) visible dans l’erreur :\n${vu}`).toBe(false);
+    }
+  }
+
+  for (const mecanisme of ['PLAIN', 'LOGIN'] as const) {
+    it(`témoin : le relais factice répète bien le secret (AUTH ${mecanisme})`, async () => {
+      const smtp = await serveur({ authEcho: true, mecanismes: mecanisme });
+      const expediteur = await expediteurSmtp(options(smtp.port, { utilisateur: UTILISATEUR, motDePasse: SECRET }));
+      await erreurDe(() => envoyer(expediteur, MESSAGE));
+      expect(smtp.authentifications).toEqual([{ utilisateur: UTILISATEUR, motDePasse: SECRET }]);
+    });
+
+    it(`verifier() : refus AUTH ${mecanisme} qui répète la ligne reçue, aucune forme du mot de passe dans l’erreur`, async () => {
+      const smtp = await serveur({ authEcho: true, mecanismes: mecanisme });
+      const expediteur = await expediteurSmtp(options(smtp.port, { utilisateur: UTILISATEUR, motDePasse: SECRET }));
+      sansSecret(await erreurDe(() => expediteur.verifier()));
+    });
+
+    it(`envoyer() : refus AUTH ${mecanisme} qui répète la ligne reçue, aucune forme du mot de passe dans l’erreur`, async () => {
+      const smtp = await serveur({ authEcho: true, mecanismes: mecanisme });
+      const expediteur = await expediteurSmtp(options(smtp.port, { utilisateur: UTILISATEUR, motDePasse: SECRET }));
+      sansSecret(await erreurDe(() => envoyer(expediteur, MESSAGE)));
+      expect(smtp.messages).toHaveLength(0);
+    });
+  }
 });
