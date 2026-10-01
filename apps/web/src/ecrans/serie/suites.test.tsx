@@ -12,7 +12,8 @@
  *     décision 9 : colonne par colonne, ligne laissée sinon, message « modifié entre-temps »).
  * Le message vu sur l'écran Planches est dans ./plan.test.tsx (dernier bloc).
  * Ajouts après la relecture (décisions 7 à 9 du chef) et la contre-relecture (décision 10,
- * règle générale de l'annulation : B3, B4, témoin) : derniers blocs du fichier.
+ * règle générale de l'annulation : B3, B4, témoin ; puis B5 rétablissement, B6 emplacement) :
+ * derniers blocs du fichier.
  *
  * Même banc que ./ecran.test.tsx : ferme du plan (./test/ferme-serie.ts), base mémoire par test,
  * aujourd'hui = 2026-09-30. Les écritures « d'un autre téléphone » (ou d'un import) arrivent par
@@ -179,7 +180,7 @@ function datesT02(parametres: Readonly<Record<string, unknown>>, ancre: { type: 
 }
 
 /** UPDATE reçu par la synchro (autre téléphone, import). */
-function recevoirUpdate(table: 'serie' | 'occupation' | 'variete' | 'itineraire', id: string, valeurs: Readonly<Record<string, string | number | null>>): void {
+function recevoirUpdate(table: 'serie' | 'occupation' | 'variete' | 'itineraire' | 'espece' | 'saison' | 'emplacement', id: string, valeurs: Readonly<Record<string, string | number | null>>): void {
   const cles = Object.keys(valeurs);
   b.base.recevoir(`UPDATE ${table} SET ${cles.map((c) => `${c} = ?`).join(', ')}, modifie_le = ? WHERE id = ?`, [...cles.map((c) => valeurs[c] ?? null), AILLEURS, id]);
 }
@@ -882,5 +883,67 @@ describe('T12b, décision 10 (B4) : « Annuler » ne remet pas une référence s
     expect(b.transactions()).toBe(1);
     expect(etat(serie(b, SERIE_LAITUE))).toEqual(initiale);
     expect(occupationsDe(b, SERIE_LAITUE).map(etat)).toEqual(occInitiales);
+  });
+});
+
+describe('T12b, décision 10 (B5) : « Annuler » ne rétablit pas une série dont une référence a été supprimée', () => {
+  it.each([
+    ['la variété', 'variete', VARIETE.grenobloise],
+    ['l’espèce', 'espece', ESPECE.batavia],
+    ['la saison', 'saison', SAISON.s2027],
+  ] as const)('création annulée depuis l’historique, puis %s supprimée ailleurs : « Annuler » laisse la série supprimée ; message', async (_cas, table, id) => {
+    const initiale = serie(b, SERIE_LAITUE);
+    recevoirModification({ table: 'Serie', ligneId: SERIE_LAITUE, operation: 'creation', horodatage: '2025-01-01T08:00:00.000Z', avant: null, apres: versJsonb(initiale) });
+    recevoirModification({
+      table: 'Occupation',
+      ligneId: OCCUPATION_LAITUE,
+      operation: 'creation',
+      horodatage: '2025-01-01T08:00:00.003Z',
+      avant: null,
+      apres: versJsonb(occupationsDe(b, SERIE_LAITUE)[0]),
+    });
+    await ouvrir({ sorte: 'modification', serieId: SERIE_LAITUE });
+    const trouverEntree = () =>
+      [...formulaire().querySelectorAll<HTMLElement>('[data-testid="modification-historique"]')].find((e) => e.dataset.operation === 'creation');
+    await attendre(() => trouverEntree() !== undefined, 'entrée « Création » dans l’historique');
+    const entree = trouverEntree();
+    if (entree === undefined) return;
+    await toucher(bouton(/^Annuler/, entree));
+    await attendre(() => serie(b, SERIE_LAITUE)?.supprime_le !== null, 'la série est supprimée doucement');
+    const saisie = enregistrees.at(-1);
+    if (saisie === undefined) throw new Error('l’annulation de la création n’a pas donné de saisie annulable');
+
+    recevoirUpdate(table, id, { supprime_le: AILLEURS });
+    const supprimee = serie(b, SERIE_LAITUE);
+    const occ = occupationsDe(b, SERIE_LAITUE);
+
+    const message = await annulerSaisie(saisie);
+    expect(serie(b, SERIE_LAITUE)?.supprime_le ?? null, 'la série reste supprimée').not.toBeNull();
+    expect(serie(b, SERIE_LAITUE), 'la série reste telle quelle').toEqual(supprimee);
+    expect(occupationsDe(b, SERIE_LAITUE), 'ses occupations aussi').toEqual(occ);
+    expect(message ?? '').toContain('modifié entre-temps');
+  });
+});
+
+describe('T12b, décision 10 (B6) : « Annuler » ne rétablit pas une occupation sur un emplacement supprimé', () => {
+  it('T2-P02 remplacée par T2-P03, puis T2-P02 supprimée ailleurs : « Annuler » laisse la série et ses occupations telles quelles ; message', async () => {
+    await ouvrir({ sorte: 'modification', serieId: SERIE_LAITUE });
+    await remplir(liste('Ajouter une planche', formulaire()), EMPLACEMENT.t2p03);
+    await attendre(() => formulaire().querySelector(`[data-testid="emplacement-serie"][data-emplacement="${EMPLACEMENT.t2p03}"]`) !== null, 'T2-P03 ajoutée');
+    await toucher(bouton('Retirer T2-P02', formulaire()));
+    await enregistrer();
+    expect(occupationsDe(b, SERIE_LAITUE).find((o) => o.id === OCCUPATION_LAITUE)?.supprime_le ?? null, 'P02 retirée par la saisie').not.toBeNull();
+    const saisie = enregistrees[0];
+    if (saisie === undefined) throw new Error('aucune saisie annulable');
+
+    recevoirUpdate('emplacement', EMPLACEMENT.t2p02, { supprime_le: AILLEURS });
+    const enregistree = serie(b, SERIE_LAITUE);
+    const occ = occupationsDe(b, SERIE_LAITUE);
+
+    const message = await annulerSaisie(saisie);
+    expect(occupationsDe(b, SERIE_LAITUE).find((o) => o.id === OCCUPATION_LAITUE)?.supprime_le ?? null, 'l’occupation sur T2-P02 (supprimée) n’est pas rétablie').not.toBeNull();
+    expect(serie(b, SERIE_LAITUE), 'la série reste telle quelle').toEqual(enregistree);
+    expect(occupationsDe(b, SERIE_LAITUE), 'ses occupations aussi').toEqual(occ);
+    expect(message ?? '').toContain('modifié entre-temps');
   });
 });
