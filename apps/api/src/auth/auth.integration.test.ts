@@ -135,6 +135,9 @@ import {
   type TrousseauCles,
 } from './index.ts';
 
+/** Chemin dynamique : ce fichier type avant que messageCode n'existe (T09c). */
+const CHEMIN_AUTH_T09C = './index.ts';
+
 const URL_BASE = process.env.DATABASE_URL ?? '';
 const EN_CI = (process.env.CI ?? '') !== '' && process.env.CI !== 'false';
 
@@ -346,6 +349,20 @@ decrireAvecBase('T09 : comptes, fermes et jetons (API)', { timeout: 30_000 }, ()
       expect(api.expediteur.messages).toHaveLength(1);
       expect(api.expediteur.messages[0]?.a).toBe(email);
       expect(api.expediteur.dernierCode(email)).toMatch(/^\d{6}$/);
+    });
+
+    // T09c : le message est celui de messageCode (texte brut + HTML sobre, message-code.test.ts).
+    it('T09c : le message envoyé est messageCode(adresse, code), avec sa version HTML', async () => {
+      const api = creer();
+      const email = emailNeuf();
+      await demanderCode(api, email);
+      const module = (await import(CHEMIN_AUTH_T09C)) as {
+        readonly messageCode?: (a: string, code: string) => MessageCourriel & { readonly html?: string };
+      };
+      if (typeof module.messageCode !== 'function') throw new Error('messageCode n’est pas une fonction exportée par auth/index.ts');
+      const attendu = module.messageCode(email, api.expediteur.dernierCode(email));
+      expect(api.expediteur.messages[0]).toEqual(attendu);
+      expect(attendu.html).toBeTruthy();
     });
 
     it('stocke le code haché, avec une expiration à 10 minutes', async () => {

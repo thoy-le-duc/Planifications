@@ -235,6 +235,37 @@ describe('lireConfig : expéditeur SMTP (T09b)', () => {
   });
 });
 
+// ── T09c : relais Brevo ─────────────────────────────────────────────────────────────────────
+
+describe('lireConfig : relais SMTP de Brevo (T09c)', () => {
+  // Témoin : les variables de T09b suffisent pour Brevo (smtp-relay.brevo.com, 587, STARTTLS).
+  it('témoin : smtp-relay.brevo.com en STARTTLS, port 587 par défaut', async () => {
+    const config = await lireConfig({ ...ENV_SMTP, SMTP_HOTE: 'smtp-relay.brevo.com', SMTP_PORT: undefined, SMTP_SECURITE: undefined });
+    expect(config.courriel).toEqual({
+      type: 'smtp',
+      hote: 'smtp-relay.brevo.com',
+      port: 587,
+      securite: 'starttls',
+      expediteur: 'Planifications <connexion@planif.fr>',
+      utilisateur: 'relais-planif',
+      motDePasse: 'mot-de-passe-de-test',
+    });
+  });
+
+  it('témoin : configuration Brevo incomplète refusée en nommant la variable, sans le mot de passe', async () => {
+    const brevo = { ...ENV_SMTP, SMTP_HOTE: 'smtp-relay.brevo.com' };
+    for (const [manque, nom] of [
+      ['SMTP_EXPEDITEUR', /SMTP_EXPEDITEUR/],
+      ['SMTP_UTILISATEUR', /SMTP_UTILISATEUR/],
+      ['SMTP_MOT_DE_PASSE', /SMTP_MOT_DE_PASSE/],
+    ] as const) {
+      const erreur = lireConfig({ ...brevo, [manque]: undefined });
+      await expect(erreur).rejects.toThrow(nom);
+      await expect(erreur).rejects.toSatisfy((e: unknown) => e instanceof Error && !e.message.includes('mot-de-passe-de-test'));
+    }
+  });
+});
+
 describe('lireConfig : PROXY_DE_CONFIANCE (T09b)', () => {
   it('absente, vide ou 0 : l’adresse IP est celle de la socket', async () => {
     expect((await lireConfig(ENV_DEV)).proxyDeConfiance).toBe(false);

@@ -286,14 +286,42 @@ export function decoderMotsEncodes(valeur: string): string {
  * multipart), décodé (7bit, 8bit, quoted-printable, base64), lignes en \n.
  */
 export function lireTexte(donnees: string): string {
+  return lirePartie(donnees, 'text/plain');
+}
+
+/** Première partie text/html d'un multipart (T09c), décodée comme lireTexte ; '' si absente. */
+export function lireHtml(donnees: string): string {
+  const type = lireEnTetes(donnees).get('content-type') ?? 'text/plain';
+  if (!/^multipart\//i.test(type) && !/^text\/html/i.test(type)) return '';
+  return lirePartie(donnees, 'text/html');
+}
+
+/** Types MIME des parties d'un multipart, dans l'ordre (récursif) ; [type] sinon. */
+export function typesDesParties(donnees: string): string[] {
+  const type = lireEnTetes(donnees).get('content-type') ?? 'text/plain';
+  const frontiere = /boundary="?([^";]+)"?/i.exec(type)?.[1];
+  if (!/^multipart\//i.test(type) || frontiere === undefined) return [type.split(';')[0]?.trim().toLowerCase() ?? ''];
+  const corps = donnees.split('\r\n\r\n').slice(1).join('\r\n\r\n');
+  return corps
+    .split(`--${frontiere}`)
+    .slice(1)
+    .filter((p) => !p.startsWith('--'))
+    .flatMap((p) => typesDesParties(p.replace(/^\r\n/, '').replace(/\r\n$/, '')));
+}
+
+function lirePartie(donnees: string, voulu: 'text/plain' | 'text/html'): string {
   const enTetes = lireEnTetes(donnees);
   const corps = donnees.split('\r\n\r\n').slice(1).join('\r\n\r\n');
   const type = enTetes.get('content-type') ?? 'text/plain';
   const frontiere = /boundary="?([^";]+)"?/i.exec(type)?.[1];
   if (/^multipart\//i.test(type) && frontiere !== undefined) {
     for (const partie of corps.split(`--${frontiere}`)) {
-      const p = partie.replace(/^\r\n/, '');
-      if (/content-type:\s*text\/plain/i.test(p.split('\r\n\r\n')[0] ?? '')) return lireTexte(p.replace(/\r\n$/, ''));
+      const p = partie.replace(/^\r\n/, '').replace(/\r\n$/, '');
+      const typePartie = lireEnTetes(p).get('content-type') ?? '';
+      if (/^multipart\//i.test(typePartie)) {
+        const interne = lirePartie(p, voulu);
+        if (interne !== '') return interne;
+      } else if (typePartie.toLowerCase().startsWith(voulu)) return lirePartie(p, voulu);
     }
     return '';
   }

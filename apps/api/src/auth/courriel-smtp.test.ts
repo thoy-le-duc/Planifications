@@ -56,8 +56,10 @@ import {
   decoderMotsEncodes,
   demarrerSmtpFactice,
   lireEnTetes,
+  lireHtml,
   lireTexte,
   portFerme,
+  typesDesParties,
   type ServeurSmtpFactice,
 } from './test/smtp-factice.ts';
 
@@ -73,13 +75,18 @@ interface OptionsSmtp {
   readonly delaiMs?: number;
 }
 
+/** T09c : l'expéditeur SMTP sait aussi vérifier la connexion au relais (démarrage de l'API). */
+interface ExpediteurSmtp extends ExpediteurCourriel {
+  verifier(): Promise<void>;
+}
+
 interface ModuleAuth {
-  readonly expediteurSmtp?: (options: OptionsSmtp) => ExpediteurCourriel;
+  readonly expediteurSmtp?: (options: OptionsSmtp) => ExpediteurSmtp;
 }
 
 const CHEMIN_AUTH = './index.ts';
 
-async function expediteurSmtp(options: OptionsSmtp): Promise<ExpediteurCourriel> {
+async function expediteurSmtp(options: OptionsSmtp): Promise<ExpediteurSmtp> {
   const module = (await import(CHEMIN_AUTH)) as ModuleAuth;
   if (typeof module.expediteurSmtp !== 'function') throw new Error('expediteurSmtp n’est pas une fonction exportée par auth/index.ts');
   return module.expediteurSmtp(options);
@@ -227,5 +234,127 @@ describe('expediteurSmtp (T09b)', () => {
     expect(smtp.authentifications).toHaveLength(0);
     expect(smtp.commandes).not.toContain('MAIL');
     expect(smtp.messages).toHaveLength(0);
+  });
+});
+
+// ── T09c : envoi par Brevo (relais SMTP) ─────────────────────────────────────────────────────
+//
+// Contrat ajouté (courriel-smtp.ts, réexporté par auth/index.ts) :
+//
+//   expediteurSmtp(options): ExpediteurSmtp
+//   interface ExpediteurSmtp extends ExpediteurCourriel {
+//     verifier(): Promise<void>;
+//       // Ouvre une connexion au relais (EHLO, STARTTLS si 'starttls', AUTH si identifiants),
+//       // sans rien envoyer, puis la ferme. Rejette si le relais est injoignable, muet au-delà
+//       // de delaiMs, sans STARTTLS alors qu'il est exigé, ou refuse les identifiants : Error en
+//       // français qui nomme l'hôte et le port, et ne contient JAMAIS le mot de passe.
+//       // (Avec nodemailer : transport.verify().)
+//   }
+//
+//   envoyer(message) :
+//     - message.html présent → multipart/alternative : une partie text/plain (message.texte)
+//       puis une partie text/html (message.html), toutes deux en UTF-8 ; absent → text/plain
+//       seul, comme en T09b ;
+//     - en-tête From au nom de l'appli : si `expediteur` est une adresse nue
+//       (« connexion@planif.fr »), le nom d'affichage « Planifications » est ajouté ; un nom
+//       déjà donné (« Ferme <x@y.fr> ») est gardé. MAIL FROM reste l'adresse nue.
+
+const MESSAGE_HTML = {
+  ...MESSAGE,
+  html: '<!doctype html><html lang="fr"><body><p>Votre code de connexion :</p><p><strong>123456</strong></p></body></html>',
+};
+
+describe('expediteurSmtp : texte brut et HTML (T09c)', () => {
+  it('avec html : multipart/alternative, texte brut puis HTML, tous deux intacts en UTF-8', async () => {
+    const smtp = await serveur();
+    await envoyer(await expediteurSmtp(options(smtp.port)), MESSAGE_HTML);
+
+    const donnees = smtp.messages[0]?.donnees ?? '';
+    expect(lireEnTetes(donnees).get('content-type') ?? '').toMatch(/^multipart\/alternative/i);
+    expect(typesDesParties(donnees)).toEqual(['text/plain', 'text/html']);
+    expect(lireTexte(donnees)).toBe(MESSAGE.texte);
+    expect(lireHtml(donnees)).toBe(MESSAGE_HTML.html);
+    expect(donnees).toMatch(/content-type:\s*text\/html;\s*charset="?utf-8"?/i);
+  });
+
+  it('témoin : sans html, le message reste en text/plain seul', async () => {
+    const smtp = await serveur();
+    await envoyer(await expediteurSmtp(options(smtp.port)), MESSAGE);
+    expect(typesDesParties(smtp.messages[0]?.donnees ?? '')).toEqual(['text/plain']);
+  });
+
+  it('avec html, verifierEnTetes s’applique toujours : rien ne part', async () => {
+    const smtp = await serveur();
+    const expediteur = await expediteurSmtp(options(smtp.port));
+    await expect(envoyer(expediteur, { ...MESSAGE_HTML, sujet: 'Code\r\nBcc: pirate@exemple.fr' })).rejects.toThrow();
+    expect(smtp.connexions()).toBe(0);
+  });
+});
+
+describe('expediteurSmtp : expéditeur au nom de l’appli (T09c)', () => {
+  it('adresse nue : From porte le nom « Planifications », MAIL FROM reste l’adresse', async () => {
+    const smtp = await serveur();
+    await envoyer(await expediteurSmtp(options(smtp.port, { expediteur: 'connexion@planif.fr' })), MESSAGE);
+
+    const [recu] = smtp.messages;
+    expect(recu?.mailFrom).toBe('connexion@planif.fr');
+    const from = decoderMotsEncodes(lireEnTetes(recu?.donnees ?? '').get('from') ?? '');
+    expect(from).toMatch(/^"?Planifications"? <connexion@planif\.fr>$/);
+  });
+
+  it('témoin : un nom d’affichage déjà donné est gardé', async () => {
+    const smtp = await serveur();
+    await envoyer(await expediteurSmtp(options(smtp.port, { expediteur: 'Ferme du Bois <connexion@ferme.fr>' })), MESSAGE);
+
+    const [recu] = smtp.messages;
+    expect(recu?.mailFrom).toBe('connexion@ferme.fr');
+    expect(decoderMotsEncodes(lireEnTetes(recu?.donnees ?? '').get('from') ?? '')).toMatch(/^"?Ferme du Bois"? <connexion@ferme\.fr>$/);
+  });
+});
+
+describe('expediteurSmtp.verifier : connexion au relais sans rien envoyer (T09c)', () => {
+  const MOT_DE_PASSE = 'secret-de-test-ne-pas-afficher';
+
+  it('relais joignable : se connecte, s’authentifie, n’envoie aucun message', async () => {
+    const smtp = await serveur();
+    const expediteur = await expediteurSmtp(options(smtp.port, { utilisateur: 'relais-planif', motDePasse: MOT_DE_PASSE }));
+    await expediteur.verifier();
+
+    expect(smtp.connexions()).toBe(1);
+    expect(smtp.authentifications).toEqual([{ utilisateur: 'relais-planif', motDePasse: MOT_DE_PASSE }]);
+    expect(smtp.commandes).not.toContain('MAIL');
+    expect(smtp.messages).toHaveLength(0);
+  });
+
+  function messageClair(port: number) {
+    return (e: unknown): boolean =>
+      e instanceof Error &&
+      e.message.includes('SMTP') &&
+      e.message.includes('127.0.0.1') &&
+      e.message.includes(String(port)) &&
+      !e.message.includes(MOT_DE_PASSE);
+  }
+
+  it('relais injoignable : rejette avec l’hôte et le port, sans le mot de passe', async () => {
+    const port = await portFerme();
+    const expediteur = await expediteurSmtp(options(port, { utilisateur: 'relais-planif', motDePasse: MOT_DE_PASSE }));
+    await expect(expediteur.verifier()).rejects.toSatisfy(messageClair(port));
+  });
+
+  it('relais muet : rejette après delaiMs', async () => {
+    const smtp = await serveur({ muet: true });
+    const expediteur = await expediteurSmtp(options(smtp.port, { delaiMs: 300, utilisateur: 'relais-planif', motDePasse: MOT_DE_PASSE }));
+    const debut = Date.now();
+    await expect(expediteur.verifier()).rejects.toSatisfy(messageClair(smtp.port));
+    expect(Date.now() - debut).toBeLessThan(5_000);
+  }, 10_000);
+
+  it('STARTTLS exigé mais absent : rejette, les identifiants ne partent pas en clair', async () => {
+    const smtp = await serveur();
+    const expediteur = await expediteurSmtp(
+      options(smtp.port, { securite: 'starttls', utilisateur: 'relais-planif', motDePasse: MOT_DE_PASSE }),
+    );
+    await expect(expediteur.verifier()).rejects.toSatisfy(messageClair(smtp.port));
+    expect(smtp.authentifications).toHaveLength(0);
   });
 });
