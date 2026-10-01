@@ -214,22 +214,48 @@ function CarteTache({ tache: t, aujourdhui, surFait, surPeser }: ProprietesCarte
 interface ProprietesHistorique {
   readonly id: string;
   readonly entrees: readonly EntreeHistorique[];
+  /**
+   * Saisie qui doit recevoir le focus (T13c, après « Changer la date ») : sa correction, une fois
+   * la journée relue. Absente de l'historique, le focus va au titre de l'historique.
+   */
+  readonly focus: string | null;
   readonly aujourdhui: string;
   readonly surAnnuler: (e: EntreeHistorique) => void;
   readonly surChangerDate: (e: EntreeHistorique) => void;
 }
 
-function Historique({ id, entrees, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
+function Historique({ id, entrees, focus, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
   const idTitre = useId();
   const [tout, setTout] = useState(false);
   // Dessinées en tâche de fond (interruptible) : l'historique, en bas de l'écran, ne retarde ni
   // l'affichage des tâches ni un tap sur un autre onglet.
   const differees = useDeferredValue(entrees, AUCUNE_SAISIE);
   const montrees = tout ? differees : differees.slice(0, SAISIES_HISTORIQUE);
+  const section = useRef<HTMLElement>(null);
+  const titre = useRef<HTMLHeadingElement>(null);
+  /** Saisie dont le focus a déjà été placé : on ne le reprend ensuite que s'il est perdu. */
+  const place = useRef<string | null>(null);
+  useEffect(() => {
+    if (focus === null) {
+      place.current = null;
+      return;
+    }
+    const s = section.current;
+    if (s === null) return;
+    const actif = document.activeElement;
+    const perdu = actif === null || actif === document.body;
+    // Le focus est ailleurs (autre geste, ou déjà placé) : on le laisse.
+    if (!perdu && (place.current === focus || !s.contains(actif))) return;
+    const entree = [...s.querySelectorAll<HTMLElement>('[data-testid="saisie-historique"]')].find((li) => li.dataset.evenement === focus);
+    if (entree === undefined && differees !== entrees && entrees.some((h) => h.evenement.id === focus)) return; // pas encore dessinée
+    if (entree?.contains(actif) === true) return;
+    (entree?.querySelector<HTMLElement>('button') ?? titre.current)?.focus();
+    place.current = focus;
+  }, [focus, entrees, differees, montrees]);
   return (
-    <section id={id} aria-labelledby={idTitre} className="auj-historique">
+    <section ref={section} id={id} aria-labelledby={idTitre} className="auj-historique">
       <div className="auj-historique-tete">
-        <h2 id={idTitre} className="auj-groupe">
+        <h2 ref={titre} id={idTitre} tabIndex={-1} className="auj-groupe">
           Historique
         </h2>
         <span className="auj-historique-compte">
@@ -398,10 +424,24 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
    * la remplace.
    */
   const [masquees, setMasquees] = useState<ReadonlyMap<string, Journee | null | 'attente'>>(new Map());
+  /**
+   * Tâche masquée : écriture en cours, ou faite sur la journée encore affichée. T13c : le masque
+   * tombe dès qu'une journée relue arrive ; une tâche revenue (réalisé annulé depuis un autre
+   * téléphone) se marque faite de nouveau.
+   */
+  const estMasquee = (cle: string): boolean => {
+    const m = masquees.get(cle);
+    return m !== undefined && (m === 'attente' || m === journee);
+  };
   const journeeActuelle = useRef<Journee | null>(journee);
   useEffect(() => {
     journeeActuelle.current = journee;
   }, [journee]);
+  /**
+   * T13c : saisie à qui rendre le focus après « Changer la date » (sa correction), et la journée
+   * affichée au moment de l'écriture : le focus attend une journée relue.
+   */
+  const [focusSaisie, setFocusSaisie] = useState<{ readonly evenementId: string; readonly avant: Journee | null } | null>(null);
   /** Une écriture à la fois : un double appui n'écrit pas deux fois. */
   const occupe = useRef(false);
   const numero = useRef(0);
@@ -453,6 +493,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     if (occupe.current) return false;
     occupe.current = true;
     setErreur(null);
+    setFocusSaisie(null);
     try {
       await action();
       return true;
@@ -472,7 +513,8 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
 
   function masquer(cle: string, valeur: Journee | null | 'attente' | undefined): void {
     setMasquees((m) => {
-      const n = new Map(m);
+      // Les masques tombés (posés sur une journée déjà remplacée) sont oubliés au passage.
+      const n = new Map([...m].filter(([, v]) => v === 'attente' || v === journeeActuelle.current));
       if (valeur === undefined) n.delete(cle);
       else n.set(cle, valeur);
       return n;
@@ -494,7 +536,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
 
   function surFait(t: TacheJour): void {
     const tache = t.tache;
-    if (tache.etape === 'debut_recolte' || masquees.has(t.cle) || occupe.current) return;
+    if (tache.etape === 'debut_recolte' || estMasquee(t.cle) || occupe.current) return;
     masquer(t.cle, 'attente');
     if (tache.etape === 'travail') {
       surTravailFait(t, tache);
@@ -531,8 +573,11 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
   }
 
   function surChangerDate(entree: EntreeHistorique, date: string): void {
+    const avant = journeeActuelle.current;
     void ecrire(async () => {
-      await changerDate(contexte(), entree.evenement, date);
+      const id = await changerDate(contexte(), entree.evenement, date);
+      // La saisie d'origine quitte l'historique à la relecture : le focus ira à sa correction.
+      setFocusSaisie({ evenementId: id, avant });
       setDialogue(null);
     });
   }
@@ -547,10 +592,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     );
   }
 
-  const taches = (journee?.taches ?? []).filter((t) => {
-    const m = masquees.get(t.cle);
-    return m === undefined || (m !== 'attente' && m !== journee);
-  });
+  const taches = (journee?.taches ?? []).filter((t) => !estMasquee(t.cle));
   const enRetard = taches.filter((t) => t.tache.enRetard);
   const semaine = taches.filter((t) => !t.tache.enRetard);
   const recoltes = journee?.recoltesEnCours ?? [];
@@ -659,11 +701,13 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
         <Historique
           id={idHistorique}
           entrees={journee.historique}
+          focus={focusSaisie !== null && focusSaisie.avant !== journee ? focusSaisie.evenementId : null}
           aujourdhui={jour}
           surAnnuler={(h) => {
             annuler(h.evenement);
           }}
           surChangerDate={(h) => {
+            setFocusSaisie(null);
             setDialogue({ sorte: 'date', entree: h, max: jourCourant() });
           }}
         />
