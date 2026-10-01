@@ -180,14 +180,21 @@ decrireAvecBase('T10h : vue evenements_en_vigueur sur 200 000 événements', { t
     return r.rows.map((l) => l.id);
   }
 
-  /** Médiane de 5 lectures (après une lecture de chauffe), en ms. */
+  /**
+   * Médiane de 5 lectures (après une lecture de chauffe), en ms, mesurées dans Postgres
+   * (planification + exécution, EXPLAIN ANALYZE) : le critère porte sur la vue. L'aller-retour
+   * complet ajoute le transfert et le décodage des lignes par le client Node, qui varient du
+   * simple au double sur une machine chargée (lire la table brute d'une ferme : 60 à 85 ms).
+   */
   async function mesurer(sql: string, parametres: readonly unknown[]): Promise<{ mediane: number; serie: number[] }> {
-    await c.query(sql, [...parametres]);
+    const expliquer = `EXPLAIN (ANALYZE, FORMAT JSON) ${sql}`;
+    await c.query(expliquer, [...parametres]);
     const serie: number[] = [];
     for (let k = 0; k < REPETITIONS; k++) {
-      const debut = performance.now();
-      await c.query(sql, [...parametres]);
-      serie.push(Math.round((performance.now() - debut) * 10) / 10);
+      const r = await c.query<{ 'QUERY PLAN': { 'Planning Time': number; 'Execution Time': number }[] }>(expliquer, [...parametres]);
+      const plan = r.rows[0]?.['QUERY PLAN'][0];
+      if (plan === undefined) throw new Error('plan');
+      serie.push(Math.round((plan['Planning Time'] + plan['Execution Time']) * 10) / 10);
     }
     return { mediane: mediane(serie), serie };
   }
