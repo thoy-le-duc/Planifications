@@ -196,9 +196,14 @@ function fermeDesDonnees(e: EcritureRecue): string | null {
   return estUuid(e.donnees?.ferme_id) ? e.donnees.ferme_id.toLowerCase() : null;
 }
 
-/** PUT d'un événement de récolte qui en remplace un autre (lu sans confiance : il ne sert qu'au verrou). */
-function remplacementDeRecolte(e: EcritureRecue): boolean {
-  return e.op === 'PUT' && e.table === 'evenement' && e.donnees?.type === 'recolte' && typeof e.donnees.remplace_evenement_id === 'string';
+/**
+ * PUT d'un événement qui en remplace un autre, correction ou annulation, de toute catégorie (lu
+ * sans confiance : il ne sert qu'au verrou). T10h, décision 2 : chaque remplacement verrouille la
+ * ligne de sa chaîne (interne.chaine_evenement) jusqu'à la fin de la transaction ; sous le verrou
+ * de ferme, deux lots qui remplacent dans les mêmes chaînes en ordre croisé ne s'interbloquent pas.
+ */
+function remplacement(e: EcritureRecue): boolean {
+  return e.op === 'PUT' && e.table === 'evenement' && typeof e.donnees?.remplace_evenement_id === 'string';
 }
 
 /** Levée dans la transaction d'un lot pour l'annuler : l'écriture `index` est refusée. */
@@ -440,8 +445,9 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
         // est celle de la ligne existante (ses données ne la portent pas forcément).
         // T10g : un remplacement de récolte (correction, annulation) se vérifie sur sa chaîne ; sous
         // le même verrou, deux corrections concurrentes de la même ferme passent l'une après l'autre.
+        // T10h (décision 2) : tout remplacement, quelle que soit sa catégorie, prend ce verrou.
         const tout = ecritures.filter((e) => TABLES_TOUT_OU_RIEN.has(e.table));
-        const declarees = [...tout, ...ecritures.filter(remplacementDeRecolte)]
+        const declarees = [...tout, ...ecritures.filter(remplacement)]
           .map(fermeDesDonnees)
           .filter((f): f is string => f !== null && fermes.has(f));
         const verrous = [...new Set([...declarees, ...(await fermesDesLignesVisees(tx, tout, fermes))])].sort();
