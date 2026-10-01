@@ -9,6 +9,7 @@ import type { Contexte } from '../dependances.ts';
 import { emailPiege, lireCorps, normaliserEmail } from '../http.ts';
 import { libreSelonFenetre, secondesAvant } from '../limites.ts';
 import { jwksPublic } from './cles.ts';
+import { messageCode } from './courriel.ts';
 import { adresseClient, enregistrerDemandeIp, type ActionLimitee } from './limite-ip.ts';
 import { emettreJetonAcces } from './jetons.ts';
 import { codeCorrespond, empreinteCode, empreinteJeton, tirerCode, tirerJetonRenouvellement } from './secrets.ts';
@@ -108,11 +109,7 @@ export function routesAuth(ctx: Contexte): Hono {
     }
 
     // Même message que le compte existe ou non : rien n'est révélé.
-    await ctx.expediteur.envoyer({
-      a: email,
-      sujet: `Votre code de connexion : ${code}`,
-      texte: `Votre code de connexion à Planifications : ${code}\n\nIl est valable 10 minutes. Si vous n'avez rien demandé, ignorez ce message.`,
-    });
+    await ctx.expediteur.envoyer(messageCode(email, code));
     return c.json({ ok: true }, 202);
   });
 

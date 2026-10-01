@@ -13,7 +13,7 @@ export {
   type CleSignature,
   type TrousseauCles,
 } from './cles.ts';
-export { expediteurConsole, verifierEnTetes, type ExpediteurCourriel, type MessageCourriel } from './courriel.ts';
+export { echapperHtml, expediteurConsole, messageCode, verifierEnTetes, type ExpediteurCourriel, type MessageCourriel } from './courriel.ts';
 export { DUREE_JETON_ACCES_S, emettreJetonAcces, verifierJetonAcces } from './jetons.ts';
 export { garde, type VariablesAuthentifiees } from './garde.ts';
 export { routesAuth } from './routes.ts';
