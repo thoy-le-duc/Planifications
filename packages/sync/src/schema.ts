@@ -48,9 +48,19 @@ export type NomTableLocale = keyof typeof TABLES_LOCALES;
 
 /** Index des lectures les plus courantes (journal par date, vue 2D, refus). */
 const INDEX: Partial<Record<NomTableLocale, Record<string, string[]>>> = {
-  evenement: { ferme_date: ['ferme_id', 'date'] },
-  occupation: { emplacement: ['emplacement_id', 'prevu_du'] },
-  serie: { ferme: ['ferme_id'] },
+  evenement: {
+    ferme_date: ['ferme_id', 'date'],
+    ferme_horodatage: ['ferme_id', 'horodatage', 'date'],
+    serie: ['serie_id', 'ferme_id', 'type', 'date', 'remplace_sorte', 'detail'],
+    campagne: ['campagne_id'],
+    remplacement: ['remplace_evenement_id', 'ferme_id', 'origine_id', 'remplace_sorte', 'horodatage'],
+  },
+  mouvement_stock: { recolte: ['recolte_id'] },
+  occupation: {
+    emplacement: ['emplacement_id', 'prevu_du'],
+    ferme_culture: ['ferme_id', 'serie_id', 'plantation_id', 'emplacement_id', 'supprime_le'],
+  },
+  serie: { ferme_statut: ['ferme_id', 'statut'] },
   refus_synchro: { utilisateur: ['utilisateur_id', 'cree_le'] },
 };
 
