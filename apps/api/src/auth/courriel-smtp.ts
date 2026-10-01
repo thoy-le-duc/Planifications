@@ -9,7 +9,7 @@
  * courriel-smtp.test.ts.
  */
 import { createTransport } from 'nodemailer';
-import { verifierEnTetes, type ExpediteurCourriel } from './courriel.ts';
+import { ErreurEnvoiCourriel, verifierEnTetes, type ExpediteurCourriel } from './courriel.ts';
 
 export type SecuriteSmtp = 'tls' | 'starttls' | 'aucune';
 
@@ -69,6 +69,25 @@ function minuterieRejet(delaiMs: number, message: string): { readonly promesse: 
   };
 }
 
+/**
+ * Masque le mot de passe sous toutes les formes qu'un relais peut répéter dans sa réponse
+ * d'erreur : en clair, base64(« \0utilisateur\0motDePasse ») (AUTH PLAIN), base64(motDePasse)
+ * (AUTH LOGIN), et base64(« utilisateur\0motDePasse »). Les plus longues d'abord.
+ */
+export function nettoyeurSecrets(utilisateur: string | undefined, motDePasse: string | undefined): (texte: string) => string {
+  if (motDePasse === undefined || motDePasse === '') return (texte) => texte;
+  const b64 = (v: string): string => Buffer.from(v, 'utf8').toString('base64');
+  const formes = [
+    ...(utilisateur === undefined ? [] : [b64(`\u0000${utilisateur}\u0000${motDePasse}`), b64(`${utilisateur}\u0000${motDePasse}`)]),
+    b64(`\u0000\u0000${motDePasse}`),
+    b64(motDePasse),
+    motDePasse,
+  ]
+    .filter((f) => f !== '')
+    .sort((x, y) => y.length - x.length);
+  return (texte) => formes.reduce((t, forme) => t.replaceAll(forme, '***'), texte);
+}
+
 export function expediteurSmtp(options: OptionsSmtp): ExpediteurSmtp {
   const delaiMs = options.delaiMs ?? DELAI_SMTP_MS;
   const auth =
@@ -93,15 +112,23 @@ export function expediteurSmtp(options: OptionsSmtp): ExpediteurSmtp {
 
   const relais = `${options.hote}:${String(options.port)}`;
 
-  /** Jamais le mot de passe dans un message d'erreur, même renvoyé par le serveur. */
-  const sansSecret = (texte: string): string =>
-    options.motDePasse === undefined || options.motDePasse === '' ? texte : texte.replaceAll(options.motDePasse, '***');
+  const nettoyer = nettoyeurSecrets(options.utilisateur, options.motDePasse);
+
+  /**
+   * Toute erreur qui sort de cet expéditeur passe ici : une Error NEUVE (ErreurEnvoiCourriel),
+   * message nettoyé, sans cause, response ni command (nodemailer y recopie la réponse du
+   * serveur, qui peut répéter la ligne AUTH).
+   */
+  const erreurPropre = (prefixe: string, erreur: unknown): ErreurEnvoiCourriel => {
+    const cause = erreur instanceof Error ? erreur.message : String(erreur);
+    return new ErreurEnvoiCourriel(nettoyer(`${prefixe} : ${cause}`));
+  };
 
   return {
     async envoyer(message) {
       // Avant toute connexion : un retour à la ligne dans un en-tête n'ouvre même pas de socket.
       verifierEnTetes(message);
-      const delai = minuterieRejet(delaiMs, `Courriel non envoyé : pas de réponse du serveur SMTP en ${String(delaiMs)} ms.`);
+      const delai = minuterieRejet(delaiMs, `pas de réponse en ${String(delaiMs)} ms`);
       // `a` est UNE adresse, jamais analysée : passée en objet (en-tête To) et dans une enveloppe
       // explicite, elle ne peut pas être décomposée en liste (« a@x.fr,pirate@y.fr ») ni réduite
       // à l'adresse entre chevrons d'un nom d'affichage. Un seul RCPT TO par message.
@@ -120,23 +147,21 @@ export function expediteurSmtp(options: OptionsSmtp): ExpediteurSmtp {
       envoi.catch(() => undefined);
       try {
         await Promise.race([envoi, delai.promesse]);
+      } catch (erreur) {
+        throw erreurPropre(`Courriel non envoyé par le relais SMTP ${relais}`, erreur);
       } finally {
         delai.annuler();
       }
     },
 
     async verifier() {
-      const delai = minuterieRejet(delaiMs, `Relais SMTP ${relais} : pas de réponse en ${String(delaiMs)} ms.`);
-      const verification = transport.verify().then(
-        () => undefined,
-        (erreur: unknown) => {
-          const cause = erreur instanceof Error ? erreur.message : String(erreur);
-          throw new Error(sansSecret(`Relais SMTP ${relais} injoignable ou refusé : ${cause}`));
-        },
-      );
+      const delai = minuterieRejet(delaiMs, `pas de réponse en ${String(delaiMs)} ms`);
+      const verification = transport.verify();
       verification.catch(() => undefined);
       try {
         await Promise.race([verification, delai.promesse]);
+      } catch (erreur) {
+        throw erreurPropre(`Relais SMTP ${relais} injoignable ou refusé`, erreur);
       } finally {
         delai.annuler();
       }

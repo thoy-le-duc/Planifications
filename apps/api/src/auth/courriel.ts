@@ -13,6 +13,14 @@ export interface MessageCourriel {
   readonly html?: string;
 }
 
+/**
+ * Échec d'envoi d'un expéditeur réel : message déjà nettoyé de tout secret (courriel-smtp.ts),
+ * sans cause attachée. Le gestionnaire d'erreur de l'API (app.ts) n'écrit que ce message.
+ */
+export class ErreurEnvoiCourriel extends Error {
+  override readonly name = 'ErreurEnvoiCourriel';
+}
+
 export interface ExpediteurCourriel {
   envoyer(message: MessageCourriel): Promise<void>;
 }
