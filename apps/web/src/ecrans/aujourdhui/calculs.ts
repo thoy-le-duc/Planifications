@@ -298,11 +298,15 @@ const SQL_ESPECES = `SELECT e.id, e.nom, e.unite_recolte, f.nom AS famille FROM 
   WHERE e.id IN (${DANS}) AND e.ferme_id = ?`;
 const SQL_VARIETES = `SELECT id, nom FROM variete WHERE id IN (${DANS}) AND ferme_id = ?`;
 
-/** Campagnes jointes à leur plantation ; `filtre` sur l'alias `c`. */
+/**
+ * Campagnes jointes à leur plantation ; `filtre` sur l'alias `c`. Une campagne dont la
+ * plantation est d'une autre ferme est masquée (décision du chef, T13c) : elle n'en reprend ni
+ * le nombre de plants ni la date d'arrachage.
+ */
 const sqlCampagnes = (filtre: string) => `SELECT c.id, c.debut_recolte_prevu, c.fin_recolte_prevue, p.id AS plantation_id, p.nombre_plants,
     p.date_arrachage, p.espece_id, p.variete_id, e.nom AS espece, e.unite_recolte, f.nom AS famille, v.nom AS variete
   FROM campagne c
-  JOIN plantation p ON p.id = c.plantation_id
+  JOIN plantation p ON p.id = c.plantation_id AND p.ferme_id = c.ferme_id
   LEFT JOIN espece e ON e.id = p.espece_id AND e.ferme_id = c.ferme_id
   LEFT JOIN famille f ON f.id = e.famille_id AND f.ferme_id = c.ferme_id
   LEFT JOIN variete v ON v.id = p.variete_id AND v.ferme_id = c.ferme_id

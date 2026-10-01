@@ -219,12 +219,14 @@ interface ProprietesHistorique {
    * la journée relue. Absente de l'historique, le focus va au titre de l'historique.
    */
   readonly focus: string | null;
+  /** Le focus a été placé : il ne sera plus jamais repris (une seule fois, T13c). */
+  readonly surFocusPlace: () => void;
   readonly aujourdhui: string;
   readonly surAnnuler: (e: EntreeHistorique) => void;
   readonly surChangerDate: (e: EntreeHistorique) => void;
 }
 
-function Historique({ id, entrees, focus, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
+function Historique({ id, entrees, focus, surFocusPlace, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
   const idTitre = useId();
   const [tout, setTout] = useState(false);
   // Dessinées en tâche de fond (interruptible) : l'historique, en bas de l'écran, ne retarde ni
@@ -233,25 +235,24 @@ function Historique({ id, entrees, focus, aujourdhui, surAnnuler, surChangerDate
   const montrees = tout ? differees : differees.slice(0, SAISIES_HISTORIQUE);
   const section = useRef<HTMLElement>(null);
   const titre = useRef<HTMLHeadingElement>(null);
-  /** Saisie dont le focus a déjà été placé : on ne le reprend ensuite que s'il est perdu. */
-  const place = useRef<string | null>(null);
+  // Focus placé UNE fois, à la première journée relue après la correction, puis oublié
+  // (`surFocusPlace`) : une relecture suivante (synchro) ne le reprend jamais, la page ne saute
+  // pas sous le pouce.
   useEffect(() => {
-    if (focus === null) {
-      place.current = null;
-      return;
-    }
+    if (focus === null) return;
     const s = section.current;
     if (s === null) return;
     const actif = document.activeElement;
-    const perdu = actif === null || actif === document.body;
-    // Le focus est ailleurs (autre geste, ou déjà placé) : on le laisse.
-    if (!perdu && (place.current === focus || !s.contains(actif))) return;
+    // Le focus est déjà ailleurs, hors de l'historique (autre geste) : on le laisse.
+    if (actif !== null && actif !== document.body && !s.contains(actif)) {
+      surFocusPlace();
+      return;
+    }
     const entree = [...s.querySelectorAll<HTMLElement>('[data-testid="saisie-historique"]')].find((li) => li.dataset.evenement === focus);
     if (entree === undefined && differees !== entrees && entrees.some((h) => h.evenement.id === focus)) return; // pas encore dessinée
-    if (entree?.contains(actif) === true) return;
-    (entree?.querySelector<HTMLElement>('button') ?? titre.current)?.focus();
-    place.current = focus;
-  }, [focus, entrees, differees, montrees]);
+    if (entree?.contains(actif) !== true) (entree?.querySelector<HTMLElement>('button') ?? titre.current)?.focus();
+    surFocusPlace();
+  }, [focus, entrees, differees, montrees, surFocusPlace]);
   return (
     <section ref={section} id={id} aria-labelledby={idTitre} className="auj-historique">
       <div className="auj-historique-tete">
@@ -442,6 +443,9 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
    * affichée au moment de l'écriture : le focus attend une journée relue.
    */
   const [focusSaisie, setFocusSaisie] = useState<{ readonly evenementId: string; readonly avant: Journee | null } | null>(null);
+  const oublierFocus = useCallback(() => {
+    setFocusSaisie(null);
+  }, []);
   /** Une écriture à la fois : un double appui n'écrit pas deux fois. */
   const occupe = useRef(false);
   const numero = useRef(0);
@@ -702,6 +706,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
           id={idHistorique}
           entrees={journee.historique}
           focus={focusSaisie !== null && focusSaisie.avant !== journee ? focusSaisie.evenementId : null}
+          surFocusPlace={oublierFocus}
           aujourdhui={jour}
           surAnnuler={(h) => {
             annuler(h.evenement);

@@ -304,8 +304,9 @@ export function suivreJournee(
 
 /**
  * Prépare la journée (base ouverte, avant l’affichage) : lue une fois (calculée à l’affichage), après
- * `apres` s'il est donné. Au lancement, App ne lui fait rien attendre (T13c) : Aujourd'hui est
- * l'écran d'accueil. L'écran ouvert entre temps attend cette lecture au lieu d'en lancer une autre.
+ * `apres` s'il est donné. Au lancement, App lui fait attendre le début du plan, au plus
+ * ATTENTE_PLAN_MAX_MS (App.tsx, T13c) : Aujourd'hui, écran d'accueil, ne reste pas bloqué derrière
+ * le plan. L'écran ouvert entre temps attend cette lecture au lieu d'en lancer une autre.
  */
 export async function prechargerJournee(porte: PorteDonnees, fermeId: string, jour: string, apres?: Promise<unknown>): Promise<void> {
   const s = suiviDe(porte, fermeId, jour);
