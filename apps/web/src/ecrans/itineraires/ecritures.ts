@@ -258,6 +258,91 @@ export function messageModifieAilleurs(n: number): string {
   return `ce qui a été modifié entre-temps sur un autre téléphone est gardé tel quel (${String(n)} ${n > 1 ? 'lignes' : 'ligne'})`;
 }
 
+/** Condition SQL ajoutée au WHERE d'un UPDATE (fragment « AND … ») et ses paramètres. */
+interface Condition {
+  readonly sql: string;
+  readonly parametres: readonly Valeur[];
+}
+
+const et = (...cs: readonly Condition[]): Condition => ({ sql: cs.map((c) => c.sql).join(''), parametres: cs.flatMap((c) => c.parametres) });
+
+/** Chaque colonne vaut encore ce que nous avions écrit, et `supprime_le` ce qu'il valait après (T24c N3). */
+function conditionIntacte(l: LigneEcrite): Condition {
+  const cles = Object.keys(l.apres).filter((c) => c !== 'supprime_le');
+  // Une occupation passée dans une autre série entre-temps n'est pas touchée (T24c B1).
+  const serie = l.table === 'occupation' ? { sql: ' AND serie_id IS ?', parametres: [l.serieId] } : et();
+  return et(
+    {
+      sql: [...cles, 'supprime_le'].map((c) => ` AND ${c} IS ?`).join(''),
+      parametres: [...cles.map((c) => l.apres[c] ?? null), l.supprimeLe],
+    },
+    serie,
+  );
+}
+
+/** Couples (catégorie, libellé) cités par les travaux prévus d'un texte de paramètres. */
+function typesCites(parametres: Valeur): { categorie: string; type: string }[] {
+  let p: unknown;
+  try {
+    p = JSON.parse(String(parametres));
+  } catch {
+    return [];
+  }
+  const travaux = typeof p === 'object' && p !== null && 'travauxPrevus' in p ? p.travauxPrevus : null;
+  if (!Array.isArray(travaux)) return [];
+  const r: { categorie: string; type: string }[] = [];
+  for (const t of travaux as unknown[]) {
+    if (typeof t === 'object' && t !== null && 'categorie' in t && 'type' in t && typeof t.categorie === 'string' && typeof t.type === 'string') r.push({ categorie: t.categorie, type: t.type });
+  }
+  return r;
+}
+
+/** Chaque type cité existe encore, non supprimé (verifierTypes du serveur). */
+function conditionTypesVivants(fermeId: string, cites: readonly { categorie: string; type: string }[]): Condition {
+  return et(
+    ...cites.map((t) => ({
+      sql: ' AND EXISTS (SELECT 1 FROM type_intervention t WHERE t.supprime_le IS NULL AND (t.ferme_id = ? OR t.ferme_id IS NULL) AND t.categorie = ? AND t.libelle = ?)',
+      parametres: [fermeId, t.categorie, t.type],
+    })),
+  );
+}
+
+/** Le couple n'est cité par aucun itinéraire actif de la ferme (« un type utilisé ne se renomme pas »). */
+function conditionNonUtilise(fermeId: string, categorie: Valeur, libelle: Valeur): Condition {
+  return {
+    sql:
+      " AND NOT EXISTS (SELECT 1 FROM itineraire i, json_each(i.parametres, '$.travauxPrevus') t WHERE i.ferme_id = ? AND i.supprime_le IS NULL" +
+      " AND json_extract(t.value, '$.categorie') = ? AND json_extract(t.value, '$.type') = ?)",
+    parametres: [fermeId, categorie, libelle],
+  };
+}
+
+/** Les types vivants de la catégorie (hors `id`) sont exactement ceux lus (`lus` : id et libellé). */
+function conditionCategorieInchangee(fermeId: string, id: string, categorie: Valeur, lus: readonly Ligne[]): Condition {
+  const cles = lus.map((l) => `${String(l.id)}\u001f${String(l.libelle)}`);
+  return {
+    sql:
+      ' AND NOT EXISTS (SELECT 1 FROM type_intervention t WHERE t.supprime_le IS NULL AND (t.ferme_id = ? OR t.ferme_id IS NULL) AND t.categorie = ? AND t.id <> ?' +
+      (cles.length === 0 ? ')' : ` AND (t.id || char(31) || t.libelle) NOT IN (${cles.map(() => '?').join(', ')}))`),
+    parametres: [fermeId, categorie, id, ...cles],
+  };
+}
+
+/** Condition vraie si elle tient maintenant (même SQL que celle portée par l'UPDATE). */
+async function tient(porte: PorteDonnees, c: Condition): Promise<boolean> {
+  return (await porte.lire<Ligne>(`SELECT 1 AS ok WHERE 1 = 1${c.sql}`, c.parametres)).length > 0;
+}
+
+/** La série et toutes ses occupations n'ont pas changé depuis leur lecture (sauf par nous, horodatées `iso`). */
+function conditionSerieInchangee(serie: Ligne, occupations: readonly Ligne[], iso: string): Condition {
+  return {
+    sql:
+      ' AND EXISTS (SELECT 1 FROM serie s WHERE s.id = ? AND (s.modifie_le IS ? OR s.modifie_le IS ?))' +
+      ` AND NOT EXISTS (SELECT 1 FROM occupation o WHERE o.serie_id = ? AND o.modifie_le IS NOT ?${occupations.map(() => ' AND NOT (o.id = ? AND o.modifie_le IS ?)').join('')})`,
+    parametres: [serie.id ?? null, serie.modifie_le ?? null, iso, serie.id ?? null, iso, ...occupations.flatMap((o) => [o.id ?? null, o.modifie_le ?? null])],
+  };
+}
+
 /**
  * Défait une écriture, en UNE transaction, colonne par colonne et ligne par ligne (décision 9) :
  * une ligne n'est ramenée que si chaque colonne que nous avions changée vaut encore ce que nous
@@ -269,9 +354,16 @@ export function messageModifieAilleurs(n: number): string {
  * l'annulation, même si sa ligne n'est pas ramenée (T24b ; T12b décision 10) : série et toutes
  * ses occupations (écrites ailleurs, laissées, ramenées) passent `etatSerieValide`, comme en fin
  * de lot au serveur. Sinon, ou si la ligne série est laissée, la série et ses occupations
- * restent telles quelles. Rend le message à montrer si des lignes ont été laissées, sinon null.
+ * restent telles quelles.
+ *
+ * T24c : les types d'intervention sont relus en base (N1) ; un renommage n'est défait que si le
+ * serveur l'accepterait (nouveau libellé non utilisé, ancien libellé sans doublon, N2). Les
+ * lectures précèdent la transaction d'écriture : chaque UPDATE porte donc dans son WHERE les
+ * conditions vérifiées (valeurs encore celles écrites, types vivants, série inchangée, règles
+ * des types), et ne touche rien si une synchro reçue entre-temps les a changées (N3). Rend le
+ * message à montrer si des lignes ont été laissées, sinon null.
  */
-export async function ramener(ctx: ContexteEcriture, etat: EtatAvant, types: readonly TypeLu[]): Promise<string | null> {
+export async function ramener(ctx: ContexteEcriture, etat: EtatAvant): Promise<string | null> {
   const iso = ctx.maintenant().toISOString();
   const vaut = (c: Ligne, valeurs: Readonly<Record<string, Valeur>>) => Object.keys(valeurs).every((k) => (c[k] ?? null) === (valeurs[k] ?? null));
   const serieDe = (l: LigneEcrite): string | null => (l.table === 'serie' ? l.id : l.table === 'occupation' ? l.serieId : null);
@@ -279,11 +371,14 @@ export async function ramener(ctx: ContexteEcriture, etat: EtatAvant, types: rea
   // Séries touchées : leur ligne et TOUTES leurs occupations (supprimées comprises), lues ensemble.
   const seriesIds = [...new Set(etat.lignes.map(serieDe).filter((x): x is string => x !== null))];
   const marques = seriesIds.map(() => '?').join(', ');
-  const [seriesLues, occupationsLues, autres] = await Promise.all([
+  const [seriesLues, occupationsLues, autres, typesLus] = await Promise.all([
     seriesIds.length === 0 ? [] : ctx.porte.lire<Ligne>(`SELECT * FROM serie WHERE id IN (${marques})`, seriesIds),
     seriesIds.length === 0 ? [] : ctx.porte.lire<Ligne>(`SELECT * FROM occupation WHERE serie_id IN (${marques}) ORDER BY id`, seriesIds),
     Promise.all(etat.lignes.map((l) => (l.table === 'serie' || l.table === 'occupation' ? Promise.resolve(null) : lireLigne(ctx.porte, l.table, l.id)))),
+    // N1 : les types tels qu'ils sont en base maintenant, pas ceux connus à l'enregistrement.
+    ctx.porte.lire<Ligne>('SELECT id, categorie, libelle FROM type_intervention WHERE supprime_le IS NULL AND (ferme_id = ? OR ferme_id IS NULL)', [ctx.fermeId]),
   ]);
+  const permis = typesLus.map((t) => ({ categorie: String(t.categorie), type: String(t.libelle) }));
   const courante = (l: LigneEcrite, i: number): Ligne | null =>
     l.table === 'serie'
       ? (seriesLues.find((x) => x.id === l.id) ?? null)
@@ -291,22 +386,48 @@ export async function ramener(ctx: ContexteEcriture, etat: EtatAvant, types: rea
         ? (occupationsLues.find((x) => x.id === l.id) ?? null)
         : (autres[i] ?? null);
 
-  // Ce que chaque ligne deviendrait : null = ignorée (déjà comme avant), 'laissee', ou les valeurs à remettre.
-  type Decision = Readonly<Record<string, Valeur>> | 'laissee' | null;
-  const decisions = etat.lignes.map((l, i): Decision => {
-    const c = courante(l, i);
-    if (c === null) return 'laissee';
-    if (vaut(c, l.avant)) return null;
-    const intacte = vaut(c, l.apres) && (c.supprime_le ?? null) === l.supprimeLe;
-    if (!intacte) return 'laissee';
-    if (l.table === 'itineraire') return validerItineraire({ ...c, ...l.avant }, { typesIntervention: typesPermis(types) }).ok ? l.avant : 'laissee';
-    if (l.table === 'type_intervention') return validerTypeIntervention({ ...c, ...l.avant }).ok ? l.avant : 'laissee';
-    return l.avant;
-  });
-  const aRemettre = (d: Decision | undefined): Readonly<Record<string, Valeur>> => (d === null || d === undefined || d === 'laissee' ? {} : d);
+  /** Conditions propres à une ligne (en plus de « intacte ») ; null si la ligne doit être laissée. */
+  async function conditionsPropres(l: LigneEcrite, c: Ligne): Promise<Condition | null> {
+    const cible = { ...c, ...l.avant };
+    if (l.table === 'itineraire') {
+      if (!validerItineraire(cible, { typesIntervention: permis }).ok) return null;
+      return (cible.supprime_le ?? null) === null ? conditionTypesVivants(ctx.fermeId, typesCites(cible.parametres ?? null)) : et();
+    }
+    if (l.table !== 'type_intervention') return et();
+    if (!validerTypeIntervention(cible).ok) return null;
+    const conditions: Condition[] = [];
+    const renomme = (cible.categorie ?? null) !== (c.categorie ?? null) || (cible.libelle ?? null) !== (c.libelle ?? null);
+    const supprime = (c.supprime_le ?? null) === null && (cible.supprime_le ?? null) !== null;
+    if (renomme || supprime) conditions.push(conditionNonUtilise(ctx.fermeId, c.categorie ?? null, c.libelle ?? null));
+    if ((cible.supprime_le ?? null) === null) {
+      // Unicité sans casse, vérifiée ici ; l'UPDATE exige en plus que la catégorie n'ait pas bougé depuis.
+      const memeCategorie = typesLus.filter((t) => t.id !== l.id && t.categorie === cible.categorie);
+      const libelle = String(cible.libelle).toLowerCase();
+      if (memeCategorie.some((t) => String(t.libelle).toLowerCase() === libelle)) return null;
+      conditions.push(conditionCategorieInchangee(ctx.fermeId, l.id, cible.categorie ?? null, memeCategorie));
+    }
+    const r = et(...conditions);
+    return (await tient(ctx.porte, r)) ? r : null;
+  }
+
+  // Ce que chaque ligne deviendrait : null = ignorée (déjà comme avant), 'laissee', ou les valeurs à remettre et la condition.
+  type Decision = { readonly valeurs: Readonly<Record<string, Valeur>>; readonly condition: Condition } | 'laissee' | null;
+  const decisions = await Promise.all(
+    etat.lignes.map(async (l, i): Promise<Decision> => {
+      const c = courante(l, i);
+      if (c === null) return 'laissee';
+      if (vaut(c, l.avant)) return null;
+      const intacte = vaut(c, l.apres) && (c.supprime_le ?? null) === l.supprimeLe;
+      if (!intacte) return 'laissee';
+      const propres = await conditionsPropres(l, c);
+      return propres === null ? 'laissee' : { valeurs: l.avant, condition: et(conditionIntacte(l), propres) };
+    }),
+  );
+  const aRemettre = (d: Decision | undefined): Readonly<Record<string, Valeur>> => (d === null || d === undefined || d === 'laissee' ? {} : d.valeurs);
 
   // Chaque série touchée, telle qu'elle serait après l'annulation, vérifiée comme la fin de lot du serveur.
   const seriesLaissees = new Set<string>();
+  const gardesSerie = new Map<string, Condition>();
   await Promise.all(
     seriesIds.map(async (id) => {
       const serie = seriesLues.find((x) => x.id === id);
@@ -317,6 +438,7 @@ export async function ramener(ctx: ContexteEcriture, etat: EtatAvant, types: rea
         return;
       }
       const occupations = occupationsLues.filter((o) => o.serie_id === id);
+      gardesSerie.set(id, conditionSerieInchangee(serie, occupations, iso));
       const apres = {
         serie: { ...serie, ...aRemettre(decisionSerie) },
         occupations: occupations.map((o) => {
@@ -341,7 +463,9 @@ export async function ramener(ctx: ContexteEcriture, etat: EtatAvant, types: rea
         laissees++;
         return;
       }
-      ordres.push(ordreDe({ ...l, apres: d }, iso));
+      const garde = serieId === null ? undefined : gardesSerie.get(serieId);
+      const c = garde === undefined ? d.condition : et(d.condition, garde);
+      ordres.push(ordreDe({ ...l, apres: d.valeurs }, iso, c.sql, c.parametres));
     });
   }
   await ctx.porte.ecrireEnsemble(ordres);

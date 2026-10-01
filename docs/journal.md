@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T24c : « Annuler » des itinéraires sûr face aux types changés ailleurs
+
+- **Fait** : « Annuler » dans « Mes itinéraires » relit les types d'intervention au moment d'annuler. Il ne remet jamais un type supprimé ailleurs, ne défait pas un renommage devenu impossible (nouveau libellé utilisé ou ancien recréé) et n'écrase plus une valeur reçue entre sa lecture et son écriture, grâce à une condition dans chaque UPDATE, qui vérifie aussi la série d'une occupation.
+- **Décidé** : un itinéraire laissé n'empêche pas ses séries d'être défaites, puisque le serveur ne relie pas l'instantané au texte de l'itinéraire. La condition dans le WHERE a été préférée à une transaction de lecture, que la porte ne permet pas.
+- **Bloquant** : rien. Suite dans T24d : prévenir quand l'annulation est bloquée en silence (fenêtre de quelques millisecondes).
+
 ## 2026-10-01 — T11d : la mesure du défilement du plan est fiable
 
 - **Fait** : la fluidité du défilement de Planches se mesure sur 5 passages, en images perdues à 60 Hz (au plus 2 d'affilée). Le test échoue si 4 passages sur 5 saccadent ou si le total des à-coups dépasse 6. Un témoin volontairement saccadé (60 ms bloquées chaque seconde) échoue à chaque fois. 19 exécutions sous charge sans échec.
