@@ -24,6 +24,8 @@ import {
   dialogueOuEchec,
   etat,
   itineraire,
+  lire,
+  occupationsValides,
   occupations,
   occupationsDe,
   ordres,
@@ -269,5 +271,51 @@ describe('T24c, N3 : une synchro reçue entre la lecture et l’écriture de « 
     const o = occupationsDe(banc, SERIE.aVenir1)[0];
     expect(o?.prevu_du, 'occupation d’aVenir1 : prevu_du écrit ailleurs reste').toBe(serieAilleurs.prevu_mise_en_place);
     expect(o?.prevu_au, 'occupation d’aVenir1 : prevu_au écrit ailleurs reste').toBe(serieAilleurs.prevu_fin_recolte);
+  });
+});
+
+describe('T24c, N3 bis (B1) : occupation passée dans une autre série pendant l’annulation', () => {
+  it('O passe de aVenir1 à aVenir2 (qui reçoit les nouvelles dates d’aVenir1) entre la lecture et l’écriture : O n’est pas réécrite et reste valide avec les dates d’aVenir2', async () => {
+    await h.ouvrir();
+    await ouvrirFormulaire(ITINERAIRE.bataviaFerme, MODIFIER_BATAVIA);
+    await remplir(champ('Avant récolte (jours)', formulaire()), '56');
+    await enregistrer();
+    await attendre(() => dialogue(/^Appliquer aux 2 séries à venir/) !== undefined, 'confirmation pour 2 séries');
+    await toucher(bouton('Appliquer aux séries', dialogueOuEchec(/^Appliquer/)));
+    await attendre(() => bandeau() !== null, 'bandeau « Annuler »');
+
+    const banc = b();
+    const s1 = serie(banc, SERIE.aVenir1);
+    if (s1 === undefined) throw new Error('aVenir1 absente');
+    const datesS1 = {
+      ancre_type: s1.ancre_type ?? null,
+      ancre_date: s1.ancre_date ?? null,
+      prevu_semis_pepiniere: s1.prevu_semis_pepiniere ?? null,
+      prevu_mise_en_place: s1.prevu_mise_en_place ?? null,
+      prevu_debut_recolte: s1.prevu_debut_recolte ?? null,
+      prevu_fin_recolte: s1.prevu_fin_recolte ?? null,
+    };
+    let recue: Ligne | undefined;
+    const original = banc.base.writeTransaction.bind(banc.base);
+    // Synchro reçue juste avant la transaction d'écriture de l'annulation (après ses lectures).
+    vi.spyOn(banc.base, 'writeTransaction').mockImplementation((fn) => {
+      if (recue === undefined) {
+        recevoirUpdate(banc, 'serie', SERIE.aVenir2, datesS1);
+        recevoirUpdate(banc, 'occupation', OCCUPATION.aVenir1, { serie_id: SERIE.aVenir2 });
+        recue = lire(banc, 'SELECT * FROM occupation WHERE id = ?', [OCCUPATION.aVenir1])[0];
+      }
+      return original(fn);
+    });
+
+    banc.remiseAZero();
+    await annuler();
+    await attendre(() => recue !== undefined, 'synchro reçue pendant l’annulation');
+    await laisserFiler();
+    verifierOrdres(banc);
+
+    const o = lire(banc, 'SELECT * FROM occupation WHERE id = ?', [OCCUPATION.aVenir1])[0];
+    expect(o?.serie_id, 'O est dans aVenir2').toBe(SERIE.aVenir2);
+    expect(o, 'O n’est pas réécrite : elle reste telle que reçue').toEqual(recue);
+    occupationsValides(banc, SERIE.aVenir2);
   });
 });
