@@ -8,6 +8,16 @@
  *   refuserDestinataire  RCPT TO répond 550 (adresse refusée par le fournisseur)
  *   muet                 accepte la connexion mais n'envoie jamais la bannière 220
  *   sansAuth             n'annonce pas AUTH dans la réponse à EHLO
+ *   mecanismes           mécanismes AUTH annoncés (défaut « PLAIN LOGIN ») : force PLAIN ou LOGIN
+ *   authEcho             (T09c) refuse l'authentification par « 535 » en RÉPÉTANT ce qu'il a
+ *                        reçu, suivi de MARQUEUR_RELAIS : un relais bavard ou malveillant. Sert
+ *                        à vérifier que ni le mot de passe ni le texte libre du serveur ne
+ *                        fuient dans une erreur. Formes :
+ *                          true | 'ligne'   la ligne reçue (base64) et sa version décodée
+ *                          'sans-egal'      le base64 sans « = » final
+ *                          'deux-lignes'    le base64 coupé en deux, réponse « 535-… » puis « 535 … »
+ *                          'hex'            les octets décodés en hexadécimal
+ *   refuserDestinataire  la réponse 550 répète l'adresse refusée, suivie de MARQUEUR_RELAIS
  */
 import { createServer, type Socket } from 'node:net';
 import type { AddressInfo } from 'node:net';
@@ -42,7 +52,12 @@ export interface OptionsSmtpFactice {
   readonly refuserDestinataire?: boolean;
   readonly muet?: boolean;
   readonly sansAuth?: boolean;
+  readonly mecanismes?: 'PLAIN' | 'LOGIN' | 'PLAIN LOGIN';
+  readonly authEcho?: boolean | 'ligne' | 'sans-egal' | 'deux-lignes' | 'hex';
 }
+
+/** Texte libre unique que le relais factice insère dans ses réponses d'erreur (T09c). */
+export const MARQUEUR_RELAIS = 'MARQUEUR-RELAIS-q8Zt3';
 
 function decoder64(b64: string): string {
   return Buffer.from(b64.trim(), 'base64').toString('utf8');
@@ -83,6 +98,33 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
     let lignesDonnees: string[] = [];
     let utilisateurLogin = '';
 
+    /** Fin d'une authentification : 235, ou 535 qui répète la ligne reçue (authEcho). */
+    const finAuth = (ligneRecue: string) => {
+      const forme = options.authEcho === true ? 'ligne' : options.authEcho;
+      if (forme !== undefined && forme !== false) {
+        const jeton = ligneRecue.split(' ').at(-1) ?? '';
+        const octets = Buffer.from(jeton.trim(), 'base64');
+        switch (forme) {
+          case 'ligne':
+            repondre(`535 5.7.8 refus pour <${ligneRecue}> (${octets.toString('utf8').replaceAll('\u0000', ' ')}) ${MARQUEUR_RELAIS}`);
+            return;
+          case 'sans-egal':
+            repondre(`535 5.7.8 refus pour <${jeton.replace(/=+$/, '')}> ${MARQUEUR_RELAIS}`);
+            return;
+          case 'deux-lignes': {
+            const milieu = Math.floor(jeton.length / 2);
+            repondre(`535-5.7.8 refus pour <${jeton.slice(0, milieu)}`);
+            repondre(`535 5.7.8 ${jeton.slice(milieu)}> ${MARQUEUR_RELAIS}`);
+            return;
+          }
+          case 'hex':
+            repondre(`535 5.7.8 refus pour <${octets.toString('hex')}> ${MARQUEUR_RELAIS}`);
+            return;
+        }
+      }
+      repondre('235 2.7.0 Authentification reussie');
+    };
+
     const traiterLigne = (ligne: string) => {
       if (etat === 'donnees') {
         if (ligne === '.') {
@@ -100,7 +142,7 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
       if (etat === 'auth-plain') {
         authentifications.push(identifiantsPlain(ligne));
         etat = 'commande';
-        repondre('235 2.7.0 Authentification reussie');
+        finAuth(ligne);
         return;
       }
       if (etat === 'auth-login-utilisateur') {
@@ -112,7 +154,7 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
       if (etat === 'auth-login-mot-de-passe') {
         authentifications.push({ utilisateur: utilisateurLogin, motDePasse: decoder64(ligne) });
         etat = 'commande';
-        repondre('235 2.7.0 Authentification reussie');
+        finAuth(ligne);
         return;
       }
 
@@ -123,7 +165,7 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
       switch (verbe) {
         case 'EHLO':
           repondre('250-smtp.factice.test');
-          if (options.sansAuth !== true) repondre('250-AUTH PLAIN LOGIN');
+          if (options.sansAuth !== true) repondre(`250-AUTH ${options.mecanismes ?? 'PLAIN LOGIN'}`);
           repondre('250-8BITMIME');
           repondre('250 SMTPUTF8');
           return;
@@ -138,7 +180,7 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
               repondre('334 ');
             } else {
               authentifications.push(identifiantsPlain(initial));
-              repondre('235 2.7.0 Authentification reussie');
+              finAuth(ligne);
             }
             return;
           }
@@ -162,7 +204,7 @@ export async function demarrerSmtpFactice(options: OptionsSmtpFactice = {}): Pro
           return;
         case 'RCPT':
           if (options.refuserDestinataire === true) {
-            repondre('550 5.1.1 Destinataire refuse');
+            repondre(`550 5.1.1 <${sansChevrons(argument.replace(/^TO:/i, ''))}> refuse ${MARQUEUR_RELAIS}`);
             return;
           }
           rcptTo.push(sansChevrons(argument.replace(/^TO:/i, '')));
@@ -286,14 +328,42 @@ export function decoderMotsEncodes(valeur: string): string {
  * multipart), décodé (7bit, 8bit, quoted-printable, base64), lignes en \n.
  */
 export function lireTexte(donnees: string): string {
+  return lirePartie(donnees, 'text/plain');
+}
+
+/** Première partie text/html d'un multipart (T09c), décodée comme lireTexte ; '' si absente. */
+export function lireHtml(donnees: string): string {
+  const type = lireEnTetes(donnees).get('content-type') ?? 'text/plain';
+  if (!/^multipart\//i.test(type) && !/^text\/html/i.test(type)) return '';
+  return lirePartie(donnees, 'text/html');
+}
+
+/** Types MIME des parties d'un multipart, dans l'ordre (récursif) ; [type] sinon. */
+export function typesDesParties(donnees: string): string[] {
+  const type = lireEnTetes(donnees).get('content-type') ?? 'text/plain';
+  const frontiere = /boundary="?([^";]+)"?/i.exec(type)?.[1];
+  if (!/^multipart\//i.test(type) || frontiere === undefined) return [type.split(';')[0]?.trim().toLowerCase() ?? ''];
+  const corps = donnees.split('\r\n\r\n').slice(1).join('\r\n\r\n');
+  return corps
+    .split(`--${frontiere}`)
+    .slice(1)
+    .filter((p) => !p.startsWith('--'))
+    .flatMap((p) => typesDesParties(p.replace(/^\r\n/, '').replace(/\r\n$/, '')));
+}
+
+function lirePartie(donnees: string, voulu: 'text/plain' | 'text/html'): string {
   const enTetes = lireEnTetes(donnees);
   const corps = donnees.split('\r\n\r\n').slice(1).join('\r\n\r\n');
   const type = enTetes.get('content-type') ?? 'text/plain';
   const frontiere = /boundary="?([^";]+)"?/i.exec(type)?.[1];
   if (/^multipart\//i.test(type) && frontiere !== undefined) {
     for (const partie of corps.split(`--${frontiere}`)) {
-      const p = partie.replace(/^\r\n/, '');
-      if (/content-type:\s*text\/plain/i.test(p.split('\r\n\r\n')[0] ?? '')) return lireTexte(p.replace(/\r\n$/, ''));
+      const p = partie.replace(/^\r\n/, '').replace(/\r\n$/, '');
+      const typePartie = lireEnTetes(p).get('content-type') ?? '';
+      if (/^multipart\//i.test(typePartie)) {
+        const interne = lirePartie(p, voulu);
+        if (interne !== '') return interne;
+      } else if (typePartie.toLowerCase().startsWith(voulu)) return lirePartie(p, voulu);
     }
     return '';
   }

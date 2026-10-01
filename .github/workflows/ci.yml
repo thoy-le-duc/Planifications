@@ -12,7 +12,7 @@ jobs:
   verifications:
     name: Typage, lint, tests, build, budgets
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     # Pas de bloc `services:` pour Postgres : il n'y prend pas d'options de commande, et le service
     # PowerSync exige wal_level=logical (tests des règles de synchro, T10). Postgres est lancé par
     # `docker run` ci-dessous.

@@ -127,6 +127,7 @@ try {
     JWT_AUDIENCE: AUDIENCE,
     PORT: String(PORT_API),
     COURRIEL_CONSOLE: '1',
+    NODE_ENV: 'development',
     CORS_ORIGINES: ORIGINE_PAGE,
   };
 

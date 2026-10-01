@@ -9,7 +9,7 @@
  * courriel-smtp.test.ts.
  */
 import { createTransport } from 'nodemailer';
-import { verifierEnTetes, type ExpediteurCourriel } from './courriel.ts';
+import { ErreurEnvoiCourriel, verifierEnTetes, type ExpediteurCourriel } from './courriel.ts';
 
 export type SecuriteSmtp = 'tls' | 'starttls' | 'aucune';
 
@@ -25,7 +25,10 @@ export interface OptionsSmtp {
   /** Identifiants AUTH (PLAIN ou LOGIN) : les deux ou aucun. */
   readonly utilisateur?: string;
   readonly motDePasse?: string;
-  /** En-tête From, ex. « Planifications <connexion@planif.fr> ». */
+  /**
+   * En-tête From, ex. « Planifications <connexion@planif.fr> ». Une adresse nue
+   * (« connexion@planif.fr ») reçoit le nom d'affichage NOM_EXPEDITEUR (T09c).
+   */
   readonly expediteur: string;
   /** Délai maximal d'un envoi, connexion comprise ; 10 s par défaut. */
   readonly delaiMs?: number;
@@ -33,7 +36,62 @@ export interface OptionsSmtp {
 
 export const DELAI_SMTP_MS = 10_000;
 
-export function expediteurSmtp(options: OptionsSmtp): ExpediteurCourriel {
+/** Nom d'affichage ajouté à une adresse d'expéditeur nue (T09c). */
+export const NOM_EXPEDITEUR = 'Planifications';
+
+export interface ExpediteurSmtp extends ExpediteurCourriel {
+  /**
+   * Connexion au relais (EHLO, STARTTLS si exigé, AUTH si identifiants) sans rien envoyer, puis
+   * fermeture (T09c, appelée au démarrage par demarrage.ts). Rejette avec une Error qui nomme
+   * l'hôte et le port, jamais le mot de passe.
+   */
+  verifier(): Promise<void>;
+}
+
+/** From : l'expéditeur tel quel s'il porte déjà un nom (« Nom <adresse> »), sinon nommé. */
+function enTeteFrom(expediteur: string): string | { readonly name: string; readonly address: string } {
+  return expediteur.includes('<') ? expediteur : { name: NOM_EXPEDITEUR, address: expediteur.trim() };
+}
+
+/** Rejette après delaiMs ; `annuler` libère la minuterie. */
+/** Délai dépassé, mesuré ici : son message est le nôtre, sans rien venu du serveur. */
+class ErreurDelaiSmtp extends Error {}
+
+function minuterieRejet(delaiMs: number, message: string): { readonly promesse: Promise<never>; annuler(): void } {
+  let minuterie: ReturnType<typeof setTimeout> | undefined;
+  const promesse = new Promise<never>((_ok, echec) => {
+    minuterie = setTimeout(() => {
+      echec(new ErreurDelaiSmtp(message));
+    }, delaiMs);
+  });
+  return {
+    promesse,
+    annuler() {
+      clearTimeout(minuterie);
+    },
+  };
+}
+
+/**
+ * Masque le mot de passe sous toutes les formes qu'un relais peut répéter dans sa réponse
+ * d'erreur : en clair, base64(« \0utilisateur\0motDePasse ») (AUTH PLAIN), base64(motDePasse)
+ * (AUTH LOGIN), et base64(« utilisateur\0motDePasse »). Les plus longues d'abord.
+ */
+export function nettoyeurSecrets(utilisateur: string | undefined, motDePasse: string | undefined): (texte: string) => string {
+  if (motDePasse === undefined || motDePasse === '') return (texte) => texte;
+  const b64 = (v: string): string => Buffer.from(v, 'utf8').toString('base64');
+  const formes = [
+    ...(utilisateur === undefined ? [] : [b64(`\u0000${utilisateur}\u0000${motDePasse}`), b64(`${utilisateur}\u0000${motDePasse}`)]),
+    b64(`\u0000\u0000${motDePasse}`),
+    b64(motDePasse),
+    motDePasse,
+  ]
+    .filter((f) => f !== '')
+    .sort((x, y) => y.length - x.length);
+  return (texte) => formes.reduce((t, forme) => t.replaceAll(forme, '***'), texte);
+}
+
+export function expediteurSmtp(options: OptionsSmtp): ExpediteurSmtp {
   const delaiMs = options.delaiMs ?? DELAI_SMTP_MS;
   const auth =
     options.utilisateur !== undefined && options.motDePasse !== undefined
@@ -55,34 +113,71 @@ export function expediteurSmtp(options: OptionsSmtp): ExpediteurCourriel {
     debug: false,
   });
 
+  const relais = `${options.hote}:${String(options.port)}`;
+
+  const nettoyer = nettoyeurSecrets(options.utilisateur, options.motDePasse);
+
+  /**
+   * Toute erreur qui sort de cet expéditeur passe ici : une Error NEUVE (ErreurEnvoiCourriel),
+   * sans cause. Son message ne recopie JAMAIS le texte de nodemailer ni la réponse du serveur
+   * (qui peut répéter la ligne AUTH sous une forme imprévue, ou l'adresse refusée) : seulement le
+   * relais, l'étape et des champs sûrs, le code nodemailer (EAUTH, ECONNECTION, ETIMEDOUT…) et
+   * le code de réponse SMTP (535, 550…). nettoyer() reste en seconde barrière.
+   */
+  const erreurPropre = (etape: string, erreur: unknown): ErreurEnvoiCourriel => {
+    const details: string[] = [];
+    if (erreur instanceof ErreurDelaiSmtp) details.push(erreur.message);
+    const champs: Readonly<Record<string, unknown>> = typeof erreur === 'object' && erreur !== null ? (erreur as Record<string, unknown>) : {};
+    const code = champs.code;
+    if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,31}$/.test(code)) details.push(`code ${code}`);
+    const reponse = champs.responseCode;
+    if (typeof reponse === 'number' && Number.isInteger(reponse) && reponse >= 100 && reponse <= 599) {
+      details.push(`réponse ${String(reponse)}`);
+    }
+    const suite = details.length > 0 ? ` (${details.join(', ')})` : '';
+    return new ErreurEnvoiCourriel(nettoyer(`Relais SMTP ${relais} : ${etape}${suite}.`));
+  };
+
   return {
     async envoyer(message) {
       // Avant toute connexion : un retour à la ligne dans un en-tête n'ouvre même pas de socket.
       verifierEnTetes(message);
-      let minuterie: ReturnType<typeof setTimeout> | undefined;
-      const delai = new Promise<never>((_ok, echec) => {
-        minuterie = setTimeout(() => {
-          echec(new Error(`Courriel non envoyé : pas de réponse du serveur SMTP en ${String(delaiMs)} ms.`));
-        }, delaiMs);
-      });
+      const delai = minuterieRejet(delaiMs, `pas de réponse en ${String(delaiMs)} ms`);
       // `a` est UNE adresse, jamais analysée : passée en objet (en-tête To) et dans une enveloppe
       // explicite, elle ne peut pas être décomposée en liste (« a@x.fr,pirate@y.fr ») ni réduite
       // à l'adresse entre chevrons d'un nom d'affichage. Un seul RCPT TO par message.
       const destinataire = { name: '', address: message.a };
+      // Avec html, nodemailer compose un multipart/alternative : text/plain puis text/html, UTF-8.
       const envoi = transport.sendMail({
-        from: options.expediteur,
+        from: enTeteFrom(options.expediteur),
         to: destinataire,
         envelope: { from: options.expediteur, to: [destinataire] },
         subject: message.sujet,
         text: message.texte,
+        ...(message.html === undefined ? {} : { html: message.html }),
         textEncoding: 'quoted-printable',
       });
       // Après le délai, l'échec tardif de l'envoi ne doit pas devenir un rejet non géré.
       envoi.catch(() => undefined);
       try {
-        await Promise.race([envoi, delai]);
+        await Promise.race([envoi, delai.promesse]);
+      } catch (erreur) {
+        throw erreurPropre('courriel non envoyé', erreur);
       } finally {
-        clearTimeout(minuterie);
+        delai.annuler();
+      }
+    },
+
+    async verifier() {
+      const delai = minuterieRejet(delaiMs, `pas de réponse en ${String(delaiMs)} ms`);
+      const verification = transport.verify();
+      verification.catch(() => undefined);
+      try {
+        await Promise.race([verification, delai.promesse]);
+      } catch (erreur) {
+        throw erreurPropre('injoignable ou refusé à la vérification', erreur);
+      } finally {
+        delai.annuler();
       }
     },
   };
