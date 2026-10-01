@@ -26,6 +26,7 @@ import {
   type UniteRecolte,
 } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees, SaisieEvenement } from '@planif/sync';
+import { annoncerSaisie } from './cache.ts';
 import { listeTextes, type Culture, type EvenementLu } from './calculs.ts';
 
 const nouvelId = creerGenerateurId({
@@ -108,6 +109,22 @@ async function article(ctx: ContexteEcriture, culture: Culture, unite: UniteReco
 }
 
 const culturePour = (culture: Culture) => culture.cible;
+
+/**
+ * Écrit les ordres d'une saisie en UNE transaction, annoncée d'abord à la journée suivie (T13c) :
+ * le changement qui suit ne relit que le journal de la culture touchée. `remplace` : la saisie
+ * corrige ou annule une saisie (les chaînes du journal changent). Sans culture, rien n'est
+ * annoncé : la journée sera relue en entier.
+ */
+async function ecrireSaisie(ctx: ContexteEcriture, culture: SaisieEvenement['culture'], remplace: boolean, ordres: readonly OrdreEcriture[]): Promise<void> {
+  const retirer = culture === null ? () => undefined : annoncerSaisie(ctx.porte, ctx.fermeId, culture, remplace);
+  try {
+    await ctx.porte.ecrireEnsemble(ordres);
+  } catch (e) {
+    retirer();
+    throw e;
+  }
+}
 const emplacementsDe = (culture: Culture) => culture.emplacements.map((e) => e.id);
 
 /** « Fait » : le réalisé de l'étape, à la date du jour. */
@@ -124,7 +141,7 @@ export async function marquerFait(ctx: ContexteEcriture, culture: Culture, etape
     remplaceEvenement: null,
     detail,
   });
-  await ctx.porte.ecrireEnsemble([e.ordre]);
+  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre]);
   return e.id;
 }
 
@@ -172,7 +189,7 @@ export async function marquerTravailFait(
     remplaceEvenement: null,
     detail: detailDuTravail(travail, datePrevue),
   });
-  await ctx.porte.ecrireEnsemble([e.ordre]);
+  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre]);
   return e.id;
 }
 
@@ -191,7 +208,7 @@ export async function noterRecolte(ctx: ContexteEcriture, culture: Culture, quan
     detail,
   });
   const a = await article(ctx, culture, unite);
-  await ctx.porte.ecrireEnsemble([...a.ordres, e.ordre, ordreMouvement(ctx, a.id, quantite, e.id)]);
+  await ecrireSaisie(ctx, culturePour(culture), false, [...a.ordres, e.ordre, ordreMouvement(ctx, a.id, quantite, e.id)]);
   return e.id;
 }
 
@@ -271,16 +288,18 @@ async function mouvementDuRemplacement(
 
 /** Annule `ev` (en vigueur) : événement d'annulation et, pour une récolte, le mouvement inverse. */
 export async function annulerSaisie(ctx: ContexteEcriture, ev: EvenementLu): Promise<Id<'Evenement'>> {
-  const e = evenement(ctx.porte, await remplacement(ctx, ev, 'annulation', ev.date));
+  const saisie = await remplacement(ctx, ev, 'annulation', ev.date);
+  const e = evenement(ctx.porte, saisie);
   const stock = await mouvementDuRemplacement(ctx, ev, 'annulation', e.id);
-  await ctx.porte.ecrireEnsemble([...stock.articles, e.ordre, ...stock.mouvements]);
+  await ecrireSaisie(ctx, saisie.culture, true, [...stock.articles, e.ordre, ...stock.mouvements]);
   return e.id;
 }
 
 /** Change la date de `ev` (en vigueur) : une correction, même détail, nouvelle date. */
 export async function changerDate(ctx: ContexteEcriture, ev: EvenementLu, date: string): Promise<Id<'Evenement'>> {
-  const e = evenement(ctx.porte, await remplacement(ctx, ev, 'correction', date));
+  const saisie = await remplacement(ctx, ev, 'correction', date);
+  const e = evenement(ctx.porte, saisie);
   const stock = await mouvementDuRemplacement(ctx, ev, 'correction', e.id);
-  await ctx.porte.ecrireEnsemble([...stock.articles, e.ordre, ...stock.mouvements]);
+  await ecrireSaisie(ctx, saisie.culture, true, [...stock.articles, e.ordre, ...stock.mouvements]);
   return e.id;
 }

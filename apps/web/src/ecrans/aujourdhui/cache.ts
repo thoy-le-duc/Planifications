@@ -6,16 +6,66 @@
  * Tant qu'un écran est ouvert, la journée est relue à chaque changement des tables lues (saisie
  * locale ou synchro) : une lecture à la fois, et un changement arrivé pendant une lecture en
  * relance une après elle (la dernière voit le dernier changement).
+ *
+ * T13c, relecture incrémentale : une saisie de l'écran (`annoncerSaisie`, appelé par
+ * ./ecritures.ts avant d'écrire) dit quelle culture elle touche. Le changement qui suit ne relit
+ * alors que le journal de cette culture (`lireCultures`) et recalcule la journée en reprenant le
+ * reste (`recalculerCultures`) : même résultat qu'une relecture complète, en quelques requêtes.
+ * Tout autre changement (synchro, saisie d'ailleurs) relit tout. Filet : une synchro arrivée dans
+ * le même avis de changement qu'une saisie passerait inaperçue ; une relecture complète suit donc
+ * toute relecture incrémentale, au calme (`VERIFICATION_MS` sans saisie), et cède la place à la
+ * moindre saisie.
  */
 import type { PorteDonnees } from '@planif/sync';
-import { calculerJournee, LectureAbandonnee, lireJournee, TABLES_AUJOURDHUI, type Journee, type LignesJournee } from './calculs.ts';
+import {
+  calculerEtat,
+  LectureAbandonnee,
+  lireCultures,
+  lireJournee,
+  recalculerCultures,
+  TABLES_AUJOURDHUI,
+  type Culture,
+  type EtatJournee,
+  type Journee,
+  type LignesJournee,
+} from './calculs.ts';
+
+/** Délai sans saisie après lequel une relecture complète vérifie les relectures incrémentales. */
+export const VERIFICATION_MS = 4_000;
+
+/** Ce que la prochaine relecture doit relire : tout, ou le journal de quelques cultures. */
+type ARelire =
+  | { readonly sorte: 'tout' }
+  | {
+      readonly sorte: 'cultures';
+      readonly series: Set<string>;
+      readonly campagnes: Set<string>;
+      /** Une saisie en remplace une autre : les chaînes du journal sont à relire. */
+      chaines: boolean;
+    };
+
+/** Saisie annoncée par l'écran, pas encore vue par un changement de la base. */
+interface Annonce {
+  readonly cible: Culture['cible'];
+  readonly remplace: boolean;
+}
 
 interface Suivi {
-  /** Dernières lignes lues ; la journée n'en est calculée que pour un écran qui la montre. */
+  readonly fermeId: string;
+  readonly jour: string;
+  /** Dernières lignes lues en entier ; la journée n'en est calculée que pour un écran qui la montre. */
   lignes: LignesJournee | null;
-  journee: Journee | null;
-  enCours: Promise<LignesJournee> | null;
+  /** Journée calculée, et de quoi la recalculer culture par culture. */
+  etat: EtatJournee | null;
+  enCours: Promise<unknown> | null;
+  /** La lecture en cours est une vérification : elle cède la place à toute relecture demandée. */
+  verificationEnCours: boolean;
   sale: boolean;
+  aRelire: ARelire | null;
+  annonces: Annonce[];
+  verification: ReturnType<typeof setTimeout> | null;
+  /** Un écran a montré la journée puis l'a quittée : une préparation en cours s'arrête. */
+  quittee: boolean;
   readonly abonnes: Set<(j: Journee) => void>;
   arreter: (() => void) | null;
 }
@@ -31,57 +81,175 @@ function suiviDe(porte: PorteDonnees, fermeId: string, jour: string): Suivi {
   const cle = `${fermeId}|${jour}`;
   let s = parCle.get(cle);
   if (s === undefined) {
-    s = { lignes: null, journee: null, enCours: null, sale: false, abonnes: new Set(), arreter: null };
+    s = {
+      fermeId,
+      jour,
+      lignes: null,
+      etat: null,
+      enCours: null,
+      verificationEnCours: false,
+      sale: false,
+      aRelire: null,
+      annonces: [],
+      verification: null,
+      quittee: false,
+      abonnes: new Set(),
+      arreter: null,
+    };
     parCle.set(cle, s);
   }
   return s;
 }
 
 /** Journée des dernières lignes lues, calculée à la première demande. */
-function journeeDe(s: Suivi, jour: string): Journee | null {
-  if (s.journee === null && s.lignes !== null) s.journee = calculerJournee(s.lignes, jour);
-  return s.journee;
+function journeeDe(s: Suivi): Journee | null {
+  if (s.etat === null && s.lignes !== null) {
+    s.etat = calculerEtat(s.lignes, s.jour);
+    s.lignes = null;
+  }
+  return s.etat?.journee ?? null;
+}
+
+function arreterVerification(s: Suivi): void {
+  if (s.verification !== null) clearTimeout(s.verification);
+  s.verification = null;
+}
+
+/** Ajoute `besoin` à ce que la prochaine relecture doit relire. */
+function demander(s: Suivi, besoin: ARelire): void {
+  const a = s.aRelire;
+  if (besoin.sorte === 'tout' || a?.sorte === 'tout') s.aRelire = { sorte: 'tout' };
+  else if (a === null) s.aRelire = besoin;
+  else {
+    for (const id of besoin.series) a.series.add(id);
+    for (const id of besoin.campagnes) a.campagnes.add(id);
+    a.chaines ||= besoin.chaines;
+  }
+}
+
+/** Un changement des tables lues : les saisies annoncées seules sont relues, sinon tout. */
+function noterChangement(s: Suivi): void {
+  const annonces = s.annonces;
+  s.annonces = [];
+  if (annonces.length === 0) {
+    demander(s, { sorte: 'tout' });
+    return;
+  }
+  const besoin: ARelire = { sorte: 'cultures', series: new Set(), campagnes: new Set(), chaines: false };
+  for (const a of annonces) {
+    if (a.cible.sorte === 'serie') besoin.series.add(a.cible.serieId);
+    else besoin.campagnes.add(a.cible.campagneId);
+    besoin.chaines ||= a.remplace;
+  }
+  demander(s, besoin);
+}
+
+/** Remet la journée relue aux écrans ouverts (sans écran, elle n'est pas calculée). */
+function remettre(s: Suivi): void {
+  if (s.abonnes.size === 0) return;
+  const j = journeeDe(s);
+  if (j !== null) for (const rappel of [...s.abonnes]) rappel(j);
 }
 
 /**
- * Lit la journée ; une lecture à la fois, relancée si la base a changé pendant. Sans écran
- * ouvert (préparation, ou l'utilisateur est passé à un autre onglet), les lignes sont gardées
- * sans calcul : aucun travail sur la page pendant qu'un autre écran défile.
+ * Relit la journée (ce que demande `s.aRelire`, tout par défaut) ; une lecture à la fois,
+ * relancée si la base a changé pendant. Sans écran ouvert (préparation, ou l'utilisateur est
+ * passé à un autre onglet), les lignes sont gardées sans calcul : aucun travail sur la page
+ * pendant qu'un autre écran défile.
  */
-function relire(porte: PorteDonnees, fermeId: string, jour: string, s: Suivi, apres?: Promise<unknown>): Promise<LignesJournee> {
+function relire(porte: PorteDonnees, s: Suivi, options: { readonly apres?: Promise<unknown>; readonly verification?: boolean; readonly preparation?: boolean } = {}): Promise<unknown> {
   if (s.enCours !== null) {
     s.sale = true;
     return s.enCours;
   }
   s.sale = false;
-  const lecture = (apres ?? Promise.resolve())
-    .catch(() => undefined)
-    // Écran quitté (avant le tour de la préparation, ou pendant la lecture) : la lecture
-    // s'arrête et laisse la base à l'écran affiché ; le prochain affichage relira.
-    .then(() => lireJournee(porte, fermeId, jour, new Date(), () => s.abonnes.size > 0));
-  s.enCours = lecture;
-  lecture.then(
-    (lignes) => {
-      s.enCours = null;
-      s.lignes = lignes;
-      s.journee = null;
-      if (s.abonnes.size > 0) {
-        const j = journeeDe(s, jour);
-        if (j !== null) for (const rappel of [...s.abonnes]) rappel(j);
+  arreterVerification(s);
+  const besoin = s.aRelire ?? { sorte: 'tout' };
+  s.aRelire = null;
+  const verification = options.verification === true;
+  s.verificationEnCours = verification;
+  // Écran quitté (avant le tour de la préparation, ou pendant la lecture) : la lecture s'arrête
+  // et laisse la base à l'écran affiché ; le prochain affichage relira. Une vérification s'arrête
+  // aussi dès qu'une autre relecture est demandée (une saisie n'attend pas derrière elle).
+  const continuer = () => (s.abonnes.size > 0 || (options.preparation === true && !s.quittee)) && !(verification && s.aRelire !== null);
+  const etat = s.etat;
+  let lecture: Promise<unknown>;
+  if (besoin.sorte === 'cultures' && etat !== null && s.abonnes.size > 0) {
+    const cultures = { series: [...besoin.series], campagnes: [...besoin.campagnes] };
+    lecture = lireCultures(porte, etat.contexte, cultures, besoin.chaines, new Date(), continuer).then((lues) => {
+      const suivant = recalculerCultures(etat, lues);
+      if (suivant === null) {
+        // Pas sûr (voir recalculerCultures) : tout relire, juste après.
+        demander(s, { sorte: 'tout' });
+        return;
       }
-      if (s.sale && s.abonnes.size > 0) void relire(porte, fermeId, jour, s).catch(() => undefined);
-    },
-    (erreur: unknown) => {
-      s.enCours = null;
-      if (!(erreur instanceof LectureAbandonnee)) console.error('Journée illisible', erreur);
-    },
-  );
+      s.etat = suivant;
+      remettre(s);
+      s.verification = setTimeout(() => {
+        s.verification = null;
+        if (s.abonnes.size === 0) return;
+        demander(s, { sorte: 'tout' });
+        relire(porte, s, { verification: true }).catch(() => undefined);
+      }, VERIFICATION_MS);
+    });
+  } else {
+    // Une lecture complète voit toutes les saisies écrites avant elle : leurs annonces tombent
+    // (au pire, le changement d'une saisie en cours d'écriture fera tout relire).
+    s.annonces = [];
+    lecture = (options.apres ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(() => lireJournee(porte, s.fermeId, s.jour, new Date(), continuer))
+      .then((lignes) => {
+        s.lignes = lignes;
+        s.etat = null;
+        remettre(s);
+      });
+  }
+  s.enCours = lecture;
+  const fin = () => {
+    s.enCours = null;
+    s.verificationEnCours = false;
+    if ((s.sale || s.aRelire !== null) && s.abonnes.size > 0) {
+      if (s.aRelire === null) demander(s, { sorte: 'tout' });
+      relire(porte, s).catch(() => undefined);
+    }
+  };
+  lecture.then(fin, (erreur: unknown) => {
+    if (erreur instanceof LectureAbandonnee) {
+      // Un écran revenu entre temps attendait peut-être cette lecture : il en aura une autre.
+      if (s.abonnes.size > 0 && s.aRelire === null) s.sale = true;
+    } else {
+      console.error('Journée illisible', erreur);
+      // Une relecture incrémentale en échec : tout relire.
+      if (besoin.sorte === 'cultures') demander(s, { sorte: 'tout' });
+    }
+    fin();
+  });
   return lecture;
 }
 
 /** Dernière journée connue pour ce jour (calculée au besoin), ou null. */
 export function journeeEnCache(porte: PorteDonnees, fermeId: string, jour: string): Journee | null {
-  return journeeDe(suiviDe(porte, fermeId, jour), jour);
+  return journeeDe(suiviDe(porte, fermeId, jour));
+}
+
+/**
+ * Annonce une saisie de l'écran sur `culture`, AVANT de l'écrire : le changement qu'elle
+ * provoquera ne relira que cette culture (`remplace` : elle corrige ou annule une saisie, les
+ * chaînes du journal sont relues aussi). Rend la fonction qui retire l'annonce si l'écriture
+ * échoue (aucun changement ne viendra).
+ */
+export function annoncerSaisie(porte: PorteDonnees, fermeId: string, culture: Culture['cible'], remplace: boolean): () => void {
+  const annonce: Annonce = { cible: culture, remplace };
+  const touches: Suivi[] = [];
+  for (const s of suivis.get(porte)?.values() ?? []) {
+    if (s.fermeId !== fermeId || s.arreter === null) continue;
+    s.annonces.push(annonce);
+    touches.push(s);
+  }
+  return () => {
+    for (const s of touches) s.annonces = s.annonces.filter((a) => a !== annonce);
+  };
 }
 
 /**
@@ -97,6 +265,7 @@ export function suivreJournee(
 ): () => void {
   const s = suiviDe(porte, fermeId, jour);
   s.abonnes.add(rappel);
+  s.quittee = false;
   const echec = (e: unknown) => {
     if (!(e instanceof LectureAbandonnee)) surEchec(e);
   };
@@ -105,18 +274,30 @@ export function suivreJournee(
     // n'a changé) ; chaque changement ensuite en relance une.
     let premier = true;
     s.arreter = porte.surveiller({ sql: 'SELECT 1 AS temoin', tables: TABLES_AUJOURDHUI }, () => {
-      const enCours = premier ? s.enCours : null;
-      premier = false;
-      (enCours ?? relire(porte, fermeId, jour, s)).catch(echec);
+      if (premier) {
+        premier = false;
+        if (s.enCours !== null && !s.verificationEnCours) {
+          s.enCours.catch(echec);
+          return;
+        }
+        demander(s, { sorte: 'tout' });
+      } else {
+        noterChangement(s);
+      }
+      relire(porte, s).catch(echec);
     });
   } else {
-    relire(porte, fermeId, jour, s).catch(echec);
+    demander(s, { sorte: 'tout' });
+    relire(porte, s).catch(echec);
   }
   return () => {
     s.abonnes.delete(rappel);
     if (s.abonnes.size === 0 && s.arreter !== null) {
       s.arreter();
       s.arreter = null;
+      s.annonces = [];
+      s.quittee = true;
+      arreterVerification(s);
     }
   };
 }
@@ -128,7 +309,10 @@ export function suivreJournee(
  */
 export async function prechargerJournee(porte: PorteDonnees, fermeId: string, jour: string, apres?: Promise<unknown>): Promise<void> {
   const s = suiviDe(porte, fermeId, jour);
-  if (s.lignes === null) await relire(porte, fermeId, jour, s, apres).catch((e: unknown) => {
-    if (!(e instanceof LectureAbandonnee)) throw e;
-  });
+  if (s.lignes === null && s.etat === null) {
+    demander(s, { sorte: 'tout' });
+    await relire(porte, s, { ...(apres === undefined ? {} : { apres }), preparation: true }).catch((e: unknown) => {
+      if (!(e instanceof LectureAbandonnee)) throw e;
+    });
+  }
 }
