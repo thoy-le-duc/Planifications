@@ -122,8 +122,15 @@ async function unTour(): Promise<void> {
   });
 }
 
-async function attendre(condition: () => boolean, message: string, tours = 300): Promise<void> {
-  for (let k = 0; k < tours && !condition(); k++) await unTour();
+/**
+ * Attend `condition` en temps RÉEL (jusqu'à `delaiMs`), tour après tour (act + setTimeout 0).
+ * Un nombre de tours ne suffit pas : sur une machine rapide, 300 tours durent ≈ 300 ms, moins
+ * que l'attente du plan que App.tsx accorde à la journée au lancement (ATTENTE_PLAN_MAX_MS,
+ * 400 ms, T13c) ; le test échouerait alors avant que la journée ne passe.
+ */
+async function attendre(condition: () => boolean, message: string, delaiMs = 3_000): Promise<void> {
+  const fin = performance.now() + delaiMs;
+  while (!condition() && performance.now() < fin) await unTour();
   expect(condition(), message).toBe(true);
 }
 
