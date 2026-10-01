@@ -343,6 +343,24 @@ function conditionSerieInchangee(serie: Ligne, occupations: readonly Ligne[], is
   };
 }
 
+/** Relit des lignes, une requête par table (par paquets d'ids) ; clé « table␟id ». */
+async function relire(porte: PorteDonnees, cibles: readonly { readonly table: Table; readonly id: string }[]): Promise<Map<string, Ligne>> {
+  const PAQUET = 500;
+  const lues = new Map<string, Ligne>();
+  const tables = [...new Set(cibles.map((c) => c.table))];
+  await Promise.all(
+    tables.flatMap((table) => {
+      const ids = [...new Set(cibles.filter((c) => c.table === table).map((c) => c.id))];
+      const paquets = Array.from({ length: Math.ceil(ids.length / PAQUET) }, (_, k) => ids.slice(k * PAQUET, (k + 1) * PAQUET));
+      return paquets.map(async (p) => {
+        const lignes = await porte.lire<Ligne>(`SELECT * FROM ${table} WHERE id IN (${p.map(() => '?').join(', ')})`, p);
+        for (const l of lignes) lues.set(`${table}\u001f${String(l.id)}`, l);
+      });
+    }),
+  );
+  return lues;
+}
+
 /**
  * Défait une écriture, en UNE transaction, colonne par colonne et ligne par ligne (décision 9) :
  * une ligne n'est ramenée que si chaque colonne que nous avions changée vaut encore ce que nous
@@ -361,8 +379,14 @@ function conditionSerieInchangee(serie: Ligne, occupations: readonly Ligne[], is
  * lectures précèdent la transaction d'écriture : chaque UPDATE porte donc dans son WHERE les
  * conditions vérifiées (valeurs encore celles écrites, types vivants, série inchangée, règles
  * des types), et ne touche rien si une synchro reçue entre-temps les a changées (N3). Rend le
- * message à montrer si des lignes ont été laissées, sinon null. T24d : les lignes ramenées sont
- * relues après l'écriture ; celles qu'une garde a bloquées comptent parmi les laissées.
+ * message à montrer si des lignes ont été laissées, sinon null.
+ *
+ * T24d : les lignes ramenées sont relues après l'écriture ; celles qu'une garde a bloquées (ou
+ * absentes) comptent parmi les laissées. Cette relecture est hors de la transaction et ne sert
+ * qu'à l'affichage : avec PowerSync, la synchro n'est pas appliquée tant que des écritures
+ * locales attendent l'envoi, la fenêtre est donc quasi nulle. Une ligne dont la synchro a remis
+ * exactement les valeurs d'avant n'est pas comptée : rien n'est perdu. Si la relecture échoue,
+ * seul le compte des lignes refusées à la lecture est rendu (l'annulation, elle, est écrite).
  */
 export async function ramener(ctx: ContexteEcriture, etat: EtatAvant): Promise<string | null> {
   const iso = ctx.maintenant().toISOString();
@@ -474,7 +498,14 @@ export async function ramener(ctx: ContexteEcriture, etat: EtatAvant): Promise<s
   await ctx.porte.ecrireEnsemble(ordres);
   // T24d : une ligne bloquée par la garde de son WHERE (synchro reçue entre les lectures et
   // l'écriture) n'a pas repris ses valeurs d'avant ; relue, elle compte parmi les laissées.
-  const relues = await Promise.all(ramenees.map((r) => lireLigne(ctx.porte, r.table, r.id)));
-  laissees += ramenees.filter((r, i) => !vaut(relues[i] ?? {}, r.valeurs)).length;
+  try {
+    const relues = await relire(ctx.porte, ramenees);
+    laissees += ramenees.filter((r) => {
+      const c = relues.get(`${r.table}\u001f${r.id}`);
+      return c === undefined || !vaut(c, r.valeurs);
+    }).length;
+  } catch {
+    // L'annulation est écrite : une relecture impossible ne la fait pas passer pour un échec.
+  }
   return laissees === 0 ? null : messageModifieAilleurs(laissees);
 }
