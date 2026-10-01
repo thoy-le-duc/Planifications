@@ -368,12 +368,15 @@ export async function defaireSerie(ctx: ContexteEcriture, ecriture: EcritureSeri
   const indexSerie = ecriture.lignes.findIndex((l) => l.table === 'serie');
   const decisionSerie = indexSerie < 0 ? null : decisions[indexSerie];
   let serieLaissee = decisionSerie === 'laissee';
+  // Série inactive après l'annulation (supprimée ailleurs) : aucune occupation n'y redevient active (décision 7).
+  let serieInactive = serieLaissee ? courant.serie.supprime_le !== null : false;
   if (!serieLaissee) {
     // La série telle qu'elle sera, et chacune de ses occupations actives d'après l'annulation.
     const cible = { ...courant.serie, ...aRemettre(decisionSerie) };
     const r = validerSerie({ ...cible });
     if (!r.ok) serieLaissee = true;
-    else if (r.valeur.supprimeLe === null) {
+    else if (r.valeur.supprimeLe !== null) serieInactive = true;
+    else {
       const serie = r.valeur;
       const apres = courant.occupations.map((o) => {
         const i = ecriture.lignes.findIndex((l) => l.table === 'occupation' && l.id === o.id);
@@ -388,7 +391,8 @@ export async function defaireSerie(ctx: ContexteEcriture, ecriture: EcritureSeri
   ecriture.lignes.forEach((l, i) => {
     const d = decisions[i];
     if (d === null || d === undefined) return;
-    if (d === 'laissee' || serieLaissee) {
+    const reactivee = serieInactive && l.table === 'occupation' && d !== 'laissee' && d.supprime_le === null;
+    if (d === 'laissee' || serieLaissee || reactivee) {
       laissees++;
       return;
     }
