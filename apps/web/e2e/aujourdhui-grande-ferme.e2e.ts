@@ -21,14 +21,16 @@ import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure } from './
  *     comprise) part dans T13d, décision du chef : médiane 8 835 ms avant T13b, 5 264 ms après ; le reste
  *     est la lecture à froid des pages SQLite dans le navigateur et l'attente de Planches (T13c),
  *     que les requêtes seules ne rattrapent pas. T13d : instantané de la journée au lancement ;
- *   - relecture après une saisie « Fait » : MESURÉE, non bloquante (console), notée dans la PR ;
- *     au-delà de 500 ms, c'est T13c qui la traite.
+ *   - relecture après une saisie « Fait » (T13c, BLOQUANT) : de l'appui à la saisie en tête de
+ *     l'historique, en moins de 500 ms, médiane de 5 saisies sur 5 tâches différentes. Mesurée
+ *     à ≈ 884 ms (une seule saisie, non bloquante) à la fin de T13b.
  */
 
 const BUDGET_TAP_MS = 300;
 /** Budget visé par T13d, rappelé dans le journal de la mesure (non bloquant ici). */
 const BUDGET_FROID_MS = 1_000;
-const SEUIL_RELECTURE_MS = 500;
+/** T13c : relecture après une saisie « Fait ». */
+const BUDGET_RELECTURE_MS = 500;
 const DELAI_AMORCAGE_MS = 240_000;
 
 test.use({ actionTimeout: 15_000 });
@@ -79,7 +81,42 @@ async function lancementAFroid(page: Page): Promise<number> {
   return page.evaluate((marque) => performance.getEntriesByName(marque, 'mark')[0]?.startTime ?? Number.NaN, MARQUE_AUJOURDHUI_ATTENDUE);
 }
 
-test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait » mesurée', async ({ page, context }) => {
+/**
+ * Relecture après « Fait » sur la première tâche qui en a un : temps de l'appui (pointerdown) à
+ * l'arrivée d'une nouvelle saisie en tête de l'historique, qui ne vient que de la journée relue
+ * (la tâche, elle, est masquée dès l'appui).
+ */
+async function relectureApresFait(page: Page): Promise<number> {
+  await page.evaluate(() => {
+    const f = window as unknown as { __appui?: number; __relue?: number };
+    delete f.__appui;
+    delete f.__relue;
+    const premiere = () => document.querySelector('[data-testid="saisie-historique"]')?.getAttribute('data-evenement') ?? null;
+    const avant = premiere();
+    document.addEventListener(
+      'pointerdown',
+      () => {
+        f.__appui = performance.now();
+      },
+      { capture: true, once: true },
+    );
+    const observateur = new MutationObserver(() => {
+      if (f.__appui !== undefined && premiere() !== avant) {
+        f.__relue = performance.now();
+        observateur.disconnect();
+      }
+    });
+    observateur.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-evenement'] });
+  });
+  await ecran(page).getByRole('button', { name: /^Marquer fait/ }).first().click();
+  await page.waitForFunction(() => (window as unknown as { __relue?: number }).__relue !== undefined, undefined, { timeout: 30_000 });
+  return page.evaluate(() => {
+    const f = window as unknown as { __appui?: number; __relue?: number };
+    return (f.__relue ?? Number.NaN) - (f.__appui ?? Number.NaN);
+  });
+}
+
+test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait »', async ({ page, context }) => {
   test.setTimeout(DELAI_AMORCAGE_MS + 240_000);
   const aujourdhui = jourLocal(new Date());
   const ferme = grandeFerme(aujourdhui);
@@ -140,41 +177,14 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
     expect(serie.mediane).toBeLessThan(BUDGET_TAP_MS);
   });
 
-  await test.step('relecture après « Fait » (mesure non bloquante, notée dans la PR)', async () => {
-    // Fin de la relecture : la saisie arrive en tête de l'historique, qui ne vient que de la
-    // journée relue (la tâche, elle, est masquée dès l'appui).
-    await page.evaluate(() => {
-      const f = window as unknown as { __appui?: number; __relue?: number };
-      delete f.__appui;
-      delete f.__relue;
-      const premiere = () => document.querySelector('[data-testid="saisie-historique"]')?.getAttribute('data-evenement') ?? null;
-      const avant = premiere();
-      document.addEventListener(
-        'pointerdown',
-        () => {
-          f.__appui = performance.now();
-        },
-        { capture: true, once: true },
-      );
-      const observateur = new MutationObserver(() => {
-        if (f.__appui !== undefined && premiere() !== avant) {
-          f.__relue = performance.now();
-          observateur.disconnect();
-        }
-      });
-      observateur.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-evenement'] });
+  await test.step(`relecture après « Fait » : saisie dans l’historique en moins de ${String(BUDGET_RELECTURE_MS)} ms, médiane de 5 (T13c)`, async () => {
+    const serie = await repeterMesure(REPETITIONS_MESURE, async () => {
+      const ms = await relectureApresFait(page);
+      // La relecture est finie : la saisie suivante part d'un écran au repos.
+      await expect(taches(page).first()).toBeVisible();
+      return ms;
     });
-    await ecran(page).getByRole('button', { name: /^Marquer fait/ }).first().click();
-    try {
-      await page.waitForFunction(() => (window as unknown as { __relue?: number }).__relue !== undefined, undefined, { timeout: 30_000 });
-      const ms = await page.evaluate(() => {
-        const f = window as unknown as { __appui?: number; __relue?: number };
-        return (f.__relue ?? Number.NaN) - (f.__appui ?? Number.NaN);
-      });
-      const verdict = ms > SEUIL_RELECTURE_MS ? `au-delà de ${String(SEUIL_RELECTURE_MS)} ms : pour T13c` : `sous ${String(SEUIL_RELECTURE_MS)} ms`;
-      console.log(`Aujourd’hui (grande ferme), relecture après « Fait » (appui → saisie dans l’historique) : ${ms.toFixed(0)} ms, ${verdict}`);
-    } catch {
-      console.log('Aujourd’hui (grande ferme), relecture après « Fait » : non mesurée (saisie absente de l’historique après 30 s)');
-    }
+    console.log(decrireSerie('Aujourd’hui (grande ferme), relecture après « Fait » (appui → saisie dans l’historique)', serie, BUDGET_RELECTURE_MS));
+    expect(serie.mediane).toBeLessThan(BUDGET_RELECTURE_MS);
   });
 });
