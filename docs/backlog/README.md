@@ -72,4 +72,5 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T19](T19-tests-de-temps.md) | Tests de temps robustes sous charge | — | fait |
 | [T20](T20-main-verte.md) | Main verte : service worker après le premier affichage, mesures e2e stables | T11 | fait |
 | [T11c](T11c-diagnostic-hors-prod.md) | Pages de test hors du site en production | T11, T10c | fait |
+| [T11d](T11d-defilement-plan-fiable.md) | Mesure du défilement du plan : fiable sans relever la limite | T11, T20 | à faire |
 | [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | à faire |

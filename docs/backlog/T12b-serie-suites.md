@@ -34,3 +34,12 @@
 7. **N5, série supprimée ailleurs** : « Annuler » ne rend jamais active une occupation dont la série n'est pas active après l'annulation ; ces occupations restent telles quelles et le message « modifié entre-temps » s'affiche. (Même trou dans `ramener` de T24 : ticket T24b.)
 8. **N2 corrigée** : le serveur revérifie la variété quand l'espèce, la variété **ou l'itinéraire** change. Donc, si l'itinéraire change sur une série dont la variété a été supprimée, le formulaire retire la variété et le dit avant d'enregistrer (« variété X retirée : supprimée de la bibliothèque »). Sans changement d'itinéraire, la variété est gardée.
 9. **Sélecteur, petits correctifs** : le focus entre toujours dans la feuille de choix rapide (sur la semaine choisie, sinon sur le titre) ; le liseré de la semaine en cours passe à l'orange foncé (contraste ≥ 3:1).
+
+## Décision du chef (après la contre-relecture)
+
+10. **Règle générale de l'annulation** : avant d'écrire, l'état de chaque série après annulation est vérifié comme le serveur le fera en fin de lot :
+    - la série passe `validerSerie` et ses références (espèce, variété, itinéraire, saison) existent et ne sont pas supprimées en local ;
+    - aucune occupation active sous une série supprimée ;
+    - toute occupation active de la série passe `validerOccupation` avec la série ramenée.
+
+    Si une condition échoue, la série et ses occupations restent telles quelles, avec le message « modifié entre-temps » ; le reste est défait. Cette règle couvre B3 (rétablissement annulé avec une planche ajoutée ailleurs) et B4 (variété ou itinéraire supprimé remis par l'annulation), et les cas voisins.
