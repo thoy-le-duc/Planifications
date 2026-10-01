@@ -19,14 +19,16 @@
  *   SMTP_PORT          défaut 465 (tls), 587 (starttls), 25 (aucune)
  *   SMTP_EXPEDITEUR    en-tête From (obligatoire avec SMTP_HOTE) : une seule adresse, nue ou
  *                      « Nom <adresse> » / « "Nom" <adresse> » ; une liste est refusée
- *   SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE   identifiants du relais : les deux ou aucun
+ *   SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE   identifiants du relais : les deux ou aucun ; mot de
+ *                      passe d'au moins 12 caractères
  *
  *   Production : relais SMTP de Brevo (T09c, hébergé en UE, Q14) :
  *     SMTP_HOTE=smtp-relay.brevo.com   SMTP_PORT=587 (défaut de starttls)
  *     SMTP_SECURITE=starttls (défaut ; TLS obligatoire, rien ne part sans lui)
  *     SMTP_EXPEDITEUR=adresse du domaine d'envoi validé chez Brevo (SPF, DKIM, DMARC) ; une
  *                      adresse nue reçoit le nom « Planifications »
- *     SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE = identifiant et clé SMTP donnés par Brevo
+ *     SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE = identifiant et clé SMTP donnés par Brevo (la clé
+ *                      fait bien plus de 12 caractères, le minimum exigé)
  *   Identifiants : dans les secrets de production uniquement, jamais dans le dépôt, un fichier
  *   versionné ou une session Claude. Le relais est vérifié au démarrage (demarrage.ts) ; s'il ne
  *   répond pas, l'API démarre quand même (la vérification se fait après l'écoute, sans la
@@ -123,6 +125,9 @@ export function lireConfig(env: Environnement): Config {
   };
 }
 
+/** Une clé SMTP de fournisseur (Brevo : bien plus longue) ; en dessous, une faute de saisie. */
+const LONGUEUR_MIN_MOT_DE_PASSE_SMTP = 12;
+
 const PORTS_SMTP: Readonly<Record<SecuriteSmtp, number>> = { tls: 465, starttls: 587, aucune: 25 };
 
 function estSecuriteSmtp(v: string): v is SecuriteSmtp {
@@ -189,6 +194,12 @@ function lireCourriel(env: Environnement): ConfigCourriel {
   const motDePasse = facultative(env, 'SMTP_MOT_DE_PASSE');
   if ((utilisateur === undefined) !== (motDePasse === undefined)) {
     throw new Error('SMTP_UTILISATEUR et SMTP_MOT_DE_PASSE vont ensemble : les deux ou aucun.');
+  }
+  // Jamais la valeur dans le message : seulement le nom de la variable et la règle.
+  if (motDePasse !== undefined && motDePasse.length < LONGUEUR_MIN_MOT_DE_PASSE_SMTP) {
+    throw new Error(
+      `SMTP_MOT_DE_PASSE refusé : il en faut au moins ${String(LONGUEUR_MIN_MOT_DE_PASSE_SMTP)} caractères (clé SMTP du fournisseur).`,
+    );
   }
   return {
     type: 'smtp',

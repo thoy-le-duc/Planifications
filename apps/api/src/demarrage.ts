@@ -21,10 +21,15 @@ export function preparerExpediteur(
   void expediteur.verifier().catch((erreur: unknown) => {
     // verifier() nomme déjà l'hôte et le port, message nettoyé de tout secret.
     const detail = erreur instanceof Error ? erreur.message : String(erreur);
-    journal(
-      `Avertissement : vérification du relais SMTP ${courriel.hote}:${String(courriel.port)} en échec, ` +
-        `l'API tourne mais les codes de connexion ne partiront pas tant qu'il ne répond pas. ${detail}`,
-    );
+    try {
+      journal(
+        `Avertissement : vérification du relais SMTP ${courriel.hote}:${String(courriel.port)} en échec, ` +
+          `l'API tourne mais les codes de connexion ne partiront pas tant qu'il ne répond pas. ${detail}`,
+      );
+    } catch {
+      // Journal en panne (sortie d'erreur fermée…) : rien, surtout pas un rejet non géré qui
+      // arrêterait l'API.
+    }
   });
   return Promise.resolve(expediteur);
 }

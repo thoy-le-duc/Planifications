@@ -54,11 +54,14 @@ function enTeteFrom(expediteur: string): string | { readonly name: string; reado
 }
 
 /** Rejette après delaiMs ; `annuler` libère la minuterie. */
+/** Délai dépassé, mesuré ici : son message est le nôtre, sans rien venu du serveur. */
+class ErreurDelaiSmtp extends Error {}
+
 function minuterieRejet(delaiMs: number, message: string): { readonly promesse: Promise<never>; annuler(): void } {
   let minuterie: ReturnType<typeof setTimeout> | undefined;
   const promesse = new Promise<never>((_ok, echec) => {
     minuterie = setTimeout(() => {
-      echec(new Error(message));
+      echec(new ErreurDelaiSmtp(message));
     }, delaiMs);
   });
   return {
@@ -116,12 +119,23 @@ export function expediteurSmtp(options: OptionsSmtp): ExpediteurSmtp {
 
   /**
    * Toute erreur qui sort de cet expéditeur passe ici : une Error NEUVE (ErreurEnvoiCourriel),
-   * message nettoyé, sans cause, response ni command (nodemailer y recopie la réponse du
-   * serveur, qui peut répéter la ligne AUTH).
+   * sans cause. Son message ne recopie JAMAIS le texte de nodemailer ni la réponse du serveur
+   * (qui peut répéter la ligne AUTH sous une forme imprévue, ou l'adresse refusée) : seulement le
+   * relais, l'étape et des champs sûrs, le code nodemailer (EAUTH, ECONNECTION, ETIMEDOUT…) et
+   * le code de réponse SMTP (535, 550…). nettoyer() reste en seconde barrière.
    */
-  const erreurPropre = (prefixe: string, erreur: unknown): ErreurEnvoiCourriel => {
-    const cause = erreur instanceof Error ? erreur.message : String(erreur);
-    return new ErreurEnvoiCourriel(nettoyer(`${prefixe} : ${cause}`));
+  const erreurPropre = (etape: string, erreur: unknown): ErreurEnvoiCourriel => {
+    const details: string[] = [];
+    if (erreur instanceof ErreurDelaiSmtp) details.push(erreur.message);
+    const champs: Readonly<Record<string, unknown>> = typeof erreur === 'object' && erreur !== null ? (erreur as Record<string, unknown>) : {};
+    const code = champs.code;
+    if (typeof code === 'string' && /^[A-Z][A-Z0-9_]{0,31}$/.test(code)) details.push(`code ${code}`);
+    const reponse = champs.responseCode;
+    if (typeof reponse === 'number' && Number.isInteger(reponse) && reponse >= 100 && reponse <= 599) {
+      details.push(`réponse ${String(reponse)}`);
+    }
+    const suite = details.length > 0 ? ` (${details.join(', ')})` : '';
+    return new ErreurEnvoiCourriel(nettoyer(`Relais SMTP ${relais} : ${etape}${suite}.`));
   };
 
   return {
@@ -148,7 +162,7 @@ export function expediteurSmtp(options: OptionsSmtp): ExpediteurSmtp {
       try {
         await Promise.race([envoi, delai.promesse]);
       } catch (erreur) {
-        throw erreurPropre(`Courriel non envoyé par le relais SMTP ${relais}`, erreur);
+        throw erreurPropre('courriel non envoyé', erreur);
       } finally {
         delai.annuler();
       }
@@ -161,7 +175,7 @@ export function expediteurSmtp(options: OptionsSmtp): ExpediteurSmtp {
       try {
         await Promise.race([verification, delai.promesse]);
       } catch (erreur) {
-        throw erreurPropre(`Relais SMTP ${relais} injoignable ou refusé`, erreur);
+        throw erreurPropre('injoignable ou refusé à la vérification', erreur);
       } finally {
         delai.annuler();
       }
