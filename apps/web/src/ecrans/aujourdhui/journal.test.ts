@@ -139,8 +139,9 @@ describe('T13b, témoin : deux corrections au même horodatage, la plus grande i
     const instant = `${j(-1)}T06:00:00.000Z`;
     const commun = { type: 'realise' as const, serieId: SERIE.carotte, emplacement: EMPLACEMENT.pcp01, detail: { etape: 'semis_direct', quantiteReelle: null }, origineId: O };
     recevoir({ ...commun, id: O, date: j(-5), horodatage: `${j(-5)}T06:00:00.000Z` });
-    recevoir({ ...commun, id: petite, date: j(-2), horodatage: instant, remplace: { sorte: 'correction', de: O } });
+    // La grande id arrive EN PREMIER : une règle « la dernière arrivée l'emporte » échouerait.
     recevoir({ ...commun, id: grande, date: j(-4), horodatage: instant, remplace: { sorte: 'correction', de: O } });
+    recevoir({ ...commun, id: petite, date: j(-2), horodatage: instant, remplace: { sorte: 'correction', de: O } });
 
     const lignes = await lireJournee(porte, FERME, AUJOURDHUI, MAINTENANT);
     const carotte = lignes.realises.filter((l) => l.serie_id === SERIE.carotte);
