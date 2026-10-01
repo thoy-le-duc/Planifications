@@ -8,18 +8,24 @@
  *
  * apps/api/src/demarrage.ts (NOUVEAU, sans effet de bord à l'import) exporte :
  *
- *   preparerExpediteur(courriel: ConfigCourriel): Promise<ExpediteurCourriel>
+ *   preparerExpediteur(courriel: ConfigCourriel, journal?: (ligne: string) => void):
+ *     Promise<ExpediteurCourriel>
  *     - { type: 'console' } → expediteurConsole(), sans aucune connexion réseau ;
  *     - { type: 'smtp', … } → expediteurSmtp(courriel), puis `await verifier()`
  *       (courriel-smtp.test.ts, T09c) : connexion, STARTTLS si exigé, AUTH, rien n'est envoyé.
- *       Si la vérification échoue, la promesse est rejetée par une Error en français qui nomme
- *       le relais (hôte et port) et ne contient JAMAIS le mot de passe.
+ *     Décision du 2026-10-01 : une panne du relais ne doit JAMAIS arrêter l'API (ni la synchro).
+ *     Si verifier() échoue, preparerExpediteur NE REJETTE PAS : elle appelle `journal` (par
+ *     défaut console.error) avec un message en français qui contient « SMTP », l'hôte et le
+ *     port, et JAMAIS le mot de passe, puis rend quand même l'expéditeur (l'envoi d'un code
+ *     échouera ensuite normalement). Si verifier() réussit, `journal` n'est pas appelé.
  *     L'expéditeur rendu envoie par ce relais (« l'envoi passe par le transport configuré »).
  *
- * apps/api/src/index.ts appelle preparerExpediteur(config.courriel) AVANT d'écouter : si elle
- * échoue, il écrit le message sur la sortie d'erreur et sort en code 1, sans jamais écrire
- * « API à l'écoute ». Testé ici en lançant vraiment `node src/index.ts` (Postgres n'est pas
- * nécessaire : le pool ne se connecte qu'à la première requête).
+ * apps/api/src/index.ts appelle `await preparerExpediteur(config.courriel)` AVANT d'écouter :
+ * relais joignable, la connexion est vérifiée avant « à l'écoute » ; relais injoignable, l'API
+ * démarre quand même et l'erreur SMTP est sur la sortie d'erreur, sans le mot de passe. Seule
+ * une configuration incomplète (lireConfig) arrête le processus en code 1. Testé ici en lançant
+ * vraiment `node src/index.ts` (Postgres n'est pas nécessaire : le pool ne se connecte qu'à la
+ * première requête).
  *
  * Témoins (déjà vrais en T09b, doivent le rester) : sans SMTP_HOTE ni COURRIEL_CONSOLE, l'API
  * refuse de démarrer en nommant les deux ; le mode console ne démarre que sur demande explicite
@@ -36,15 +42,26 @@ import { demarrerSmtpFactice, lireTexte, portFerme, type ServeurSmtpFactice } fr
 import type { ConfigCourriel } from './config.ts';
 
 interface ModuleDemarrage {
-  readonly preparerExpediteur?: (courriel: ConfigCourriel) => Promise<ExpediteurCourriel>;
+  readonly preparerExpediteur?: (courriel: ConfigCourriel, journal?: (ligne: string) => void) => Promise<ExpediteurCourriel>;
 }
 
 const CHEMIN_DEMARRAGE = './demarrage.ts';
 
-async function preparerExpediteur(courriel: ConfigCourriel): Promise<ExpediteurCourriel> {
+async function preparerExpediteur(courriel: ConfigCourriel, journal?: (ligne: string) => void): Promise<ExpediteurCourriel> {
   const module = (await import(CHEMIN_DEMARRAGE)) as ModuleDemarrage;
   if (typeof module.preparerExpediteur !== 'function') throw new Error('preparerExpediteur n’est pas une fonction exportée par demarrage.ts');
-  return module.preparerExpediteur(courriel);
+  return module.preparerExpediteur(courriel, journal);
+}
+
+/** Journal espion : les lignes que preparerExpediteur signale. */
+function journalEspion(): { readonly lignes: string[]; readonly journal: (ligne: string) => void } {
+  const lignes: string[] = [];
+  return {
+    lignes,
+    journal: (ligne) => {
+      lignes.push(ligne);
+    },
+  };
 }
 
 const MOT_DE_PASSE = 'secret-de-test-ne-pas-afficher';
@@ -76,20 +93,23 @@ function smtp(port: number, autres: Partial<Extract<ConfigCourriel, { type: 'smt
   };
 }
 
-function erreurClaire(port: number) {
-  return (e: unknown): boolean =>
-    e instanceof Error &&
-    e.message.includes('SMTP') &&
-    e.message.includes('127.0.0.1') &&
-    e.message.includes(String(port)) &&
-    !e.message.includes(MOT_DE_PASSE);
+/** Le journal signale le relais en panne : « SMTP », hôte, port ; jamais le mot de passe. */
+function attendreSignalement(lignes: readonly string[], port: number): void {
+  const tout = lignes.join('\n');
+  expect(lignes.length).toBeGreaterThanOrEqual(1);
+  expect(tout).toContain('SMTP');
+  expect(tout).toContain('127.0.0.1');
+  expect(tout).toContain(String(port));
+  expect(tout).not.toContain(MOT_DE_PASSE);
 }
 
 describe('preparerExpediteur (T09c)', () => {
   it('SMTP joignable : vérifie la connexion (AUTH) sans rien envoyer, puis envoie par ce relais', async () => {
     const relais = await serveur();
-    const expediteur = await preparerExpediteur(smtp(relais.port));
+    const { lignes, journal } = journalEspion();
+    const expediteur = await preparerExpediteur(smtp(relais.port), journal);
 
+    expect(lignes).toEqual([]);
     expect(relais.connexions()).toBeGreaterThanOrEqual(1);
     expect(relais.authentifications).toContainEqual({ utilisateur: 'relais-planif', motDePasse: MOT_DE_PASSE });
     expect(relais.messages).toHaveLength(0);
@@ -100,22 +120,31 @@ describe('preparerExpediteur (T09c)', () => {
     expect(lireTexte(relais.messages[0]?.donnees ?? '')).toBe(MESSAGE.texte);
   });
 
-  it('SMTP injoignable : rejet en nommant le relais, sans le mot de passe', async () => {
+  it('SMTP injoignable : ne rejette pas, signale le relais (sans mot de passe), rend un expéditeur dont l’envoi échoue', async () => {
     const port = await portFerme();
-    await expect(preparerExpediteur(smtp(port))).rejects.toSatisfy(erreurClaire(port));
+    const { lignes, journal } = journalEspion();
+    const expediteur = await preparerExpediteur(smtp(port), journal);
+
+    attendreSignalement(lignes, port);
+    await expect(expediteur.envoyer(MESSAGE)).rejects.toThrow();
   });
 
-  it('STARTTLS exigé mais absent : rejet, les identifiants ne partent pas', async () => {
+  it('STARTTLS exigé mais absent : ne rejette pas, signale le relais, les identifiants ne partent pas', async () => {
     const relais = await serveur();
-    await expect(preparerExpediteur(smtp(relais.port, { securite: 'starttls' }))).rejects.toSatisfy(erreurClaire(relais.port));
+    const { lignes, journal } = journalEspion();
+    await preparerExpediteur(smtp(relais.port, { securite: 'starttls' }), journal);
+
+    attendreSignalement(lignes, relais.port);
     expect(relais.authentifications).toHaveLength(0);
   });
 
   it('console : aucun relais contacté', async () => {
     const relais = await serveur();
-    const expediteur = await preparerExpediteur({ type: 'console' });
+    const { lignes, journal } = journalEspion();
+    const expediteur = await preparerExpediteur({ type: 'console' }, journal);
     expect(typeof expediteur.envoyer).toBe('function');
     expect(relais.connexions()).toBe(0);
+    expect(lignes).toEqual([]);
   });
 });
 
@@ -124,18 +153,20 @@ describe('preparerExpediteur (T09c)', () => {
 const INDEX = fileURLToPath(new URL('./index.ts', import.meta.url));
 const DOSSIER_API = fileURLToPath(new URL('..', import.meta.url));
 const ECOUTE = /à l'écoute/;
+const GRACE_MS = 500;
 
 interface Sortie {
   readonly code: number | null;
   readonly stdout: string;
   readonly stderr: string;
-  /** Vrai si le processus écoutait encore au bout du délai (il a alors été arrêté). */
+  /** Vrai si le processus tournait encore (à l'écoute, ou au bout du délai) : il a été arrêté. */
   readonly toujoursEnVie: boolean;
 }
 
 /**
  * Lance l'API avec cet environnement (rien hérité de process.env sauf PATH), attend qu'elle
- * sorte ou écrive « à l'écoute », puis l'arrête.
+ * sorte ou écrive « à l'écoute », puis l'arrête. Après « à l'écoute », un court délai de grâce
+ * laisse arriver ce qui a été écrit sur la sortie d'erreur (deux tubes, ordre non garanti).
  */
 function demarrer(env: Record<string, string>, delaiMs = 15_000): Promise<Sortie> {
   return new Promise((fin) => {
@@ -156,7 +187,7 @@ function demarrer(env: Record<string, string>, delaiMs = 15_000): Promise<Sortie
       stdout += d.toString();
       if (stdout.includes("à l'écoute")) {
         clearTimeout(minuterie);
-        arreter();
+        setTimeout(arreter, GRACE_MS);
       }
     });
     enfant.stderr.on('data', (d: Buffer) => {
@@ -200,14 +231,14 @@ async function envSmtp(port: number): Promise<Record<string, string>> {
 }
 
 describe('démarrage de l’API : node src/index.ts (T09c)', () => {
-  it('relais SMTP injoignable : sortie en code 1, message clair, sans le mot de passe, jamais à l’écoute', async () => {
+  it('relais SMTP injoignable : l’API démarre quand même, l’erreur SMTP est sur la sortie d’erreur, sans le mot de passe', async () => {
     const port = await portFerme();
     const sortie = await demarrer(await envSmtp(port));
 
-    expect(sortie.toujoursEnVie, `l’API a démarré malgré un relais injoignable :\n${sortie.stdout}`).toBe(false);
-    expect(sortie.code).toBe(1);
-    expect(sortie.stdout).not.toMatch(ECOUTE);
+    // Une panne du relais n'arrête jamais l'API (ni la synchro) : seule la config incomplète le fait.
+    expect(sortie.stdout, `l’API n’a pas démarré (code ${String(sortie.code)}) :\n${sortie.stderr}`).toMatch(ECOUTE);
     expect(sortie.stderr).toMatch(/SMTP/);
+    expect(sortie.stderr).toContain('127.0.0.1');
     expect(sortie.stderr).toContain(String(port));
     expect(sortie.stdout + sortie.stderr).not.toContain(MOT_DE_PASSE);
   }, 30_000);
