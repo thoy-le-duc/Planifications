@@ -49,7 +49,6 @@ function remplaces(v: unknown): Id<'Emplacement'>[] {
   }
 }
 
-<<<<<<< HEAD
 const versVariete = (v: LigneLocale): VarieteLue => ({
   id: texte(v.id),
   especeId: texte(v.espece_id),
@@ -69,14 +68,14 @@ export async function lireVarieteDeSerie(porte: PorteDonnees, serieId: string): 
   );
   const v = l[0];
   return v === undefined ? null : versVariete(v);
-=======
+}
+
 const TYPES_ABRI: readonly TypeAbri[] = ['plein_champ', 'tunnel', 'serre', 'hors_sol'];
 
 /** Type d'abri lu ; valeur inconnue : absent (le moteur la traite comme de la pleine terre). */
 function typeAbri(v: unknown): { readonly typeAbri?: TypeAbri } {
   const connu = TYPES_ABRI.find((t) => t === v);
   return connu === undefined ? {} : { typeAbri: connu };
->>>>>>> origin/main
 }
 
 /** Planche proposée : de sorte « planche », active aujourd'hui ou plus tard. */
