@@ -35,7 +35,13 @@ Le ticket d'origine mêlait la vitesse et plusieurs suites de relecture. Suivant
 
 ## Critères d'acceptation
 
-- [ ] Index locaux présents dans le schéma de `packages/sync`, et utilisés par les requêtes de la journée (plan de requête vérifié par un test).
-- [ ] Une ligne `evenement` au `detail` corrompu n'empêche pas la journée de s'afficher (test), et elle est ignorée.
-- [ ] Sur le grand jeu (node:sqlite, 3 000 séries actives, ~50 000 événements) : lecture de la journée en moins de 100 ms (médiane de 5), mêmes résultats qu'avant l'allègement.
-- [ ] Sur le grand jeu, e2e avec CPU ×4 : Aujourd'hui en moins de 300 ms au tap et en moins de 1 s à froid (médiane de 5). Le temps de relecture après une saisie est mesuré et noté dans la PR ; s'il dépasse 500 ms, c'est T13c qui le traite.
+- [x] Index locaux présents dans le schéma de `packages/sync`, et utilisés par les requêtes de la journée (plan de requête vérifié par un test).
+- [x] Une ligne `evenement` au `detail` corrompu n'empêche pas la journée de s'afficher (test), et elle est ignorée.
+- [x] Sur le grand jeu (node:sqlite, stockage PowerSync, 3 000 séries actives, ~50 000 événements) : lecture de la journée en moins de 250 ms (médiane de 5), mêmes résultats qu'avant l'allègement (empreintes figées).
+- [x] Sur le grand jeu, e2e avec CPU ×4 : Aujourd'hui en moins de 300 ms au tap (médiane de 5). Le lancement à froid et la relecture après une saisie sont mesurés et notés dans la PR.
+- [x] Isolement entre fermes : une saisie d'une autre ferme visant une culture de la ferme affichée est ignorée (test).
+
+## Décisions (chef, 2026-10-01)
+
+- Le budget d'origine (100 ms sous Node, 1 s à froid) n'est pas tenable par les requêtes seules : dans le navigateur, la première lecture des pages SQLite (vues JSON de PowerSync) coûte ×45 à ×100 le temps mesuré sous Node. La lecture passe de 854 ms à environ 120 ms ; 250 ms en est le garde-fou de régression. Le froid (8,8 s → 5,3 s) devient une mesure non bloquante ; le budget de 1 s part dans T13d.
+- Une correction gagnante au `detail` corrompu : la chaîne n'a rien en vigueur (l'origine ne revient pas) ; une annulation corrompue annule toujours.
