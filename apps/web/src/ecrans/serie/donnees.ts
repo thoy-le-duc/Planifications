@@ -4,7 +4,7 @@
  * conflits et la rotation, la série modifiée et son historique (lignes `modification` écrites
  * par le serveur).
  */
-import type { DateCalendaire, Emplacement, HierarchieParcellaire, Id, Instant, OccupationHistorique } from '@planif/core';
+import type { DateCalendaire, Emplacement, HierarchieParcellaire, Id, Instant, OccupationHistorique, TypeAbri } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { versEmplacement, versOccupation } from '../plan/calculs.ts';
 import { comparerNoms, libelleCulture, versAssolement, type Bibliotheque, type EspeceLue, type FamilleLue, type OccupationLue, type PlancheLue } from './calculs.ts';
@@ -22,7 +22,7 @@ const SQL = {
     'SELECT id, nom, famille_id, delai_retour_minimal_ans, delai_retour_conseille_ans FROM espece WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL',
   variete: 'SELECT id, espece_id, nom, poids_mille_graines_g, taux_germination FROM variete WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL',
   itineraire: 'SELECT id, espece_id, variete_id, nom, parametres FROM itineraire WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL',
-  zone: 'SELECT id, nom, zone_parente_id FROM zone WHERE ferme_id = ? AND supprime_le IS NULL',
+  zone: 'SELECT id, nom, zone_parente_id, type_abri FROM zone WHERE ferme_id = ? AND supprime_le IS NULL',
   emplacement: 'SELECT * FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL',
   saison: 'SELECT id, debut, fin FROM saison WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY debut, id',
   occupation: `SELECT o.*, COALESCE(s.espece_id, p.espece_id) AS espece_id_occupant, COALESCE(s.variete_id, p.variete_id) AS variete_id_occupant
@@ -47,6 +47,14 @@ function remplaces(v: unknown): Id<'Emplacement'>[] {
   } catch {
     return [];
   }
+}
+
+const TYPES_ABRI: readonly TypeAbri[] = ['plein_champ', 'tunnel', 'serre', 'hors_sol'];
+
+/** Type d'abri lu ; valeur inconnue : absent (le moteur la traite comme de la pleine terre). */
+function typeAbri(v: unknown): { readonly typeAbri?: TypeAbri } {
+  const connu = TYPES_ABRI.find((t) => t === v);
+  return connu === undefined ? {} : { typeAbri: connu };
 }
 
 /** Planche proposée : de sorte « planche », active aujourd'hui ou plus tard. */
@@ -115,8 +123,13 @@ export async function lireBibliotheque(porte: PorteDonnees, fermeId: string, auj
   }
 
   const hierarchie: HierarchieParcellaire = {
-    zones: zones.map((z) => ({ id: texte(z.id) as Id<'Zone'>, zoneParenteId: texteOuNul(z.zone_parente_id) as Id<'Zone'> | null })),
-    emplacements: emplacements.map((l) => ({ id: texte(l.id) as Id<'Emplacement'>, zoneId: texte(l.zone_id) as Id<'Zone'>, remplace: remplaces(l.remplace) })),
+    zones: zones.map((z) => ({ id: texte(z.id) as Id<'Zone'>, zoneParenteId: texteOuNul(z.zone_parente_id) as Id<'Zone'> | null, ...typeAbri(z.type_abri) })),
+    emplacements: emplacements.map((l) => ({
+      id: texte(l.id) as Id<'Emplacement'>,
+      zoneId: texte(l.zone_id) as Id<'Zone'>,
+      remplace: remplaces(l.remplace),
+      sorte: parEmplacement.get(texte(l.id))?.sorte ?? 'planche',
+    })),
   };
   const saisonsLues = saisons.map((s) => ({ id: texte(s.id), debut: texte(s.debut), fin: texte(s.fin) }));
 
