@@ -1,8 +1,8 @@
 {
-  "maj": "1er octobre 2026, 13 h 20 UTC",
-  "resume": "Cette fenêtre : **« Annuler » des itinéraires ne touche plus une série déplacée par un autre téléphone (T24c)** ; **la vue « en vigueur » devient rapide côté serveur (T10h)**, environ 17 ms pour une ferme sur 200 000 événements au lieu de plusieurs secondes, et le téléphone applique exactement la même règle. Deux tests instables ont été fiabilisés sans relever de limite. Prochains : T13b (Aujourd'hui rapide sur une grande ferme), T24d (prévenir quand « Annuler » est bloqué).",
+  "maj": "1er octobre 2026, 17 h 50 UTC",
+  "resume": "Cette fenêtre : **« Annuler » des itinéraires prévient quand une synchro l'a empêché de tout défaire (T24d)** ; **Aujourd'hui sept fois plus rapide à lire sur une ferme de 3 000 séries (T13b)**, avec une saisie abîmée qui ne fait plus tomber l'écran — mais l'ouverture à froid de cette grande ferme reste à 5 s sur un téléphone moyen : T13d l'amènera sous 1 s (instantané de la journée) ; **codes de connexion par Brevo prêts côté code (T09c)**, après trois relectures de sécurité (aucun mot de passe ni code dans les journaux, une panne de Brevo n'arrête jamais la synchro). La CI dure désormais jusqu'à 40 minutes au plus (installation de Chromium parfois lente), sans aucun budget de l'appli relevé. Prochains : T13c (relecture rapide après une saisie, accueil sans attendre Planches), T13d.",
   "en_cours": {},
-  "attente": "Rien de bloquant côté questions. Pour la mise en ligne : créer le compte Brevo et choisir le domaine d'envoi (T09c) ; la base de production devra être en locale UTF-8.",
+  "attente": "Pour la mise en ligne (T09c) : créer le compte Brevo, choisir le domaine d'envoi (SPF, DKIM, DMARC), ranger les identifiants dans les secrets de production, et désactiver le suivi des ouvertures et des clics dans Brevo. La base de production devra être en locale UTF-8.",
   "visuels": [
     {
       "titre": "Plan de culture : nouvelle série",
