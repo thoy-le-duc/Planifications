@@ -1,6 +1,6 @@
 {
-  "maj": "1er octobre 2026, 9 h UTC",
-  "resume": "Cette fenêtre : **« Annuler » des itinéraires sûr face à un autre téléphone (T24b)**, avec la même vérification que le formulaire de série, désormais partagée ; **le test de fluidité du défilement du plan fiable (T11d)**, sans relever la limite. Nouvelles règles de sobriété en jetons (deux relectures au plus, modèle léger pour les tickets sans risque). Prochains : T24c (suites de l'annulation des itinéraires), T10h (vitesse de la vue « en vigueur »), T13b (Aujourd'hui rapide sur une grande ferme).",
+  "maj": "1er octobre 2026, 13 h 20 UTC",
+  "resume": "Cette fenêtre : **« Annuler » des itinéraires ne touche plus une série déplacée par un autre téléphone (T24c)** ; **la vue « en vigueur » devient rapide côté serveur (T10h)**, environ 17 ms pour une ferme sur 200 000 événements au lieu de plusieurs secondes, et le téléphone applique exactement la même règle. Deux tests instables ont été fiabilisés sans relever de limite. Prochains : T13b (Aujourd'hui rapide sur une grande ferme), T24d (prévenir quand « Annuler » est bloqué).",
   "en_cours": {},
   "attente": "Rien de bloquant côté questions. Pour la mise en ligne : créer le compte Brevo et choisir le domaine d'envoi (T09c) ; la base de production devra être en locale UTF-8.",
   "visuels": [
