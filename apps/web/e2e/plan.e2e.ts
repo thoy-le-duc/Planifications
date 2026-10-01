@@ -120,12 +120,13 @@ import {
  * lignes dans le DOM, dernière ligne atteinte, une image par pas de 40 px.
  * Témoin : les 5 mêmes passages, avec un travail bloquant injecté dans la page, doivent être
  * jugés saccadés par la même fonction (jugerDefilement). Il est choisi le plus difficile à voir :
- * des gels RARES et JUSTE au-delà de la limite (60 ms de calcul par seconde, soit ~8 gels de
- * 3 images perdues par passage de ~500 images, moins de 2 %). Un blocage de 60 ms n'est pas
- * toujours vu comme 3 images perdues (l'horodatage de requestAnimationFrame est celui du début
- * de l'image, qui peut tomber pendant le blocage) : un gel toutes les 2 s a laissé un passage
- * sans rafale au-delà de la limite ; à un par seconde, chaque passage en voit plusieurs. Sans ce
- * témoin, rien ne prouverait que la statistique n'a pas rendu la mesure aveugle.
+ * des gels RARES (100 ms de calcul par seconde, soit ~8 gels par passage de ~500 images, moins
+ * de 2 %), nettement au-delà de la limite sur toute machine. Un premier réglage à 60 ms (juste
+ * au-delà de la limite en local) n'était vu que comme 2 images perdues sur la machine de CI, plus
+ * rapide (CPU ×4 relatif) : 1 passage saccadé, 2 intervalles fautifs, témoin non vu. À 100 ms, un
+ * gel couvre au moins 5 images même si l'horodatage de requestAnimationFrame tombe pendant le
+ * blocage, soit au moins 4 perdues, quelle que soit la vitesse de la machine. Sans ce témoin, rien
+ * ne prouverait que la statistique n'a pas rendu la mesure aveugle.
  */
 
 const BUDGET_MS = 300;
@@ -141,11 +142,12 @@ const RAFALES_TOTAL_MAX = 6;
 /** Défilement à ~40 px par image (2,4 px/ms à 60 Hz : un balayage rapide du pouce). */
 const PAS_DEFILEMENT_PX = 40;
 /**
- * Témoin saccadé : blocage du fil principal (ms) et période (ms). 60 ms bloquées = au moins
- * 4 images à 60 Hz entre deux images affichées, soit 3 perdues : juste au-delà de la limite.
+ * Témoin saccadé : blocage du fil principal (ms) et période (ms). 100 ms bloquées = au moins
+ * 5 images à 60 Hz entre deux images affichées, soit au moins 4 perdues : au-delà de la limite
+ * sur la CI comme en local (60 ms n'y suffisaient pas, voir l'en-tête).
  * Une fois par seconde : ~8 gels par passage (~8 s), des gels rares, pas un saccadement continu.
  */
-const TEMOIN_BLOCAGE_MS = 60;
+const TEMOIN_BLOCAGE_MS = 100;
 const TEMOIN_PERIODE_MS = 1_000;
 const MARQUE_PLAN = 'planif:plan-affiche';
 /** Remplir la base PowerSync (≈ 42 000 lignes, jeu de T07) prend quelques secondes sans ralentissement. */
@@ -467,7 +469,7 @@ test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, con
   });
 
   await test.step('témoin : un défilement volontairement saccadé fait échouer la mesure', async () => {
-    // Travail bloquant injecté dans la page pendant le défilement : 60 ms de calcul par seconde.
+    // Travail bloquant injecté dans la page pendant le défilement : 100 ms de calcul par seconde.
     // Une image ne peut pas être produite pendant le blocage : en général 3 images perdues
     // d'affilée, juste au-delà de la limite, plusieurs fois par passage. Si ce témoin passait pour
     // fluide, la mesure ne garantirait plus rien.
