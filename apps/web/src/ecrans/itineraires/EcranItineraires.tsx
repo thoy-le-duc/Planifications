@@ -113,7 +113,7 @@ function RenommerType({ type, types, ctx, surFermer, surEnregistre }: Proprietes
     setOccupe(true);
     try {
       const avant = await modifierType(ctx, type.id, { libelle: v.libelle });
-      surEnregistre({ texte: v.libelle, annuler: () => ramener(ctx, avant, types) });
+      surEnregistre({ texte: v.libelle, annuler: () => ramener(ctx, avant) });
       surFermer();
     } catch (e) {
       console.error('Type non renommé', e);
@@ -300,7 +300,7 @@ export function EcranItineraires({ porte, fermeId, surFermer, aujourdhui = jourD
     setOccupe(true);
     try {
       const avant = await modifierType(ctx, t.id, { masque: t.masque ? 0 : 1 });
-      enregistre({ texte: t.libelle, annuler: () => ramener(ctx, avant, types) });
+      enregistre({ texte: t.libelle, annuler: () => ramener(ctx, avant) });
     } catch (e) {
       console.error('Type non modifié', e);
       setMessageType(messageEchec(e));
