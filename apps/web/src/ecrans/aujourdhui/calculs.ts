@@ -196,7 +196,8 @@ function evenementLu(l: Ligne): EvenementLu | null {
  * puis id le plus grand), à défaut l'origine. Même règle que `lireChaine` du serveur, même quand
  * la chaîne se ramifie. Un parent absent de la liste (origine plus ancienne que l'historique lu) :
  * son id sert de clé de chaîne, pour que deux corrections d'une même origine absente se
- * départagent quand même.
+ * départagent quand même. Sur des chaînes complètes, même résultat que `EN_VIGUEUR` (SQL), dont
+ * la journée se sert : l'historique ne lit qu'une fenêtre, la base juge sur tout le journal.
  */
 export function enVigueur(evenements: readonly EvenementLu[]): EvenementLu[] {
   const parId = new Map(evenements.map((e) => [e.id, e]));
@@ -299,27 +300,49 @@ const SQL_OCCUPATIONS = sqlOccupations(
 );
 
 /**
- * Règle « en vigueur » de la vue evenements_en_vigueur (@planif/db), en SQL, pour l'alias `e` :
- * ni une annulation, ni un événement annulé ou corrigé ; une correction seulement si c'est la
- * plus récente de son événement et qu'il n'est pas annulé. Règle d'avant T10g, par événement
- * remplacé : elle ne diffère de `enVigueur` (toute la chaîne) que pour une chaîne ramifiée ou une
- * correction annulée qui a des sœurs, sans effet sur les premières dates du semainier en usage
- * normal. L'historique, lui, passe par `enVigueur`.
+ * Chaînes du journal local, en tête de chaque requête qui applique `EN_VIGUEUR` (paramètre : la
+ * ferme). Seuls les remplacements (corrections, annulations : peu de lignes) montent jusqu'à leur
+ * origine, par l'identifiant ; un parent absent de la base locale sert de clé de chaîne, comme
+ * dans `enVigueur`. Profondeur bornée (données corrompues : jamais de boucle sans fin).
+ *   - `remplacement` : chaque correction ou annulation, avec l'origine de sa chaîne ;
+ *   - `gagnant` : par chaîne sans annulation, la clé (horodatage|id) de la correction la plus
+ *     récente.
  */
-const EN_VIGUEUR = `(e.remplace_sorte IS NULL OR e.remplace_sorte <> 'annulation')
-    AND e.id NOT IN (SELECT remplace_evenement_id FROM evenement WHERE ferme_id = ? AND remplace_evenement_id IS NOT NULL)
-    AND (e.remplace_sorte IS NULL OR (
-      e.remplace_evenement_id NOT IN (SELECT remplace_evenement_id FROM evenement WHERE ferme_id = ? AND remplace_sorte = 'annulation')
-      AND (e.remplace_evenement_id, e.horodatage || '|' || e.id) IN (
-        SELECT remplace_evenement_id, MAX(horodatage || '|' || id) FROM evenement
-        WHERE ferme_id = ? AND remplace_sorte = 'correction' GROUP BY remplace_evenement_id)))`;
+const CHAINES = `WITH RECURSIVE montee(id, sorte, horodatage, origine, profondeur) AS (
+    SELECT id, remplace_sorte, horodatage, remplace_evenement_id, 0 FROM evenement
+    WHERE ferme_id = ? AND remplace_evenement_id IS NOT NULL
+    UNION ALL
+    SELECT m.id, m.sorte, m.horodatage, p.remplace_evenement_id, m.profondeur + 1
+    FROM montee m JOIN evenement p ON p.id = m.origine
+    WHERE p.remplace_evenement_id IS NOT NULL AND m.profondeur < 1000
+  ),
+  remplacement AS (
+    SELECT m.id, m.sorte, m.horodatage, m.origine FROM montee m LEFT JOIN evenement p ON p.id = m.origine
+    WHERE p.remplace_evenement_id IS NULL
+  ),
+  gagnant AS (
+    SELECT MAX(horodatage || '|' || id) AS cle FROM remplacement
+    WHERE sorte = 'correction' AND origine NOT IN (SELECT origine FROM remplacement WHERE sorte = 'annulation')
+    GROUP BY origine
+  )
+`;
+
+/**
+ * Règle « en vigueur » de la vue evenements_en_vigueur (@planif/db, T10g décision 4), en SQL, pour
+ * l'alias `e`, après `CHAINES` : la même que `enVigueur`, sur tout le journal local. Une chaîne
+ * qui contient une annulation n'a rien en vigueur ; sinon une seule saisie : la correction la plus
+ * récente de TOUTE la chaîne (horodatage, puis id), à défaut l'origine (jamais remplacée).
+ * Le semainier (premières dates, interventions) et l'historique s'en servent tous deux.
+ */
+const EN_VIGUEUR = `((e.remplace_sorte IS NULL AND e.id NOT IN (SELECT origine FROM remplacement))
+    OR (e.remplace_sorte = 'correction' AND e.horodatage || '|' || e.id IN (SELECT cle FROM gagnant)))`;
 
 /**
  * Réalisés des cultures actives, agrégés dans la base (première date par culture et par étape) :
  * le journal d'une grande ferme compte des milliers de lignes, seules quelques-unes par culture
  * arrivent jusqu'à la page.
  */
-const SQL_REALISES = `SELECT e.serie_id, e.campagne_id, e.type, json_extract(e.detail, '$.etape') AS etape, MIN(e.date) AS date
+const SQL_REALISES = `${CHAINES}SELECT e.serie_id, e.campagne_id, e.type, json_extract(e.detail, '$.etape') AS etape, MIN(e.date) AS date
   FROM evenement e
   WHERE e.ferme_id = ? AND e.type IN ('realise', 'recolte')
     AND (e.serie_id IN (${SERIES_ACTIVES}) OR e.campagne_id IN (${CAMPAGNES_ACTIVES}))
@@ -330,20 +353,26 @@ const SQL_REALISES = `SELECT e.serie_id, e.campagne_id, e.type, json_extract(e.d
  * T22 : interventions en vigueur des séries actives (ni annulées, ni remplacées par une
  * correction, ni les annulations elles-mêmes) : elles soldent les travaux prévus du semainier.
  */
-const SQL_INTERVENTIONS = `SELECT e.serie_id, e.date, json_extract(e.detail, '$.categorie') AS categorie,
+const SQL_INTERVENTIONS = `${CHAINES}SELECT e.serie_id, e.date, json_extract(e.detail, '$.categorie') AS categorie,
     json_extract(e.detail, '$.type') AS type_intervention,
     json_extract(e.detail, '$.occurrenceVisee') AS occurrence_visee
   FROM evenement e
   WHERE e.ferme_id = ? AND e.type = 'intervention' AND e.serie_id IN (${SERIES_ACTIVES})
     AND ${EN_VIGUEUR}`;
 
-/** Saisies récentes (historique, dernières récoltes), en vigueur ou non : la règle s'applique ici. */
-const SQL_RECENTS = `SELECT id, type, date, horodatage, serie_id, campagne_id, remplace_sorte, remplace_evenement_id,
-    json_extract(detail, '$.etape') AS etape, json_extract(detail, '$.quantiteReelle') AS quantite_reelle,
-    json_extract(detail, '$.quantite') AS quantite, json_extract(detail, '$.unite') AS unite,
-    json_extract(detail, '$.categorie') AS categorie, json_extract(detail, '$.type') AS type_intervention
-  FROM evenement
-  WHERE ferme_id = ? AND type IN ('realise', 'recolte', 'intervention') AND (date >= ? OR horodatage >= ?)`;
+/**
+ * Saisies récentes (historique, dernières récoltes), en vigueur ou non, avec `en_vigueur` (0 / 1)
+ * jugé sur toute la chaîne, y compris ses saisies plus anciennes que la fenêtre (T10h) : une
+ * récolte dont l'origine et une correction sont hors de la fenêtre, et l'annulation dedans, est
+ * bien annulée.
+ */
+const SQL_RECENTS = `${CHAINES}SELECT e.id, e.type, e.date, e.horodatage, e.serie_id, e.campagne_id, e.remplace_sorte, e.remplace_evenement_id,
+    json_extract(e.detail, '$.etape') AS etape, json_extract(e.detail, '$.quantiteReelle') AS quantite_reelle,
+    json_extract(e.detail, '$.quantite') AS quantite, json_extract(e.detail, '$.unite') AS unite,
+    json_extract(e.detail, '$.categorie') AS categorie, json_extract(e.detail, '$.type') AS type_intervention,
+    ${EN_VIGUEUR} AS en_vigueur
+  FROM evenement e
+  WHERE e.ferme_id = ? AND e.type IN ('realise', 'recolte', 'intervention') AND (e.date >= ? OR e.horodatage >= ?)`;
 
 export interface LignesJournee {
   readonly series: readonly Ligne[];
@@ -353,7 +382,7 @@ export interface LignesJournee {
   readonly realises: readonly Ligne[];
   /** T22 : interventions en vigueur des séries actives (série, date, catégorie, type, occurrence visée T22b). */
   readonly interventions: readonly Ligne[];
-  /** Événements récents (bornesHistorique), tels quels. */
+  /** Événements récents (bornesHistorique), tels quels, avec `en_vigueur` (0 / 1, toute la chaîne). */
   readonly recents: readonly Ligne[];
 }
 
@@ -389,9 +418,9 @@ export async function lireJournee(
   const series = await lire(SQL_SERIES, [fermeId]);
   const campagnes = await lire(SQL_CAMPAGNES, [fermeId, aujourdhui]);
   const occupations = await lire(SQL_OCCUPATIONS, [fermeId, fermeId, fermeId, aujourdhui, aujourdhui, aujourdhui]);
-  const realises = await lire(SQL_REALISES, [fermeId, fermeId, fermeId, aujourdhui, fermeId, fermeId, fermeId]);
-  const interventions = await lire(SQL_INTERVENTIONS, [fermeId, fermeId, fermeId, fermeId, fermeId]);
-  const recents = await lire(SQL_RECENTS, [fermeId, depuis, horodatageDepuis]);
+  const realises = await lire(SQL_REALISES, [fermeId, fermeId, fermeId, fermeId, aujourdhui]);
+  const interventions = await lire(SQL_INTERVENTIONS, [fermeId, fermeId, fermeId]);
+  const recents = await lire(SQL_RECENTS, [fermeId, fermeId, depuis, horodatageDepuis]);
   // Historique : les cultures terminées ou passées qu'il nomme, lues en plus (rarement).
   const connues = new Set([...series, ...campagnes].map((l) => texte(l.id)));
   const autresSeries = [...new Set(recents.map((l) => texte(l.serie_id)).filter((x) => x !== '' && !connues.has(x)))];
@@ -606,13 +635,13 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
     interventions: interventions as ReadonlyMap<Id<'Serie'>, readonly InterventionRealisee[]>,
   };
 
-  // Saisies récentes en vigueur : historique et dernières récoltes.
-  const lus: EvenementLu[] = [];
+  // Saisies récentes en vigueur (règle jugée par la base sur toute la chaîne, comme le
+  // semainier) : historique et dernières récoltes.
+  const vigueur: EvenementLu[] = [];
   for (const l of lignes.recents) {
-    const e = evenementLu(l);
-    if (e !== null) lus.push(e);
+    const e = l.en_vigueur === 1 ? evenementLu(l) : null;
+    if (e !== null) vigueur.push(e);
   }
-  const vigueur = enVigueur(lus);
   const dernieresRecoltes = new Map<string, DerniereRecolte>();
   for (const e of vigueur) {
     const cible = e.serieId ?? e.campagneId;
