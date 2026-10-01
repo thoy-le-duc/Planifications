@@ -503,6 +503,18 @@ select.serie-champ {
   border-radius: 6px;
 }
 
+/* Variété retirée au changement d'itinéraire (décision 8) : ce qui demande attention, en orange. */
+.serie-retiree {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 6px solid var(--couleur-orange);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-fond);
+  color: var(--couleur-texte-orange);
+  font-weight: 700;
+  font-size: 15px;
+}
+
 /* ── Planches ────────────────────────────────────────────────────────────────────────────── */
 
 .serie-planches {

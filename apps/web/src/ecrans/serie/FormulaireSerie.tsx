@@ -299,6 +299,7 @@ export function FormulaireSerie({
   const [erreur, setErreur] = useState<string | null>(null);
   const [historique, setHistorique] = useState<Modification[]>([]);
   const [varieteGardee, setVarieteGardee] = useState<string | null>(null);
+  const [varieteRetiree, setVarieteRetiree] = useState<string | null>(null);
 
   const idTitre = useId();
   const idCulture = useId();
@@ -397,6 +398,7 @@ export function FormulaireSerie({
       ancreGardee: ancre === s.ancre ? s.ancreGardee : null,
     }));
     setRecherche('');
+    setVarieteRetiree(null);
   }
 
   function choisirItineraire(id: string): void {
@@ -405,9 +407,22 @@ export function FormulaireSerie({
     const origine = etat !== null && String(etat.serie.itineraire_id) === id && typeof etat.serie.parametres === 'string' ? etat.serie.parametres : null;
     const texte = origine ?? it?.parametresTexte ?? null;
     const nouveauMode = modeDe(objetJson(texte));
+    // Variété supprimée de la bibliothèque : le serveur la revérifie si l'itinéraire change. Elle
+    // est alors retirée, et le formulaire le dit avant d'écrire ; de retour sur l'itinéraire
+    // d'origine, elle revient (décision 8).
+    const c = saisie?.culture ?? null;
+    const surOrigine = etat !== null && String(etat.serie.itineraire_id) === id;
+    let culture = c;
+    if (c !== null && varieteGardee !== null && c.varieteId === varieteGardee && !surOrigine) {
+      culture = { ...c, varieteId: null, nomVariete: null };
+      setVarieteRetiree(c.nomVariete);
+    } else if (c !== null && varieteRetiree !== null && surOrigine && c.varieteId === null && c.especeId === etat.serie.espece_id) {
+      culture = (bib === null ? null : cultureDe(bib, c.especeId, varieteGardee)) ?? c;
+      setVarieteRetiree(null);
+    }
     changer((s) => {
       const ancre = s.ancre === 'semis' && nouveauMode === 'plant_achete' ? 'plantation' : s.ancre;
-      return { ...s, itineraireId: it?.id ?? null, parametresTexte: texte, ancre, ancreGardee: ancre === s.ancre ? s.ancreGardee : null };
+      return { ...s, culture, itineraireId: it?.id ?? null, parametresTexte: texte, ancre, ancreGardee: ancre === s.ancre ? s.ancreGardee : null };
     });
   }
 
@@ -608,6 +623,7 @@ export function FormulaireSerie({
                 type="button"
                 className="serie-bouton-leger"
                 onClick={() => {
+                  setVarieteRetiree(null);
                   changer((s) => ({ ...s, culture: null, itineraireId: null, parametresTexte: null }));
                 }}
               >
@@ -635,6 +651,11 @@ export function FormulaireSerie({
                 </option>
               ))}
             </select>
+            {varieteRetiree !== null && (
+              <p role="status" className="serie-retiree">
+                Variété {varieteRetiree} retirée : supprimée de la bibliothèque, elle ne suit pas un autre itinéraire.
+              </p>
+            )}
             {itineraires.length === 0 && <p className="serie-aide">Aucun itinéraire pour cette culture : l’import de la bibliothèque les fournit.</p>}
           </section>
         )}
