@@ -10,6 +10,7 @@
 import {
   ajouterJours,
   appliquerRealises,
+  estDateValide,
   semaineIso,
   semainier,
   validerTravauxPrevus,
@@ -249,27 +250,44 @@ export function enVigueur(evenements: readonly EvenementLu[]): EvenementLu[] {
 }
 
 // ── Requêtes ─────────────────────────────────────────────────────────────────────────────────
+//
+// T13b : la base locale de PowerSync range chaque ligne en JSON (`ps_data__<table>.data`) ; lire
+// une colonne de la vue, c'est extraire du JSON. Le coût d'une lecture est donc surtout le nombre
+// de lignes dont on ouvre le JSON (et, sur le téléphone, les pages de la base à lire). D'où :
+//   - chaque requête part d'un index (jamais de parcours de tout le journal de la ferme), qui
+//     porte si possible les colonnes lues : SQLite les y prend sans ouvrir la ligne ;
+//   - les petites tables (espèces, variétés, emplacements, zones) sont lues une fois et jointes
+//     ici, pas une fois par série ou par occupation ;
+//   - les chaînes de remplacement (`CHAINES`) sont calculées une seule fois par journée ;
+//   - les listes d'identifiants (séries actives, chaînes) passent en un paramètre JSON (`DANS`) ;
+//   - un detail qui n'est pas du JSON écarte sa ligne (`json_valid`) : json_extract lèverait, et
+//     toute la journée avec lui.
 
 /**
- * Séries que le semainier peut planifier : prévues ou en cours, avec un mode d'itinéraire valide
- * (sans lui, pas de dates d'étapes : `calculerJournee` les écarterait, autant ne pas les lire).
+ * Séries que le semainier peut planifier : prévues ou en cours (index ferme_statut : les séries
+ * terminées des saisons passées ne sont pas lues), avec un mode d'itinéraire valide, vérifié par
+ * `lireJournee` (`parametresDe`) : sans lui, pas de dates d'étapes, `calculerJournee` les
+ * écarterait.
  */
-const FILTRE_SERIES_ACTIVES = `s.statut IN ('prevue', 'en_cours') AND json_extract(s.parametres, '$.mode') IN ('semis_direct', 'plant_maison', 'plant_achete')`;
-const SERIES_ACTIVES = `SELECT s.id FROM serie s WHERE s.ferme_id = ? AND s.supprime_le IS NULL AND ${FILTRE_SERIES_ACTIVES}`;
-const CAMPAGNES_ACTIVES = `SELECT id FROM campagne WHERE ferme_id = ? AND supprime_le IS NULL AND (fin_recolte_prevue IS NULL OR fin_recolte_prevue >= ?)`;
-/** `?, ?, ?` : un paramètre par identifiant. */
-const marques = (n: number) => Array.from({ length: n }, () => '?').join(', ');
+const FILTRE_SERIES_ACTIVES = `s.statut IN ('prevue', 'en_cours')`;
+/** Liste d'identifiants passée en UN paramètre (tableau JSON) : `x IN (${DANS})`. */
+const DANS = 'SELECT value FROM json_each(?)';
+/** Tableau JSON d'identifiants, sans doublon ni vide, pour `DANS`. */
+const listeJson = (ids: Iterable<string>): string => JSON.stringify([...new Set(ids)].filter((x) => x !== ''));
 
-/** Séries jointes à l'espèce, la famille et la variété ; `filtre` sur l'alias `s`. */
-const sqlSeries = (filtre: string) => `SELECT s.id, s.statut, json_extract(s.parametres, '$.mode') AS mode,
-    json_extract(s.parametres, '$.travauxPrevus') AS travaux, s.prevu_semis_pepiniere,
-    s.prevu_mise_en_place, s.prevu_debut_recolte, s.prevu_fin_recolte, s.longueur_m, s.nombre_plants, s.espece_id, s.variete_id,
-    e.nom AS espece, e.unite_recolte, f.nom AS famille, v.nom AS variete
+/**
+ * Séries, l'instantané `parametres` en texte (lu une fois par texte : `parametresDe`), sans
+ * jointure (l'espèce, la famille et la variété sont lues à part : `lireNoms`) ; `filtre`
+ * sur l'alias `s`.
+ */
+const sqlSeries = (filtre: string) => `SELECT s.id, s.statut, s.parametres, s.prevu_semis_pepiniere,
+    s.prevu_mise_en_place, s.prevu_debut_recolte, s.prevu_fin_recolte, s.longueur_m, s.nombre_plants, s.espece_id, s.variete_id
   FROM serie s
-  LEFT JOIN espece e ON e.id = s.espece_id
-  LEFT JOIN famille f ON f.id = e.famille_id
-  LEFT JOIN variete v ON v.id = s.variete_id
   WHERE s.ferme_id = ? AND s.supprime_le IS NULL AND ${filtre}`;
+
+/** Espèces des séries lues, avec le nom de leur famille. */
+const SQL_ESPECES = `SELECT e.id, e.nom, e.unite_recolte, f.nom AS famille FROM espece e LEFT JOIN famille f ON f.id = e.famille_id WHERE e.id IN (${DANS})`;
+const SQL_VARIETES = `SELECT id, nom FROM variete WHERE id IN (${DANS})`;
 
 /** Campagnes jointes à leur plantation ; `filtre` sur l'alias `c`. */
 const sqlCampagnes = (filtre: string) => `SELECT c.id, c.debut_recolte_prevu, c.fin_recolte_prevue, p.id AS plantation_id, p.nombre_plants,
@@ -281,104 +299,168 @@ const sqlCampagnes = (filtre: string) => `SELECT c.id, c.debut_recolte_prevu, c.
   LEFT JOIN variete v ON v.id = p.variete_id
   WHERE c.ferme_id = ? AND c.supprime_le IS NULL AND p.supprime_le IS NULL AND ${filtre}`;
 
+/** Occupations non supprimées des séries et des plantations données (deux listes JSON). */
+const SQL_OCCUPATIONS = `SELECT o.serie_id, o.plantation_id, o.emplacement_id FROM occupation o
+  WHERE o.ferme_id = ? AND o.supprime_le IS NULL AND (o.serie_id IN (${DANS}) OR o.plantation_id IN (${DANS}))`;
+
 /**
- * Emplacements occupés, par série ou plantation ; `filtre` sur l'alias `o`. Seuls les
- * emplacements actifs le jour donné (deux derniers paramètres) : jamais un emplacement supprimé
- * ou retiré recopié dans une saisie (le serveur le refuserait).
+ * Emplacements occupés, avec leur zone. Seuls les emplacements actifs le jour donné (deux
+ * derniers paramètres) : jamais un emplacement supprimé ou retiré recopié dans une saisie (le
+ * serveur le refuserait).
  */
-const sqlOccupations = (filtre: string) => `SELECT o.serie_id, o.plantation_id, em.id AS emplacement_id, em.code, z.nom AS zone
-  FROM occupation o
-  JOIN emplacement em ON em.id = o.emplacement_id
-  LEFT JOIN zone z ON z.id = em.zone_id
-  WHERE o.ferme_id = ? AND o.supprime_le IS NULL AND ${filtre}
-    AND em.supprime_le IS NULL AND em.actif_du <= ? AND (em.actif_au IS NULL OR em.actif_au > ?)`;
-
-const SQL_SERIES = sqlSeries(FILTRE_SERIES_ACTIVES);
-const SQL_CAMPAGNES = sqlCampagnes('(c.fin_recolte_prevue IS NULL OR c.fin_recolte_prevue >= ?)');
-const SQL_OCCUPATIONS = sqlOccupations(
-  `(o.serie_id IN (${SERIES_ACTIVES}) OR o.plantation_id IN (SELECT plantation_id FROM campagne WHERE id IN (${CAMPAGNES_ACTIVES})))`,
-);
+const SQL_EMPLACEMENTS = `SELECT em.id, em.code, z.nom AS zone FROM emplacement em LEFT JOIN zone z ON z.id = em.zone_id
+  WHERE em.id IN (${DANS}) AND em.supprime_le IS NULL AND em.actif_du <= ? AND (em.actif_au IS NULL OR em.actif_au > ?)`;
 
 /**
- * Chaînes du journal local, en tête de chaque requête qui applique `EN_VIGUEUR` (paramètre : la
- * ferme). Une ligne reçue du serveur porte l'origine de sa chaîne (`origine_id`, tenue par la
- * base, T10h) : elle est lue telle quelle. Seules les saisies locales pas encore synchronisées
- * (sans `origine_id`) montent, par l'identifiant, jusqu'au premier parent qui la porte ou jusqu'à
- * l'origine (décision 3 du chef : une chaîne de 1 000 corrections ne se remonte pas). Un parent
- * absent de la base locale sert de clé de chaîne, comme dans `enVigueur`. Profondeur bornée
- * (données corrompues : jamais de boucle sans fin).
- *   - `remplacement` : chaque correction ou annulation, avec l'origine de sa chaîne ;
- *   - `gagnant` : par chaîne sans annulation, la clé (horodatage|id) de la correction la plus
- *     récente.
+ * Chaînes du journal local (paramètre : la ferme). Une ligne reçue du serveur porte l'origine de
+ * sa chaîne (`origine_id`, tenue par la base, T10h) : elle est lue telle quelle. Seules les
+ * saisies locales pas encore synchronisées (sans `origine_id`) montent, par l'identifiant,
+ * jusqu'au premier parent qui la porte ou jusqu'à l'origine (décision 3 du chef : une chaîne de
+ * 1 000 corrections ne se remonte pas). Un parent absent de la base locale sert de clé de chaîne,
+ * comme dans `enVigueur`. Profondeur bornée (données corrompues : jamais de boucle sans fin).
+ *   - `remplacement` : chaque correction ou annulation, avec l'origine de sa chaîne (le dernier
+ *     maillon de sa montée : fini, ou dont le parent est une origine ou absent) ;
+ *   - `chaine` : par origine, la clé (horodatage|id) de sa correction la plus récente et son
+ *     `id` (colonne nue de SQLite : celle de la ligne du MAX), le nombre de ses annulations et
+ *     de ses corrections.
+ *
+ * T13b : les remplacements se lisent par l'index `remplacement` (`>= ''` : toute valeur non
+ * nulle, comme `IS NOT NULL`, que SQLite ne cherche pas dans un index d'expression), qui porte
+ * aussi la ferme, l'origine, la sorte et l'horodatage : aucune ligne du journal n'est ouverte,
+ * sauf les parents des saisies locales. La ferme est écartée de l'index ferme_date (`+`) :
+ * sinon SQLite parcourrait tout le journal de la ferme.
  */
 const CHAINES = `WITH RECURSIVE montee(id, sorte, horodatage, origine, fini, profondeur) AS (
     SELECT id, remplace_sorte, horodatage, coalesce(origine_id, remplace_evenement_id), origine_id IS NOT NULL, 0 FROM evenement
-    WHERE ferme_id = ? AND remplace_evenement_id IS NOT NULL
+    WHERE remplace_evenement_id >= '' AND +ferme_id = ?
     UNION ALL
     SELECT m.id, m.sorte, m.horodatage, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL, m.profondeur + 1
     FROM montee m JOIN evenement p ON p.id = m.origine
     WHERE NOT m.fini AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL) AND m.profondeur < 1000
   ),
   remplacement AS (
-    SELECT m.id, m.sorte, m.horodatage, m.origine FROM montee m LEFT JOIN evenement p ON p.id = m.origine
-    WHERE m.fini OR (p.origine_id IS NULL AND p.remplace_evenement_id IS NULL)
+    SELECT m.id, m.sorte, m.horodatage, m.origine FROM montee m
+    WHERE m.fini OR NOT EXISTS (SELECT 1 FROM evenement p WHERE p.id = m.origine AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL))
   ),
-  gagnant AS (
-    SELECT MAX(horodatage || '|' || id) AS cle FROM remplacement
-    WHERE sorte = 'correction' AND origine NOT IN (SELECT origine FROM remplacement WHERE sorte = 'annulation')
-    GROUP BY origine
+  chaine AS (
+    SELECT origine, MAX(CASE WHEN sorte = 'correction' THEN horodatage || '|' || id END) AS cle, id,
+      SUM(sorte = 'annulation') AS annulations, SUM(sorte = 'correction') AS corrections
+    FROM remplacement GROUP BY origine
   )
 `;
 
 /**
- * Règle « en vigueur » de la vue evenements_en_vigueur (@planif/db, T10g décision 4), en SQL, pour
- * l'alias `e`, après `CHAINES` : la même que `enVigueur`, sur tout le journal local. Une chaîne
- * qui contient une annulation n'a rien en vigueur ; sinon une seule saisie : la correction la plus
- * récente de TOUTE la chaîne (horodatage, puis id), à défaut l'origine (jamais remplacée).
- * Le semainier (premières dates, interventions) et l'historique s'en servent tous deux.
+ * Les chaînes, lues UNE fois par journée (avant T13b, chaque requête du journal les recalculait) :
+ * l'origine de chaque chaîne remplacée, et l'id de la correction gagnante (la plus grande clé
+ * horodatage|id) de chaque chaîne sans annulation, en deux tableaux JSON que `EN_VIGUEUR` relit
+ * (`json_each`). L'id plutôt que la clé : la clé contient l'id, désigner la gagnante par son id
+ * revient au même, et le journal n'a pas à ouvrir chaque correction pour en lire l'horodatage.
  */
-const EN_VIGUEUR = `((e.remplace_sorte IS NULL AND e.id NOT IN (SELECT origine FROM remplacement))
-    OR (e.remplace_sorte = 'correction' AND e.horodatage || '|' || e.id IN (SELECT cle FROM gagnant)))`;
+const SQL_CHAINES = `${CHAINES}SELECT json_group_array(origine) AS origines,
+    json_group_array(id) FILTER (WHERE annulations = 0 AND cle IS NOT NULL) AS gagnants
+  FROM chaine`;
 
 /**
- * Réalisés des cultures actives, agrégés dans la base (première date par culture et par étape) :
- * le journal d'une grande ferme compte des milliers de lignes, seules quelques-unes par culture
- * arrivent jusqu'à la page.
+ * Règle « en vigueur » de la vue evenements_en_vigueur (@planif/db, T10g décision 4), en SQL, pour
+ * l'alias `e`, sur les chaînes de `SQL_CHAINES` (deux paramètres : origines, gagnants) : la même
+ * que `enVigueur`, sur tout le journal local. Une chaîne qui contient une annulation n'a rien en
+ * vigueur ; sinon une seule saisie : la correction la plus récente de TOUTE la chaîne
+ * (horodatage, puis id), à défaut l'origine (jamais remplacée). Le semainier (premières dates,
+ * interventions) et l'historique s'en servent tous deux.
  */
-const SQL_REALISES = `${CHAINES}SELECT e.serie_id, e.campagne_id, e.type, json_extract(e.detail, '$.etape') AS etape, MIN(e.date) AS date
+const EN_VIGUEUR = `((e.remplace_sorte IS NULL AND e.id NOT IN (SELECT value FROM json_each(?)))
+    OR (e.remplace_sorte = 'correction' AND e.id IN (SELECT value FROM json_each(?))))`;
+
+/**
+ * Réalisés des cultures actives, agrégés dans la base (première date par culture, par type et par
+ * étape) : le journal d'une grande ferme compte des dizaines de milliers de lignes, seules
+ * quelques-unes par culture arrivent jusqu'à la page. L'étape n'est lue que pour un réalisé.
+ * Filtrées par la ferme, comme tout le journal : un événement d'une autre ferme posé sur une
+ * culture de celle-ci ne compte jamais (isolement entre fermes).
+ *
+ * Séries (liste JSON, puis la ferme) : par l'index `serie` (série, ferme, type, date, sorte,
+ * detail), qui porte tout ce que la requête lit, ferme comprise, sauf l'id (`EN_VIGUEUR`). Les récoltes à part, regroupées par la seule
+ * série dans l'ordre de l'index, sans tri ; un événement vise au plus une culture
+ * (`au_plus_une_culture`) : pas de campagne à regrouper.
+ */
+const SQL_REALISES_SERIES = `SELECT e.serie_id, 'recolte' AS type, NULL AS etape, MIN(e.date) AS date
   FROM evenement e
-  WHERE e.ferme_id = ? AND e.type IN ('realise', 'recolte')
-    AND (e.serie_id IN (${SERIES_ACTIVES}) OR e.campagne_id IN (${CAMPAGNES_ACTIVES}))
-    AND ${EN_VIGUEUR}
+  WHERE e.serie_id IN (${DANS}) AND e.ferme_id = ? AND e.type = 'recolte' AND json_valid(e.detail) AND ${EN_VIGUEUR}
+  GROUP BY e.serie_id
+  UNION ALL
+  SELECT e.serie_id, 'realise' AS type, json_extract(e.detail, '$.etape') AS etape, MIN(e.date) AS date
+  FROM evenement e
+  WHERE e.serie_id IN (${DANS}) AND e.ferme_id = ? AND e.type = 'realise' AND json_valid(e.detail) AND ${EN_VIGUEUR}
+  GROUP BY e.serie_id, etape`;
+/**
+ * Campagnes (liste JSON, séries actives, puis la ferme) : par l'index `campagne` (la ferme lue
+ * dans la ligne, écartée de l'index ferme_date par `+` : quelques centaines de récoltes) ; une
+ * saisie d'une série active y est déjà comptée.
+ */
+const SQL_REALISES_CAMPAGNES = `SELECT e.serie_id, e.campagne_id, e.type,
+    CASE e.type WHEN 'realise' THEN json_extract(e.detail, '$.etape') END AS etape, MIN(e.date) AS date
+  FROM evenement e
+  WHERE e.campagne_id IN (${DANS}) AND (e.serie_id IS NULL OR e.serie_id NOT IN (${DANS})) AND +e.ferme_id = ?
+    AND e.type IN ('realise', 'recolte') AND json_valid(e.detail) AND ${EN_VIGUEUR}
   GROUP BY e.serie_id, e.campagne_id, e.type, etape`;
 
 /**
  * T22 : interventions en vigueur des séries actives (ni annulées, ni remplacées par une
  * correction, ni les annulations elles-mêmes) : elles soldent les travaux prévus du semainier.
+ * Liste JSON des séries, puis la ferme (index `serie`).
  */
-const SQL_INTERVENTIONS = `${CHAINES}SELECT e.serie_id, e.date, json_extract(e.detail, '$.categorie') AS categorie,
+const SQL_INTERVENTIONS = `SELECT e.serie_id, e.date, json_extract(e.detail, '$.categorie') AS categorie,
     json_extract(e.detail, '$.type') AS type_intervention,
     json_extract(e.detail, '$.occurrenceVisee') AS occurrence_visee
   FROM evenement e
-  WHERE e.ferme_id = ? AND e.type = 'intervention' AND e.serie_id IN (${SERIES_ACTIVES})
-    AND ${EN_VIGUEUR}`;
+  WHERE e.serie_id IN (${DANS}) AND e.ferme_id = ? AND e.type = 'intervention' AND json_valid(e.detail) AND ${EN_VIGUEUR}`;
+
+/** Champs du detail lus pour l'historique : chemin JSON, colonne de la ligne. */
+const CHAMPS_DETAIL = [
+  ['etape', 'etape'],
+  ['quantiteReelle', 'quantite_reelle'],
+  ['quantite', 'quantite'],
+  ['unite', 'unite'],
+  ['categorie', 'categorie'],
+  ['type', 'type_intervention'],
+] as const;
+
+/**
+ * Valeur d'un champ lu par une extraction à plusieurs chemins (tableau JSON), rendue comme
+ * `json_extract` l'aurait rendue seule : booléen en 1 / 0, objet ou tableau en texte JSON.
+ */
+function valeurExtraite(v: unknown): Valeur {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'boolean') return v ? 1 : 0;
+  if (typeof v === 'string' || typeof v === 'number') return v;
+  return JSON.stringify(v);
+}
 
 /**
  * Saisies récentes (historique, dernières récoltes), en vigueur ou non, avec `en_vigueur` (0 / 1)
  * jugé sur toute la chaîne, y compris ses saisies plus anciennes que la fenêtre (T10h) : une
  * récolte dont l'origine et une correction sont hors de la fenêtre, et l'annulation dedans, est
- * bien annulée.
+ * bien annulée. Par la date du journal OU par l'instant de saisie : deux recherches indexées
+ * réunies par UNION (un OR empêcherait les index) ; la seconde ne garde que les saisies d'une date
+ * plus ancienne (lue dans l'index ferme_horodatage) : les deux parties sont disjointes. Les
+ * champs du detail sont extraits en un appel (`CHAMPS_DETAIL`), puis rangés en colonnes ici.
  */
-const SQL_RECENTS = `${CHAINES}SELECT e.id, e.type, e.date, e.horodatage, e.serie_id, e.campagne_id, e.remplace_sorte, e.remplace_evenement_id,
-    json_extract(e.detail, '$.etape') AS etape, json_extract(e.detail, '$.quantiteReelle') AS quantite_reelle,
-    json_extract(e.detail, '$.quantite') AS quantite, json_extract(e.detail, '$.unite') AS unite,
-    json_extract(e.detail, '$.categorie') AS categorie, json_extract(e.detail, '$.type') AS type_intervention,
+const sqlRecents = (partie: string) => `SELECT e.id, e.type, e.date, e.horodatage, e.serie_id, e.campagne_id, e.remplace_sorte, e.remplace_evenement_id,
+    json_extract(e.detail, ${CHAMPS_DETAIL.map(([chemin]) => `'$.${chemin}'`).join(', ')}) AS detail,
     ${EN_VIGUEUR} AS en_vigueur
   FROM evenement e
-  WHERE e.ferme_id = ? AND e.type IN ('realise', 'recolte', 'intervention') AND (e.date >= ? OR e.horodatage >= ?)`;
+  WHERE ${partie} AND e.type IN ('realise', 'recolte', 'intervention') AND json_valid(e.detail)`;
+const SQL_RECENTS = `${sqlRecents('e.ferme_id = ? AND e.date >= ?')}
+  UNION ALL
+  ${sqlRecents('e.ferme_id = ? AND e.horodatage >= ? AND (e.date < ? OR e.date IS NULL)')}`;
 
 export interface LignesJournee {
+  /** Séries (sans leurs noms : `especes`, `varietes`). */
   readonly series: readonly Ligne[];
+  /** Espèces des séries (id, nom, unite_recolte, famille : nom de la famille). */
+  readonly especes: readonly Ligne[];
+  /** Variétés des séries (id, nom). */
+  readonly varietes: readonly Ligne[];
   readonly campagnes: readonly Ligne[];
   readonly occupations: readonly Ligne[];
   /** Première date par culture, type et étape, parmi les événements en vigueur. */
@@ -400,6 +482,56 @@ export function bornesHistorique(aujourdhui: string, maintenant: Date): { readon
 /** Lecture abandonnée entre deux requêtes : plus aucun écran ne l'attend. */
 export class LectureAbandonnee extends Error {}
 
+/** Ligne de `SQL_RECENTS`, les champs du detail rangés en colonnes (etape, quantite…). */
+function ligneRecente(l: Ligne): Ligne {
+  const champs = jsonOuNul(l.detail);
+  const valeurs = Array.isArray(champs) ? champs : [];
+  const ligne: Record<string, Valeur> = {
+    id: l.id,
+    type: l.type,
+    date: l.date,
+    horodatage: l.horodatage,
+    serie_id: l.serie_id,
+    campagne_id: l.campagne_id,
+    remplace_sorte: l.remplace_sorte,
+    remplace_evenement_id: l.remplace_evenement_id,
+    en_vigueur: l.en_vigueur,
+  };
+  for (const [i, [, colonne]] of CHAMPS_DETAIL.entries()) ligne[colonne] = valeurExtraite(valeurs[i]);
+  return ligne;
+}
+
+type Lire = (sql: string, parametres: readonly unknown[]) => Promise<Ligne[]>;
+
+interface Noms {
+  readonly especes: readonly Ligne[];
+  readonly varietes: readonly Ligne[];
+}
+
+/** Espèces (avec leur famille) et variétés des séries lues par `sqlSeries`. */
+async function lireNoms(lire: Lire, series: readonly Ligne[]): Promise<Noms> {
+  if (series.length === 0) return { especes: [], varietes: [] };
+  const especes = await lire(SQL_ESPECES, [listeJson(series.map((s) => texte(s.espece_id)))]);
+  const idsVarietes = series.map((s) => texte(s.variete_id)).filter((x) => x !== '');
+  const varietes = idsVarietes.length === 0 ? [] : await lire(SQL_VARIETES, [listeJson(idsVarietes)]);
+  return { especes, varietes };
+}
+
+/** Emplacements actifs occupés par ces séries et plantations : lignes (serie_id, plantation_id, emplacement_id, code, zone). */
+async function lireOccupations(lire: Lire, fermeId: string, series: readonly string[], plantations: readonly string[], aujourdhui: string): Promise<Ligne[]> {
+  if (series.length === 0 && plantations.length === 0) return [];
+  const occupations = await lire(SQL_OCCUPATIONS, [fermeId, listeJson(series), listeJson(plantations)]);
+  if (occupations.length === 0) return [];
+  const emplacements = await lire(SQL_EMPLACEMENTS, [listeJson(occupations.map((o) => texte(o.emplacement_id))), aujourdhui, aujourdhui]);
+  const parId = new Map(emplacements.map((em) => [texte(em.id), em]));
+  const lignes: Ligne[] = [];
+  for (const o of occupations) {
+    const em = parId.get(texte(o.emplacement_id));
+    if (em !== undefined) lignes.push({ serie_id: o.serie_id, plantation_id: o.plantation_id, emplacement_id: em.id, code: em.code, zone: em.zone });
+  }
+  return lignes;
+}
+
 /**
  * Lit ce dont la journée a besoin, bornée aux cultures actives. Une requête à la fois (la base
  * n'en sert qu'une à la fois de toute façon) : entre deux, `continuer()` dit si un écran attend
@@ -414,31 +546,45 @@ export async function lireJournee(
   continuer: () => boolean = () => true,
 ): Promise<LignesJournee> {
   const { depuis, horodatageDepuis } = bornesHistorique(aujourdhui, maintenant);
-  const lire = async (sql: string, parametres: readonly unknown[]): Promise<Ligne[]> => {
+  const lire: Lire = async (sql, parametres) => {
     if (!continuer()) throw new LectureAbandonnee();
     return porte.lire<Ligne>(sql, parametres);
   };
-  const series = await lire(SQL_SERIES, [fermeId]);
-  const campagnes = await lire(SQL_CAMPAGNES, [fermeId, aujourdhui]);
-  const occupations = await lire(SQL_OCCUPATIONS, [fermeId, fermeId, fermeId, aujourdhui, aujourdhui, aujourdhui]);
-  const realises = await lire(SQL_REALISES, [fermeId, fermeId, fermeId, fermeId, aujourdhui]);
-  const interventions = await lire(SQL_INTERVENTIONS, [fermeId, fermeId, fermeId]);
-  const recents = await lire(SQL_RECENTS, [fermeId, fermeId, depuis, horodatageDepuis]);
+  const series = (await lire(sqlSeries(FILTRE_SERIES_ACTIVES), [fermeId])).filter((s) => parametresDe(texte(s.id), s.parametres).mode !== null);
+  const noms = await lireNoms(lire, series);
+  const campagnes = await lire(sqlCampagnes('(c.fin_recolte_prevue IS NULL OR c.fin_recolte_prevue >= ?)'), [fermeId, aujourdhui]);
+  const idsSeries = series.map((s) => texte(s.id));
+  const idsCampagnes = campagnes.map((c) => texte(c.id));
+  const occupations = await lireOccupations(lire, fermeId, idsSeries, campagnes.map((c) => texte(c.plantation_id)), aujourdhui);
+
+  const [chaines] = await lire(SQL_CHAINES, [fermeId]);
+  const vigueur = [texte(chaines?.origines) || '[]', texte(chaines?.gagnants) || '[]'];
+  const jsonSeries = listeJson(idsSeries);
+  const realises = [
+    ...(await lire(SQL_REALISES_SERIES, [jsonSeries, fermeId, ...vigueur, jsonSeries, fermeId, ...vigueur])),
+    ...(idsCampagnes.length === 0 ? [] : await lire(SQL_REALISES_CAMPAGNES, [listeJson(idsCampagnes), jsonSeries, fermeId, ...vigueur])),
+  ];
+  const interventions = await lire(SQL_INTERVENTIONS, [jsonSeries, fermeId, ...vigueur]);
+  const recents = (await lire(SQL_RECENTS, [...vigueur, fermeId, depuis, ...vigueur, fermeId, horodatageDepuis, depuis])).map(ligneRecente);
   // Historique : les cultures terminées ou passées qu'il nomme, lues en plus (rarement).
-  const connues = new Set([...series, ...campagnes].map((l) => texte(l.id)));
+  const connues = new Set([...idsSeries, ...idsCampagnes]);
   const autresSeries = [...new Set(recents.map((l) => texte(l.serie_id)).filter((x) => x !== '' && !connues.has(x)))];
   const autresCampagnes = [...new Set(recents.map((l) => texte(l.campagne_id)).filter((x) => x !== '' && !connues.has(x)))];
-  if (autresSeries.length === 0 && autresCampagnes.length === 0) return { series, campagnes, occupations, realises, interventions, recents };
-  const [s2, c2] = await Promise.all([
-    autresSeries.length === 0 ? [] : lire(sqlSeries(`s.id IN (${marques(autresSeries.length)})`), [fermeId, ...autresSeries]),
-    autresCampagnes.length === 0 ? [] : lire(sqlCampagnes(`c.id IN (${marques(autresCampagnes.length)})`), [fermeId, ...autresCampagnes]),
-  ]);
-  const plantations = c2.map((l) => texte(l.plantation_id));
-  const o2 = await lire(
-    sqlOccupations(`(o.serie_id IN (${marques(autresSeries.length)}) OR o.plantation_id IN (${marques(plantations.length)}))`),
-    [fermeId, ...autresSeries, ...plantations, aujourdhui, aujourdhui],
-  );
-  return { series: [...series, ...s2], campagnes: [...campagnes, ...c2], occupations: [...occupations, ...o2], realises, interventions, recents };
+  if (autresSeries.length === 0 && autresCampagnes.length === 0) return { series, ...noms, campagnes, occupations, realises, interventions, recents };
+  const s2 = autresSeries.length === 0 ? [] : await lire(sqlSeries(`s.id IN (${DANS})`), [fermeId, listeJson(autresSeries)]);
+  const noms2 = await lireNoms(lire, s2);
+  const c2 = autresCampagnes.length === 0 ? [] : await lire(sqlCampagnes(`c.id IN (${DANS})`), [fermeId, listeJson(autresCampagnes)]);
+  const o2 = await lireOccupations(lire, fermeId, autresSeries, c2.map((l) => texte(l.plantation_id)), aujourdhui);
+  return {
+    series: [...series, ...s2],
+    especes: [...noms.especes, ...noms2.especes],
+    varietes: [...noms.varietes, ...noms2.varietes],
+    campagnes: [...campagnes, ...c2],
+    occupations: [...occupations, ...o2],
+    realises,
+    interventions,
+    recents,
+  };
 }
 
 // ── Calcul de la journée ─────────────────────────────────────────────────────────────────────
@@ -484,23 +630,49 @@ function modeDe(mode: Valeur): ModeItineraire | null {
 
 const AUCUN_TRAVAIL: readonly TravailPrevu[] = [];
 
-/** Travaux déjà lus, par texte JSON et mode : relire la journée ne revalide pas chaque instantané. */
-const travauxLus = new Map<string, readonly TravailPrevu[]>();
+interface ParametresLus {
+  readonly mode: ModeItineraire | null;
+  /** Travaux prévus de l'instantané, validés par le cœur pour ce mode ; aucun sans mode. */
+  readonly travaux: readonly TravailPrevu[];
+}
+
+const SANS_PARAMETRES: ParametresLus = { mode: null, travaux: AUCUN_TRAVAIL };
 
 /**
- * Travaux prévus de l'instantané d'une série (texte JSON), validés par le cœur. Un instantané
- * illisible ne fait pas tomber l'écran : la série n'a alors aucun travail affiché.
+ * Instantanés déjà lus, par texte JSON, et le dernier lu de chaque série : relire la journée
+ * (après une saisie, une synchro) ne relit ni ne revalide l'instantané d'une série qui n'a pas
+ * changé. Par série d'abord : comparer deux textes égaux coûte moins que hacher un long texte.
  */
-function travauxDe(v: Valeur, mode: ModeItineraire): readonly TravailPrevu[] {
-  if (typeof v !== 'string' || v === '' || v === '[]') return AUCUN_TRAVAIL;
-  const cle = `${mode}|${v}`;
-  const connus = travauxLus.get(cle);
-  if (connus !== undefined) return connus;
-  const r = validerTravauxPrevus(jsonOuNul(v), { mode });
-  const travaux = r.ok ? r.valeur : AUCUN_TRAVAIL;
-  if (travauxLus.size >= 2_000) travauxLus.clear();
-  travauxLus.set(cle, travaux);
-  return travaux;
+const parametresLus = new Map<string, ParametresLus>();
+const parametresParSerie = new Map<string, { readonly texte: string; readonly lus: ParametresLus }>();
+
+/**
+ * Mode et travaux prévus de l'instantané d'une série (`serie.parametres`, texte JSON). Un
+ * instantané illisible ne fait pas tomber l'écran : la série n'a alors pas de mode (le semainier
+ * ne la planifie pas), ou des travaux illisibles, aucun travail affiché.
+ */
+function parametresDe(serieId: string, v: Valeur): ParametresLus {
+  if (typeof v !== 'string') return SANS_PARAMETRES;
+  const dernier = parametresParSerie.get(serieId);
+  if (dernier?.texte === v) return dernier.lus;
+  let lus = parametresLus.get(v);
+  if (lus === undefined) {
+    lus = SANS_PARAMETRES;
+    const p = jsonOuNul(v);
+    if (p !== null && typeof p === 'object' && !Array.isArray(p)) {
+      const { mode: m, travauxPrevus } = p as { readonly mode?: unknown; readonly travauxPrevus?: unknown };
+      const mode = modeDe(typeof m === 'string' ? m : null);
+      if (mode !== null) {
+        const r = travauxPrevus === undefined || travauxPrevus === null ? null : validerTravauxPrevus(travauxPrevus, { mode });
+        lus = { mode, travaux: r?.ok === true ? r.valeur : AUCUN_TRAVAIL };
+      }
+    }
+    if (parametresLus.size >= 2_000) parametresLus.clear();
+    parametresLus.set(v, lus);
+  }
+  if (parametresParSerie.size >= 20_000) parametresParSerie.clear();
+  parametresParSerie.set(serieId, { texte: v, lus });
+  return lus;
 }
 
 /** Calcule la journée depuis les lignes lues. Pure. */
@@ -520,25 +692,30 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
     if (!(cible.get(cle) ?? []).some((x) => x.id === e.id)) ajouterA(cible, cle, e);
   }
 
+  const especes = new Map(lignes.especes.map((e) => [texte(e.id), e]));
+  const varietes = new Map(lignes.varietes.map((v) => [texte(v.id), v]));
   const cultures = new Map<string, Culture>();
   const series = new Map<string, SerieLue>();
   for (const s of lignes.series) {
     const id = texte(s.id);
+    const espece = especes.get(texte(s.espece_id));
+    const nomEspece = texte(espece?.nom) || 'Culture';
+    const variete = texteOuNul(varietes.get(texte(s.variete_id))?.nom);
     const emplacements = trierEmplacements(parSerie.get(id) ?? []);
     cultures.set(id, {
       cible: { sorte: 'serie', serieId: id as Id<'Serie'> },
       cibleId: id,
       especeId: texte(s.espece_id),
       varieteId: texteOuNul(s.variete_id),
-      espece: texte(s.espece) || 'Culture',
-      variete: texteOuNul(s.variete),
-      unite: unite(s.unite_recolte),
-      famille: cleFamille(texteOuNul(s.famille)),
+      espece: nomEspece,
+      variete,
+      unite: unite(espece?.unite_recolte),
+      famille: cleFamille(texteOuNul(espece?.famille)),
       emplacements,
     });
     const statut = texte(s.statut) as StatutSerie;
     const active = statut === 'prevue' || statut === 'en_cours';
-    const mode = modeDe(s.mode);
+    const { mode, travaux: travauxPrevus } = parametresDe(id, s.parametres);
     const miseEnPlace = texteOuNul(s.prevu_mise_en_place);
     const debutRecolte = texteOuNul(s.prevu_debut_recolte);
     const finRecolte = texteOuNul(s.prevu_fin_recolte);
@@ -553,13 +730,12 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
       };
       const longueur = nombreOuNul(s.longueur_m);
       const taille: TailleSerie = longueur !== null ? { unite: 'longueur', longueurM: longueur } : { unite: 'plants', nombrePlants: nombreOuNul(s.nombre_plants) ?? 0 };
-      const travauxPrevus = travauxDe(s.travaux, mode);
       pourSemainier = {
         id: id as Id<'Serie'>,
         statut,
         mode,
-        culture: texte(s.espece) || 'Culture',
-        variete: texteOuNul(s.variete),
+        culture: nomEspece,
+        variete,
         datesPrevues,
         taille,
         emplacements,
@@ -627,9 +803,10 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
     const c = categorie(l.categorie);
     const date = texte(l.date);
     if (serieId === null || c === null || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
-    // T22b : l'occurrence visée par « Fait » (null si absente ou illisible : saisie libre).
+    // T22b : l'occurrence visée par « Fait » (null si absente, ou si ce n'est pas une date qui
+    // existe, comme '2026-02-31' : saisie libre, soldée par sa date réelle).
     const visee = texteOuNul(l.occurrence_visee);
-    const occurrenceVisee = visee !== null && /^\d{4}-\d{2}-\d{2}$/.test(visee) ? (visee as DateCalendaire) : null;
+    const occurrenceVisee = visee !== null && estDateValide(visee) ? visee : null;
     ajouterA(interventions, serieId as Id<'Serie'>, { date: date as DateCalendaire, categorie: c, type: texte(l.type_intervention), occurrenceVisee });
   }
   const realises = {
