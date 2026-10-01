@@ -35,7 +35,7 @@ import {
 } from './calculs.ts';
 import { entreeAnnulable, lireBibliotheque, lireEtatSerie, lireVarieteDeSerie, requeteHistorique, type EtatSerie, type Modification } from './donnees.ts';
 import { SelecteurSemaine } from './SelecteurSemaine.tsx';
-import { annulerEntree, creerSerie, modifierSerie, ramenerSerie, SerieRefusee, type ContexteEcriture, type SerieAEcrire } from './ecritures.ts';
+import { annulerEntree, creerSerie, defaireSerie, modifierSerie, SerieRefusee, supprimerSerieCreee, type ContexteEcriture, type SerieAEcrire } from './ecritures.ts';
 
 /** Marque de performance posée quand le formulaire est utilisable (e2e/serie.e2e.ts). */
 export const MARQUE_SERIE_AFFICHEE = 'planif:serie-affichee';
@@ -53,7 +53,11 @@ export type DepartSerie =
 /** Saisie enregistrée, que le bandeau de l'écran Planches peut défaire. */
 export interface SaisieSerieAnnulable {
   readonly texte: string;
-  annuler(): Promise<void>;
+  /**
+   * Défait la saisie, en une transaction (N5, règle de T24) : null si tout a été défait, sinon le
+   * message à montrer, qui contient « modifié entre-temps ».
+   */
+  annuler(): Promise<string | null>;
 }
 
 export interface ProprietesFormulaireSerie {
@@ -469,10 +473,10 @@ export function FormulaireSerie({
     try {
       if (serieId === null) {
         const id = await creerSerie(ctx, s);
-        surEnregistree?.({ texte, annuler: () => ramenerSerie(ctx, id, null) });
+        surEnregistree?.({ texte, annuler: () => supprimerSerieCreee(ctx, id) });
       } else {
-        const avant = await modifierSerie(ctx, serieId, s);
-        surEnregistree?.({ texte, annuler: () => ramenerSerie(ctx, serieId, avant) });
+        const ecrit = await modifierSerie(ctx, serieId, s);
+        surEnregistree?.({ texte, annuler: () => defaireSerie(ctx, ecrit) });
       }
       surFermer();
     } catch (e) {
@@ -509,8 +513,8 @@ export function FormulaireSerie({
     const texte = libelleCulture(saisie.culture);
     setOccupe(true);
     try {
-      const avant = await annulerEntree(ctx, serieId, entree);
-      surEnregistree?.({ texte, annuler: () => ramenerSerie(ctx, serieId, avant) });
+      const ecrit = await annulerEntree(ctx, serieId, entree);
+      surEnregistree?.({ texte, annuler: () => defaireSerie(ctx, ecrit) });
       surFermer();
     } catch (e) {
       console.error('Annulation impossible', e);

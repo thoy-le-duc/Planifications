@@ -364,7 +364,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   const [annulable, setAnnulable] = useState<(SaisieSerieAnnulable & { readonly numero: number }) | null>(null);
   const numeroAnnulable = useRef(0);
   /** Annulation par le bandeau refusée : ce qui n'a pas pu être défait (message affiché). */
-  const [echecAnnulation, setEchecAnnulation] = useState<string | null>(null);
+  const [echecAnnulation, setEchecAnnulation] = useState<{ readonly titre: string; readonly texte: string } | null>(null);
   const defilement = useRef<HTMLDivElement>(null);
   const total = plan?.lignes.length ?? 0;
   const [vue, setVue] = useState(() => fenetre(null, total));
@@ -584,10 +584,15 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   const annuler = useCallback((a: SaisieSerieAnnulable & { readonly numero: number }) => {
     setAnnulable((x) => (x?.numero === a.numero ? null : x));
     setEchecAnnulation(null);
-    a.annuler().catch((erreur: unknown) => {
-      console.error('Annulation impossible', erreur);
-      setEchecAnnulation(a.texte);
-    });
+    a.annuler().then(
+      (laisse) => {
+        if (laisse !== null) setEchecAnnulation({ titre: 'Annulation incomplète', texte: `${a.texte} : ${laisse}.` });
+      },
+      (erreur: unknown) => {
+        console.error('Annulation impossible', erreur);
+        setEchecAnnulation({ titre: 'Annulation impossible', texte: `${a.texte} reste enregistrée telle quelle. Réessaie depuis l’historique de la série.` });
+      },
+    );
   }, []);
 
   const lignesVisibles = useMemo(() => {
@@ -709,8 +714,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
       {echecAnnulation !== null && annulable === null && (
         <div role="alert" className="plan-bandeau plan-bandeau-echec">
           <span className="plan-bandeau-texte">
-            <strong>Annulation impossible</strong>
-            <span>{echecAnnulation} reste enregistrée telle quelle. Réessaie depuis l’historique de la série.</span>
+            <strong>{echecAnnulation.titre}</strong>
+            <span>{echecAnnulation.texte}</span>
           </span>
           <button
             type="button"

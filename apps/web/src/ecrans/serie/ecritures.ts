@@ -99,6 +99,55 @@ function extraire(l: Ligne, colonnes: readonly string[]): Record<string, Valeur>
   return r;
 }
 
+// ── Ce qu'une écriture a changé (pour « Annuler », N5) ───────────────────────────────────────
+
+/**
+ * Une ligne écrite : les colonnes changées, leurs valeurs d'avant et celles que nous avons
+ * écrites, et `supprime_le` après notre écriture. « Annuler » ne ramène que cela (règle de T24,
+ * décision 9 : apps/web/src/ecrans/itineraires/ecritures.ts, `ramener`).
+ */
+export interface LigneEcrite {
+  readonly table: 'serie' | 'occupation';
+  readonly id: string;
+  readonly avant: Readonly<Record<string, Valeur>>;
+  readonly apres: Readonly<Record<string, Valeur>>;
+  readonly supprimeLe: Valeur;
+  /** Occupation insérée par nous : « Annuler » la supprime doucement. */
+  readonly creee: boolean;
+}
+
+/** Ce qu'une saisie a écrit sur une série et ses occupations. */
+export interface EcritureSerie {
+  readonly serieId: string;
+  readonly lignes: readonly LigneEcrite[];
+}
+
+/** Trace d'un UPDATE : les seules colonnes qui changent ; null si rien ne change. */
+function trace(table: 'serie' | 'occupation', avant: Ligne, valeurs: Readonly<Record<string, Valeur>>): LigneEcrite | null {
+  const changees = Object.keys(valeurs).filter((c) => (valeurs[c] ?? null) !== (avant[c] ?? null));
+  if (changees.length === 0) return null;
+  const a: Record<string, Valeur> = {};
+  const b: Record<string, Valeur> = {};
+  for (const c of changees) {
+    a[c] = avant[c] ?? null;
+    b[c] = valeurs[c] ?? null;
+  }
+  const supprimeLe = 'supprime_le' in b ? (b.supprime_le ?? null) : (avant.supprime_le ?? null);
+  return { table, id: String(avant.id), avant: a, apres: b, supprimeLe, creee: false };
+}
+
+/** Trace d'une occupation insérée : ce qui compte pour la reconnaître intacte. */
+function traceInsertion(o: Ligne): LigneEcrite {
+  const apres = extraire(o, ['emplacement_id', 'longueur_m', 'prevu_du', 'prevu_au', 'supprime_le']);
+  return { table: 'occupation', id: String(o.id), avant: {}, apres, supprimeLe: null, creee: true };
+}
+
+/** UPDATE des colonnes `valeurs` d'une ligne tracée. */
+function ordreTrace(t: Pick<LigneEcrite, 'table' | 'id'>, valeurs: Readonly<Record<string, Valeur>>, iso: string): OrdreEcriture {
+  const cles = Object.keys(valeurs);
+  return { sql: `UPDATE ${t.table} SET ${cles.map((c) => `${c} = ?`).join(', ')}, modifie_le = ? WHERE id = ?`, parametres: [...cles.map((c) => valeurs[c] ?? null), iso, t.id] };
+}
+
 // ── Enregistrer ──────────────────────────────────────────────────────────────────────────────
 
 export interface SerieAEcrire {
@@ -188,7 +237,7 @@ export async function creerSerie(ctx: ContexteEcriture, s: SerieAEcrire): Promis
  * planches gardées, INSERT pour une planche ajoutée, suppression douce pour une planche retirée.
  * Rend l'état d'avant (pour « Annuler »).
  */
-export async function modifierSerie(ctx: ContexteEcriture, serieId: string, s: SerieAEcrire): Promise<EtatSerie> {
+export async function modifierSerie(ctx: ContexteEcriture, serieId: string, s: SerieAEcrire): Promise<EcritureSerie> {
   const avant = await lireEtatSerie(ctx.porte, serieId);
   if (avant === null) throw new SerieRefusee('série introuvable');
   const iso = ctx.maintenant().toISOString();
@@ -196,8 +245,13 @@ export async function modifierSerie(ctx: ContexteEcriture, serieId: string, s: S
   const apresSerie: Ligne = { ...avant.serie, ...colonnesSerie(s), rotation_acceptee: s.rotationAcceptee, modifie_le: iso };
   const lue = serieValide(apresSerie);
   const ordres: OrdreEcriture[] = [];
-  const ordreSerie = mettreAJour('serie', avant.serie, extraire(apresSerie, COLONNES_SERIE), iso);
-  if (ordreSerie !== null) ordres.push(ordreSerie);
+  const lignes: LigneEcrite[] = [];
+  const noter = (t: LigneEcrite | null) => {
+    if (t === null) return;
+    ordres.push(ordreTrace(t, t.apres, iso));
+    lignes.push(t);
+  };
+  noter(trace('serie', avant.serie, extraire(apresSerie, COLONNES_SERIE)));
 
   const actives = avant.occupations.filter((o) => o.supprime_le === null);
   const gardees = new Set<string>();
@@ -207,60 +261,141 @@ export async function modifierSerie(ctx: ContexteEcriture, serieId: string, s: S
       const o = nouvelleOccupation(ctx, nouvelId(), serieId, e, s.dates, iso);
       occupationValide(o, lue, true);
       ordres.push(inserer('occupation', o));
+      lignes.push(traceInsertion(o));
       continue;
     }
     gardees.add(String(existante.id));
     const apres: Ligne = { ...existante, longueur_m: e.longueurM, prevu_du: s.dates.miseEnPlace, prevu_au: s.dates.finRecolte };
     occupationValide(apres, lue, true);
-    const ordre = mettreAJour('occupation', existante, extraire(apres, COLONNES_OCCUPATION), iso);
-    if (ordre !== null) ordres.push(ordre);
+    noter(trace('occupation', existante, extraire(apres, COLONNES_OCCUPATION)));
   }
   for (const o of actives) {
     if (gardees.has(String(o.id))) continue;
-    const ordre = mettreAJour('occupation', o, { supprime_le: iso }, iso);
-    if (ordre !== null) ordres.push(ordre);
+    noter(trace('occupation', o, { supprime_le: iso }));
   }
   await ctx.porte.ecrireEnsemble(ordres);
-  return avant;
+  return { serieId, lignes };
 }
 
 // ── Annuler ──────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Ramène la série à `cible` (null : elle n'existait pas → suppression douce de la série et de ses
- * occupations), en une transaction. Une occupation absente de `cible` est supprimée doucement.
+ * Annuler une création, dans les 10 s du bandeau : la série et ses occupations sont supprimées
+ * doucement, même modifiées ailleurs entre-temps (c'est notre propre saisie ; décision 4 de T12b,
+ * comme T24). Rien si elle est déjà supprimée.
  */
-export async function ramenerSerie(ctx: ContexteEcriture, serieId: string, cible: EtatSerie | null): Promise<void> {
+export async function supprimerSerieCreee(ctx: ContexteEcriture, serieId: string): Promise<null> {
   const courant = await lireEtatSerie(ctx.porte, serieId);
-  if (courant === null) return;
+  if (courant === null) return null;
   const iso = ctx.maintenant().toISOString();
   const ordres: OrdreEcriture[] = [];
-  if (cible === null) {
-    const o = mettreAJour('serie', courant.serie, { supprime_le: courant.serie.supprime_le ?? iso }, iso);
-    if (o !== null) ordres.push(o);
-    for (const occ of courant.occupations) {
-      const x = mettreAJour('occupation', occ, { supprime_le: occ.supprime_le ?? iso }, iso);
-      if (x !== null) ordres.push(x);
+  const o = mettreAJour('serie', courant.serie, { supprime_le: courant.serie.supprime_le ?? iso }, iso);
+  if (o !== null) ordres.push(o);
+  for (const occ of courant.occupations) {
+    const x = mettreAJour('occupation', occ, { supprime_le: occ.supprime_le ?? iso }, iso);
+    if (x !== null) ordres.push(x);
+  }
+  if (ordres.length > 0) await ctx.porte.ecrireEnsemble(ordres);
+  return null;
+}
+
+/**
+ * Ramène la série à `cible`, en une transaction. Une occupation absente de `cible` est supprimée
+ * doucement. Rend ce qui a été écrit (pour « Annuler » l'annulation).
+ */
+export async function ramenerSerie(ctx: ContexteEcriture, serieId: string, cible: EtatSerie): Promise<EcritureSerie> {
+  const courant = await lireEtatSerie(ctx.porte, serieId);
+  if (courant === null) return { serieId, lignes: [] };
+  const iso = ctx.maintenant().toISOString();
+  const lignes: LigneEcrite[] = [];
+  const serie = serieValide({ ...courant.serie, ...extraire(cible.serie, COLONNES_SERIE) });
+  const ts = trace('serie', courant.serie, extraire(cible.serie, COLONNES_SERIE));
+  if (ts !== null) lignes.push(ts);
+  const serieSupprimee = serie.supprimeLe !== null;
+  for (const occ of courant.occupations) {
+    const avant = cible.occupations.find((x) => x.id === occ.id);
+    let valeurs: Record<string, Valeur>;
+    if (avant === undefined) valeurs = { supprime_le: occ.supprime_le ?? iso };
+    else {
+      valeurs = extraire(avant, COLONNES_OCCUPATION);
+      if (serieSupprimee && valeurs.supprime_le === null) valeurs.supprime_le = iso;
+      if (valeurs.supprime_le === null) occupationValide({ ...occ, ...valeurs }, serie, true);
     }
-  } else {
-    const serie = serieValide({ ...courant.serie, ...extraire(cible.serie, COLONNES_SERIE) });
-    const o = mettreAJour('serie', courant.serie, extraire(cible.serie, COLONNES_SERIE), iso);
-    if (o !== null) ordres.push(o);
-    const seriesSupprimee = serie.supprimeLe !== null;
-    for (const occ of courant.occupations) {
-      const avant = cible.occupations.find((x) => x.id === occ.id);
-      let valeurs: Record<string, Valeur>;
-      if (avant === undefined) valeurs = { supprime_le: occ.supprime_le ?? iso };
-      else {
-        valeurs = extraire(avant, COLONNES_OCCUPATION);
-        if (seriesSupprimee && valeurs.supprime_le === null) valeurs.supprime_le = iso;
-        if (valeurs.supprime_le === null) occupationValide({ ...occ, ...valeurs }, serie, true);
-      }
-      const x = mettreAJour('occupation', occ, valeurs, iso);
-      if (x !== null) ordres.push(x);
+    const t = trace('occupation', occ, valeurs);
+    if (t !== null) lignes.push(t);
+  }
+  if (lignes.length > 0) await ctx.porte.ecrireEnsemble(lignes.map((t) => ordreTrace(t, t.apres, iso)));
+  return { serieId, lignes };
+}
+
+/** Message d'une annulation incomplète (N5, règle de T24) : contient « modifié entre-temps ». */
+export function messageModifieAilleurs(n: number): string {
+  return `ce qui a été modifié entre-temps sur un autre téléphone est gardé tel quel (${String(n)} ${n > 1 ? 'lignes' : 'ligne'})`;
+}
+
+/**
+ * « Annuler » du bandeau (N5, règle de T24, décision 9), en UNE transaction, colonne par colonne :
+ *   - une ligne n'est ramenée que si chaque colonne que nous avions changée vaut encore ce que
+ *     nous avions écrit et que personne ne l'a supprimée (ni ressuscitée) ; ramenée, seules ces
+ *     colonnes reprennent leur valeur d'avant (ce qu'un autre téléphone a changé ailleurs reste) ;
+ *   - une ligne que notre écriture n'a finalement pas changée (elle vaut déjà l'avant) est ignorée ;
+ *   - la série n'est ramenée que si toutes ses occupations actives d'après l'annulation (celles
+ *     écrites ailleurs, celles laissées, celles ramenées) collent encore à ses dates ; sinon elle
+ *     reste telle quelle, et ses occupations aussi ;
+ *   - tout ce qui reste passe validerSerie / validerOccupation.
+ * Rend le message à montrer si des lignes ont été laissées, sinon null.
+ */
+export async function defaireSerie(ctx: ContexteEcriture, ecriture: EcritureSerie): Promise<string | null> {
+  if (ecriture.lignes.length === 0) return null;
+  const courant = await lireEtatSerie(ctx.porte, ecriture.serieId);
+  if (courant === null) return messageModifieAilleurs(ecriture.lignes.length);
+  const iso = ctx.maintenant().toISOString();
+  const vaut = (c: Ligne, valeurs: Readonly<Record<string, Valeur>>) => Object.keys(valeurs).every((k) => (c[k] ?? null) === (valeurs[k] ?? null));
+  const ligneCourante = (l: LigneEcrite): Ligne | null => (l.table === 'serie' ? courant.serie : (courant.occupations.find((o) => o.id === l.id) ?? null));
+
+  // Ce que chaque ligne deviendrait : null = ignorée (déjà comme avant), 'laissee', ou les valeurs à remettre.
+  type Decision = Readonly<Record<string, Valeur>> | 'laissee' | null;
+  const aRemettre = (d: Decision | undefined): Readonly<Record<string, Valeur>> => (d === null || d === undefined || d === 'laissee' ? {} : d);
+  const decisions = ecriture.lignes.map((l): Decision => {
+    const c = ligneCourante(l);
+    if (c === null) return 'laissee';
+    if (!l.creee && vaut(c, l.avant)) return null;
+    const intacte = vaut(c, l.apres) && (c.supprime_le ?? null) === l.supprimeLe;
+    if (!intacte) return 'laissee';
+    return l.creee ? { supprime_le: iso } : l.avant;
+  });
+
+  const indexSerie = ecriture.lignes.findIndex((l) => l.table === 'serie');
+  const decisionSerie = indexSerie < 0 ? null : decisions[indexSerie];
+  let serieLaissee = decisionSerie === 'laissee';
+  if (!serieLaissee) {
+    // La série telle qu'elle sera, et chacune de ses occupations actives d'après l'annulation.
+    const cible = { ...courant.serie, ...aRemettre(decisionSerie) };
+    const r = validerSerie({ ...cible });
+    if (!r.ok) serieLaissee = true;
+    else if (r.valeur.supprimeLe === null) {
+      const serie = r.valeur;
+      const apres = courant.occupations.map((o) => {
+        const i = ecriture.lignes.findIndex((l) => l.table === 'occupation' && l.id === o.id);
+        return i < 0 ? o : { ...o, ...aRemettre(decisions[i]) };
+      });
+      serieLaissee = !apres.every((o) => o.supprime_le !== null || validerOccupation({ ...o }, serie, { datesDeLaSerie: true }).ok);
     }
   }
-  await ctx.porte.ecrireEnsemble(ordres);
+
+  const ordres: OrdreEcriture[] = [];
+  let laissees = 0;
+  ecriture.lignes.forEach((l, i) => {
+    const d = decisions[i];
+    if (d === null || d === undefined) return;
+    if (d === 'laissee' || serieLaissee) {
+      laissees++;
+      return;
+    }
+    ordres.push(ordreTrace(l, d, iso));
+  });
+  if (ordres.length > 0) await ctx.porte.ecrireEnsemble(ordres);
+  return laissees === 0 ? null : messageModifieAilleurs(laissees);
 }
 
 /** Valeur d'un `avant` de Postgres (to_jsonb) au format local : jsonb en texte, instants en toISOString. */
@@ -288,9 +423,9 @@ function depuisPostgres(avant: Readonly<Record<string, unknown>>, colonnes: read
 /**
  * Annuler l'entrée `entree` de l'historique : la série et ses occupations reviennent à leur état
  * juste avant son horodatage (ce qui défait aussi les entrées plus récentes), en une transaction.
- * Rend l'état d'avant l'annulation (pour annuler l'annulation).
+ * Rend ce qui a été écrit (pour annuler l'annulation).
  */
-export async function annulerEntree(ctx: ContexteEcriture, serieId: string, entree: Modification): Promise<EtatSerie | null> {
+export async function annulerEntree(ctx: ContexteEcriture, serieId: string, entree: Modification): Promise<EcritureSerie> {
   // Seule une création mène à la suppression douce ; un `avant` illisible ne s'annule pas.
   if (!entreeAnnulable(entree)) throw new SerieRefusee('cette ligne de l’historique est illisible');
   const courant = await lireEtatSerie(ctx.porte, serieId);
@@ -308,6 +443,5 @@ export async function annulerEntree(ctx: ContexteEcriture, serieId: string, entr
     if (premiere.avant === null) throw new SerieRefusee('une ligne de l’historique d’une planche est illisible');
     return depuisPostgres(premiere.avant, COLONNES_OCCUPATION, occ);
   });
-  await ramenerSerie(ctx, serieId, { serie, occupations });
-  return courant;
+  return ramenerSerie(ctx, serieId, { serie, occupations });
 }
