@@ -19,6 +19,17 @@
  *   SMTP_PORT          défaut 465 (tls), 587 (starttls), 25 (aucune)
  *   SMTP_EXPEDITEUR    en-tête From (obligatoire avec SMTP_HOTE)
  *   SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE   identifiants du relais : les deux ou aucun
+ *
+ *   Production : relais SMTP de Brevo (T09c, hébergé en UE, Q14) :
+ *     SMTP_HOTE=smtp-relay.brevo.com   SMTP_PORT=587 (défaut de starttls)
+ *     SMTP_SECURITE=starttls (défaut ; TLS obligatoire, rien ne part sans lui)
+ *     SMTP_EXPEDITEUR=adresse du domaine d'envoi validé chez Brevo (SPF, DKIM, DMARC) ; une
+ *                      adresse nue reçoit le nom « Planifications »
+ *     SMTP_UTILISATEUR, SMTP_MOT_DE_PASSE = identifiant et clé SMTP donnés par Brevo
+ *   Identifiants : dans les secrets de production uniquement, jamais dans le dépôt, un fichier
+ *   versionné ou une session Claude. Le relais est vérifié au démarrage (demarrage.ts) ; s'il ne
+ *   répond pas, l'API démarre quand même et l'erreur est écrite sur la sortie d'erreur.
+ *
  *   PROXY_DE_CONFIANCE « 1 » derrière exactement un proxy de confiance (production) : l'adresse IP
  *                      du client (limite par IP) est la dernière valeur de X-Forwarded-For, si
  *                      c'est une adresse IP valide. Sinon « 0 » ou absente :
