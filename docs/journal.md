@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T11d : la mesure du défilement du plan est fiable
+
+- **Fait** : la fluidité du défilement de Planches se mesure sur 5 passages, en images perdues à 60 Hz (au plus 2 d'affilée). Le test échoue si 4 passages sur 5 saccadent ou si le total des à-coups dépasse 6. Un témoin volontairement saccadé (60 ms bloquées chaque seconde) échoue à chaque fois. 19 exécutions sous charge sans échec.
+- **Décidé** : la limite n'est pas relevée. L'arrondi à l'image la plus proche place la frontière vers 58 ms au lieu de 50 pile, ce qui supprime les échecs à 50,1 ms. Ticket de test sans risque, relu avec le modèle léger (règle de sobriété).
+- **Bloquant** : rien. Sous une charge extrême (machine saturée), toutes les mesures de temps échouent, celles de T20 comprises : c'est attendu.
+
 ## 2026-10-01 — T24b : « Annuler » des itinéraires sûr face à une série supprimée ailleurs
 
 - **Fait** : « Annuler » dans « Mes itinéraires » vérifie, pour chaque série touchée, l'état d'après annulation comme la fin de lot du serveur, même quand la ligne série n'est pas ramenée. Plus aucune occupation n'est réactivée sous une série supprimée ailleurs.

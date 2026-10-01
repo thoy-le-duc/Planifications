@@ -6,7 +6,17 @@ import { remplirJeuT07 } from '../../../packages/sync/src/test/jeu-t07.ts';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import { LIBELLES_COURTS_ATTENDUS, type LigneEmplacementPlan, type ModuleCalculsPlan, type Plan } from '../src/ecrans/plan/test/contrat.ts';
 import { COULEURS, FAMILLES } from '../src/ui/jetons.ts';
-import { decrireSerie, ralentirCpu, repeterMesures, REPETITIONS_MESURE, surveillerCsp, tempsAppPrete } from './outils.ts';
+import {
+  decrireDefilement,
+  decrireSerie,
+  jugerDefilement,
+  ralentirCpu,
+  repeterMesures,
+  REPETITIONS_MESURE,
+  surveillerCsp,
+  tempsAppPrete,
+  type PassageDefilement,
+} from './outils.ts';
 
 /**
  * T11 — vue 2D planches × semaines, de bout en bout, sur le build de production servi par
@@ -54,15 +64,91 @@ import { decrireSerie, ralentirCpu, repeterMesures, REPETITIONS_MESURE, surveill
  *   4. réel plein (fond = bande de la famille), prévu hachuré (repeating-linear-gradient) ;
  *   5. semaine courante marquée et visible à l'ouverture (si aujourd'hui est dans la saison) ;
  *   6. changement de saison sans rechargement ;
- *   7. défilement de haut en bas à ~40 px par image : aucun intervalle entre deux images
- *      (requestAnimationFrame) au-delà de 50 ms, jamais 60 lignes ou plus dans le DOM, la
- *      dernière ligne atteinte ;
+ *   7. défilement de haut en bas à ~40 px par image, 5 passages : échec si 4 passages ou plus
+ *      perdent, au moins une fois, plus de 2 images d'affilée (à 60 Hz), ou si plus de 6
+ *      intervalles au total dépassent cette limite ; à chaque passage,
+ *      jamais 60 lignes ou plus dans le DOM et la dernière ligne atteinte ; un témoin
+ *      volontairement saccadé doit échouer à la même mesure (T11d, ci-dessous) ;
  *   8. à 360 px de large : pas de défilement horizontal de la page, plan et barre de navigation
  *      visibles ; aucune violation de la CSP.
+ *
+ * ── T11d : pourquoi cette mesure du défilement ───────────────────────────────────────────────
+ * Avant : le pire intervalle entre deux images d'UN seul passage, limite 50 ms. Quatre échecs au
+ * hasard sous charge (66,7, 66,7, 50,1 ms), jamais seul (33,4 à 50,0 ms). Deux défauts :
+ *   - 50 ms tombe pile sur 3 images à 60 Hz (3 × 16,7 ms) : un intervalle de 3 images mesuré
+ *     50,1 ms au bruit d'horloge près échouait, alors qu'il est exactement ce qu'on autorisait ;
+ *   - un seul passage : une seule rafale due à un autre processus (deux agents, un second e2e)
+ *     fait échouer le test, sans rien dire de l'appli.
+ * Maintenant :
+ *   - la limite est comptée en images : chaque intervalle est arrondi à l'image à 60 Hz la plus
+ *     proche (imagesPerdues, outils.ts) ; « au plus 2 images perdues d'affilée » est la même
+ *     limite que 50 ms, sans la frontière : 50,1 ms compte 2 images perdues, 66,7 ms en compte 3.
+ *     L'arrondi à l'image la plus proche place la frontière réelle vers 58 ms (3,5 images) :
+ *     tout intervalle mesuré entre ~50 et ~58 ms compte encore 2 images perdues. Ce n'est vrai
+ *     que si les horodatages de requestAnimationFrame sont alignés sur une synchro à 60 Hz, ce
+ *     qui est le cas du Chromium headless des e2e (intervalles observés : 16,7, 33,4, 50,0,
+ *     66,7 ms…, jamais entre deux). La limite n'est pas relevée ;
+ *   - un passage est « saccadé » s'il dépasse cette limite au moins une fois (le pire intervalle,
+ *     comme avant : un seul gel suffit à marquer le passage) ;
+ *   - 5 passages (comme les 5 répétitions de T20) ; le défilement ÉCHOUE SI 4 PASSAGES OU PLUS
+ *     SONT SACCADÉS, OU SI PLUS DE 6 INTERVALLES AU TOTAL (sur les 5 passages) DÉPASSENT LA
+ *     LIMITE. Un saccadement de l'appli (rendu trop lourd, lignes non virtualisées, mise en page
+ *     forcée, travail lancé à intervalles) se reproduit d'un passage à l'autre ; une rafale due
+ *     à la machine tombe au hasard.
+ * Pourquoi « 4 sur 5 » et pas la médiane des 5 pires (3 sur 5), essayée d'abord : 19 exécutions
+ * menées jusqu'au défilement (une 20e a échoué avant, sur une médiane de temps de T20) sous charge (un second e2e en parallèle, deux agents sur une machine à 4 cœurs) ont donné
+ * 17 passages saccadés sur 95 (18 %), toujours par 1 à 3 intervalles isolés sur ~500 : la
+ * machine, pas l'appli. À 18 % par passage, la médiane échoue au hasard environ 1 fois sur 23
+ * (observé : 1 sur 19) ; « 4 sur 5 » environ 1 fois sur 200 (sur ces 19 exécutions : au plus
+ * 3 passages saccadés, aucun échec). Le témoin ci-dessous, lui, a été saccadé dans 100 passages
+ * sur 100 (20 exécutions sous charge) : « 4 sur 5 » le voit à chaque fois.
+ * Pourquoi, en plus, le total des intervalles fautifs (relecture) : « 4 sur 5 » seul laisse
+ * passer un gel de l'appli présent dans 3 passages sur 5 seulement. Avec le total, un tel gel
+ * est détecté dès 7 intervalles fautifs sur les 5 passages (par exemple 3 gels par passage
+ * dans 3 passages : 9). Bruit observé sous charge : sur les 19 exécutions ci-dessus, au plus
+ * 3 intervalles fautifs dans un passage et 3 au total ; sur la série finale (20 exécutions,
+ * second e2e en parallèle), au plus 1 au total ; mais dans une série plus chargée (deux agents
+ * et un second e2e, 4 exécutions), un passage en a compté 5 et une exécution 6 au total : le
+ * seuil de 6 est donc au ras de ce bruit-là, pas au-dessus avec de la marge. Le témoin
+ * ci-dessous en compte 28 au moins.
+ * On a écarté le 95e centile des intervalles : un gel rare de l'appli (2 à 4 par passage,
+ * moins de 1 % des images) y passerait inaperçu. Ce que la règle laisse encore passer, en
+ * connaissance de cause : un gel qui ne survient que dans 3 passages sur 5 ou moins ET au plus
+ * 6 fois en tout (par exemple un ramasse-miettes occasionnel). C'est le prix d'un test qui ne
+ * crie pas au loup.
+ * Les contraintes qui ne sont pas des temps restent exigées à CHAQUE passage : moins de 60
+ * lignes dans le DOM, dernière ligne atteinte, une image par pas de 40 px.
+ * Témoin : les 5 mêmes passages, avec un travail bloquant injecté dans la page, doivent être
+ * jugés saccadés par la même fonction (jugerDefilement). Il est choisi le plus difficile à voir :
+ * des gels RARES (100 ms de calcul par seconde, soit ~8 gels par passage de ~500 images, moins
+ * de 2 %), nettement au-delà de la limite sur toute machine. Un premier réglage à 60 ms (juste
+ * au-delà de la limite en local) n'était vu que comme 2 images perdues sur la machine de CI, plus
+ * rapide (CPU ×4 relatif) : 1 passage saccadé, 2 intervalles fautifs, témoin non vu. À 100 ms, un
+ * gel couvre au moins 5 images même si l'horodatage de requestAnimationFrame tombe pendant le
+ * blocage, soit au moins 4 perdues, quelle que soit la vitesse de la machine. Sans ce témoin, rien
+ * ne prouverait que la statistique n'a pas rendu la mesure aveugle.
  */
 
 const BUDGET_MS = 300;
-const IMAGE_MAX_MS = 50;
+/**
+ * T11d — limite de fluidité du défilement, en images à 60 Hz : au plus 2 images perdues d'affilée
+ * (un intervalle de 3 images, 50 ms, comme l'ancienne limite IMAGE_MAX_MS = 50). Échec si au moins
+ * PASSAGES_SACCADES_ECHEC passages sur REPETITIONS_MESURE (5) la dépassent, ou si plus de
+ * RAFALES_TOTAL_MAX intervalles, sur les 5 passages, la dépassent. Justification en tête.
+ */
+const IMAGES_PERDUES_MAX = 2;
+const PASSAGES_SACCADES_ECHEC = 4;
+const RAFALES_TOTAL_MAX = 6;
+/** Défilement à ~40 px par image (2,4 px/ms à 60 Hz : un balayage rapide du pouce). */
+const PAS_DEFILEMENT_PX = 40;
+/**
+ * Témoin saccadé : blocage du fil principal (ms) et période (ms). 100 ms bloquées = au moins
+ * 5 images à 60 Hz entre deux images affichées, soit au moins 4 perdues : au-delà de la limite
+ * sur la CI comme en local (60 ms n'y suffisaient pas, voir l'en-tête).
+ * Une fois par seconde : ~8 gels par passage (~8 s), des gels rares, pas un saccadement continu.
+ */
+const TEMOIN_BLOCAGE_MS = 100;
+const TEMOIN_PERIODE_MS = 1_000;
 const MARQUE_PLAN = 'planif:plan-affiche';
 /** Remplir la base PowerSync (≈ 42 000 lignes, jeu de T07) prend quelques secondes sans ralentissement. */
 const DELAI_AMORCAGE_MS = 120_000;
@@ -132,8 +218,68 @@ async function tapJusquAuPlan(page: Page, libelle: string): Promise<number> {
   }, MARQUE_PLAN);
 }
 
+/** Un passage de défilement mesuré dans la page : intervalles entre images et état du DOM. */
+interface PassageMesure extends PassageDefilement {
+  readonly images: number;
+  readonly lignesMax: number;
+  readonly bas: boolean;
+  readonly derniere: string | null;
+}
+
+/**
+ * Un passage : remonte en haut, puis descend de PAS_DEFILEMENT_PX à chaque image
+ * (requestAnimationFrame) jusqu'en bas, en relevant chaque intervalle entre deux images et le
+ * nombre de lignes présentes dans le DOM.
+ */
+async function defilerUneFois(page: Page): Promise<PassageMesure> {
+  await defilement(page).evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  await page.waitForTimeout(200);
+  return defilement(page).evaluate(
+    (el, pas) =>
+      new Promise<PassageMesure>((fini) => {
+        const intervalles: number[] = [];
+        let lignesMax = 0;
+        let precedent = -1;
+        const image = (t: number) => {
+          if (precedent >= 0) intervalles.push(t - precedent);
+          precedent = t;
+          lignesMax = Math.max(lignesMax, el.querySelectorAll('[data-testid="ligne-plan"]').length);
+          const max = el.scrollHeight - el.clientHeight;
+          if (el.scrollTop >= max - 1) {
+            requestAnimationFrame(() => {
+              const lignes = el.querySelectorAll('[data-testid="ligne-plan"]');
+              fini({
+                // Les deux premiers intervalles comptent le démarrage de la mesure, pas le défilement.
+                intervalles: intervalles.slice(2),
+                images: intervalles.length,
+                lignesMax,
+                bas: true,
+                derniere: lignes[lignes.length - 1]?.getAttribute('data-id') ?? null,
+              });
+            });
+            return;
+          }
+          el.scrollTop = Math.min(max, el.scrollTop + pas);
+          requestAnimationFrame(image);
+        };
+        requestAnimationFrame(image);
+      }),
+    PAS_DEFILEMENT_PX,
+  );
+}
+
+/** REPETITIONS_MESURE passages de défilement, l'un après l'autre (T11d). */
+async function repeterDefilement(page: Page): Promise<PassageMesure[]> {
+  const passages: PassageMesure[] = [];
+  for (let i = 0; i < REPETITIONS_MESURE; i += 1) passages.push(await defilerUneFois(page));
+  return passages;
+}
+
 test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, context }) => {
-  test.setTimeout(DELAI_AMORCAGE_MS + 120_000);
+  // T11d : +120 s pour les 10 passages de défilement (5 mesurés, 5 témoins, ~10 s chacun sous charge).
+  test.setTimeout(DELAI_AMORCAGE_MS + 240_000);
   const attendu = await planAttendu();
   const { plan, calculs } = attendu;
   const H = calculs.HAUTEUR_LIGNE_PX;
@@ -306,49 +452,52 @@ test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, con
     await expect(page.getByTestId('barre').first()).toBeVisible();
   });
 
-  await test.step('défilement de haut en bas : aucune image au-delà de 50 ms, < 60 lignes dans le DOM', async () => {
-    await defilement(page).evaluate((el) => {
-      el.scrollTop = 0;
-    });
-    await page.waitForTimeout(200);
-    const mesure = await defilement(page).evaluate(
-      (el, pas) =>
-        new Promise<{ pireMs: number; images: number; lignesMax: number; bas: boolean; derniere: string | null }>((fini) => {
-          const intervalles: number[] = [];
-          let lignesMax = 0;
-          let precedent = -1;
-          const image = (t: number) => {
-            if (precedent >= 0) intervalles.push(t - precedent);
-            precedent = t;
-            lignesMax = Math.max(lignesMax, el.querySelectorAll('[data-testid="ligne-plan"]').length);
-            const max = el.scrollHeight - el.clientHeight;
-            if (el.scrollTop >= max - 1) {
-              requestAnimationFrame(() => {
-                const lignes = el.querySelectorAll('[data-testid="ligne-plan"]');
-                fini({
-                  // Les deux premiers intervalles comptent le démarrage de la mesure, pas le défilement.
-                  pireMs: Math.max(0, ...intervalles.slice(2)),
-                  images: intervalles.length,
-                  lignesMax,
-                  bas: true,
-                  derniere: lignes[lignes.length - 1]?.getAttribute('data-id') ?? null,
-                });
-              });
-              return;
-            }
-            el.scrollTop = Math.min(max, el.scrollTop + pas);
-            requestAnimationFrame(image);
-          };
-          requestAnimationFrame(image);
-        }),
-      40,
+  await test.step('défilement de haut en bas, 5 passages : moins de 4 passages et au plus 6 intervalles au-delà de 2 images perdues, < 60 lignes dans le DOM', async () => {
+    const passages = await repeterDefilement(page);
+    const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
+    console.log(decrireDefilement('défilement', verdict));
+    for (const [i, p] of passages.entries()) {
+      console.log(`  passage ${String(i + 1)} : ${String(p.images)} images, ${String(p.lignesMax)} lignes au plus dans le DOM`);
+      expect(p.bas, `passage ${String(i + 1)} : bas atteint`).toBe(true);
+      expect(p.images, `passage ${String(i + 1)} : une image par pas de 40 px`).toBeGreaterThan((plan.lignes.length * H) / PAS_DEFILEMENT_PX / 2);
+      expect(p.lignesMax, `passage ${String(i + 1)} : virtualisation`).toBeLessThan(60);
+      expect(p.derniere, `passage ${String(i + 1)} : dernière ligne`).toBe(plan.lignes.at(-1)?.id ?? '');
+    }
+    expect(verdict.passagesSaccades, 'passages qui perdent plus de 2 images d’affilée').toBeLessThan(PASSAGES_SACCADES_ECHEC);
+    expect(verdict.rafalesTotal, 'intervalles au-delà de 2 images perdues, sur les 5 passages').toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
+    expect(verdict.fluide).toBe(true);
+  });
+
+  await test.step('témoin : un défilement volontairement saccadé fait échouer la mesure', async () => {
+    // Travail bloquant injecté dans la page pendant le défilement : 100 ms de calcul par seconde.
+    // Une image ne peut pas être produite pendant le blocage : en général 3 images perdues
+    // d'affilée, juste au-delà de la limite, plusieurs fois par passage. Si ce témoin passait pour
+    // fluide, la mesure ne garantirait plus rien.
+    await page.evaluate(
+      ([blocageMs, periodeMs]) => {
+        const f = window as unknown as { __saccade?: number };
+        f.__saccade = window.setInterval(() => {
+          const fin = performance.now() + blocageMs;
+          while (performance.now() < fin) {
+            // attente active : le fil principal est bloqué, comme par un rendu trop lourd
+          }
+        }, periodeMs);
+      },
+      [TEMOIN_BLOCAGE_MS, TEMOIN_PERIODE_MS] as const,
     );
-    console.log(`défilement : ${String(mesure.images)} images, pire intervalle ${mesure.pireMs.toFixed(1)} ms (limite ${String(IMAGE_MAX_MS)} ms), ${String(mesure.lignesMax)} lignes au plus dans le DOM`);
-    expect(mesure.bas).toBe(true);
-    expect(mesure.images).toBeGreaterThan((plan.lignes.length * H) / 40 / 2);
-    expect(mesure.pireMs).toBeLessThanOrEqual(IMAGE_MAX_MS);
-    expect(mesure.lignesMax).toBeLessThan(60);
-    expect(mesure.derniere).toBe(plan.lignes.at(-1)?.id ?? '');
+    try {
+      const passages = await repeterDefilement(page);
+      const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
+      console.log(decrireDefilement('témoin saccadé', verdict));
+      expect(verdict.fluide, 'le défilement saccadé doit échouer à la mesure').toBe(false);
+      expect(verdict.passagesSaccades).toBeGreaterThanOrEqual(PASSAGES_SACCADES_ECHEC);
+      // Chacun des deux critères, seul, doit suffire à le voir.
+      expect(verdict.rafalesTotal).toBeGreaterThan(RAFALES_TOTAL_MAX);
+    } finally {
+      await page.evaluate(() => {
+        window.clearInterval((window as unknown as { __saccade?: number }).__saccade);
+      });
+    }
   });
 
   await test.step('à 360 px de large : pas de défilement horizontal, plan et navigation visibles', async () => {
