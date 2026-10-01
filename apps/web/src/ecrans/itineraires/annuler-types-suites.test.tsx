@@ -301,6 +301,9 @@ describe('T24c, N3 bis (B1) : occupation passée dans une autre série pendant l
     vi.spyOn(banc.base, 'writeTransaction').mockImplementation((fn) => {
       if (recue === undefined) {
         recevoirUpdate(banc, 'serie', SERIE.aVenir2, datesS1);
+        // État serveur cohérent : l'occupation propre d'aVenir2 suit ses nouvelles dates (sinon la
+        // synchro elle-même livrerait un état que le serveur refuse, indépendamment de l'annulation).
+        recevoirUpdate(banc, 'occupation', OCCUPATION.aVenir2, { prevu_du: datesS1.prevu_mise_en_place, prevu_au: datesS1.prevu_fin_recolte });
         recevoirUpdate(banc, 'occupation', OCCUPATION.aVenir1, { serie_id: SERIE.aVenir2 });
         recue = lire(banc, 'SELECT * FROM occupation WHERE id = ?', [OCCUPATION.aVenir1])[0];
       }
