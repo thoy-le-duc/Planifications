@@ -168,6 +168,7 @@ decrireAvecBase('T10g')('T10g : récoltes annulées et corrections concurrentes'
       emetteur: EMETTEUR,
       audience: AUDIENCE,
       maintenant: () => MAINTENANT,
+      envoisMaxParMinute: 1_000_000, // T10f : la suite envoie bien plus de 120 lots par minute pour un même utilisateur
     });
     fermeA = await creerFerme(base.pool, 'Jardins de Garonne');
     const u = await creerUtilisateur(base.pool);

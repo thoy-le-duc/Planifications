@@ -27,6 +27,14 @@ export const MOTIFS_MOUVEMENT_SAISIS = ['recolte'] as const satisfies readonly M
  */
 export const ECRITURES_MAX_PAR_LOT = 500;
 
+/**
+ * Taille au plus d'une transaction locale de la porte (@planif/sync) : 5 Mio, en octets UTF-8 de
+ * `JSON.stringify(ordres)` (T10f). Le serveur mesure, lui, le corps envoyé, qui peut peser plus
+ * (format du connecteur) : sa limite souple est à 6 Mio ('lot_trop_gros'), sa limite dure à 8 Mio
+ * (413). Les 5 Mio de la porte laissent cette marge.
+ */
+export const TAILLE_MAX_PAR_LOT = 5 * 1_048_576;
+
 /** Décimales au plus d'une quantité de stock (décision du chef, relecture T10c : le millionième). */
 export const DECIMALES_MAX_QUANTITE = 6;
 

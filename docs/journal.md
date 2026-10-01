@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T10f : la synchro protégée des abus
+
+- **Fait** : la porte du téléphone refuse une transaction de plus de 5 Mio avant d'écrire ; le serveur limite chaque utilisateur à 120 envois par minute (429, la file reprend plus tard, rien de perdu) ; un client muet est coupé après 10 s sans données, des en-têtes incomplets après 15 s, sans gêner un téléphone lent mais régulier.
+- **Décidé** : marge de 1 Mio au serveur (6 Mio) pour le format d'envoi de PowerSync ; durée totale de 300 s ; compteur par processus en v1 ; l'affichage des refus sur le téléphone, jamais construit, devient T10i. Deux relectures de sécurité : la première a trouvé deux failles du nouveau délai (connexions jamais fermées, requêtes longues coupées sans réponse), corrigées et testées ; la contre-relecture les confirme closes (16 scénarios sur sockets brutes).
+- **Bloquant** : rien. Pour la mise en ligne : production sur la version de Node de `.node-version`, comme la CI.
+
 ## 2026-10-01 — T09c : codes de connexion par Brevo, côté code
 
 - **Fait** : le code de connexion part en texte et en HTML sobre (sans image ni lien), expéditeur « Planifications » ; la connexion au relais Brevo est vérifiée au démarrage, en tâche de fond ; configuration Brevo documentée dans `config.ts`. Trois relectures de sécurité : aucune forme du mot de passe SMTP ni du texte du serveur n'atteint plus les journaux, le mode console (codes en clair) n'existe qu'en développement, l'adresse d'expéditeur et la longueur du mot de passe sont contrôlées.

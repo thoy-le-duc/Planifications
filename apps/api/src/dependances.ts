@@ -7,6 +7,7 @@ import { creerGenerateurId, type GenerateurId } from '@planif/core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { ExpediteurCourriel } from './auth/courriel.ts';
 import type { TrousseauCles } from './auth/cles.ts';
+import { ENVOIS_MAX_PAR_MINUTE } from './sync/upload.ts';
 
 export interface DependancesApp {
   /** drizzle(pool) de drizzle-orm/node-postgres. */
@@ -31,6 +32,11 @@ export interface DependancesApp {
    * en-têtes ignorés (un client les falsifie).
    */
   readonly proxyDeConfiance?: boolean;
+  /**
+   * Envois POST /sync/upload au plus par utilisateur et par minute glissante (T10f) ; par défaut
+   * ENVOIS_MAX_PAR_MINUTE (sync/upload.ts). Relevé seulement par les tests qui envoient beaucoup.
+   */
+  readonly envoisMaxParMinute?: number;
 }
 
 /** Dépendances complétées, partagées par les routes. */
@@ -45,5 +51,12 @@ export function completer(deps: DependancesApp): Contexte {
     horloge: () => maintenant().getTime(),
     aleatoire: (n) => new Uint8Array(randomBytes(n)),
   });
-  return { ...deps, maintenant, nouvelId, corsOrigines: deps.corsOrigines ?? [], proxyDeConfiance: deps.proxyDeConfiance ?? false };
+  return {
+    ...deps,
+    maintenant,
+    nouvelId,
+    corsOrigines: deps.corsOrigines ?? [],
+    proxyDeConfiance: deps.proxyDeConfiance ?? false,
+    envoisMaxParMinute: deps.envoisMaxParMinute ?? ENVOIS_MAX_PAR_MINUTE,
+  };
 }

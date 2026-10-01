@@ -295,6 +295,7 @@ decrireAvecBase('T10e')('T10e : POST /sync/upload accepte les séries des télé
       emetteur: EMETTEUR,
       audience: AUDIENCE,
       maintenant,
+      envoisMaxParMinute: 1_000_000, // T10f : la suite envoie bien plus de 120 lots par minute pour un même utilisateur
     });
     ferme = await creerFerme(base.pool, 'Jardins de Garonne');
     secondeFerme = await creerFerme(base.pool, 'Second site de Théophane');

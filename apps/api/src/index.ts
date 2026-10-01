@@ -1,16 +1,16 @@
 /**
  * Démarrage de l'API : lit la configuration (config.ts, variables documentées là), puis sert
- * `creerApp`. Une configuration invalide arrête le processus en code 1, avec son message. Le
- * relais SMTP est vérifié en tâche de fond (demarrage.ts) : injoignable ou muet, il ne retarde
- * ni n'arrête l'écoute (erreur sur la sortie d'erreur), pour que la synchro démarre quand même.
+ * `creerApp` par `creerServeur` (serveur.ts). Une configuration invalide arrête le processus en
+ * code 1, avec son message. Le relais SMTP est vérifié en tâche de fond (demarrage.ts) :
+ * injoignable ou muet, il ne retarde ni n'arrête l'écoute (erreur sur la sortie d'erreur), pour que la synchro démarre quand même.
  */
-import { serve } from '@hono/node-server';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
 import { creerApp } from './app.ts';
 import { trousseauDepuisJwks } from './auth/index.ts';
 import { lireConfig, type Config } from './config.ts';
 import { preparerExpediteur } from './demarrage.ts';
+import { creerServeur } from './serveur.ts';
 
 let config: Config;
 try {
@@ -36,6 +36,7 @@ const app = creerApp({
   ...(config.corsOrigines === undefined ? {} : { corsOrigines: config.corsOrigines }),
 });
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
-  console.log(`API à l'écoute sur http://localhost:${String(info.port)}`);
+// Délai court de lecture du corps (T10f) : un client muet ne garde pas une connexion 300 s.
+creerServeur({ fetch: app.fetch }).listen(config.port, () => {
+  console.log(`API à l'écoute sur http://localhost:${String(config.port)}`);
 });
