@@ -327,3 +327,54 @@ describe('T04b : historique mixte (lien « remplace »)', () => {
     expect(alertesRotation(FRAISIERS_PREVUS, nouvelle, 2026, h, hierarchie([champ, horsSol], [ancienne, nouvelle]))).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Décision 4 du chef : l'historique hors-sol ne compte jamais pour une planche de pleine terre
+// ---------------------------------------------------------------------------------------------
+
+describe('T04b, décision 4 : une culture passée en hors-sol ne compte pas pour la pleine terre', () => {
+  it('planche de pleine terre qui remplace une ancienne gouttière (fraisiers 2025) : [] en 2026', () => {
+    const serre = zone('serre', 'serre');
+    const ancienne = gouttiere('S-G01-2025', serre);
+    const p = planche('S-P01', serre, [ancienne]);
+    const h = historique([fraisiers2025(ancienne)]);
+    expect(alertesRotation(FRAISIERS_PREVUS, p, 2026, h, hierarchie([serre], [ancienne, p]))).toEqual([]);
+  });
+
+  it('planche de plein champ qui remplace une ancienne planche d’une zone hors_sol (fraisiers 2025, assolement Rosacées de cette zone) : []', () => {
+    const champ = zone('champ', 'plein_champ');
+    const horsSol = zone('hors-sol', 'hors_sol');
+    const ancienne = planche('HS-P01-2025', horsSol);
+    const p = planche('CH-P01', champ, [ancienne]);
+    const h = historique([fraisiers2025(ancienne)], [rosacees2025Sur(horsSol)]);
+    expect(alertesRotation(FRAISIERS_PREVUS, p, 2026, h, hierarchie([champ, horsSol], [ancienne, p]))).toEqual([]);
+  });
+
+  it('témoin : la même planche avec, en plus, des fraisiers 2025 en pleine terre sur elle-même : rouge, seule la ligne de pleine terre en cause', () => {
+    const serre = zone('serre', 'serre');
+    const ancienne = gouttiere('S-G01-2025', serre);
+    const p = planche('S-P01', serre, [ancienne]);
+    const enTerre = fraisiers2025(p);
+    const alertes = alertesRotation(FRAISIERS_PREVUS, p, 2026, historique([fraisiers2025(ancienne), enTerre]), hierarchie([serre], [ancienne, p]));
+    expect(alertes.map((a) => a.niveau)).toEqual(['rouge']);
+    expect(alertes[0]?.lignes.map((l) => l.source)).toEqual([{ sorte: 'occupation', occupationId: enTerre.occupation.id }]);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Décision 3 du chef : entrée minimale (sans sorte ni typeAbri) = pleine terre, comme avant
+// ---------------------------------------------------------------------------------------------
+
+describe('T04b, décision 3 : sans `sorte` ni `typeAbri`, comportement d’avant', () => {
+  it('emplacement { id, zoneId, remplace } et zones { id, zoneParenteId } : alerte rouge', () => {
+    const z = { id: id<'Zone'>('zone-minimale'), zoneParenteId: null };
+    const e = { id: id<'Emplacement'>('E-min'), zoneId: z.id, remplace: [] };
+    const occ: OccupationHistorique = {
+      occupation: { id: id<'Occupation'>('fraisiers-2025-min'), emplacementId: e.id, prevuDu: d('2025-03-01'), prevuAu: d('2025-12-01'), reel: null, supprimeLe: null },
+      especeId: FRAISIER.id,
+      familleId: ROSACEES.id,
+    };
+    const alertes = alertesRotation(FRAISIERS_PREVUS, e, 2026, historique([occ]), { zones: [z], emplacements: [e] });
+    expect(alertes.map((a) => a.niveau)).toEqual(['rouge']);
+  });
+});
