@@ -20,3 +20,4 @@
 ## Note de mise en ligne (T23)
 
 - La base Postgres de production doit être créée en locale UTF-8 (par exemple `C.UTF-8` ou `fr_FR.UTF-8`) : l'index unique des types d'intervention repose sur `lower(libelle)`, qui ne met en minuscules que l'ASCII en locale `C` pure.
+- Les migrations 0019 à 0021 (T10h) réécrivent toute la table `evenement` dans une seule transaction (verrou exclusif, 23 s sur 446 000 lignes, journal re-téléchargé par les téléphones). Sans données en production, sans effet ; sinon, planifier une fenêtre de maintenance ou découper la reprise.

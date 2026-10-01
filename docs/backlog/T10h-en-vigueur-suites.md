@@ -16,3 +16,11 @@
 - [ ] Vue : moins de 50 ms pour une ferme sur un journal de 200 000 événements (test d'intégration mesuré).
 - [ ] Téléphone : même valeur en vigueur que le serveur sur une chaîne ramifiée, dans le semainier comme dans l'historique.
 - [ ] Historique partiel : la récolte annulée n'apparaît pas.
+
+## Décisions du chef (après la relecture)
+
+1. **B1 — origine introuvable** : le déclencheur BEFORE INSERT lève une erreur (`23503`) si l'origine du parent ne peut pas être lue, au lieu de retomber sur le parent. La base reste juste quel que soit l'écrivain ; l'API voit une erreur de référence et refuse comme pour un parent absent.
+2. **N1 — interblocage** : le verrou de ferme est pris pour tout événement qui en remplace un autre (correction ou annulation, toutes catégories), avant toute écriture, comme pour les récoltes.
+3. **N3 — chaînes profondes au téléphone** : `EN_VIGUEUR` utilise `origine_id` quand la ligne l'a (lignes reçues du serveur), et ne remonte la chaîne que pour les saisies locales pas encore synchronisées.
+4. **N2 — migration lourde** : à planifier avant toute mise en production avec des données (note dans T09c). Non bloquant tant qu'il n'y a pas de données.
+5. **N4** : commentaire dans 0020 : toute future migration qui touche à `evenement_ajout_seul` doit recalculer `interne.chaine_evenement`.
