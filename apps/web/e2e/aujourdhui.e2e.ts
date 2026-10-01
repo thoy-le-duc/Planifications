@@ -364,6 +364,8 @@ test('travaux prévus : tâche, charge de la semaine, « Fait » sur la grelinet
   await page.setViewportSize({ width: 360, height: 780 });
 
   await test.step('les travaux sont des tâches, la charge de la semaine en pastille', async () => {
+    // Attendre la lecture des tâches avant d'en relever l'ordre, comme le test de la saisie terrain.
+    await expect(taches(page)).toHaveCount(ferme.attendu.taches.length);
     expect(await taches(page).evaluateAll((els) => els.map((e) => e.getAttribute('data-cle')))).toEqual(ferme.attendu.taches);
     const t = tache(page, grelinette);
     await expect(t.getByTestId('surtitre')).toHaveText(LIBELLES_CATEGORIES.travail_sol ?? '');
