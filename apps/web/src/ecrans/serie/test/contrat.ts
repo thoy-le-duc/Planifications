@@ -177,7 +177,11 @@
  *     de la semaine choisie à l'ouverture) ; boutons « Année précédente » et « Année suivante » ;
  *     un bouton data-testid="choix-semaine", data-semaine='AAAA-Www' par semaine ISO de l'année
  *     (52 ou 53), texte « S22 » et la date courte du lundi ; la semaine choisie porte
- *     aria-current="true" et reçoit le focus à l'ouverture. Toucher une semaine la choisit, ferme
+ *     aria-current="true" et reçoit le focus à l'ouverture (décision 9 : si elle n'est pas
+ *     affichée, semaine vide ou invalide, le focus entre quand même dans la feuille, sur son
+ *     titre ; Échap la ferme toujours). Liseré de la semaine du jour (.semaine-case-jour, et
+ *     l'échantillon de la légende) : orange foncé, contraste ≥ 3:1 sur la feuille et sur la
+ *     case, jamais --couleur-orange (#E0701F). Toucher une semaine la choisit, ferme
  *     le choix et rend le focus au bouton « Choisir la semaine ». Échap ferme le choix sans rien
  *     changer et SANS fermer le formulaire ;
  *   - cibles ≥ 56 × 56 px (choix rapide ouvert compris), sans défilement horizontal à 360 px
@@ -192,10 +196,12 @@
  *   la semaine n'est pas touchée : les dates affichées sont celles de cette ancre, et changer la
  *   longueur (ou une planche) n'écrit ni ancre_date ni prevu_*. Toucher la semaine ramène
  *   l'ancre au lundi de la semaine choisie.
- * N2 (interprétation du testeur, la plus simple, à trancher par le chef) : une série dont la
- *   variété a été supprimée de la bibliothèque la GARDE : le formulaire l'affiche (« Grenobloise »),
- *   compte sa germination, et « Enregistrer » n'écrit pas variete_id. La variété supprimée n'est
- *   toujours pas proposée à la recherche de culture.
+ * N2 (décisions 2 et 8 du chef) : une série dont la variété a été supprimée de la bibliothèque
+ *   la GARDE tant que l'itinéraire ne change pas : le formulaire l'affiche (« Grenobloise »),
+ *   compte sa germination, et « Enregistrer » n'écrit pas variete_id. Si l'itinéraire change
+ *   (le serveur revérifie alors la variété), le formulaire retire la variété et le dit AVANT
+ *   d'enregistrer (texte « variété Grenobloise retirée : supprimée de la bibliothèque ») ; la
+ *   ligne écrite a variete_id nul. La variété supprimée n'est jamais proposée à la recherche.
  * N3 : rotation_acceptee est effacé (null) à l'enregistrement quand il ne correspond plus :
  *   culture changée (autre espèce), ou plus aucune alerte rouge (orange seule ou rien). Il est
  *   gardé, sans nouvelle question, si l'alerte rouge de la même famille est toujours là.
@@ -211,7 +217,10 @@
  *   - une planche ajoutée ailleurs, qui ne collerait plus aux dates rétablies, bloque le retour
  *     de sa série ; ce qui reste passe toujours validerSerie / validerOccupation ;
  *   - annuler() rend alors un message contenant « modifié entre-temps », que l'écran Planches
- *     affiche (role="alert" ou role="status") ; null si tout a été défait.
+ *     affiche (role="alert" ou role="status") ; null si tout a été défait ;
+ *   - décision 7 du chef : « Annuler » ne rend jamais active une occupation dont la série n'est
+ *     pas active après l'annulation (série supprimée ailleurs : une planche retirée par la
+ *     saisie n'est pas ressuscitée) ; ces occupations restent telles quelles, avec le message.
  *
  * ── Amorçage des tests de bout en bout (src/donnees/amorcer.ts) ──────────────────────────────
  *

@@ -11,11 +11,15 @@
  *   - N5 : « Annuler » (bandeau) ne passe pas par-dessus un autre téléphone (règle de T24,
  *     décision 9 : colonne par colonne, ligne laissée sinon, message « modifié entre-temps »).
  * Le message vu sur l'écran Planches est dans ./plan.test.tsx (dernier bloc).
+ * Ajouts après la relecture (décisions 7 à 9 du chef) : derniers blocs du fichier.
  *
  * Même banc que ./ecran.test.tsx : ferme du plan (./test/ferme-serie.ts), base mémoire par test,
  * aujourd'hui = 2026-09-30. Les écritures « d'un autre téléphone » (ou d'un import) arrivent par
  * base.recevoir, comme la synchro.
  */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -602,5 +606,145 @@ describe('T12b, N5 : « Annuler » (bandeau) ne défait que ce que nous avons é
     expect(b.transactions()).toBe(1);
     expect(etat(serie(b, SERIE_LAITUE))).toEqual(initiale);
     expect(occupationsDe(b, SERIE_LAITUE).map(etat)).toEqual(occInitiales);
+  });
+});
+
+// ── Décisions du chef après la relecture (7, 8, 9) ───────────────────────────────────────────
+
+describe('T12b, décision 7 (B1) : « Annuler » ne ressuscite pas une planche sous une série supprimée ailleurs', () => {
+  it('T2-P02 remplacée par T2-P03 ; un autre téléphone supprime la série et ses occupations ; « Annuler » : aucune occupation active, série supprimée, message', async () => {
+    await ouvrir({ sorte: 'modification', serieId: SERIE_LAITUE });
+    await remplir(liste('Ajouter une planche', formulaire()), EMPLACEMENT.t2p03);
+    await attendre(() => formulaire().querySelector(`[data-testid="emplacement-serie"][data-emplacement="${EMPLACEMENT.t2p03}"]`) !== null, 'T2-P03 ajoutée');
+    expect(champ('Longueur T2-P03', formulaire()).value, 'longueur égale (30 m)').toBe('30');
+    await toucher(bouton('Retirer T2-P02', formulaire()));
+    await enregistrer();
+    const apres = occupationsDe(b, SERIE_LAITUE);
+    expect(apres.find((o) => o.id === OCCUPATION_LAITUE)?.supprime_le, 'P02 retirée par la saisie').not.toBeNull();
+    const p03 = apres.find((o) => o.emplacement_id === EMPLACEMENT.t2p03 && o.supprime_le === null);
+    expect(p03, 'P03 ajoutée par la saisie').toBeDefined();
+    const saisie = enregistrees[0];
+    if (saisie === undefined || p03 === undefined) throw new Error('saisie absente');
+
+    // L'autre téléphone supprime la série et ses occupations actives.
+    recevoirUpdate('serie', SERIE_LAITUE, { supprime_le: AILLEURS });
+    recevoirUpdate('occupation', String(p03.id), { supprime_le: AILLEURS });
+
+    b.remiseAZero();
+    const rendu: { message: string | null } = { message: null };
+    await act(async () => {
+      rendu.message = await saisie.annuler();
+    });
+    verifierOrdres(b);
+    const occ = occupationsDe(b, SERIE_LAITUE);
+    expect(occ.filter((o) => o.supprime_le === null).map((o) => o.emplacement_id), 'aucune occupation active sous une série supprimée').toEqual([]);
+    expect(occ.find((o) => o.id === OCCUPATION_LAITUE)?.supprime_le, 'P02 n’est pas ressuscitée').not.toBeNull();
+    expect(serie(b, SERIE_LAITUE)?.supprime_le, 'la série reste supprimée').toBe(AILLEURS);
+    expect(rendu.message ?? '').toContain('modifié entre-temps');
+  });
+});
+
+describe('T12b, décision 8 (B2) : variété supprimée et itinéraire changé', () => {
+  it('autre itinéraire de la même espèce : le formulaire dit, avant d’écrire, que la variété est retirée ; variete_id nul, ligne valide', async () => {
+    recevoirUpdate('variete', VARIETE.grenobloise, { supprime_le: AILLEURS });
+    await ouvrir({ sorte: 'modification', serieId: SERIE_LAITUE });
+    b.remiseAZero();
+    await remplir(liste('Itinéraire', formulaire()), ITINERAIRE.bataviaEte);
+    await attendre(
+      () => /variété Grenobloise retirée/i.test(texte(formulaire())),
+      `message « variété Grenobloise retirée… » avant l’enregistrement (formulaire : ${texte(formulaire()).slice(0, 200)}…)`,
+    );
+    expect(texte(formulaire())).toMatch(/supprimée de la bibliothèque/i);
+    expect(b.transactions(), 'rien d’écrit avant « Enregistrer »').toBe(0);
+    await enregistrer();
+    const s = serie(b, SERIE_LAITUE);
+    expect(s?.itineraire_id).toBe(ITINERAIRE.bataviaEte);
+    expect(s?.variete_id ?? null, 'variété retirée').toBeNull();
+    serieValide(s ?? {});
+    occupationsValides(b, SERIE_LAITUE);
+    verifierOrdres(b);
+  });
+});
+
+describe('T12b, décision 9 : choix rapide, focus et liseré de la semaine du jour', () => {
+  it.each([
+    ['vide', ''],
+    ['qui n’existe pas', '2027-W60'],
+  ])('semaine %s (pas affichée dans la feuille) : le focus entre dans la feuille ; Échap la ferme sans fermer le formulaire', async (_cas, semaine) => {
+    await ouvrir({ sorte: 'creation', emplacementId: EMPLACEMENT.t2p01, semaine, saisonId: SAISON.s2027 });
+    await toucher(bouton(/^Choisir la semaine/, selecteurSemaine(formulaire())));
+    await attendre(() => choixSemaines() !== undefined, 'choix rapide ouvert');
+    const feuille = choixSemaines();
+    expect(feuille?.querySelector('[aria-current="true"]') ?? null, 'la semaine choisie n’est pas affichée').toBeNull();
+    expect(feuille?.contains(document.activeElement) ?? false, `le focus est dans la feuille (actif : ${document.activeElement?.outerHTML.slice(0, 80) ?? 'aucun'})`).toBe(true);
+    const cible = document.activeElement ?? document.body;
+    await act(async () => {
+      cible.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    await unTour();
+    expect(choixSemaines(), 'Échap ferme la feuille').toBeUndefined();
+    expect(fermetures, 'le formulaire reste ouvert').toBe(0);
+  });
+
+  it('année suivante (la semaine choisie n’y est pas) : le focus reste dans la feuille ; Échap la ferme', async () => {
+    await ouvrir({ sorte: 'creation', emplacementId: EMPLACEMENT.t2p01, semaine: '2027-W14', saisonId: SAISON.s2027 });
+    await toucher(bouton(/^Choisir la semaine/, selecteurSemaine(formulaire())));
+    await attendre(() => choixSemaines() !== undefined, 'choix rapide ouvert');
+    const suivante = bouton('Année suivante', choixSemaines() ?? document);
+    suivante.focus();
+    await toucher(suivante);
+    expect(choixSemaines()?.dataset.annee).toBe('2028');
+    expect(choixSemaines()?.contains(document.activeElement) ?? false, 'le focus est dans la feuille').toBe(true);
+    await act(async () => {
+      (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    await unTour();
+    expect(choixSemaines()).toBeUndefined();
+    expect(fermetures).toBe(0);
+    expect(valeurSemaine(formulaire())).toBe('2027-W14');
+  });
+
+  it('liseré de la semaine du jour : plus l’orange clair #E0701F, contraste ≥ 3:1 sur la feuille et sur la case', () => {
+    // Chemins en texte : sous happy-dom, `URL` n'est pas celle de Node (fs la refuse).
+    const ici = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(ici, 'serie.css'), 'utf8');
+    const jetons = readFileSync(join(ici, '..', '..', 'jetons.css'), 'utf8');
+    const variable = (nom: string): string => {
+      const m = new RegExp(`${nom}\\s*:\\s*(#[0-9a-fA-F]{6})`).exec(jetons);
+      if (m?.[1] === undefined) throw new Error(`jeton ${nom} introuvable`);
+      return m[1];
+    };
+    const resoudre = (v: string): string => {
+      const t = v.trim();
+      const m = /^var\((--[\w-]+)\)$/.exec(t);
+      return (m?.[1] === undefined ? t : variable(m[1])).toUpperCase();
+    };
+    const bloc = (selecteur: string): string => {
+      const echappe = selecteur.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const m = new RegExp(`(?:^|\\n|,)\\s*${echappe}\\s*\\{([^}]*)\\}`).exec(css);
+      if (m?.[1] === undefined) throw new Error(`règle ${selecteur} introuvable dans serie.css`);
+      return m[1];
+    };
+    const couleurBord = (corps: string): string => {
+      const m = /border(?:-color)?\s*:\s*(?:[\d.]+px\s+solid\s+)?([^;]+);/.exec(corps);
+      if (m?.[1] === undefined) throw new Error(`pas de couleur de bord dans ${corps}`);
+      return resoudre(m[1]);
+    };
+    const lum = (hex: string): number => {
+      const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * (c[0] ?? 0) + 0.7152 * (c[1] ?? 0) + 0.0722 * (c[2] ?? 0);
+    };
+    const contraste = (a: string, c: string) => (Math.max(lum(a), lum(c)) + 0.05) / (Math.min(lum(a), lum(c)) + 0.05);
+    const fonds = { feuille: variable('--couleur-surface'), case: variable('--couleur-fond') };
+    for (const selecteur of ['.semaine-case-jour', '.semaine-legende i']) {
+      const bord = couleurBord(bloc(selecteur));
+      expect(bord, `${selecteur} : couleur hexadécimale ou jeton`).toMatch(/^#[0-9A-F]{6}$/);
+      expect(bord, `${selecteur} : plus l’orange clair`).not.toBe('#E0701F');
+      for (const [ou, fond] of Object.entries(fonds)) {
+        expect(contraste(bord, fond), `${selecteur} : contraste du liseré sur ${ou} (${bord} / ${fond})`).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 });
