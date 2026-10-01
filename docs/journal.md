@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-01 — T04b : pas d'alerte de rotation sur le hors-sol
+
+- **Fait** : plus aucune alerte de rotation sur une gouttière ni sur un emplacement d'une zone hors-sol (Q17). Une culture passée sur du hors-sol ne compte plus dans l'historique d'une planche de pleine terre, même par le lien « remplace ». Le formulaire de série transmet la sorte et l'abri au moteur.
+- **Décidé** : on regarde l'abri de la zone directe de l'emplacement. Une zone inconnue garde l'alerte, sauf sur une gouttière. Sans sorte ni abri, l'emplacement est traité comme de la pleine terre. Le serveur ne recalcule pas la rotation, il n'y a rien à aligner.
+- **Bloquant** : rien. Le test de fluidité du plan (T11) a encore échoué une fois sous charge (66,7 ms pour 50) ; à surveiller.
+
 ## 2026-09-30 — T24 : l'écran « Mes itinéraires »
 
 - **Fait** :

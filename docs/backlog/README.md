@@ -14,7 +14,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T02](T02-dates-serie.md) | Dates d'une série, planification à rebours et décalage | T01 | fait |
 | [T03](T03-occupations-conflits.md) | Occupations et conflits de place | T02 | fait |
 | [T04](T04-rotation.md) | Alertes de rotation | T03 | fait |
-| [T04b](T04b-rotation-hors-sol.md) | Pas d'alerte de rotation sur le hors-sol (Q17) | T04 | à faire |
+| [T04b](T04b-rotation-hors-sol.md) | Pas d'alerte de rotation sur le hors-sol (Q17) | T04 | fait |
 | [T05](T05-besoins-semences.md) | Besoins en semences et en plants | T01 | fait |
 | [T06](T06-semainier.md) | Semainier | T02 | fait |
 | [T06b](T06b-retards-semainier.md) | Semainier : une seule ligne en retard par série | T06 | fait |
@@ -41,6 +41,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T22b](T22b-fait-en-retard.md) | « Fait » sur un travail répété en retard (Q24) | T22 | fait |
 | [T23](T23-itineraires-synchro.md) | Synchro : le serveur accepte les itinéraires et les types d'intervention | T10e, T22 | fait |
 | [T24](T24-ecran-itineraires.md) | Écran : mes itinéraires et mes types d'intervention | T22, T23 | fait |
+| [T24b](T24b-annuler-serie-supprimee.md) | « Annuler » des itinéraires : série supprimée ailleurs | T24 | à faire |
 | [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T10c, T11, T16 | fait |
 | [T13b](T13b-aujourdhui-grande-ferme.md) | Aujourd'hui : rapide sur une grande ferme | T13 | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |

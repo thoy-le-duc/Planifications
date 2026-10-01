@@ -487,6 +487,7 @@ function alertesSur(ctx: ContexteCalcul, culture: ChoixCulture, planche: Planche
     id: planche.id as Id<'Emplacement'>,
     zoneId: planche.zoneId as Id<'Zone'>,
     remplace: [],
+    sorte: planche.emplacement.sorte,
   };
   let trouvees: readonly AlerteRotation[];
   try {
