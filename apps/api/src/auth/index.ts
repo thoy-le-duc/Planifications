@@ -17,4 +17,4 @@ export { echapperHtml, expediteurConsole, messageCode, verifierEnTetes, type Exp
 export { DUREE_JETON_ACCES_S, emettreJetonAcces, verifierJetonAcces } from './jetons.ts';
 export { garde, type VariablesAuthentifiees } from './garde.ts';
 export { routesAuth } from './routes.ts';
-export { DELAI_SMTP_MS, expediteurSmtp, type OptionsSmtp, type SecuriteSmtp } from './courriel-smtp.ts';
+export { DELAI_SMTP_MS, expediteurSmtp, type ExpediteurSmtp, type OptionsSmtp, type SecuriteSmtp } from './courriel-smtp.ts';
