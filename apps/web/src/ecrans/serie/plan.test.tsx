@@ -10,6 +10,13 @@
  * doigt se lit donc directement dans clientX (contrat : LARGEUR_ETIQUETTE_PX + i ×
  * LARGEUR_SEMAINE_PX, exportés par ecrans/plan/calculs.ts). La géométrie réelle est vérifiée
  * par apps/web/e2e/serie.e2e.ts.
+ *
+ * Modifié par T12b (sélecteur de semaine maison, docs/backlog/T12b-serie-suites.md, N8) : le
+ * champ <input type="week"> n'existe plus. `champ('Semaine', d).value` devient `valeurSemaine(d)`
+ * (data-semaine du sélecteur) et `remplir(champ('Semaine', d), '2027-W22')` devient
+ * `choisirSemaine(d, '2027-W22')` : depuis S21, un seul toucher sur « Semaine suivante », donc
+ * toujours un geste ; le compte de gestes (< 8) est inchangé. Ajout T12b : N5, le message
+ * « modifié entre-temps » du bandeau (dernier bloc).
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -26,6 +33,7 @@ import {
   bouton,
   boutons,
   champ,
+  choisirSemaine,
   liste,
   compteur,
   creerBanc,
@@ -42,6 +50,7 @@ import {
   series,
   texte,
   toucher,
+  valeurSemaine,
   verifierOrdres,
   type Banc,
 } from './test/outils.ts';
@@ -147,7 +156,7 @@ describe('T12 : appui long sur une case vide du plan', () => {
     const d = dialogueOuEchec('Nouvelle série');
     await attendre(() => emplacementsChoisis(d).length > 0, 'planche préremplie');
     expect(emplacementsChoisis(d)).toEqual([EMPLACEMENT.c3p02]);
-    expect(champ('Semaine', d).value).toBe('2026-W42');
+    expect(valeurSemaine(d)).toBe('2026-W42');
   });
 
   it('un appui bref n’ouvre rien ; un appui long sur l’étiquette (code de la planche) non plus', async () => {
@@ -170,7 +179,7 @@ describe('T12 : appui long sur une case vide du plan', () => {
     const d = dialogueOuEchec('Nouvelle série');
     await attendre(() => emplacementsChoisis(d).length > 0, 'planche préremplie');
     expect(emplacementsChoisis(d)).toEqual([EMPLACEMENT.t2p01]);
-    expect(champ('Semaine', d).value).toBe('2027-W14');
+    expect(valeurSemaine(d)).toBe('2027-W14');
 
     await remplir(champ('Culture', d), 'bat');
     const choix = () => d.querySelector<HTMLElement>(`[data-testid="choix-culture"][data-espece="${ESPECE.batavia}"][data-variete="${VARIETE.grenobloise}"]`);
@@ -179,7 +188,7 @@ describe('T12 : appui long sur une case vide du plan', () => {
     if (c === null) return;
     await toucher(c);
     await toucher(radio('Récolte à partir de', d));
-    await remplir(champ('Semaine', d), '2027-W22');
+    await choisirSemaine(d, '2027-W22');
     const dates = (): Record<string, string> => {
       const r: Record<string, string> = {};
       for (const e of d.querySelectorAll<HTMLElement>('[data-testid="date-serie"]')) r[e.dataset.etape ?? '?'] = e.dataset.date ?? '';
@@ -247,7 +256,7 @@ describe('T12 : autres entrées du plan de culture', () => {
     await attendre(() => dialogue('Modifier la série') !== undefined, 'formulaire de modification');
     const f = dialogueOuEchec('Modifier la série');
     await attendre(() => f.querySelector('[data-testid="date-serie"]') !== null, 'formulaire rempli');
-    expect(champ('Semaine', f).value).toBe('2027-W14');
+    expect(valeurSemaine(f)).toBe('2027-W14');
 
     await remplir(champ('Longueur T2-P02', f), '20');
     b.remiseAZero();
@@ -306,5 +315,38 @@ describe('T12 : corrections de la relecture, écran Planches', () => {
     expect(serie(b, SERIE_LAITUE)?.longueur_m, 'rien n’a été défait').toBe(20);
     const alertes = [...conteneur.querySelectorAll<HTMLElement>('[role="alert"]')].filter((el) => /annul/i.test(texte(el)));
     expect(alertes.length, 'un message role="alert" dit que l’annulation a échoué').toBeGreaterThan(0);
+  });
+});
+
+describe('T12b : N5, bandeau « Annuler » face à un autre téléphone (règle de T24, décision 9)', () => {
+  it('la série modifiée puis supprimée sur un autre téléphone : « Annuler » ne la ressuscite pas et l’écran Planches dit « modifié entre-temps »', async () => {
+    await rendre();
+    await saison2027();
+    const barre = conteneur.querySelector<HTMLElement>(`[data-testid="barre"][data-occupation="${OCCUPATION_LAITUE}"]`);
+    if (barre === null) throw new Error('barre de SERIE_LAITUE absente');
+    await toucher(barre);
+    await toucher(bouton('Modifier la série', dialogueOuEchec('Détail de la série')));
+    await attendre(() => dialogue('Modifier la série') !== undefined, 'formulaire de modification');
+    const f = dialogueOuEchec('Modifier la série');
+    await attendre(() => f.querySelector('[data-testid="date-serie"]') !== null, 'formulaire rempli');
+    await remplir(champ('Longueur T2-P02', f), '20');
+    await toucher(bouton('Enregistrer', f));
+    await attendre(() => serie(b, SERIE_LAITUE)?.longueur_m === 20, 'modification écrite');
+    await attendre(() => conteneur.querySelector('[data-testid="saisie-annulable"]') !== null, 'bandeau « Annuler »');
+    const bandeau = conteneur.querySelector<HTMLElement>('[data-testid="saisie-annulable"]');
+    if (bandeau === null) return;
+
+    // L'autre téléphone supprime la série, reçue par la synchro pendant les 10 s du bandeau.
+    const ailleurs = '2026-09-30T08:00:07.000Z';
+    b.base.recevoir('UPDATE serie SET supprime_le = ?, modifie_le = ? WHERE id = ?', [ailleurs, ailleurs, SERIE_LAITUE]);
+    const recue = serie(b, SERIE_LAITUE);
+    b.remiseAZero();
+    await toucher(bouton('Annuler', bandeau));
+    const messages = (): string =>
+      [...conteneur.querySelectorAll<HTMLElement>('[role="alert"], [role="status"]')].map((el) => texte(el)).join(' | ');
+    for (let k = 0; k < 40 && !messages().includes('modifié entre-temps'); k++) await patienter(5);
+    expect(messages(), 'un message visible dit « modifié entre-temps »').toContain('modifié entre-temps');
+    expect(serie(b, SERIE_LAITUE), 'la série supprimée ailleurs n’est pas ressuscitée ni retouchée').toEqual(recue);
+    verifierOrdres(b);
   });
 });

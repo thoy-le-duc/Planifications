@@ -22,6 +22,15 @@ import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveille
  *   - cibles ≥ 56 px et contraste AA dans le formulaire ; à 360 px, pas de défilement horizontal ;
  *   - hors ligne : la série s'enregistre (1 saisie en attente) et reste après rechargement ;
  *     aucune violation de la CSP.
+ *
+ * Modifié par T12b (docs/backlog/T12b-serie-suites.md) : le champ <input type="week"> est
+ * remplacé par le sélecteur de semaine maison. La semaine se lit dans data-semaine du sélecteur
+ * (au lieu de toHaveValue sur « Semaine »), « S21 → S22 » se fait par « Semaine suivante » (un
+ * geste, comme le fill d'avant : le compte de gestes ne change pas), et le recalcul se mesure du
+ * clic sur « Semaine suivante » (dans la page) au début de récolte affiché, au lieu d'une valeur
+ * posée dans le champ. Mêmes semaines, mêmes budgets. Ajouts T12b : aucun input[type=week], choix
+ * rapide ouvert à 360 px (cibles ≥ 56 px, pas de défilement horizontal), et le libellé « Récolte
+ * à partir de » qui tient dans son bouton à 360 et 390 px.
  */
 
 const BUDGET_AFFICHAGE_MS = 300;
@@ -43,6 +52,7 @@ const navigation = (page: Page) => page.getByRole('navigation', { name: 'Navigat
 const onglet = (page: Page, libelle: string) => navigation(page).locator('button').filter({ hasText: libelle });
 const formulaire = (page: Page, nom: 'Nouvelle série' | 'Modifier la série') => page.getByRole('dialog', { name: nom });
 const etatSynchro = (page: Page) => page.getByTestId('etat-synchro');
+const selecteurSemaine = (f: Locator) => f.getByTestId('selecteur-semaine');
 const ligne = (page: Page, emplacementId: string) => page.locator(`[data-testid="ligne-plan"][data-sorte="emplacement"][data-id="${emplacementId}"]`);
 
 async function ouvrirPlanches2027(page: Page): Promise<void> {
@@ -148,17 +158,20 @@ async function datesAffichees(f: Locator): Promise<Record<string, string>> {
 }
 
 /**
- * Pose la semaine `valeur` dans le formulaire ouvert et mesure, dans la page, le temps jusqu'à ce
- * que le début de récolte affiché vaille `attendu` (MutationObserver : pas de latence de Playwright).
+ * Touche « Semaine suivante » dans le formulaire ouvert et mesure, dans la page, le temps jusqu'à
+ * ce que le début de récolte affiché vaille `attendu` (MutationObserver : pas de latence de
+ * Playwright).
  */
-async function tempsRecalcul(page: Page, valeur: string, attendu: string): Promise<number> {
+async function tempsRecalcul(page: Page, attendu: string): Promise<number> {
   return page.evaluate(
-    ({ valeur, attendu }) =>
+    ({ attendu }) =>
       new Promise<number>((resolve, reject) => {
         const racine = document.querySelector('[data-testid="formulaire-serie"]');
-        const champ = racine === null ? null : racine.querySelector<HTMLInputElement>('input[type="week"]');
-        if (racine === null || champ === null) {
-          reject(new Error('formulaire ou champ « Semaine » absent'));
+        const selecteur = racine === null ? null : racine.querySelector('[data-testid="selecteur-semaine"]');
+        const suivante =
+          selecteur === null ? undefined : [...selecteur.querySelectorAll<HTMLButtonElement>('button')].find((b) => (b.getAttribute('aria-label') ?? b.textContent.trim()) === 'Semaine suivante');
+        if (racine === null || suivante === undefined) {
+          reject(new Error('formulaire ou bouton « Semaine suivante » absent'));
           return;
         }
         const lire = () => racine.querySelector('[data-testid="date-serie"][data-etape="debutRecolte"]')?.getAttribute('data-date');
@@ -175,12 +188,33 @@ async function tempsRecalcul(page: Page, valeur: string, attendu: string): Promi
           reject(new Error(`pas de recalcul vers ${attendu} en 5 s`));
         }, 5_000);
         t0 = performance.now();
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(champ, valeur);
-        champ.dispatchEvent(new Event('input', { bubbles: true }));
-        champ.dispatchEvent(new Event('change', { bubbles: true }));
+        suivante.click();
       }),
-    { valeur, attendu },
+    { attendu },
   );
+}
+
+/**
+ * Le libellé d'un radio d'ancre tient dans son bouton (<label>) : boîte du texte dans celle du
+ * bouton, aucun débordement, bouton ≥ 56 px.
+ */
+async function mesurerAncre(f: Locator, nom: string): Promise<{ bouton: DOMRect; texte: DOMRect; deborde: boolean }> {
+  return f.getByRole('radio', { name: nom }).evaluate((radio) => {
+    const bouton = radio.closest('label') ?? radio;
+    const plage = document.createRange();
+    plage.selectNodeContents(bouton);
+    const morceaux = [...plage.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+    const haut = Math.min(...morceaux.map((r) => r.top));
+    const bas = Math.max(...morceaux.map((r) => r.bottom));
+    const gauche = Math.min(...morceaux.map((r) => r.left));
+    const droite = Math.max(...morceaux.map((r) => r.right));
+    const b = bouton.getBoundingClientRect();
+    return {
+      bouton: b.toJSON() as DOMRect,
+      texte: { top: haut, bottom: bas, left: gauche, right: droite, height: bas - haut, width: droite - gauche } as DOMRect,
+      deborde: bouton.scrollHeight > bouton.clientHeight + 1 || bouton.scrollWidth > bouton.clientWidth + 1,
+    };
+  });
 }
 
 test('plan de culture hors ligne : la batavia de T02 en moins de 8 gestes, 300 ms, 100 ms', async ({ page, context }) => {
@@ -258,7 +292,8 @@ test('plan de culture hors ligne : la batavia de T02 en moins de 8 gestes, 300 m
     await appuiLong(page, colonne.x + colonne.width / 2, rangee.y + rangee.height / 2);
     await expect(f).toBeVisible();
     await expect(f.locator(`[data-testid="emplacement-serie"][data-emplacement="${EMPLACEMENT.t2p01}"]`)).toHaveCount(1);
-    await expect(f.getByLabel('Semaine')).toHaveValue('2027-W14');
+    await expect(selecteurSemaine(f)).toHaveAttribute('data-semaine', '2027-W14');
+    await expect(f.locator('input[type="week"]'), 'plus de champ type=week (T12b)').toHaveCount(0);
   });
 
   await test.step('la batavia de T02 : culture, itinéraire proposé, « récolte à partir de » S22 ; dates de T02', async () => {
@@ -270,9 +305,11 @@ test('plan de culture hors ligne : la batavia de T02 en moins de 8 gestes, 300 m
     await expect.poll(() => datesAffichees(f)).toEqual({ ...ATTENDU.bataviaPlantationS14 });
     gestes++;
     await f.getByRole('radio', { name: 'Récolte à partir de' }).click();
-    await expect(f.getByLabel('Semaine')).toHaveValue('2027-W21');
+    await expect(selecteurSemaine(f)).toHaveAttribute('data-semaine', '2027-W21');
     gestes++;
-    await f.getByLabel('Semaine').fill('2027-W22');
+    await selecteurSemaine(f).getByRole('button', { name: 'Semaine suivante', exact: true }).click();
+    await expect(selecteurSemaine(f)).toHaveAttribute('data-semaine', '2027-W22');
+    await expect(selecteurSemaine(f).getByTestId('semaine-libelle')).toHaveText('S22 · 31 mai 2027');
     await expect.poll(() => datesAffichees(f)).toEqual({ ...ATTENDU.bataviaRecolteS22 });
     await expect(f.getByTestId('date-serie').filter({ hasText: 'S22' })).toHaveCount(1);
   });
@@ -285,6 +322,52 @@ test('plan de culture hors ligne : la batavia de T02 en moins de 8 gestes, 300 m
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
     const debordement = await f.evaluate((e) => e.scrollWidth - e.clientWidth);
     expect(debordement, 'le formulaire ne défile pas horizontalement').toBeLessThanOrEqual(0);
+    if (vue !== null) await page.setViewportSize(vue);
+  });
+
+  await test.step('T12b : « Récolte à partir de » tient dans son bouton à 360 et 390 px, bouton ≥ 56 px', async () => {
+    const vue = page.viewportSize();
+    for (const largeur of [360, 390]) {
+      await page.setViewportSize({ width: largeur, height: 780 });
+      const m = await mesurerAncre(f, 'Récolte à partir de');
+      const ou = `${String(largeur)} px`;
+      expect(m.bouton.height, `${ou} : hauteur du bouton`).toBeGreaterThanOrEqual(CIBLE_MIN_PX);
+      expect(m.bouton.width, `${ou} : largeur du bouton`).toBeGreaterThanOrEqual(CIBLE_MIN_PX);
+      expect(m.texte.height, `${ou} : le texte n’est pas plus haut que le bouton`).toBeLessThanOrEqual(m.bouton.height);
+      expect(m.texte.top, `${ou} : le texte n’est pas rogné en haut`).toBeGreaterThanOrEqual(m.bouton.top - 0.5);
+      expect(m.texte.bottom, `${ou} : le texte n’est pas rogné en bas`).toBeLessThanOrEqual(m.bouton.bottom + 0.5);
+      expect(m.texte.left, `${ou} : le texte ne déborde pas à gauche`).toBeGreaterThanOrEqual(m.bouton.left - 0.5);
+      expect(m.texte.right, `${ou} : le texte ne déborde pas à droite`).toBeLessThanOrEqual(m.bouton.right + 0.5);
+      expect(m.deborde, `${ou} : aucun débordement dans le bouton`).toBe(false);
+    }
+    if (vue !== null) await page.setViewportSize(vue);
+  });
+
+  await test.step('T12b : choix rapide de la semaine à 360 px : cibles ≥ 56 px, pas de défilement horizontal, Échap le ferme', async () => {
+    const vue = page.viewportSize();
+    await page.setViewportSize({ width: 360, height: 780 });
+    const ouvrirChoix = selecteurSemaine(f).getByRole('button', { name: /^Choisir la semaine/ });
+    await ouvrirChoix.click();
+    const choix = page.getByRole('dialog', { name: /^Choisir la semaine/ });
+    await expect(choix).toBeVisible();
+    await expect(choix.getByTestId('choix-semaine')).toHaveCount(52);
+    const tailles = await choix.locator('button').evaluateAll((els) =>
+      els.map((e) => {
+        const r = e.getBoundingClientRect();
+        return { nom: e.getAttribute('aria-label') ?? e.textContent.trim(), largeur: r.width, hauteur: r.height };
+      }),
+    );
+    expect(tailles.length).toBeGreaterThan(52);
+    for (const t of tailles) {
+      expect(t.largeur, `choix rapide, 360 px : largeur de « ${t.nom} »`).toBeGreaterThanOrEqual(CIBLE_MIN_PX);
+      expect(t.hauteur, `choix rapide, 360 px : hauteur de « ${t.nom} »`).toBeGreaterThanOrEqual(CIBLE_MIN_PX);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), 'choix rapide ouvert : pas de défilement horizontal').toBeLessThanOrEqual(360);
+    expect(await choix.evaluate((e) => e.scrollWidth - e.clientWidth), 'le choix rapide ne défile pas horizontalement').toBeLessThanOrEqual(0);
+    await page.keyboard.press('Escape');
+    await expect(choix).toHaveCount(0);
+    await expect(f, 'Échap ne ferme que le choix rapide').toBeVisible();
+    await expect(selecteurSemaine(f)).toHaveAttribute('data-semaine', '2027-W22');
     if (vue !== null) await page.setViewportSize(vue);
   });
 
@@ -305,11 +388,14 @@ test('plan de culture hors ligne : la batavia de T02 en moins de 8 gestes, 300 m
     await page.getByRole('dialog', { name: 'Détail de la série' }).getByRole('button', { name: 'Modifier la série' }).click();
     const m = formulaire(page, 'Modifier la série');
     await expect(m).toBeVisible();
-    await expect(m.getByLabel('Semaine')).toHaveValue('2027-W22');
+    await expect(selecteurSemaine(m)).toHaveAttribute('data-semaine', '2027-W22');
+    // Chaque mesure avance d'une semaine (« Semaine suivante ») : S23, S24… S27.
     const semaines = [23, 24, 25, 26, 27];
     const serie = await repeterMesure(REPETITIONS_MESURE, async (i) => {
       const s = semaines[i] ?? 23;
-      return tempsRecalcul(page, `2027-W${String(s)}`, lundiDeSemaine(2027, s));
+      const ms = await tempsRecalcul(page, lundiDeSemaine(2027, s));
+      await expect(selecteurSemaine(m)).toHaveAttribute('data-semaine', `2027-W${String(s)}`);
+      return ms;
     });
     console.log(decrireSerie('recalcul du formulaire (semaine changée)', serie, BUDGET_RECALCUL_MS));
     expect(serie.mediane).toBeLessThan(BUDGET_RECALCUL_MS);

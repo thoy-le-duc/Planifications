@@ -1,6 +1,8 @@
 /**
  * Contrat de T12 — plan de culture : créer et modifier une série (docs/backlog/T12-plan-de-
- * culture.md, « Décisions du chef »). Types et constantes seuls : les tests chargent les modules
+ * culture.md, « Décisions du chef »), amendé par T12b (docs/backlog/T12b-serie-suites.md :
+ * sélecteur de semaine maison, libellé de l'ancre, N1, N2, N3, N5 ; voir « T12b » plus bas et
+ * ../suites.test.tsx). Types et constantes seuls : les tests chargent les modules
  * par import dynamique (chemin tenu dans une variable), leur typage ne dépend pas du code pas
  * encore écrit.
  *
@@ -49,8 +51,10 @@
  *     « Semis » (semis direct). « Semis » est désactivé pour un plant acheté (validerSerie le
  *     refuse). Changer d'ancre NE CHANGE PAS les dates : la semaine du formulaire devient celle
  *     de la date calculée de l'étape choisie (plantation S14 → récolte S21, maquette Serie) ;
- *   - Semaine : <input type="week"> nommé « Semaine », value 'AAAA-Www'. ancre_date = le lundi
- *     de cette semaine (l'interface parle en semaines, le stockage en dates) ;
+ *   - Semaine : sélecteur de semaine maison (T12b, voir « Sélecteur de semaine » plus bas), plus
+ *     AUCUN <input type="week">. ancre_date = le lundi de cette semaine (l'interface parle en
+ *     semaines, le stockage en dates), sauf N1 (T12b) : une série dont l'ancre n'est pas un
+ *     lundi la garde tant que la semaine n'est pas touchée ;
  *   - Emplacements : un élément data-testid="emplacement-serie", data-emplacement=<id> par
  *     planche choisie (texte : son code), avec un champ nombre nommé « Longueur <code> » (en m,
  *     par défaut la longueur de la planche) et un bouton « Retirer <code> » ; un <select> nommé
@@ -156,6 +160,59 @@
  * Détail d'une barre de SÉRIE : un bouton « Modifier la série » en plus de « Fermer », qui ouvre
  *   le formulaire en modification. Plantation ou couverture : lecture seule, « Fermer » seul.
  *
+ * ── T12b : sélecteur de semaine ──────────────────────────────────────────────────────────────
+ *
+ * Remplace <input type="week"> (sans sélecteur sur iOS Safari ni Firefox Android). Aucun
+ * input[type="week"] dans le document.
+ *   - racine role="group", nom accessible « Semaine », data-testid="selecteur-semaine",
+ *     data-semaine='AAAA-Www' (la semaine choisie) ;
+ *   - libellé visible data-testid="semaine-libelle", aria-live="polite" : « S22 · 31 mai 2027 »
+ *     = « S » + numéro ISO sur deux chiffres, « · », le lundi de la semaine (jour, mois court
+ *     comme les dates du formulaire : « 4 janv. », « 28 déc. ») et l'année ;
+ *   - trois <button type="button"> : « Semaine précédente », « Semaine suivante » (noms
+ *     exacts ; passage d'année compris : 2026-W53 → 2027-W01) et un bouton dont le nom commence
+ *     par « Choisir la semaine », aria-haspopup="dialog", aria-expanded="true|false" ;
+ *   - choix rapide : « Choisir la semaine » ouvre role="dialog" dont le nom commence par
+ *     « Choisir la semaine », data-testid="choix-semaines", data-annee=<année affichée> (celle
+ *     de la semaine choisie à l'ouverture) ; boutons « Année précédente » et « Année suivante » ;
+ *     un bouton data-testid="choix-semaine", data-semaine='AAAA-Www' par semaine ISO de l'année
+ *     (52 ou 53), texte « S22 » et la date courte du lundi ; la semaine choisie porte
+ *     aria-current="true" et reçoit le focus à l'ouverture. Toucher une semaine la choisit, ferme
+ *     le choix et rend le focus au bouton « Choisir la semaine ». Échap ferme le choix sans rien
+ *     changer et SANS fermer le formulaire ;
+ *   - cibles ≥ 56 × 56 px (choix rapide ouvert compris), sans défilement horizontal à 360 px
+ *     (e2e).
+ *
+ * ── T12b : ancre, N1, N2, N3 ─────────────────────────────────────────────────────────────────
+ *
+ * Libellé de l'ancre : « Récolte à partir de » tient dans son bouton (e2e, 360 et 390 px) : le
+ *   texte ne dépasse pas la boîte du <label>, qui garde ≥ 56 px. Le nom accessible du radio
+ *   reste « Récolte à partir de ».
+ * N1 : en modification, une ancre_date qui n'est pas un lundi (série importée) est gardée tant que
+ *   la semaine n'est pas touchée : les dates affichées sont celles de cette ancre, et changer la
+ *   longueur (ou une planche) n'écrit ni ancre_date ni prevu_*. Toucher la semaine ramène
+ *   l'ancre au lundi de la semaine choisie.
+ * N2 (interprétation du testeur, la plus simple, à trancher par le chef) : une série dont la
+ *   variété a été supprimée de la bibliothèque la GARDE : le formulaire l'affiche (« Grenobloise »),
+ *   compte sa germination, et « Enregistrer » n'écrit pas variete_id. La variété supprimée n'est
+ *   toujours pas proposée à la recherche de culture.
+ * N3 : rotation_acceptee est effacé (null) à l'enregistrement quand il ne correspond plus :
+ *   culture changée (autre espèce), ou plus aucune alerte rouge (orange seule ou rien). Il est
+ *   gardé, sans nouvelle question, si l'alerte rouge de la même famille est toujours là.
+ *
+ * ── T12b : N5, bandeau « Annuler » face à un autre téléphone ─────────────────────────────────
+ *
+ * Même règle que T24, décision 9 (apps/web/src/ecrans/itineraires/ecritures.ts, `ramener`) :
+ *   - colonne par colonne : une ligne (série ou occupation) n'est ramenée que si chaque colonne
+ *     que la saisie a changée vaut encore ce qu'elle a écrit et que personne ne l'a supprimée ;
+ *     ramenée, seules ces colonnes reprennent leur valeur d'avant (statut, nombre_plants… changés
+ *     ailleurs restent) ;
+ *   - sinon la ligne reste telle quelle (et les occupations d'une série laissée aussi) ;
+ *   - une planche ajoutée ailleurs, qui ne collerait plus aux dates rétablies, bloque le retour
+ *     de sa série ; ce qui reste passe toujours validerSerie / validerOccupation ;
+ *   - annuler() rend alors un message contenant « modifié entre-temps », que l'écran Planches
+ *     affiche (role="alert" ou role="status") ; null si tout a été défait.
+ *
  * ── Amorçage des tests de bout en bout (src/donnees/amorcer.ts) ──────────────────────────────
  *
  * /diagnostic/amorcer.html?jeu=serie : mêmes garde-fous que T11 et T13 (jamais connect(), file
@@ -166,7 +223,7 @@
 import type { PorteDonnees } from '@planif/sync';
 import type { ReactElement } from 'react';
 
-/** D'où part le formulaire. `semaine` : 'AAAA-Www' (valeur d'un <input type="week">). */
+/** D'où part le formulaire. `semaine` : 'AAAA-Www' (semaine ISO, comme `data-semaine` du sélecteur). */
 export type DepartSerie =
   | {
       readonly sorte: 'creation';
@@ -180,8 +237,11 @@ export type DepartSerie =
 export interface SaisieSerieAnnulable {
   /** Ce que dit le bandeau : la culture (« Batavia Grenobloise »). */
   readonly texte: string;
-  /** Défait la saisie, en une transaction. */
-  annuler(): Promise<void>;
+  /**
+   * Défait la saisie, en une transaction (T12b, N5 : règle de T24, décision 9). Rend null si tout
+   * a été défait, sinon le message à montrer, qui contient « modifié entre-temps ».
+   */
+  annuler(): Promise<string | null>;
 }
 
 export interface ProprietesFormulaireSerie {

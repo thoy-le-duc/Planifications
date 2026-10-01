@@ -6,7 +6,7 @@
 import { act } from 'react';
 import { expect } from 'vitest';
 import { creerPorte, SCHEMA_LOCAL, type BaseLocale, type PorteDonnees } from '@planif/sync';
-import { validerOccupation, validerSerie, type Id, type Serie } from '@planif/core';
+import { ecartEnJours, lundiDeSemaine, validerOccupation, validerSerie, type DateCalendaire, type Id, type Serie } from '@planif/core';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../../packages/sync/src/test/base-memoire.ts';
 import { ecrireFermeSerie, FERME, UTILISATEUR } from './ferme-serie.ts';
 
@@ -235,4 +235,57 @@ export function dialogueOuEchec(debutNom: string): HTMLElement {
   expect(d, `dialogue « ${debutNom}… » (ouverts : ${dialogues().map(nomAccessible).join(' | ')})`).toBeDefined();
   if (d === undefined) throw new Error(`dialogue ${debutNom} absent`);
   return d;
+}
+
+// ── Sélecteur de semaine maison (T12b) ───────────────────────────────────────────────────────
+
+/** Le sélecteur de semaine (data-testid="selecteur-semaine") dans `dans`. */
+export function selecteurSemaine(dans: ParentNode = document): HTMLElement {
+  const s = dans.querySelector<HTMLElement>('[data-testid="selecteur-semaine"]');
+  expect(s, 'sélecteur de semaine data-testid="selecteur-semaine" (T12b)').not.toBeNull();
+  if (s === null) throw new Error('sélecteur de semaine absent');
+  return s;
+}
+
+/** Semaine choisie, 'AAAA-Www' (data-semaine du sélecteur). */
+export const valeurSemaine = (dans: ParentNode = document): string => selecteurSemaine(dans).dataset.semaine ?? '';
+
+/** Le choix rapide ouvert (role="dialog" nommé « Choisir la semaine… »), ou undefined. */
+export const choixSemaines = (): HTMLElement | undefined => dialogue('Choisir la semaine');
+
+/** Lundi d'une semaine 'AAAA-Www'. */
+function lundi(semaine: string): DateCalendaire {
+  const m = /^(\d{4})-W(\d{2})$/.exec(semaine);
+  if (m === null) throw new Error(`semaine ${semaine} : 'AAAA-Www' attendu`);
+  return lundiDeSemaine(Number(m[1]), Number(m[2]));
+}
+
+/**
+ * Choisit la semaine `valeur` comme le ferait le maraîcher : une semaine d'écart, la flèche
+ * (un geste) ; sinon le choix rapide (ouvrir, changer d'année au besoin, toucher la semaine).
+ */
+export async function choisirSemaine(dans: ParentNode, valeur: string): Promise<void> {
+  const actuelle = valeurSemaine(dans);
+  if (actuelle === valeur) return;
+  const ecart = ecartEnJours(lundi(actuelle), lundi(valeur)) / 7;
+  if (ecart === 1 || ecart === -1) {
+    await toucher(bouton(ecart === 1 ? 'Semaine suivante' : 'Semaine précédente', selecteurSemaine(dans)));
+  } else {
+    await toucher(bouton(/^Choisir la semaine/, selecteurSemaine(dans)));
+    await attendre(() => choixSemaines() !== undefined, 'choix rapide « Choisir la semaine » ouvert');
+    const annee = valeur.slice(0, 4);
+    for (let k = 0; k < 10; k++) {
+      const c = choixSemaines();
+      const affichee = c?.dataset.annee ?? '';
+      if (c === undefined || affichee === annee) break;
+      await toucher(bouton(Number(affichee) < Number(annee) ? 'Année suivante' : 'Année précédente', c));
+    }
+    const c = choixSemaines();
+    expect(c?.dataset.annee, `choix rapide sur l’année ${annee}`).toBe(annee);
+    const cible = c?.querySelector<HTMLElement>(`[data-testid="choix-semaine"][data-semaine="${valeur}"]`) ?? null;
+    expect(cible, `semaine ${valeur} proposée dans le choix rapide`).not.toBeNull();
+    if (cible === null) return;
+    await toucher(cible);
+  }
+  await attendre(() => valeurSemaine(dans) === valeur, `semaine ${valeur} choisie (affichée : ${valeurSemaine(dans)})`);
 }
