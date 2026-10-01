@@ -151,18 +151,13 @@ export interface MaillonChaine {
  * les corrections de l'origine, les corrections de ces corrections, et toutes leurs annulations,
  * dans l'ordre (origine d'abord, puis horodatage, puis id). null si `id` est introuvable dans la
  * ferme, ou si la chaîne dépasse PROFONDEUR_MAX_CHAINE niveaux (jamais de chaîne partielle).
- * Montée par la clé composée (ferme_id, remplace_evenement_id) : toute la chaîne est de la ferme.
+ * Toute la chaîne est de la ferme (clé composée (ferme_id, remplace_evenement_id)).
  */
 export async function lireMaillons(tx: TransactionDb, id: string, fermeId: string): Promise<MaillonChaine[] | null> {
+  // Origine tenue par la base (T10h, evenement.origine_id) : plus de montée. Une chaîne trop
+  // profonde reste refusée par la descente ci-dessous.
   const racine = await tx.execute<{ id: string }>(
-    sql`WITH RECURSIVE montee(id, parent, profondeur) AS (
-          SELECT id, remplace_evenement_id, 0 FROM evenement WHERE id = ${id}::uuid AND ferme_id = ${fermeId}::uuid
-          UNION ALL
-          SELECT e.id, e.remplace_evenement_id, m.profondeur + 1
-          FROM evenement e JOIN montee m ON e.id = m.parent
-          WHERE m.profondeur < ${PROFONDEUR_MAX_CHAINE}
-        )
-        SELECT id::text AS id FROM montee WHERE parent IS NULL`,
+    sql`SELECT origine_id::text AS id FROM evenement WHERE id = ${id}::uuid AND ferme_id = ${fermeId}::uuid`,
   );
   const origine = racine.rows[0]?.id;
   if (origine === undefined) return null;

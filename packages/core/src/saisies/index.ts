@@ -97,7 +97,10 @@ const CATEGORIES_INTERVENTION = [
 const NATURES = ['ravageur', 'maladie', 'stade', 'autre'] as const satisfies readonly NatureObservation[];
 const GRAVITES = ['faible', 'moyenne', 'forte'] as const;
 
-/** Colonnes d'une ligne `evenement` ; `cree_le` (remplie par le serveur) est tolérée et ignorée. */
+/**
+ * Colonnes d'une ligne `evenement` ; `cree_le` et `origine_id` (remplies par le serveur, T10h pour
+ * la seconde) sont tolérées et ignorées : une ligne relue de la base locale se valide telle quelle.
+ */
 const COLONNES = new Set([
   'id',
   'ferme_id',
@@ -115,6 +118,7 @@ const COLONNES = new Set([
   'remplace_evenement_id',
   'detail',
   'cree_le',
+  'origine_id',
 ]);
 
 /** Clés de chaque Detail* de T01 (intervention : clés communes, puis celles de la catégorie). */

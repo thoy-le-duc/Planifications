@@ -24,7 +24,8 @@ export type Ligne<T extends { $inferSelect: object }> = Omit<T['$inferSelect'], 
 export type LigneSerie = Ligne<typeof serie>;
 export type LigneOccupation = Ligne<typeof occupation>;
 export type LigneEmplacement = Ligne<typeof emplacement>;
-export type LigneEvenement = Ligne<typeof evenement>;
+/** Sans `origineId` : l'origine de la chaîne est remplie par la base (déclencheur, T10h). */
+export type LigneEvenement = Omit<Ligne<typeof evenement>, 'origineId'>;
 
 /** Ligne incohérente avec le modèle (les contraintes de la base l'empêchent normalement). */
 export class LigneInvalide extends Error {
