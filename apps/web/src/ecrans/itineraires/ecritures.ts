@@ -269,10 +269,15 @@ const et = (...cs: readonly Condition[]): Condition => ({ sql: cs.map((c) => c.s
 /** Chaque colonne vaut encore ce que nous avions écrit, et `supprime_le` ce qu'il valait après (T24c N3). */
 function conditionIntacte(l: LigneEcrite): Condition {
   const cles = Object.keys(l.apres).filter((c) => c !== 'supprime_le');
-  return {
-    sql: [...cles, 'supprime_le'].map((c) => ` AND ${c} IS ?`).join(''),
-    parametres: [...cles.map((c) => l.apres[c] ?? null), l.supprimeLe],
-  };
+  // Une occupation passée dans une autre série entre-temps n'est pas touchée (T24c B1).
+  const serie = l.table === 'occupation' ? { sql: ' AND serie_id IS ?', parametres: [l.serieId] } : et();
+  return et(
+    {
+      sql: [...cles, 'supprime_le'].map((c) => ` AND ${c} IS ?`).join(''),
+      parametres: [...cles.map((c) => l.apres[c] ?? null), l.supprimeLe],
+    },
+    serie,
+  );
 }
 
 /** Couples (catégorie, libellé) cités par les travaux prévus d'un texte de paramètres. */
