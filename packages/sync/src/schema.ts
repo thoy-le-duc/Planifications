@@ -51,7 +51,7 @@ const INDEX: Partial<Record<NomTableLocale, Record<string, string[]>>> = {
   evenement: {
     ferme_date: ['ferme_id', 'date'],
     ferme_horodatage: ['ferme_id', 'horodatage', 'date'],
-    serie: ['serie_id', 'type', 'date', 'remplace_sorte', 'detail'],
+    serie: ['serie_id', 'ferme_id', 'type', 'date', 'remplace_sorte', 'detail'],
     campagne: ['campagne_id'],
     remplacement: ['remplace_evenement_id', 'ferme_id', 'origine_id', 'remplace_sorte', 'horodatage'],
   },

@@ -375,40 +375,45 @@ const EN_VIGUEUR = `((e.remplace_sorte IS NULL AND e.id NOT IN (SELECT value FRO
  * Réalisés des cultures actives, agrégés dans la base (première date par culture, par type et par
  * étape) : le journal d'une grande ferme compte des dizaines de milliers de lignes, seules
  * quelques-unes par culture arrivent jusqu'à la page. L'étape n'est lue que pour un réalisé.
- * Pas de filtre sur la ferme (il ouvrirait chaque ligne du journal) : les séries et les campagnes
- * lues sont celles de la ferme, et le serveur refuse un événement qui vise la culture d'une autre.
+ * Filtrées par la ferme, comme tout le journal : un événement d'une autre ferme posé sur une
+ * culture de celle-ci ne compte jamais (isolement entre fermes).
  *
- * Séries (liste JSON) : par l'index `serie` (série, type, date, sorte, detail), qui porte tout ce
- * que la requête lit, sauf l'id (`EN_VIGUEUR`). Les récoltes à part, regroupées par la seule
+ * Séries (liste JSON, puis la ferme) : par l'index `serie` (série, ferme, type, date, sorte,
+ * detail), qui porte tout ce que la requête lit, ferme comprise, sauf l'id (`EN_VIGUEUR`). Les récoltes à part, regroupées par la seule
  * série dans l'ordre de l'index, sans tri ; un événement vise au plus une culture
  * (`au_plus_une_culture`) : pas de campagne à regrouper.
  */
 const SQL_REALISES_SERIES = `SELECT e.serie_id, 'recolte' AS type, NULL AS etape, MIN(e.date) AS date
   FROM evenement e
-  WHERE e.serie_id IN (${DANS}) AND e.type = 'recolte' AND json_valid(e.detail) AND ${EN_VIGUEUR}
+  WHERE e.serie_id IN (${DANS}) AND e.ferme_id = ? AND e.type = 'recolte' AND json_valid(e.detail) AND ${EN_VIGUEUR}
   GROUP BY e.serie_id
   UNION ALL
   SELECT e.serie_id, 'realise' AS type, json_extract(e.detail, '$.etape') AS etape, MIN(e.date) AS date
   FROM evenement e
-  WHERE e.serie_id IN (${DANS}) AND e.type = 'realise' AND json_valid(e.detail) AND ${EN_VIGUEUR}
+  WHERE e.serie_id IN (${DANS}) AND e.ferme_id = ? AND e.type = 'realise' AND json_valid(e.detail) AND ${EN_VIGUEUR}
   GROUP BY e.serie_id, etape`;
-/** Campagnes (liste JSON) : par l'index `campagne` ; une saisie d'une série active y est déjà comptée. */
+/**
+ * Campagnes (liste JSON, séries actives, puis la ferme) : par l'index `campagne` (la ferme lue
+ * dans la ligne, écartée de l'index ferme_date par `+` : quelques centaines de récoltes) ; une
+ * saisie d'une série active y est déjà comptée.
+ */
 const SQL_REALISES_CAMPAGNES = `SELECT e.serie_id, e.campagne_id, e.type,
     CASE e.type WHEN 'realise' THEN json_extract(e.detail, '$.etape') END AS etape, MIN(e.date) AS date
   FROM evenement e
-  WHERE e.campagne_id IN (${DANS}) AND (e.serie_id IS NULL OR e.serie_id NOT IN (${DANS}))
+  WHERE e.campagne_id IN (${DANS}) AND (e.serie_id IS NULL OR e.serie_id NOT IN (${DANS})) AND +e.ferme_id = ?
     AND e.type IN ('realise', 'recolte') AND json_valid(e.detail) AND ${EN_VIGUEUR}
   GROUP BY e.serie_id, e.campagne_id, e.type, etape`;
 
 /**
  * T22 : interventions en vigueur des séries actives (ni annulées, ni remplacées par une
  * correction, ni les annulations elles-mêmes) : elles soldent les travaux prévus du semainier.
+ * Liste JSON des séries, puis la ferme (index `serie`).
  */
 const SQL_INTERVENTIONS = `SELECT e.serie_id, e.date, json_extract(e.detail, '$.categorie') AS categorie,
     json_extract(e.detail, '$.type') AS type_intervention,
     json_extract(e.detail, '$.occurrenceVisee') AS occurrence_visee
   FROM evenement e
-  WHERE e.serie_id IN (${DANS}) AND e.type = 'intervention' AND json_valid(e.detail) AND ${EN_VIGUEUR}`;
+  WHERE e.serie_id IN (${DANS}) AND e.ferme_id = ? AND e.type = 'intervention' AND json_valid(e.detail) AND ${EN_VIGUEUR}`;
 
 /** Champs du detail lus pour l'historique : chemin JSON, colonne de la ligne. */
 const CHAMPS_DETAIL = [
@@ -556,10 +561,10 @@ export async function lireJournee(
   const vigueur = [texte(chaines?.origines) || '[]', texte(chaines?.gagnants) || '[]'];
   const jsonSeries = listeJson(idsSeries);
   const realises = [
-    ...(await lire(SQL_REALISES_SERIES, [jsonSeries, ...vigueur, jsonSeries, ...vigueur])),
-    ...(idsCampagnes.length === 0 ? [] : await lire(SQL_REALISES_CAMPAGNES, [listeJson(idsCampagnes), jsonSeries, ...vigueur])),
+    ...(await lire(SQL_REALISES_SERIES, [jsonSeries, fermeId, ...vigueur, jsonSeries, fermeId, ...vigueur])),
+    ...(idsCampagnes.length === 0 ? [] : await lire(SQL_REALISES_CAMPAGNES, [listeJson(idsCampagnes), jsonSeries, fermeId, ...vigueur])),
   ];
-  const interventions = await lire(SQL_INTERVENTIONS, [jsonSeries, ...vigueur]);
+  const interventions = await lire(SQL_INTERVENTIONS, [jsonSeries, fermeId, ...vigueur]);
   const recents = (await lire(SQL_RECENTS, [...vigueur, fermeId, depuis, ...vigueur, fermeId, horodatageDepuis, depuis])).map(ligneRecente);
   // Historique : les cultures terminées ou passées qu'il nomme, lues en plus (rarement).
   const connues = new Set([...idsSeries, ...idsCampagnes]);
