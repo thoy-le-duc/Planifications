@@ -188,10 +188,11 @@ export function App() {
       const f = e.ferme;
       if (f !== null && f !== prechargee) {
         prechargee = f;
-        // Échec : l'écran lira le plan lui-même à l'ouverture.
-        const plan = planches.then((m) => m.prechargerPlan(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
-        // La journée ensuite (l'écran l'attend) : le début du plan passe d'abord à la base.
-        ecranDuJour.then((m) => m.prechargerJournee(f.porte, f.fermeId, m.jourDuTelephone(), plan)).catch(() => undefined);
+        // Échec : l'écran lira le plan (ou la journée) lui-même à l'ouverture. Les deux lectures
+        // partent ensemble, sans s'attendre (T13c) : Aujourd'hui est l'écran d'accueil, il ne
+        // patiente jamais derrière le plan d'une grande ferme ; la base les sert à tour de rôle.
+        planches.then((m) => m.prechargerPlan(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
+        ecranDuJour.then((m) => m.prechargerJournee(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
       }
     };
     import('./donnees/appli.ts').then(

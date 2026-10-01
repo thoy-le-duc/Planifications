@@ -123,11 +123,10 @@ export function suivreJournee(
 
 /**
  * Prépare la journée (base ouverte, avant l’affichage) : lue une fois (calculée à l’affichage), après
- * `apres` (le début du plan, préparé d'abord : la base ne sert qu'une requête à la fois, et la
- * journée d'une grande ferme ne doit pas retarder le tap sur « Planches »). L'écran ouvert entre
- * temps attend cette lecture au lieu d'en lancer une autre.
+ * `apres` s'il est donné. Au lancement, App ne lui fait rien attendre (T13c) : Aujourd'hui est
+ * l'écran d'accueil. L'écran ouvert entre temps attend cette lecture au lieu d'en lancer une autre.
  */
-export async function prechargerJournee(porte: PorteDonnees, fermeId: string, jour: string, apres: Promise<unknown>): Promise<void> {
+export async function prechargerJournee(porte: PorteDonnees, fermeId: string, jour: string, apres?: Promise<unknown>): Promise<void> {
   const s = suiviDe(porte, fermeId, jour);
   if (s.lignes === null) await relire(porte, fermeId, jour, s, apres).catch((e: unknown) => {
     if (!(e instanceof LectureAbandonnee)) throw e;
