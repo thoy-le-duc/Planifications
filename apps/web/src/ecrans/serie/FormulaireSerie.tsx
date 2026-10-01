@@ -33,7 +33,7 @@ import {
   type ChoixCulture,
   type Saisie,
 } from './calculs.ts';
-import { entreeAnnulable, lireBibliotheque, lireEtatSerie, requeteHistorique, type EtatSerie, type Modification } from './donnees.ts';
+import { entreeAnnulable, lireBibliotheque, lireEtatSerie, lireVarieteDeSerie, requeteHistorique, type EtatSerie, type Modification } from './donnees.ts';
 import { SelecteurSemaine } from './SelecteurSemaine.tsx';
 import { annulerEntree, creerSerie, modifierSerie, ramenerSerie, SerieRefusee, type ContexteEcriture, type SerieAEcrire } from './ecritures.ts';
 
@@ -294,6 +294,7 @@ export function FormulaireSerie({
   const [occupe, setOccupe] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [historique, setHistorique] = useState<Modification[]>([]);
+  const [varieteGardee, setVarieteGardee] = useState<string | null>(null);
 
   const idTitre = useId();
   const idCulture = useId();
@@ -311,15 +312,23 @@ export function FormulaireSerie({
   // Lecture à l'ouverture : bibliothèque, et la série en modification.
   useEffect(() => {
     let actif = true;
-    const lectures = Promise.all([lireBibliotheque(porte, fermeId, jour), serieId === null ? Promise.resolve(null) : lireEtatSerie(porte, serieId)]);
+    const lectures = Promise.all([
+      lireBibliotheque(porte, fermeId, jour),
+      serieId === null ? Promise.resolve(null) : lireEtatSerie(porte, serieId),
+      serieId === null ? Promise.resolve(null) : lireVarieteDeSerie(porte, serieId),
+    ]);
     lectures.then(
-      ([b, e]) => {
+      ([lue, e, variete]) => {
         if (!actif) return;
         if (serieId !== null && !serieActive(e)) {
           setIntrouvable(true);
           return;
         }
+        // Variété de la série supprimée de la bibliothèque depuis : gardée pour cette série
+        // (affichée, germination comptée), jamais proposée à la recherche (N2).
+        const b = variete === null || lue.varietes.some((v) => v.id === variete.id) ? lue : { ...lue, varietes: [...lue.varietes, variete] };
         setBib(b);
+        setVarieteGardee(variete !== null && b !== lue ? variete.id : null);
         setEtat(e);
         setSaisie(saisieInitiale(b, depart, e, jour));
       },
@@ -356,7 +365,7 @@ export function FormulaireSerie({
 
   const exclure = useMemo(() => new Set((etat?.occupations ?? []).map((o) => String(o.id))), [etat]);
   const calcul = useMemo(() => (bib === null || saisie === null ? null : calculer({ bib, exclure }, saisie)), [bib, saisie, exclure]);
-  const cultures = useMemo(() => (bib === null ? [] : culturesDe(bib)), [bib]);
+  const cultures = useMemo(() => (bib === null ? [] : culturesDe(bib).filter((c) => varieteGardee === null || c.varieteId !== varieteGardee)), [bib, varieteGardee]);
   const trouvees = useMemo(() => chercherCultures(cultures, recherche), [cultures, recherche]);
   const cultureChoisie = saisie?.culture ?? null;
   const itineraires = useMemo(() => (bib === null || cultureChoisie === null ? [] : itinerairesDe(bib, cultureChoisie)), [bib, cultureChoisie]);
