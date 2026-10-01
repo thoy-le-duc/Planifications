@@ -45,7 +45,8 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T24c](T24c-annuler-types-suites.md) | « Annuler » des itinéraires : types d'intervention et course lecture/écriture | T24b | fait |
 | [T24d](T24d-annuler-bloque-message.md) | « Annuler » bloqué en silence : prévenir le maraîcher | T24c | à faire |
 | [T13](T13-saisie-terrain.md) | Saisie terrain hors ligne : réalisé et récolte | T06, T10, T10c, T11, T16 | fait |
-| [T13b](T13b-aujourdhui-grande-ferme.md) | Aujourd'hui : rapide sur une grande ferme | T13 | à faire |
+| [T13b](T13b-aujourdhui-grande-ferme.md) | Aujourd'hui : rapide sur une grande ferme | T13 | en revue |
+| [T13c](T13c-aujourdhui-suites.md) | Aujourd'hui : suites de la relecture (relecture incrémentale, lancement, masque, focus) | T13b | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16 | à faire |
 | [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | fait |
