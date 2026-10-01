@@ -578,7 +578,7 @@ export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, 
         types,
         aujourdhui,
       );
-      surEnregistre({ texte: String(ligne.nom), annuler: () => ramener(ctx, avant, types) });
+      surEnregistre({ texte: String(ligne.nom), annuler: () => ramener(ctx, avant) });
       surFermer();
     } catch (e) {
       console.error('Itinéraire non enregistré', e);
