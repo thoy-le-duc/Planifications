@@ -24,7 +24,7 @@
  *   n'est pas recopié (contrainte refus_synchro_sans_doublon).
  * - Rien de ce que le téléphone envoie ne donne un 500 : textes du refus nettoyés (U+0000) et
  *   tronqués, données trop grosses non conservées, erreur de données de la base = refus.
- * - Limites (T10d) : plus de 500 écritures ou corps de plus de 5 Mio → 200, refus
+ * - Limites (T10d, T10f) : plus de 500 écritures ou corps de plus de 6 Mio → 200, refus
  *   'lot_trop_gros' (avant toute autre règle), rien d'écrit : la file PowerSync avance toujours.
  *   Un refus par écriture plausible (dédupliqué), une seule ligne récapitulative pour le reste :
  *   un envoi forgé ne se multiplie pas en milliers de refus (relecture de sécurité).
@@ -40,7 +40,7 @@
  *   puis id) est refusée ; le serveur écrit lui-même l'écart de stock d'un remplacement
  *   (references.ts, stock.ts). Contrat : recoltes-annulees.integration.test.ts.
  */
-import { ECRITURES_MAX_PAR_LOT, TAILLE_MAX_PAR_LOT, type Id } from '@planif/core';
+import { ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
 import {
   evenement,
   fermesDeLUtilisateur,
@@ -79,12 +79,16 @@ const MESSAGES: Readonly<Record<MotifRefus, string>> = {
   table_interdite: 'Modification refusée : cette donnée ne se modifie pas depuis le téléphone.',
   ecriture_invalide: 'Saisie non enregistrée, données invalides',
   lot_trop_gros:
-    'Saisie non enregistrée : envoi trop volumineux (plus de 500 saisies ou de 5 Mio en une fois). Ressaisissez-la.',
+    'Saisie non enregistrée : envoi trop volumineux (plus de 500 saisies ou de 6 Mio en une fois). Ressaisissez-la.',
   recolte_annulee: 'Cette récolte a été annulée : elle ne se corrige plus. Pour la rétablir, saisissez une nouvelle récolte.',
 };
 
-/** Corps HTTP au plus, la même borne que la porte du téléphone (au-delà : 200, chaque écriture refusée 'lot_trop_gros', rien d'écrit). */
-export const TAILLE_MAX_CORPS = TAILLE_MAX_PAR_LOT;
+/**
+ * Corps HTTP au plus (au-delà : 200, chaque écriture refusée 'lot_trop_gros', rien d'écrit). La
+ * porte du téléphone s'arrête à 5 Mio d'ordres (TAILLE_MAX_PAR_LOT) ; le corps envoyé peut peser
+ * plus (PowerSync y range toutes les colonnes de la ligne) : 6 Mio laissent la marge (T10f).
+ */
+export const TAILLE_MAX_CORPS = 6 * 1_048_576;
 /** Limite dure du corps HTTP (au-delà : 413, le serveur cesse de lire ; rien d'écrit, aucun refus). */
 export const TAILLE_MAX_CORPS_DURE = 8 * 1_048_576;
 /**
