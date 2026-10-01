@@ -1,8 +1,8 @@
 /**
- * Démarrage de l'API : lit la configuration (config.ts, variables documentées là), vérifie le
- * relais SMTP (demarrage.ts), puis sert `creerApp`. Une configuration invalide arrête le
- * processus en code 1, avec son message ; un relais injoignable n'arrête rien (erreur sur la
- * sortie d'erreur), pour que la synchro démarre quand même.
+ * Démarrage de l'API : lit la configuration (config.ts, variables documentées là), puis sert
+ * `creerApp`. Une configuration invalide arrête le processus en code 1, avec son message. Le
+ * relais SMTP est vérifié en tâche de fond (demarrage.ts) : injoignable ou muet, il ne retarde
+ * ni n'arrête l'écoute (erreur sur la sortie d'erreur), pour que la synchro démarre quand même.
  */
 import { serve } from '@hono/node-server';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -21,8 +21,8 @@ try {
 }
 
 const cles = await trousseauDepuisJwks(config.jwtClesPrivees);
-// COURRIEL_CONSOLE=1 (développement, refusé en production par lireConfig) ou relais SMTP,
-// vérifié avant d'écouter.
+// COURRIEL_CONSOLE=1 (NODE_ENV=development seulement, lireConfig) ou relais SMTP, vérifié en
+// tâche de fond sans retarder l'écoute.
 const expediteur = await preparerExpediteur(config.courriel);
 
 const pool = new pg.Pool({ connectionString: config.databaseUrl });
