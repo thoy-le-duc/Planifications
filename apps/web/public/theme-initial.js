@@ -1,0 +1,1 @@
+{let t,m=document.querySelector('meta[name="theme-color"]');try{t=localStorage.getItem("planif.theme")}catch{}if(t=="clair"||t=="sombre")document.documentElement.dataset.theme=t;else t=matchMedia("(prefers-color-scheme: dark)").matches&&"sombre";m&&(m.content=t=="sombre"?"#8DCBA6":"#1F4D3A")}

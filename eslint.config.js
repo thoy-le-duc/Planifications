@@ -5,7 +5,19 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig(
-  { ignores: ['**/dist/**', '**/dist-synchro/**', '**/dist-essais/**', '**/dist-demo/**', '**/dev-dist/**', '**/playwright-report/**', '**/test-results/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/dist-synchro/**',
+      '**/dist-essais/**',
+      '**/dist-demo/**',
+      '**/dev-dist/**',
+      '**/playwright-report/**',
+      '**/test-results/**',
+      // T18 : script minifié, généré depuis les jetons, vérifié par apps/web/src/ui/theme-initial.test.ts.
+      'apps/web/public/theme-initial.js',
+    ],
+  },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   tseslint.configs.stylisticTypeChecked,
