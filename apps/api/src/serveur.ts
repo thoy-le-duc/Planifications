@@ -13,12 +13,22 @@
  *   (`decrireErreur`, jamais son message) et la connexion est coupée, sans terminer la réponse :
  *   un export tronqué ne passe jamais pour complet. @hono/node-server, lui, écrirait l'erreur
  *   brute sur la console et enverrait `Error: <message>` au client, ou une réponse tronquée
- *   d'apparence complète.
+ *   d'apparence complète. Un client parti n'est pas une erreur du serveur : rien au journal.
+ * - Erreur levée par `fetch` lui-même (synchrone ou non : flux verrouillé, `start` qui lève…) :
+ *   500 et une ligne au journal, rien sur la console.
+ *
+ * RÈGLES pour tout corps de réponse en flux (export, téléchargement…) :
+ * - Un flux qui échoue doit LEVER (`controller.error(erreur)` ou `throw` dans `pull`), jamais se
+ *   fermer proprement (`controller.close()`) : sinon la réponse tronquée part comme complète et
+ *   le maraîcher croit avoir un export entier.
+ * - Ne jamais utiliser `hono/streaming` (stream, streamText, streamSSE) : il attrape lui-même les
+ *   erreurs du flux, les écrit sur la console et termine la réponse proprement (test statique,
+ *   serveur-flux.test.ts). Rendre `new Response(readableStream)`.
  *
  * Contrat : serveur.test.ts, serveur-relecture.test.ts, serveur-flux.test.ts.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { getRequestListener } from '@hono/node-server';
+import { getRequestListener, RequestError } from '@hono/node-server';
 import { journalParDefaut } from './dependances.ts';
 import { decrireErreur, journalSur } from './journal.ts';
 
@@ -102,13 +112,17 @@ function surveillerCorps(requete: IncomingMessage, reponse: ServerResponse, dela
 
 /** Réponse HTTP/1.1 ou HTTP/2 de Node : `destroy()` coupe la connexion (ou le flux HTTP/2). */
 interface Coupable {
+  readonly destroyed: boolean;
   destroy(): unknown;
+  once(evenement: 'close', ecouteur: () => void): unknown;
 }
 
 /**
  * Corps de `source` relu tel quel ; s'il lève en cours d'envoi, l'erreur va au journal, la
  * connexion est coupée (`reponse.destroy()`), puis le flux se termine pour @hono/node-server, qui
- * n'écrit plus rien sur une réponse détruite. Il ne voit donc jamais l'erreur.
+ * n'écrit plus rien sur une réponse détruite. Il ne voit donc jamais l'erreur. Si la réponse est
+ * déjà fermée (client parti : la source lève souvent à l'abandon de `requete.signal`), rien au
+ * journal et pas de second `destroy()`.
  */
 function corpsSurveille(
   source: ReadableStream<Uint8Array>,
@@ -116,6 +130,10 @@ function corpsSurveille(
   journal: (ligne: string) => void,
 ): ReadableStream<Uint8Array> {
   const lecteur = source.getReader();
+  let fermee = false;
+  reponse.once('close', () => {
+    fermee = true;
+  });
   return new ReadableStream<Uint8Array>(
     {
       async pull(controleur) {
@@ -123,8 +141,10 @@ function corpsSurveille(
         try {
           lu = await lecteur.read();
         } catch (erreur) {
-          journal(`[réponse] envoi du corps interrompu, connexion coupée : ${decrireErreur(erreur)}`);
-          reponse.destroy();
+          if (!fermee && !reponse.destroyed) {
+            journal(`[réponse] envoi du corps interrompu, connexion coupée : ${decrireErreur(erreur)}`);
+            reponse.destroy();
+          }
           controleur.close();
           return;
         }
@@ -171,13 +191,27 @@ export function creerServeur(options: OptionsServeur): Server {
       headers: reponse.headers,
     });
   };
-  const ecouteur = getRequestListener((requete, { outgoing }) => {
-    const reponse = options.fetch(requete);
-    // Réponse immédiate gardée immédiate : @hono/node-server l'envoie alors sans attente.
-    return reponse instanceof Promise
-      ? reponse.then((r) => surveiller(r, outgoing))
-      : surveiller(reponse, outgoing);
-  });
+  /**
+   * `fetch` (ou l'enveloppe) a levé, avant toute réponse : 500 et une ligne au journal, au lieu du
+   * 500 muet de @hono/node-server. Requête illisible (RequestError) : 400, comme sans ce
+   * gestionnaire ; délai dépassé (TimeoutError) : 504, idem.
+   */
+  const surErreur = (erreur: unknown): Response => {
+    if (erreur instanceof RequestError) return new Response(null, { status: 400 });
+    journal(`[réponse] erreur avant toute réponse : ${decrireErreur(erreur)}`);
+    const delai = erreur instanceof Error && (erreur.name === 'TimeoutError' || erreur.constructor.name === 'TimeoutError');
+    return new Response(null, { status: delai ? 504 : 500 });
+  };
+  const ecouteur = getRequestListener(
+    (requete, { outgoing }) => {
+      const reponse = options.fetch(requete);
+      // Réponse immédiate gardée immédiate : @hono/node-server l'envoie alors sans attente.
+      return reponse instanceof Promise
+        ? reponse.then((r) => surveiller(r, outgoing))
+        : surveiller(reponse, outgoing);
+    },
+    { errorHandler: surErreur },
+  );
   const serveur = createServer(
     // Node ne vérifie les délais d'en-têtes et de requête qu'à cet intervalle (30 s par défaut).
     { connectionsCheckingInterval: Math.min(1_000, Math.max(100, Math.floor(delaiEnTetesMs / 4))) },
