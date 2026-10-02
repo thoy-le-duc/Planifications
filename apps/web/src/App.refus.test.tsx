@@ -17,7 +17,16 @@ import { creerBaseMemoire, type BaseMemoire } from '../../../packages/sync/src/t
 import { CLE_SESSION } from './connexion/session.ts';
 import type { EtatDonnees, PoigneeDonnees } from './donnees/etat-appli.ts';
 import { ecrireFermeDuJour, FERME, UTILISATEUR } from './ecrans/aujourdhui/test/ferme-du-jour.ts';
-import { AUTRE_UTILISATEUR, MESSAGES_SERVEUR, parametresRefus, SQL_INSERER_REFUS, type LigneRefusLocale } from './ecrans/ferme/test/refus.ts';
+import {
+  AUTRE_UTILISATEUR,
+  MESSAGES_SERVEUR,
+  parametresRefus,
+  parametresRefusArchive,
+  SQL_ARCHIVER_PAR_SYNCHRO,
+  SQL_INSERER_REFUS,
+  SQL_INSERER_REFUS_ARCHIVE,
+  type LigneRefusLocale,
+} from './ecrans/ferme/test/refus.ts';
 
 const banc = vi.hoisted((): { porte: PorteDonnees | null } => ({ porte: null }));
 
@@ -324,5 +333,23 @@ describe('T10i : pastille des refus sur l’onglet Ferme', () => {
     await taper('Aujourd');
     await laisserPasser();
     expect(pastilleAllumee()).toBe(false);
+  });
+});
+
+describe('T10l : la pastille ne compte pas les refus archivés', () => {
+  it('un refus déjà archivé (sur un autre téléphone) n’allume pas la pastille', async () => {
+    base.recevoir(SQL_INSERER_REFUS_ARCHIVE, parametresRefusArchive(refus('r-archive', 5), new Date().toISOString()));
+    await lancer();
+    await laisserPasser();
+    expect(pastilleAllumee()).toBe(false);
+    expect(ongletDitRefus()).toBe(false);
+  });
+
+  it('le seul refus non vu est archivé sur un autre téléphone : la pastille s’éteint', async () => {
+    recevoir(refus('r-1', 10));
+    await lancer();
+    await attendre(pastilleAllumee, 'pastille allumée par le refus non vu');
+    base.recevoir(SQL_ARCHIVER_PAR_SYNCHRO, [new Date().toISOString(), 'r-1']);
+    await attendre(() => !pastilleAllumee(), 'pastille éteinte : le refus archivé ne compte plus');
   });
 });
