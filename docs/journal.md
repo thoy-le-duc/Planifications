@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T13e : plus de « Fait » en double sur une relecture tardive
+
+- **Fait** : une relecture de la journée lue avant l'écriture d'un « Fait » et livrée après ne fait plus réapparaître la tâche ; un second tap n'écrit plus de deuxième réalisé ; une annulation venue d'un autre téléphone rend toujours « Fait » possible.
+- **Décidé** : chaque lecture porte le numéro de son départ, chaque « Fait » celui de la fin de son écriture ; le masque tient tant que la journée affichée est plus ancienne que l'écriture. Ticket sans risque : testeur, développeur et relecteur sur le modèle léger ; une relecture, rien de bloquant.
+- **Bloquant** : rien. Suite : T13f (changement d'onglet juste après « Fait », relecture partielle ; cas rares, déjà possibles avant).
+
 ## 2026-10-02 — T10i : les refus de synchro s'affichent sur le téléphone
 
 - **Fait** : l'onglet Ferme montre chaque saisie refusée par le serveur (type de saisie, date, motif en français, quoi faire), du plus récent au plus ancien, 20 puis « voir plus » ; un envoi trop gros a sa propre phrase ; une pastille orange sur l'onglet Ferme signale un refus pas encore vu. 100 refus : onglet affiché en ~100 ms. Jusqu'ici, un refus passait inaperçu.
