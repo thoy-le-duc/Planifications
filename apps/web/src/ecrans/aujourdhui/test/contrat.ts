@@ -242,6 +242,15 @@
  *   (le dialogue « Noter une récolte » ouvert sur l'instantané attend la journée relue).
  * Marque de performance 'planif:aujourdhui-affiche' : posée au premier dessin des tâches,
  *   instantané compris (c'est ce que mesure l'e2e : moins de 1 s à froid, CPU ×4).
+ * Retouches de la relecture (tests : ../instantane-retouches.test.tsx) :
+ *   - « Fait » sur l'instantané : si la tâche relue (lireTacheCiblee) ne dit plus ce que la
+ *     carte disait (travaux renumérotés : « Grelinette » touchée, « Compost » relu), rien n'est
+ *     écrit et la carte n'est pas retirée en silence (elle reste, ou un message le dit) ; si la
+ *     tâche est déjà faite ailleurs (null), rien n'est écrit ET un message (role status ou alert,
+ *     texte avec « déjà ») le dit ;
+ *   - l'instantané de `utilisateurId` ne s'écrit que si la session rangée dans `stockage`
+ *     (CLE_SESSION) est celle de cet utilisateur : rien après une déconnexion ou un changement de
+ *     compte dans un autre onglet, réécriture différée en attente comprise.
  * Déconnexion (connexion/deconnexion.ts, T09b) : l'instantané de l'utilisateur est effacé du
  *   stockage de `deconnecter`, que l'API réponde ou non, même si l'effacement de la base échoue.
  */

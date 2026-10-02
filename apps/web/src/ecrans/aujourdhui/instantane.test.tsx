@@ -91,8 +91,14 @@ interface StockageTest extends StockageInstantane {
   readonly valeurs: Map<string, string>;
 }
 
-function stockageMemoire(): StockageTest {
-  const valeurs = new Map<string, string>();
+/**
+ * Retouche (relecture du chef, R3) : la session de l'utilisateur est rangée dans le stockage,
+ * comme dans l'appli ; l'instantané ne s'écrit que pour la session rangée.
+ */
+function stockageMemoire(utilisateurId: string = UTILISATEUR): StockageTest {
+  const valeurs = new Map<string, string>([
+    [CLE_SESSION, JSON.stringify({ ...SESSION, utilisateurId })],
+  ]);
   return {
     valeurs,
     getItem: (c) => valeurs.get(c) ?? null,
@@ -125,8 +131,12 @@ function stockagePlein(): StockageTest {
 }
 
 /** Tout ce qui est rangé dans le stockage, en un texte. */
+/** Tout ce qui est rangé dans le stockage, hors session, en un texte. */
 const toutLeTexte = (s: StockageTest): string =>
-  [...s.valeurs.values()].join("\n");
+  [...s.valeurs]
+    .filter(([c]) => c !== CLE_SESSION)
+    .map(([, v]) => v)
+    .join("\n");
 
 // ── Base, portes ─────────────────────────────────────────────────────────────────────────────
 
@@ -445,7 +455,7 @@ async function ouvrirEtGarder(
   await rendre(p.porte, { ...o, stockage });
   await attendre(() => taches().length > 0, "tâches de la journée relue");
   await attendreMs(
-    () => stockage.valeurs.size > 0 && toutLeTexte(stockage) !== avant,
+    () => toutLeTexte(stockage) !== "" && toutLeTexte(stockage) !== avant,
     "un instantané est gardé dans le stockage donné à l’écran",
   );
   return cles();
@@ -491,9 +501,10 @@ describe("T13d, I1 : l’instantané est dessiné au lancement, avant toute lect
   it("valeur rangée : texte JSON d’un objet qui porte `version` (entier)", async () => {
     const stockage = stockageMemoire();
     await ouvrirEtGarder(stockage);
-    const objets = [...stockage.valeurs.values()].map(
-      (v) => JSON.parse(v) as unknown,
-    );
+    const objets = [...stockage.valeurs]
+      .filter(([c]) => c !== CLE_SESSION)
+      .map(([, v]) => v)
+      .map((v) => JSON.parse(v) as unknown);
     expect(
       objets.some(
         (x) =>
@@ -510,7 +521,7 @@ describe("T13d, I1 : l’instantané est dessiné au lancement, avant toute lect
     await rendre(p.porte, { stockage, utilisateurId: null });
     await attendre(() => taches().length > 0, "tâches relues");
     await tours(30);
-    expect(stockage.valeurs.size).toBe(0);
+    expect([...stockage.valeurs.keys()]).toEqual([CLE_SESSION]);
   });
 });
 
@@ -625,7 +636,7 @@ describe("T13d, I3 : un instantané illisible ou d’une autre version est ignor
       const stockage = stockageMemoire();
       const relues = await ouvrirEtGarder(stockage);
       for (const [cle, v] of stockage.valeurs)
-        stockage.valeurs.set(cle, abimer(v));
+        if (cle !== CLE_SESSION) stockage.valeurs.set(cle, abimer(v));
       const erreurs = vi
         .spyOn(console, "error")
         .mockImplementation(() => undefined);
@@ -667,7 +678,7 @@ describe("T13d, I3 : un instantané illisible ou d’une autre version est ignor
       const stockage = stockageMemoire();
       await ouvrirEtGarder(stockage);
       for (const [cle, v] of stockage.valeurs)
-        stockage.valeurs.set(cle, abimer(v));
+        if (cle !== CLE_SESSION) stockage.valeurs.set(cle, abimer(v));
       await relancer({ stockage });
       await tours(30);
       expect(cles()).toEqual([]);
@@ -1012,7 +1023,7 @@ describe("T13d, I8 : l’instantané ne contient pas plus que ce que l’écran 
     const grande = creerBasePowerSync(SCHEMA_LOCAL.toJSON() as SchemaJson);
     try {
       await ecrireGrandeFerme(grande, AUJOURDHUI);
-      const stockage = stockageMemoire();
+      const stockage = stockageMemoire(UTILISATEUR_GRANDE);
       const p = nouvellePorte(false, grande, {
         utilisateurId: UTILISATEUR_GRANDE,
         fermeId: FERME_GRANDE,
@@ -1028,14 +1039,13 @@ describe("T13d, I8 : l’instantané ne contient pas plus que ce que l’écran 
         60_000,
       );
       await attendreMs(
-        () => stockage.valeurs.size > 0,
+        () => toutLeTexte(stockage) !== "",
         "instantané gardé",
         5_000,
       );
-      const octets = [...stockage.valeurs].reduce(
-        (n, [c, v]) => n + new TextEncoder().encode(c + v).length,
-        0,
-      );
+      const octets = [...stockage.valeurs]
+        .filter(([c]) => c !== CLE_SESSION)
+        .reduce((n, [c, v]) => n + new TextEncoder().encode(c + v).length, 0);
       console.log(
         `T13d : instantané de la grande ferme, ${String(octets)} octets (${String(taches().length)} cartes dessinées)`,
       );
