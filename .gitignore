@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-synchro/
 dist-essais/
+dist-demo/
 dev-dist/
 coverage/
 playwright-report/
