@@ -176,6 +176,8 @@ for (const theme of THEMES) {
     await expect(bandeau).toBeVisible();
     await expect(bandeau.getByRole('button', { name: 'Annuler' })).toBeVisible();
     await attendreEtVerifierTheme(page, theme);
+    // Fin du fondu d'apparition (160 ms) : sinon la capture montre un bandeau translucide.
+    await expect(bandeau).toHaveCSS('opacity', '1');
     await capturer(page, `bandeau-annulation-${theme}`);
   });
 }
