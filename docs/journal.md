@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T10n : annuler un archivage de refus
+
+- **Fait** : après « Archiver » ou « Tout archiver », les refus sortent tout de suite de la liste et un bandeau « N refus archivés — Annuler » reste 5 s ; rien n'est écrit tant qu'on peut annuler ; l'archivage part à la fin du délai, ou tout de suite si l'on quitte l'onglet, ferme l'appli ou se déconnecte.
+- **Décidé** : aucune règle serveur nouvelle (le serveur ne désarchive toujours pas) ; si la base devient indisponible pendant le délai, rien n'est écrit et les refus réapparaissent avec un message. Une relecture, aucun bloquant, cinq retouches faites (déconnexion, compte du bandeau, annonce aux lecteurs d'écran, animations réduites).
+- **Bloquant** : rien. Deux tests de T10l ajustés (ils lisent la base après le délai d'annulation), justifiés dans la PR.
+
 ## 2026-10-02 — T10m : journal du serveur sans donnée saisie
 
 - **Fait** : un seul journal pour toute l'API (`apps/api/src/journal.ts`), nettoyé ligne par ligne (contrôles, caractères invisibles et de sens d'écriture, demi-caractères) ; une erreur inattendue est décrite par sa classe, un code vérifié et des positions de pile relatives au dépôt, jamais par son message ; le journal cite le motif de route (`/fermes/:id`), jamais le chemin reçu ; erreurs de fond (base, rejets, exceptions) branchées sur ce journal.
