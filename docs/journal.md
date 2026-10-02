@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T10m : journal du serveur sans donnée saisie
+
+- **Fait** : un seul journal pour toute l'API (`apps/api/src/journal.ts`), nettoyé ligne par ligne (contrôles, caractères invisibles et de sens d'écriture, demi-caractères) ; une erreur inattendue est décrite par sa classe, un code vérifié et des positions de pile relatives au dépôt, jamais par son message ; le journal cite le motif de route (`/fermes/:id`), jamais le chemin reçu ; erreurs de fond (base, rejets, exceptions) branchées sur ce journal.
+- **Décidé** : un rejet de promesse orphelin est journalisé sans arrêter l'API (sinon un client pourrait la faire redémarrer en boucle) ; une exception non rattrapée l'arrête (code 1). Relecture jusqu'à zéro faille : 3 bloquants puis un cas théorique, tous fermés avec les tests écrits d'abord.
+- **Bloquant** : rien. Suite : T10p (erreur d'envoi en flux de `@hono/node-server`, non atteignable aujourd'hui).
+
 ## 2026-10-02 — T10l : archiver un refus vu
 
 - **Fait** : bouton « Archiver » sur chaque refus et « Tout archiver (N) » sous la liste dès deux refus ; un refus archivé disparaît sur tous les téléphones de l'utilisateur (colonne `archive_le`, migration 0024, flux PowerSync) ; le serveur n'accepte que la date d'archivage, sur ses propres refus, et refuse un instant impossible ou hors bornes.
