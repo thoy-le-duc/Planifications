@@ -153,6 +153,7 @@ describe('T15b relecture : export annulable (signal)', () => {
       surveiller: interdit('surveiller'),
       saisirEvenement: interdit('saisirEvenement'),
       surveillerRefus: interdit('surveillerRefus'),
+      archiverRefus: () => Promise.resolve(),
     };
   }
 

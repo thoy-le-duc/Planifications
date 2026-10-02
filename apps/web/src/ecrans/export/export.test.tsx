@@ -150,6 +150,7 @@ function porteFactice(): { porte: PorteDonnees; requetes: string[] } {
     ecrireEnsemble: interdit('ecrireEnsemble'),
     preparerSaisie: interdit('preparerSaisie'),
     surveillerRefus: interdit('surveillerRefus'),
+    archiverRefus: () => Promise.resolve(),
   };
   return { porte, requetes };
 }

@@ -523,6 +523,7 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
       surveiller: interdit('surveiller'),
       saisirEvenement: interdit('saisirEvenement'),
       surveillerRefus: interdit('surveillerRefus'),
+      archiverRefus: () => Promise.resolve(),
     };
     const resultat = await exporterFerme(porteLectureSeule, { fermeId: jeu.principale.fermeId, genereLe: GENERE_LE, jour: JOUR });
     expect(reseau).not.toHaveBeenCalled();

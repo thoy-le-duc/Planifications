@@ -143,6 +143,42 @@ export const parametresRefusResume = (l: LigneRefusLocale & ResumeSaisieLocal): 
   ...COLONNES_RESUME.map((c) => l[c]),
 ];
 
+/**
+ * T10l (docs/backlog/T10l-refus-archives.md) : archiver un refus vu. Colonne `archive_le` de
+ * refus_synchro (instant ISO, nulle tant que le refus n'est pas archivé), synchronisée : un refus
+ * archivé sur un téléphone l'est sur tous ceux de l'utilisateur. La porte : `archiverRefus(ids)`
+ * (contrat : packages/sync/src/porte-archiver.test.ts) ; `surveillerRefus` ne rend plus les archivés.
+ *
+ * Écran Ferme, carte « Saisies refusées » :
+ *   - chaque refus affiché (data-testid="refus") contient un bouton data-testid="refus-archiver",
+ *     de texte « Archiver » (56 px de haut au moins : au champ, avec des gants) ; un tap archive CE
+ *     refus (porte.archiverRefus([id])) : il disparaît de la liste, le titre se recompte ;
+ *   - un bouton data-testid="refus-tout-archiver", de texte contenant « Tout archiver » (56 px au
+ *     moins), archive les refus AFFICHÉS (pas ceux encore cachés derrière « voir plus ») ;
+ *   - pas de confirmation exigée : archiver ne supprime rien, la ligne reste dans la base ;
+ *   - un refus archivé (archive_le non nul, arrivé par la synchro) ne s'affiche pas ; plus aucun
+ *     refus non archivé : la carte disparaît (aucun data-testid="refus"), le reste de l'écran reste ;
+ *   - le refus d'un archivage refusé par le serveur (nom_table 'refus_synchro') s'affiche comme les
+ *     autres, sans jamais montrer le nom brut de la table.
+ * Coquille : la pastille ne compte jamais un refus archivé.
+ *
+ * Relecture T10l :
+ *   - « Tout archiver » n'apparaît qu'à partir de 2 refus affichés, avec leur nombre :
+ *     « Tout archiver (N) » ; il est placé APRÈS la liste des cartes (ordre du DOM) ;
+ *   - chaque bouton « Archiver » a un nom accessible (aria-label, sinon son texte) DISTINCT, qui
+ *     commence par « Archiver » et contient le titre de sa carte (ex. « Archiver : Récolte ·
+ *     ajout, 14 sept. à 14:00 ») ; le texte visible reste « Archiver » ;
+ *   - le refus d'un archivage refusé (nom_table 'refus_synchro') a sa propre action : une phrase
+ *     qui dit que ce refus n'a pas pu être archivé (« Ce refus n’a pas pu être archivé… »), jamais
+ *     « responsable de la ferme » (personne d'autre n'y peut rien).
+ */
+export const SQL_INSERER_REFUS_ARCHIVE = `INSERT INTO refus_synchro (${[...COLONNES, 'archive_le'].join(', ')}) VALUES (${[...COLONNES, 'archive_le']
+  .map(() => '?')
+  .join(', ')})`;
+export const parametresRefusArchive = (l: LigneRefusLocale, archiveLe: string | null): (string | null)[] => [...parametresRefus(l), archiveLe];
+/** Archivage arrivé par la synchro (autre téléphone de l'utilisateur). */
+export const SQL_ARCHIVER_PAR_SYNCHRO = 'UPDATE refus_synchro SET archive_le = ? WHERE id = ?';
+
 /** Message tel que le serveur l'écrit (upload.ts : précision ajoutée après « : »). */
 export function messageServeur(motif: CodeMotif, precision?: string): string {
   return precision === undefined ? MESSAGES_SERVEUR[motif] : `${MESSAGES_SERVEUR[motif]} : ${precision}.`;

@@ -2,7 +2,7 @@
  * Le schéma local (T10) suit le schéma Postgres de @planif/db : mêmes tables synchronisées, mêmes
  * colonnes, sauf ce qui ne doit jamais descendre sur un téléphone.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import * as db from '@planif/db';
 import { getTableConfig, PgTable } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
@@ -89,6 +89,31 @@ describe('schéma local', () => {
     expect(colonnes, 'jamais les données reçues').not.toContain('donnees');
     expect(colonnes, 'jamais toutes les colonnes').not.toContain('*');
     expect(requetes[0], 'toujours au seul auteur').toMatch(/WHERE utilisateur_id = auth\.user_id\(\)$/);
+  });
+
+  it('T10l : archive_le (instant nullable) descend sur le téléphone, archivés compris, toujours au seul auteur', () => {
+    const c = (tablesPostgres.find((t) => t.name === 'refus_synchro')?.columns ?? []).find((x) => x.name === 'archive_le');
+    expect(c, 'refus_synchro.archive_le dans Postgres').toBeDefined();
+    expect(c?.notNull, 'nulle par défaut : un refus naît non archivé').toBe(false);
+    expect(c?.getSQLType(), 'un instant avec fuseau').toBe('timestamp with time zone');
+    const locale: Readonly<Record<string, string>> = TABLES_LOCALES.refus_synchro;
+    expect(locale.archive_le, 'colonne locale en texte (instant ISO)').toBe('texte');
+
+    const migrations = readdirSync(new URL('../../db/migrations/', import.meta.url)).filter((f) => /^0024_.*\.sql$/.test(f));
+    expect(migrations, 'migration 0024 de packages/db').toHaveLength(1);
+    const sqlMigration = readFileSync(new URL(`../../db/migrations/${migrations[0] ?? ''}`, import.meta.url), 'utf8');
+    expect(sqlMigration).toMatch(/refus_synchro[\s\S]*archive_le/);
+
+    const regles = readFileSync(new URL('../../../powersync/sync-config.yaml', import.meta.url), 'utf8');
+    const requetes = [...regles.matchAll(/query:[ \t]*(?:>-?[ \t]*\n((?:[ \t]{6,}[^\n]*\n?)+)|(SELECT[^\n]*))/g)]
+      .map((r) => (r[1] ?? r[2] ?? '').replace(/\s+/g, ' ').trim())
+      .filter((q) => /\bFROM refus_synchro\b/.test(q));
+    expect(requetes, 'un seul flux pour refus_synchro').toHaveLength(1);
+    const colonnes = (/^SELECT (.*?) FROM refus_synchro/.exec(requetes[0] ?? '')?.[1] ?? '').split(',').map((x) => x.trim());
+    expect(colonnes, 'archive_le dans le flux refus_synchro').toContain('archive_le');
+    expect(colonnes, 'jamais les données reçues').not.toContain('donnees');
+    // Les archivés descendent aussi (rien n'est perdu sur le téléphone) : aucun filtre sur archive_le.
+    expect(requetes[0], 'toujours au seul auteur, archivés compris').toMatch(/WHERE utilisateur_id = auth\.user_id\(\)$/);
   });
 
   it('T23 : les règles de synchro servent les types de la ferme et la liste de départ (ferme_id nul)', () => {

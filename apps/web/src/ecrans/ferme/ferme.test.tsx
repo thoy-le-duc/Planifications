@@ -147,6 +147,7 @@ function porteControlee(): {
       rappel([]);
       return () => undefined;
     },
+    archiverRefus: () => Promise.resolve(),
     ecrireEnsemble: interdit('ecrireEnsemble'),
     preparerSaisie: interdit('preparerSaisie'),
   };

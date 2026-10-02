@@ -29,8 +29,11 @@ import {
   MESSAGES_SERVEUR,
   messageServeur,
   parametresRefus,
+  parametresRefusArchive,
   parametresRefusResume,
+  SQL_ARCHIVER_PAR_SYNCHRO,
   SQL_INSERER_REFUS,
+  SQL_INSERER_REFUS_ARCHIVE,
   SQL_INSERER_REFUS_RESUME,
   UTILISATEUR_REFUS,
   type LigneRefusLocale,
@@ -450,5 +453,188 @@ describe('T10k : la saisie refusée reconnaissable', () => {
     verifierRefusSaisie(ancien, /saisie|événement|journal/i, /\b14\s+sept/i);
     verifierRefusSaisie(vide, /saisie|événement|journal/i, /\b15\s+sept/i);
     for (const id of ['r-ancien', 'r-vide']) sansTrou(texte(elementRefus(id)), id);
+  });
+});
+
+describe('T10l : archiver un refus vu', () => {
+  const archiveLe = (id: string): string | null | undefined =>
+    base.lireDirect<{ archive_le: string | null }>('SELECT archive_le FROM refus_synchro WHERE id = ?', [id])[0]?.archive_le;
+
+  function recevoirArchive(l: LigneRefusLocale, date: string | null): void {
+    base.recevoir(SQL_INSERER_REFUS_ARCHIVE, parametresRefusArchive(l, date));
+  }
+
+  function bouton(dans: ParentNode, testId: string, libelle: RegExp, quoi: string): HTMLButtonElement {
+    const b = dans.querySelector<HTMLButtonElement>(`button[data-testid="${testId}"]`);
+    if (b === null) throw new Error(`${quoi} : bouton data-testid="${testId}" absent`);
+    expect(texte(b), quoi).toMatch(libelle);
+    const hauteur = Number.parseFloat(getComputedStyle(b).minHeight || b.style.minHeight);
+    expect(hauteur, `${quoi} : 56 px de haut au moins (gants)`).toBeGreaterThanOrEqual(56);
+    return b;
+  }
+
+  const archiverUn = (id: string): HTMLButtonElement => bouton(elementRefus(id), 'refus-archiver', /^Archiver$/, `refus ${id}`);
+  const toutArchiver = (): HTMLButtonElement => bouton(conteneur, 'refus-tout-archiver', /Tout archiver/i, '« Tout archiver »');
+
+  async function taper(b: HTMLButtonElement): Promise<void> {
+    await act(async () => {
+      b.click();
+      await Promise.resolve();
+    });
+  }
+
+  it('« Archiver » sur une carte : ce refus disparaît, archivé dans la base (rien de supprimé), les autres restent', async () => {
+    recevoir(refus({ id: 'r-1', cree_le: '2025-09-14T12:00:00.000Z' }), refus({ id: 'r-2', cree_le: '2025-09-15T12:00:00.000Z' }));
+    await rendre();
+    await attendre(() => elementsRefus().length === 2, 'deux refus affichés');
+    expect(texte(region())).toMatch(/2 saisies refusées/);
+
+    await taper(archiverUn('r-2'));
+    await attendre(() => elementsRefus().length === 1, 'le refus archivé disparaît');
+    expect(ids()).toEqual(['r-1']);
+    expect(texte(region()), 'le titre se recompte').toMatch(/1 saisie refusée/);
+    expect(archiveLe('r-2'), 'archive_le posé, en instant ISO').toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/);
+    expect(archiveLe('r-1'), 'l’autre refus n’est pas archivé').toBeNull();
+    expect(base.lireDirect<{ n: number }>('SELECT count(*) AS n FROM refus_synchro')[0]?.n, 'rien de supprimé').toBe(2);
+  });
+
+  it('le dernier refus archivé : plus aucune carte de refus, le reste de l’écran est là', async () => {
+    recevoir(refus({ id: 'r-seul', cree_le: '2025-09-14T12:00:00.000Z' }));
+    await rendre();
+    await attendre(() => elementsRefus().length === 1, 'le refus est affiché');
+    await taper(archiverUn('r-seul'));
+    await attendre(() => elementsRefus().length === 0, 'plus aucun refus affiché');
+    expect(texte(conteneur)).toContain('Exporter toute ma ferme');
+  });
+
+  it('« Tout archiver » : archive les 20 refus affichés, pas ceux cachés derrière « voir plus »', async () => {
+    const lignes: LigneRefusLocale[] = [];
+    for (let n = 1; n <= 25; n++) {
+      lignes.push(refus({ id: `r-${String(n).padStart(2, '0')}`, cree_le: new Date(Date.UTC(2025, 8, 14, 12, 60 - n)).toISOString() }));
+    }
+    recevoir(...lignes);
+    await rendre();
+    await attendre(() => elementsRefus().length === 20, '20 refus affichés d’abord');
+
+    await taper(toutArchiver());
+    await attendre(() => elementsRefus().length === 5, `les 5 refus qui n’étaient pas affichés restent (affichés : ${String(elementsRefus().length)})`);
+    expect(ids()).toEqual(lignes.slice(20).map((l) => l.id));
+    for (const l of lignes.slice(0, 20)) expect(archiveLe(l.id), `${l.id} archivé`).not.toBeNull();
+    for (const l of lignes.slice(20)) expect(archiveLe(l.id), `${l.id} pas encore vu : pas archivé`).toBeNull();
+  });
+
+  it('un refus archivé (sur ce téléphone ou un autre) ne s’affiche pas ; archivé par la synchro pendant que l’écran est ouvert, il disparaît', async () => {
+    recevoirArchive(refus({ id: 'r-archive', cree_le: '2025-09-16T12:00:00.000Z' }), '2025-09-16T13:00:00.000Z');
+    recevoir(refus({ id: 'r-1', cree_le: '2025-09-14T12:00:00.000Z' }), refus({ id: 'r-2', cree_le: '2025-09-15T12:00:00.000Z' }));
+    await rendre();
+    await attendre(() => elementsRefus().length === 2, 'les deux refus non archivés sont affichés');
+    await laisserFiler();
+    expect(ids(), 'jamais le refus archivé').toEqual(['r-2', 'r-1']);
+
+    base.recevoir(SQL_ARCHIVER_PAR_SYNCHRO, ['2025-09-17T08:00:00.000Z', 'r-2']);
+    await attendre(() => elementsRefus().length === 1, 'archivé sur un autre téléphone : il disparaît');
+    expect(ids()).toEqual(['r-1']);
+  });
+
+  it('le refus d’un archivage refusé par le serveur (table refus_synchro) s’affiche sans casser l’écran ni montrer le nom de la table', async () => {
+    const l = refus({
+      id: 'r-archivage',
+      cree_le: '2025-09-18T12:00:00.000Z',
+      nom_table: 'refus_synchro',
+      operation: 'PATCH',
+      motif: 'table_interdite',
+      message: MESSAGES_SERVEUR.table_interdite,
+    });
+    recevoir(l);
+    await rendre();
+    await attendre(() => elementsRefus().length === 1, 'le refus est affiché');
+    const t = texte(elementRefus('r-archivage'));
+    expect(t).toContain(MESSAGES_SERVEUR.table_interdite);
+    expect(t, 'jamais le nom brut de la table').not.toMatch(/refus_synchro|table_interdite/);
+    expect(t).not.toMatch(/\b(null|undefined|NaN)\b/);
+    expect(action(elementRefus('r-archivage')).length).toBeGreaterThanOrEqual(10);
+    // Il s'archive comme les autres.
+    await taper(archiverUn('r-archivage'));
+    await attendre(() => elementsRefus().length === 0, 'archivé à son tour');
+  });
+
+  describe('relecture', () => {
+    const toutArchiverAbsent = (): boolean => conteneur.querySelector('[data-testid="refus-tout-archiver"]') === null;
+    const nomAccessible = (b: HTMLElement): string => (b.getAttribute('aria-label') ?? texte(b)).replace(/\s+/g, ' ').trim();
+    const titreCarte = (id: string): string => texte(elementRefus(id).querySelector('strong'));
+
+    it('« Tout archiver » absent avec un seul refus affiché, « Tout archiver (2) » dès deux', async () => {
+      recevoir(refus({ id: 'r-1', cree_le: '2025-09-14T12:00:00.000Z' }));
+      await rendre();
+      await attendre(() => elementsRefus().length === 1, 'le refus est affiché');
+      await laisserFiler();
+      expect(toutArchiverAbsent(), 'un seul refus : « Archiver » suffit').toBe(true);
+
+      recevoir(refus({ id: 'r-2', cree_le: '2025-09-15T12:00:00.000Z' }));
+      await attendre(() => elementsRefus().length === 2, 'le deuxième refus arrive');
+      expect(texte(toutArchiver())).toMatch(/Tout archiver \(2\)/);
+    });
+
+    it('« Tout archiver (20) » quand 20 refus sont affichés sur 25', async () => {
+      const lignes: LigneRefusLocale[] = [];
+      for (let n = 1; n <= 25; n++) {
+        lignes.push(refus({ id: `r-${String(n).padStart(2, '0')}`, cree_le: new Date(Date.UTC(2025, 8, 14, 12, 60 - n)).toISOString() }));
+      }
+      recevoir(...lignes);
+      await rendre();
+      await attendre(() => elementsRefus().length === 20, '20 refus affichés');
+      expect(texte(toutArchiver())).toMatch(/Tout archiver \(20\)/);
+    });
+
+    it('« Tout archiver » est placé après la liste des cartes', async () => {
+      recevoir(refus({ id: 'r-1', cree_le: '2025-09-14T12:00:00.000Z' }), refus({ id: 'r-2', cree_le: '2025-09-15T12:00:00.000Z' }));
+      await rendre();
+      await attendre(() => elementsRefus().length === 2, 'deux refus affichés');
+      const derniere = elementsRefus().at(-1);
+      if (derniere === undefined) throw new Error('aucune carte');
+      const position = derniere.compareDocumentPosition(toutArchiver());
+      expect(position & Node.DOCUMENT_POSITION_FOLLOWING, 'après la dernière carte (ordre du DOM)').toBeTruthy();
+      expect(position & Node.DOCUMENT_POSITION_CONTAINED_BY, 'hors des cartes').toBeFalsy();
+    });
+
+    it('chaque « Archiver » a un nom accessible distinct, qui contient le titre de sa carte', async () => {
+      const recolte = refus({ id: 'r-recolte', cree_le: '2025-10-01T12:00:00.000Z', operation: 'PUT', motif: 'recolte_annulee', message: MESSAGES_SERVEUR.recolte_annulee });
+      base.recevoir(SQL_INSERER_REFUS_RESUME, parametresRefusResume({ ...recolte, saisie_type: 'recolte', saisie_culture: 'Laitue', saisie_date: '2025-09-28', saisie_quantite: 3, saisie_unite: 'kg' }));
+      recevoir(
+        refus({ id: 'r-serie', cree_le: '2025-09-30T12:00:00.000Z', nom_table: 'serie', operation: 'PUT', motif: 'ecriture_invalide', message: MESSAGES_SERVEUR.ecriture_invalide }),
+        // Deux refus de même titre, à des dates différentes : leurs noms doivent quand même différer.
+        refus({ id: 'r-a', cree_le: '2025-09-14T12:00:00.000Z' }),
+        refus({ id: 'r-b', cree_le: '2025-09-15T12:00:00.000Z' }),
+      );
+      await rendre();
+      await attendre(() => elementsRefus().length === 4, 'quatre refus affichés');
+      const noms = ['r-recolte', 'r-serie', 'r-a', 'r-b'].map((id) => {
+        const b = archiverUn(id);
+        const nom = nomAccessible(b);
+        expect(nom, `refus ${id} : le nom commence par « Archiver »`).toMatch(/^Archiver\b/);
+        expect(nom, `refus ${id} : le nom contient le titre de la carte`).toContain(titreCarte(id));
+        return nom;
+      });
+      expect(nomAccessible(archiverUn('r-recolte'))).toMatch(/Récolte/);
+      expect(new Set(noms).size, `noms distincts : ${JSON.stringify(noms)}`).toBe(noms.length);
+    });
+
+    it('refus d’un archivage refusé (refus_synchro) : action propre, jamais « responsable de la ferme »', async () => {
+      recevoir(
+        refus({
+          id: 'r-archivage',
+          cree_le: '2025-09-18T12:00:00.000Z',
+          nom_table: 'refus_synchro',
+          operation: 'PATCH',
+          motif: 'table_interdite',
+          message: MESSAGES_SERVEUR.table_interdite,
+        }),
+      );
+      await rendre();
+      await attendre(() => elementsRefus().length === 1, 'le refus est affiché');
+      const a = action(elementRefus('r-archivage'));
+      expect(a).toMatch(/refus n[’']a pas pu être archivé/i);
+      expect(a).not.toMatch(/responsable de la ferme/i);
+    });
   });
 });

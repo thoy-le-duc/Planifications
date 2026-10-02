@@ -39,7 +39,15 @@ const SQL_SAISIE = `INSERT INTO evenement (${COLONNES_EVENEMENT.join(', ')}) VAL
 
 const SQL_REFUS = `SELECT id, nom_table, ligne_id, operation, motif, message, cree_le,
     saisie_type, saisie_culture, saisie_date, saisie_quantite, saisie_unite
-  FROM refus_synchro WHERE utilisateur_id = ? ORDER BY cree_le DESC, id DESC`;
+  FROM refus_synchro WHERE utilisateur_id = ? AND archive_le IS NULL ORDER BY cree_le DESC, id DESC`;
+
+/**
+ * T10l : archive des refus de l'utilisateur (ids en fin de requête). Seule archive_le change : la
+ * synchro l'envoie en PATCH { archive_le }, seule forme que le serveur accepte. Un refus déjà
+ * archivé garde sa première date ; celui d'un autre utilisateur n'est jamais touché.
+ */
+const sqlArchiverRefus = (n: number): string =>
+  `UPDATE refus_synchro SET archive_le = ? WHERE utilisateur_id = ? AND archive_le IS NULL AND id IN (${Array.from({ length: n }, () => '?').join(', ')})`;
 
 interface LigneRefus {
   readonly id: string;
@@ -216,6 +224,18 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
         },
         rappel,
       );
+    },
+
+    async archiverRefus(ids: readonly string[]) {
+      const uniques = [...new Set(ids)];
+      // Au plus ECRITURES_MAX_PAR_LOT lignes par transaction locale : une transaction = un envoi,
+      // que le serveur refuserait au-delà.
+      for (let debut = 0; debut < uniques.length; debut += ECRITURES_MAX_PAR_LOT) {
+        const lot = uniques.slice(debut, debut + ECRITURES_MAX_PAR_LOT);
+        await base.writeTransaction(async (tx) => {
+          await tx.execute(sqlArchiverRefus(lot.length), [maintenant().toISOString(), options.utilisateurId, ...lot]);
+        });
+      }
     },
   };
 }

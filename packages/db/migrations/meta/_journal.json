@@ -169,6 +169,13 @@
       "when": 1790937029839,
       "tag": "0023_refus_resume_saisie",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790954973737,
+      "tag": "0024_refus_archive",
+      "breakpoints": true
     }
   ]
 }
