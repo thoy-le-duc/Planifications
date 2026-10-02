@@ -61,7 +61,7 @@ Node 22.18 ou plus (exécute le TypeScript sans compilation), pnpm 10.
 | Commande | Rôle |
 | --- | --- |
 | `pnpm install` | Installe tout le monorepo |
-| `pnpm verif` | Tout ce que vérifie la CI, dans l'ordre : typage, lint, tests, build, build des essais, budgets |
+| `pnpm verif` | Tout ce que vérifie la CI, dans l'ordre : typage, lint, tests, build, build des essais, budgets, e2e, démo |
 | `pnpm typecheck` | TypeScript strict sur chaque paquet |
 | `pnpm lint` | ESLint strict, aucun `any`, zéro avertissement |
 | `pnpm test` | Tests unitaires Vitest de tous les paquets |
@@ -69,6 +69,8 @@ Node 22.18 ou plus (exécute le TypeScript sans compilation), pnpm 10.
 | `pnpm build:essais` | Build des essais (`apps/web/dist-essais/`) : reconstruit `dist/`, le copie, puis y ajoute les pages de mesure et de diagnostic |
 | `pnpm budget` | Poids du JavaScript de démarrage (limite dans `apps/web/budget.json`) |
 | `pnpm e2e` | Playwright : temps d'affichage avec CPU ralenti ×4 et réouverture hors ligne, sur `dist-essais/` (après `pnpm build:essais`, qui fait les deux builds) |
+| `pnpm build:demo` | Build de la démo en ligne (`apps/web/dist-demo/`) : ferme fictive, sans serveur, publiée par Vercel |
+| `pnpm e2e:demo` | Playwright sur `dist-demo/` : démo sans connexion, sans réseau, hors ligne |
 | `pnpm e2e:synchro` | Synchro de bout en bout : Postgres + PowerSync + API + deux navigateurs (Docker requis) |
 
 Sur une machine où Chromium est déjà installé, `CHROMIUM_PATH=/chemin/vers/chrome pnpm e2e` évite le téléchargement.

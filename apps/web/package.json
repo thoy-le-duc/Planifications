@@ -3,14 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:essais": "vite build && node scripts/build-essais.ts",
+    "build:demo": "vite build --mode demo",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "budget": "node scripts/budget.ts",
     "e2e": "playwright test",
+    "e2e:demo": "playwright test -c playwright.demo.config.ts",
     "jetons": "node scripts/jetons-css.ts"
   },
   "dependencies": {
