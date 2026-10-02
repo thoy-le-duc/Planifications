@@ -80,8 +80,10 @@
   }
 }
 
+/* Sans animation : le bandeau apparaît d'un coup et la barre de temps reste pleine, immobile. */
 @media (prefers-reduced-motion: reduce) {
-  .refus-bandeau {
+  .refus-bandeau,
+  .refus-bandeau-temps {
     animation: none;
   }
 }
