@@ -434,7 +434,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
   ): Promise<Refus | null> {
     const fermeDonnee = fermeDesDonnees(e);
     // T10l : seul l'archivage de ses propres refus (archiver-refus.ts).
-    if (e.table === TABLE_REFUS) return archiverRefus(tx, e, utilisateurId);
+    if (e.table === TABLE_REFUS) return archiverRefus(tx, e, utilisateurId, ctx.maintenant());
     // e.table est lue ensuite comme nom de table SQL : seulement l'une de ces constantes.
     if (!TABLES_ECRITES.has(e.table)) return { motif: 'table_interdite', fermeId: fermeDonnee };
     if (e.op === null || e.id === '' || e.donneesIllisibles) {

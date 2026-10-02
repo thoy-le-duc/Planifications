@@ -9,7 +9,8 @@
  * Isolement (T10d) : le refus d'un autre utilisateur, même d'un collègue de la même ferme, répond
  * exactement comme un id inconnu ('table_interdite', ferme nulle). Les vérifications qui précèdent
  * la lecture de la ligne (opération, colonnes, valeur) ne dépendent que de l'écriture reçue : la
- * réponse ne dit jamais si l'id existe chez quelqu'un d'autre.
+ * réponse ne dit jamais si l'id existe chez quelqu'un d'autre. La borne basse (cree_le − 1 jour)
+ * ne se vérifie qu'une fois la ligne trouvée parmi les refus de l'utilisateur.
  */
 import type { Id } from '@planif/core';
 import { sql } from 'drizzle-orm';
@@ -20,10 +21,23 @@ import type { TransactionDb } from './references.ts';
 export const TABLE_REFUS = 'refus_synchro';
 
 /** Instant ISO 8601 complet, avec fuseau (celui que rend `Date.toISOString()`). */
-const INSTANT_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const INSTANT_ISO = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-](\d{2}):(\d{2}))$/;
 
+const JOUR_MS = 86_400_000;
+
+/**
+ * L'instant, ou null s'il est illisible ou impossible : le jour (31 février…) doit exister, et
+ * l'heure, les minutes, les secondes et le décalage rester dans leurs bornes (le moteur de dates
+ * de JavaScript, lui, reporterait le 31 février au 3 mars).
+ */
 function lireInstant(valeur: unknown): Date | null {
-  if (typeof valeur !== 'string' || !INSTANT_ISO.test(valeur)) return null;
+  if (typeof valeur !== 'string') return null;
+  const m = INSTANT_ISO.exec(valeur);
+  if (m === null) return null;
+  const [annee, mois, jour, heure, minute, seconde, decalageH, decalageM] = m.slice(1).map((x) => (x === undefined ? 0 : Number(x)));
+  const calendrier = new Date(Date.UTC(annee ?? 0, (mois ?? 0) - 1, jour ?? 0));
+  if (calendrier.getUTCFullYear() !== annee || calendrier.getUTCMonth() !== (mois ?? 0) - 1 || calendrier.getUTCDate() !== jour) return null;
+  if ((heure ?? 0) > 23 || (minute ?? 0) > 59 || (seconde ?? 0) > 59 || (decalageH ?? 0) > 23 || (decalageM ?? 0) > 59) return null;
   const date = new Date(valeur);
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -39,7 +53,12 @@ interface EcritureArchivage {
  * Archive le refus `e.id` de `utilisateurId` : null si accepté (déjà archivé compris : la première
  * date est gardée), sinon le refus. Dans la transaction de l'appelant.
  */
-export async function archiverRefus(tx: TransactionDb, e: EcritureArchivage, utilisateurId: Id<'Utilisateur'>): Promise<Refus | null> {
+export async function archiverRefus(
+  tx: TransactionDb,
+  e: EcritureArchivage,
+  utilisateurId: Id<'Utilisateur'>,
+  maintenant: Date,
+): Promise<Refus | null> {
   const interdit: Refus = { motif: 'table_interdite', fermeId: null };
   // Un refus ne se crée ni ne s'efface depuis le téléphone.
   if (e.op !== 'PATCH') return interdit;
@@ -49,15 +68,22 @@ export async function archiverRefus(tx: TransactionDb, e: EcritureArchivage, uti
   if (colonnes.length !== 1 || colonnes[0] !== 'archive_le') return interdit;
   const archiveLe = lireInstant(e.donnees.archive_le);
   if (archiveLe === null) return { motif: 'ecriture_invalide', detail: 'archive_le illisible', fermeId: null };
+  // Plus d'un jour d'avance sur l'heure du serveur : horloge du téléphone déréglée ou envoi forgé.
+  if (archiveLe.getTime() > maintenant.getTime() + JOUR_MS) return { motif: 'ecriture_invalide', detail: 'archive_le dans le futur', fermeId: null };
   if (!estUuid(e.id)) return interdit;
 
   const id = e.id.toLowerCase();
-  const { rows } = await tx.execute<{ archive_le: unknown }>(
-    sql`SELECT archive_le FROM refus_synchro WHERE id = ${id}::uuid AND utilisateur_id = ${utilisateurId}::uuid FOR UPDATE`,
+  const { rows } = await tx.execute<{ archive_le: unknown; cree_le: unknown }>(
+    sql`SELECT archive_le, cree_le FROM refus_synchro WHERE id = ${id}::uuid AND utilisateur_id = ${utilisateurId}::uuid FOR UPDATE`,
   );
   const [ligne] = rows;
   // Id inconnu ou refus d'autrui : même réponse.
   if (ligne === undefined) return interdit;
+  // Archivé plus d'un jour avant d'avoir été refusé : impossible (lu seulement pour son propre refus).
+  const creeLe = new Date(ligne.cree_le instanceof Date ? ligne.cree_le.getTime() : String(ligne.cree_le));
+  if (!Number.isNaN(creeLe.getTime()) && archiveLe.getTime() < creeLe.getTime() - JOUR_MS) {
+    return { motif: 'ecriture_invalide', detail: 'archive_le antérieur au refus', fermeId: null };
+  }
   // Déjà archivé (autre téléphone, envoi rejoué) : accepté, la première date est gardée.
   if (ligne.archive_le !== null) return null;
   await tx.execute(
