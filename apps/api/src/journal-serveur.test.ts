@@ -338,8 +338,8 @@ describe('T10m (relecture) — journal en panne : la réponse part quand même',
  * `console.x` (et `globalThis.console.x`, `global.console.x`), `console[…]`, alias de `console`,
  * `process.stderr.write`, `process.stdout.write`. Nom donné : « error », « log »… pour la console,
  * « stderr.write » / « stdout.write » pour les sorties.
- * - index.ts : point d'entrée ; il fournit les sorties par défaut (configuration invalide avant
- *   que le journal existe, « à l'écoute »), tout y est permis ;
+ * - index.ts : point d'entrée ; console.error (configuration invalide, avant que le journal
+ *   existe) et console.log (« à l'écoute »), rien d'autre ;
  * - generer-cles.ts : outil en ligne de commande qui écrit une clé sur la sortie standard ;
  * - dependances.ts : la sortie par défaut du journal (`journalParDefaut`), console.error ou
  *   process.stderr.write ;
@@ -349,7 +349,7 @@ describe('T10m (relecture) — journal en panne : la réponse part quand même',
  * Tout le reste (app.ts, demarrage.ts, sync/**, auth/**…) passe par le journal injecté.
  */
 const AUTORISES: Readonly<Record<string, readonly string[] | 'tout'>> = {
-  'index.ts': 'tout',
+  'index.ts': ['error', 'log'],
   'generer-cles.ts': ['log', 'stdout.write'],
   'dependances.ts': ['error', 'stderr.write'],
   'auth/courriel.ts': ['log'],
@@ -492,9 +492,9 @@ describe('T10m (relecture) — index.ts branche les erreurs hors requête sur le
   const texte = readFileSync(join(RACINE, 'index.ts'), 'utf8');
   const source = ts.createSourceFile('index.ts', texte, ts.ScriptTarget.Latest, true);
 
-  /** Texte du gestionnaire de `<cible>.on('<evenement>', gestionnaire)`, ou null. */
-  function gestionnaire(cible: string, evenement: string): string | null {
-    let trouve: string | null = null;
+  /** Texte et position du gestionnaire de `<cible>.on('<evenement>', gestionnaire)`, ou null. */
+  function gestionnaire(cible: string, evenement: string): { readonly texte: string; readonly position: number } | null {
+    let trouve: { texte: string; position: number } | null = null;
     const visiter = (noeud: ts.Node): void => {
       if (
         trouve === null &&
@@ -505,7 +505,7 @@ describe('T10m (relecture) — index.ts branche les erreurs hors requête sur le
         noeud.arguments.length >= 2
       ) {
         const [nom, rappel] = noeud.arguments;
-        if (nom !== undefined && rappel !== undefined && ts.isStringLiteralLike(nom) && nom.text === evenement) trouve = rappel.getText(source);
+        if (nom !== undefined && rappel !== undefined && ts.isStringLiteralLike(nom) && nom.text === evenement) trouve = { texte: rappel.getText(source), position: noeud.getStart() };
       }
       ts.forEachChild(noeud, visiter);
     };
@@ -519,12 +519,41 @@ describe('T10m (relecture) — index.ts branche les erreurs hors requête sur le
     ['process', 'uncaughtException'],
   ] as const) {
     it(`${cible}.on('${evenement}') écrit decrireErreur(…) dans le journal`, () => {
-      const corps = gestionnaire(cible, evenement);
+      const corps = gestionnaire(cible, evenement)?.texte ?? null;
       expect(corps, `${cible}.on('${evenement}', …) absent de index.ts`).not.toBeNull();
       expect(corps).toMatch(/\bjournal\s*\(/);
       expect(corps).toContain('decrireErreur(');
       expect(corps).not.toMatch(/\bconsole\b/);
       expect(corps).not.toMatch(/\.message\b/);
+    });
+  }
+
+  /** Position du premier `await` de niveau module (hors de toute fonction), ou null. */
+  function premierAwait(): number | null {
+    let trouve: number | null = null;
+    const visiter = (noeud: ts.Node): void => {
+      if (trouve !== null || ts.isFunctionLike(noeud)) return;
+      if (ts.isAwaitExpression(noeud) || (ts.isForOfStatement(noeud) && noeud.awaitModifier !== undefined)) {
+        trouve = noeud.getStart();
+        return;
+      }
+      ts.forEachChild(noeud, visiter);
+    };
+    visiter(source);
+    return trouve;
+  }
+
+  it('témoin : index.ts contient un await de niveau module', () => {
+    expect(premierAwait()).not.toBeNull();
+  });
+
+  for (const evenement of ['unhandledRejection', 'uncaughtException'] as const) {
+    it(`process.on('${evenement}') est posé AVANT le premier await de niveau module`, () => {
+      const ecouteur = gestionnaire('process', evenement);
+      const attente = premierAwait();
+      expect(ecouteur, `process.on('${evenement}', …) absent de index.ts`).not.toBeNull();
+      expect(attente).not.toBeNull();
+      expect(ecouteur?.position ?? Infinity, 'écouteur posé avant le premier await').toBeLessThan(attente ?? -Infinity);
     });
   }
 });

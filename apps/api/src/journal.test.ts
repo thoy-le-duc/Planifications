@@ -9,13 +9,20 @@
  * substitut isolé (\p{Cs}). La troncature ne coupe jamais une paire de substitution en deux.
  *
  * decrireErreur(erreur) : classe, code sûr, cause, et positions de la pile. De la pile, il ne
- * reste que des positions `fichier:ligne:colonne` (file://…, node:…, ou chemin absolu) : ni nom
+ * reste que des positions `fichier:ligne:colonne` sous `node:` ou sous la racine du dépôt (calculée
+ * depuis import.meta.url de journal.ts), écrites RELATIVES à cette racine (`apps/api/src/app.ts:12:3`,
+ * `node_modules/pg/…`) ; une position hors de la racine (/home/jean@…, /srv/…) disparaît : ni nom
  * de fonction, ni « [as …] », ni texte qui précède la première frame (« Nom: message », dont le
  * nom et le message peuvent imiter des frames), ni frame d'une pile concaténée par une
  * bibliothèque (« \ncause: » + pile de la cause). Elle ne lève jamais, quelle que soit la valeur.
  */
 import { describe, expect, it } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import { decrireErreur, ligneDeJournal } from './journal.ts';
+
+/** Racine du dépôt (apps/api/src → ../../../), en chemin et en URL file://. */
+const URL_RACINE = new URL('../../../', import.meta.url).href;
+const RACINE = fileURLToPath(URL_RACINE);
 
 const INTERDITS = ['jean', 'exemple.fr', 'tomate', 'dupont', 'secret', 'synchro'];
 
@@ -88,40 +95,65 @@ describe('decrireErreur — pile réduite à des positions', () => {
   });
 
   it('pile concaténée par une bibliothèque (« \\ncause: » + pile de la cause piégée) : rien de piégé', () => {
-    const cause = new Error("tomate\n    at Object.<anonymous> [as jean@exemple.fr] (file:///srv/api/a.js:1:1)\n[synchro] refus faux 'Jean Dupont'");
-    cause.stack = `Error: ${cause.message}\n    at jean@exemple.fr (file:///srv/api/b.js:2:3)\n    at tomate (node:internal/x:4:5)`;
+    const cause = new Error(`tomate\n    at Object.<anonymous> [as jean@exemple.fr] (${URL_RACINE}apps/api/src/a.js:1:1)\n[synchro] refus faux 'Jean Dupont'`);
+    cause.stack = `Error: ${cause.message}\n    at jean@exemple.fr (${URL_RACINE}apps/api/src/b.js:2:3)\n    at tomate (node:internal/x:4:5)`;
     const erreur = new Error('requête échouée');
-    erreur.stack = `Error: requête échouée\n    at f (file:///srv/api/c.js:6:7)\ncause: ${cause.stack}`;
+    erreur.stack = `Error: requête échouée\n    at f (${URL_RACINE}apps/api/src/c.js:6:7)\ncause: ${cause.stack}`;
     const ligne = decrireErreur(erreur);
     sansPiege(ligne);
-    expect(ligne).toContain('file:///srv/api/c.js:6:7');
+    expect(ligne).toContain('apps/api/src/c.js:6:7');
+    expect(ligne).not.toContain(URL_RACINE);
   });
 
-  it('frame `at Object.f [as jean@exemple.fr] (file:///…:1:1)` : ni le nom de fonction ni le [as …], la position reste', () => {
+  it('frame `at Object.f [as jean@exemple.fr] (file:///…:1:1)` : ni le nom de fonction ni le [as …], la position reste, relative', () => {
     const erreur = new Error('x');
     erreur.stack = [
       'Error: x',
-      '    at Object.f [as jean@exemple.fr] (file:///srv/api/src/a.js:1:1)',
+      `    at Object.f [as jean@exemple.fr] (${URL_RACINE}apps/api/src/a.js:1:1)`,
       '    at async tomate.Dupont (node:internal/process/task_queues:95:5)',
-      '    at new Jean (/srv/api/src/b.ts:12:34)',
-      '    at file:///srv/api/src/c.js:7:8',
+      `    at new Jean (${RACINE}apps/api/src/b.ts:12:34)`,
+      `    at ${URL_RACINE}node_modules/pg/lib/client.js:7:8`,
     ].join('\n');
     const ligne = decrireErreur(erreur);
     sansPiege(ligne);
     expect(ligne).not.toContain('Object.f');
     expect(ligne).not.toContain('[as');
-    expect(ligne).toContain('file:///srv/api/src/a.js:1:1');
+    expect(ligne).toContain('apps/api/src/a.js:1:1');
     expect(ligne).toContain('node:internal/process/task_queues:95:5');
-    expect(ligne).toContain('/srv/api/src/b.ts:12:34');
-    expect(ligne).toContain('file:///srv/api/src/c.js:7:8');
+    expect(ligne).toContain('apps/api/src/b.ts:12:34');
+    expect(ligne).toContain('node_modules/pg/lib/client.js:7:8');
+    expect(ligne, 'positions relatives à la racine').not.toContain(RACINE);
+    expect(ligne).not.toContain('file://');
+  });
+
+  it('position hors de la racine du dépôt (chemin qui cite une personne) : disparaît', () => {
+    const erreur = new Error('m');
+    erreur.stack = 'Error: m\n    at f (/home/jean@exemple.fr/JeanDupont:1:1)\n    at g (file:///srv/jean/tomate.js:2:2)\n    at h (/srv/api/src/b.ts:12:34)';
+    const ligne = decrireErreur(erreur);
+    sansPiege(ligne);
+    expect(ligne).not.toContain('JeanDupont');
+    expect(ligne).not.toContain('/srv/');
+  });
+
+  it('message raccourci après lecture de la pile : la pile garde l’ancien message piégé, rien ne passe', () => {
+    const erreur = new Error('x\n    at /jean@exemple.fr:1:1\n    at tomate (/home/jean/secret.js:1:1)');
+    expect(erreur.stack, 'pile lue (donc figée) avant de raccourcir le message').toContain('jean@exemple.fr');
+    erreur.message = 'x';
+    sansPiege(decrireErreur(erreur));
+  });
+
+  it('frame réelle de ce fichier de test (sous apps/api) : gardée, relative', () => {
+    const ligne = decrireErreur(new Error('x'));
+    expect(ligne).toContain('apps/api/src/journal.test.ts:');
+    expect(ligne).not.toContain(RACINE);
   });
 
   it('une frame dont la « position » n’en est pas une (texte libre) disparaît', () => {
     const erreur = new Error('x');
-    erreur.stack = 'Error: x\n    at f (jean@exemple.fr tomate)\n    at g (eval at h (secret.js:1:1), <anonymous>:1:1)\n    at file:///srv/a.js:1:2';
+    erreur.stack = `Error: x\n    at f (jean@exemple.fr tomate)\n    at g (eval at h (secret.js:1:1), <anonymous>:1:1)\n    at ${URL_RACINE}apps/api/src/a.js:1:2`;
     const ligne = decrireErreur(erreur);
     sansPiege(ligne);
-    expect(ligne).toContain('file:///srv/a.js:1:2');
+    expect(ligne).toContain('apps/api/src/a.js:1:2');
   });
 });
 
