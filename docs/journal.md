@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T25 : démo en ligne sur Vercel
+
+- **Fait** : build `demo` (`pnpm build:demo`, `apps/web/dist-demo/`) publié par Vercel à chaque fusion et à chaque PR : ferme fictive remplie au premier lancement (tâches du jour, plan, itinéraires, quelques refus) datée du jour du téléphone, sans connexion ni serveur, hors ligne, bandeau « Démo — données fictives » et « Réinitialiser la démo » avec confirmation ; `apps/web/vercel.json` (build, cache, réécritures).
+- **Décidé** : rien de la démo n'entre dans le build de production (garde au build et test sur `dist/`), JS de démarrage inchangé à 70,8 Kio ; la démo n'écrase jamais la session d'un vrai compte ; aucun appel réseau (synchro jamais branchée, `fetch` bloqué hors origine). Une relecture, aucun bloquant, quatre retouches faites.
+- **Bloquant** : rien. Suite : T25b (masquer « Se déconnecter » et l'état de synchro dans la démo). Côté Vercel : Root Directory `apps/web`, Node 22.
+
 ## 2026-10-02 — T10l : archiver un refus vu
 
 - **Fait** : bouton « Archiver » sur chaque refus et « Tout archiver (N) » sous la liste dès deux refus ; un refus archivé disparaît sur tous les téléphones de l'utilisateur (colonne `archive_le`, migration 0024, flux PowerSync) ; le serveur n'accepte que la date d'archivage, sur ses propres refus, et refuse un instant impossible ou hors bornes.

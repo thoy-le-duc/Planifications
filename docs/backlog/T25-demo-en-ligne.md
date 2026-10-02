@@ -19,11 +19,11 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : `dist-demo/` contient le mode démo ; `dist/` n'en contient aucune trace (bandeau, jeux, identifiants de démo).
-- [ ] e2e sur `dist-demo/` : premier lancement → Aujourd'hui affiche des tâches de la ferme fictive, sans écran de connexion ; aucune requête réseau hors de l'origine, et aucune vers `/api` ni PowerSync.
-- [ ] e2e : « Fait » sur une tâche, rechargement → la tâche reste faite ; « Réinitialiser » → elle revient.
-- [ ] e2e : rechargement hors ligne → la démo s'ouvre.
-- [ ] `vercel.json` valide (test qui le lit : commande, dossier de sortie, en-têtes).
+- [x] Test : `dist-demo/` contient le mode démo ; `dist/` n'en contient aucune trace (bandeau, jeux, identifiants de démo).
+- [x] e2e sur `dist-demo/` : premier lancement → Aujourd'hui affiche des tâches de la ferme fictive, sans écran de connexion ; aucune requête réseau hors de l'origine, et aucune vers `/api` ni PowerSync.
+- [x] e2e : « Fait » sur une tâche, rechargement → la tâche reste faite ; « Réinitialiser » → elle revient.
+- [x] e2e : rechargement hors ligne → la démo s'ouvre.
+- [x] `vercel.json` valide (test qui le lit : commande, dossier de sortie, en-têtes).
 
 ## Hors périmètre
 
