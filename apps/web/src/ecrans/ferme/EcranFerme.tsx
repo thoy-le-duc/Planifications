@@ -33,7 +33,7 @@ import type { PorteDonnees, RefusSynchro } from '@planif/sync';
 import type { EtatBase, PoigneeDonnees } from '../../donnees/etat-appli.ts';
 import { AlerteOrange, BoutonSecondaire, CARTE } from '../../ui/elements.tsx';
 import { Confirmation } from '../../ui/confirmation.tsx';
-import { SaisiesRefusees } from './Refus.tsx';
+import { SaisiesRefusees, type VidangeArchivage } from './Refus.tsx';
 
 /** Marque de performance : les refus de synchro sont lus et dessinés (T10i, e2e/refus.e2e.ts). */
 export const MARQUE_REFUS_AFFICHES = 'planif:refus-affiches';
@@ -204,6 +204,8 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
   const refus = porteRefus === null ? AUCUN_REFUS : refusLus?.porte === porteRefus ? refusLus.refus : null;
   // T10l : archiver un refus vu (il sort de la liste ; la ligne reste).
   const archiverRefus = porteRefus === null ? undefined : (ids: readonly string[]) => porteRefus.archiverRefus(ids);
+  // T10n : l'archivage différé (bandeau « Annuler ») est écrit et terminé avant la déconnexion.
+  const vidangeRefus = useRef<VidangeArchivage | null>(null);
 
   // Une marque par ouverture de l'écran, quand les refus (ou leur absence) sont dessinés.
   const refusMarques = useRef(false);
@@ -389,6 +391,9 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     setDeconnexionEnCours(true);
     let erreur: string | null = null;
     try {
+      // T10n : un archivage de refus encore annulable part maintenant, avant de compter la file
+      // d'envoi et de fermer la base (sinon il serait écrit dans une base fermée, ou perdu).
+      await vidangeRefus.current?.();
       // Base ouverte par l'appli (T11) : elle compte la file d'envoi. Pas encore lisible (en cours
       // d'ouverture, ou bloquée par un autre onglet) : si la base locale existe, confirmation
       // générique d'abord (null) ; sans base, rien à perdre (0). Effacement : la base est fermée
@@ -424,7 +429,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
   return (
     <>
       {effacementEnAttente && <AlerteOrange>{ALERTE_EFFACEMENT}</AlerteOrange>}
-      {refus !== null && <SaisiesRefusees refus={refus} archiver={archiverRefus} />}
+      {refus !== null && <SaisiesRefusees refus={refus} archiver={archiverRefus} vidangeRef={vidangeRefus} />}
       <Carte titre="Ma façon de cultiver">
         <Ligne
           nom="Mes itinéraires"
