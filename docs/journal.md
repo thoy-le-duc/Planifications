@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T10k : la saisie refusée reconnaissable
+
+- **Fait** : la carte d'un refus montre maintenant la saisie concernée — « Récolte · Tomate Cœur de bœuf · saisie du 28 sept. · 12,5 kg » ; le serveur calcule ce court résumé (type, culture, date, quantité, unité), sans jamais la note ni les données brutes, et il descend au seul téléphone de l'auteur.
+- **Décidé** : culture montrée seulement si la culture est de la ferme de la saisie et que l'utilisateur en est membre ; quantité plafonnée à 1 000 000 ; migration additive (5 colonnes). Une relecture centrée sur l'isolement : rien de bloquant, tests ajoutés pour figer la règle.
+- **Bloquant** : question Q25 à Théophane (effacer les refus d'une ferme qu'on a quittée ?).
+
 ## 2026-10-02 — T10j : des refus de synchro sans jargon
 
 - **Fait** : tous les messages de refus renvoyés au téléphone sont en français simple (« cette saisie existe déjà avec d'autres valeurs », « une information obligatoire manque (quantité) »…), sans nom de colonne, de table, de code ni de seuil technique ; les erreurs du moteur sont traduites par l'API ; le détail technique part dans un journal du serveur, une ligne par refus. Un filet de tests lit tous les textes du serveur et refuse le jargon.

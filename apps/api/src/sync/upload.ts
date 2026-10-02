@@ -39,6 +39,9 @@
  *   ('recolte_annulee') ; une correction plus ancienne que celle en vigueur (heure du téléphone,
  *   puis id) est refusée ; le serveur écrit lui-même l'écart de stock d'un remplacement
  *   (references.ts, stock.ts). Contrat : recoltes-annulees.integration.test.ts.
+ * - T10k : le refus d'un événement porte un court résumé de la saisie (type, culture de la ferme
+ *   de l'événement, jour, quantité et unité ; jamais la note), calculé par resume.ts ; aucun pour
+ *   les autres tables ni pour un lot trop gros. Contrat : resume-refus.integration.test.ts.
  */
 import { ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
 import {
@@ -63,6 +66,7 @@ import type { MotifRefus, Refus } from './motifs.ts';
 import { verifierCorrection, verifierReferences, verifierRemplacementRecolte, type TransactionDb } from './references.ts';
 import { ecrireItineraire, estTableItineraire, TABLES_ITINERAIRE } from './itineraire.ts';
 import { ecrireSerie, fermesDesLignesVisees, TABLES_SERIE, verifierFinDeLot, type SeriesTouchees } from './serie.ts';
+import { RESUME_VIDE, resumerSaisies, type ResumeSaisie } from './resume.ts';
 import { completerStock, ecrireArticle, ecrireMouvement, type RemplacementEcrit } from './stock.ts';
 
 export type { MotifRefus } from './motifs.ts';
@@ -524,7 +528,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
   }
 
   /** Ligne de refus_synchro pour l'écriture `e`. */
-  function ligneRefus(e: EcritureRecue, utilisateurId: Id<'Utilisateur'>, fermes: ReadonlySet<string>, refus: Refus) {
+  function ligneRefus(e: EcritureRecue, utilisateurId: Id<'Utilisateur'>, fermes: ReadonlySet<string>, refus: Refus, resume: ResumeSaisie) {
     const message = messageRefus(refus);
     const fermeVisee = refus.fermeId ?? null;
     const ligne = {
@@ -539,6 +543,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       motif: refus.motif,
       message: texteRefus(message),
       donnees: donneesRefus(e.donnees),
+      // T10k : le court résumé de la saisie (resume.ts), seul à descendre avec le motif.
+      ...resume,
       creeLe: ctx.maintenant(),
     };
     return ligne;
@@ -566,7 +572,11 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     fermes: ReadonlySet<string>,
   ): Promise<void> {
     for (let debut = 0; debut < refus.length; debut += REFUS_PAR_REQUETE) {
-      const lignes = refus.slice(debut, debut + REFUS_PAR_REQUETE).map(([e, r]) => ligneRefus(e, utilisateurId, fermes, r));
+      const paquet = refus.slice(debut, debut + REFUS_PAR_REQUETE);
+      // T10k : pas de résumé pour un lot trop gros (refusé avant toute lecture, rien de plus à lire).
+      const aResumer = paquet.map(([e, r]) => (r.motif === 'lot_trop_gros' ? { table: e.table, donnees: null } : e));
+      const resumes = await resumerSaisies(db, aResumer, fermes);
+      const lignes = paquet.map(([e, r], i) => ligneRefus(e, utilisateurId, fermes, r, resumes[i] ?? RESUME_VIDE));
       try {
         await db.insert(refusSynchro).values(lignes).onConflictDoNothing();
       } catch (erreur) {
