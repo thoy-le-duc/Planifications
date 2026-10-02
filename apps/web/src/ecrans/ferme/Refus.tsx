@@ -33,7 +33,7 @@
  * hidden) écrit tout de suite ce qui attend, une seule fois : rien n'est perdu. Aucune règle
  * serveur nouvelle.
  */
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import type { RefusSynchro, ResumeSaisie } from '@planif/sync';
 import { CARTE } from '../../ui/elements.tsx';
 import './refus.css';
@@ -334,39 +334,69 @@ function libelleArchives(n: number): string {
 
 /**
  * T10n : archivages en attente d'écriture. `archiverPlusTard` cache les ids et (re)lance le délai ;
- * `annuler` les rend ; `ecrireMaintenant` envoie tout ce qui attend, une seule fois. Les ids
- * envoyés restent cachés jusqu'à ce que la liste ne les contienne plus (porte.surveillerRefus),
- * ou reviennent si l'écriture échoue.
+ * `annuler` les rend ; `ecrireMaintenant` envoie tout ce qui attend encore dans la liste, une seule
+ * fois. Les ids envoyés restent cachés jusqu'à ce que la liste ne les contienne plus
+ * (porte.surveillerRefus), ou reviennent si l'écriture échoue. Un id en attente qui sort de la
+ * liste (archivé ailleurs, par la synchro) est oublié : il ne compte plus et n'est pas réécrit.
+ * Plus de porte (`archiver` absente) pendant le délai : l'attente est abandonnée sans écrire, et
+ * `surEchec` le dit ; rien ne part en douce quand la porte revient.
  */
-function useArchivageDiffere(archiver: ((ids: readonly string[]) => Promise<void>) | undefined, surEchec: () => void) {
+function useArchivageDiffere(
+  refus: readonly RefusSynchro[],
+  archiver: ((ids: readonly string[]) => Promise<void>) | undefined,
+  surEchec: () => void,
+) {
   const [enAttente, setEnAttente] = useState<readonly string[]>([]);
   const [envoyes, setEnvoyes] = useState<ReadonlySet<string>>(() => new Set());
   const attente = useRef<readonly string[]>([]);
   const minuteur = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Dernières fonctions reçues : l'écriture au démontage ou sur pagehide part avec elles.
-  const derniers = useRef({ archiver, surEchec });
+  /** Écritures parties et pas encore terminées : la déconnexion les attend. */
+  const enCours = useRef(new Set<Promise<void>>());
+  // Derniers refus et fonctions reçus : l'écriture au démontage ou sur pagehide part avec eux.
+  const derniers = useRef({ refus, archiver, surEchec });
   useEffect(() => {
-    derniers.current = { archiver, surEchec };
+    derniers.current = { refus, archiver, surEchec };
   });
 
-  const ecrireMaintenant = useCallback(() => {
+  const arreterMinuteur = useCallback(() => {
     if (minuteur.current !== null) {
       clearTimeout(minuteur.current);
       minuteur.current = null;
     }
+  }, []);
+
+  const vider = useCallback((): readonly string[] => {
+    arreterMinuteur();
     const ids = attente.current;
-    if (ids.length === 0) return;
     attente.current = [];
-    setEnAttente([]);
+    if (ids.length > 0) setEnAttente([]);
+    return ids;
+  }, [arreterMinuteur]);
+
+  const ecrireMaintenant = useCallback((): void => {
+    const presents = new Set(derniers.current.refus.map((r) => r.id));
+    const ids = vider().filter((id) => presents.has(id));
+    if (ids.length === 0) return;
     const { archiver: ecrire, surEchec: echec } = derniers.current;
-    if (ecrire === undefined) return;
+    if (ecrire === undefined) {
+      echec();
+      return;
+    }
     setEnvoyes((avant) => new Set([...avant, ...ids]));
-    ecrire(ids).catch((erreur: unknown) => {
+    const ecriture = ecrire(ids).catch((erreur: unknown) => {
       console.error('archivage des refus en échec', erreur);
       setEnvoyes((avant) => new Set([...avant].filter((id) => !ids.includes(id))));
       echec();
     });
-  }, []);
+    enCours.current.add(ecriture);
+    void ecriture.finally(() => enCours.current.delete(ecriture));
+  }, [vider]);
+
+  /** Écrit ce qui attend et résout quand toutes les écritures parties sont terminées (déconnexion). */
+  const ecrireEtAttendre = useCallback(async (): Promise<void> => {
+    ecrireMaintenant();
+    await Promise.all([...enCours.current]);
+  }, [ecrireMaintenant]);
 
   // Démontage, page fermée ou appli en arrière-plan : ce qui attend part tout de suite.
   useEffect(() => {
@@ -382,24 +412,36 @@ function useArchivageDiffere(archiver: ((ids: readonly string[]) => Promise<void
     };
   }, [ecrireMaintenant]);
 
+  // Plus de porte pendant le délai : on abandonne, sans écrire, en le disant.
+  const sansPorte = archiver === undefined;
+  useEffect(() => {
+    if (sansPorte && vider().length > 0) surEchec();
+  }, [sansPorte, vider, surEchec]);
+
+  // Liste changée (synchro) : on oublie les ids qui n'y sont plus.
+  useEffect(() => {
+    const presents = new Set(refus.map((r) => r.id));
+    if (attente.current.some((id) => !presents.has(id))) {
+      attente.current = attente.current.filter((id) => presents.has(id));
+      setEnAttente(attente.current);
+      if (attente.current.length === 0) arreterMinuteur();
+    }
+    setEnvoyes((avant) => ([...avant].every((id) => presents.has(id)) ? avant : new Set([...avant].filter((id) => presents.has(id)))));
+  }, [refus, arreterMinuteur]);
+
   function archiverPlusTard(ids: readonly string[]): void {
     const nouveaux = ids.filter((id) => !attente.current.includes(id));
     attente.current = [...attente.current, ...nouveaux];
     setEnAttente(attente.current);
-    if (minuteur.current !== null) clearTimeout(minuteur.current);
+    arreterMinuteur();
     minuteur.current = setTimeout(ecrireMaintenant, DELAI_ANNULATION_ARCHIVAGE_MS);
   }
 
   function annuler(): void {
-    if (minuteur.current !== null) {
-      clearTimeout(minuteur.current);
-      minuteur.current = null;
-    }
-    attente.current = [];
-    setEnAttente([]);
+    vider();
   }
 
-  return { enAttente, envoyes, archiverPlusTard, annuler };
+  return { enAttente, envoyes, archiverPlusTard, annuler, ecrireEtAttendre };
 }
 
 /** T10n : « Annuler » du bandeau, 56 px pour un doigt ganté (en ligne : la hauteur se vérifie sans feuille de style). */
@@ -416,10 +458,14 @@ const ANNULER: CSSProperties = {
   fontSize: 17,
 };
 
-/** T10n : bandeau « N refus archivés — Annuler », en bas de l'écran, au-dessus des onglets. */
+/**
+ * T10n : bandeau « N refus archivés — Annuler », en bas de l'écran, au-dessus des onglets. Il
+ * s'affiche dans la zone d'annonce (role="status"), toujours présente, vide hors attente : un
+ * lecteur d'écran n'annonce que ce qui arrive dans une zone déjà là.
+ */
 function BandeauAnnulation({ nombre, surAnnuler, numero }: { readonly nombre: number; readonly surAnnuler: () => void; readonly numero: number }) {
   return (
-    <div data-testid="refus-annulation" role="status" className="refus-bandeau">
+    <div className="refus-bandeau">
       <span className="refus-bandeau-icone">
         <IconeArchive />
       </span>
@@ -436,36 +482,65 @@ function BandeauAnnulation({ nombre, surAnnuler, numero }: { readonly nombre: nu
   );
 }
 
+/** T10n : écrit l'archivage en attente et résout quand il est terminé (déconnexion). */
+export type VidangeArchivage = () => Promise<void>;
+
 /**
- * Carte « Saisies refusées » ; rien si aucun refus (ni archivage à annuler). `archiver` (T10l,
- * porte.archiverRefus) : sans elle, pas de bouton d'archivage.
+ * Carte « Saisies refusées » ; pas de carte si aucun refus affiché, seulement la zone d'annonce du
+ * bandeau (vide hors attente). `archiver` (T10l, porte.archiverRefus) : sans elle, pas de bouton
+ * d'archivage. `vidangeRef` (T10n) : reçoit, tant que la carte est là, de quoi écrire et attendre
+ * l'archivage en attente (« Se déconnecter » l'appelle avant de fermer la base).
  */
 export function SaisiesRefusees({
   refus,
   archiver,
+  vidangeRef,
 }: {
   readonly refus: readonly RefusSynchro[];
   readonly archiver?: ((ids: readonly string[]) => Promise<void>) | undefined;
+  readonly vidangeRef?: RefObject<VidangeArchivage | null> | undefined;
 }) {
   const [montres, setMontres] = useState(REFUS_PAR_PAGE);
   const [echec, setEchec] = useState(false);
   const [numeroArchivage, setNumeroArchivage] = useState(0);
-  const { enAttente, envoyes, archiverPlusTard, annuler } = useArchivageDiffere(archiver, () => {
+  const signalerEchec = useCallback(() => {
     setEchec(true);
-  });
+  }, []);
+  const { enAttente, envoyes, archiverPlusTard, annuler, ecrireEtAttendre } = useArchivageDiffere(refus, archiver, signalerEchec);
+  useEffect(() => {
+    if (vidangeRef === undefined) return undefined;
+    vidangeRef.current = ecrireEtAttendre;
+    return () => {
+      if (vidangeRef.current === ecrireEtAttendre) vidangeRef.current = null;
+    };
+  }, [vidangeRef, ecrireEtAttendre]);
   const caches = enAttente.length === 0 && envoyes.size === 0 ? null : new Set([...enAttente, ...envoyes]);
   const visibles = caches === null ? refus : refus.filter((r) => !caches.has(r.id));
-  const bandeau =
-    enAttente.length === 0 ? null : (
-      <BandeauAnnulation
-        nombre={enAttente.length}
-        numero={numeroArchivage}
-        surAnnuler={() => {
-          annuler();
-        }}
-      />
+  // Seuls comptent les refus en attente encore dans la liste (un autre a pu être archivé ailleurs).
+  const enAttenteListes = enAttente.length === 0 ? 0 : refus.filter((r) => enAttente.includes(r.id)).length;
+  // Zone d'annonce à une seule place de l'arbre : le même nœud, que la carte soit là ou non.
+  const zone = (
+    <div data-testid="refus-annulation" role="status">
+      {enAttenteListes > 0 && (
+        <BandeauAnnulation
+          nombre={enAttenteListes}
+          numero={numeroArchivage}
+          surAnnuler={() => {
+            annuler();
+          }}
+        />
+      )}
+    </div>
+  );
+  if (visibles.length === 0) {
+    return (
+      <>
+        {/* Place de la carte, vide : la zone garde sa position dans l'arbre, donc son nœud. */}
+        {null}
+        {zone}
+      </>
     );
-  if (visibles.length === 0) return bandeau;
+  }
   const maintenant = new Date();
   const restants = visibles.length - montres;
   const affiches = visibles.slice(0, montres);
@@ -515,7 +590,7 @@ export function SaisiesRefusees({
           </button>
         )}
       </section>
-      {bandeau}
+      {zone}
     </>
   );
 }
