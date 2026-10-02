@@ -29,7 +29,7 @@ export const MESSAGES: Readonly<Record<MotifRefus, string>> = {
 const PRECISION_INCOMPRISE = "ce n'est pas une saisie que l'appli sait enregistrer";
 
 /** Précisions communes aux séries et aux itinéraires (serie.ts, itineraire.ts). */
-export const PRECISION_MODIFIEE_AILLEURS = 'cette saisie a été modifiée sur un autre téléphone';
+export const PRECISION_EXISTE_DEJA = "cette saisie existe déjà avec d'autres valeurs";
 export const PRECISION_INTROUVABLE = 'la saisie à modifier est introuvable';
 export const PRECISION_CREEE_SUPPRIMEE = 'une saisie ne se crée pas déjà supprimée';
 export const PRECISION_CHANGE_DE_FERME = 'une saisie ne change pas de ferme';

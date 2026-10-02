@@ -36,7 +36,7 @@ import {
   PRECISION_CHANGE_DE_FERME,
   PRECISION_CREEE_SUPPRIMEE,
   PRECISION_INTROUVABLE,
-  PRECISION_MODIFIEE_AILLEURS,
+  PRECISION_EXISTE_DEJA,
   refusDuCoeur,
 } from './messages.ts';
 import type { Refus } from './motifs.ts';
@@ -345,7 +345,7 @@ async function creer(tx: TransactionDb, ctx: Contexte, e: EcritureItineraireRecu
     // Même id, autres valeurs, ou ligne d'une autre ferme ou de la bibliothèque : refusé. Le
     // refus ne porte la ferme que si la ligne existante est la sienne (rien sur une autre ferme).
     if (existante) return null;
-    return invalide(PRECISION_MODIFIEE_AILLEURS, (await deLaFerme(tx, e.table, v.valeur.id, fermeId)) ? fermeId : null);
+    return invalide(PRECISION_EXISTE_DEJA, (await deLaFerme(tx, e.table, v.valeur.id, fermeId)) ? fermeId : null);
   }
 
   const refus = await verifierEnBase(tx, v, entree, null);
@@ -355,7 +355,7 @@ async function creer(tx: TransactionDb, ctx: Contexte, e: EcritureItineraireRecu
   if (!(await inserer(tx, e.table, v.ligne, maintenant))) {
     // Écrite entre-temps par un envoi concurrent : même règle que le renvoi.
     if ((await identique(tx, e.table, v.ligne, v.valeur.id)) === true) return null;
-    return invalide(PRECISION_MODIFIEE_AILLEURS, (await deLaFerme(tx, e.table, v.valeur.id, fermeId)) ? fermeId : null);
+    return invalide(PRECISION_EXISTE_DEJA, (await deLaFerme(tx, e.table, v.valeur.id, fermeId)) ? fermeId : null);
   }
   await historiser(tx, ctx, e.table, v.valeur.id, fermeId, auteurId, maintenant, 'creation', null);
   return null;

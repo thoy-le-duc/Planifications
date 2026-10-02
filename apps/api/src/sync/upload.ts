@@ -188,6 +188,18 @@ function texteRefus(texte: string): string {
   return texte.replaceAll('\u0000', '\uFFFD').slice(0, LONGUEUR_MAX_TEXTE_REFUS);
 }
 
+/** Longueur au plus d'une entrée du journal du serveur. */
+const LONGUEUR_MAX_LIGNE_JOURNAL = 1_000;
+
+/**
+ * Entrée du journal sur UNE ligne, toujours : la table, l'id et le détail (nom de clé reçu…)
+ * viennent du téléphone. Caractères de contrôle et séparateurs de ligne (U+0085, U+2028, U+2029)
+ * remplacés, entrée tronquée.
+ */
+function ligneDeJournal(texte: string): string {
+  return texte.slice(0, LONGUEUR_MAX_LIGNE_JOURNAL).replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '?');
+}
+
 /**
  * JSON.stringify qui ne lève jamais (relecture T10, R2) : une valeur imbriquée sur des dizaines
  * de milliers de niveaux dépasse la pile (RangeError). null si la valeur ne s'écrit pas.
@@ -538,9 +550,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
    */
   function journaliser(e: EcritureRecue, refus: Refus): void {
     try {
-      // Table et id viennent du téléphone : tronqués, sans caractère de contrôle (une ligne de journal reste une ligne).
-      const brut = (t: string): string => texteRefus(t).replace(/\p{Cc}/gu, '?');
-      ctx.journal(`[synchro] refus ${refus.motif} ${brut(e.table)} ${brut(e.id)} : ${refus.detail ?? '-'}`);
+      ctx.journal(ligneDeJournal(`[synchro] refus ${refus.motif} ${texteRefus(e.table)} ${texteRefus(e.id)} : ${refus.detail ?? '-'}`));
     } catch {
       // Sortie d'erreur fermée… : le refus s'enregistre quand même.
     }

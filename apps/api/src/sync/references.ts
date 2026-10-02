@@ -40,6 +40,8 @@ interface Reference {
   readonly ids: readonly string[];
   /** Ce que le maraîcher lit dans le message. */
   readonly libelle: string;
+  /** Ce que le maraîcher lit si la ligne est introuvable, quand « <libellé> introuvable » ne se dit pas. */
+  readonly introuvable?: string;
   /** Ligne partagée (ferme_id nul) acceptée : la bibliothèque de produits phyto. */
   readonly bibliothequeAcceptee?: boolean;
   /**
@@ -58,7 +60,7 @@ function references(l: LigneEvenement): Reference[] {
     liste.push({ table: 'emplacement', ids: [...new Set(l.emplacementIds)], libelle: 'emplacement', supprimee: 'emplacement supprimé' });
   }
   if (l.remplaceEvenementId !== null) {
-    liste.push({ table: 'evenement', ids: [l.remplaceEvenementId], libelle: 'saisie corrigée ou annulée', supprimee: null });
+    liste.push({ table: 'evenement', ids: [l.remplaceEvenementId], libelle: 'saisie remplacée', introuvable: 'la saisie à corriger ou annuler est introuvable', supprimee: null });
   }
   // Le détail a été lu selon son type (evenement.ts) : ces clés n'existent que pour l'irrigation et le traitement.
   const detail = l.detail;
@@ -105,7 +107,7 @@ export async function verifierReferences(tx: TransactionDb, l: LigneEvenement): 
     const trouvees = new Map(lignes.rows.map((x) => [x.id, x]));
     for (const id of r.ids) {
       const ligne = trouvees.get(id);
-      if (ligne === undefined) return { motif: 'ecriture_invalide', precision: `${r.libelle} introuvable` };
+      if (ligne === undefined) return { motif: 'ecriture_invalide', precision: r.introuvable ?? `${r.libelle} introuvable` };
       if (ligne.supprimee) return { motif: 'ecriture_invalide', precision: r.supprimee ?? `${r.libelle} introuvable` };
     }
   }

@@ -31,7 +31,7 @@ import {
   PRECISION_CHANGE_DE_FERME,
   PRECISION_CREEE_SUPPRIMEE,
   PRECISION_INTROUVABLE,
-  PRECISION_MODIFIEE_AILLEURS,
+  PRECISION_EXISTE_DEJA,
   refusDuCoeur,
 } from './messages.ts';
 import type { Refus } from './motifs.ts';
@@ -336,7 +336,7 @@ async function creer(
   const existante = await identique(tx, e.table, ligne, valeur.id);
   if (existante !== null) {
     // Décision 4 du chef : même id, autres valeurs (ou ligne d'une autre ferme) → ecriture_invalide.
-    return existante ? null : invalide(PRECISION_MODIFIEE_AILLEURS, fermeId);
+    return existante ? null : invalide(PRECISION_EXISTE_DEJA, fermeId);
   }
 
   if (e.table === 'serie') {
@@ -359,7 +359,7 @@ async function creer(
   );
   if (ecrite.rows.length === 0) {
     // Écrite entre-temps par un envoi concurrent : même règle que le renvoi.
-    return (await identique(tx, e.table, ligne, valeur.id)) === true ? null : invalide(PRECISION_MODIFIEE_AILLEURS, fermeId);
+    return (await identique(tx, e.table, ligne, valeur.id)) === true ? null : invalide(PRECISION_EXISTE_DEJA, fermeId);
   }
   await historiser(tx, ctx, e.table, valeur.id, fermeId, auteurId, maintenant, 'creation', null);
   touchees.set(serieId, index);
@@ -527,7 +527,7 @@ export async function verifierFinDeLot(
     for (const o of occupations.rows) {
       const lecture = validerOccupation(o.l, serie.valeur);
       if (!lecture.ok) {
-        const refus = { ...invalide("l'occupation d'un emplacement sort des dates de sa série", fermeId), detail: detailDuCoeur(lecture.erreur) };
+        const refus = { ...invalide("l'occupation d'un emplacement ne suit plus les dates de sa série", fermeId), detail: detailDuCoeur(lecture.erreur) };
         return { index, refus };
       }
     }
