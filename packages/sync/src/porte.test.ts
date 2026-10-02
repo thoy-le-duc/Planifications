@@ -285,5 +285,38 @@ describe('T10 : porte d’accès aux données (@planif/sync)', () => {
       ]);
       arreter();
     });
+
+    it('T10k : le résumé de la saisie refusée (colonnes saisie_*), absent quand le serveur n’en a pas', async () => {
+      base.recevoir(
+        `INSERT INTO refus_synchro (id, utilisateur_id, ferme_id, nom_table, ligne_id, operation, motif, message, cree_le,
+                                    saisie_type, saisie_culture, saisie_date, saisie_quantite, saisie_unite)
+         VALUES (?, ?, ?, 'evenement', 'ligne-r5', 'PUT', 'recolte_annulee', 'Message r5', ?, ?, ?, ?, ?, ?)`,
+        ['r5', UTILISATEUR, FERME, '2026-10-01T06:00:05.000Z', 'recolte', 'Laitue Batavia blonde', '2026-09-28', 12.5, 'kg'],
+      );
+      base.recevoir(
+        `INSERT INTO refus_synchro (id, utilisateur_id, ferme_id, nom_table, ligne_id, operation, motif, message, cree_le,
+                                    saisie_type, saisie_culture, saisie_date, saisie_quantite, saisie_unite)
+         VALUES (?, ?, ?, 'evenement', 'ligne-r6', 'PUT', 'auteur_invalide', 'Message r6', ?, ?, NULL, ?, NULL, NULL)`,
+        ['r6', UTILISATEUR, FERME, '2026-10-01T06:00:04.000Z', 'realise', '2026-08-05'],
+      );
+      recevoirRefus('r7', UTILISATEUR, 'ajout_seul', '2026-10-01T06:00:03.000Z');
+      const vus: RefusSynchro[][] = [];
+      const arreter = porte.surveillerRefus((refus) => vus.push(refus));
+      await jusqua(() => vus.at(-1)?.length === 3);
+      const [r5, r6, r7] = vus.at(-1) ?? [];
+      expect(r5?.saisie).toEqual({ type: 'recolte', culture: 'Laitue Batavia blonde', date: '2026-09-28', quantite: 12.5, unite: 'kg' });
+      expect(r6?.saisie).toEqual({ type: 'realise', culture: null, date: '2026-08-05', quantite: null, unite: null });
+      expect(r7?.saisie, 'aucun résumé : pas de champ saisie').toBeUndefined();
+      expect(r7).toEqual({
+        id: 'r7',
+        nomTable: 'evenement',
+        ligneId: 'ligne-r7',
+        operation: 'PATCH',
+        motif: 'ajout_seul',
+        message: 'Message r7',
+        creeLe: '2026-10-01T06:00:03.000Z',
+      });
+      arreter();
+    });
   });
 });

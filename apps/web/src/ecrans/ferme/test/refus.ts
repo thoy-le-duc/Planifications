@@ -108,6 +108,41 @@ const COLONNES = ['id', 'utilisateur_id', 'ferme_id', 'nom_table', 'ligne_id', '
 export const SQL_INSERER_REFUS = `INSERT INTO refus_synchro (${COLONNES.join(', ')}) VALUES (${COLONNES.map(() => '?').join(', ')})`;
 export const parametresRefus = (l: LigneRefusLocale): (string | null)[] => COLONNES.map((c) => l[c]);
 
+/**
+ * T10k (docs/backlog/T10k-refus-saisie.md) : résumé de la saisie refusée, calculé par le serveur
+ * et synchronisé (colonnes nullables saisie_* de refus_synchro ; contrat complet en tête
+ * d'apps/api/src/sync/resume-refus.integration.test.ts). La porte l'expose en
+ * `RefusSynchro.saisie` ({ type, culture, date, quantite, unite }), absent quand tout est nul.
+ *
+ * Écran : la carte d'un refus qui a un résumé montre ce qui avait été saisi — le type
+ * d'événement EN FRANÇAIS (« Récolte », jamais le code 'recolte'), la culture telle quelle, le
+ * JOUR de la saisie (jour et mois en français, distinct de la date du refus, qui reste affichée)
+ * et, pour une récolte, la quantité au format français avec son unité lisible (« 12,5 kg »,
+ * « 30 pièces », jamais le code 'piece'). Un champ absent ne s'affiche pas (ni « null », ni
+ * « undefined », ni « NaN ») ; un refus sans résumé s'affiche comme en T10i.
+ */
+export interface ResumeSaisieLocal {
+  readonly saisie_type: string | null;
+  readonly saisie_culture: string | null;
+  readonly saisie_date: string | null;
+  readonly saisie_quantite: number | null;
+  readonly saisie_unite: string | null;
+}
+
+const COLONNES_RESUME = ['saisie_type', 'saisie_culture', 'saisie_date', 'saisie_quantite', 'saisie_unite'] as const;
+
+/** Insertion d'un refus avec son résumé (T10k). */
+export const SQL_INSERER_REFUS_RESUME = `INSERT INTO refus_synchro (${[...COLONNES, ...COLONNES_RESUME].join(', ')}) VALUES (${[
+  ...COLONNES,
+  ...COLONNES_RESUME,
+]
+  .map(() => '?')
+  .join(', ')})`;
+export const parametresRefusResume = (l: LigneRefusLocale & ResumeSaisieLocal): (string | number | null)[] => [
+  ...parametresRefus(l),
+  ...COLONNES_RESUME.map((c) => l[c]),
+];
+
 /** Message tel que le serveur l'écrit (upload.ts : précision ajoutée après « : »). */
 export function messageServeur(motif: CodeMotif, precision?: string): string {
   return precision === undefined ? MESSAGES_SERVEUR[motif] : `${MESSAGES_SERVEUR[motif]} : ${precision}.`;
