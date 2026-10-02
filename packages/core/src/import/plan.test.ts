@@ -927,6 +927,42 @@ describe('T14d — une semaine qui retombe avant la précédente : année suivan
     expect(l.avertissements).toBeUndefined();
   });
 
+  it('retouche 1. saison 2025, S50 → S1 : la plantation est le lundi 2025-12-29, semaine 1 de 2026 → l’avertissement dit 2026 (année de la semaine, pas de la date civile)', () => {
+    const l = ligne(plan('Tomate;S50;S1;;', 2025), 2);
+    expect(l.erreurs).toStrictEqual([]);
+    expect(l.valeurs).toMatchObject({ date_semis: '2025-12-08', date_plantation: '2025-12-29' });
+    expect(avertissements(l).map((a) => [a.champ, a.annee])).toStrictEqual([['date_plantation', 2026]]);
+    expect(avertissements(l)[0]?.message).toMatch(/2026/);
+    expect(avertissements(l)[0]?.message).not.toMatch(/2025/);
+  });
+
+  it('retouche 2. message exact : « plantation en 2028 » (libellé court, sans « date de »)', () => {
+    const l = ligne(plan('Tomate;S40;S2;;'), 2);
+    expect(avertissements(l).map((a) => a.message)).toStrictEqual(['plantation en 2028']);
+  });
+
+  it('retouche 3. témoin : une ligne en erreur n’a pas de champ avertissements', () => {
+    for (const saisie of ['Tomate;S40;S2;S45;', 'Tomate;S40;S10;S5;', 'Tomate;S40;S2;S41;']) {
+      const l = ligne(plan(saisie), 2);
+      expect(l.statut).toBe('erreur');
+      expect(l.avertissements).toBeUndefined();
+    }
+  });
+
+  it('retouche 4. témoin : semis en date complète 15/10/2027 + plantation S2 → plantation 2028-01-10, avertissement sur la plantation', () => {
+    const l = ligne(plan('Tomate;15/10/2027;S2;;'), 2);
+    expect(l.erreurs).toStrictEqual([]);
+    expect(l.valeurs).toMatchObject({ date_semis: '2027-10-15', date_plantation: '2028-01-10' });
+    expect(avertissements(l).map((a) => [a.champ, a.annee])).toStrictEqual([['date_plantation', 2028]]);
+  });
+
+  it('retouche 5. témoin : saison 2026 (53 semaines), S40 2026 → S2 → S40 de 2027 = 371 jours, plus de 52 semaines → erreur', () => {
+    const l = ligne(plan('Tomate;S40;S2;S40;', 2026), 2);
+    expect(l.statut).toBe('erreur');
+    expect(codes(l)).toStrictEqual([['dates_incoherentes', 'date_debut_recolte', 3]]);
+    expect(l.avertissements).toBeUndefined();
+  });
+
   it('fonction pure : entrée gelée, même plan à chaque appel', () => {
     const e = geler(entree(csv(`${ENTETE}\nTomate;S40;S2;S20;`), 'series', { anneeSaison: 2027 }));
     expect(m.preparerImport(e)).toStrictEqual(m.preparerImport(e));
