@@ -21,6 +21,18 @@ const PREFIXES_PAGES_HORS_APPLI = ['/mesures/', '/diagnostic/'];
 /** Mode du build des essais (pages de test seules). */
 const MODE_ESSAIS = 'essais';
 
+/**
+ * T25 — mode du build de la démo en ligne (`vite build --mode demo`, servi par Vercel) : la même
+ * appli (entrée `index`, service worker, précache), avec le mode démo (src/demo/, choisi par
+ * src/main.tsx sur `import.meta.env.MODE`), dans son propre dossier. Sans API ni synchro : les
+ * URL de service sont vidées, quelle que soit la configuration de l'hébergeur.
+ */
+const MODE_DEMO = 'demo';
+const DOSSIER_DEMO = 'dist-demo';
+
+/** Code du mode démo : jamais dans un autre build que celui de la démo. */
+const DOSSIER_SOURCES_DEMO = fileURLToPath(new URL('src/demo/', import.meta.url));
+
 /** Liste blanche du build de production : l'entrée `index`, la page `/index.html`, rien d'autre. */
 const ENTREE_APPLI = 'index';
 const PAGE_APPLI = '/index.html';
@@ -125,7 +137,7 @@ interface MorceauSortie {
  * n'enregistre de service worker : le build échoue sinon. Le build de production, lui, échoue
  * s'il contient une page hors appli.
  */
-function pagesHorsAppliSansServiceWorker(essais: boolean): Plugin {
+function pagesHorsAppliSansServiceWorker(essais: boolean, demo: boolean): Plugin {
   return {
     name: 'planif:pages-hors-appli-sans-sw',
     apply: 'build',
@@ -134,6 +146,10 @@ function pagesHorsAppliSansServiceWorker(essais: boolean): Plugin {
       // T11c : le build des essais ne vide jamais le dossier du build de production.
       if (essais && resolve(config.root, config.build.outDir) === resolve(config.root, 'dist')) {
         throw new Error('build des essais vers dist/ refusé : passer --outDir (scripts/build-essais.ts) (T11c)');
+      }
+      // T25 : la démo ne remplace jamais le build de production.
+      if (demo && resolve(config.root, config.build.outDir) === resolve(config.root, 'dist')) {
+        throw new Error(`build de la démo vers dist/ refusé : sa sortie est ${DOSSIER_DEMO}/ (T25)`);
       }
     },
     buildStart(options) {
@@ -165,6 +181,13 @@ function pagesHorsAppliSansServiceWorker(essais: boolean): Plugin {
       const morceaux = new Map<string, MorceauSortie>();
       for (const [fichier, sortie] of Object.entries(paquet)) {
         if (sortie.type === 'chunk') morceaux.set(fichier, sortie);
+      }
+      // T25 : hors du build de la démo, aucun module de src/demo/ (bandeau, jeux de la démo).
+      if (!demo) {
+        for (const [fichier, morceau] of morceaux) {
+          const intrus = morceau.moduleIds.find((id) => id.startsWith(DOSSIER_SOURCES_DEMO));
+          if (intrus !== undefined) throw new Error(`${fichier} : code du mode démo (${intrus}) hors du build de la démo (T25)`);
+        }
       }
       // Build des essais : toutes les entrées sont des pages de test, chacune est parcourue.
       for (const [fichierEntree, entree] of morceaux) {
@@ -228,6 +251,7 @@ function entrees(essais: boolean): Record<string, string> {
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, import.meta.dirname, 'VITE_');
   const essais = mode === MODE_ESSAIS;
+  const demo = mode === MODE_DEMO;
   return {
     plugins: [
       react(),
@@ -273,14 +297,18 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,
         },
       }),
-      pagesHorsAppliSansServiceWorker(essais),
-      cspEnBalise({ urlApi: env.VITE_API_URL, urlPowerSync: env.VITE_POWERSYNC_URL }),
+      pagesHorsAppliSansServiceWorker(essais, demo),
+      // Démo : ni API ni synchro, la CSP n'autorise que l'origine de la démo.
+      cspEnBalise(demo ? {} : { urlApi: env.VITE_API_URL, urlPowerSync: env.VITE_POWERSYNC_URL }),
     ],
+    // Démo : URL de service vidées, même si l'hébergeur définit VITE_API_URL ou VITE_POWERSYNC_URL.
+    ...(demo ? { define: { 'import.meta.env.VITE_API_URL': '""', 'import.meta.env.VITE_POWERSYNC_URL': '""' } } : {}),
     build: {
       // modulepreload est natif sur les navigateurs visés (Chrome Android, Safari 17+) ; ailleurs,
       // les mêmes fichiers se chargent sans préchargement. Le polyfill n'était que du JavaScript de
       // démarrage en plus (T16, budget de poids).
       modulePreload: { polyfill: false },
+      ...(demo ? { outDir: DOSSIER_DEMO } : {}),
       // Build des essais : public/ est déjà dans la copie du build de production.
       copyPublicDir: !essais,
       rollupOptions: {

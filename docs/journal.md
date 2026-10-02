@@ -7,6 +7,11 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Fait** : un seul journal pour toute l'API (`apps/api/src/journal.ts`), nettoyé ligne par ligne (contrôles, caractères invisibles et de sens d'écriture, demi-caractères) ; une erreur inattendue est décrite par sa classe, un code vérifié et des positions de pile relatives au dépôt, jamais par son message ; le journal cite le motif de route (`/fermes/:id`), jamais le chemin reçu ; erreurs de fond (base, rejets, exceptions) branchées sur ce journal.
 - **Décidé** : un rejet de promesse orphelin est journalisé sans arrêter l'API (sinon un client pourrait la faire redémarrer en boucle) ; une exception non rattrapée l'arrête (code 1). Relecture jusqu'à zéro faille : 3 bloquants puis un cas théorique, tous fermés avec les tests écrits d'abord.
 - **Bloquant** : rien. Suite : T10p (erreur d'envoi en flux de `@hono/node-server`, non atteignable aujourd'hui).
+## 2026-10-02 — T25 : démo en ligne sur Vercel
+
+- **Fait** : build `demo` (`pnpm build:demo`, `apps/web/dist-demo/`) publié par Vercel à chaque fusion et à chaque PR : ferme fictive remplie au premier lancement (tâches du jour, plan, itinéraires, quelques refus) datée du jour du téléphone, sans connexion ni serveur, hors ligne, bandeau « Démo — données fictives » et « Réinitialiser la démo » avec confirmation ; `apps/web/vercel.json` (build, cache, réécritures).
+- **Décidé** : rien de la démo n'entre dans le build de production (garde au build et test sur `dist/`), JS de démarrage inchangé à 70,8 Kio ; la démo n'écrase jamais la session d'un vrai compte ; aucun appel réseau (synchro jamais branchée, `fetch` bloqué hors origine). Une relecture, aucun bloquant, quatre retouches faites.
+- **Bloquant** : rien. Suite : T25b (masquer « Se déconnecter » et l'état de synchro dans la démo). Côté Vercel : Root Directory `apps/web`, Node 22.
 
 ## 2026-10-02 — T10l : archiver un refus vu
 

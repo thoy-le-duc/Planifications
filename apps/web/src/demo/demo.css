@@ -1,0 +1,240 @@
+/*
+ * T25 — habillage du mode démo (chargé avec lui, jamais dans le build de production). Jetons de
+ * src/ui (jetons.css) : la bande prolonge l'en-tête vert, la confirmation reprend la feuille du
+ * bas des autres écrans.
+ *
+ * Mise en page : le cadre tient exactement dans l'écran (100dvh) ; la bande y prend 44 px et
+ * l'appli le reste. C'est la zone de l'appli qui défile, jamais la page : la barre du bas reste
+ * collée en bas, et les écrans qui tiennent dans l'écran (Planches, connexion) gardent leur
+ * hauteur, bande déduite.
+ */
+:root {
+  --demo-hauteur: 44px;
+}
+
+.demo-cadre,
+.demo-page {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.demo-contenu {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Écrans en min-height: 100dvh (coquille, connexion) : la hauteur de la zone, pas de l'écran. */
+.demo-contenu > .coquille,
+.demo-contenu > .connexion,
+.demo-contenu > .demo-attente {
+  flex: 1 0 auto;
+  min-height: 100%;
+}
+
+/* Planches : la coquille tient dans la zone (height: 100dvh dans plan.css), seul le plan défile. */
+.demo-contenu > .coquille-plan {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+.demo-bande {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: var(--espace-s);
+  height: calc(var(--demo-hauteur) + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 8px 0 14px;
+  background: var(--couleur-encre);
+  color: var(--couleur-sur-foret);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.demo-etiquette {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--police-code);
+  color: var(--couleur-sur-foret-doux);
+}
+
+.demo-etiquette::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-pousse);
+  box-shadow: 0 0 0 3px rgba(159, 224, 180, 0.22);
+}
+
+/* Le bouton occupe toute la hauteur de la bande (cible de 44 px) ; la pastille est le dessin. */
+.demo-reinitialiser {
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-height: var(--demo-hauteur);
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--couleur-sur-foret);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.demo-reinitialiser-pastille {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(244, 247, 239, 0.28);
+  border-radius: var(--rayon-pastille);
+}
+
+.demo-reinitialiser:active .demo-reinitialiser-pastille {
+  background: rgba(244, 247, 239, 0.12);
+}
+
+.demo-reinitialiser:focus-visible {
+  outline: none;
+}
+
+.demo-reinitialiser:focus-visible .demo-reinitialiser-pastille {
+  outline: 3px solid var(--couleur-pousse);
+  outline-offset: 2px;
+}
+
+.demo-reinitialiser:disabled {
+  opacity: 0.6;
+}
+
+/* Attente (préparation, échec, autre compte connecté). */
+.demo-attente {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--espace-l);
+  padding: var(--espace-xl);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  text-align: center;
+  font-size: 18px;
+}
+
+.demo-attente h1 {
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 30px;
+  letter-spacing: -0.01em;
+}
+
+.demo-attente p {
+  max-width: 30ch;
+  color: var(--couleur-sur-foret-doux);
+}
+
+.demo-attente[data-etat='preparation'] p::after {
+  content: '';
+  display: block;
+  width: 48px;
+  height: 4px;
+  margin: var(--espace-l) auto 0;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-pousse);
+  animation: demo-pulse 1.2s ease-in-out infinite;
+}
+
+/* Confirmation : feuille du bas, voile sur l'appli. */
+.demo-voile {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(21, 32, 26, 0.48);
+  animation: demo-apparition 0.16s ease-out;
+}
+
+.demo-feuille {
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  border-radius: var(--rayon-feuille) var(--rayon-feuille) 0 0;
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: 0 -8px 32px rgba(21, 32, 26, 0.18);
+  animation: demo-montee 0.2s ease-out;
+}
+
+.demo-poignee {
+  align-self: center;
+  width: 40px;
+  height: 5px;
+  margin-bottom: var(--espace-s);
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-trait);
+}
+
+.demo-feuille h2 {
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 22px;
+}
+
+.demo-feuille p {
+  font-size: 17px;
+  color: var(--couleur-secondaire);
+}
+
+.demo-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-s);
+  margin-top: var(--espace-s);
+}
+
+@keyframes demo-pulse {
+  50% {
+    opacity: 0.3;
+    transform: scaleX(0.6);
+  }
+}
+
+@keyframes demo-apparition {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes demo-montee {
+  from {
+    transform: translateY(24px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-attente[data-etat='preparation'] p::after,
+  .demo-voile,
+  .demo-feuille {
+    animation: none;
+  }
+}
