@@ -30,7 +30,12 @@
  *     'table_interdite' ;
  *   - PUT ou DELETE sur refus_synchro : 'table_interdite' (un refus ne se crée ni ne s'efface
  *     depuis le téléphone) ;
- *   - archive_le illisible ou nul : 'ecriture_invalide'.
+ *   - archive_le illisible ou nul : 'ecriture_invalide' ;
+ *   - (relecture) archive_le impossible (31 février) ou hors bornes : avant cree_le − 1 jour, ou
+ *     après l'heure du serveur + 1 jour (9999-12-31…) : 'ecriture_invalide' ;
+ *   - (relecture) `donnees` portant une clé `__proto__` en plus d'archive_le : 'table_interdite'.
+ * Lot mêlé (relecture) : un lot qui contient une écriture de stock est tout ou rien (T10c) ;
+ * l'archivage d'un refus d'autrui y est refusé et fait refuser tout le lot, rien n'est écrit.
  * Un archivage refusé renvoyé (file du téléphone) ne crée pas un second refus (contrainte
  * refus_synchro_sans_doublon) : pas de boucle. Refus_synchro n'est pas une table « tout ou
  * rien » : dans un même lot (« Tout archiver »), un archivage refusé ne bloque pas les autres.
@@ -40,7 +45,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { creerApp } from '../app.ts';
 import { emettreJetonAcces, genererCleSignature, type ExpediteurCourriel, type TrousseauCles } from '../auth/index.ts';
-import { ajouterMembre, creerBaseJetable, creerFerme, creerUtilisateur, decrireAvecBase, type BaseJetable } from './test/base-jetable.ts';
+import { ajouterMembre, creerBaseJetable, creerFerme, creerUtilisateur, decrireAvecBase, peuplerFerme, type BaseJetable } from './test/base-jetable.ts';
 
 const EMETTEUR = 'https://api.planif.test';
 const AUDIENCE = 'powersync-planif';
@@ -315,6 +320,68 @@ decrireAvecBase('T10l')('T10l : archiver un refus vu', { timeout: 60_000 }, () =
       ]);
       expect(await ligne(id)).toEqual(avant);
       expect(await ligne(nouveau), 'aucun refus créé à l’id choisi par le téléphone').toBeUndefined();
+    });
+  });
+
+  // ── 3 bis. Relecture : instants impossibles ou hors bornes, clé __proto__, lot mêlé ─────────
+
+  describe('relecture : valeurs piégées', () => {
+    // refusExistant : cree_le = 2026-09-30T06:00Z ; heure du serveur : 2026-10-01T06:00Z.
+    it.each([
+      ['31 février', '2026-02-31T00:00:00.000Z'],
+      ['avant cree_le − 1 jour', '2026-09-29T05:00:00.000Z'],
+      ['après l’heure du serveur + 1 jour', '2026-10-02T07:00:00.000Z'],
+      ['an 9999', '9999-12-31T23:59:59.999Z'],
+      ['an 1970', '1970-01-01T00:00:00.000Z'],
+    ])('archive_le %s : refusé (ecriture_invalide), ligne intacte', async (_cas, instant) => {
+      const id = await refusExistant(theo);
+      const avant = await ligne(id);
+      const r = await lot(jetonTheo, [archivage(id, { archive_le: instant })]);
+      expect(r.refus).toEqual([{ table: 'refus_synchro', id, motif: 'ecriture_invalide' }]);
+      expect(await ligne(id)).toEqual(avant);
+    });
+
+    it.each([
+      ['juste après cree_le − 1 jour', '2026-09-29T07:00:00.000Z'],
+      ['juste avant l’heure du serveur + 1 jour', '2026-10-02T05:00:00.000Z'],
+    ])('archive_le %s : accepté (téléphone un peu en avance ou en retard)', async (_cas, instant) => {
+      const id = await refusExistant(theo);
+      expect((await lot(jetonTheo, [archivage(id, { archive_le: instant })])).refus).toEqual([]);
+      expect(await archiveLe(id)).toBe(instant);
+    });
+
+    it('donnees avec une clé __proto__ en plus d’archive_le : refusé (table_interdite), ligne intacte', async () => {
+      const id = await refusExistant(theo);
+      const avant = await ligne(id);
+      const donnees: unknown = JSON.parse(`{"__proto__":{"x":1},"archive_le":"${ARCHIVE_1}"}`);
+      const r = await lot(jetonTheo, [archivage(id, donnees)]);
+      expect(r.refus).toEqual([{ table: 'refus_synchro', id, motif: 'table_interdite' }]);
+      expect(await ligne(id)).toEqual(avant);
+    });
+
+    it('lot mêlé (article de stock valide + archivage du refus d’autrui) : tout ou rien, l’archivage refusé, rien d’écrit', async () => {
+      const id = await refusExistant(theo);
+      const avant = await ligne(id);
+      const { serie } = await peuplerFerme(base.pool, fermeA);
+      const espece = (await base.pool.query<{ espece_id: string }>(`SELECT espece_id::text AS espece_id FROM serie WHERE id = $1`, [serie])).rows[0]?.espece_id;
+      const article: EcritureEnvoyee = {
+        op: 'PUT',
+        table: 'article_stock',
+        id: nouvelId<'ArticleStock'>(),
+        donnees: { ferme_id: fermeA, espece_id: espece, variete_id: null, unite: 'kg', categorie: null },
+      };
+      // Témoin : le même article, seul, serait accepté.
+      const temoin = { ...article, id: nouvelId<'ArticleStock'>() };
+      expect((await lot(jetonCollegue, [temoin])).refus, 'témoin : l’article seul est valide').toEqual([]);
+
+      const r = await lot(jetonCollegue, [article, archivage(id)]);
+      expect(r.refus).toEqual([
+        { table: 'article_stock', id: article.id, motif: 'ecriture_invalide' },
+        { table: 'refus_synchro', id, motif: 'table_interdite' },
+      ]);
+      expect(await ligne(id), 'le refus de Théo est intact').toEqual(avant);
+      const n = await base.pool.query<{ n: string }>(`SELECT count(*) AS n FROM article_stock WHERE id = $1`, [article.id]);
+      expect(Number(n.rows[0]?.n), 'tout ou rien : l’article n’est pas écrit').toBe(0);
     });
   });
 
