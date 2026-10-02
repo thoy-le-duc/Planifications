@@ -62,7 +62,8 @@ function stockage(): Storage | null {
 
 const SANS_STOCKAGE = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
 
-export function Apparence() {
+/** `idTitre` : id de l'intitulé de la carte, qui nomme le groupe de choix. */
+export function Apparence({ idTitre }: { readonly idTitre: string }) {
   const nom = useId();
   const [choix, setChoix] = useState<ChoixTheme>(() => lireTheme(stockage() ?? SANS_STOCKAGE));
 
@@ -73,7 +74,7 @@ export function Apparence() {
 
   return (
     <div className="apparence">
-      <div role="radiogroup" aria-label="Apparence" className="apparence-choix">
+      <div role="radiogroup" aria-labelledby={idTitre} className="apparence-choix">
         {CHOIX.map((c) => (
           <label key={c.id} className={`apparence-option${choix === c.id ? ' apparence-choisie' : ''}`}>
             <input
