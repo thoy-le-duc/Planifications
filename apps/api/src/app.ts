@@ -10,6 +10,7 @@ import { routesAuth } from './auth/routes.ts';
 import { corsListeBlanche } from './cors.ts';
 import { completer, type DependancesApp } from './dependances.ts';
 import { routesFermes } from './fermes.ts';
+import { decrireErreur } from './journal.ts';
 import { routesSynchro } from './sync/index.ts';
 
 export type { DependancesApp } from './dependances.ts';
@@ -28,15 +29,17 @@ export function creerApp(deps: DependancesApp): Hono {
   racine.route('/', routesFermes(ctx));
   racine.route('/', routesSynchro(ctx));
   racine.onError((erreur, c) => {
+    // Tout passe par le journal du contexte (T10m), qui met chaque entrée sur une ligne.
     // Échec d'envoi d'e-mail (relais SMTP en panne, identifiants refusés) : seul le message
-    // nettoyé de l'expéditeur est écrit, jamais l'erreur brute ; le client reçoit un 503 sans
-    // détail. Le reste suit le comportement par défaut de Hono (500 sans détail).
+    // nettoyé par l'expéditeur (erreurPropre) est écrit ; le client reçoit un 503 sans détail.
     if (erreur instanceof ErreurEnvoiCourriel) {
-      console.error(`[courriel] ${c.req.method} ${c.req.path} : ${erreur.message}`);
+      ctx.journal(`[courriel] ${c.req.method} ${c.req.path} : ${erreur.message}`);
       return c.json({ erreur: 'envoi_impossible' }, 503);
     }
     if (erreur instanceof HTTPException) return erreur.getResponse();
-    console.error(erreur);
+    // Erreur inattendue : sa classe, son code, sa pile, jamais son message (une erreur de la
+    // base peut citer une valeur saisie). Le client reçoit un 500 sans détail.
+    ctx.journal(`[erreur] ${c.req.method} ${c.req.path} : ${decrireErreur(erreur)}`);
     return c.text('Internal Server Error', 500);
   });
   return racine;

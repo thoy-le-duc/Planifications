@@ -7,6 +7,7 @@ import { creerGenerateurId, type GenerateurId } from '@planif/core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { ExpediteurCourriel } from './auth/courriel.ts';
 import type { TrousseauCles } from './auth/cles.ts';
+import { ligneDeJournal } from './journal.ts';
 import { ENVOIS_MAX_PAR_MINUTE } from './sync/upload.ts';
 
 export interface DependancesApp {
@@ -38,11 +39,18 @@ export interface DependancesApp {
    */
   readonly envoisMaxParMinute?: number;
   /**
-   * Journal du serveur (T10j : détail technique d'un refus de synchro, jamais envoyé au
-   * téléphone) ; par défaut console.error. Ne reçoit jamais de donnée personnelle.
+   * Journal du serveur, unique pour toute l'API (T10j, T10m) : refus de synchro, erreurs
+   * inattendues, échecs d'envoi d'e-mail. Par défaut `journalParDefaut` (sortie d'erreur). Ne
+   * reçoit jamais de donnée personnelle ; chaque entrée y arrive nettoyée sur une ligne
+   * (`ligneDeJournal`, journal.ts).
    */
   readonly journal?: (ligne: string) => void;
 }
+
+/** Sortie par défaut du journal du serveur : la sortie d'erreur du processus. */
+export const journalParDefaut = (ligne: string): void => {
+  console.error(ligne);
+};
 
 /** Dépendances complétées, partagées par les routes. */
 export interface Contexte extends Required<DependancesApp> {
@@ -51,6 +59,7 @@ export interface Contexte extends Required<DependancesApp> {
 }
 
 export function completer(deps: DependancesApp): Contexte {
+  const sortie = deps.journal ?? journalParDefaut;
   const maintenant = deps.maintenant ?? (() => new Date());
   const nouvelId = creerGenerateurId({
     horloge: () => maintenant().getTime(),
@@ -63,6 +72,9 @@ export function completer(deps: DependancesApp): Contexte {
     corsOrigines: deps.corsOrigines ?? [],
     proxyDeConfiance: deps.proxyDeConfiance ?? false,
     envoisMaxParMinute: deps.envoisMaxParMinute ?? ENVOIS_MAX_PAR_MINUTE,
-    journal: deps.journal ?? console.error,
+    // Toute entrée, quelle que soit la route, passe par le même nettoyage.
+    journal: (ligne) => {
+      sortie(ligneDeJournal(ligne));
+    },
   };
 }

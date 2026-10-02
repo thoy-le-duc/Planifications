@@ -9,10 +9,12 @@
  */
 import { expediteurConsole, expediteurSmtp, type ExpediteurCourriel } from './auth/index.ts';
 import type { ConfigCourriel } from './config.ts';
+import { journalParDefaut } from './dependances.ts';
+import { ligneDeJournal } from './journal.ts';
 
 export function preparerExpediteur(
   courriel: ConfigCourriel,
-  journal: (ligne: string) => void = console.error,
+  journal: (ligne: string) => void = journalParDefaut,
 ): Promise<ExpediteurCourriel> {
   if (courriel.type === 'console') return Promise.resolve(expediteurConsole());
   const expediteur = expediteurSmtp(courriel);
@@ -23,8 +25,10 @@ export function preparerExpediteur(
     const detail = erreur instanceof Error ? erreur.message : String(erreur);
     try {
       journal(
-        `Avertissement : vérification du relais SMTP ${courriel.hote}:${String(courriel.port)} en échec, ` +
-          `l'API tourne mais les codes de connexion ne partiront pas tant qu'il ne répond pas. ${detail}`,
+        ligneDeJournal(
+          `Avertissement : vérification du relais SMTP ${courriel.hote}:${String(courriel.port)} en échec, ` +
+            `l'API tourne mais les codes de connexion ne partiront pas tant qu'il ne répond pas. ${detail}`,
+        ),
       );
     } catch {
       // Journal en panne (sortie d'erreur fermée…) : rien, surtout pas un rejet non géré qui

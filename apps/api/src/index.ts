@@ -10,6 +10,7 @@ import { creerApp } from './app.ts';
 import { trousseauDepuisJwks } from './auth/index.ts';
 import { lireConfig, type Config } from './config.ts';
 import { preparerExpediteur } from './demarrage.ts';
+import { journalParDefaut } from './dependances.ts';
 import { creerServeur } from './serveur.ts';
 
 let config: Config;
@@ -23,7 +24,9 @@ try {
 const cles = await trousseauDepuisJwks(config.jwtClesPrivees);
 // COURRIEL_CONSOLE=1 (NODE_ENV=development seulement, lireConfig) ou relais SMTP, vérifié en
 // tâche de fond sans retarder l'écoute.
-const expediteur = await preparerExpediteur(config.courriel);
+// Un seul journal pour toute l'API (T10m) : le démarrage et les routes écrivent au même endroit.
+const journal = journalParDefaut;
+const expediteur = await preparerExpediteur(config.courriel, journal);
 
 const pool = new pg.Pool({ connectionString: config.databaseUrl });
 const app = creerApp({
@@ -33,6 +36,7 @@ const app = creerApp({
   emetteur: config.emetteur,
   audience: config.audience,
   proxyDeConfiance: config.proxyDeConfiance,
+  journal,
   ...(config.corsOrigines === undefined ? {} : { corsOrigines: config.corsOrigines }),
 });
 
