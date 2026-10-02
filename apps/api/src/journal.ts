@@ -46,13 +46,37 @@ const CODE_SUR = /^[0-9A-Z][0-9A-Z_]{0,31}$/;
 const CLASSE_SURE = /^[A-Za-z_$][\w$]{0,63}$/;
 
 /**
- * Racine du dépôt (journal.ts est dans apps/api/src), en URL file:// et en chemin, calculée une
- * fois. Seules les positions sous `node:` ou sous cette racine sont gardées, écrites relatives
+ * Racine du dépôt (journal.ts est dans apps/api/src), en URL file://, calculée une fois. Seules
+ * les positions sous `node:` ou sous cette racine sont gardées, écrites relatives
  * (apps/api/src/app.ts:12:3, node_modules/pg/lib/client.js:1:2) : un chemin hors du dépôt
  * (/home/<personne>/…) peut citer quelqu'un.
  */
 const RACINE_URL = new URL('../../../', import.meta.url).href;
-const RACINE_CHEMIN = fileURLToPath(RACINE_URL);
+
+/** Racine en URL et en chemin ; null si elle ne protège rien (« / ») ou ne se lit pas. */
+interface Racine {
+  readonly url: string;
+  readonly chemin: string;
+}
+
+/**
+ * Garde commune à la racine calculée et à une racine passée : si l'API est regroupée en un seul
+ * fichier (/app/index.js), la racine calculée vaut « / » et TOUT chemin absolu serait « sous la
+ * racine » : aucune position n'est alors gardée.
+ */
+function racineSure(url: string): Racine | null {
+  let chemin: string;
+  try {
+    chemin = fileURLToPath(url);
+  } catch {
+    return null;
+  }
+  if (!url.endsWith('/') || chemin === '/') return null;
+  return { url, chemin };
+}
+
+/** Racine calculée, passée une fois par la garde. */
+const RACINE_PAR_DEFAUT = racineSure(RACINE_URL);
 
 /** `fichier:ligne:colonne`. */
 const POSITION = /^(.+):(\d+):(\d+)$/;
@@ -62,14 +86,15 @@ const MODULE_NODE = /^node:[\w/.-]+$/;
 const CHEMIN_RELATIF = /^[\w@+-][\w.@+-]*(?:\/[\w@+-][\w.@+-]*)*$/;
 
 /** Position gardée, relative à la racine ou sous node:, sinon null. */
-function positionSure(position: string): string | null {
+function positionSure(position: string, racine: Racine | null): string | null {
   const morceaux = POSITION.exec(position);
   if (morceaux === null) return null;
   const [, fichier = '', ligne = '', colonne = ''] = morceaux;
   let relatif: string;
   if (MODULE_NODE.test(fichier)) relatif = fichier;
-  else if (fichier.startsWith(RACINE_URL)) relatif = fichier.slice(RACINE_URL.length);
-  else if (fichier.startsWith(RACINE_CHEMIN)) relatif = fichier.slice(RACINE_CHEMIN.length);
+  else if (racine === null) return null;
+  else if (fichier.startsWith(racine.url)) relatif = fichier.slice(racine.url.length);
+  else if (fichier.startsWith(racine.chemin)) relatif = fichier.slice(racine.chemin.length);
   else return null;
   if (!MODULE_NODE.test(relatif) && !CHEMIN_RELATIF.test(relatif)) return null;
   return `${relatif}:${ligne}:${colonne}`;
@@ -126,7 +151,7 @@ function sansEnTete(pile: string, nom: string | null, message: string | null): s
  * le « [as …] » ni l'en-tête. S'arrête à la première ligne qui n'est pas une frame (« cause: »
  * suivi de la pile d'une cause, concaténée par une bibliothèque).
  */
-function positions(valeur: unknown): string[] {
+function positions(valeur: unknown, racine: Racine | null): string[] {
   const pile = texte(champ(valeur, 'stack'));
   if (pile === null) return [];
   const suite = sansEnTete(pile, texte(champ(valeur, 'name')), texte(champ(valeur, 'message')));
@@ -141,14 +166,14 @@ function positions(valeur: unknown): string[] {
     const corps = ligne.slice(3);
     const entreParentheses = /\(([^()]*)\)$/.exec(corps);
     const position = entreParentheses === null ? corps : (entreParentheses[1] ?? '');
-    const sure = positionSure(position);
+    const sure = positionSure(position, racine);
     if (sure !== null) gardees.push(sure);
     if (gardees.length >= FRAMES_MAX) break;
   }
   return gardees;
 }
 
-function decrire(erreur: unknown): string {
+function decrire(erreur: unknown, racine: Racine | null): string {
   const morceaux = [classe(erreur)];
   const code = codeSur(erreur);
   if (code !== null) morceaux.push(`code ${code}`);
@@ -157,7 +182,7 @@ function decrire(erreur: unknown): string {
     const codeCause = codeSur(cause);
     morceaux.push(`cause ${classe(cause)}${codeCause === null ? '' : ` code ${codeCause}`}`);
   }
-  const frames = positions(erreur);
+  const frames = positions(erreur, racine);
   if (frames.length > 0) morceaux.push(`pile ${frames.join(' | ')}`);
   return morceaux.join(' ');
 }
@@ -176,10 +201,14 @@ export function journalSur(sortie: (ligne: string) => void): (ligne: string) => 
   };
 }
 
-/** Description d'une erreur inattendue pour le journal : classe, code, cause, positions. Ne lève jamais. */
-export function decrireErreur(erreur: unknown): string {
+/**
+ * Description d'une erreur inattendue pour le journal : classe, code, cause, positions. Ne lève
+ * jamais. `racine` : URL file:// de la racine du dépôt, finie par « / » (par défaut celle que
+ * calcule ce module) ; « / » ou illisible, aucune position de pile n'est gardée.
+ */
+export function decrireErreur(erreur: unknown, racine: string = RACINE_URL): string {
   try {
-    return decrire(erreur);
+    return decrire(erreur, racine === RACINE_URL ? RACINE_PAR_DEFAUT : racineSure(racine));
   } catch {
     return 'erreur indescriptible';
   }
