@@ -1,9 +1,9 @@
-# T10j — Refus de synchro : messages simples, saisie reconnaissable, archivage
+# T10j — Refus de synchro : messages sans jargon
 
-**Objectif** : un refus se comprend sans jargon et se rattache à la saisie concernée ; la liste ne grossit pas sans fin.
+**Objectif** : chaque message de refus se comprend sans jargon technique.
 
 **Dépend de** : T10i
-**Périmètre** : `apps/api/src/sync/**` (messages, résumé du refus), règles de synchro (`sync-config.yaml`), `apps/web/src/ecrans/ferme/Refus.tsx`
+**Périmètre** : `apps/api/src/sync/**` (messages des refus), `apps/web/src/ecrans/ferme/Refus.tsx` si un texte y dépend du message
 
 ## Constat (relecture T10i)
 
@@ -11,14 +11,16 @@
 - Le téléphone ne sait pas quelle saisie a été refusée (culture, quantité, date de la saisie) : la table `refus_synchro` ne porte que la table, l'opération, le motif et le message.
 - Aucun moyen d'archiver un refus vu : la liste ne fait que grandir.
 
+## Découpage (chef, 2026-10-02)
+
+Le ticket d'origine mêlait trois sujets. T10j garde les messages ; T10k (saisie reconnaissable) et T10l (archivage) les reprennent.
+
 ## Règles
 
-- Messages du serveur en français simple, sans nom de colonne ni de table ; le détail technique reste dans le journal du serveur.
-- Un court résumé non sensible de la saisie refusée (type, culture, date de la saisie, quantité) accompagne le refus, pour l'afficher sur la carte.
-- Archiver un refus vu (ou tous) ; les refus archivés ne s'affichent plus.
+- Messages du serveur en français simple, sans nom de colonne, de table, de code ni de seuil technique (« 500 saisies ou 6 Mio ») ; le détail technique reste dans le journal du serveur.
+- Chaque motif garde un message propre et stable (le téléphone l'affiche tel quel).
 
 ## Critères d'acceptation
 
-- [ ] Aucun message de refus ne contient de nom de colonne, de table ou de code.
-- [ ] La carte d'un refus de récolte montre la culture, la date et la quantité saisies.
-- [ ] Archiver un refus le retire de la liste, sur tous les téléphones de l'utilisateur.
+- [ ] Test : aucun message de refus renvoyé au téléphone ne contient de nom de colonne, de table, de code de motif ni de détail technique (tous les motifs et toutes les précisions).
+- [ ] Le détail technique d'un refus reste disponible côté serveur (journal), sans fuite de données personnelles.
