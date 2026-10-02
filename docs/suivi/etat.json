@@ -1,8 +1,8 @@
 {
-  "maj": "2 octobre 2026, 12 h 30 UTC",
-  "resume": "Cette fenêtre : **Aujourd'hui s'ouvre en moins d'une seconde sur une grande ferme (T13d)** — 5,8 s → 0,6 à 0,8 s sur un téléphone moyen, grâce à la dernière journée gardée sur le téléphone, affichée tout de suite puis remplacée par la journée relue ; un « Fait » depuis cette journée gardée revérifie la tâche et ne double jamais rien ; **la carte d'un refus de synchro montre la saisie concernée (T10k)** — culture, date, quantité, sans jamais la note ni rien d'une autre ferme. Question à Théophane : **Q25** (effacer les refus d'une ferme quand on l'a quittée ?). Nouveau ticket T13g (encore plus de marge au lancement). Prochains : T10l, T10m, T13f, T13g.",
+  "maj": "2 octobre 2026, 19 h 30 UTC",
+  "resume": "Cette fenêtre : **la démo en ligne est publiée sur Vercel (T25)** — une ferme fictive déjà remplie, sans compte ni serveur, utilisable sur téléphone et hors ligne, avec un bandeau « Démo » et un bouton « Réinitialiser » ; chaque PR a sa propre adresse d'aperçu ; rien de la démo n'entre dans la vraie appli. **On peut archiver un refus de synchro vu (T10l)** — il disparaît sur tous les téléphones, rien n'est supprimé. **Le journal du serveur ne contient plus jamais de valeur saisie ni de donnée personnelle (T10m)** — relu jusqu'à zéro faille. À confirmer : les refus restent hors de l'export complet (règle de T15). Nouveaux tickets : T25b, T10n, T10o, T10p, T15d.",
   "en_cours": {},
-  "attente": "Q25 : effacer de son téléphone les refus d'une ferme qu'on a quittée ? Pour la mise en ligne : compte Brevo, domaine d'envoi (SPF, DKIM, DMARC), identifiants dans les secrets de production, suivi des ouvertures désactivé ; base de production en locale UTF-8 ; Node 22.",
+  "attente": "Q25 : effacer de son téléphone les refus d'une ferme qu'on a quittée ? Confirmer que les refus de synchro restent hors de l'export (T10l). Vercel : désactiver « Vercel Authentication » (Settings → Deployment Protection) pour partager les aperçus sans connexion. Pour la mise en ligne : compte Brevo, domaine d'envoi (SPF, DKIM, DMARC), identifiants dans les secrets de production, suivi des ouvertures désactivé ; base de production en locale UTF-8 ; Node 22.",
   "visuels": [
     {
       "titre": "Plan de culture : nouvelle série",
