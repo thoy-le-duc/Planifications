@@ -14,20 +14,12 @@ import { journalParDefaut } from './dependances.ts';
 import { decrireErreur, journalSur } from './journal.ts';
 import { creerServeur } from './serveur.ts';
 
-let config: Config;
-try {
-  config = lireConfig(process.env);
-} catch (erreur) {
-  console.error(erreur instanceof Error ? erreur.message : String(erreur));
-  process.exit(1);
-}
-
-const cles = await trousseauDepuisJwks(config.jwtClesPrivees);
 // Un seul journal pour toute l'API (T10m) : démarrage, routes et erreurs hors requête écrivent
 // au même endroit, nettoyé (une ligne) et sans jamais lever.
 const journal = journalSur(journalParDefaut);
 
-// Erreurs hors requête : décrites sans leur message (qui peut citer une saisie).
+// Erreurs hors requête : décrites sans leur message (qui peut citer une saisie). Posés avant le
+// premier await de niveau module, pour couvrir aussi le démarrage.
 process.on('unhandledRejection', (raison) => {
   journal(`[processus] rejet non géré : ${decrireErreur(raison)}`);
 });
@@ -37,6 +29,15 @@ process.on('uncaughtException', (erreur) => {
   process.exit(1);
 });
 
+let config: Config;
+try {
+  config = lireConfig(process.env);
+} catch (erreur) {
+  console.error(erreur instanceof Error ? erreur.message : String(erreur));
+  process.exit(1);
+}
+
+const cles = await trousseauDepuisJwks(config.jwtClesPrivees);
 // COURRIEL_CONSOLE=1 (NODE_ENV=development seulement, lireConfig) ou relais SMTP, vérifié en
 // tâche de fond sans retarder l'écoute.
 const expediteur = await preparerExpediteur(config.courriel, journal);
