@@ -608,11 +608,15 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     if (type === 'series') {
       // Semaines qui retombent avant la précédente : année suivante, signalée (T14d).
       const { changees, depassement } = passerALAnneeSuivante(valeurs, semaines, anneeSaison);
-      avertissements = changees.map((champ) => {
-        const date = valeurs[champ];
-        const annee = typeof date === 'string' ? Number(date.slice(0, 4)) : 0;
-        return { code: 'annee_suivante', champ, colonne: colonneDe.get(champ) ?? null, annee, message: `${libelle(type, champ).toLowerCase()} en ${String(annee)}` };
-      });
+      // L'année est celle de la semaine (saison + 1), pas l'année civile de son lundi.
+      const annee = (anneeSaison ?? 0) + 1;
+      avertissements = changees.map((champ) => ({
+        code: 'annee_suivante',
+        champ,
+        colonne: colonneDe.get(champ) ?? null,
+        annee,
+        message: `${libelle(type, champ).toLowerCase().replace(/^date de /, '')} en ${String(annee)}`,
+      }));
       if (depassement !== null) {
         erreurs.push(erreur('dates_incoherentes', depassement, colonneDe.get(depassement) ?? null, 'plus d’un an entre la première et la dernière date'));
       }
