@@ -18,14 +18,19 @@
  *   saisie_culture   text              « Espèce » ou « Espèce Variété » de la série (serie_id) ou
  *                                      de la plantation de la campagne (campagne_id) désignée, LUE
  *                                      EN BASE, seulement si cette série ou campagne appartient à
- *                                      une ferme dont l'utilisateur est membre accepté (ferme de
- *                                      l'utilisateur au moment du lot) ; sinon NULL. Nettoyée :
+ *                                      la ferme DE L'ÉVÉNEMENT (ferme_id reçu) et que l'utilisateur
+ *                                      en est membre accepté au moment du lot (décision du chef :
+ *                                      une série de B désignée par un événement déclaré en A, même
+ *                                      si l'utilisateur est membre des deux, donne NULL ; un invité
+ *                                      pas encore accepté aussi) ; sinon NULL. Nettoyée :
  *                                      aucun caractère de contrôle ni séparateur de ligne
  *                                      (\p{Cc}, \p{Zl}, \p{Zp}), espaces de bord retirés,
  *                                      LONGUEUR_MAX_CULTURE (80) caractères au plus ; vide → NULL.
  *   saisie_date      date (ou text)    `date` reçue si c'est un jour valide AAAA-MM-JJ ; sinon NULL.
  *   saisie_quantite  double precision  récolte seulement : detail.quantite (detail reçu en texte
- *                                      JSON ou en objet) si c'est un nombre fini ; sinon NULL.
+ *                                      JSON ou en objet) si c'est un nombre fini et au plus
+ *                                      QUANTITE_MAX_RESUME (1e6, décision du chef : 999 999 gardée,
+ *                                      1e7 ou 1e300 → NULL) ; sinon NULL.
  *   saisie_unite     text              récolte seulement : detail.unite si elle est l'une de
  *                                      UNITES_RECOLTE ('kg', 'botte', 'piece', 'barquette') ; sinon NULL.
  *
@@ -34,14 +39,16 @@
  * (contenu personnel), ni aucun autre texte libre reçu. Une écriture illisible (données absentes,
  * pas un objet, champs de mauvais type, JSON cassé, nombre infini) donne un résumé vide ou partiel,
  * jamais un 500 : le refus s'enregistre quand même. Les écritures d'autres tables qu'evenement et
- * la ligne récapitulative d'un lot trop gros peuvent n'avoir aucun résumé (non exigé ici).
+ * la ligne récapitulative d'un lot trop gros peuvent n'avoir aucun résumé. Un lot trop gros
+ * n'a AUCUN résumé et ne déclenche aucune lecture en base pour le résumer (pas d'amplification).
  *
  * Total borné : la somme des longueurs des champs texte du résumé reste sous 200 caractères.
  */
-import { creerGenerateurId } from '@planif/core';
+import { creerGenerateurId, ECRITURES_MAX_PAR_LOT } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import pg from 'pg';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { creerApp } from '../app.ts';
 import { emettreJetonAcces, genererCleSignature, type ExpediteurCourriel, type TrousseauCles } from '../auth/index.ts';
 import {
@@ -410,6 +417,99 @@ decrireAvecBase('T10k')('T10k : résumé de la saisie refusée', { timeout: 60_0
       await refusee(e, 'ferme_interdite');
       expect((await resume(e.id)).saisie_culture).toBeNull();
       expect(await ligneQuiDescend(e.id)).not.toContain('Asperge quittée');
+    });
+  });
+
+  describe('isolement : la ferme de l’événement fait foi (décisions du chef)', () => {
+    it('membre de A et de B : un événement déclaré en A qui vise une série de B → culture vide ; témoin : déclaré en B → culture remplie', async () => {
+      const enA = putRecolte(6, 'kg', { ferme_id: fermeA, serie_id: b.serie });
+      await refusee(enA);
+      expect((await resume(enA.id)).saisie_culture, 'série de B, événement de A').toBeNull();
+      expect(await ligneQuiDescend(enA.id)).not.toContain('cerise');
+
+      const enB = putRecolte(6, 'kg', { ferme_id: fermeB, serie_id: b.serie, auteur_id: collegue });
+      await refusee(enB, 'auteur_invalide');
+      expect((await resume(enB.id)).saisie_culture, 'témoin : même série, événement de B').toContain('cerise');
+    });
+
+    it('invité pas encore accepté dans la ferme de la série : culture vide', async () => {
+      const invitee = await creerFerme(base.pool, 'Ferme qui invite');
+      await ajouterMembre(base.pool, theo, invitee, { etat: 'invite', invitePar: collegue });
+      const i = await peuplerFerme(base.pool, invitee);
+      await base.pool.query(`UPDATE espece SET nom = 'Rhubarbe de l’invitation' WHERE ferme_id = $1`, [invitee]);
+      const e = putRecolte(5, 'kg', { ferme_id: invitee, serie_id: i.serie });
+      await refusee(e, 'ferme_interdite');
+      expect((await resume(e.id)).saisie_culture).toBeNull();
+      expect(await ligneQuiDescend(e.id)).not.toContain('Rhubarbe');
+    });
+  });
+
+  describe('quantité aberrante (décision du chef : plafond 1e6)', () => {
+    it.each([
+      [1e300, null],
+      [1e7, null],
+      [999_999, 999_999],
+    ] as const)('récolte refusée de %s → saisie_quantite %s', async (quantite, attendue) => {
+      const e = putRecolte(quantite, 'kg', { serie_id: a.serie, auteur_id: collegue });
+      await refusee(e, 'auteur_invalide');
+      const r = await resume(e.id);
+      expect(r.saisie_quantite).toBe(attendue);
+      expect(r.saisie_unite, 'l’unité reste').toBe('kg');
+    });
+  });
+
+  describe('lot trop gros', () => {
+    it('aucun résumé et aucune lecture en base pour le résumer', async () => {
+      const pool = new pg.Pool({ connectionString: base.url, max: 2 });
+      try {
+        const espion = vi.spyOn(pool, 'query');
+        const appEspionnee = creerApp({
+          db: drizzle(pool),
+          expediteur: expediteurMuet,
+          cles,
+          emetteur: EMETTEUR,
+          audience: AUDIENCE,
+          maintenant: () => MAINTENANT,
+          envoisMaxParMinute: 1_000_000,
+        });
+        const envoyer = async (ecritures: readonly EcritureEnvoyee[]): Promise<ReponseUpload> => {
+          const res = await appEspionnee.request('/sync/upload', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: `Bearer ${jeton}` },
+            body: JSON.stringify({ ecritures }),
+          });
+          expect(res.status).toBe(200);
+          return (await res.json()) as ReponseUpload;
+        };
+        /** Requêtes envoyées qui lisent une culture (série ou campagne jointe à l'espèce). */
+        const lecturesDeCulture = (): number =>
+          espion.mock.calls.filter((appel) => {
+            const q: unknown = appel[0];
+            const texte = typeof q === 'object' && q !== null ? (q as { text?: unknown }).text : q;
+            const texteSql = typeof texte === 'string' ? texte : '';
+            return /\bJOIN\s+espece\b/i.test(texteSql);
+          }).length;
+
+        // Témoin : l'espion voit bien la lecture de la culture d'un refus ordinaire.
+        const temoin = putRecolte(5, 'kg', { serie_id: a.serie, auteur_id: collegue });
+        await envoyer([temoin]);
+        expect(lecturesDeCulture(), 'témoin : la culture d’un refus ordinaire est lue (sinon l’espion ne voit rien)').toBeGreaterThan(0);
+        expect((await resume(temoin.id)).saisie_culture).toContain('Laitue');
+
+        espion.mockClear();
+        const ecritures = Array.from({ length: ECRITURES_MAX_PAR_LOT + 1 }, () => putRecolte(5, 'kg', { serie_id: a.serie, campagne_id: a.campagne }));
+        const r = await envoyer(ecritures);
+        expect(r.refus.every((x) => x.motif === 'lot_trop_gros')).toBe(true);
+        expect(lecturesDeCulture(), 'aucune lecture de culture pour un lot trop gros').toBe(0);
+        const lignes = await base.pool.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM refus_synchro WHERE ligne_id = ANY($1::text[])
+             AND num_nonnulls(saisie_type, saisie_culture, saisie_date, saisie_quantite, saisie_unite) > 0`,
+          [ecritures.map((e) => e.id)],
+        );
+        expect(lignes.rows[0]?.n, 'aucun résumé').toBe(0);
+      } finally {
+        await pool.end();
+      }
     });
   });
 
