@@ -1,6 +1,6 @@
 {
-  "maj": "2 octobre 2026, 2 h 10 UTC",
-  "resume": "Cette fenêtre : **les refus de synchro s'affichent enfin sur le téléphone (T10i)** — l'onglet Ferme montre chaque saisie refusée par le serveur, avec le motif en français et quoi faire, et une pastille orange signale un refus pas encore vu ; **l'import comprend une saison à cheval sur deux années (T14d, Q18)** — semée en S40, plantée en S2 : plantation l'année suivante, signalée dans l'aperçu. Nouveau ticket T10j : messages du serveur sans jargon, culture et quantité de la saisie refusée, archivage. À surveiller : le JavaScript de démarrage est à 70,8 Kio pour 71. Prochains : T13d (ouverture à froid sous 1 s), T13e, T10j.",
+  "maj": "2 octobre 2026, 6 h 50 UTC",
+  "resume": "Cette fenêtre : **des refus de synchro sans jargon (T10j)** — tous les messages affichés dans l'onglet Ferme sont en français simple (« cette saisie existe déjà avec d'autres valeurs », « une information obligatoire manque (quantité) »), le détail technique part dans le journal du serveur sans aucune valeur saisie ; une faille d'injection dans ce journal, trouvée en relecture, est corrigée ; **plus de « Fait » en double sur une relecture tardive (T13e)**. Nouveaux tickets : T10k (culture et quantité de la saisie refusée), T10l (archiver les refus vus), T10m (même règle de journal partout), T13f (deux cas rares de « Fait » en double). Prochains : T13d (ouverture à froid sous 1 s), T10k.",
   "en_cours": {},
   "attente": "Pour la mise en ligne : compte Brevo, domaine d'envoi (SPF, DKIM, DMARC), identifiants dans les secrets de production, suivi des ouvertures désactivé dans Brevo ; base de production en locale UTF-8 ; Node de production à la version de `.node-version` (22).",
   "visuels": [
