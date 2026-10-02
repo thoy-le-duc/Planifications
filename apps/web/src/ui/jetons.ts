@@ -58,6 +58,12 @@ export const COULEURS = {
   surEnteteDoux: '#B9D3C2',
   /** Ombres portées et voile sous les feuilles : toujours sombre, quel que soit le thème. */
   ombre: '#15201A',
+  /**
+   * Pousses en décor sur un fond foncé (motif de la connexion, bande de la démo) : la même dans les
+   * deux thèmes. `pousse`, elle, devient un vert foncé en sombre (barre du compte à rebours sur le
+   * vert sauge des bandeaux) ; .zone-entete (src/ui/base.css) la remplace par celle-ci.
+   */
+  pousseEntete: '#9FE0B4',
 } as const satisfies Record<string, string>;
 
 export type CleCouleur = keyof typeof COULEURS;
@@ -74,14 +80,15 @@ export const COULEURS_SOMBRES: Readonly<Record<CleCouleur, string>> = {
   fond: '#111915',
   surface: '#1A2420',
   encre: '#E7EEE3',
-  secondaire: '#B2BFB6',
+  // Pas plus claire que la bande de famille la plus claire (racines) : « Autres » ne crie pas.
+  secondaire: '#A3B0A7',
   tertiaire: '#93A298',
   trait: '#2D3B34',
   foret: '#8DCBA6',
   foretClair: '#A5D8B9',
   surForet: '#0D1C14',
   surForetDoux: '#21412F',
-  pousse: '#9FE0B4',
+  pousse: '#164A33',
   orange: '#EE8A3C',
   texteOrange: '#F2A766',
   surOrange: '#1B0F05',
@@ -91,6 +98,7 @@ export const COULEURS_SOMBRES: Readonly<Record<CleCouleur, string>> = {
   surEntete: '#EEF4EA',
   surEnteteDoux: '#A9C9B5',
   ombre: '#040605',
+  pousseEntete: '#9FE0B4',
 };
 
 export type CleFamille = 'salades' | 'solanacees' | 'cruciferes' | 'racines';
@@ -104,6 +112,18 @@ export const FAMILLES: Readonly<Record<CleFamille, { readonly bande: string; rea
   solanacees: { bande: '#C0392B', texte: '#FFFFFF' },
   cruciferes: { bande: '#1BAF7A', texte: '#15201A' },
   racines: { bande: '#EDA100', texte: '#15201A' },
+};
+
+/**
+ * Bandes des familles en thème sombre (T18) : éclaircies pour se détacher des cartes sombres
+ * (3:1 au moins), avec un texte forêt de nuit dessus (4,5:1 au moins). Appliquées par les mêmes
+ * variables `--famille-*` (variablesCss).
+ */
+export const FAMILLES_SOMBRES: Readonly<Record<CleFamille, { readonly bande: string; readonly texte: string }>> = {
+  salades: { bande: '#5E9BE8', texte: '#0D1C14' },
+  solanacees: { bande: '#EC7363', texte: '#0D1C14' },
+  cruciferes: { bande: '#2DBE86', texte: '#0D1C14' },
+  racines: { bande: '#EDA100', texte: '#0D1C14' },
 };
 
 /** Familles de polices (hébergées sous public/polices/, voir src/ui/base.css). */
@@ -190,10 +210,26 @@ export const PAIRES_CONTRASTE: readonly PaireContraste[] = [
   { texte: 'surEntete', fond: 'enteteClair', usage: 'texte' },
   // Puce « déjà utilisée » des itinéraires : texte sur surForetDoux.
   { texte: 'encre', fond: 'surForetDoux', usage: 'texte' },
+  // Bandeaux d'annulation (relecture T18) : barre du compte à rebours sur la forêt ; bandeau
+  // d'échec, texte sur conflit.
+  { texte: 'pousse', fond: 'foret', usage: 'contour' },
+  { texte: 'surface', fond: 'conflit', usage: 'texte' },
+  // Bande de la démo : texte sur l'ombre.
+  { texte: 'surEntete', fond: 'ombre', usage: 'texte' },
+  { texte: 'surEnteteDoux', fond: 'ombre', usage: 'texte' },
+  // Bande neutre « Autres » du plan.
+  { texte: 'surForet', fond: 'secondaire', usage: 'texte' },
 ];
 
 function kebab(cle: string): string {
   return cle.replace(/[A-Z]/g, (l) => `-${l.toLowerCase()}`);
+}
+
+/** `--famille-<clé>` (bande) et `--famille-<clé>-texte` pour chaque famille. */
+function variablesFamilles(familles: Readonly<Record<string, { readonly bande: string; readonly texte: string }>>): string {
+  return Object.entries(familles)
+    .map(([cle, f]) => `--famille-${kebab(cle)}:${f.bande};--famille-${kebab(cle)}-texte:${f.texte};`)
+    .join('');
 }
 
 /** `--couleur-<clé>:<valeur>;` pour chaque couleur. */
@@ -214,18 +250,21 @@ export function variablesCss(): string {
     for (const [cle, v] of Object.entries(valeurs)) lignes.push(`--${prefixe}-${kebab(cle)}:${String(v)}${unite};`);
   };
   lignes.push(variablesCouleurs(COULEURS));
-  for (const [cle, f] of Object.entries(FAMILLES)) {
-    lignes.push(`--famille-${kebab(cle)}:${f.bande};`, `--famille-${kebab(cle)}-texte:${f.texte};`);
-  }
+  lignes.push(variablesFamilles(FAMILLES));
   ajouter('police', POLICES);
   ajouter('rayon', RAYONS, 'px');
   ajouter('espace', ESPACEMENTS, 'px');
   ajouter('ombre', OMBRES);
   const sombres = variablesCouleurs(COULEURS_SOMBRES);
+  // Bandes sombres dans une règle à part (sélecteur html, plus spécifique que :root) : les
+  // surcharges :root ne portent que les couleurs.
+  const familles = variablesFamilles(FAMILLES_SOMBRES);
   return (
     `:root{${lignes.join('')}}\n` +
     `@media (prefers-color-scheme: dark){:root:not([data-theme="clair"]){${sombres}}}\n` +
-    `:root[data-theme="sombre"]{${sombres}}`
+    `:root[data-theme="sombre"]{${sombres}}\n` +
+    `@media (prefers-color-scheme: dark){html:not([data-theme="clair"]){${familles}}}\n` +
+    `html[data-theme="sombre"]{${familles}}`
   );
 }
 

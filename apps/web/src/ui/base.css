@@ -145,6 +145,7 @@ p {
   --couleur-foret-clair: var(--couleur-entete-clair);
   --couleur-sur-foret: var(--couleur-sur-entete);
   --couleur-sur-foret-doux: var(--couleur-sur-entete-doux);
+  --couleur-pousse: var(--couleur-pousse-entete);
 }
 
 /* Coquille : en-tête, contenu, barre de navigation collée au bas de l'écran. */

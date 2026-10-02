@@ -76,8 +76,8 @@
   width: 8px;
   height: 8px;
   border-radius: var(--rayon-pastille);
-  background: var(--couleur-pousse);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--couleur-pousse) 22%, transparent);
+  background: var(--couleur-pousse-entete);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--couleur-pousse-entete) 22%, transparent);
 }
 
 /* Le bouton occupe toute la hauteur de la bande (cible de 44 px) ; la pastille est le dessin. */
@@ -114,7 +114,7 @@
 }
 
 .demo-reinitialiser:focus-visible .demo-reinitialiser-pastille {
-  outline: 3px solid var(--couleur-pousse);
+  outline: 3px solid var(--couleur-pousse-entete);
   outline-offset: 2px;
 }
 
@@ -155,7 +155,7 @@
   height: 4px;
   margin: var(--espace-l) auto 0;
   border-radius: var(--rayon-pastille);
-  background: var(--couleur-pousse);
+  background: var(--couleur-pousse-entete);
   animation: demo-pulse 1.2s ease-in-out infinite;
 }
 
