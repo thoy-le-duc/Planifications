@@ -142,7 +142,11 @@ function porteControlee(): {
     ecrire: interdit('ecrire'),
     surveiller: interdit('surveiller'),
     saisirEvenement: interdit('saisirEvenement'),
-    surveillerRefus: interdit('surveillerRefus'),
+    // T10i : l'écran Ferme montre les refus de synchro (./refus.test.tsx) ; ici, aucun refus.
+    surveillerRefus: (rappel) => {
+      rappel([]);
+      return () => undefined;
+    },
     ecrireEnsemble: interdit('ecrireEnsemble'),
     preparerSaisie: interdit('preparerSaisie'),
   };

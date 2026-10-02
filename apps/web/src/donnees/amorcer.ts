@@ -21,6 +21,11 @@
  * (src/ecrans/itineraires/test/ferme-itineraires.ts, datée relativement à `date`), dans la base
  * de SON utilisateur de test ; contrat : src/ecrans/itineraires/test/contrat.ts, « Amorçage ».
  *
+ * T10i — `?jeu=refus&date=AAAA-MM-JJ` : la ferme du jour (comme `?jeu=aujourdhui`) et 101 refus de
+ * synchro (src/ecrans/ferme/test/refus.ts : 100 de l'utilisateur de test, datés d'avant l'heure
+ * du navigateur, et 1 d'un autre utilisateur), dans la base de SON utilisateur de test
+ * (e2e/refus.e2e.ts).
+ *
  * Garde-fous : seule la base de l'utilisateur du jeu (identifiant de test, jamais un vrai compte)
  * est ouverte, sans session ; la synchro n'est jamais branchée (aucun appel à connect()), et la
  * file d'envoi est vidée : rien de ce jeu ne partira vers un serveur.
@@ -30,6 +35,7 @@ import { remplirJeuT07, type JeuT07 } from '../../../../packages/sync/src/test/j
 import { ecrireFermeDuJour, fermeDuJour } from '../ecrans/aujourdhui/test/ferme-du-jour.ts';
 import { ecrireGrandeFerme, grandeFerme } from '../ecrans/aujourdhui/test/grande-ferme.ts';
 import { ecrireFermeItineraires, fermeItineraires } from '../ecrans/itineraires/test/ferme-itineraires.ts';
+import { ecrireRefus, REFUS_DU_JEU_TOTAL, refusDuJeu } from '../ecrans/ferme/test/refus.ts';
 import { ecrireFermeSerie, fermeSerie } from '../ecrans/serie/test/ferme-serie.ts';
 import { ouvrirBaseLocale } from './ouvrir.ts';
 
@@ -113,6 +119,18 @@ async function amorcerItineraires(date: string): Promise<Amorcage> {
   return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
 }
 
+/** T10i : la ferme du jour et les refus du jeu, datés d'avant l'heure du navigateur. */
+async function amorcerRefus(date: string): Promise<Amorcage> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`date invalide : « ${date} » (AAAA-MM-JJ attendu)`);
+  const ferme = fermeDuJour(date);
+  const maintenant = new Date();
+  await remplirBase(ferme.utilisateurId, ferme.fermeId, async (base) => {
+    await ecrireFermeDuJour(base, date);
+    await ecrireRefus(base, refusDuJeu(maintenant));
+  });
+  return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total + REFUS_DU_JEU_TOTAL };
+}
+
 function amorcer(): Promise<Amorcage> {
   const parametres = new URLSearchParams(location.search);
   const jeu = parametres.get('jeu');
@@ -122,6 +140,7 @@ function amorcer(): Promise<Amorcage> {
   if (jeu === 'aujourdhui-grande-ferme') return amorcerGrandeFerme(parametres.get('date') ?? '');
   if (jeu === 'serie') return amorcerSerie();
   if (jeu === 'itineraires') return amorcerItineraires(parametres.get('date') ?? '');
+  if (jeu === 'refus') return amorcerRefus(parametres.get('date') ?? '');
   return Promise.reject(new Error(`jeu inconnu : « ${jeu} »`));
 }
 
