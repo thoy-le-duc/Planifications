@@ -125,3 +125,46 @@ test('rechargement hors ligne : la démo s’ouvre', async ({ page, context }) =
   await expect(taches(page).first()).toBeVisible({ timeout: DELAI_BASE_MS });
   await expect(page.getByTestId('carte-connexion')).toHaveCount(0);
 });
+
+const onglet = (page: Page, libelle: string) => page.getByRole('navigation', { name: 'Navigation principale' }).locator('button').filter({ hasText: libelle });
+
+/** La page elle-même défile-t-elle ? (la hauteur du document dépasse celle de la fenêtre) */
+const pageDefile = (page: Page) => page.evaluate(() => (document.scrollingElement?.scrollHeight ?? 0) > window.innerHeight);
+
+test('la bande de démo ne fait pas défiler la page (Aujourd’hui et Planches) ; bouton de 44 px au moins', async ({ page }) => {
+  await ouvrirLaDemo(page);
+  expect(await pageDefile(page), 'Aujourd’hui : la page défile').toBe(false);
+  await onglet(page, 'Planches').click();
+  await expect(page.getByTestId('app')).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(await pageDefile(page), 'Planches : la page défile').toBe(false);
+  await expect(page.getByTestId(TESTID.bandeau)).toBeVisible();
+  const boite = await page.getByTestId(TESTID.reinitialiser).boundingBox();
+  expect(boite, 'zone du bouton « Réinitialiser la démo »').not.toBeNull();
+  expect(boite?.height ?? 0, 'hauteur de la zone de tap').toBeGreaterThanOrEqual(44);
+});
+
+/** Le focus est-il dans la feuille de confirmation ? */
+const focusDansLaFeuille = (page: Page) => page.evaluate(() => document.activeElement?.closest('[role="alertdialog"]') !== null && document.activeElement?.closest('[role="alertdialog"]') !== undefined);
+const focusSurReinitialiser = (page: Page) => page.evaluate((id) => document.activeElement?.getAttribute('data-testid') === id, TESTID.reinitialiser);
+
+test('la feuille de confirmation garde le focus, et le rend au bouton à la fermeture', async ({ page }) => {
+  await ouvrirLaDemo(page);
+  for (const fermeture of ['annuler', 'echap'] as const) {
+    await page.getByTestId(TESTID.reinitialiser).click();
+    await expect(page.getByRole('alertdialog')).toBeVisible();
+    expect(await focusDansLaFeuille(page), `${fermeture} : focus dans la feuille à l’ouverture`).toBe(true);
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('Tab');
+      expect(await focusDansLaFeuille(page), `${fermeture} : Tab n° ${String(i + 1)} sort de la feuille`).toBe(true);
+    }
+    for (let i = 0; i < 6; i++) {
+      await page.keyboard.press('Shift+Tab');
+      expect(await focusDansLaFeuille(page), `${fermeture} : Maj+Tab n° ${String(i + 1)} sort de la feuille`).toBe(true);
+    }
+    if (fermeture === 'annuler') await page.getByTestId(TESTID.annuler).click();
+    else await page.keyboard.press('Escape');
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    expect(await focusSurReinitialiser(page), `${fermeture} : le focus revient sur « Réinitialiser la démo »`).toBe(true);
+  }
+});
