@@ -108,32 +108,44 @@ export function fusionnerJeux(jeux: readonly Jeu[], cible: Cible): Map<string, L
 
 const MOTIF_DATE = /\b(\d{4})-(\d{2})-(\d{2})/g;
 
-function bissextile(annee: number): boolean {
-  return (annee % 4 === 0 && annee % 100 !== 0) || annee % 400 === 0;
+const JOUR_MS = 86_400_000;
+
+/** 'AAAA-MM-JJ' + `jours` jours civils, calculé en UTC (aucun fuseau, aucune heure d'été). */
+function plusJours(annee: number, mois: number, jour: number, jours: number): string {
+  return new Date(Date.UTC(annee, mois - 1, jour) + jours * JOUR_MS).toISOString().slice(0, 10);
+}
+
+/** Année où tombe le milieu de l'année `annee` (1er juillet) une fois décalé de `jours` jours. */
+function anneeDecalee(annee: number, jours: number): number {
+  return Number(plusJours(annee, 7, 1, jours).slice(0, 4));
 }
 
 /**
- * Décale de `annees` toutes les dates (AAAA-MM-JJ, seules ou en tête d'un horodatage ou dans un
- * texte JSON), les années (colonne `annee`) et les noms de saison (AAAA) d'un jeu à dates fixes, pour le rapprocher du jour du
- * téléphone. Un 29 février d'une année non bissextile devient le 28.
+ * Décale de `jours` jours civils (négatif : recule) toutes les dates AAAA-MM-JJ d'un jeu à dates
+ * fixes (seules, en tête d'un horodatage ou dans un texte JSON), pour garder son écart au jour du
+ * téléphone à la journée près. Les années restent cohérentes : la colonne `annee` et une saison
+ * d'année civile (nom AAAA, du 1er janvier au 31 décembre) passent à l'année où tombe le milieu
+ * de leur année une fois décalé ; la saison reste une année civile (deux saisons qui tombent la
+ * même année sont fusionnées par `fusionnerJeux`).
  */
-export function decalerAnnees(lignes: Lignes, annees: number): Lignes {
-  if (annees === 0) return lignes;
-  const decaler = (v: Valeur, table: string, colonne: string): Valeur => {
-    if (typeof v === 'number') return colonne === 'annee' ? v + annees : v;
-    if (v === null) return v;
-    if (table === 'saison' && colonne === 'nom' && /^\d{4}$/.test(v)) return String(Number(v) + annees);
-    return v.replace(MOTIF_DATE, (_, a: string, m: string, j: string) => {
-      const annee = Number(a) + annees;
-      const jour = m === '02' && j === '29' && !bissextile(annee) ? '28' : j;
-      return `${String(annee).padStart(4, '0')}-${m}-${jour}`;
-    });
-  };
+export function decalerJours(lignes: Lignes, jours: number): Lignes {
+  if (jours === 0) return lignes;
+  const decalerTexte = (v: string): string =>
+    v.replace(MOTIF_DATE, (_, a: string, m: string, j: string) => plusJours(Number(a), Number(m), Number(j), jours));
   const sortie: Partial<Record<string, Ligne[]>> = {};
   for (const [table, liste] of Object.entries(lignes)) {
     sortie[table] = (liste ?? []).map((l) => {
+      const nom = l.nom;
+      if (table === 'saison' && typeof nom === 'string' && /^\d{4}$/.test(nom) && l.debut === `${nom}-01-01` && l.fin === `${nom}-12-31`) {
+        const annee = String(anneeDecalee(Number(nom), jours));
+        const d: Record<string, Valeur> = {};
+        for (const [c, v] of Object.entries(l)) d[c] = typeof v === 'string' ? decalerTexte(v) : v;
+        return { ...d, nom: annee, debut: `${annee}-01-01`, fin: `${annee}-12-31` };
+      }
       const d: Record<string, Valeur> = {};
-      for (const [c, v] of Object.entries(l)) d[c] = decaler(v, table, c);
+      for (const [c, v] of Object.entries(l)) {
+        d[c] = typeof v === 'string' ? decalerTexte(v) : typeof v === 'number' && c === 'annee' ? anneeDecalee(v, jours) : v;
+      }
       return d;
     });
   }

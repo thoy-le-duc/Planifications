@@ -1,10 +1,10 @@
 /**
  * T25 — fusion des jeux de test en une ferme de démonstration (./fusion.ts) : rattachement à
  * l'utilisateur et à la ferme de la démo, doublons écartés, références (y compris dans le JSON)
- * renvoyées vers la ligne gardée, années décalées.
+ * renvoyées vers la ligne gardée, années d'un jeu décalé en jours (dates : ./decalage.test.ts).
  */
 import { describe, expect, it } from 'vitest';
-import { decalerAnnees, fusionnerJeux, type Jeu } from './fusion.ts';
+import { decalerJours, fusionnerJeux, type Jeu } from './fusion.ts';
 
 const id = (prefixe: string, n: number) => `0192f0c1-${prefixe}-7000-8000-${n.toString(16).padStart(12, '0')}`;
 const CIBLE = { utilisateurId: id('de00', 1), fermeId: id('de00', 2), nomUtilisateur: 'Visiteur', nomFerme: 'Ferme de démo' };
@@ -64,23 +64,23 @@ describe('T25 : fusion des jeux de la démo', () => {
   });
 });
 
-describe('T25 : années d’un jeu à dates fixes', () => {
-  it('dates, horodatages, JSON, colonne annee et noms de saison décalés ; 29 février ramené au 28', () => {
-    const lignes = decalerAnnees(
+describe('T25 : années d’un jeu décalé en jours', () => {
+  it('saison d’année civile et colonne annee : l’année où tombe le milieu de leur année', () => {
+    const lignes = decalerJours(
       {
-        saison: [{ id: 's', nom: '2026', debut: '2026-01-01', fin: '2026-12-31' }],
-        serie: [{ id: 'x', parametres: '{"miseEnPlace":"2027-04-05"}', cree_le: '2025-01-01T08:00:00.000Z' }],
-        campagne: [{ id: 'c', annee: 2024, debut_recolte_prevu: '2024-02-29' }],
+        saison: [
+          { id: 's', nom: '2026', debut: '2026-01-01', fin: '2026-12-31' },
+          { id: 'p', nom: 'Printemps', debut: '2026-03-01', fin: '2026-06-30' },
+        ],
+        campagne: [{ id: 'c', annee: 2026, debut_recolte_prevu: '2026-06-01' }],
       },
-      1,
+      200,
     );
-    expect(lignes.saison).toEqual([{ id: 's', nom: '2027', debut: '2027-01-01', fin: '2027-12-31' }]);
-    expect(lignes.serie).toEqual([{ id: 'x', parametres: '{"miseEnPlace":"2028-04-05"}', cree_le: '2026-01-01T08:00:00.000Z' }]);
-    expect(lignes.campagne).toEqual([{ id: 'c', annee: 2025, debut_recolte_prevu: '2025-02-28' }]);
-  });
-
-  it('décalage nul : le jeu tel quel', () => {
-    const l = { saison: [{ id: 's', nom: '2026' }] };
-    expect(decalerAnnees(l, 0)).toBe(l);
+    expect(lignes.saison).toEqual([
+      { id: 's', nom: '2027', debut: '2027-01-01', fin: '2027-12-31' },
+      { id: 'p', nom: 'Printemps', debut: '2026-09-17', fin: '2027-01-16' },
+    ]);
+    expect(lignes.campagne).toEqual([{ id: 'c', annee: 2027, debut_recolte_prevu: '2026-12-18' }]);
+    expect(decalerJours({ saison: [{ id: 's', nom: '2026', debut: '2026-01-01', fin: '2026-12-31' }] }, 138).saison?.[0]?.nom).toBe('2026');
   });
 });

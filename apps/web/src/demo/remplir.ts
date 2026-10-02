@@ -1,7 +1,8 @@
 /**
  * T25 — remplissage de la base locale de la démo avec les jeux de test existants, datés par
  * rapport au jour du téléphone : la ferme du jour (avec ses travaux prévus), la ferme des
- * itinéraires, la ferme du plan (dates fixes, rapprochées de l'année du téléphone) et quelques
+ * itinéraires, la ferme du plan (dates fixes, décalées d'autant de jours que le téléphone en a
+ * depuis son jour de référence) et quelques
  * refus de synchro. Tous rattachés à l'utilisateur et à la ferme de la démo (./fusion.ts).
  *
  * Chargé à la demande par ./index.tsx, au premier lancement et après « Réinitialiser la démo »
@@ -18,12 +19,17 @@ import { FERME_REFUS, refusDuJeu, UTILISATEUR_REFUS } from '../ecrans/ferme/test
 import { fermeItineraires } from '../ecrans/itineraires/test/ferme-itineraires.ts';
 import { fermeSerie } from '../ecrans/serie/test/ferme-serie.ts';
 import { nomBaseLocale, supprimerBaseIndexedDb } from '../donnees/effacer.ts';
-import { ouvrirBaseLocale } from '../donnees/ouvrir.ts';
-import { decalerAnnees, fusionnerJeux, type Jeu, type Ligne } from './fusion.ts';
+import { decalerJours, fusionnerJeux, type Jeu, type Ligne } from './fusion.ts';
 import { FERME_DEMO, NOM_FERME_DEMO, NOM_UTILISATEUR_DEMO, UTILISATEUR_DEMO } from './identite.ts';
 
-/** Année du jour des tests de la ferme du plan (2026-09-30), dont les dates sont fixes. */
-const ANNEE_DU_JEU_PLAN = 2026;
+/** Jour de référence de la ferme du plan (« aujourd'hui » de ses tests), dont les dates sont fixes. */
+const JOUR_DU_JEU_PLAN = '2026-09-30';
+
+/** Jours de `de` à `a` ('AAAA-MM-JJ'), calculés en UTC. */
+function joursEntre(de: string, a: string): number {
+  const utc = (d: string) => Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)));
+  return Math.round((utc(a) - utc(de)) / 86_400_000);
+}
 
 /** Refus de synchro montrés dans la démo (écran Ferme) : quelques-uns, pas la centaine de l'e2e. */
 const REFUS_DE_LA_DEMO = 3;
@@ -52,7 +58,7 @@ export function lignesDeLaDemo(jour: string, maintenant: Date): Map<string, Lign
   const jeux: Jeu[] = [
     fermeDuJour(jour, { travaux: true }),
     fermeItineraires(jour),
-    { ...plan, lignes: decalerAnnees(plan.lignes, Number(jour.slice(0, 4)) - ANNEE_DU_JEU_PLAN) },
+    { ...plan, lignes: decalerJours(plan.lignes, joursEntre(JOUR_DU_JEU_PLAN, jour)) },
     { utilisateurId: UTILISATEUR_REFUS, fermeId: FERME_REFUS, lignes: { refus_synchro: refus } },
   ];
   return fusionnerJeux(jeux, { utilisateurId: UTILISATEUR_DEMO, fermeId: FERME_DEMO, nomUtilisateur: NOM_UTILISATEUR_DEMO, nomFerme: NOM_FERME_DEMO });
@@ -65,6 +71,8 @@ export function lignesDeLaDemo(jour: string, maintenant: Date): Map<string, Lign
 export async function remplirDemo(jour: string, maintenant: Date): Promise<void> {
   const tables = lignesDeLaDemo(jour, maintenant);
   await supprimerBaseIndexedDb(nomBaseLocale(UTILISATEUR_DEMO));
+  // PowerSync à la demande : lignesDeLaDemo reste utilisable sans navigateur (tests sous Node).
+  const { ouvrirBaseLocale } = await import('../donnees/ouvrir.ts');
   const { base, fermer } = ouvrirBaseLocale(UTILISATEUR_DEMO);
   try {
     await base.writeTransaction(async (tx) => {
