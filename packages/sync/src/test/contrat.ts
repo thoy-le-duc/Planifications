@@ -120,8 +120,15 @@ export interface PorteDonnees {
    * son id. Aucun réseau : l'écran change tout de suite, l'envoi suit au retour du réseau.
    */
   saisirEvenement(saisie: SaisieEvenement): Promise<Id<'Evenement'>>;
-  /** Refus de l'utilisateur de la porte, du plus récent au plus ancien ; même contrat que `surveiller`. */
+  /**
+   * Refus de l'utilisateur de la porte, du plus récent au plus ancien ; même contrat que `surveiller`.
+   * T10l : seulement les refus NON archivés (`archive_le` nul) ; un refus archivé ici ou sur un
+   * autre téléphone de l'utilisateur (archive_le arrivé par la synchro) sort de la liste.
+   * L'archivage lui-même (`archiverRefus`) : contrat en tête de src/porte-archiver.test.ts.
+   */
   surveillerRefus(rappel: (refus: RefusSynchro[]) => void): () => void;
+  /** T10l (relecture) : obligatoire. Archive les refus `ids` de l'utilisateur (src/porte-archiver.test.ts). */
+  archiverRefus(ids: readonly string[]): Promise<void>;
 }
 
 // ── Envoi des écritures (uploadData du connecteur PowerSync) ─────────────────────────────────

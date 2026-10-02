@@ -34,7 +34,7 @@ export const TABLES_LOCALES = {
   plantation: { ferme_id: T, espece_id: T, variete_id: T, date_plantation: T, nombre_plants: 'entier', date_arrachage: T, cree_le: T, modifie_le: T, supprime_le: T },
   produit_phyto: { ferme_id: T, nom_commercial: T, numero_amm: T, substance_active: T, delai_avant_recolte_jours: 'entier', utilisable_en_bio: 'entier', dose_maximale: T, cree_le: T, modifie_le: T, supprime_le: T },
   proposition: { ferme_id: T, source: T, auteur_id: T, statut: T, decide_le: T, changements: T, cree_le: T, modifie_le: T, supprime_le: T },
-  refus_synchro: { utilisateur_id: T, ferme_id: T, nom_table: T, ligne_id: T, operation: T, motif: T, message: T, cree_le: T, saisie_type: T, saisie_culture: T, saisie_date: T, saisie_quantite: 'reel', saisie_unite: T },
+  refus_synchro: { utilisateur_id: T, ferme_id: T, nom_table: T, ligne_id: T, operation: T, motif: T, message: T, cree_le: T, saisie_type: T, saisie_culture: T, saisie_date: T, saisie_quantite: 'reel', saisie_unite: T, archive_le: T },
   saison: { ferme_id: T, nom: T, debut: T, fin: T, cree_le: T, modifie_le: T, supprime_le: T },
   secteur_emplacement: { ferme_id: T, secteur_irrigation_id: T, emplacement_id: T, du: T, au: T, cree_le: T, modifie_le: T, supprime_le: T },
   secteur_irrigation: { ferme_id: T, numero_vanne: 'entier', nom: T, debit_litres_heure: 'reel', adresse_modbus: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
