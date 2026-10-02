@@ -34,6 +34,7 @@ import {
   check,
   foreignKey,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -983,8 +984,21 @@ export const refusSynchro = pgTable(
     motif: text('motif').notNull(),
     /** Explication en français, affichée telle quelle sur le téléphone. */
     message: text('message').notNull(),
-    /** Ce qui a été reçu (`donnees` de l'écriture), pour comprendre après coup. */
+    /** Ce qui a été reçu (`donnees` de l'écriture), pour comprendre après coup. Ne descend jamais sur le téléphone. */
     donnees: jsonb('donnees').$type<Readonly<Record<string, unknown>>>(),
+    // T10k : court résumé de la saisie refusée, calculé par le serveur (apps/api/src/sync/resume.ts)
+    // et seul à descendre sur le téléphone avec le motif (jamais `donnees`, jamais la note). Chaque
+    // champ est NULL quand il est absent, illisible ou d'une ferme qui n'est pas celle de l'événement.
+    /** Type d'événement, s'il est l'un des types connus. */
+    saisieType: text('saisie_type'),
+    /** « Espèce » ou « Espèce Variété », lue en base dans la ferme de l'événement ; nettoyée, 80 caractères au plus. */
+    saisieCulture: text('saisie_culture'),
+    /** Jour de la saisie. */
+    saisieDate: jour('saisie_date'),
+    /** Récolte : quantité saisie (nombre fini). */
+    saisieQuantite: doublePrecision('saisie_quantite'),
+    /** Récolte : unité saisie, l'une des unités de récolte. */
+    saisieUnite: text('saisie_unite'),
     creeLe: creeLe(),
   },
   (t) => [
