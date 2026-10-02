@@ -20,6 +20,7 @@ import './connexion/connexion.css';
 import { ContexteFerme } from './donnees/contexte.ts';
 import { ETAT_DONNEES_INITIAL, type EtatDonnees, type FermeOuverte, type PoigneeDonnees } from './donnees/etat-appli.ts';
 import { libelleSynchro } from './donnees/libelle-synchro.ts';
+import { lireRefusVus, noterRefusVus, refusNonVus } from './donnees/refus-vus.ts';
 import { marquerAppPrete } from './perf.ts';
 import { BarreNavigation, EnTete, ONGLETS, type Onglet } from './ui/composants.tsx';
 
@@ -146,6 +147,57 @@ const POUSSES: readonly (readonly [number, number, number, number])[] = [
  */
 const ATTENTE_PLAN_MAX_MS = 400;
 
+/**
+ * Refus de synchro (T10i) : la coquille ne les lit qu'après ce délai, une fois la journée et le
+ * plan lancés (même raison qu'ATTENTE_PLAN_MAX_MS : ne pas disputer la base aux écrans au
+ * lancement). Onglet Ferme ouvert : tout de suite.
+ */
+const ATTENTE_REFUS_MS = 1_000;
+
+/**
+ * Pastille des refus de synchro (T10i) : vrai si un refus de l'utilisateur n'a pas encore été vu.
+ * Onglet Ferme ouvert : les refus lus (y compris ceux qui arrivent) sont notés vus, sur le
+ * téléphone (./donnees/refus-vus.ts). La porte vient de l'état des données : rien de
+ * @planif/sync dans le JavaScript de démarrage.
+ */
+function useRefusNonVus(ferme: FermeOuverte | null, utilisateurId: string | undefined, fermeOuvert: boolean): boolean {
+  const porte = ferme?.porte ?? null;
+  const [eveil, setEveil] = useState(false);
+  const actif = eveil || fermeOuvert;
+  const [lus, setLus] = useState<{ readonly porte: FermeOuverte['porte']; readonly ids: readonly string[] } | null>(null);
+
+  useEffect(() => {
+    if (porte === null) return undefined;
+    const minuterie = setTimeout(() => {
+      setEveil(true);
+    }, ATTENTE_REFUS_MS);
+    return () => {
+      clearTimeout(minuterie);
+    };
+  }, [porte]);
+
+  useEffect(() => {
+    if (!actif || porte === null) return undefined;
+    return porte.surveillerRefus((refus) => {
+      setLus({ porte, ids: refus.map((r) => r.id) });
+    });
+  }, [actif, porte]);
+
+  const ids = porte !== null && lus?.porte === porte ? lus.ids : null;
+
+  // Onglet Ferme ouvert : ce qui est lu (refus arrivés pendant l'ouverture compris) est vu.
+  useEffect(() => {
+    if (utilisateurId !== undefined && fermeOuvert && ids !== null) noterRefusVus(stockageNavigateur(), utilisateurId, ids);
+  }, [utilisateurId, fermeOuvert, ids]);
+
+  // Relu en quittant l'onglet Ferme : les refus notés vus pendant l'ouverture comptent.
+  const vus = useMemo(
+    () => (fermeOuvert || utilisateurId === undefined ? null : lireRefusVus(stockageNavigateur(), utilisateurId)),
+    [fermeOuvert, utilisateurId],
+  );
+  return ids !== null && vus !== null && refusNonVus(ids, vus);
+}
+
 export function App() {
   // Session gardée sur le téléphone : lue une fois, sans réseau.
   const [session, setSession] = useState<SessionConnexion | null>(() => lireSession(stockageNavigateur()));
@@ -222,6 +274,7 @@ export function App() {
       setDonnees(ETAT_DONNEES_INITIAL);
     };
   }, [utilisateurId]);
+  const pastilleRefus = useRefusNonVus(donnees.ferme, utilisateurId, onglet === 'ferme');
   const baseLocale = useMemo<PoigneeDonnees>(
     () => ({
       compterEnAttente: () => poignee.current?.compterEnAttente() ?? Promise.resolve(null),
@@ -291,7 +344,7 @@ export function App() {
           )}
         </ContexteFerme>
       </div>
-      <BarreNavigation actif={onglet} surChoix={setOnglet} />
+      <BarreNavigation actif={onglet} surChoix={setOnglet} pastilleFerme={pastilleRefus} />
     </main>
   );
 }

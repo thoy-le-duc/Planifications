@@ -2,6 +2,11 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T10i : les refus de synchro s'affichent sur le téléphone
+
+- **Fait** : l'onglet Ferme montre chaque saisie refusée par le serveur (type de saisie, date, motif en français, quoi faire), du plus récent au plus ancien, 20 puis « voir plus » ; un envoi trop gros a sa propre phrase ; une pastille orange sur l'onglet Ferme signale un refus pas encore vu. 100 refus : onglet affiché en ~100 ms. Jusqu'ici, un refus passait inaperçu.
+- **Décidé** : la pastille compare les refus déjà vus (pas l'heure du téléphone), mémoire par utilisateur effacée à la déconnexion ; phrase d'action propre au stock. Une relecture, rien de bloquant, petits points corrigés au même tour.
+- **Bloquant** : rien. Suite : T10j (messages du serveur sans jargon, culture et quantité de la saisie refusée, archivage). Attention : le JS de démarrage est à 70,8 Kio pour 71 ; le prochain ticket qui touche la coquille devra en libérer.
 ## 2026-10-02 — T14d : import d'une saison à cheval sur deux années
 
 - **Fait** : à l'import d'un tableur, une série semée en S40 et plantée en S2 est comprise comme plantée l'année suivante (Q18) ; la ligne reste valide et l'aperçu porte un avertissement « plantation en 2028 » ; une ligne qui s'étalerait sur plus d'un an, ou qui retombe deux fois, reste en erreur.

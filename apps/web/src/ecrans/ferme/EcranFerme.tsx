@@ -18,6 +18,10 @@
  * Mes itinéraires (T24) : une ligne, active quand la base est prête et la ferme connue. Un tap
  * charge l'écran (`import('../itineraires/index.ts')`, jamais un import statique : ni l'entrée
  * ni ce morceau ne le portent ; préchargé au repos) et le montre avec la porte du contexte.
+ *
+ * Saisies refusées (T10i) : les refus de synchro de l'utilisateur (porte.surveillerRefus), en
+ * tête de l'écran quand il y en a (./Refus.tsx). Marque MARQUE_REFUS_AFFICHES une fois par
+ * ouverture, quand la liste est lue et dessinée (même vide).
  */
 import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { urlApi } from '../../connexion/client.ts';
@@ -25,10 +29,16 @@ import { deconnecterAvecConfirmation, effacementsEnAttente } from '../../connexi
 import { stockageNavigateur, type SessionConnexion } from '../../connexion/session.ts';
 import { ContexteFerme } from '../../donnees/contexte.ts';
 import { baseLocaleExiste, effacerDonneesLocales } from '../../donnees/effacer.ts';
-import type { PorteDonnees } from '@planif/sync';
+import type { PorteDonnees, RefusSynchro } from '@planif/sync';
 import type { EtatBase, PoigneeDonnees } from '../../donnees/etat-appli.ts';
 import { AlerteOrange, BoutonSecondaire, CARTE } from '../../ui/elements.tsx';
 import { Confirmation } from '../../ui/confirmation.tsx';
+import { SaisiesRefusees } from './Refus.tsx';
+
+/** Marque de performance : les refus de synchro sont lus et dessinés (T10i, e2e/refus.e2e.ts). */
+export const MARQUE_REFUS_AFFICHES = 'planif:refus-affiches';
+
+const AUCUN_REFUS: readonly RefusSynchro[] = [];
 
 /** Confirmation de déconnexion en attente de réponse (vrai : se déconnecter quand même). */
 interface ConfirmationEnAttente {
@@ -180,6 +190,26 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
   const [exportActif, setExportActif] = useState(false);
   const pied = useRef<HTMLDivElement>(null);
   const enCours = etatExport.etape === 'en_cours';
+
+  // Refus de synchro de l'utilisateur, tenus à jour (un refus qui arrive s'ajoute). Sans ferme
+  // ouverte, rien à lire : la liste est vide.
+  const porteRefus = ouverte?.porte ?? null;
+  const [refusLus, setRefusLus] = useState<{ readonly porte: PorteDonnees; readonly refus: readonly RefusSynchro[] } | null>(null);
+  useEffect(() => {
+    if (porteRefus === null) return undefined;
+    return porteRefus.surveillerRefus((r) => {
+      setRefusLus({ porte: porteRefus, refus: r });
+    });
+  }, [porteRefus]);
+  const refus = porteRefus === null ? AUCUN_REFUS : refusLus?.porte === porteRefus ? refusLus.refus : null;
+
+  // Une marque par ouverture de l'écran, quand les refus (ou leur absence) sont dessinés.
+  const refusMarques = useRef(false);
+  useEffect(() => {
+    if (refus === null || refusMarques.current) return;
+    refusMarques.current = true;
+    performance.mark(MARQUE_REFUS_AFFICHES);
+  }, [refus]);
 
   // Au lancement, le focus clavier passe sur « Annuler » (le bouton tapé devient désactivé).
   useEffect(() => {
@@ -392,6 +422,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
   return (
     <>
       {effacementEnAttente && <AlerteOrange>{ALERTE_EFFACEMENT}</AlerteOrange>}
+      {refus !== null && <SaisiesRefusees refus={refus} />}
       <Carte titre="Ma façon de cultiver">
         <Ligne
           nom="Mes itinéraires"

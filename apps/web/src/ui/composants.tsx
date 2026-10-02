@@ -120,7 +120,24 @@ const ICONES: Readonly<Record<Onglet, ReactNode>> = {
 export interface ProprietesBarreNavigation {
   readonly actif: Onglet;
   readonly surChoix: (onglet: Onglet) => void;
+  /**
+   * T10i : un refus de synchro pas encore vu. Point orange sur l'icône de l'onglet Ferme, et le
+   * nom de l'onglet le dit (lecteurs d'écran).
+   */
+  readonly pastilleFerme?: boolean;
 }
+
+/** Point orange sur l'icône de l'onglet Ferme (T10i), cerclé de blanc pour se détacher du trait. */
+const PASTILLE_ONGLET = {
+  position: 'absolute',
+  top: -3,
+  right: -5,
+  width: 13,
+  height: 13,
+  borderRadius: 'var(--rayon-pastille)',
+  background: 'var(--couleur-orange)',
+  boxShadow: '0 0 0 2.5px var(--couleur-surface)',
+} as const;
 
 /**
  * Barre basse : quatre onglets de même largeur, 48 px au moins (quatre tiennent dans 195 px, un
@@ -128,7 +145,7 @@ export interface ProprietesBarreNavigation {
  * Focus : contour à l'intérieur de l'onglet (classe onglet, src/ui/base.css), jamais rogné par le
  * bord de l'écran.
  */
-export function BarreNavigation({ actif, surChoix }: ProprietesBarreNavigation) {
+export function BarreNavigation({ actif, surChoix, pastilleFerme = false }: ProprietesBarreNavigation) {
   return (
     <nav
       aria-label="Navigation principale"
@@ -141,12 +158,14 @@ export function BarreNavigation({ actif, surChoix }: ProprietesBarreNavigation) 
     >
       {ONGLETS.map(({ id, libelle }) => {
         const courant = id === actif;
+        const pastille = id === 'ferme' && pastilleFerme;
         return (
           <button
             key={id}
             type="button"
             className="onglet"
             aria-current={courant ? 'page' : undefined}
+            aria-label={pastille ? `${libelle} : refus de synchro à voir` : undefined}
             onClick={() => {
               surChoix(id);
             }}
@@ -170,19 +189,22 @@ export function BarreNavigation({ actif, surChoix }: ProprietesBarreNavigation) 
               color: courant ? 'var(--couleur-foret)' : 'var(--couleur-tertiaire)',
             }}
           >
-            <svg
-              aria-hidden="true"
-              width="26"
-              height="26"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              {ICONES[id]}
-            </svg>
+            <span style={{ position: 'relative', display: 'flex' }}>
+              <svg
+                aria-hidden="true"
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {ICONES[id]}
+              </svg>
+              {pastille && <span data-testid="pastille-refus" aria-hidden="true" style={PASTILLE_ONGLET} />}
+            </span>
             {libelle}
           </button>
         );

@@ -12,8 +12,14 @@
 - La ligne récapitulative d'un lot trop gros (`table: 'lot'`, T10f) est montrée de façon compréhensible.
 - La file d'envoi n'est jamais bloquée par un refus (déjà vrai, à garder).
 
+## Décisions (chef, 2026-10-02)
+
+- Le téléphone ne connaît de la saisie refusée que sa table, l'opération, le motif, le message et la date : la carte montre le type de saisie en français, la date du refus, le message du serveur et quoi faire. Montrer la culture ou la quantité demande un résumé synchronisé par le serveur : T10j.
+- Pastille sans limite d'âge, comparée par refus déjà vus (jamais par l'heure du téléphone), mémoire par utilisateur effacée à la déconnexion.
+- 20 refus, puis « voir plus » ; pas d'archivage (T10j).
+
 ## Critères d'acceptation
 
-- [ ] Test : un refus reçu s'affiche avec son motif en français ; la file continue.
-- [ ] Test : la ligne `lot` s'affiche en une phrase compréhensible.
-- [ ] e2e : l'onglet Ferme reste sous 300 ms avec 100 refus.
+- [x] Test : un refus reçu s'affiche avec son motif en français ; la file continue.
+- [x] Test : la ligne `lot` s'affiche en une phrase compréhensible.
+- [x] e2e : l'onglet Ferme reste sous 300 ms avec 100 refus.

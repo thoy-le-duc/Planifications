@@ -564,3 +564,43 @@ describe('B2 : l’effacement en attente ne touche jamais l’utilisateur connec
     expect(typeof module.retirerEffacementEnAttente).toBe('function');
   });
 });
+
+/**
+ * T10i (relecture du chef) — les refus de synchro « vus » sont gardés sur le téléphone, clé
+ * `planif.refus-vus.<utilisateurId>` (src/donnees/refus-vus.ts). Téléphone partagé (T09b) : rien
+ * du compte précédent ne reste lisible ; la déconnexion retire cette clé, que l'API réponde ou
+ * non, et même si l'effacement de la base échoue. Les clés des autres comptes ne sont pas
+ * l'affaire de cette déconnexion (non vérifiées).
+ */
+describe('T10i : la déconnexion efface les refus vus de l’utilisateur', () => {
+  const CLE_REFUS_VUS = `planif.refus-vus.${SESSION.utilisateurId}`;
+
+  function stockageAvecRefusVus() {
+    const s = stockage();
+    s.valeurs.set(CLE_REFUS_VUS, JSON.stringify(['0192f0c1-1010-7000-9000-000000000001']));
+    return s;
+  }
+
+  it('API joignable : la clé des refus vus est retirée', async () => {
+    const { fetch } = fetchSimule(() => Promise.resolve(new Response(null, { status: 204 })));
+    const s = stockageAvecRefusVus();
+    await deconnecter(SESSION, { urlApi: 'https://api', fetch, stockage: s, effacerBaseLocale: effaceur().effacerBaseLocale });
+    expect(s.valeurs.has(CLE_REFUS_VUS)).toBe(false);
+  });
+
+  it('hors ligne : la clé des refus vus est retirée quand même', async () => {
+    const { fetch } = fetchSimule(() => Promise.reject(new TypeError('Failed to fetch')));
+    const s = stockageAvecRefusVus();
+    await deconnecter(SESSION, { urlApi: 'https://api', fetch, stockage: s, effacerBaseLocale: effaceur().effacerBaseLocale });
+    expect(s.valeurs.has(CLE_REFUS_VUS)).toBe(false);
+  });
+
+  it('base locale impossible à effacer : la promesse rejette, la clé des refus vus est retirée quand même', async () => {
+    const { fetch } = fetchSimule(() => Promise.resolve(new Response(null, { status: 204 })));
+    const s = stockageAvecRefusVus();
+    await expect(
+      deconnecter(SESSION, { urlApi: 'https://api', fetch, stockage: s, effacerBaseLocale: effaceur(true).effacerBaseLocale }),
+    ).rejects.toThrow();
+    expect(s.valeurs.has(CLE_REFUS_VUS)).toBe(false);
+  });
+});
