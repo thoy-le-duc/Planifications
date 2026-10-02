@@ -57,7 +57,8 @@ import { garde, type VariablesAuthentifiees } from '../auth/garde.ts';
 import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
 import { creerLimiteMemoire } from '../limites.ts';
-import { lireEvenement } from './evenement.ts';
+import { validerEvenement } from './evenement.ts';
+import { messageRefus, refusDuCoeur } from './messages.ts';
 import type { MotifRefus, Refus } from './motifs.ts';
 import { verifierCorrection, verifierReferences, verifierRemplacementRecolte, type TransactionDb } from './references.ts';
 import { ecrireItineraire, estTableItineraire, TABLES_ITINERAIRE } from './itineraire.ts';
@@ -69,19 +70,6 @@ export type { MotifRefus } from './motifs.ts';
 interface Env {
   Variables: VariablesAuthentifiees;
 }
-
-/** Explication affichée telle quelle sur le téléphone. */
-const MESSAGES: Readonly<Record<MotifRefus, string>> = {
-  ferme_interdite: "Saisie non enregistrée : elle vise une ferme dont vous n'êtes pas (ou plus) membre.",
-  auteur_invalide: "Saisie non enregistrée : elle porte le nom d'une autre personne que vous.",
-  ajout_seul:
-    'Un événement enregistré ne se modifie pas et ne se supprime pas : saisissez plutôt une correction ou une annulation.',
-  table_interdite: 'Modification refusée : cette donnée ne se modifie pas depuis le téléphone.',
-  ecriture_invalide: 'Saisie non enregistrée, données invalides',
-  lot_trop_gros:
-    'Saisie non enregistrée : envoi trop volumineux (plus de 500 saisies ou de 6 Mio en une fois). Ressaisissez-la.',
-  recolte_annulee: 'Cette récolte a été annulée : elle ne se corrige plus. Pour la rétablir, saisissez une nouvelle récolte.',
-};
 
 /**
  * Corps HTTP au plus (au-delà : 200, chaque écriture refusée 'lot_trop_gros', rien d'écrit). La
@@ -127,7 +115,7 @@ const TABLES_ECRITES = new Set(['evenement', ...TABLES_TOUT_OU_RIEN]);
 const TABLES_AJOUT_SEUL = new Set(['evenement', 'mouvement_stock']);
 
 /** Précision du refus des autres écritures d'une saisie refusée en entier. */
-const PRECISION_SAISIE_REFUSEE = 'saisie refusée en entier, une autre de ses écritures est refusée';
+const PRECISION_SAISIE_REFUSEE = 'une autre partie de cette saisie est refusée, rien n’a été enregistré';
 
 /** Écriture telle que reçue, lue sans confiance. */
 interface EcritureRecue {
@@ -153,15 +141,36 @@ function lireEcriture(brut: unknown): EcritureRecue {
   };
 }
 
-/** Code SQLSTATE d'une erreur de pg, éventuellement enveloppée par Drizzle (`cause`). */
-function codeSql(erreur: unknown): string | null {
+/** Erreur de pg, éventuellement enveloppée par Drizzle (`cause`) : son code SQLSTATE et les noms qu'elle donne. */
+interface ErreurSql {
+  readonly code: string;
+  readonly constraint?: unknown;
+  readonly table?: unknown;
+  readonly column?: unknown;
+}
+
+function erreurSql(erreur: unknown): ErreurSql | null {
   let e: unknown = erreur;
   for (let i = 0; i < 5 && typeof e === 'object' && e !== null; i++) {
     const code = (e as { code?: unknown }).code;
-    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return code;
+    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) return e as ErreurSql;
     e = (e as { cause?: unknown }).cause;
   }
   return null;
+}
+
+/**
+ * Détail d'une erreur de la base pour le journal : code SQLSTATE, et contrainte, table, colonne
+ * quand pg les donne. Jamais le message de pg, qui peut citer la valeur refusée.
+ */
+function detailSql(erreur: unknown): string {
+  const e = erreurSql(erreur);
+  if (e === null) return 'base';
+  const noms = (['constraint', 'table', 'column'] as const).flatMap((k) => {
+    const nom = e[k];
+    return typeof nom === 'string' ? [`${k} ${nom}`] : [];
+  });
+  return ['SQLSTATE', e.code, ...noms].join(' ');
 }
 
 /**
@@ -170,7 +179,7 @@ function codeSql(erreur: unknown): string | null {
  * renverra le lot, rien n'est perdu.
  */
 function refusParLaBase(erreur: unknown): boolean {
-  const code = codeSql(erreur);
+  const code = erreurSql(erreur)?.code ?? null;
   return code !== null && (code.startsWith('22') || code.startsWith('23') || code.startsWith('54'));
 }
 
@@ -408,7 +417,9 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     // e.table est lue ensuite comme nom de table SQL : seulement l'une de ces constantes.
     if (!TABLES_ECRITES.has(e.table)) return { motif: 'table_interdite', fermeId: fermeDonnee };
     if (e.op === null || e.id === '' || e.donneesIllisibles) {
-      return { motif: 'ecriture_invalide', precision: 'écriture mal formée', fermeId: fermeDonnee };
+      const detail = e.op === null ? 'opération inconnue' : e.id === '' ? 'id manquant' : 'données qui ne sont pas un objet';
+      // Sans précision : « ce n'est pas une saisie que l'appli sait enregistrer » (messages.ts).
+      return { motif: 'ecriture_invalide', detail, fermeId: fermeDonnee };
     }
     if (e.op === 'PATCH' && (e.table === 'serie' || e.table === 'occupation')) {
       // T10e : une série et ses occupations se modifient (suppression douce comprise).
@@ -425,8 +436,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     if (e.table === 'evenement') {
       const auteur = donnees.auteur_id;
       if (estUuid(auteur) && auteur.toLowerCase() !== utilisateurId) return { motif: 'auteur_invalide', fermeId: fermeDonnee };
-      const lecture = lireEvenement(e.id, donnees);
-      if (!lecture.ok) return { motif: 'ecriture_invalide', precision: lecture.raison, fermeId: fermeDonnee };
+      const lecture = validerEvenement(e.id, donnees);
+      if (!lecture.ok) return refusDuCoeur(lecture.erreur, fermeDonnee);
       return ecrireEvenement(tx, lecture.valeur, utilisateurId, remplacements, index);
     }
     if (e.table === 'serie' || e.table === 'occupation') {
@@ -490,14 +501,19 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       const e = ecritures[courante];
       return {
         index: courante,
-        refus: { motif: 'ecriture_invalide', precision: 'refusée par une règle de la base', fermeId: e === undefined ? null : fermeDesDonnees(e) },
+        refus: {
+          motif: 'ecriture_invalide',
+          precision: 'une valeur saisie n’est pas acceptée',
+          detail: detailSql(erreur),
+          fermeId: e === undefined ? null : fermeDesDonnees(e),
+        },
       };
     }
   }
 
   /** Ligne de refus_synchro pour l'écriture `e`. */
   function ligneRefus(e: EcritureRecue, utilisateurId: Id<'Utilisateur'>, fermes: ReadonlySet<string>, refus: Refus) {
-    const message = refus.precision === undefined ? MESSAGES[refus.motif] : `${MESSAGES[refus.motif]} : ${refus.precision}.`;
+    const message = messageRefus(refus);
     const fermeVisee = refus.fermeId ?? null;
     const ligne = {
       id: ctx.nouvelId(),
@@ -514,6 +530,20 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       creeLe: ctx.maintenant(),
     };
     return ligne;
+  }
+
+  /**
+   * Une ligne au journal du serveur pour un refus qui porte un détail technique : motif, table et
+   * id de l'écriture, détail (jamais de donnée de la saisie). Un journal en panne ne bloque pas la synchro.
+   */
+  function journaliser(e: EcritureRecue, refus: Refus): void {
+    try {
+      // Table et id viennent du téléphone : tronqués, sans caractère de contrôle (une ligne de journal reste une ligne).
+      const brut = (t: string): string => texteRefus(t).replace(/\p{Cc}/gu, '?');
+      ctx.journal(`[synchro] refus ${refus.motif} ${brut(e.table)} ${brut(e.id)} : ${refus.detail ?? '-'}`);
+    } catch {
+      // Sortie d'erreur fermée… : le refus s'enregistre quand même.
+    }
   }
 
   /**
@@ -562,6 +592,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     const ecritures = (brutes as unknown[]).map(lireEcriture);
     const refus: { table: string; id: string; motif: MotifRefus }[] = [];
     const refuser = async (liste: readonly (readonly [EcritureRecue, Refus])[]): Promise<void> => {
+      // T10j : le détail technique d'un refus va au journal, avant la réponse ; jamais au téléphone.
+      for (const [e, r] of liste) if (r.detail !== undefined) journaliser(e, r);
       await enregistrerRefus(liste, utilisateurId, fermes);
       for (const [e, r] of liste) refus.push({ table: e.table, id: e.id, motif: r.motif });
     };
@@ -574,7 +606,9 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       const liste: (readonly [EcritureRecue, Refus])[] = plausibles.map((e) => [e, { motif: 'lot_trop_gros', fermeId: fermeDesDonnees(e) }] as const);
       if (autres > 0) {
         const recapitulatif: EcritureRecue = { op: null, table: 'lot', id: ctx.nouvelId(), donnees: null, donneesIllisibles: false };
-        liste.push([recapitulatif, { motif: 'lot_trop_gros', precision: `${String(autres)} autres écritures illisibles, en double ou hors des tables permises`, fermeId: null }]);
+        // Le message reste celui du motif ; le compte va au journal.
+        const detail = `${String(autres)} autres écritures illisibles, en double ou hors des tables permises`;
+        liste.push([recapitulatif, { motif: 'lot_trop_gros', detail, fermeId: null }]);
       }
       await refuser(liste);
       return c.json({ refus });

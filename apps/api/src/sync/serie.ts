@@ -25,6 +25,15 @@ import { modification } from '@planif/db';
 import { sql, type SQL } from 'drizzle-orm';
 import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
+import {
+  detailDuCoeur,
+  ID_GLISSE,
+  PRECISION_CHANGE_DE_FERME,
+  PRECISION_CREEE_SUPPRIMEE,
+  PRECISION_INTROUVABLE,
+  PRECISION_MODIFIEE_AILLEURS,
+  refusDuCoeur,
+} from './messages.ts';
 import type { Refus } from './motifs.ts';
 import { visibleParLaFerme, type TransactionDb } from './references.ts';
 
@@ -92,6 +101,8 @@ export type SeriesTouchees = Map<string, number>;
 type Ligne = Readonly<Record<string, unknown>>;
 
 const invalide = (precision: string, fermeId: string | null): Refus => ({ motif: 'ecriture_invalide', precision, fermeId });
+/** Série enregistrée que le cœur ne relit pas (ne devrait pas arriver) : le détail va au journal. */
+const PRECISION_SERIE_ILLISIBLE = 'la série enregistrée est illisible';
 
 const estTableSerie = (table: string): table is TableSerie => TABLES_SERIE.has(table);
 
@@ -247,7 +258,7 @@ async function serieDeLaFerme(tx: TransactionDb, serieId: string, fermeId: strin
   const ligne = r.rows[0]?.l;
   if (ligne === undefined) return { refus: invalide('série introuvable', fermeId) };
   const lecture = validerSerie(ligne);
-  if (!lecture.ok) return { refus: invalide(`série illisible : ${lecture.erreur.message}`, fermeId) };
+  if (!lecture.ok) return { refus: { ...invalide(PRECISION_SERIE_ILLISIBLE, fermeId), detail: detailDuCoeur(lecture.erreur) } };
   return { serie: lecture.valeur };
 }
 
@@ -262,15 +273,15 @@ type Validee = { readonly ligne: Ligne; readonly valeur: Serie | Occupation; rea
 async function valider(tx: TransactionDb, table: TableSerie, entree: Ligne, fermeId: string): Promise<Validee> {
   if (table === 'serie') {
     const lecture = validerSerie(entree);
-    if (!lecture.ok) return { refus: invalide(lecture.erreur.message, fermeId) };
+    if (!lecture.ok) return { refus: refusDuCoeur(lecture.erreur, fermeId) };
     return { ligne: ligneSerie(lecture.valeur), valeur: lecture.valeur, serieId: lecture.valeur.id };
   }
   const serieId = entree.serie_id;
-  if (!estUuid(serieId)) return { refus: invalide('série : identifiant manquant ou invalide', fermeId) };
+  if (!estUuid(serieId)) return { refus: invalide('série manquante ou illisible', fermeId) };
   const serie = await serieDeLaFerme(tx, serieId.toLowerCase(), fermeId);
   if ('refus' in serie) return serie;
   const lecture = validerOccupation(entree, serie.serie, { datesDeLaSerie: false });
-  if (!lecture.ok) return { refus: invalide(lecture.erreur.message, fermeId) };
+  if (!lecture.ok) return { refus: refusDuCoeur(lecture.erreur, fermeId) };
   return { ligne: ligneOccupation(lecture.valeur), valeur: lecture.valeur, serieId: serie.serie.id };
 }
 
@@ -314,18 +325,18 @@ async function creer(
   touchees: SeriesTouchees,
   index: number,
 ): Promise<Refus | null> {
-  if (fermeDonnee === null) return invalide('ferme : identifiant manquant ou invalide', null);
+  if (fermeDonnee === null) return invalide('ferme manquante ou illisible', null);
   const fermeId = fermeDonnee;
   const validee = await valider(tx, e.table, { ...e.donnees, id: e.id }, fermeId);
   if ('refus' in validee) return validee.refus;
   const { ligne, valeur, serieId } = validee;
   // Décision 6 du chef : une ligne se crée active.
-  if (valeur.supprimeLe !== null) return invalide('une ligne se crée active (supprime_le vide)', fermeId);
+  if (valeur.supprimeLe !== null) return invalide(PRECISION_CREEE_SUPPRIMEE, fermeId);
 
   const existante = await identique(tx, e.table, ligne, valeur.id);
   if (existante !== null) {
     // Décision 4 du chef : même id, autres valeurs (ou ligne d'une autre ferme) → ecriture_invalide.
-    return existante ? null : invalide('déjà enregistrée avec d’autres valeurs : une modification passe par PATCH', fermeId);
+    return existante ? null : invalide(PRECISION_MODIFIEE_AILLEURS, fermeId);
   }
 
   if (e.table === 'serie') {
@@ -348,7 +359,7 @@ async function creer(
   );
   if (ecrite.rows.length === 0) {
     // Écrite entre-temps par un envoi concurrent : même règle que le renvoi.
-    return (await identique(tx, e.table, ligne, valeur.id)) === true ? null : invalide('déjà enregistrée avec d’autres valeurs', fermeId);
+    return (await identique(tx, e.table, ligne, valeur.id)) === true ? null : invalide(PRECISION_MODIFIEE_AILLEURS, fermeId);
   }
   await historiser(tx, ctx, e.table, valeur.id, fermeId, auteurId, maintenant, 'creation', null);
   touchees.set(serieId, index);
@@ -377,7 +388,7 @@ async function modifier(
   touchees: SeriesTouchees,
   index: number,
 ): Promise<Refus | null> {
-  if (!estUuid(e.id)) return invalide('ligne introuvable', null);
+  if (!estUuid(e.id)) return invalide(PRECISION_INTROUVABLE, null);
   // Ferme dans la requête du verrou : une ligne d'une autre ferme n'est ni lue ni verrouillée.
   const r = await tx.execute<{ l: Ligne; texte: string }>(
     sql`SELECT to_jsonb(t) AS l, to_jsonb(t)::text AS texte FROM ${sql.identifier(e.table)} t
@@ -385,7 +396,7 @@ async function modifier(
         FOR UPDATE`,
   );
   const existante = r.rows[0];
-  if (existante === undefined) return invalide('ligne introuvable', null);
+  if (existante === undefined) return invalide(PRECISION_INTROUVABLE, null);
   const avant = existante.l;
   const fermeId = String(avant.ferme_id);
   // Relecture de sécurité (décision 1) : seule une occupation de série se modifie depuis le
@@ -397,7 +408,7 @@ async function modifier(
   const fermeDemandee = e.donnees.ferme_id;
   if (fermeDemandee !== undefined && (typeof fermeDemandee !== 'string' || fermeDemandee.toLowerCase() !== fermeId)) {
     if (estUuid(fermeDemandee) && !fermes.has(fermeDemandee.toLowerCase())) return { motif: 'ferme_interdite', fermeId: fermeDemandee.toLowerCase() };
-    return invalide('une ligne ne change pas de ferme', fermeId);
+    return invalide(PRECISION_CHANGE_DE_FERME, fermeId);
   }
 
   const validee = await valider(tx, e.table, { ...avant, ...e.donnees, id: avant.id }, fermeId);
@@ -455,7 +466,7 @@ export async function ecrireSerie(
   index: number,
 ): Promise<Refus | null> {
   // Un id glissé dans les données : colonne inconnue (l'id est celui de l'écriture).
-  if (Object.hasOwn(e.donnees, 'id')) return invalide('colonne inconnue : id', fermeDonnee);
+  if (Object.hasOwn(e.donnees, 'id')) return refusDuCoeur(ID_GLISSE, fermeDonnee);
   if (e.op === 'PATCH') return modifier(tx, ctx, e, fermes, auteurId, touchees, index);
   return creer(tx, ctx, e, fermeDonnee, auteurId, touchees, index);
 }
@@ -504,18 +515,21 @@ export async function verifierFinDeLot(
     if (ligne === undefined) return { index, refus: invalide('série introuvable', null) };
     const fermeId = String(ligne.ferme_id);
     const serie = validerSerie(ligne);
-    if (!serie.ok) return { index, refus: invalide(`série illisible : ${serie.erreur.message}`, fermeId) };
+    if (!serie.ok) return { index, refus: { ...invalide(PRECISION_SERIE_ILLISIBLE, fermeId), detail: detailDuCoeur(serie.erreur) } };
     const occupations = await tx.execute<{ l: Ligne }>(
       // Décision 3 : seulement les occupations de la ferme de la série.
       sql`SELECT to_jsonb(o) AS l FROM occupation o
           WHERE o.serie_id = ${serieId}::uuid AND o.ferme_id = ${fermeId}::uuid AND o.supprime_le IS NULL ORDER BY o.id`,
     );
     if (occupations.rows.length > 0 && serie.valeur.supprimeLe !== null) {
-      return { index, refus: invalide('série supprimée alors qu’une de ses occupations reste active', fermeId) };
+      return { index, refus: invalide('la série est supprimée mais occupe encore un emplacement', fermeId) };
     }
     for (const o of occupations.rows) {
       const lecture = validerOccupation(o.l, serie.valeur);
-      if (!lecture.ok) return { index, refus: invalide(`occupation incohérente avec sa série : ${lecture.erreur.message}`, fermeId) };
+      if (!lecture.ok) {
+        const refus = { ...invalide("l'occupation d'un emplacement sort des dates de sa série", fermeId), detail: detailDuCoeur(lecture.erreur) };
+        return { index, refus };
+      }
     }
   }
   return null;

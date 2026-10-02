@@ -24,10 +24,15 @@ export type TransactionDb = Parameters<Parameters<NodePgDatabase['transaction']>
 export interface RefusReference {
   readonly motif: 'ecriture_invalide';
   readonly precision: string;
+  /** Détail technique pour le journal du serveur (motifs.ts). */
+  readonly detail?: string;
 }
 
 /** Profondeur au plus d'une chaîne de corrections (garde-fou : le journal n'a pas de cycle). */
 export const PROFONDEUR_MAX_CHAINE = 1_000;
+/** Chaîne de corrections plus profonde que PROFONDEUR_MAX_CHAINE : le message, puis le détail du journal. */
+export const PRECISION_TROP_CORRIGEE = 'cette récolte a été corrigée trop de fois : annulez-la puis ressaisissez-la';
+export const DETAIL_CHAINE_TROP_LONGUE = `chaîne de plus de ${String(PROFONDEUR_MAX_CHAINE)} corrections`;
 
 interface Reference {
   /** Table Postgres visée. */
@@ -37,20 +42,23 @@ interface Reference {
   readonly libelle: string;
   /** Ligne partagée (ferme_id nul) acceptée : la bibliothèque de produits phyto. */
   readonly bibliothequeAcceptee?: boolean;
-  /** La table a une colonne supprime_le (toutes sauf `evenement`, en ajout seul). */
-  readonly suppressionDouce: boolean;
+  /**
+   * Ce que le maraîcher lit si la ligne est supprimée ; null : la table n'a pas de colonne
+   * supprime_le (`evenement`, en ajout seul).
+   */
+  readonly supprimee: string | null;
 }
 
 /** Identifiants portés par l'événement, table par table (seuls ces deux-là existent dans les Detail* de T01). */
 function references(l: LigneEvenement): Reference[] {
   const liste: Reference[] = [];
-  if (l.serieId !== null) liste.push({ table: 'serie', ids: [l.serieId], libelle: 'série', suppressionDouce: true });
-  if (l.campagneId !== null) liste.push({ table: 'campagne', ids: [l.campagneId], libelle: 'campagne', suppressionDouce: true });
+  if (l.serieId !== null) liste.push({ table: 'serie', ids: [l.serieId], libelle: 'série', supprimee: 'série supprimée' });
+  if (l.campagneId !== null) liste.push({ table: 'campagne', ids: [l.campagneId], libelle: 'campagne', supprimee: 'campagne supprimée' });
   if (l.emplacementIds.length > 0) {
-    liste.push({ table: 'emplacement', ids: [...new Set(l.emplacementIds)], libelle: 'emplacement', suppressionDouce: true });
+    liste.push({ table: 'emplacement', ids: [...new Set(l.emplacementIds)], libelle: 'emplacement', supprimee: 'emplacement supprimé' });
   }
   if (l.remplaceEvenementId !== null) {
-    liste.push({ table: 'evenement', ids: [l.remplaceEvenementId], libelle: 'événement remplacé', suppressionDouce: false });
+    liste.push({ table: 'evenement', ids: [l.remplaceEvenementId], libelle: 'saisie corrigée ou annulée', supprimee: null });
   }
   // Le détail a été lu selon son type (evenement.ts) : ces clés n'existent que pour l'irrigation et le traitement.
   const detail = l.detail;
@@ -59,7 +67,7 @@ function references(l: LigneEvenement): Reference[] {
       table: 'secteur_irrigation',
       ids: [detail.secteurIrrigationId.toLowerCase()],
       libelle: "secteur d'irrigation",
-      suppressionDouce: true,
+      supprimee: "secteur d'irrigation supprimé",
     });
   }
   if ('produitPhytoId' in detail) {
@@ -68,7 +76,7 @@ function references(l: LigneEvenement): Reference[] {
       ids: [detail.produitPhytoId.toLowerCase()],
       libelle: 'produit phytosanitaire',
       bibliothequeAcceptee: true,
-      suppressionDouce: true,
+      supprimee: 'produit phytosanitaire supprimé',
     });
   }
   return liste;
@@ -85,7 +93,7 @@ export function visibleParLaFerme(fermeId: string, bibliotheque: boolean): SQL {
 /** null si toutes les références sont dans la ferme de l'événement ; sinon le refus. */
 export async function verifierReferences(tx: TransactionDb, l: LigneEvenement): Promise<RefusReference | null> {
   for (const r of references(l)) {
-    const supprimee = r.suppressionDouce ? sql`supprime_le IS NOT NULL` : sql`false`;
+    const supprimee = r.supprimee !== null ? sql`supprime_le IS NOT NULL` : sql`false`;
     // sql.param : le tableau part en UN paramètre (sinon Drizzle le déplie, un paramètre par id).
     // La ferme est dans le WHERE : une ligne d'une autre ferme n'est ni rendue ni verrouillée.
     const lignes = await tx.execute<{ id: string; supprimee: boolean }>(
@@ -98,7 +106,7 @@ export async function verifierReferences(tx: TransactionDb, l: LigneEvenement): 
     for (const id of r.ids) {
       const ligne = trouvees.get(id);
       if (ligne === undefined) return { motif: 'ecriture_invalide', precision: `${r.libelle} introuvable` };
-      if (ligne.supprimee) return { motif: 'ecriture_invalide', precision: `${r.libelle} : ligne supprimée` };
+      if (ligne.supprimee) return { motif: 'ecriture_invalide', precision: r.supprimee ?? `${r.libelle} introuvable` };
     }
   }
   return null;
@@ -190,6 +198,8 @@ export function maillonEnVigueur(maillons: readonly MaillonChaine[]): MaillonCha
 export interface RefusRemplacement {
   readonly motif: 'recolte_annulee' | 'ecriture_invalide';
   readonly precision?: string;
+  /** Détail technique pour le journal du serveur (motifs.ts). */
+  readonly detail?: string;
 }
 
 /**
@@ -211,7 +221,7 @@ export async function verifierRemplacementRecolte(tx: TransactionDb, l: LigneEve
   const deja = await tx.execute<{ n: number }>(sql`SELECT 1 AS n FROM evenement WHERE id = ${l.id}::uuid`);
   if (deja.rows.length > 0) return null;
   const maillons = await lireMaillons(tx, l.remplaceEvenementId, l.fermeId);
-  if (maillons === null) return { motif: 'ecriture_invalide', precision: `chaîne de corrections trop longue (${String(PROFONDEUR_MAX_CHAINE)} au plus)` };
+  if (maillons === null) return { motif: 'ecriture_invalide', precision: PRECISION_TROP_CORRIGEE, detail: DETAIL_CHAINE_TROP_LONGUE };
   const cible = maillons.find((m) => m.id === l.remplaceEvenementId);
   if (cible?.remplace_sorte === 'annulation') return { motif: 'recolte_annulee' };
   if (l.remplaceSorte === 'annulation') return null;

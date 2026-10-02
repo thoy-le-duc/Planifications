@@ -30,7 +30,15 @@ import { sql } from 'drizzle-orm';
 import { createHash } from 'node:crypto';
 import type { Contexte } from '../dependances.ts';
 import type { Refus } from './motifs.ts';
-import { lireMaillons, maillonEnVigueur, PROFONDEUR_MAX_CHAINE, visibleParLaFerme, type TransactionDb } from './references.ts';
+import { ID_GLISSE, refusDuCoeur } from './messages.ts';
+import {
+  DETAIL_CHAINE_TROP_LONGUE,
+  lireMaillons,
+  maillonEnVigueur,
+  PRECISION_TROP_CORRIGEE,
+  visibleParLaFerme,
+  type TransactionDb,
+} from './references.ts';
 
 /** Écriture PUT reçue : id de l'écriture PowerSync et colonnes (lues sans confiance). */
 export interface PutRecu {
@@ -137,9 +145,9 @@ async function verifierEspece(tx: TransactionDb, a: ArticleStock): Promise<Refus
  */
 export async function ecrireArticle(tx: TransactionDb, ctx: Contexte, e: PutRecu, fermeId: string, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
   const ligne = avecId(e);
-  if ('idGlisse' in ligne) return invalide('colonne inconnue : id', fermeId);
+  if ('idGlisse' in ligne) return refusDuCoeur(ID_GLISSE, fermeId);
   const lecture = validerArticleStock(ligne);
-  if (!lecture.ok) return invalide(lecture.erreur.message, fermeId);
+  if (!lecture.ok) return refusDuCoeur(lecture.erreur, fermeId);
   const a = lecture.valeur;
 
   const existant = await articleIdentique(tx, a);
@@ -287,7 +295,7 @@ async function verifierMouvement(
   if (recolte.type !== 'recolte' || recolte.quantite === null) return refuser("l'événement lié n'est pas une récolte");
 
   const chaine = await lireChaine(tx, m.recolteId, m.fermeId);
-  if (chaine === null) return refuser(`chaîne de corrections trop longue (${String(PROFONDEUR_MAX_CHAINE)} au plus)`);
+  if (chaine === null) return { refus: { ...invalide(PRECISION_TROP_CORRIGEE, m.fermeId), detail: DETAIL_CHAINE_TROP_LONGUE } };
 
   // B2 : un seul article par chaîne ; le premier est de l'unité et de l'espèce de la récolte.
   const articlesDeLaChaine = [...chaine.sommes.keys()];
@@ -304,7 +312,7 @@ async function verifierMouvement(
       quantiteEnVigueur: chaine.quantiteEnVigueur,
       annulee: chaine.annulee,
     });
-    return erreur === null ? { quantite: m.quantite } : refuser(erreur.message);
+    return erreur === null ? { quantite: m.quantite } : { refus: refusDuCoeur(erreur, m.fermeId) };
   }
   // Décision 8 : l'écart de ce remplacement est déjà écrit (par le serveur, ou par un premier
   // mouvement du téléphone) : un mouvement qui arrive plus tard est accepté sans rien écrire.
@@ -325,9 +333,9 @@ async function verifierMouvement(
  */
 export async function ecrireMouvement(tx: TransactionDb, ctx: Contexte, e: PutRecu, fermeId: string, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
   const ligne = avecId(e);
-  if ('idGlisse' in ligne) return invalide('colonne inconnue : id', fermeId);
+  if ('idGlisse' in ligne) return refusDuCoeur(ID_GLISSE, fermeId);
   const lecture = validerMouvementStock(ligne);
-  if (!lecture.ok) return invalide(lecture.erreur.message, fermeId);
+  if (!lecture.ok) return refusDuCoeur(lecture.erreur, fermeId);
   const v = lecture.valeur;
   const m: MouvementLu = {
     id: v.id,
@@ -428,7 +436,7 @@ export async function completerStock(tx: TransactionDb, ctx: Contexte, r: Rempla
     const pris = await tx.execute<{ sien: boolean }>(
       sql`SELECT recolte_id IS NOT DISTINCT FROM ${r.id}::uuid AS sien FROM mouvement_stock WHERE id = ${id}::uuid`,
     );
-    return pris.rows[0]?.sien === true ? null : invalide("identifiant du mouvement d'écart déjà pris par un autre mouvement", r.fermeId);
+    return pris.rows[0]?.sien === true ? null : { ...invalide('le stock de cette correction est déjà enregistré autrement', r.fermeId), detail: "id du mouvement d'écart déjà pris" };
   }
   await historiser(tx, ctx, 'mouvement_stock', id, r.fermeId, auteurId, maintenant);
   return null;
