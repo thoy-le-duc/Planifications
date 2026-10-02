@@ -33,6 +33,9 @@ interface ModuleJetons {
   readonly COULEURS: Readonly<Record<string, string>>;
   readonly COULEURS_SOMBRES: Readonly<Record<string, string>>;
   readonly PAIRES_CONTRASTE: readonly PaireContraste[];
+  readonly FAMILLES: Readonly<Record<string, { readonly bande: string; readonly texte: string }>>;
+  /** Facultatif : bandes propres au thème sombre (même forme que FAMILLES) ; sinon FAMILLES sert aux deux thèmes. */
+  readonly FAMILLES_SOMBRES?: Readonly<Record<string, { readonly bande: string; readonly texte: string }>>;
   variablesCss(): string;
 }
 
@@ -146,5 +149,93 @@ describe('CSS généré : surcharges sombres', () => {
     expect(css).toBe(jetonsCss());
     verifierSurcharge(css, MEDIA_SOMBRE, '@media (prefers-color-scheme: dark)', j);
     verifierSurcharge(css, FORCE_SOMBRE, ':root[data-theme="sombre"]', j);
+  });
+});
+
+/** Paires utilisées par l'appli qui doivent figurer dans PAIRES_CONTRASTE (donc être vérifiées dans les deux thèmes). */
+const PAIRES_A_DECLARER: readonly PaireContraste[] = [
+  // Barre du compte à rebours (pousse) et bandeau d'échec (conflit) sur le fond du bandeau d'annulation (forêt).
+  { texte: 'pousse', fond: 'foret', usage: 'contour' },
+  { texte: 'conflit', fond: 'foret', usage: 'contour' },
+  // Bande de la démo : texte sur l'ombre.
+  { texte: 'surEntete', fond: 'ombre', usage: 'texte' },
+  { texte: 'surEnteteDoux', fond: 'ombre', usage: 'texte' },
+  // Bande neutre « Autres » du plan : texte sur secondaire.
+  { texte: 'surForet', fond: 'secondaire', usage: 'texte' },
+  // Bandeau d'échec : texte sur conflit.
+  { texte: 'surface', fond: 'conflit', usage: 'texte' },
+];
+
+describe('paires utilisées par les écrans (relecture T18)', () => {
+  it('chaque paire est déclarée dans PAIRES_CONTRASTE (donc testée en clair et en sombre)', () => {
+    for (const e of PAIRES_A_DECLARER) {
+      const d = j.PAIRES_CONTRASTE.find((p) => p.texte === e.texte && p.fond === e.fond && p.usage === e.usage);
+      expect(d, `paire ${e.texte} sur ${e.fond} (${e.usage})`).toBeDefined();
+    }
+  });
+
+  it('chaque paire déclarée atteint son seuil dans le thème clair aussi', () => {
+    const echecs: string[] = [];
+    for (const p of j.PAIRES_CONTRASTE) {
+      const r = ratio(j.COULEURS[p.texte] ?? '#000000', j.COULEURS[p.fond] ?? '#000000');
+      if (r < SEUILS[p.usage]) echecs.push(`${p.texte} sur ${p.fond} (${p.usage}) : ${r.toFixed(2)}:1`);
+    }
+    expect(echecs).toEqual([]);
+  });
+
+  const racineWeb = join(import.meta.dirname, '..', '..');
+  const lire = (chemin: string) => readFileSync(join(racineWeb, chemin), 'utf8');
+
+  it('les barres de compte à rebours (Aujourd’hui, Planches, Itinéraires, saisies refusées) utilisent la couleur pousse, celle qui est testée', () => {
+    for (const [chemin, classe] of [
+      ['src/ecrans/aujourdhui/aujourdhui.css', 'auj-bandeau-temps'],
+      ['src/ecrans/plan/plan.css', 'plan-bandeau-temps'],
+      ['src/ecrans/itineraires/itineraires.css', 'itin-bandeau-temps'],
+      ['src/ecrans/ferme/refus.css', 'refus-bandeau-temps'],
+    ] as const) {
+      const regle = new RegExp(`\\.${classe}\\s*\\{([^}]*)\\}`).exec(lire(chemin))?.[1] ?? '';
+      expect(regle, `${chemin} .${classe}`).toMatch(/background\s*:\s*var\(--couleur-pousse\)/);
+    }
+  });
+
+  it('les bandeaux d’échec (Planches, Itinéraires) utilisent la couleur conflit, celle qui est testée', () => {
+    for (const [chemin, classe] of [
+      ['src/ecrans/plan/plan.css', 'plan-bandeau-echec'],
+      ['src/ecrans/itineraires/itineraires.css', 'itin-bandeau-echec'],
+    ] as const) {
+      const regle = new RegExp(`\\.${classe}\\s*\\{([^}]*)\\}`).exec(lire(chemin))?.[1] ?? '';
+      expect(regle, `${chemin} .${classe}`).toMatch(/background\s*:\s*var\(--couleur-conflit\)/);
+    }
+  });
+});
+
+describe('bandes de familles en thème sombre (relecture T18)', () => {
+  const bandes = () => j.FAMILLES_SOMBRES ?? j.FAMILLES;
+
+  it('chaque bande se détache de la surface sombre (≥ 3:1), et son texte est lisible (≥ 4,5:1)', () => {
+    const echecs: string[] = [];
+    for (const [cle, f] of Object.entries(bandes())) {
+      const r = ratio(f.bande, j.COULEURS_SOMBRES.surface ?? '#000000');
+      if (r < 3) echecs.push(`bande ${cle} ${f.bande} sur surface sombre : ${r.toFixed(2)}:1 < 3:1`);
+      const rt = ratio(f.texte, f.bande);
+      if (rt < 4.5) echecs.push(`texte ${f.texte} sur bande ${cle} ${f.bande} : ${rt.toFixed(2)}:1 < 4,5:1`);
+    }
+    expect(echecs).toEqual([]);
+  });
+
+  it('la bordure de conflit se distingue de chaque bande (≥ 3:1), ou un liseré de surface la sépare (plan.css)', () => {
+    const conflit = j.COULEURS_SOMBRES.conflit ?? '#000000';
+    const faibles = Object.entries(bandes()).filter(([, f]) => ratio(conflit, f.bande) < 3).map(([cle]) => cle);
+    if (faibles.length === 0) return;
+    const regle = /\.barre-conflit\s*\{([^}]*)\}/.exec(readFileSync(join(import.meta.dirname, '..', 'ecrans', 'plan', 'plan.css'), 'utf8'))?.[1] ?? '';
+    // Liseré : conflit trop proche de ces bandes → contour de surface autour de la bordure, vérifié ici dans la feuille de style.
+    expect(regle, `conflit ${conflit} trop proche des bandes ${faibles.join(', ')} : liseré var(--couleur-surface) attendu`).toMatch(/(?:outline|box-shadow)[^;]*var\(--couleur-surface\)/);
+    // Et le liseré lui-même doit se voir contre le conflit.
+    expect(ratio(j.COULEURS_SOMBRES.surface ?? '#000000', conflit), 'liseré surface contre conflit').toBeGreaterThanOrEqual(3);
+  });
+
+  it('la bande neutre « Autres » (secondaire) n’est pas plus claire que la plus claire des familles', () => {
+    const plusClaire = Math.max(...Object.values(bandes()).map((f) => luminance(f.bande)));
+    expect(luminance(j.COULEURS_SOMBRES.secondaire ?? '#FFFFFF'), 'secondaire sombre ≤ bande de famille la plus claire').toBeLessThanOrEqual(plusClaire);
   });
 });

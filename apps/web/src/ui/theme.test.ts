@@ -13,8 +13,10 @@
  *
  * appliquerTheme(choix, doc: Document, stockage): void
  *   Pose le thème ET le mémorise : document.documentElement.dataset.theme = 'clair' | 'sombre'
- *   (attribut absent pour 'systeme'), <meta name="theme-color"> adapté (clair : COULEURS.foret ;
- *   sombre : COULEURS_SOMBRES.foret ; systeme : l'une des deux, selon le téléphone), et
+ *   (attribut absent pour 'systeme'), <meta name="theme-color"> adapté (modifié en T18 après relecture : la barre
+ *   du navigateur suit l'en-tête ; en mode forcé TOUTES les balises portent COULEURS.entete (clair)
+ *   ou COULEURS_SOMBRES.entete (sombre) ; systeme : chaque balise retrouve la couleur de son
+ *   thème, clair puis sombre ; index.html porte deux balises, avec `media`), et
  *   stockage.setItem(CLE_THEME, choix) (removeItem pour 'systeme'). Un stockage qui lève
  *   (mode privé, accès refusé) est toléré : le thème s'applique quand même, sans exception.
  *
@@ -22,6 +24,8 @@
  *   Au démarrage, AVANT le premier rendu : lit le choix, applique dataset et meta, sans rien
  *   écrire dans le stockage. Renvoie le choix appliqué.
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface ModuleTheme {
@@ -39,6 +43,11 @@ interface ModuleJetons {
 const CHEMIN_THEME = './theme.ts';
 const CHEMIN_JETONS = './jetons.ts';
 
+/** index.html (T18) : une balise par thème du téléphone ; le JS ne les touche qu'en mode forcé. */
+const METAS =
+  '<meta name="theme-color" content="#1F4D3A" media="(prefers-color-scheme: light)">' +
+  '<meta name="theme-color" content="#1C3A2C" media="(prefers-color-scheme: dark)">';
+
 let t: ModuleTheme;
 let j: ModuleJetons;
 
@@ -49,7 +58,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   document.documentElement.removeAttribute('data-theme');
-  document.head.innerHTML = '<meta name="theme-color" content="#1F4D3A">';
+  document.head.innerHTML = METAS;
 });
 
 function stockageMemoire(initial: Record<string, string> = {}) {
@@ -69,7 +78,8 @@ function stockageQuiLeve() {
   return { getItem: erreur, setItem: erreur, removeItem: erreur };
 }
 
-const metaCouleur = () => document.querySelector('meta[name="theme-color"]')?.getAttribute('content')?.toUpperCase();
+const metas = () => [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.getAttribute('content')?.toUpperCase());
+const toutes = (c: string | undefined) => [c?.toUpperCase(), c?.toUpperCase()];
 
 describe('lireTheme', () => {
   it('la clé est planif.theme', () => {
@@ -100,27 +110,27 @@ describe('appliquerTheme', () => {
     const s = stockageMemoire();
     t.appliquerTheme('sombre', document, s);
     expect(document.documentElement.dataset.theme).toBe('sombre');
-    expect(metaCouleur()).toBe(j.COULEURS_SOMBRES.foret?.toUpperCase());
+    expect(metas()).toEqual(toutes(j.COULEURS_SOMBRES.entete));
     expect(s.valeurs.get('planif.theme')).toBe('sombre');
   });
 
   it('clair : data-theme="clair", meta theme-color clair (forêt), choix mémorisé', () => {
     const s = stockageMemoire();
     document.documentElement.dataset.theme = 'sombre';
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', j.COULEURS_SOMBRES.foret ?? '');
     t.appliquerTheme('clair', document, s);
     expect(document.documentElement.dataset.theme).toBe('clair');
-    expect(metaCouleur()).toBe(j.COULEURS.foret?.toUpperCase());
+    expect(metas()).toEqual(toutes(j.COULEURS.entete));
     expect(s.valeurs.get('planif.theme')).toBe('clair');
   });
 
   it('systeme : attribut data-theme absent, plus rien de mémorisé', () => {
     const s = stockageMemoire({ 'planif.theme': 'sombre' });
-    document.documentElement.dataset.theme = 'sombre';
+    t.appliquerTheme('sombre', document, s);
     t.appliquerTheme('systeme', document, s);
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
     expect(s.valeurs.has('planif.theme')).toBe(false);
-    expect([j.COULEURS.foret?.toUpperCase(), j.COULEURS_SOMBRES.foret?.toUpperCase()]).toContain(metaCouleur());
+    // Chaque balise garde (ou retrouve) la couleur de son thème : clair puis sombre.
+    expect(metas()).toEqual([j.COULEURS.entete?.toUpperCase(), j.COULEURS_SOMBRES.entete?.toUpperCase()]);
   });
 
   it('stockage qui lève : le thème s’applique quand même, sans exception', () => {
@@ -128,6 +138,17 @@ describe('appliquerTheme', () => {
       t.appliquerTheme('sombre', document, stockageQuiLeve());
     }).not.toThrow();
     expect(document.documentElement.dataset.theme).toBe('sombre');
+  });
+
+  it('index.html : deux balises theme-color par thème du téléphone (clair d’abord), couleur d’en-tête', () => {
+    const html = readFileSync(join(import.meta.dirname, '..', '..', 'index.html'), 'utf8');
+    const balises = [...html.matchAll(/<meta\s+name="theme-color"[^>]*>/gi)].map((m) => m[0]);
+    expect(balises, 'deux balises theme-color').toHaveLength(2);
+    const [clair, sombre] = balises;
+    expect(clair).toMatch(/content="([^"]+)"\s+media="\(prefers-color-scheme:\s*light\)"/i);
+    expect(sombre).toMatch(/content="([^"]+)"\s+media="\(prefers-color-scheme:\s*dark\)"/i);
+    expect(/content="([^"]+)"/.exec(clair ?? '')?.[1]?.toUpperCase()).toBe(j.COULEURS.entete?.toUpperCase());
+    expect(/content="([^"]+)"/.exec(sombre ?? '')?.[1]?.toUpperCase()).toBe(j.COULEURS_SOMBRES.entete?.toUpperCase());
   });
 
   it('page sans meta theme-color : pas d’exception', () => {
@@ -145,7 +166,7 @@ describe('initialiserTheme (démarrage, avant le premier rendu)', () => {
     const effacer = vi.spyOn(s, 'removeItem');
     expect(t.initialiserTheme(document, s)).toBe('sombre');
     expect(document.documentElement.dataset.theme).toBe('sombre');
-    expect(metaCouleur()).toBe(j.COULEURS_SOMBRES.foret?.toUpperCase());
+    expect(metas()).toEqual(toutes(j.COULEURS_SOMBRES.entete));
     expect(ecrire).not.toHaveBeenCalled();
     expect(effacer).not.toHaveBeenCalled();
   });

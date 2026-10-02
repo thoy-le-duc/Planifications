@@ -4,6 +4,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import { fermeItineraires } from '../src/ecrans/itineraires/test/ferme-itineraires.ts';
 import { SAISON, fermeSerie } from '../src/ecrans/serie/test/ferme-serie.ts';
+import { cleTache, fermeDuJour, SERIE } from '../src/ecrans/aujourdhui/test/ferme-du-jour.ts';
+import { COULEURS, COULEURS_SOMBRES } from '../src/ui/jetons.ts';
 import { surveillerCsp } from './outils.ts';
 
 /**
@@ -117,6 +119,11 @@ for (const theme of THEMES) {
     await capturer(page, `serie-${theme}`);
     await page.getByRole('dialog', { name: 'Nouvelle série' }).getByRole('button', { name: 'Fermer' }).click();
 
+    await onglet(page, 'Dicter').click();
+    await expect(page.getByText(/^Bientôt : .+/)).toBeVisible();
+    await attendreEtVerifierTheme(page, theme);
+    await capturer(page, `dicter-${theme}`);
+
     await onglet(page, 'Ferme').click();
     await expect(page.getByRole('button', { name: 'Exporter toute ma ferme', exact: true })).toBeVisible();
     await attendreEtVerifierTheme(page, theme);
@@ -136,6 +143,40 @@ for (const theme of THEMES) {
     await expect(page.getByRole('dialog', { name: 'Mes itinéraires' })).toBeVisible();
     await attendreEtVerifierTheme(page, theme);
     await capturer(page, `itineraires-${theme}`);
+  });
+}
+
+for (const theme of THEMES) {
+  test(`captures ${theme} : connexion, étape e-mail et étape code (le téléphone est en ${theme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme === 'sombre' ? 'dark' : 'light' });
+    await page.route('**/auth/code', (route) => route.fulfill({ status: 202, json: { ok: true } }));
+    await page.goto('/');
+    const email = page.getByLabel(/adresse e-mail/i);
+    await expect(email).toBeVisible();
+    await attendreEtVerifierTheme(page, theme);
+    await capturer(page, `connexion-email-${theme}`);
+
+    await email.fill('theophane@ferme.fr');
+    await page.getByRole('button', { name: /recevoir un code/i }).click();
+    await expect(page.getByTestId('case-code')).toHaveCount(6);
+    await page.keyboard.type('482');
+    await attendreEtVerifierTheme(page, theme);
+    await capturer(page, `connexion-code-${theme}`);
+  });
+
+  test(`captures ${theme} : bandeau d’annulation ouvert après « Fait » sur Aujourd’hui`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.emulateMedia({ colorScheme: theme === 'sombre' ? 'dark' : 'light' });
+    const jour = new Date().toLocaleDateString('sv-SE');
+    const ferme = fermeDuJour(jour);
+    await amorcer(page, `/diagnostic/amorcer.html?jeu=aujourdhui&date=${jour}`, ferme);
+    await connecter(page, ferme.utilisateurId);
+    await page.locator(`[data-testid="tache"][data-cle="${cleTache(SERIE.chou, 'plantation')}"]`).getByRole('button', { name: /^Marquer fait/ }).click();
+    const bandeau = page.getByTestId('saisie-annulable');
+    await expect(bandeau).toBeVisible();
+    await expect(bandeau.getByRole('button', { name: 'Annuler' })).toBeVisible();
+    await attendreEtVerifierTheme(page, theme);
+    await capturer(page, `bandeau-annulation-${theme}`);
   });
 }
 
@@ -201,7 +242,8 @@ test('« Sombre » forcé, téléphone en clair : un rechargement n’affiche ja
   // « Clair » forcé d'abord : couleur de la barre du navigateur de référence.
   await page.reload();
   await expect(page.getByTestId('app')).toBeVisible();
-  const barreClair = await page.locator('meta[name="theme-color"]').getAttribute('content');
+  const barreClair = await page.locator('meta[name="theme-color"]').first().getAttribute('content');
+  expect(barreClair?.toUpperCase(), 'thème clair forcé : barre = en-tête clair').toBe(COULEURS.entete.toUpperCase());
   await page.evaluate(() => {
     localStorage.setItem('planif.theme', 'sombre');
   });
@@ -243,6 +285,8 @@ test('« Sombre » forcé, téléphone en clair : un rechargement n’affiche ja
   }
   expect(clairs, 'aucun affichage en thème clair ni à fond clair').toEqual([]);
   await attendreEtVerifierTheme(page, 'sombre');
-  const barreSombre = await page.locator('meta[name="theme-color"]').getAttribute('content');
-  expect(barreSombre, 'theme-color adapté au sombre').not.toBe(barreClair);
+  // En mode forcé, toutes les balises theme-color portent la couleur du thème choisi.
+  for (const c of await page.locator('meta[name="theme-color"]').evaluateAll((els) => els.map((e) => e.getAttribute('content')))) {
+    expect(c?.toUpperCase(), 'theme-color : en-tête sombre').toBe(COULEURS_SOMBRES.entete.toUpperCase());
+  }
 });
