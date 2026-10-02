@@ -203,7 +203,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
   }, [porteRefus]);
   const refus = porteRefus === null ? AUCUN_REFUS : refusLus?.porte === porteRefus ? refusLus.refus : null;
   // T10l : archiver un refus vu (il sort de la liste ; la ligne reste).
-  const archiverRefus = porteRefus?.archiverRefus === undefined ? undefined : (ids: readonly string[]) => porteRefus.archiverRefus?.(ids) ?? Promise.resolve();
+  const archiverRefus = porteRefus === null ? undefined : (ids: readonly string[]) => porteRefus.archiverRefus(ids);
 
   // Une marque par ouverture de l'écran, quand les refus (ou leur absence) sont dessinés.
   const refusMarques = useRef(false);
