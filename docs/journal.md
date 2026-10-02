@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T10j : des refus de synchro sans jargon
+
+- **Fait** : tous les messages de refus renvoyés au téléphone sont en français simple (« cette saisie existe déjà avec d'autres valeurs », « une information obligatoire manque (quantité) »…), sans nom de colonne, de table, de code ni de seuil technique ; les erreurs du moteur sont traduites par l'API ; le détail technique part dans un journal du serveur, une ligne par refus. Un filet de tests lit tous les textes du serveur et refuse le jargon.
+- **Décidé** : le journal ne garde que des codes (motif, champ, SQLSTATE), jamais une valeur saisie ; la synchro décide exactement comme avant (vérifié chemin par chemin). Découpage : T10k (saisie reconnaissable), T10l (archivage). Deux relectures : une injection de fausses lignes dans le journal par un nom de champ piégé (bloquant), corrigée et testée.
+- **Bloquant** : rien. Suite : T10m (même règle de journal pour les erreurs inattendues de l'API).
+
 ## 2026-10-02 — T13e : plus de « Fait » en double sur une relecture tardive
 
 - **Fait** : une relecture de la journée lue avant l'écriture d'un « Fait » et livrée après ne fait plus réapparaître la tâche ; un second tap n'écrit plus de deuxième réalisé ; une annulation venue d'un autre téléphone rend toujours « Fait » possible.

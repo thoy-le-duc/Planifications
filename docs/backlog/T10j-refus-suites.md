@@ -22,5 +22,11 @@ Le ticket d'origine mêlait trois sujets. T10j garde les messages ; T10k (saisie
 
 ## Critères d'acceptation
 
-- [ ] Test : aucun message de refus renvoyé au téléphone ne contient de nom de colonne, de table, de code de motif ni de détail technique (tous les motifs et toutes les précisions).
-- [ ] Le détail technique d'un refus reste disponible côté serveur (journal), sans fuite de données personnelles.
+- [x] Test : aucun message de refus renvoyé au téléphone ne contient de nom de colonne, de table, de code de motif ni de détail technique (tous les motifs et toutes les précisions).
+- [x] Le détail technique d'un refus reste disponible côté serveur (journal), sans fuite de données personnelles.
+
+## Décisions (chef, 2026-10-02)
+
+- Les erreurs du cœur sont traduites par l'API d'après leur code et leur champ ; le cœur n'est pas modifié.
+- Journal du serveur injectable (`DependancesApp.journal`) : une ligne par refus, nettoyée (contrôles et séparateurs de ligne remplacés), avec le motif, la table, l'id et le détail technique (code d'erreur, champ, SQLSTATE, contrainte) ; jamais le message du cœur ni celui de la base, qui peuvent citer une valeur saisie.
+- Les refus déjà descendus sur les téléphones gardent leur ancien texte.
