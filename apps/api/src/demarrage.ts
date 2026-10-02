@@ -7,24 +7,29 @@
  * écrit dans le journal, et l'envoi d'un code échouera ensuite normalement. Seule une configuration
  * incomplète (lireConfig) arrête le processus. Contrat : demarrage.test.ts.
  */
-import { expediteurConsole, expediteurSmtp, type ExpediteurCourriel } from './auth/index.ts';
+import { ErreurEnvoiCourriel, expediteurConsole, expediteurSmtp, type ExpediteurCourriel } from './auth/index.ts';
 import type { ConfigCourriel } from './config.ts';
+import { journalParDefaut } from './dependances.ts';
+import { decrireErreur, ligneDeJournal } from './journal.ts';
 
 export function preparerExpediteur(
   courriel: ConfigCourriel,
-  journal: (ligne: string) => void = console.error,
+  journal: (ligne: string) => void = journalParDefaut,
 ): Promise<ExpediteurCourriel> {
   if (courriel.type === 'console') return Promise.resolve(expediteurConsole());
   const expediteur = expediteurSmtp(courriel);
   // Tâche de fond, jamais attendue : un relais muet (jusqu'à DELAI_SMTP_MS) ne retarde pas
   // l'écoute de l'API, donc la synchro.
   void expediteur.verifier().catch((erreur: unknown) => {
-    // verifier() nomme déjà l'hôte et le port, message nettoyé de tout secret.
-    const detail = erreur instanceof Error ? erreur.message : String(erreur);
+    // Une ErreurEnvoiCourriel (verifier()) a un message déjà nettoyé (erreurPropre) ; toute autre
+    // erreur (bug, erreur brute d'une bibliothèque) est décrite sans son message (T10m).
+    const detail = erreur instanceof ErreurEnvoiCourriel ? erreur.message : decrireErreur(erreur);
     try {
       journal(
-        `Avertissement : vérification du relais SMTP ${courriel.hote}:${String(courriel.port)} en échec, ` +
-          `l'API tourne mais les codes de connexion ne partiront pas tant qu'il ne répond pas. ${detail}`,
+        ligneDeJournal(
+          `Avertissement : vérification du relais SMTP ${courriel.hote}:${String(courriel.port)} en échec, ` +
+            `l'API tourne mais les codes de connexion ne partiront pas tant qu'il ne répond pas. ${detail}`,
+        ),
       );
     } catch {
       // Journal en panne (sortie d'erreur fermée…) : rien, surtout pas un rejet non géré qui

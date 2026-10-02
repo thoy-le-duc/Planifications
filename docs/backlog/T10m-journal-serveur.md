@@ -17,4 +17,4 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : une erreur 500 provoquée par une valeur piégée ne fait apparaître ni la valeur ni un retour à la ligne dans le journal.
+- [x] Test : une erreur 500 provoquée par une valeur piégée ne fait apparaître ni la valeur ni un retour à la ligne dans le journal.

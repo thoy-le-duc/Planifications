@@ -10,7 +10,24 @@ import { creerApp } from './app.ts';
 import { trousseauDepuisJwks } from './auth/index.ts';
 import { lireConfig, type Config } from './config.ts';
 import { preparerExpediteur } from './demarrage.ts';
+import { journalParDefaut } from './dependances.ts';
+import { decrireErreur, journalSur } from './journal.ts';
 import { creerServeur } from './serveur.ts';
+
+// Un seul journal pour toute l'API (T10m) : démarrage, routes et erreurs hors requête écrivent
+// au même endroit, nettoyé (une ligne) et sans jamais lever.
+const journal = journalSur(journalParDefaut);
+
+// Erreurs hors requête : décrites sans leur message (qui peut citer une saisie). Posés avant le
+// premier await de niveau module, pour couvrir aussi le démarrage.
+process.on('unhandledRejection', (raison) => {
+  journal(`[processus] rejet non géré : ${decrireErreur(raison)}`);
+});
+process.on('uncaughtException', (erreur) => {
+  journal(`[processus] exception non rattrapée : ${decrireErreur(erreur)}`);
+  // Comportement normal de Node après une exception non rattrapée : arrêt en code 1.
+  process.exit(1);
+});
 
 let config: Config;
 try {
@@ -23,9 +40,13 @@ try {
 const cles = await trousseauDepuisJwks(config.jwtClesPrivees);
 // COURRIEL_CONSOLE=1 (NODE_ENV=development seulement, lireConfig) ou relais SMTP, vérifié en
 // tâche de fond sans retarder l'écoute.
-const expediteur = await preparerExpediteur(config.courriel);
+const expediteur = await preparerExpediteur(config.courriel, journal);
 
 const pool = new pg.Pool({ connectionString: config.databaseUrl });
+// Client inactif du pool coupé (Postgres redémarré…) : sans écouteur, le processus s'arrêterait.
+pool.on('error', (erreur) => {
+  journal(`[base] erreur d'un client inactif : ${decrireErreur(erreur)}`);
+});
 const app = creerApp({
   db: drizzle(pool),
   expediteur,
@@ -33,6 +54,7 @@ const app = creerApp({
   emetteur: config.emetteur,
   audience: config.audience,
   proxyDeConfiance: config.proxyDeConfiance,
+  journal,
   ...(config.corsOrigines === undefined ? {} : { corsOrigines: config.corsOrigines }),
 });
 
