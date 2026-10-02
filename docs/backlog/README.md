@@ -54,7 +54,8 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T13c](T13c-aujourdhui-suites.md) | Aujourd'hui : suites de la relecture (relecture incrémentale, lancement, masque, focus) | T13b | fait |
 | [T13e](T13e-fait-double.md) | « Fait » en double sur une relecture tardive | T13c | fait |
 | [T13f](T13f-fait-double-suites.md) | « Fait » en double : changement d'onglet et relecture partielle | T13e | à faire |
-| [T13d](T13d-aujourdhui-froid.md) | Aujourd'hui : ouverture à froid sous 1 s sur une grande ferme (instantané de la journée) | T13b, T13c | à faire |
+| [T13d](T13d-aujourdhui-froid.md) | Aujourd'hui : ouverture à froid sous 1 s sur une grande ferme (instantané de la journée) | T13b, T13c | fait |
+| [T13g](T13g-aujourdhui-avant-base.md) | Aujourd'hui : instantané avant la base, « Fait » en file au lancement | T13d | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16 | à faire |
 | [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | fait |

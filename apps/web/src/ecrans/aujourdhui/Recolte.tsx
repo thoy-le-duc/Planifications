@@ -29,6 +29,11 @@ export interface ProprietesRecolte {
   readonly surFermer: () => void;
   /** Échec de la dernière écriture, montré dans la récolte (l'écran est dessous). */
   readonly erreur?: string | null;
+  /**
+   * T13d : l'écran montre l'instantané, la journée n'est pas encore relue : les récoltes en cours
+   * ne sont pas connues (l'instantané ne les garde pas), le choix de la culture les attend.
+   */
+  readonly enAttente?: boolean;
 }
 
 function IconeRetour() {
@@ -76,7 +81,7 @@ function uniteAffichee(quantite: number, u: UniteRecolte): string {
   return quantiteAvecUnite(quantite, u).replace(/^\S+ /, '');
 }
 
-export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surValider, surFermer, erreur = null }: ProprietesRecolte) {
+export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surValider, surFermer, erreur = null, enAttente = false }: ProprietesRecolte) {
   const [culture, setCulture] = useState<Culture | null>(initiale);
   const [unite, setUnite] = useState<UniteRecolte>(initiale?.unite ?? 'kg');
   const [texte, setTexte] = useState('');
@@ -152,7 +157,9 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
         </div>
 
         {culture === null ? (
-          recoltesEnCours.length === 0 ? (
+          enAttente ? (
+            <p className="auj-recolte-vide">Lecture des récoltes en cours…</p>
+          ) : recoltesEnCours.length === 0 ? (
             <p className="auj-recolte-vide">Aucune récolte en cours cette semaine. Les cultures dont la fenêtre de récolte est ouverte s’afficheront ici.</p>
           ) : (
             <ul className="auj-choix">

@@ -208,6 +208,51 @@
  * Amorçage : /diagnostic/amorcer.html?jeu=aujourdhui-travaux&date=AAAA-MM-JJ : comme
  *   ?jeu=aujourdhui, avec ecrireFermeDuJour(base, date, { travaux: true }) ;
  *   window.__amorcage.lignes = fermeDuJour(date, { travaux: true }).total.
+ *
+ * ── T13d : instantané de la journée (tests : ../instantane.test.tsx,
+ *    e2e/aujourdhui-grande-ferme.e2e.ts) ──────────────────────────────────────────────────────
+ *
+ * Au lancement, l'écran dessine tout de suite la dernière journée calculée, gardée sur le
+ *   téléphone (« instantané »), puis relit la base en arrière-plan et la remplace dès qu'elle
+ *   arrive ; la journée relue gagne toujours (un réalisé fait ailleurs fait disparaître la tâche).
+ * Propriétés ajoutées à EcranAujourdhui (ProprietesEcranAujourdhui ci-dessous) :
+ *   - utilisateurId : l'utilisateur connecté (App.tsx le passe, depuis la session). Sans lui,
+ *     aucun instantané n'est lu ni écrit (tests d'avant T13d inchangés) ;
+ *   - stockage : où l'instantané est gardé, `StockageInstantane` (défaut : localStorage, comme
+ *     la session). Lecture SYNCHRONE au premier rendu : rien à attendre avant de dessiner.
+ * Écriture : à chaque journée relue affichée (le moment exact est libre : tout de suite ou
+ *   différé de quelques centaines de millisecondes). Valeur : texte JSON d'un objet qui porte
+ *   `version` (entier, format de l'instantané), l'utilisateur, la ferme et le jour ; le reste
+ *   est libre. Clé libre (une par utilisateur conseillée : `planif.aujourdhui.<utilisateurId>`).
+ * Jamais montré : instantané d'un autre jour (que `aujourdhui()`), d'une autre ferme (que
+ *   `fermeId`), d'un autre utilisateur (que `utilisateurId`), d'une autre version de format, ou
+ *   illisible (JSON cassé, champs manquants ou du mauvais type) : ignoré sans planter, l'écran
+ *   attend la journée relue comme avant T13d. Stockage indisponible (getItem, setItem ou
+ *   removeItem lèvent) ou plein (setItem lève QuotaExceededError) : l'écran marche comme avant.
+ * Saisies : rien n'est écrit DEPUIS l'instantané (il sert à l'affichage seulement). « Fait »
+ *   touché pendant qu'il est affiché masque la tâche tout de suite (comme D1), et la saisie
+ *   écrite est celle qu'écrirait l'écran sur la journée relue : un seul réalisé, emplacements
+ *   relus dans la base (règle B2), pas ceux de l'instantané ; si la journée relue n'a plus la
+ *   tâche (réalisé fait ailleurs entre temps), rien n'est écrit. Le moment de l'écriture est
+ *   libre (tout de suite après une lecture ciblée, ou à l'arrivée de la journée relue).
+ * Contenu : pas plus que ce que l'écran dessine au lancement (cartes visibles, compteurs,
+ *   historique visible) : aucune culture absente de l'écran (`Journee.cultures` en entier n'y va
+ *   pas), ni note d'événement, ni paramètres de série. Sur la grande ferme de T13b : moins de
+ *   TAILLE_INSTANTANE_MAX_OCTETS au total, ce qui exclut la liste complète des récoltes en cours
+ *   (le dialogue « Noter une récolte » ouvert sur l'instantané attend la journée relue).
+ * Marque de performance 'planif:aujourdhui-affiche' : posée au premier dessin des tâches,
+ *   instantané compris (c'est ce que mesure l'e2e : moins de 1 s à froid, CPU ×4).
+ * Retouches de la relecture (tests : ../instantane-retouches.test.tsx) :
+ *   - « Fait » sur l'instantané : si la tâche relue (lireTacheCiblee) ne dit plus ce que la
+ *     carte disait (travaux renumérotés : « Grelinette » touchée, « Compost » relu), rien n'est
+ *     écrit et la carte n'est pas retirée en silence (elle reste, ou un message le dit) ; si la
+ *     tâche est déjà faite ailleurs (null), rien n'est écrit ET un message (role status ou alert,
+ *     texte avec « déjà ») le dit ;
+ *   - l'instantané de `utilisateurId` ne s'écrit que si la session rangée dans `stockage`
+ *     (CLE_SESSION) est celle de cet utilisateur : rien après une déconnexion ou un changement de
+ *     compte dans un autre onglet, réécriture différée en attente comprise.
+ * Déconnexion (connexion/deconnexion.ts, T09b) : l'instantané de l'utilisateur est effacé du
+ *   stockage de `deconnecter`, que l'API réponde ou non, même si l'effacement de la base échoue.
  */
 import type { PorteDonnees } from '@planif/sync';
 import type { ReactElement } from 'react';
@@ -217,7 +262,22 @@ export interface ProprietesEcranAujourdhui {
   readonly fermeId: string;
   /** Jour du téléphone, 'AAAA-MM-JJ'. */
   readonly aujourdhui?: () => string;
+  /** T13d : utilisateur connecté ; sans lui, pas d'instantané. */
+  readonly utilisateurId?: string;
+  /** T13d : où garder l'instantané (défaut : localStorage). */
+  readonly stockage?: StockageInstantane;
 }
+
+/** T13d : stockage synchrone de l'instantané, de la forme de localStorage. */
+export type StockageInstantane = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+/**
+ * T13d : taille totale au plus de l'instantané de la grande ferme de T13b (clés et textes rangés,
+ * en UTF-8). Relevé du testeur sur un prototype jeté : les 50 cartes dessinées et les 20 saisies
+ * de l'historique, objets de la journée rangés tels quels, ≈ 64 Ko ; avec en plus toutes les
+ * récoltes en cours (liste de la récolte), ≈ 385 Ko ; `Journee.cultures` entier, davantage.
+ */
+export const TAILLE_INSTANTANE_MAX_OCTETS = 128 * 1024;
 
 export interface ModuleEcranAujourdhui {
   readonly EcranAujourdhui: (p: ProprietesEcranAujourdhui) => ReactElement;

@@ -188,6 +188,9 @@ function evenementLu(l: Ligne): EvenementLu | null {
   };
 }
 
+/** Ce que `enVigueur` lit d'un événement : sa place dans sa chaîne de remplacements. */
+export type MaillonChaine = Pick<EvenementLu, 'id' | 'horodatage' | 'remplaceSorte' | 'remplaceEvenementId'>;
+
 /**
  * Événements en vigueur (vue evenements_en_vigueur de @planif/db, T10g) : on regroupe chaque
  * événement avec sa chaîne (l'origine, ses corrections, les corrections de ses corrections, et
@@ -199,10 +202,10 @@ function evenementLu(l: Ligne): EvenementLu | null {
  * départagent quand même. Sur des chaînes complètes, même résultat que `EN_VIGUEUR` (SQL), dont
  * la journée se sert : l'historique ne lit qu'une fenêtre, la base juge sur tout le journal.
  */
-export function enVigueur(evenements: readonly EvenementLu[]): EvenementLu[] {
+export function enVigueur<E extends MaillonChaine>(evenements: readonly E[]): E[] {
   const parId = new Map(evenements.map((e) => [e.id, e]));
   const origines = new Map<string, string>();
-  const origineDe = (e: EvenementLu): string => {
+  const origineDe = (e: E): string => {
     const connue = origines.get(e.id);
     if (connue !== undefined) return connue;
     // Montée jusqu'au plus haut connu ; `vus` protège d'un cycle (données corrompues).
@@ -225,10 +228,10 @@ export function enVigueur(evenements: readonly EvenementLu[]): EvenementLu[] {
     for (const id of chemin) origines.set(id, origine);
     return origine;
   };
-  const plusRecent = (a: EvenementLu, b: EvenementLu) => a.horodatage > b.horodatage || (a.horodatage === b.horodatage && a.id > b.id);
+  const plusRecent = (a: E, b: E) => a.horodatage > b.horodatage || (a.horodatage === b.horodatage && a.id > b.id);
   const annulees = new Set<string>();
   /** Par chaîne : la correction la plus récente, sinon l'origine (la première sans remplacement vue). */
-  const retenue = new Map<string, EvenementLu>();
+  const retenue = new Map<string, E>();
   for (const e of evenements) {
     const o = origineDe(e);
     if (e.remplaceSorte === 'annulation') {
@@ -692,6 +695,71 @@ export async function lireCultures(
     recents.push(...(await lire(sql, [...vigueur, json, fermeId, depuis, ...vigueur, json, fermeId, horodatageDepuis, depuis])).map(ligneRecente));
   }
   return { series: cultures.series, campagnes: cultures.campagnes, vigueur, realises, interventions, recents, bornes };
+}
+
+/**
+ * Journal d'une culture (paramètres : liste JSON, la ferme) : de quoi juger ses chaînes de
+ * remplacement (`enVigueur`), par l'index de la culture. Un remplacement garde la culture de la
+ * saisie qu'il remplace (contrat T13) : la chaîne entière est là.
+ */
+const sqlJournalDe = (colonne: 'serie_id' | 'campagne_id') => `SELECT id, horodatage, remplace_sorte, remplace_evenement_id FROM evenement
+  WHERE ${colonne} IN (${DANS}) AND +ferme_id = ?`;
+
+/**
+ * Chaînes d'une culture, au format de `SQL_CHAINES` ([origines, gagnants] en JSON, pour
+ * `EN_VIGUEUR`), jugées par `enVigueur` sur son seul journal : origines = saisies d'origine qui ne
+ * sont plus en vigueur ; gagnants = corrections en vigueur. Sur les événements de la culture,
+ * `EN_VIGUEUR` rend alors exactement `enVigueur`.
+ */
+function chainesDeCulture(lignes: readonly Ligne[]): readonly [string, string] {
+  const maillons: MaillonChaine[] = lignes.map((l) => {
+    const sorte = texteOuNul(l.remplace_sorte);
+    return {
+      id: texte(l.id),
+      horodatage: texte(l.horodatage),
+      remplaceSorte: sorte === 'correction' || sorte === 'annulation' ? sorte : null,
+      remplaceEvenementId: texteOuNul(l.remplace_evenement_id),
+    };
+  });
+  const vigueur = new Set(enVigueur(maillons).map((e) => e.id));
+  const origines = maillons.filter((e) => e.remplaceSorte === null && !vigueur.has(e.id)).map((e) => e.id);
+  const gagnants = maillons.filter((e) => e.remplaceSorte === 'correction' && vigueur.has(e.id)).map((e) => e.id);
+  return [JSON.stringify(origines), JSON.stringify(gagnants)];
+}
+
+/**
+ * T13d, lecture ciblée : la tâche `cle` telle que la journée relue la calculerait, en ne lisant
+ * que sa culture (série ou campagne, ses noms, ses emplacements actifs, son journal). Sert au
+ * « Fait » touché sur l'instantané, avant que la journée relue n'arrive : rien n'est écrit depuis
+ * l'instantané. Rend null quand la journée relue n'aurait plus cette tâche (faite ailleurs,
+ * culture retirée, semaine passée). Même calcul que la journée (`calculerJournee`), sur une
+ * journée réduite à cette culture : le semainier d'une culture ne dépend pas des autres.
+ */
+export async function lireTacheCiblee(porte: PorteDonnees, fermeId: string, aujourdhui: string, cle: string): Promise<TacheJour | null> {
+  const cibleId = cle.split(':')[0] ?? '';
+  if (cibleId === '') return null;
+  const lire: Lire = (sql, parametres) => porte.lire<Ligne>(sql, parametres);
+  const ids = listeJson([cibleId]);
+  const series = (await lire(sqlSeries(`s.id IN (${DANS}) AND ${FILTRE_SERIES_ACTIVES}`), [fermeId, ids])).filter(
+    (s) => parametresDe(texte(s.id), s.parametres).mode !== null,
+  );
+  const campagnes =
+    series.length > 0 ? [] : await lire(sqlCampagnes(`c.id IN (${DANS}) AND (c.fin_recolte_prevue IS NULL OR c.fin_recolte_prevue >= ?)`), [fermeId, ids, aujourdhui]);
+  if (series.length === 0 && campagnes.length === 0) return null;
+  const idsSeries = series.map((s) => texte(s.id));
+  const idsCampagnes = campagnes.map((c) => texte(c.id));
+  const noms = await lireNoms(lire, fermeId, series);
+  const occupations = await lireOccupations(lire, fermeId, idsSeries, campagnes.map((c) => texte(c.plantation_id)), aujourdhui);
+  const vigueur = chainesDeCulture(await lire(sqlJournalDe(series.length > 0 ? 'serie_id' : 'campagne_id'), [ids, fermeId]));
+  const jsonSeries = listeJson(idsSeries);
+  const realises =
+    series.length > 0
+      ? await lire(SQL_REALISES_SERIES, [jsonSeries, fermeId, ...vigueur, jsonSeries, fermeId, ...vigueur])
+      : await lire(SQL_REALISES_CAMPAGNES, [listeJson(idsCampagnes), jsonSeries, fermeId, ...vigueur]);
+  const interventions = series.length > 0 ? await lire(SQL_INTERVENTIONS, [jsonSeries, fermeId, ...vigueur]) : [];
+  const contexte: ContexteLecture = { fermeId, aujourdhui, vigueur, jsonSeries, series: new Set(idsSeries), campagnes: new Set(idsCampagnes) };
+  const journee = calculerJournee({ series, ...noms, campagnes, occupations, realises, interventions, recents: [], contexte }, aujourdhui);
+  return journee.taches.find((t) => t.cle === cle) ?? null;
 }
 
 // ── Calcul de la journée ─────────────────────────────────────────────────────────────────────
