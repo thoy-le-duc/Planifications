@@ -31,7 +31,9 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10i](T10i-refus-affiches.md) | Les refus de synchro s'affichent sur le téléphone | T10, T10f | fait |
 | [T10j](T10j-refus-suites.md) | Refus : messages sans jargon | T10i | fait |
 | [T10k](T10k-refus-saisie.md) | Refus : la saisie refusée reconnaissable | T10j | fait |
-| [T10l](T10l-refus-archives.md) | Refus : archiver un refus vu | T10i | à faire |
+| [T10l](T10l-refus-archives.md) | Refus : archiver un refus vu | T10i | fait |
+| [T10n](T10n-refus-desarchiver.md) | Refus : annuler un archivage | T10l | à faire |
+| [T10o](T10o-refus-archives-e2e.md) | Refus : archivage vérifié entre deux téléphones | T10l | à faire |
 | [T10m](T10m-journal-serveur.md) | Journal du serveur : la même règle partout | T10j | à faire |
 | [T10g](T10g-recoltes-annulees.md) | Récoltes annulées et plafonds définitifs (Q20, Q13) | T10d | fait |
 | [T10h](T10h-en-vigueur-suites.md) | « En vigueur » : performance de la vue et alignement du téléphone | T10g | fait |

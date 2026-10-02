@@ -11,5 +11,5 @@
 
 ## Critères d'acceptation
 
-- [ ] Archiver un refus le retire de la liste, sur tous les téléphones de l'utilisateur.
-- [ ] Archiver ne supprime rien : la ligne reste sur le serveur et le téléphone. Les refus de synchro restent hors de l'export complet, comme décidé en T15.
+- [x] Archiver un refus le retire de la liste, sur tous les téléphones de l'utilisateur.
+- [x] Archiver ne supprime rien : la ligne reste sur le serveur et le téléphone. Les refus de synchro restent hors de l'export complet, comme décidé en T15.
