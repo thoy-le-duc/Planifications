@@ -7,7 +7,7 @@ import { creerGenerateurId, type GenerateurId } from '@planif/core';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import type { ExpediteurCourriel } from './auth/courriel.ts';
 import type { TrousseauCles } from './auth/cles.ts';
-import { ligneDeJournal } from './journal.ts';
+import { journalSur } from './journal.ts';
 import { ENVOIS_MAX_PAR_MINUTE } from './sync/upload.ts';
 
 export interface DependancesApp {
@@ -72,9 +72,8 @@ export function completer(deps: DependancesApp): Contexte {
     corsOrigines: deps.corsOrigines ?? [],
     proxyDeConfiance: deps.proxyDeConfiance ?? false,
     envoisMaxParMinute: deps.envoisMaxParMinute ?? ENVOIS_MAX_PAR_MINUTE,
-    // Toute entrée, quelle que soit la route, passe par le même nettoyage.
-    journal: (ligne) => {
-      sortie(ligneDeJournal(ligne));
-    },
+    // Toute entrée, quelle que soit la route, passe par le même nettoyage ; un journal en panne
+    // ne change jamais la réponse.
+    journal: journalSur(sortie),
   };
 }
