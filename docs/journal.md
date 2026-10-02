@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T10l : archiver un refus vu
+
+- **Fait** : bouton « Archiver » sur chaque refus et « Tout archiver (N) » sous la liste dès deux refus ; un refus archivé disparaît sur tous les téléphones de l'utilisateur (colonne `archive_le`, migration 0024, flux PowerSync) ; le serveur n'accepte que la date d'archivage, sur ses propres refus, et refuse un instant impossible ou hors bornes.
+- **Décidé** : rien n'est supprimé ; les refus restent hors de l'export complet comme décidé en T15 (critère du ticket reformulé, à confirmer par Théophane) ; la première date d'archivage est gardée ; le refus d'un autre répond comme un id inconnu. Une relecture, aucun bloquant, neuf retouches faites.
+- **Bloquant** : rien. Au déploiement, redéployer les règles PowerSync avec la migration 0024. Suites : T10n (annuler un archivage), T10o (archivage vérifié entre deux téléphones réels).
+
 ## 2026-10-02 — T13d : Aujourd'hui s'ouvre en moins d'une seconde
 
 - **Fait** : au lancement, Aujourd'hui affiche tout de suite la dernière journée gardée sur le téléphone, puis la remplace par la journée relue ; sur la grande ferme (3 000 séries), CPU ×4, l'ouverture à froid passe de 5,8 s à 0,6–0,8 s. « Fait » depuis cette journée gardée relit d'abord la tâche : rien n'est écrit si elle a été faite ailleurs ou a changé, et un message le dit.

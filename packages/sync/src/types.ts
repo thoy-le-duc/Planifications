@@ -141,8 +141,17 @@ export interface PorteDonnees {
    * `validerSaisie` lit) et l'ordre SQL qui l'insère.
    */
   preparerSaisie(saisie: SaisieEvenement): EvenementPrepare;
-  /** Refus de l'utilisateur de la porte, du plus récent au plus ancien ; même contrat que `surveiller`. */
+  /**
+   * Refus NON archivés de l'utilisateur de la porte, du plus récent au plus ancien ; même contrat
+   * que `surveiller`. T10l : un refus archivé ici ou sur un autre téléphone sort de la liste.
+   */
   surveillerRefus(rappel: (refus: RefusSynchro[]) => void): () => void;
+  /**
+   * T10l : archive les refus `ids` de l'utilisateur de la porte (archive_le = maintenant, rien
+   * d'autre ne change, la ligne reste). Id inconnu, d'autrui ou déjà archivé (première date
+   * gardée) : ignoré. Au plus ECRITURES_MAX_PAR_LOT lignes par transaction ; liste vide : aucune.
+   */
+  archiverRefus(ids: readonly string[]): Promise<void>;
 }
 
 /** Écriture en attente, telle que la donne PowerSync (`CrudEntry`). */

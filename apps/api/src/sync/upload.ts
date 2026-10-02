@@ -42,6 +42,8 @@
  * - T10k : le refus d'un événement porte un court résumé de la saisie (type, culture de la ferme
  *   de l'événement, jour, quantité et unité ; jamais la note), calculé par resume.ts ; aucun pour
  *   les autres tables ni pour un lot trop gros. Contrat : resume-refus.integration.test.ts.
+ * - T10l : le téléphone archive ses propres refus (PATCH { archive_le } sur refus_synchro, rien
+ *   d'autre) ; archiver-refus.ts. Contrat : archiver-refus.integration.test.ts.
  */
 import { ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
 import {
@@ -64,6 +66,7 @@ import { creerLimiteMemoire } from '../limites.ts';
 import { validerEvenement } from './evenement.ts';
 import { messageRefus, refusDuCoeur } from './messages.ts';
 import type { MotifRefus, Refus } from './motifs.ts';
+import { archiverRefus, TABLE_REFUS } from './archiver-refus.ts';
 import { verifierCorrection, verifierReferences, verifierRemplacementRecolte, type TransactionDb } from './references.ts';
 import { ecrireItineraire, estTableItineraire, TABLES_ITINERAIRE } from './itineraire.ts';
 import { ecrireSerie, fermesDesLignesVisees, TABLES_SERIE, verifierFinDeLot, type SeriesTouchees } from './serie.ts';
@@ -419,6 +422,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     remplacements: RemplacementEcrit[],
   ): Promise<Refus | null> {
     const fermeDonnee = fermeDesDonnees(e);
+    // T10l : seul l'archivage de ses propres refus (archiver-refus.ts).
+    if (e.table === TABLE_REFUS) return archiverRefus(tx, e, utilisateurId, ctx.maintenant());
     // e.table est lue ensuite comme nom de table SQL : seulement l'une de ces constantes.
     if (!TABLES_ECRITES.has(e.table)) return { motif: 'table_interdite', fermeId: fermeDonnee };
     if (e.op === null || e.id === '' || e.donneesIllisibles) {

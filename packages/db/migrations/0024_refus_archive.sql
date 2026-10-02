@@ -1,0 +1,1 @@
+ALTER TABLE "refus_synchro" ADD COLUMN "archive_le" timestamp with time zone;

@@ -1000,6 +1000,12 @@ export const refusSynchro = pgTable(
     /** Récolte : unité saisie, l'une des unités de récolte. */
     saisieUnite: text('saisie_unite'),
     creeLe: creeLe(),
+    /**
+     * T10l : instant où l'auteur a archivé ce refus (NULL tant qu'il ne l'est pas). Seule colonne que
+     * le téléphone écrit (PATCH de l'auteur, première date gardée) ; un refus archivé ne s'affiche
+     * plus mais la ligne reste.
+     */
+    archiveLe: instant('archive_le'),
   },
   (t) => [
     verif('refus_synchro', 'operation', parmi(t.operation, OPERATIONS_SYNCHRO)),
