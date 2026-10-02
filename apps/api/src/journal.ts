@@ -4,10 +4,12 @@
  * - `ligneDeJournal` : nettoyage commun à toute entrée (contrôles, formats, séparateurs de ligne,
  *   substituts isolés remplacés, longueur bornée) ; `journalSur` l'applique à toute sortie.
  * - `decrireErreur` : une erreur inattendue décrite par sa classe, son code s'il est sûr, celui
- *   de sa cause, et les seules positions `fichier:ligne:colonne` de sa pile. Jamais son message,
+ *   de sa cause, et les seules positions `fichier:ligne:colonne` de sa pile sous node: ou sous la
+ *   racine du dépôt, écrites relatives à celle-ci. Jamais son message,
  *   ses noms de fonction ni ses champs (detail, params, query, response…), qui peuvent recopier
  *   la saisie ou une adresse. Ne lève jamais.
  */
+import { fileURLToPath } from 'node:url';
 
 /** Longueur au plus d'une entrée du journal du serveur. */
 const LONGUEUR_MAX_LIGNE_JOURNAL = 1_000;
@@ -43,8 +45,35 @@ const CODE_SUR = /^[0-9A-Z][0-9A-Z_]{0,31}$/;
 /** Nom de classe cité seulement s'il ressemble à un identifiant. */
 const CLASSE_SURE = /^[A-Za-z_$][\w$]{0,63}$/;
 
-/** Position d'une frame : file:///…, node:… ou chemin absolu, suivi de :ligne:colonne. */
-const POSITION = /^(?:file:\/\/\/|node:|\/)[\w./%+@-]*:\d+:\d+$/;
+/**
+ * Racine du dépôt (journal.ts est dans apps/api/src), en URL file:// et en chemin, calculée une
+ * fois. Seules les positions sous `node:` ou sous cette racine sont gardées, écrites relatives
+ * (apps/api/src/app.ts:12:3, node_modules/pg/lib/client.js:1:2) : un chemin hors du dépôt
+ * (/home/<personne>/…) peut citer quelqu'un.
+ */
+const RACINE_URL = new URL('../../../', import.meta.url).href;
+const RACINE_CHEMIN = fileURLToPath(RACINE_URL);
+
+/** `fichier:ligne:colonne`. */
+const POSITION = /^(.+):(\d+):(\d+)$/;
+/** Module interne de Node. */
+const MODULE_NODE = /^node:[\w/.-]+$/;
+/** Chemin relatif sous la racine : segments sûrs, sans . ni .. */
+const CHEMIN_RELATIF = /^[\w@+-][\w.@+-]*(?:\/[\w@+-][\w.@+-]*)*$/;
+
+/** Position gardée, relative à la racine ou sous node:, sinon null. */
+function positionSure(position: string): string | null {
+  const morceaux = POSITION.exec(position);
+  if (morceaux === null) return null;
+  const [, fichier = '', ligne = '', colonne = ''] = morceaux;
+  let relatif: string;
+  if (MODULE_NODE.test(fichier)) relatif = fichier;
+  else if (fichier.startsWith(RACINE_URL)) relatif = fichier.slice(RACINE_URL.length);
+  else if (fichier.startsWith(RACINE_CHEMIN)) relatif = fichier.slice(RACINE_CHEMIN.length);
+  else return null;
+  if (!MODULE_NODE.test(relatif) && !CHEMIN_RELATIF.test(relatif)) return null;
+  return `${relatif}:${ligne}:${colonne}`;
+}
 
 /** Lecture d'un champ qui ne lève jamais (accesseur, Proxy hostiles). */
 function champ(valeur: unknown, nom: string): unknown {
@@ -112,7 +141,8 @@ function positions(valeur: unknown): string[] {
     const corps = ligne.slice(3);
     const entreParentheses = /\(([^()]*)\)$/.exec(corps);
     const position = entreParentheses === null ? corps : (entreParentheses[1] ?? '');
-    if (POSITION.test(position)) gardees.push(position);
+    const sure = positionSure(position);
+    if (sure !== null) gardees.push(sure);
     if (gardees.length >= FRAMES_MAX) break;
   }
   return gardees;
