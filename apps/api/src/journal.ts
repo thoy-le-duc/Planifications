@@ -1,26 +1,37 @@
 /**
  * Journal du serveur (T10j, T10m) : une entrée = une ligne, jamais de valeur saisie.
  *
- * - `ligneDeJournal` : nettoyage commun à toute entrée (contrôles et séparateurs de ligne
- *   remplacés, longueur bornée) ; appliqué par le journal du contexte (dependances.ts).
+ * - `ligneDeJournal` : nettoyage commun à toute entrée (contrôles, formats, séparateurs de ligne,
+ *   substituts isolés remplacés, longueur bornée) ; `journalSur` l'applique à toute sortie.
  * - `decrireErreur` : une erreur inattendue décrite par sa classe, son code s'il est sûr, celui
- *   de sa cause, et sa pile sans la ligne « Nom: message ». Jamais son message ni ses champs
- *   (detail, params, query, response…), qui peuvent recopier la saisie ou une adresse.
+ *   de sa cause, et les seules positions `fichier:ligne:colonne` de sa pile. Jamais son message,
+ *   ses noms de fonction ni ses champs (detail, params, query, response…), qui peuvent recopier
+ *   la saisie ou une adresse. Ne lève jamais.
  */
 
 /** Longueur au plus d'une entrée du journal du serveur. */
 const LONGUEUR_MAX_LIGNE_JOURNAL = 1_000;
 
-/** Frames de pile gardées au plus : assez pour situer l'erreur, sans noyer le journal. */
+/** Positions de pile gardées au plus : assez pour situer l'erreur, sans noyer le journal. */
 const FRAMES_MAX = 8;
+
+/** Ce qu'aucune entrée ne contient : contrôles, formats (U+202E…), séparateurs, substituts isolés. */
+const INTERDITS_LIGNE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu;
 
 /**
  * Entrée du journal sur UNE ligne, toujours : la table, l'id et le détail (nom de clé reçu…)
- * viennent du téléphone. Caractères de contrôle et séparateurs de ligne (U+0085, U+2028, U+2029)
- * remplacés, entrée tronquée.
+ * viennent du téléphone. Caractères de contrôle, de format (qui retournent ou masquent
+ * l'affichage), séparateurs de ligne (U+0085, U+2028, U+2029) et substituts isolés remplacés ;
+ * entrée tronquée sans couper une paire de substitution.
  */
 export function ligneDeJournal(texte: string): string {
-  return texte.slice(0, LONGUEUR_MAX_LIGNE_JOURNAL).replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, '?');
+  let fin = Math.min(texte.length, LONGUEUR_MAX_LIGNE_JOURNAL);
+  if (fin < texte.length) {
+    const dernier = texte.charCodeAt(fin - 1);
+    const suivant = texte.charCodeAt(fin);
+    if (dernier >= 0xd800 && dernier <= 0xdbff && suivant >= 0xdc00 && suivant <= 0xdfff) fin -= 1;
+  }
+  return texte.slice(0, fin).replace(INTERDITS_LIGNE, '?');
 }
 
 /**
@@ -32,8 +43,12 @@ const CODE_SUR = /^[0-9A-Z][0-9A-Z_]{0,31}$/;
 /** Nom de classe cité seulement s'il ressemble à un identifiant. */
 const CLASSE_SURE = /^[A-Za-z_$][\w$]{0,63}$/;
 
+/** Position d'une frame : file:///…, node:… ou chemin absolu, suivi de :ligne:colonne. */
+const POSITION = /^(?:file:\/\/\/|node:|\/)[\w./%+@-]*:\d+:\d+$/;
+
+/** Lecture d'un champ qui ne lève jamais (accesseur, Proxy hostiles). */
 function champ(valeur: unknown, nom: string): unknown {
-  if (typeof valeur !== 'object' || valeur === null) return undefined;
+  if ((typeof valeur !== 'object' && typeof valeur !== 'function') || valeur === null) return undefined;
   try {
     return (valeur as Record<string, unknown>)[nom];
   } catch {
@@ -41,43 +56,69 @@ function champ(valeur: unknown, nom: string): unknown {
   }
 }
 
+function texte(valeur: unknown): string | null {
+  return typeof valeur === 'string' ? valeur : null;
+}
+
 function classe(valeur: unknown): string {
   if (typeof valeur !== 'object' || valeur === null) return typeof valeur;
-  const constructeur = champ(valeur, 'constructor');
-  const nom = typeof constructeur === 'function' ? constructeur.name : '';
+  const nom = texte(champ(champ(valeur, 'constructor'), 'name')) ?? '';
   return CLASSE_SURE.test(nom) ? nom : 'objet';
 }
 
 function codeSur(valeur: unknown): string | null {
-  const code = champ(valeur, 'code');
-  return typeof code === 'string' && CODE_SUR.test(code) ? code : null;
+  const code = texte(champ(valeur, 'code'));
+  return code !== null && CODE_SUR.test(code) ? code : null;
 }
 
 /**
- * Lignes « at … » de la pile, après le message. Le début de la pile recopie « Nom: message » et le
- * message peut tenir sur plusieurs lignes, dont certaines imitent une frame : on coupe donc après
- * le texte du message lui-même. Message introuvable dans la pile (pile réécrite) : pas de pile.
+ * Pile privée de son en-tête « Nom: message » (nom et message peuvent tenir sur plusieurs lignes
+ * et imiter des frames). null si l'en-tête ne se reconnaît pas : mieux vaut pas de pile.
  */
-function pile(valeur: unknown): string | null {
-  const brute = champ(valeur, 'stack');
-  if (typeof brute !== 'string') return null;
-  const message = champ(valeur, 'message');
-  let suite = brute;
-  if (typeof message === 'string' && message !== '') {
-    const debut = brute.indexOf(message);
-    if (debut < 0) return null;
-    suite = brute.slice(debut + message.length);
+function sansEnTete(pile: string, nom: string | null, message: string | null): string | null {
+  const msg = message ?? '';
+  if (nom !== null) {
+    const entete = msg === '' ? nom : `${nom}: ${msg}`;
+    if (pile.startsWith(entete)) return pile.slice(entete.length);
   }
-  const frames = suite
-    .split(/\r\n|[\n\r\u0085\p{Zl}\p{Zp}]/u)
-    .map((l) => l.trim())
-    .filter((l) => l.startsWith('at '))
-    .slice(0, FRAMES_MAX);
-  return frames.length > 0 ? frames.join(' | ') : null;
+  if (msg !== '') {
+    const debut = pile.indexOf(msg);
+    return debut < 0 ? null : pile.slice(debut + msg.length);
+  }
+  // Ni nom ni message reconnus : l'en-tête est la première ligne seulement si rien ne peut
+  // l'avoir étendue sur plusieurs lignes.
+  if (nom !== null && /[\r\n\u0085\p{Zl}\p{Zp}]/u.test(nom)) return null;
+  const saut = pile.search(/\r\n|[\n\r\u0085\p{Zl}\p{Zp}]/u);
+  return saut < 0 ? '' : pile.slice(saut);
 }
 
-/** Description d'une erreur inattendue pour le journal : classe, code, cause, pile. */
-export function decrireErreur(erreur: unknown): string {
+/**
+ * Positions `fichier:ligne:colonne` des premières frames de la pile, jamais le nom de fonction,
+ * le « [as …] » ni l'en-tête. S'arrête à la première ligne qui n'est pas une frame (« cause: »
+ * suivi de la pile d'une cause, concaténée par une bibliothèque).
+ */
+function positions(valeur: unknown): string[] {
+  const pile = texte(champ(valeur, 'stack'));
+  if (pile === null) return [];
+  const suite = sansEnTete(pile, texte(champ(valeur, 'name')), texte(champ(valeur, 'message')));
+  if (suite === null) return [];
+  const gardees: string[] = [];
+  let dansLesFrames = false;
+  for (const brute of suite.split(/\r\n|[\n\r\u0085\p{Zl}\p{Zp}]/u)) {
+    const ligne = brute.trim();
+    if (ligne === '' && !dansLesFrames) continue;
+    if (!ligne.startsWith('at ')) break;
+    dansLesFrames = true;
+    const corps = ligne.slice(3);
+    const entreParentheses = /\(([^()]*)\)$/.exec(corps);
+    const position = entreParentheses === null ? corps : (entreParentheses[1] ?? '');
+    if (POSITION.test(position)) gardees.push(position);
+    if (gardees.length >= FRAMES_MAX) break;
+  }
+  return gardees;
+}
+
+function decrire(erreur: unknown): string {
   const morceaux = [classe(erreur)];
   const code = codeSur(erreur);
   if (code !== null) morceaux.push(`code ${code}`);
@@ -86,7 +127,30 @@ export function decrireErreur(erreur: unknown): string {
     const codeCause = codeSur(cause);
     morceaux.push(`cause ${classe(cause)}${codeCause === null ? '' : ` code ${codeCause}`}`);
   }
-  const frames = pile(erreur);
-  if (frames !== null) morceaux.push(`pile ${frames}`);
+  const frames = positions(erreur);
+  if (frames.length > 0) morceaux.push(`pile ${frames.join(' | ')}`);
   return morceaux.join(' ');
+}
+
+/**
+ * Journal sûr bâti sur une sortie : chaque entrée nettoyée par `ligneDeJournal`, et une sortie en
+ * panne (sortie d'erreur fermée…) n'est jamais propagée à l'appelant (réponse HTTP, démarrage).
+ */
+export function journalSur(sortie: (ligne: string) => void): (ligne: string) => void {
+  return (ligne) => {
+    try {
+      sortie(ligneDeJournal(ligne));
+    } catch {
+      // Rien : le journal ne doit jamais changer une réponse ni arrêter l'API.
+    }
+  };
+}
+
+/** Description d'une erreur inattendue pour le journal : classe, code, cause, positions. Ne lève jamais. */
+export function decrireErreur(erreur: unknown): string {
+  try {
+    return decrire(erreur);
+  } catch {
+    return 'erreur indescriptible';
+  }
 }
