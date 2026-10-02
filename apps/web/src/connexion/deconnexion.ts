@@ -4,6 +4,7 @@
  * l'effacement de la base locale est injecté (src/donnees, chargé à la demande).
  */
 import { cleRefusVus } from '../donnees/refus-vus.ts';
+import { cleInstantane } from '../ecrans/aujourdhui/cle-instantane.ts';
 import { effacerSession, lireSession, type SessionConnexion } from './session.ts';
 
 export interface OptionsDeconnexion {
@@ -151,11 +152,14 @@ export async function deconnecter(session: SessionConnexion, options: OptionsDec
     await revoquer(session, options);
   } finally {
     effacerSession(options.stockage);
-    // Téléphone partagé : les refus vus du compte (T10i) ne restent pas, quoi qu'il arrive ensuite.
-    try {
-      options.stockage.removeItem(cleRefusVus(session.utilisateurId));
-    } catch {
-      // Stockage refusé : rien de lisible à retirer.
+    // Téléphone partagé : les refus vus du compte (T10i) et l'instantané de sa journée (T13d) ne
+    // restent pas, quoi qu'il arrive ensuite.
+    for (const cle of [cleRefusVus(session.utilisateurId), cleInstantane(session.utilisateurId)]) {
+      try {
+        options.stockage.removeItem(cle);
+      } catch {
+        // Stockage refusé : rien de lisible à retirer.
+      }
     }
   }
   // Échec (base ouverte dans un autre onglet) : l'utilisateur rejoint le marqueur, repris ensuite.
