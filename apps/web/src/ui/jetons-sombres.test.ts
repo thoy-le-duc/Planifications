@@ -154,9 +154,9 @@ describe('CSS généré : surcharges sombres', () => {
 
 /** Paires utilisées par l'appli qui doivent figurer dans PAIRES_CONTRASTE (donc être vérifiées dans les deux thèmes). */
 const PAIRES_A_DECLARER: readonly PaireContraste[] = [
-  // Barre du compte à rebours (pousse) et bandeau d'échec (conflit) sur le fond du bandeau d'annulation (forêt).
+  // Barre du compte à rebours (pousse) sur le fond du bandeau d'annulation (forêt). Le bandeau d'échec
+  // remplace ce fond par conflit (pas de conflit posé sur forêt) : sa paire réelle est surface sur conflit.
   { texte: 'pousse', fond: 'foret', usage: 'contour' },
-  { texte: 'conflit', fond: 'foret', usage: 'contour' },
   // Bande de la démo : texte sur l'ombre.
   { texte: 'surEntete', fond: 'ombre', usage: 'texte' },
   { texte: 'surEnteteDoux', fond: 'ombre', usage: 'texte' },
