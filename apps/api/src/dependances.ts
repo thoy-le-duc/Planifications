@@ -37,6 +37,11 @@ export interface DependancesApp {
    * ENVOIS_MAX_PAR_MINUTE (sync/upload.ts). Relevé seulement par les tests qui envoient beaucoup.
    */
   readonly envoisMaxParMinute?: number;
+  /**
+   * Journal du serveur (T10j : détail technique d'un refus de synchro, jamais envoyé au
+   * téléphone) ; par défaut console.error. Ne reçoit jamais de donnée personnelle.
+   */
+  readonly journal?: (ligne: string) => void;
 }
 
 /** Dépendances complétées, partagées par les routes. */
@@ -58,5 +63,6 @@ export function completer(deps: DependancesApp): Contexte {
     corsOrigines: deps.corsOrigines ?? [],
     proxyDeConfiance: deps.proxyDeConfiance ?? false,
     envoisMaxParMinute: deps.envoisMaxParMinute ?? ENVOIS_MAX_PAR_MINUTE,
+    journal: deps.journal ?? console.error,
   };
 }
