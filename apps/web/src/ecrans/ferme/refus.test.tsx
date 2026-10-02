@@ -275,6 +275,52 @@ describe('T10i : les refus de synchro dans l’onglet Ferme', () => {
     expect(ids()).toEqual(['r-nouveau', 'r-ancien']);
   });
 
+  it('ajout_seul sur un mouvement de stock : quoi faire ne renvoie pas à l’historique d’Aujourd’hui (le stock n’y figure pas)', async () => {
+    const stock = refus({ id: 'r-stock', cree_le: '2025-09-22T12:00:00.000Z', nom_table: 'mouvement_stock', operation: 'PATCH', motif: 'ajout_seul' });
+    recevoir(stock);
+    await rendre();
+    await attendre(() => elementsRefus().length === 1, 'le refus du mouvement de stock est affiché');
+    verifierRefusSaisie(stock, /stock/i, /\b22\s+sept/i);
+    expect(action(elementRefus('r-stock')), 'phrase neutre ou propre au stock, pas l’historique d’Aujourd’hui').not.toMatch(/historique|aujourd/i);
+  });
+
+  it('45 refus : 20 d’abord, puis « Voir les 20 suivants (encore 25) » → 40, puis « Voir les 5 derniers refus » → 45', async () => {
+    const lignes: LigneRefusLocale[] = [];
+    for (let n = 1; n <= 45; n++) {
+      // Le n-ième refus a n minutes de plus que le premier : r-01 est le plus récent.
+      lignes.push(refus({ id: `r-${String(n).padStart(2, '0')}`, cree_le: new Date(Date.UTC(2025, 8, 14, 12, 60 - n)).toISOString() }));
+    }
+    recevoir(...lignes);
+    await rendre();
+    await attendre(() => elementsRefus().length === 20, `20 refus affichés d’abord (affichés : ${String(elementsRefus().length)})`);
+    expect(ids()).toEqual(lignes.slice(0, 20).map((l) => l.id));
+
+    const voirPlus = (): HTMLButtonElement | undefined =>
+      [...conteneur.querySelectorAll<HTMLButtonElement>('button')].find((b) => /^Voir les? /.test(texte(b)));
+    const premier = voirPlus();
+    expect(texte(premier)).toBe('Voir les 20 suivants (encore 25)');
+    if (premier === undefined) throw new Error('bouton « voir plus » absent');
+    const hauteur = Number.parseFloat(getComputedStyle(premier).minHeight || premier.style.minHeight);
+    expect(hauteur, 'bouton « voir plus » : 56 px de haut au moins').toBeGreaterThanOrEqual(56);
+
+    await act(async () => {
+      premier.click();
+      await Promise.resolve();
+    });
+    await attendre(() => elementsRefus().length === 40, '40 refus après le premier « voir plus »');
+    expect(ids()).toEqual(lignes.slice(0, 40).map((l) => l.id));
+    const second = voirPlus();
+    expect(texte(second)).toBe('Voir les 5 derniers refus');
+
+    await act(async () => {
+      second?.click();
+      await Promise.resolve();
+    });
+    await attendre(() => elementsRefus().length === 45, 'les 45 refus');
+    expect(ids()).toEqual(lignes.map((l) => l.id));
+    expect(voirPlus(), 'plus de bouton une fois tout affiché').toBeUndefined();
+  });
+
   it('aucun refus : aucun élément de refus, le reste de l’écran est là', async () => {
     await rendre();
     await laisserFiler();

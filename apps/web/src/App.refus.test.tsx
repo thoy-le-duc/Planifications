@@ -88,6 +88,7 @@ afterEach(() => {
   base.fermer();
   banc.porte = null;
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 async function unTour(): Promise<void> {
@@ -233,6 +234,84 @@ describe('T10i : pastille des refus sur l’onglet Ferme', () => {
 
     await relancer();
     await attendre(pastilleAllumee, 'toujours allumée après relance : le nouveau refus n’a pas été vu');
+  });
+
+  it('localStorage qui lève sur les refus vus (lecture et écriture) : l’appli ne plante pas, la pastille s’affiche', async () => {
+    // Seules les clés des refus vus lèvent : la session, elle, reste lisible. localStorage
+    // remplacé (vi.stubGlobal, retiré après le test) : un espion posé sur l'objet de happy-dom ne
+    // se retire pas proprement, et ses méthodes ne passent pas par Storage.prototype.
+    const reel = localStorage;
+    const appels: string[] = [];
+    const casse = (cle: string, quoi: string): void => {
+      if (cle.startsWith('planif.refus-vus.')) {
+        appels.push(quoi);
+        throw new Error('stockage indisponible');
+      }
+    };
+    vi.stubGlobal('localStorage', {
+      getItem: (cle: string) => {
+        casse(cle, 'lecture');
+        return reel.getItem(cle);
+      },
+      setItem: (cle: string, valeur: string) => {
+        casse(cle, 'écriture');
+        reel.setItem(cle, valeur);
+      },
+      removeItem: (cle: string) => {
+        reel.removeItem(cle);
+      },
+      clear: () => {
+        reel.clear();
+      },
+      key: (i: number) => reel.key(i),
+      get length() {
+        return reel.length;
+      },
+    } satisfies Storage);
+    recevoir(refus('r-1', 10));
+    await lancer();
+    await attendre(pastilleAllumee, 'pastille allumée malgré le stockage indisponible');
+    await taper('Ferme');
+    await attendre(() => refusAffiches().includes('r-1'), 'l’onglet Ferme s’ouvre et montre le refus');
+    await taper('Aujourd');
+    await laisserPasser();
+    expect(conteneur.querySelector('[data-testid="app"]'), 'l’appli est toujours là').not.toBeNull();
+    // Le banc a bien servi : l'appli a tenté de lire et d'écrire les refus vus.
+    expect(appels).toContain('lecture');
+    expect(appels).toContain('écriture');
+  });
+
+  it('autre utilisateur sur le même téléphone : les refus vus du premier n’éteignent pas la pastille du second', async () => {
+    recevoir(refus('r-1', 10));
+    await lancer();
+    await attendre(pastilleAllumee, 'pastille de A allumée');
+    await taper('Ferme');
+    await attendre(() => refusAffiches().includes('r-1'), 'A voit son refus');
+    await attendre(() => !pastilleAllumee(), 'pastille de A éteinte');
+
+    // B se connecte : sa base à lui, un refus de MÊME identifiant (le pire cas pour « vu »).
+    act(() => {
+      racine.unmount();
+    });
+    const baseB = creerBaseMemoire(SCHEMA_LOCAL);
+    try {
+      await ecrireFermeDuJour(baseB, jourLocal(new Date()));
+      baseB.recevoir(SQL_INSERER_REFUS, parametresRefus({ ...refus('r-1', 10), utilisateur_id: AUTRE_UTILISATEUR }));
+      banc.porte = creerPorte(baseB, { utilisateurId: AUTRE_UTILISATEUR as Id<'Utilisateur'>, fermeId: FERME as Id<'Ferme'> });
+      localStorage.setItem(
+        CLE_SESSION,
+        JSON.stringify({ utilisateurId: AUTRE_UTILISATEUR, email: 'b@ferme.fr', jetonAcces: 'bbb.ccc.ddd', jetonRenouvellement: 's'.repeat(43) }),
+      );
+      racine = createRoot(conteneur);
+      await lancer();
+      await attendre(pastilleAllumee, 'pastille de B allumée : les refus vus de A ne comptent pas pour B');
+    } finally {
+      act(() => {
+        racine.unmount();
+      });
+      racine = createRoot(conteneur);
+      baseB.fermer();
+    }
   });
 
   it('un refus qui arrive pendant que l’onglet Ferme est ouvert est vu : pas de pastille en le quittant', async () => {
