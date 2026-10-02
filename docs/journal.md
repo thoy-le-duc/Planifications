@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T14d : import d'une saison à cheval sur deux années
+
+- **Fait** : à l'import d'un tableur, une série semée en S40 et plantée en S2 est comprise comme plantée l'année suivante (Q18) ; la ligne reste valide et l'aperçu porte un avertissement « plantation en 2028 » ; une ligne qui s'étalerait sur plus d'un an, ou qui retombe deux fois, reste en erreur.
+- **Décidé** : bascule seulement pour les dates en semaines ; l'année affichée est celle de la semaine (S1 qui commence fin décembre) ; un test existant qui affirmait le contraire de Q18 a été inversé. Ticket sans risque : testeur, développeur et relecteur sur le modèle léger.
+- **Bloquant** : rien. L'avertissement n'est pas encore affiché à l'écran : c'est dans T14b (l'écran d'import).
+
 ## 2026-10-01 — T13c : Aujourd'hui, relecture rapide et suites
 
 - **Fait** : après une saisie, seule la culture touchée est relue : 799 → ~210 ms sur la grande ferme (CPU ×4), journée identique à une relecture complète (empreintes, nombreux cas limites) ; Aujourd'hui n'attend plus Planches que 400 ms au plus au lancement ; « Fait » redevient possible après une annulation venue d'ailleurs ; le focus reste sur l'entrée corrigée après « Changer la date », sans jamais être repris ensuite ; emplacements, zones, espèces, familles, variétés et plantations d'une autre ferme n'apparaissent plus.

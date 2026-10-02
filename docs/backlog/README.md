@@ -53,7 +53,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16 | à faire |
 | [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | fait |
-| [T14d](T14d-import-annee-suivante.md) | Import : saison à cheval sur deux années (Q18) | T14 | en revue |
+| [T14d](T14d-import-annee-suivante.md) | Import : saison à cheval sur deux années (Q18) | T14 | fait |
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
 | [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | fait |
 | [T15c](T15c-export-rapide.md) | Export : sous 10 secondes sur un téléphone moyen | T16b | à faire |
