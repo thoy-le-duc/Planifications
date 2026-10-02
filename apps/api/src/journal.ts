@@ -45,28 +45,46 @@ const CODE_SUR = /^[0-9A-Z][0-9A-Z_]{0,31}$/;
 /** Nom de classe cité seulement s'il ressemble à un identifiant. */
 const CLASSE_SURE = /^[A-Za-z_$][\w$]{0,63}$/;
 
-/**
- * Racine du dépôt (journal.ts est dans apps/api/src), en URL file://, calculée une fois. Seules
- * les positions sous `node:` ou sous cette racine sont gardées, écrites relatives
- * (apps/api/src/app.ts:12:3, node_modules/pg/lib/client.js:1:2) : un chemin hors du dépôt
- * (/home/<personne>/…) peut citer quelqu'un.
- */
-const RACINE_URL = new URL('../../../', import.meta.url).href;
+/** Emplacement de ce module sous la racine du dépôt (source .ts, ou compilé .js à la même place). */
+const SUFFIXES_MODULE = ['apps/api/src/journal.ts', 'apps/api/src/journal.js'] as const;
 
-/** Racine en URL et en chemin ; null si elle ne protège rien (« / ») ou ne se lit pas. */
+/**
+ * Racine du dépôt (URL file:// finie par « / ») déduite de l'URL de ce module, seulement s'il est
+ * bien à sa place (`<racine>/apps/api/src/journal.ts|js`). Ailleurs (API regroupée en un seul
+ * fichier /app/index.js…), racine « / », URL non file: ou illisible : null, et aucune position
+ * de pile n'est gardée. Pure.
+ */
+export function racineDepuisModule(urlModule: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(urlModule);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'file:') return null;
+  const href = url.href;
+  for (const suffixe of SUFFIXES_MODULE) {
+    if (!href.endsWith(`/${suffixe}`)) continue;
+    const racine = href.slice(0, href.length - suffixe.length);
+    return racineSure(racine) === null ? null : racine;
+  }
+  return null;
+}
+
+/** Racine en URL et en chemin. */
 interface Racine {
   readonly url: string;
   readonly chemin: string;
 }
 
 /**
- * Garde commune à la racine calculée et à une racine passée : si l'API est regroupée en un seul
- * fichier (/app/index.js), la racine calculée vaut « / » et TOUT chemin absolu serait « sous la
- * racine » : aucune position n'est alors gardée.
+ * Garde commune à la racine calculée et à une racine passée : URL file: lisible, finie par « / »,
+ * et pas « / » elle-même (TOUT chemin absolu serait alors « sous la racine »). Sinon null.
  */
 function racineSure(url: string): Racine | null {
   let chemin: string;
   try {
+    if (new URL(url).protocol !== 'file:') return null;
     chemin = fileURLToPath(url);
   } catch {
     return null;
@@ -75,8 +93,29 @@ function racineSure(url: string): Racine | null {
   return { url, chemin };
 }
 
-/** Racine calculée, passée une fois par la garde. */
-const RACINE_PAR_DEFAUT = racineSure(RACINE_URL);
+/**
+ * Racine du dépôt calculée une fois. Seules les positions sous `node:` ou sous cette racine sont
+ * gardées, écrites relatives (apps/api/src/app.ts:12:3, node_modules/pg/lib/client.js:1:2) : un
+ * chemin hors du dépôt (/home/<personne>/…) peut citer quelqu'un.
+ */
+const RACINE_URL = racineDepuisModule(import.meta.url);
+const RACINE_PAR_DEFAUT = RACINE_URL === null ? null : racineSure(RACINE_URL);
+
+/**
+ * Racine passée à `decrireErreur` : retenue seulement si, une fois normalisée (« .. », « %2e%2e »),
+ * c'est la racine calculée ou un dossier sous elle. Sinon null (aucune position).
+ */
+function racinePassee(racine: string): Racine | null {
+  if (RACINE_URL === null) return null;
+  let href: string;
+  try {
+    href = new URL(racine).href;
+  } catch {
+    return null;
+  }
+  if (!href.startsWith(RACINE_URL)) return null;
+  return racineSure(href);
+}
 
 /** `fichier:ligne:colonne`. */
 const POSITION = /^(.+):(\d+):(\d+)$/;
@@ -203,12 +242,13 @@ export function journalSur(sortie: (ligne: string) => void): (ligne: string) => 
 
 /**
  * Description d'une erreur inattendue pour le journal : classe, code, cause, positions. Ne lève
- * jamais. `racine` : URL file:// de la racine du dépôt, finie par « / » (par défaut celle que
- * calcule ce module) ; « / » ou illisible, aucune position de pile n'est gardée.
+ * jamais. `racine` : URL file:// finie par « / », la racine calculée par ce module ou un dossier
+ * sous elle (par défaut la racine calculée) ; sinon, ou si la racine calculée manque, aucune
+ * position de pile n'est gardée.
  */
-export function decrireErreur(erreur: unknown, racine: string = RACINE_URL): string {
+export function decrireErreur(erreur: unknown, racine?: string): string {
   try {
-    return decrire(erreur, racine === RACINE_URL ? RACINE_PAR_DEFAUT : racineSure(racine));
+    return decrire(erreur, racine === undefined ? RACINE_PAR_DEFAUT : racinePassee(racine));
   } catch {
     return 'erreur indescriptible';
   }
