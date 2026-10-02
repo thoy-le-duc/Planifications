@@ -22,6 +22,8 @@ Le parcours du ticket T14 (déposer, dire ce que c'est, faire correspondre colon
 - L'aperçu montre la cellule fautive à côté du message (`lignes[ligne - 1][colonne]`), y compris une zone reprise de la ligne du dessus.
 - Rapprochement des cultures : 400 000 cultures toutes différentes prennent 26 s et 500 Mo ; limiter le nombre de valeurs distinctes à rapprocher, ou le faire dans le Web Worker avec un plafond.
 
+- **Avertissements de l'aperçu (T14d)** : une ligne valide peut porter `avertissements` (par exemple « plantation en 2028 », passage à l'année suivante) ; l'aperçu les montre sur la ligne, avec un compteur à côté des lignes valides.
+
 ## Critères d'acceptation
 
 - [ ] e2e : chaque fichier du jeu de T14 importé de bout en bout, dont quatre sans correction manuelle.

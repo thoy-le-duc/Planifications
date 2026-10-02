@@ -10,6 +10,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   chargerImport,
   chargerXlsx,
+  type AvertissementImport,
   type ChoixValeur,
   type Correspondance,
   type EntreeImport,
@@ -629,9 +630,10 @@ describe('dates d’une série dans le désordre (relecture, point 9)', () => {
     expect(ligne(plan, 2).statut).toBe('valide');
   });
 
-  it('semaines de la saison dans le désordre (récolte en S10 d’une plantation en S40) : erreur, pas de bascule sur l’année suivante', () => {
+  it('semaines de la saison dans le désordre (récolte en S10 d’une plantation en S40) : passe à l’année suivante, plus une erreur (T14d, Q18)', () => {
     const plan = m.preparerImport(entree(csv('Culture;Plantation;Début récolte\nPoireau;S40;S10'), 'series', { anneeSaison: 2027 }));
-    expect(codes(ligne(plan, 2))).toStrictEqual([['dates_incoherentes', 'date_debut_recolte', 2]]);
+    expect(ligne(plan, 2).statut).toBe('valide');
+    expect(ligne(plan, 2).valeurs).toMatchObject({ date_plantation: '2027-10-04', date_debut_recolte: '2028-03-06' });
   });
 });
 
@@ -814,5 +816,155 @@ describe('correspondance qui associe un champ à deux colonnes : erreur explicit
       ['champ_en_double', 'date_semis', 3],
     ]);
     expect(ligne(plan, 2).statut).toBe('erreur');
+  });
+});
+
+// ── T14d : saison à cheval sur deux années (Q18) ─────────────────────────────────────────────
+
+describe('T14d — une semaine qui retombe avant la précédente : année suivante, signalée dans l’aperçu', () => {
+  const ENTETE = 'Culture;Semis;Plantation;Début récolte;Fin récolte';
+  const plan = (lignes: string, anneeSaison: number | null = 2027) => m.preparerImport(entree(csv(`${ENTETE}\n${lignes}`), 'series', { anneeSaison }));
+  const avertissements = (l: LignePlan): readonly AvertissementImport[] => l.avertissements ?? [];
+
+  it('1. S40 → S2 → S20 (saison 2027) : semis 2027, plantation et récolte 2028 ; un avertissement « plantation en 2028 », pas d’erreur', () => {
+    const l = ligne(plan('Tomate;S40;S2;S20;'), 2);
+    expect(l.erreurs).toStrictEqual([]);
+    expect(l.statut).toBe('valide');
+    expect(l.valeurs).toMatchObject({ date_semis: '2027-10-04', date_plantation: '2028-01-10', date_debut_recolte: '2028-05-15' });
+    // Un seul avertissement, à l'endroit où l'année change (la plantation) ; la récolte, qui suit
+    // dans la même année, n'en ajoute pas.
+    expect(avertissements(l)).toStrictEqual([{ code: 'annee_suivante', champ: 'date_plantation', colonne: 2, annee: 2028, message: expect.stringMatching(/plantation.*2028/i) as string }]);
+  });
+
+  it('1 bis. même chose avec quatre dates, et avec des numéros de semaine nus dans des colonnes « (sem.) »', () => {
+    const quatre = ligne(plan('Tomate;S40;S2;S20;S30'), 2);
+    expect(quatre.valeurs).toMatchObject({ date_semis: '2027-10-04', date_plantation: '2028-01-10', date_debut_recolte: '2028-05-15', date_fin_recolte: '2028-07-24' });
+    expect(avertissements(quatre).map((a) => [a.champ, a.annee])).toStrictEqual([['date_plantation', 2028]]);
+
+    const nus = m.preparerImport(entree([['Culture', 'Semis (sem.)', 'Plantation (semaine)', 'Harvest start (week)'], ['Tomate', 40, '2', 20]], 'series', { anneeSaison: 2027 }));
+    expect(ligne(nus, 2).statut).toBe('valide');
+    expect(ligne(nus, 2).valeurs).toMatchObject({ date_semis: '2027-10-04', date_plantation: '2028-01-10', date_debut_recolte: '2028-05-15' });
+    expect(avertissements(ligne(nus, 2)).map((a) => [a.champ, a.annee])).toStrictEqual([['date_plantation', 2028]]);
+  });
+
+  it('1 ter. le résumé compte la ligne comme valide ; l’aperçu garde les autres lignes intactes', () => {
+    const p = plan('Tomate;S40;S2;S20;\nChou;S10;S20;S30;');
+    expect(p.resume).toMatchObject({ valides: 2, erreurs: 0 });
+    expect(ligne(p, 3).statut).toBe('valide');
+    expect(ligne(p, 3).avertissements).toBeUndefined();
+  });
+
+  it('2a. passage au milieu : S50 → S52 → S1 → la récolte tombe en 2028, avertissement sur la récolte', () => {
+    const l = ligne(plan('Chou;S50;S52;S1;'), 2);
+    expect(l.erreurs).toStrictEqual([]);
+    expect(l.valeurs).toMatchObject({ date_semis: '2027-12-13', date_plantation: '2027-12-27', date_debut_recolte: '2028-01-03' });
+    expect(avertissements(l).map((a) => [a.code, a.champ, a.colonne, a.annee])).toStrictEqual([['annee_suivante', 'date_debut_recolte', 3, 2028]]);
+    expect(avertissements(l)[0]?.message).toMatch(/2028/);
+  });
+
+  it('2b. même semaine deux fois (S1 → S1) : pas de changement d’année, pas d’avertissement', () => {
+    const l = ligne(plan('Radis;S1;S1;S1;'), 2);
+    expect(l.statut).toBe('valide');
+    expect(l.valeurs).toMatchObject({ date_semis: '2027-01-04', date_plantation: '2027-01-04', date_debut_recolte: '2027-01-04' });
+    expect(l.avertissements).toBeUndefined();
+  });
+
+  it('2c. témoin : S10 → S20 → S30, aucun changement, aucun avertissement', () => {
+    const l = ligne(plan('Tomate;S10;S20;S30;'), 2);
+    expect(l.statut).toBe('valide');
+    expect(l.valeurs).toMatchObject({ date_semis: '2027-03-08', date_plantation: '2027-05-17', date_debut_recolte: '2027-07-26' });
+    expect(l.avertissements).toBeUndefined();
+  });
+
+  it('dates complètes dans le désordre : toujours dates_incoherentes (l’année est écrite, rien à deviner)', () => {
+    const l = ligne(plan('Tomate;10/10/2027;05/01/2027;;'), 2);
+    expect(codes(l)).toStrictEqual([['dates_incoherentes', 'date_plantation', 2]]);
+    expect(l.statut).toBe('erreur');
+  });
+
+  it('3. S40 → S2 → S45 : plus de 52 semaines en tout → dates_incoherentes sur la date qui dépasse (début de récolte), pas d’année devinée', () => {
+    const l = ligne(plan('Tomate;S40;S2;S45;'), 2);
+    expect(l.statut).toBe('erreur');
+    expect(codes(l)).toStrictEqual([['dates_incoherentes', 'date_debut_recolte', 3]]);
+    expect(l.erreurs[0]?.message.length).toBeGreaterThan(5);
+  });
+
+  it('3 bis. deux retombées (S40 → S10 → S5) : il faudrait deux années de plus → dates_incoherentes sur la troisième date', () => {
+    const l = ligne(plan('Tomate;S40;S10;S5;'), 2);
+    expect(l.statut).toBe('erreur');
+    expect(codes(l)).toStrictEqual([['dates_incoherentes', 'date_debut_recolte', 3]]);
+  });
+
+  it('3 ter. borne : 52 semaines pile (S40 2027 → S40 2028) passe, 53 semaines (S41 2028) reste en erreur', () => {
+    const pile = ligne(plan('Tomate;S40;S2;S40;'), 2);
+    expect(pile.erreurs).toStrictEqual([]);
+    expect(pile.valeurs).toMatchObject({ date_semis: '2027-10-04', date_debut_recolte: '2028-10-02' });
+    expect(ligne(plan('Tomate;S40;S2;S41;'), 2).statut).toBe('erreur');
+    expect(codes(ligne(plan('Tomate;S40;S2;S41;'), 2))).toStrictEqual([['dates_incoherentes', 'date_debut_recolte', 3]]);
+  });
+
+  it('4a. 2026 a 53 semaines : S53 → S1 passe à 2027 (semis lundi 28/12/2026, plantation lundi 04/01/2027), signalé', () => {
+    const l = ligne(plan('Tomate;S53;S1;;', 2026), 2);
+    expect(l.erreurs).toStrictEqual([]);
+    expect(l.valeurs).toMatchObject({ date_semis: '2026-12-28', date_plantation: '2027-01-04' });
+    expect(avertissements(l).map((a) => [a.champ, a.annee])).toStrictEqual([['date_plantation', 2027]]);
+  });
+
+  it('4b. 2027 n’a que 52 semaines : S53 reste date_invalide, comme avant (et S52 → S1 y passe à 2028)', () => {
+    const l = ligne(plan('Tomate;S53;S1;;', 2027), 2);
+    expect(l.statut).toBe('erreur');
+    expect(codes(l)).toStrictEqual([['date_invalide', 'date_semis', 1]]);
+    expect(l.avertissements).toBeUndefined();
+
+    const ok = ligne(plan('Tomate;S52;S1;;', 2027), 2);
+    expect(ok.valeurs).toMatchObject({ date_semis: '2027-12-27', date_plantation: '2028-01-03' });
+    expect(avertissements(ok).map((a) => [a.champ, a.annee])).toStrictEqual([['date_plantation', 2028]]);
+  });
+
+  it('sans année de saison : annee_manquante comme avant, rien n’est deviné', () => {
+    const l = ligne(plan('Tomate;S40;S2;;', null), 2);
+    expect(l.erreurs.map((e) => e.code)).toContain('annee_manquante');
+    expect(l.avertissements).toBeUndefined();
+  });
+
+  it('retouche 1. saison 2025, S50 → S1 : la plantation est le lundi 2025-12-29, semaine 1 de 2026 → l’avertissement dit 2026 (année de la semaine, pas de la date civile)', () => {
+    const l = ligne(plan('Tomate;S50;S1;;', 2025), 2);
+    expect(l.erreurs).toStrictEqual([]);
+    expect(l.valeurs).toMatchObject({ date_semis: '2025-12-08', date_plantation: '2025-12-29' });
+    expect(avertissements(l).map((a) => [a.champ, a.annee])).toStrictEqual([['date_plantation', 2026]]);
+    expect(avertissements(l)[0]?.message).toMatch(/2026/);
+    expect(avertissements(l)[0]?.message).not.toMatch(/2025/);
+  });
+
+  it('retouche 2. message exact : « plantation en 2028 » (libellé court, sans « date de »)', () => {
+    const l = ligne(plan('Tomate;S40;S2;;'), 2);
+    expect(avertissements(l).map((a) => a.message)).toStrictEqual(['plantation en 2028']);
+  });
+
+  it('retouche 3. témoin : une ligne en erreur n’a pas de champ avertissements', () => {
+    for (const saisie of ['Tomate;S40;S2;S45;', 'Tomate;S40;S10;S5;', 'Tomate;S40;S2;S41;']) {
+      const l = ligne(plan(saisie), 2);
+      expect(l.statut).toBe('erreur');
+      expect(l.avertissements).toBeUndefined();
+    }
+  });
+
+  it('retouche 4. témoin : semis en date complète 15/10/2027 + plantation S2 → plantation 2028-01-10, avertissement sur la plantation', () => {
+    const l = ligne(plan('Tomate;15/10/2027;S2;;'), 2);
+    expect(l.erreurs).toStrictEqual([]);
+    expect(l.valeurs).toMatchObject({ date_semis: '2027-10-15', date_plantation: '2028-01-10' });
+    expect(avertissements(l).map((a) => [a.champ, a.annee])).toStrictEqual([['date_plantation', 2028]]);
+  });
+
+  it('retouche 5. témoin : saison 2026 (53 semaines), S40 2026 → S2 → S40 de 2027 = 371 jours, plus de 52 semaines → erreur', () => {
+    const l = ligne(plan('Tomate;S40;S2;S40;', 2026), 2);
+    expect(l.statut).toBe('erreur');
+    expect(codes(l)).toStrictEqual([['dates_incoherentes', 'date_debut_recolte', 3]]);
+    expect(l.avertissements).toBeUndefined();
+  });
+
+  it('fonction pure : entrée gelée, même plan à chaque appel', () => {
+    const e = geler(entree(csv(`${ENTETE}\nTomate;S40;S2;S20;`), 'series', { anneeSaison: 2027 }));
+    expect(m.preparerImport(e)).toStrictEqual(m.preparerImport(e));
   });
 });
