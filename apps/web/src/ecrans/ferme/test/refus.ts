@@ -202,6 +202,20 @@ export const SQL_ARCHIVER_PAR_SYNCHRO = 'UPDATE refus_synchro SET archive_le = ?
  *     tout de suite, une seule fois (pas perdu, pas doublé à la fin du délai).
  *   - Page fermée ou mise en arrière-plan pendant le délai (pagehide sur window, ou visibilitychange
  *     avec document.visibilityState === 'hidden') : écrit tout de suite aussi, une seule fois.
+ *
+ * Relecture T10n :
+ *   - « Se déconnecter » pendant le délai : l'archivage en attente est écrit et TERMINÉ avant la
+ *     fermeture puis l'effacement de la base locale.
+ *   - `archiver` devient indisponible pendant le délai (porte fermée) : l'attente est abandonnée
+ *     sans écrire, les refus réapparaissent avec le message d'échec (role="alert", « archivage ») ;
+ *     la porte revenue, rien n'est écrit en douce.
+ *   - Un refus en attente archivé ailleurs (synchro) ne compte plus dans le bandeau ; plus aucun en
+ *     attente : le bandeau se vide, rien n'est écrit.
+ *   - archiverRefus rejette : les refus réapparaissent, message d'échec (role="alert").
+ *   - La zone data-testid="refus-annulation" (role="status") est dans le DOM dès qu'un refus est
+ *     affiché, VIDE (aucun texte) tant que rien n'attend ; c'est le même nœud qui reçoit puis perd
+ *     le texte du bandeau (archivage, carte disparue, « Annuler ») : les lecteurs d'écran
+ *     n'annoncent que le contenu d'une zone déjà présente. « Pas de bandeau » = zone vide.
  */
 export const DELAI_ANNULATION_ARCHIVAGE_MS = 5_000;
 export const TESTID_BANDEAU_ANNULATION = 'refus-annulation';

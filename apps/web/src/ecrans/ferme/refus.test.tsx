@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { act, createElement, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
-import { creerPorte, SCHEMA_LOCAL, type PorteDonnees } from '@planif/sync';
+import { creerPorte, SCHEMA_LOCAL, type PorteDonnees, type RefusSynchro } from '@planif/sync';
 import type { Id } from '@planif/core';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
 import type { SessionConnexion } from '../../connexion/session.ts';
@@ -43,9 +43,19 @@ import {
   type ResumeSaisieLocal,
 } from './test/refus.ts';
 
+/** T10n : ordre de la fermeture et de l'effacement de la base locale (déconnexion). */
+const ordreBase = vi.hoisted((): string[] => []);
+
 vi.mock('../../donnees/effacer.ts', async (original) => {
   const reel = await original<typeof import('../../donnees/effacer.ts')>();
-  return { ...reel, baseLocaleExiste: () => Promise.resolve(true), effacerDonneesLocales: () => Promise.resolve() };
+  return {
+    ...reel,
+    baseLocaleExiste: () => Promise.resolve(true),
+    effacerDonneesLocales: () => {
+      ordreBase.push('effacer');
+      return Promise.resolve();
+    },
+  };
 });
 
 interface ProprietesEcranFerme {
@@ -75,7 +85,13 @@ const SESSION: SessionConnexion = {
   jetonRenouvellement: 'r'.repeat(43),
 };
 
-const POIGNEE: PoigneeDonnees = { compterEnAttente: () => Promise.resolve(0), fermer: () => Promise.resolve() };
+const POIGNEE: PoigneeDonnees = {
+  compterEnAttente: () => Promise.resolve(0),
+  fermer: () => {
+    ordreBase.push('fermer');
+    return Promise.resolve();
+  },
+};
 
 /** Codes des motifs : jamais affichés tels quels. */
 const CODES = [...Object.keys(MESSAGES_SERVEUR), 'motif_de_demain'];
@@ -88,6 +104,7 @@ let racine: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   localStorage.clear();
+  ordreBase.length = 0;
   base = creerBaseMemoire(SCHEMA_LOCAL);
   porte = creerPorte(base, { utilisateurId: UTILISATEUR_REFUS as Id<'Utilisateur'>, fermeId: FERME_REFUS as Id<'Ferme'> });
   conteneur = document.createElement('div');
@@ -660,8 +677,11 @@ describe('T10l : archiver un refus vu', () => {
 
   describe('T10n : annuler un archivage', () => {
     let archiverRefus: MockInstance<PorteDonnees['archiverRefus']>;
+    /** La vraie écriture de la porte, pour les doublures qui l'enrobent. */
+    let vraiArchiver: PorteDonnees['archiverRefus'];
 
     beforeEach(() => {
+      vraiArchiver = porte.archiverRefus.bind(porte);
       // Appelle la vraie porte : l'écriture arrive dans la base mémoire.
       archiverRefus = vi.spyOn(porte, 'archiverRefus');
     });
@@ -674,7 +694,13 @@ describe('T10l : archiver un refus vu', () => {
     }
 
     const nomAccessible = (b: HTMLElement): string => (b.getAttribute('aria-label') ?? texte(b)).replace(/\s+/g, ' ').trim();
-    const bandeau = (): HTMLElement | null => conteneur.querySelector<HTMLElement>(`[data-testid="${TESTID_BANDEAU_ANNULATION}"]`);
+    /** Zone d'annonce du bandeau (role="status"), présente même vide (relecture, point 5). */
+    const zoneAnnonce = (): HTMLElement | null => conteneur.querySelector<HTMLElement>(`[data-testid="${TESTID_BANDEAU_ANNULATION}"]`);
+    /** Le bandeau affiché : la zone, quand elle a un contenu ; null si absente ou vide. */
+    const bandeau = (): HTMLElement | null => {
+      const z = zoneAnnonce();
+      return z !== null && texte(z) !== '' ? z : null;
+    };
     const annuler = (): HTMLButtonElement => {
       const b = bouton(conteneur, TESTID_ANNULER_ARCHIVAGE, /Annuler/, '« Annuler »');
       const nom = nomAccessible(b);
@@ -695,7 +721,7 @@ describe('T10l : archiver un refus vu', () => {
       await rendre();
       await attendre(() => elementsRefus().length === 3, 'trois refus affichés');
       await laisserFiler();
-      expect(bandeau(), 'pas de bandeau avant tout archivage').toBeNull();
+      expect(bandeau(), 'pas de bandeau (zone vide) avant tout archivage').toBeNull();
       vi.useFakeTimers();
     }
 
@@ -867,6 +893,153 @@ describe('T10l : archiver un refus vu', () => {
       });
       await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 2);
       expect(archiverRefus).not.toHaveBeenCalled();
+    });
+
+    describe('relecture T10n', () => {
+      it('point 1 : « Tout archiver » puis « Se déconnecter » avant la fin du délai : archivage écrit et terminé AVANT la fermeture et l’effacement de la base', async () => {
+        await troisRefus();
+        archiverRefus.mockImplementation(async (idsArchives) => {
+          ordreBase.push('archiver-debut');
+          await vraiArchiver(idsArchives);
+          // Une écriture qui prend un peu de temps : la déconnexion doit l'attendre.
+          await new Promise((r) => setTimeout(r, 300));
+          ordreBase.push('archiver-fin');
+        });
+        await taper(toutArchiver());
+        await avancer(1_000);
+        expect(archiverRefus).not.toHaveBeenCalled();
+        const deconnecter = [...conteneur.querySelectorAll<HTMLButtonElement>('button')].find(
+          (b) => (b.getAttribute('aria-label') ?? texte(b)).replace(/\s+/g, ' ').trim() === 'Se déconnecter',
+        );
+        if (deconnecter === undefined) throw new Error('bouton « Se déconnecter » absent');
+        await taper(deconnecter);
+        for (let k = 0; k < 60 && !ordreBase.includes('effacer'); k++) await avancer(100);
+        expect(ordreBase, 'base effacée à la fin de la déconnexion').toContain('effacer');
+        expect(appels(), 'archivage en attente écrit une fois, avec tous les ids').toEqual([['r-1', 'r-2', 'r-3']]);
+        expect(ordreBase, 'archivage écrit et terminé, puis base fermée, puis effacée').toEqual(['archiver-debut', 'archiver-fin', 'fermer', 'effacer']);
+        for (const id of ['r-1', 'r-2', 'r-3']) expect(archiveLe(id), `${id} archivé`).not.toBeNull();
+        await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 2);
+        expect(archiverRefus, 'pas une seconde fois').toHaveBeenCalledTimes(1);
+      });
+
+      /**
+       * Composant seul (Refus.tsx), pour faire disparaître puis revenir `archiver` sans démonter.
+       * Règle choisie (la plus simple, rien de perdu de vue) : la porte disparaît pendant le délai →
+       * l'attente est abandonnée SANS écrire, les refus réapparaissent avec le message d'échec
+       * (role="alert") ; la porte revenue, rien n'est écrit en douce.
+       */
+      it('point 2 : la porte disparaît pendant le délai puis revient : les refus réapparaissent avec un message, rien n’est écrit en douce', async () => {
+        const CHEMIN_REFUS = './Refus.tsx';
+        const { SaisiesRefusees } = (await import(/* @vite-ignore */ CHEMIN_REFUS)) as {
+          SaisiesRefusees: (p: { refus: readonly RefusSynchro[]; archiver?: ((ids: readonly string[]) => Promise<void>) | undefined }) => ReactElement | null;
+        };
+        const liste: RefusSynchro[] = ['r-3', 'r-2', 'r-1'].map((id, n) => ({
+          id,
+          nomTable: 'evenement',
+          ligneId: `ligne-${id}`,
+          operation: 'PATCH',
+          motif: 'ajout_seul',
+          message: MESSAGES_SERVEUR.ajout_seul,
+          creeLe: new Date(Date.UTC(2025, 8, 16 - n, 12)).toISOString(),
+        }));
+        const archiver = vi.fn<(ids: readonly string[]) => Promise<void>>(() => Promise.resolve());
+        const dessiner = async (a: typeof archiver | undefined): Promise<void> => {
+          await act(async () => {
+            racine.render(createElement(SaisiesRefusees, { refus: liste, archiver: a }));
+            await Promise.resolve();
+          });
+        };
+        await dessiner(archiver);
+        expect(ids()).toEqual(['r-3', 'r-2', 'r-1']);
+        vi.useFakeTimers();
+        await taper(toutArchiver());
+        await avancer(1_000);
+        expect(elementsRefus()).toHaveLength(0);
+
+        await dessiner(undefined); // porte indisponible (base qui se ferme, ferme changée…)
+        await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 2);
+        expect(ids(), 'porte indisponible : les refus en attente réapparaissent').toEqual(['r-3', 'r-2', 'r-1']);
+        const alerte = conteneur.querySelector('[role="alert"]');
+        expect(alerte, 'un message dit que l’archivage n’a pas été fait').not.toBeNull();
+        expect(texte(alerte)).toMatch(/archiv/i);
+        expect(bandeau(), 'plus de bandeau « Annuler »').toBeNull();
+
+        await dessiner(archiver); // la porte revient
+        await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 2);
+        expect(archiver, 'rien n’est écrit en douce au retour de la porte').not.toHaveBeenCalled();
+        expect(ids(), 'les refus restent affichés').toEqual(['r-3', 'r-2', 'r-1']);
+      });
+
+      it('point 3 : un refus en attente archivé ailleurs (synchro) : le bandeau ne compte que ceux encore là ; plus aucun : il disparaît sans écrire', async () => {
+        await troisRefus();
+        await taper(toutArchiver());
+        await avancer(1_000);
+        expect(texte(bandeau())).toMatch(/3 refus archivés/);
+
+        base.recevoir(SQL_ARCHIVER_PAR_SYNCHRO, ['2025-09-17T08:00:00.000Z', 'r-1']);
+        await avancer(0);
+        await avancer(0);
+        expect(texte(bandeau()), 'r-1 archivé ailleurs : il ne compte plus').toMatch(/2 refus archivés/);
+
+        base.recevoir(SQL_ARCHIVER_PAR_SYNCHRO, ['2025-09-17T08:00:00.000Z', 'r-2']);
+        base.recevoir(SQL_ARCHIVER_PAR_SYNCHRO, ['2025-09-17T08:00:00.000Z', 'r-3']);
+        await avancer(0);
+        await avancer(0);
+        expect(bandeau(), 'plus aucun refus en attente : le bandeau disparaît').toBeNull();
+        await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 2);
+        expect(archiverRefus, 'rien à écrire : tout est déjà archivé').not.toHaveBeenCalled();
+      });
+
+      it('point 3 bis : un refus en attente archivé ailleurs : à la fin du délai, les autres sont écrits', async () => {
+        await troisRefus();
+        await taper(toutArchiver());
+        await avancer(1_000);
+        base.recevoir(SQL_ARCHIVER_PAR_SYNCHRO, ['2025-09-17T08:00:00.000Z', 'r-1']);
+        await avancer(0);
+        await avancer(DELAI_ANNULATION_ARCHIVAGE_MS);
+        await avancer(0);
+        expect(archiverRefus).toHaveBeenCalledTimes(1);
+        expect(appels()[0], 'les refus encore en attente sont écrits').toEqual(expect.arrayContaining(['r-2', 'r-3']));
+      });
+
+      it('point 4 : archiverRefus rejette à la fin du délai : les refus réapparaissent et le message d’erreur (role="alert") s’affiche', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        await troisRefus();
+        archiverRefus.mockImplementation(() => Promise.reject(new Error('base fermée')));
+        await taper(toutArchiver());
+        await avancer(DELAI_ANNULATION_ARCHIVAGE_MS);
+        await avancer(0);
+        expect(archiverRefus).toHaveBeenCalledTimes(1);
+        expect(ids(), 'les refus réapparaissent').toEqual(['r-3', 'r-2', 'r-1']);
+        const alerte = conteneur.querySelector('[role="alert"]');
+        expect(alerte, 'message d’échec').not.toBeNull();
+        expect(texte(alerte)).toMatch(/archivage/i);
+        expect(bandeau()).toBeNull();
+      });
+
+      it('point 5 : la zone role="status" du bandeau est dans le DOM avant l’archivage (vide), et c’est le même nœud qui s’annonce', async () => {
+        await troisRefus();
+        const zone = zoneAnnonce();
+        expect(zone, 'zone d’annonce présente avant tout archivage').not.toBeNull();
+        expect(zone?.getAttribute('role')).toBe('status');
+        expect(texte(zone), 'vide avant l’archivage').toBe('');
+
+        await taper(archiverUn('r-2'));
+        await avancer(0);
+        expect(zoneAnnonce(), 'même nœud après « Archiver »').toBe(zone);
+        expect(texte(zone)).toMatch(/1 refus archivé/);
+
+        await taper(toutArchiver());
+        await avancer(0);
+        expect(elementsRefus(), 'plus aucune carte').toHaveLength(0);
+        expect(zoneAnnonce(), 'même nœud quand la carte disparaît').toBe(zone);
+        expect(texte(zone)).toMatch(/3 refus archivés/);
+
+        await taper(annuler());
+        await avancer(0);
+        expect(zoneAnnonce(), 'même nœud après « Annuler », vidé').toBe(zone);
+        expect(texte(zone)).toBe('');
+      });
     });
   });
 });
