@@ -30,6 +30,15 @@ import { modification } from '@planif/db';
 import { sql, type SQL } from 'drizzle-orm';
 import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
+import {
+  detailDuCoeur,
+  ID_GLISSE,
+  PRECISION_CHANGE_DE_FERME,
+  PRECISION_CREEE_SUPPRIMEE,
+  PRECISION_INTROUVABLE,
+  PRECISION_EXISTE_DEJA,
+  refusDuCoeur,
+} from './messages.ts';
 import type { Refus } from './motifs.ts';
 import { visibleParLaFerme, type TransactionDb } from './references.ts';
 
@@ -142,11 +151,11 @@ type Validee =
 function valider(table: TableItineraire, entree: Ligne, fermeId: string | null): Validee {
   if (table === 'itineraire') {
     const lecture = validerItineraire(entree);
-    if (!lecture.ok) return { refus: invalide(lecture.erreur.message, fermeId) };
+    if (!lecture.ok) return { refus: refusDuCoeur(lecture.erreur, fermeId) };
     return { table, ligne: ligneItineraire(lecture.valeur), valeur: lecture.valeur };
   }
   const lecture = validerTypeIntervention(entree);
-  if (!lecture.ok) return { refus: invalide(lecture.erreur.message, fermeId) };
+  if (!lecture.ok) return { refus: refusDuCoeur(lecture.erreur, fermeId) };
   return { table, ligne: ligneType(lecture.valeur), valeur: lecture.valeur };
 }
 
@@ -205,7 +214,8 @@ async function verifierTypes(tx: TransactionDb, entree: Ligne, i: ItineraireEcri
   );
   const permis: Couple[] = r.rows.map((l) => ({ categorie: l.categorie, type: l.libelle }));
   const lecture = validerItineraire(entree, { typesIntervention: permis });
-  return lecture.ok ? null : invalide(lecture.erreur.message, i.fermeId);
+  // La seule règle ajoutée par la liste des types : un travail prévu d'un type inconnu de la ferme.
+  return lecture.ok ? null : { ...invalide('un travail prévu vise un type d’intervention que la ferme n’a pas', i.fermeId), detail: detailDuCoeur(lecture.erreur) };
 }
 
 /**
@@ -328,14 +338,14 @@ async function creer(tx: TransactionDb, ctx: Contexte, e: EcritureItineraireRecu
   if ('refus' in v) return v.refus;
   const fermeId = v.valeur.fermeId;
   // Comme une série (T10e) : une ligne se crée active.
-  if (v.valeur.supprimeLe !== null) return invalide('une ligne se crée active (supprime_le vide)', fermeId);
+  if (v.valeur.supprimeLe !== null) return invalide(PRECISION_CREEE_SUPPRIMEE, fermeId);
 
   const existante = await identique(tx, e.table, v.ligne, v.valeur.id);
   if (existante !== null) {
     // Même id, autres valeurs, ou ligne d'une autre ferme ou de la bibliothèque : refusé. Le
     // refus ne porte la ferme que si la ligne existante est la sienne (rien sur une autre ferme).
     if (existante) return null;
-    return invalide('déjà enregistrée avec d’autres valeurs : une modification passe par PATCH', (await deLaFerme(tx, e.table, v.valeur.id, fermeId)) ? fermeId : null);
+    return invalide(PRECISION_EXISTE_DEJA, (await deLaFerme(tx, e.table, v.valeur.id, fermeId)) ? fermeId : null);
   }
 
   const refus = await verifierEnBase(tx, v, entree, null);
@@ -345,7 +355,7 @@ async function creer(tx: TransactionDb, ctx: Contexte, e: EcritureItineraireRecu
   if (!(await inserer(tx, e.table, v.ligne, maintenant))) {
     // Écrite entre-temps par un envoi concurrent : même règle que le renvoi.
     if ((await identique(tx, e.table, v.ligne, v.valeur.id)) === true) return null;
-    return invalide('déjà enregistrée avec d’autres valeurs', (await deLaFerme(tx, e.table, v.valeur.id, fermeId)) ? fermeId : null);
+    return invalide(PRECISION_EXISTE_DEJA, (await deLaFerme(tx, e.table, v.valeur.id, fermeId)) ? fermeId : null);
   }
   await historiser(tx, ctx, e.table, v.valeur.id, fermeId, auteurId, maintenant, 'creation', null);
   return null;
@@ -363,7 +373,7 @@ async function modifier(
   fermes: ReadonlySet<string>,
   auteurId: Id<'Utilisateur'>,
 ): Promise<Refus | null> {
-  if (!estUuid(e.id) || fermes.size === 0) return invalide('ligne introuvable', null);
+  if (!estUuid(e.id) || fermes.size === 0) return invalide(PRECISION_INTROUVABLE, null);
   // Ferme dans la requête du verrou : une ligne d'une autre ferme ou de la bibliothèque (ferme_id
   // nul) n'est ni lue ni verrouillée.
   const r = await tx.execute<{ l: Ligne; texte: string }>(
@@ -372,14 +382,14 @@ async function modifier(
         FOR UPDATE`,
   );
   const existante = r.rows[0];
-  if (existante === undefined) return invalide('ligne introuvable', null);
+  if (existante === undefined) return invalide(PRECISION_INTROUVABLE, null);
   const avant = existante.l;
   const fermeId = String(avant.ferme_id);
 
   // Décision 7 du chef : une ligne ne change pas de ferme (ni vers une autre, ni vers la bibliothèque).
   const fermeDemandee = e.donnees.ferme_id;
   if (fermeDemandee !== undefined && (typeof fermeDemandee !== 'string' || fermeDemandee.toLowerCase() !== fermeId)) {
-    return invalide('une ligne ne change pas de ferme', fermeId);
+    return invalide(PRECISION_CHANGE_DE_FERME, fermeId);
   }
 
   const entree: Ligne = { ...avant, ...e.donnees, id: avant.id };
@@ -418,7 +428,7 @@ export async function ecrireItineraire(
   auteurId: Id<'Utilisateur'>,
 ): Promise<Refus | null> {
   // Un id glissé dans les données : colonne inconnue (l'id est celui de l'écriture).
-  if (Object.hasOwn(e.donnees, 'id')) return invalide('colonne inconnue : id', fermeDonnee);
+  if (Object.hasOwn(e.donnees, 'id')) return refusDuCoeur(ID_GLISSE, fermeDonnee);
   if (e.op === 'PATCH') return modifier(tx, ctx, e, fermes, auteurId);
   return creer(tx, ctx, e, fermeDonnee, auteurId);
 }

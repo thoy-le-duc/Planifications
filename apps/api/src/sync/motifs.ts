@@ -12,8 +12,16 @@ export type MotifRefus =
 
 export interface Refus {
   readonly motif: MotifRefus;
-  /** Précision ajoutée au message (données invalides). Jamais de donnée d'une autre ferme. */
+  /**
+   * Précision ajoutée au message ('ecriture_invalide' seulement : messages.ts), en français simple,
+   * sans jargon. Jamais de donnée d'une autre ferme.
+   */
   readonly precision?: string;
+  /**
+   * Détail technique (code SQLSTATE, colonne, code d'erreur du cœur…), écrit au journal du
+   * serveur, jamais envoyé au téléphone. Ni adresse e-mail, ni note, ni valeur saisie.
+   */
+  readonly detail?: string;
   /** Ferme visée, si connue. */
   readonly fermeId?: string | null;
 }
