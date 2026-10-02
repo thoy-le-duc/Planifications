@@ -12,3 +12,7 @@
 ## Critères d'acceptation
 
 - [ ] Test : une réponse en flux qui échoue en cours d'envoi ne fait apparaître ni le message dans le journal, ni `Error:` au client.
+
+## Aussi (dernière vérification T10m)
+
+- Si l'API est un jour regroupée en un seul fichier et que la racine calculée par `journal.ts` vaut `/`, ne garder aucune position de pile (test).
