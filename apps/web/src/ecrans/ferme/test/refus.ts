@@ -161,6 +161,16 @@ export const parametresRefusResume = (l: LigneRefusLocale & ResumeSaisieLocal): 
  *   - le refus d'un archivage refusé par le serveur (nom_table 'refus_synchro') s'affiche comme les
  *     autres, sans jamais montrer le nom brut de la table.
  * Coquille : la pastille ne compte jamais un refus archivé.
+ *
+ * Relecture T10l :
+ *   - « Tout archiver » n'apparaît qu'à partir de 2 refus affichés, avec leur nombre :
+ *     « Tout archiver (N) » ; il est placé APRÈS la liste des cartes (ordre du DOM) ;
+ *   - chaque bouton « Archiver » a un nom accessible (aria-label, sinon son texte) DISTINCT, qui
+ *     commence par « Archiver » et contient le titre de sa carte (ex. « Archiver : Récolte ·
+ *     ajout, 14 sept. à 14:00 ») ; le texte visible reste « Archiver » ;
+ *   - le refus d'un archivage refusé (nom_table 'refus_synchro') a sa propre action : une phrase
+ *     qui dit que ce refus n'a pas pu être archivé (« Ce refus n’a pas pu être archivé… »), jamais
+ *     « responsable de la ferme » (personne d'autre n'y peut rien).
  */
 export const SQL_INSERER_REFUS_ARCHIVE = `INSERT INTO refus_synchro (${[...COLONNES, 'archive_le'].join(', ')}) VALUES (${[...COLONNES, 'archive_le']
   .map(() => '?')
