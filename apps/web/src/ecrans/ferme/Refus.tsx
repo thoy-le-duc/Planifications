@@ -19,7 +19,8 @@
  * Les REFUS_PAR_PAGE plus récents d'abord, puis un bouton pour voir les suivants : 100 refus ne
  * ralentissent pas l'ouverture de l'onglet.
  *
- * T10l : « Archiver » sur chaque carte, « Tout archiver » pour les refus affichés (pas ceux encore
+ * T10l : « Archiver » sur chaque carte (nom accessible : titre et date de la carte), « Tout
+ * archiver (N) » après la liste, dès deux refus affichés, pour ceux-là seulement (pas ceux encore
  * cachés derrière « voir plus »). Sans confirmation : archiver ne supprime rien, la ligne reste
  * sur le téléphone et le serveur ; elle sort seulement de la liste (porte.surveillerRefus), sur
  * tous les téléphones de l'utilisateur.
@@ -84,6 +85,12 @@ const ACTION_PAR_TABLE: Readonly<Record<string, Readonly<Record<string, string>>
     ajout_seul: 'Le stock se corrige par une nouvelle saisie, pas en modifiant l’ancienne : saisissez l’entrée ou la sortie qui rétablit la quantité.',
   },
 };
+
+/**
+ * T10l : le refus d'un archivage (table refus_synchro). Rien n'a changé sur la ferme et personne
+ * d'autre n'y peut rien : seul ce message reste à archiver.
+ */
+const ACTION_ARCHIVAGE = 'Ce refus n’a pas pu être archivé ; rien n’a changé sur la ferme. Vous pouvez archiver ce message.';
 
 /** Quoi faire pour un motif que l'appli ne connaît pas encore. */
 const ACTION_GENERALE = 'Vérifiez cette saisie et refaites-la ; si le refus recommence, signalez-le.';
@@ -167,7 +174,7 @@ export function refusLisible(r: RefusSynchro, maintenant = new Date()): RefusLis
   return {
     titre: `${type} · ${OPERATION[r.operation]}`,
     message: r.message,
-    action: ACTION_PAR_TABLE[r.nomTable]?.[r.motif] ?? ACTION[r.motif] ?? ACTION_GENERALE,
+    action: r.nomTable === 'refus_synchro' ? ACTION_ARCHIVAGE : (ACTION_PAR_TABLE[r.nomTable]?.[r.motif] ?? ACTION[r.motif] ?? ACTION_GENERALE),
     ...(r.saisie === undefined ? {} : saisieLisible(r.saisie, maintenant)),
   };
 }
@@ -237,16 +244,12 @@ const ARCHIVER: CSSProperties = {
   fontSize: 16,
 };
 
-/** T10l : « Tout archiver », sous l'explication de la carte. */
+/** T10l : « Tout archiver (N) », après la liste, en bouton secondaire (contour) sur toute la largeur. */
 const TOUT_ARCHIVER: CSSProperties = {
   ...ARCHIVER,
-  justifySelf: 'auto',
   justifyContent: 'center',
   width: 'calc(100% - 32px)',
-  margin: '0 16px 14px',
-  border: 0,
-  background: 'var(--couleur-foret)',
-  color: 'var(--couleur-sur-foret)',
+  margin: '12px 16px 16px',
   fontSize: 17,
 };
 
@@ -271,12 +274,13 @@ function UnRefus({
   readonly archiver: (() => void) | undefined;
 }) {
   const { titre, message, action, culture, details } = refusLisible(refus, maintenant);
+  const date = dateDuRefus(refus.creeLe, maintenant);
   return (
     <li data-testid="refus" data-refus={refus.id} style={REFUS}>
       <div style={ENTETE_REFUS}>
         <strong style={{ fontSize: 17, color: 'var(--couleur-encre)' }}>{titre}</strong>{' '}
         <span style={{ fontFamily: 'var(--police-code)', fontSize: 13, color: 'var(--couleur-secondaire)' }}>
-          {dateDuRefus(refus.creeLe, maintenant)}
+          {date}
         </span>
       </div>
       {(culture !== undefined || details !== undefined) && (
@@ -295,7 +299,7 @@ function UnRefus({
         <span>{action}</span>
       </p>
       {archiver !== undefined && (
-        <button type="button" data-testid="refus-archiver" style={ARCHIVER} onClick={archiver}>
+        <button type="button" data-testid="refus-archiver" aria-label={`Archiver : ${titre}${date === '' ? '' : `, ${date}`}`} style={ARCHIVER} onClick={archiver}>
           <IconeArchive />
           Archiver
         </button>
@@ -345,12 +349,6 @@ export function SaisiesRefusees({
       <p style={{ padding: '0 16px 12px', fontSize: 15, color: 'var(--couleur-secondaire)' }}>
         Le serveur n’a pas enregistré ces saisies. Les autres sont parties normalement.
       </p>
-      {lancer !== undefined && (
-        <button type="button" data-testid="refus-tout-archiver" style={TOUT_ARCHIVER} onClick={lancer(affiches.map((r) => r.id))}>
-          <IconeArchive />
-          {affiches.length === 1 ? 'Tout archiver' : `Tout archiver (${String(affiches.length)})`}
-        </button>
-      )}
       {echec && (
         <p role="alert" style={{ padding: '0 16px 12px', fontSize: 15, fontWeight: 700, color: 'var(--couleur-texte-orange)' }}>
           L’archivage n’a pas abouti. Réessayez.
@@ -361,6 +359,13 @@ export function SaisiesRefusees({
           <UnRefus key={r.id} refus={r} maintenant={maintenant} archiver={lancer?.([r.id])} />
         ))}
       </ul>
+      {/* Seulement à partir de deux refus affichés : pour un seul, « Archiver » suffit. */}
+      {lancer !== undefined && affiches.length >= 2 && (
+        <button type="button" data-testid="refus-tout-archiver" style={TOUT_ARCHIVER} onClick={lancer(affiches.map((r) => r.id))}>
+          <IconeArchive />
+          {`Tout archiver (${String(affiches.length)})`}
+        </button>
+      )}
       {restants > 0 && (
         <button
           type="button"
