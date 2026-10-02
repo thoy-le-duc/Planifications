@@ -59,6 +59,7 @@ const app = creerApp({
 });
 
 // Délai court de lecture du corps (T10f) : un client muet ne garde pas une connexion 300 s.
-creerServeur({ fetch: app.fetch }).listen(config.port, () => {
+// Même journal (T10p) : un corps de réponse en flux qui échoue y est décrit, jamais sur la console.
+creerServeur({ fetch: app.fetch, journal }).listen(config.port, () => {
   console.log(`API à l'écoute sur http://localhost:${String(config.port)}`);
 });
