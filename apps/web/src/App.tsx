@@ -14,7 +14,7 @@
  * PowerSync s'il y a une base à ouvrir), la garde ouverte pour les écrans et la ferme à la
  * déconnexion, avant l'effacement. Les écrans reçoivent la ferme par ContexteFerme.
  */
-import { useContext, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactElement } from 'react';
 import { lireSession, stockageNavigateur, surveillerSession, type SessionConnexion } from './connexion/session.ts';
 import './connexion/connexion.css';
 import { ContexteFerme } from './donnees/contexte.ts';
@@ -112,11 +112,14 @@ function attente(base: EtatDonnees['base'], montrera: string): string {
       : 'Ouverture des données de ce téléphone…';
 }
 
-/** Un écran chargé à la demande sur la ferme du contexte (fournie par la coquille). */
-function OngletFerme({ base, ecran, montrera }: { readonly base: EtatDonnees['base']; readonly ecran: typeof planches; readonly montrera: string }) {
+/**
+ * Un écran chargé à la demande sur la ferme du contexte (fournie par la coquille) : `ecran` le
+ * dessine sur la ferme ouverte.
+ */
+function OngletFerme({ base, ecran, montrera }: { readonly base: EtatDonnees['base']; readonly ecran: (f: FermeOuverte) => ReactElement; readonly montrera: string }) {
   const ouverte = useContext(ContexteFerme);
   if (ouverte === null) return <p className="attente">{attente(base, montrera)}</p>;
-  return <ecran.Composant key={ouverte.fermeId} porte={ouverte.porte} fermeId={ouverte.fermeId} />;
+  return ecran(ouverte);
 }
 
 /**
@@ -239,8 +242,10 @@ export function App() {
     // son plan se prépare (avant même le rendu) : un tap sur « Planches » l'affiche tout de suite.
     const planches = chargerPlanches();
     // Aujourd'hui, premier écran : son code se charge aussi pendant que la base s'ouvre, et la
-    // journée se lit dès la ferme connue.
+    // journée se lit dès la ferme connue. T13d : chargé par `precharger`, l'écran (et son
+    // instantané) se dessine dans le même rendu que la ferme ouverte, sans rendu de plus.
     const ecranDuJour = chargerAujourdhui();
+    void aujourdhui.precharger();
     let prechargee: FermeOuverte | null = null;
     const surEtat = (e: EtatDonnees) => {
       if (fermee) return;
@@ -336,9 +341,14 @@ export function App() {
           {onglet === 'ferme' ? (
             <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} etatBase={donnees.base} />
           ) : onglet === 'planches' ? (
-            <OngletFerme base={donnees.base} ecran={planches} montrera="le plan s’affichera" />
+            <OngletFerme base={donnees.base} ecran={(f) => <planches.Composant key={f.fermeId} porte={f.porte} fermeId={f.fermeId} />} montrera="le plan s’affichera" />
           ) : onglet === 'aujourdhui' ? (
-            <OngletFerme base={donnees.base} ecran={aujourdhui} montrera="les tâches du jour s’afficheront" />
+            <OngletFerme
+              base={donnees.base}
+              // T13d : l'utilisateur de la session, pour l'instantané de la journée.
+              ecran={(f) => <aujourdhui.Composant key={f.fermeId} porte={f.porte} fermeId={f.fermeId} utilisateurId={session.utilisateurId} />}
+              montrera="les tâches du jour s’afficheront"
+            />
           ) : (
             <p className="attente">{BIENTOT[onglet]}</p>
           )}
