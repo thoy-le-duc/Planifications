@@ -34,10 +34,12 @@ function lireInstant(valeur: unknown): Date | null {
   if (typeof valeur !== 'string') return null;
   const m = INSTANT_ISO.exec(valeur);
   if (m === null) return null;
-  const [annee, mois, jour, heure, minute, seconde, decalageH, decalageM] = m.slice(1).map((x) => (x === undefined ? 0 : Number(x)));
-  const calendrier = new Date(Date.UTC(annee ?? 0, (mois ?? 0) - 1, jour ?? 0));
-  if (calendrier.getUTCFullYear() !== annee || calendrier.getUTCMonth() !== (mois ?? 0) - 1 || calendrier.getUTCDate() !== jour) return null;
-  if ((heure ?? 0) > 23 || (minute ?? 0) > 59 || (seconde ?? 0) > 59 || (decalageH ?? 0) > 23 || (decalageM ?? 0) > 59) return null;
+  // Groupes absents (secondes, décalage de « Z ») : 0.
+  const champ = (i: number): number => Number(m[i] ?? '0');
+  const [annee, mois, jour] = [champ(1), champ(2), champ(3)];
+  const calendrier = new Date(Date.UTC(annee, mois - 1, jour));
+  if (calendrier.getUTCFullYear() !== annee || calendrier.getUTCMonth() !== mois - 1 || calendrier.getUTCDate() !== jour) return null;
+  if (champ(4) > 23 || champ(5) > 59 || champ(6) > 59 || champ(7) > 23 || champ(8) > 59) return null;
   const date = new Date(valeur);
   return Number.isNaN(date.getTime()) ? null : date;
 }
