@@ -83,6 +83,8 @@ test('« Fait » reste après rechargement ; « Réinitialiser la démo » la fa
   await test.step('« Fait » : la tâche part de la liste', async () => {
     await tache(page, cle).getByRole('button', { name: /^Marquer fait/ }).click();
     await expect(tache(page, cle)).toHaveCount(0);
+    // Attendre la fin de l’écriture (bandeau d’annulation) avant de recharger, comme aujourdhui.e2e.ts.
+    await expect(page.getByTestId('saisie-annulable')).toBeVisible();
   });
 
   await test.step('rechargement : la tâche reste faite', async () => {
