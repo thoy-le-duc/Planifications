@@ -1,8 +1,8 @@
 {
-  "maj": "2 octobre 2026, 6 h 50 UTC",
-  "resume": "Cette fenêtre : **des refus de synchro sans jargon (T10j)** — tous les messages affichés dans l'onglet Ferme sont en français simple (« cette saisie existe déjà avec d'autres valeurs », « une information obligatoire manque (quantité) »), le détail technique part dans le journal du serveur sans aucune valeur saisie ; une faille d'injection dans ce journal, trouvée en relecture, est corrigée ; **plus de « Fait » en double sur une relecture tardive (T13e)**. Nouveaux tickets : T10k (culture et quantité de la saisie refusée), T10l (archiver les refus vus), T10m (même règle de journal partout), T13f (deux cas rares de « Fait » en double). Prochains : T13d (ouverture à froid sous 1 s), T10k.",
+  "maj": "2 octobre 2026, 12 h 30 UTC",
+  "resume": "Cette fenêtre : **Aujourd'hui s'ouvre en moins d'une seconde sur une grande ferme (T13d)** — 5,8 s → 0,6 à 0,8 s sur un téléphone moyen, grâce à la dernière journée gardée sur le téléphone, affichée tout de suite puis remplacée par la journée relue ; un « Fait » depuis cette journée gardée revérifie la tâche et ne double jamais rien ; **la carte d'un refus de synchro montre la saisie concernée (T10k)** — culture, date, quantité, sans jamais la note ni rien d'une autre ferme. Question à Théophane : **Q25** (effacer les refus d'une ferme quand on l'a quittée ?). Nouveau ticket T13g (encore plus de marge au lancement). Prochains : T10l, T10m, T13f, T13g.",
   "en_cours": {},
-  "attente": "Pour la mise en ligne : compte Brevo, domaine d'envoi (SPF, DKIM, DMARC), identifiants dans les secrets de production, suivi des ouvertures désactivé dans Brevo ; base de production en locale UTF-8 ; Node de production à la version de `.node-version` (22).",
+  "attente": "Q25 : effacer de son téléphone les refus d'une ferme qu'on a quittée ? Pour la mise en ligne : compte Brevo, domaine d'envoi (SPF, DKIM, DMARC), identifiants dans les secrets de production, suivi des ouvertures désactivé ; base de production en locale UTF-8 ; Node 22.",
   "visuels": [
     {
       "titre": "Plan de culture : nouvelle série",
