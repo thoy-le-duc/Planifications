@@ -9,7 +9,11 @@
  * - Un seul journal pour toute l'API : `DependancesApp.journal` (dependances.ts, T10j), reçu par
  *   creerApp. Le gestionnaire d'erreur de app.ts écrit DANS CE JOURNAL, jamais sur la console.
  * - Chaque entrée est UNE ligne : ni \r, ni \n, ni U+0085, U+2028, U+2029, ni aucun caractère de
- *   contrôle (nettoyage de T10j, `ligneDeJournal` de sync/upload.ts).
+ *   contrôle ou de format (nettoyage de T10j, `ligneDeJournal` de journal.ts, testé dans
+ *   journal.test.ts).
+ * - L'entrée cite le motif de la route (`c.req.routePath`, ex. /fermes/:id ou /sync/*), jamais le
+ *   chemin brut de la requête, que le client choisit.
+ * - Un journal en panne (qui lève) ne change pas la réponse : 500 ou 503 quand même.
  * - Erreur inattendue (500) : journalisée par sa classe (nom du constructeur), son code s'il en a
  *   un (SQLSTATE de Postgres ; pour une DrizzleQueryError, celui de sa cause) et sa pile, JAMAIS
  *   par son message, ni par les champs de l'erreur qui recopient la saisie (detail, params,
@@ -37,6 +41,7 @@ import ts from 'typescript';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { creerApp } from './app.ts';
 import { genererCleSignature, type TrousseauCles } from './auth/cles.ts';
+import { emettreJetonAcces } from './auth/jetons.ts';
 import { ErreurEnvoiCourriel, type ExpediteurCourriel } from './auth/courriel.ts';
 
 /** Valeur piégée : saisie du client, donnée personnelle et fausse entrée de journal. */
@@ -220,15 +225,124 @@ describe('T10m — échec d’envoi du courriel', () => {
   });
 });
 
-// ── Aucun console.* dans le code de production ──────────────────────────────────────────────
+// ── Relecture T10m : chemin de la requête, journal en panne ─────────────────────────────────
+
+describe('T10m (relecture) — le journal cite le motif de la route, jamais le chemin brut', () => {
+  /** Jeton d'accès valide : la garde va jusqu'à la base, qui lève. */
+  async function jeton(): Promise<string> {
+    return emettreJetonAcces({ cles, emetteur: 'https://api.test', audience: 'powersync-test' }, '01890a5d-ac96-774b-bcce-b302099a8057', new Date());
+  }
+
+  /** Base dont toute lecture lève une erreur dont le message cite la saisie. */
+  const baseQuiLeve = (): NodePgDatabase =>
+    ({
+      select: () => {
+        throw new TypeError(PIEGE);
+      },
+      transaction: () => Promise.reject(new TypeError(PIEGE)),
+    }) as unknown as NodePgDatabase;
+
+  async function appeler(methode: string, chemin: string): Promise<Essai> {
+    const lignes: string[] = [];
+    const surConsole: string[] = [];
+    const capter = (...args: unknown[]): void => {
+      surConsole.push(args.map(String).join(' '));
+    };
+    vi.spyOn(console, 'error').mockImplementation(capter);
+    vi.spyOn(console, 'log').mockImplementation(capter);
+    const app = creerApp({
+      db: baseQuiLeve(),
+      expediteur: expediteurMuet,
+      cles,
+      emetteur: 'https://api.test',
+      audience: 'powersync-test',
+      journal: (ligne) => {
+        lignes.push(ligne);
+      },
+    });
+    const res = await app.request(chemin, {
+      method: methode,
+      headers: { authorization: `Bearer ${await jeton()}`, 'content-type': 'application/json' },
+      ...(methode === 'POST' ? { body: '{}' } : {}),
+    });
+    return { status: res.status, corps: await res.text(), lignes, console: surConsole };
+  }
+
+  const CHEMINS: readonly (readonly [string, string, string])[] = [
+    ['GET', '/fermes/Jean Dupont tomate', '/fermes'],
+    ['GET', '/fermes/Jean%20Dupont%20tomate', '/fermes'],
+    ['GET', '/fermes/jean%40exemple.fr', '/fermes'],
+    ['GET', '/fermes/jean%0A%5Bsynchro%5D%20tomate', '/fermes'],
+    ['POST', `/sync/${encodeURIComponent('abc\u202Etomate jean')}`, '/sync'],
+    ['POST', '/sync/upload/../jean%E2%80%AEtomate', '/sync'],
+  ];
+
+  for (const [methode, chemin, motif] of CHEMINS) {
+    it(`${methode} ${chemin} : 500, l'entrée cite ${motif}…, ni « jean », ni « tomate »`, async () => {
+      const essai = await appeler(methode, chemin);
+      expect(essai.status).toBe(500);
+      expect(essai.lignes.length).toBeGreaterThan(0);
+      for (const ligne of essai.lignes) {
+        expect(ligne).not.toMatch(SAUT_OU_CONTROLE);
+        expect(ligne).not.toMatch(/\p{Cf}/u);
+        expect(ligne.toLowerCase()).not.toContain('jean');
+        expect(ligne).not.toContain('tomate');
+        expect(ligne).not.toContain('Dupont');
+      }
+      expect(essai.lignes.join(' ')).toContain(motif);
+      expect(essai.console).toEqual([]);
+    });
+  }
+});
+
+describe('T10m (relecture) — journal en panne : la réponse part quand même', () => {
+  function appQuiJournaliseMal(db: NodePgDatabase, expediteur: ExpediteurCourriel = expediteurMuet): ReturnType<typeof creerApp> {
+    return creerApp({
+      db,
+      expediteur,
+      cles,
+      emetteur: 'https://api.test',
+      audience: 'powersync-test',
+      journal: () => {
+        throw new Error('sortie d’erreur fermée');
+      },
+    });
+  }
+  const requete = { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'jean@exemple.fr' }) };
+
+  it('erreur inattendue : 500', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const res = await appQuiJournaliseMal(fausseBase(() => Promise.reject(new TypeError(PIEGE)))).request('/auth/code', requete);
+    expect(res.status).toBe(500);
+    expect(await res.text()).not.toContain('tomate');
+  });
+
+  it('échec d’envoi du courriel : 503 envoi_impossible', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const expediteur: ExpediteurCourriel = {
+      envoyer: () => Promise.reject(new ErreurEnvoiCourriel('Relais SMTP smtp.exemple.fr:587 : courriel non envoyé (code EAUTH).')),
+    };
+    const res = await appQuiJournaliseMal(
+      fausseBase(() => Promise.resolve(null)),
+      expediteur,
+    ).request('/auth/code', requete);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ erreur: 'envoi_impossible' });
+  });
+});
+
+// ── Aucune écriture directe sur la console ni sur les sorties dans le code de production ────
 
 /**
- * Appels `console.<méthode>` autorisés, par fichier (chemin relatif à apps/api/src) :
+ * Écritures directes autorisées, par fichier (chemin relatif à apps/api/src). Formes repérées :
+ * `console.x` (et `globalThis.console.x`, `global.console.x`), `console[…]`, alias de `console`,
+ * `process.stderr.write`, `process.stdout.write`. Nom donné : « error », « log »… pour la console,
+ * « stderr.write » / « stdout.write » pour les sorties.
  * - index.ts : point d'entrée ; il fournit les sorties par défaut (configuration invalide avant
- *   que le journal existe, « à l'écoute »), tout console.* y est permis ;
+ *   que le journal existe, « à l'écoute »), tout y est permis ;
  * - generer-cles.ts : outil en ligne de commande qui écrit une clé sur la sortie standard ;
- * - dependances.ts : la valeur par défaut du journal (`deps.journal ?? console.error`), seul
- *   console.error ;
+ * - dependances.ts : la sortie par défaut du journal (`journalParDefaut`), console.error ou
+ *   process.stderr.write ;
  * - auth/courriel.ts : la sortie par défaut de `expediteurConsole` (console.log), qui n'est pas
  *   un journal mais l'affichage du courriel lui-même en développement (sur demande explicite,
  *   jamais en production).
@@ -236,8 +350,8 @@ describe('T10m — échec d’envoi du courriel', () => {
  */
 const AUTORISES: Readonly<Record<string, readonly string[] | 'tout'>> = {
   'index.ts': 'tout',
-  'generer-cles.ts': ['log'],
-  'dependances.ts': ['error'],
+  'generer-cles.ts': ['log', 'stdout.write'],
+  'dependances.ts': ['error', 'stderr.write'],
   'auth/courriel.ts': ['log'],
 };
 
@@ -257,18 +371,54 @@ function fichiersProduction(dossier: string): string[] {
   return trouves;
 }
 
-/** Chaque `console.<méthode>` du code (commentaires et chaînes exclus) : « méthode:ligne ». */
-function usagesConsole(chemin: string): { readonly methode: string; readonly ligne: number }[] {
-  const source = ts.createSourceFile(chemin, readFileSync(chemin, 'utf8'), ts.ScriptTarget.Latest, true);
+const GLOBAUX = new Set(['globalThis', 'global', 'window', 'self']);
+
+/** `console`, `globalThis.console`, `global.console`… */
+function estConsole(noeud: ts.Node): boolean {
+  if (ts.isIdentifier(noeud)) return noeud.text === 'console';
+  if (ts.isPropertyAccessExpression(noeud)) return noeud.name.text === 'console' && ts.isIdentifier(noeud.expression) && GLOBAUX.has(noeud.expression.text);
+  if (ts.isElementAccessExpression(noeud)) {
+    return ts.isStringLiteralLike(noeud.argumentExpression) && noeud.argumentExpression.text === 'console' && ts.isIdentifier(noeud.expression) && GLOBAUX.has(noeud.expression.text);
+  }
+  return false;
+}
+
+/** `process.stderr` / `process.stdout` (aussi via globalThis.process) : « stderr » ou « stdout », sinon null. */
+function sortieProcessus(noeud: ts.Node): string | null {
+  if (!ts.isPropertyAccessExpression(noeud) || (noeud.name.text !== 'stderr' && noeud.name.text !== 'stdout')) return null;
+  const p = noeud.expression;
+  const estProcess =
+    (ts.isIdentifier(p) && p.text === 'process') ||
+    (ts.isPropertyAccessExpression(p) && p.name.text === 'process' && ts.isIdentifier(p.expression) && GLOBAUX.has(p.expression.text));
+  return estProcess ? noeud.name.text : null;
+}
+
+/** Chaque écriture directe du code (commentaires et chaînes exclus) : méthode et ligne. */
+function ecrituresDirectes(nom: string, texte: string): { readonly methode: string; readonly ligne: number }[] {
+  const source = ts.createSourceFile(nom, texte, ts.ScriptTarget.Latest, true);
   const usages: { methode: string; ligne: number }[] = [];
+  const noter = (methode: string, noeud: ts.Node): void => {
+    usages.push({ methode, ligne: source.getLineAndCharacterOfPosition(noeud.getStart()).line + 1 });
+  };
   const visiter = (noeud: ts.Node): void => {
-    if (ts.isPropertyAccessExpression(noeud) && ts.isIdentifier(noeud.expression) && noeud.expression.text === 'console') {
-      usages.push({ methode: noeud.name.text, ligne: source.getLineAndCharacterOfPosition(noeud.getStart()).line + 1 });
-    } else if (ts.isElementAccessExpression(noeud) && ts.isIdentifier(noeud.expression) && noeud.expression.text === 'console') {
-      usages.push({ methode: '[…]', ligne: source.getLineAndCharacterOfPosition(noeud.getStart()).line + 1 });
-    } else if (ts.isIdentifier(noeud) && noeud.text === 'console' && !ts.isPropertyAccessExpression(noeud.parent) && !ts.isElementAccessExpression(noeud.parent)) {
-      // `const c = console`, `{ error } = console`… : contournement, interdit aussi.
-      usages.push({ methode: '(alias)', ligne: source.getLineAndCharacterOfPosition(noeud.getStart()).line + 1 });
+    const parent = noeud.parent as ts.Node | undefined;
+    if (ts.isPropertyAccessExpression(noeud) && estConsole(noeud.expression)) {
+      noter(noeud.name.text, noeud);
+    } else if (ts.isElementAccessExpression(noeud) && estConsole(noeud.expression)) {
+      noter('[…]', noeud);
+    } else if (ts.isPropertyAccessExpression(noeud) && sortieProcessus(noeud.expression) !== null) {
+      noter(`${String(sortieProcessus(noeud.expression))}.${noeud.name.text}`, noeud);
+    } else if (sortieProcessus(noeud) !== null && parent !== undefined && !(ts.isPropertyAccessExpression(parent) && parent.expression === noeud)) {
+      // `const e = process.stderr` : contournement, interdit aussi.
+      noter(`${String(sortieProcessus(noeud))} (alias)`, noeud);
+    } else if (
+      estConsole(noeud) &&
+      parent !== undefined &&
+      !((ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent)) && parent.expression === noeud) &&
+      !(ts.isPropertyAccessExpression(parent) && parent.name === noeud && estConsole(parent))
+    ) {
+      // `const c = console`, `{ error } = globalThis.console`… : contournement, interdit aussi.
+      noter('(alias)', noeud);
     }
     ts.forEachChild(noeud, visiter);
   };
@@ -276,7 +426,7 @@ function usagesConsole(chemin: string): { readonly methode: string; readonly lig
   return usages;
 }
 
-describe('T10m — un seul journal : pas de console.* dans le code de production', () => {
+describe('T10m — un seul journal : pas d’écriture directe dans le code de production', () => {
   it('le balayage trouve bien les fichiers de production (témoin)', () => {
     const fichiers = fichiersProduction(RACINE).map((f) => relative(RACINE, f).split('\\').join('/'));
     expect(fichiers).toContain('app.ts');
@@ -285,16 +435,96 @@ describe('T10m — un seul journal : pas de console.* dans le code de production
     expect(fichiers.some((f) => f.startsWith('sync/test/'))).toBe(false);
   });
 
-  it('aucun appel console.* hors des points d’entrée autorisés', () => {
+  it('le repérage voit toutes les formes, et ignore commentaires et chaînes (témoin)', () => {
+    const texte = [
+      'console.error(a);',
+      'globalThis.console.warn(a);',
+      'global.console.log(a);',
+      "globalThis['console'].info(a);",
+      "console['debug'](a);",
+      'const c = console;',
+      'process.stderr.write(a);',
+      'process.stdout.write(a);',
+      'globalThis.process.stderr.write(a);',
+      'const s = process.stderr;',
+      '// console.error(a); process.stderr.write(a)',
+      "const t = 'console.log(a) process.stdout.write(a)';",
+      'monJournal.error(a); process.exit(1); process.on("x", f);',
+    ].join('\n');
+    expect(ecrituresDirectes('essai.ts', texte).map((u) => `${String(u.ligne)} ${u.methode}`)).toEqual([
+      '1 error',
+      '2 warn',
+      '3 log',
+      '4 info',
+      '5 […]',
+      '6 (alias)',
+      '7 stderr.write',
+      '8 stdout.write',
+      '9 stderr.write',
+      '10 stderr (alias)',
+    ]);
+  });
+
+  it('aucune écriture directe hors des points d’entrée autorisés', () => {
     const interdits: string[] = [];
     for (const chemin of fichiersProduction(RACINE)) {
       const nom = relative(RACINE, chemin).split('\\').join('/');
       const permis = AUTORISES[nom];
       if (permis === 'tout') continue;
-      for (const { methode, ligne } of usagesConsole(chemin)) {
-        if (permis?.includes(methode) !== true) interdits.push(`${nom}:${String(ligne)} console.${methode}`);
+      for (const { methode, ligne } of ecrituresDirectes(chemin, readFileSync(chemin, 'utf8'))) {
+        if (permis?.includes(methode) !== true) interdits.push(`${nom}:${String(ligne)} ${methode}`);
       }
     }
     expect(interdits).toEqual([]);
   });
+});
+
+// ── index.ts : les erreurs hors requête passent aussi par le journal nettoyé ─────────────────
+
+/**
+ * index.ts n'est pas testable sans lancer le processus (configuration, écoute) : test statique.
+ * Attendu : `pool.on('error', …)`, `process.on('unhandledRejection', …)` et
+ * `process.on('uncaughtException', …)` sont branchés, et chaque gestionnaire décrit l'erreur par
+ * `decrireErreur` et l'écrit par le journal (`journal(…)`, la variable qui reçoit
+ * journalParDefaut), jamais par console.* ni par le message brut.
+ */
+describe('T10m (relecture) — index.ts branche les erreurs hors requête sur le journal', () => {
+  const texte = readFileSync(join(RACINE, 'index.ts'), 'utf8');
+  const source = ts.createSourceFile('index.ts', texte, ts.ScriptTarget.Latest, true);
+
+  /** Texte du gestionnaire de `<cible>.on('<evenement>', gestionnaire)`, ou null. */
+  function gestionnaire(cible: string, evenement: string): string | null {
+    let trouve: string | null = null;
+    const visiter = (noeud: ts.Node): void => {
+      if (
+        trouve === null &&
+        ts.isCallExpression(noeud) &&
+        ts.isPropertyAccessExpression(noeud.expression) &&
+        (noeud.expression.name.text === 'on' || noeud.expression.name.text === 'once') &&
+        noeud.expression.expression.getText(source) === cible &&
+        noeud.arguments.length >= 2
+      ) {
+        const [nom, rappel] = noeud.arguments;
+        if (nom !== undefined && rappel !== undefined && ts.isStringLiteralLike(nom) && nom.text === evenement) trouve = rappel.getText(source);
+      }
+      ts.forEachChild(noeud, visiter);
+    };
+    visiter(source);
+    return trouve;
+  }
+
+  for (const [cible, evenement] of [
+    ['pool', 'error'],
+    ['process', 'unhandledRejection'],
+    ['process', 'uncaughtException'],
+  ] as const) {
+    it(`${cible}.on('${evenement}') écrit decrireErreur(…) dans le journal`, () => {
+      const corps = gestionnaire(cible, evenement);
+      expect(corps, `${cible}.on('${evenement}', …) absent de index.ts`).not.toBeNull();
+      expect(corps).toMatch(/\bjournal\s*\(/);
+      expect(corps).toContain('decrireErreur(');
+      expect(corps).not.toMatch(/\bconsole\b/);
+      expect(corps).not.toMatch(/\.message\b/);
+    });
+  }
 });
