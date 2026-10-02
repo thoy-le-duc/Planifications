@@ -70,5 +70,9 @@ jobs:
         run: pnpm --filter @planif/web exec playwright install --with-deps chromium
       - name: Budgets de temps d'affichage et hors-ligne
         run: pnpm e2e
+      - name: Build de la démo en ligne (Vercel)
+        run: pnpm build:demo
+      - name: Démo en ligne de bout en bout (sans serveur, hors ligne)
+        run: pnpm e2e:demo
       - name: Synchro de bout en bout (Postgres, PowerSync, API, deux navigateurs)
         run: pnpm e2e:synchro
