@@ -26,6 +26,13 @@ Piste complémentaire du développeur de T13b : sur le serveur, `origine_id` vau
 
 ## Critères d'acceptation
 
-- [ ] Grand jeu de T13b, CPU ×4 : Aujourd'hui affiché en moins de 1 s à froid (médiane de 5), mesure e2e redevenue bloquante.
-- [ ] Un instantané d'un autre jour, d'une autre ferme ou d'un autre utilisateur n'est jamais montré (tests).
-- [ ] « Fait » depuis l'instantané : la saisie part bien, et la journée relue la confirme (test).
+- [x] Grand jeu de T13b, CPU ×4 : Aujourd'hui affiché en moins de 1 s à froid (médiane de 5), mesure e2e redevenue bloquante.
+- [x] Un instantané d'un autre jour, d'une autre ferme ou d'un autre utilisateur n'est jamais montré (tests).
+- [x] « Fait » depuis l'instantané : la saisie part bien, et la journée relue la confirme (test).
+
+## Décisions (chef, 2026-10-02)
+
+- Instantané dans localStorage, une clé par utilisateur ; lu de façon synchrone au premier rendu ; il ne contient que des textes prêts à afficher (≈ 21 Ko sur la grande ferme, 128 Kio au plus) ; jamais montré d'un autre jour, d'une autre ferme ou d'un autre utilisateur ; effacé à la déconnexion ; jamais réécrit si la session n'est plus celle de l'utilisateur.
+- « Fait » depuis l'instantané : lecture ciblée de la tâche avant d'écrire ; si elle a été faite ailleurs ou si elle a changé, rien n'est écrit et un message le dit.
+- « Noter une récolte » attend la journée relue.
+- L'instantané s'affiche une fois la base ouverte : la marge sous 1 s dépend de l'ouverture de la base (≈ 600 à 800 ms). Suite : T13g.

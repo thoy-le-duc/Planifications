@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T13d : Aujourd'hui s'ouvre en moins d'une seconde
+
+- **Fait** : au lancement, Aujourd'hui affiche tout de suite la dernière journée gardée sur le téléphone, puis la remplace par la journée relue ; sur la grande ferme (3 000 séries), CPU ×4, l'ouverture à froid passe de 5,8 s à 0,6–0,8 s. « Fait » depuis cette journée gardée relit d'abord la tâche : rien n'est écrit si elle a été faite ailleurs ou a changé, et un message le dit.
+- **Décidé** : instantané par utilisateur, jamais montré d'un autre jour, d'une autre ferme ou d'un autre utilisateur, effacé à la déconnexion, limité à ce que l'écran affiche (≈ 21 Ko). Une relecture, rien de bloquant ; trois retouches faites (écriture différente de l'affichage, message « déjà notée », session vérifiée avant d'écrire).
+- **Bloquant** : rien. Suite : T13g (afficher avant la base pour plus de marge, « Fait » en file au lancement). Le JS de démarrage reste à 70,8 Kio pour 71.
+
 ## 2026-10-02 — T10k : la saisie refusée reconnaissable
 
 - **Fait** : la carte d'un refus montre maintenant la saisie concernée — « Récolte · Tomate Cœur de bœuf · saisie du 28 sept. · 12,5 kg » ; le serveur calcule ce court résumé (type, culture, date, quantité, unité), sans jamais la note ni les données brutes, et il descend au seul téléphone de l'auteur.
