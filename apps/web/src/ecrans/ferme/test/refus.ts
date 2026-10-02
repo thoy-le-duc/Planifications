@@ -179,6 +179,34 @@ export const parametresRefusArchive = (l: LigneRefusLocale, archiveLe: string | 
 /** Archivage arrivé par la synchro (autre téléphone de l'utilisateur). */
 export const SQL_ARCHIVER_PAR_SYNCHRO = 'UPDATE refus_synchro SET archive_le = ? WHERE id = ?';
 
+/**
+ * T10n (docs/backlog/T10n-refus-desarchiver.md) : annuler un archivage. Rien n'est écrit tant
+ * qu'on peut annuler (aucune règle serveur nouvelle).
+ *
+ *   - Après « Archiver » (une carte) ou « Tout archiver (N) », les refus concernés disparaissent
+ *     TOUT DE SUITE de la liste (le titre se recompte) et un bandeau data-testid="refus-annulation",
+ *     role="status", s'affiche : « N refus archivé(s) » (« 1 refus archivé », « 3 refus archivés »)
+ *     avec un bouton data-testid="refus-annuler", texte « Annuler », 56 px de haut au moins, dont le
+ *     nom accessible (aria-label, sinon le texte) commence par « Annuler » et parle d'archivage
+ *     (ex. « Annuler l’archivage de 3 refus »). Le bandeau reste visible même quand plus aucune
+ *     carte de refus n'est affichée (la carte peut disparaître, pas le bandeau).
+ *   - Le bandeau reste DELAI_ANNULATION_ARCHIVAGE_MS (exporté par Refus.tsx sous le même nom).
+ *   - « Annuler » pendant le délai : les refus réapparaissent (même ordre), le bandeau disparaît,
+ *     porte.archiverRefus n'est JAMAIS appelée, archive_le reste nul.
+ *   - Fin du délai sans « Annuler » : porte.archiverRefus appelée UNE fois avec tous les ids en
+ *     attente ; le bandeau disparaît ; les refus ne reviennent pas.
+ *   - Un second archivage pendant le délai rejoint le même bandeau (« 3 refus archivés ») et
+ *     repousse le délai (DELAI_ANNULATION_ARCHIVAGE_MS à partir du dernier tap) ; « Annuler »
+ *     rétablit tout.
+ *   - Quitter l'écran (onglet changé, démontage) pendant le délai : l'archivage en attente est écrit
+ *     tout de suite, une seule fois (pas perdu, pas doublé à la fin du délai).
+ *   - Page fermée ou mise en arrière-plan pendant le délai (pagehide sur window, ou visibilitychange
+ *     avec document.visibilityState === 'hidden') : écrit tout de suite aussi, une seule fois.
+ */
+export const DELAI_ANNULATION_ARCHIVAGE_MS = 5_000;
+export const TESTID_BANDEAU_ANNULATION = 'refus-annulation';
+export const TESTID_ANNULER_ARCHIVAGE = 'refus-annuler';
+
 /** Message tel que le serveur l'écrit (upload.ts : précision ajoutée après « : »). */
 export function messageServeur(motif: CodeMotif, precision?: string): string {
   return precision === undefined ? MESSAGES_SERVEUR[motif] : `${MESSAGES_SERVEUR[motif]} : ${precision}.`;

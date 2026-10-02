@@ -15,7 +15,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, createElement, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { creerPorte, SCHEMA_LOCAL, type PorteDonnees } from '@planif/sync';
 import type { Id } from '@planif/core';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
@@ -24,6 +24,7 @@ import { ContexteFerme } from '../../donnees/contexte.ts';
 import type { EtatBase, PoigneeDonnees } from '../../donnees/etat-appli.ts';
 import {
   AUTRE_UTILISATEUR,
+  DELAI_ANNULATION_ARCHIVAGE_MS,
   FERME_REFUS,
   MARQUE_REFUS_AFFICHES_ATTENDUE,
   MESSAGES_SERVEUR,
@@ -35,6 +36,8 @@ import {
   SQL_INSERER_REFUS,
   SQL_INSERER_REFUS_ARCHIVE,
   SQL_INSERER_REFUS_RESUME,
+  TESTID_ANNULER_ARCHIVAGE,
+  TESTID_BANDEAU_ANNULATION,
   UTILISATEUR_REFUS,
   type LigneRefusLocale,
   type ResumeSaisieLocal,
@@ -97,6 +100,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // T10n : un test peut finir sous faux minuteurs.
+  vi.useRealTimers();
   act(() => {
     racine.unmount();
   });
@@ -483,16 +488,27 @@ describe('T10l : archiver un refus vu', () => {
     });
   }
 
+  /** T10n : laisse passer le bandeau d'annulation (faux minuteurs déjà en place). */
+  async function passerDelaiAnnulation(): Promise<void> {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DELAI_ANNULATION_ARCHIVAGE_MS + 100);
+    });
+  }
+
   it('« Archiver » sur une carte : ce refus disparaît, archivé dans la base (rien de supprimé), les autres restent', async () => {
     recevoir(refus({ id: 'r-1', cree_le: '2025-09-14T12:00:00.000Z' }), refus({ id: 'r-2', cree_le: '2025-09-15T12:00:00.000Z' }));
     await rendre();
     await attendre(() => elementsRefus().length === 2, 'deux refus affichés');
     expect(texte(region())).toMatch(/2 saisies refusées/);
 
+    // T10n : l'écriture n'a lieu qu'à la fin du bandeau « Annuler » ; minuteurs simulés pour le passer.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     await taper(archiverUn('r-2'));
     await attendre(() => elementsRefus().length === 1, 'le refus archivé disparaît');
     expect(ids()).toEqual(['r-1']);
     expect(texte(region()), 'le titre se recompte').toMatch(/1 saisie refusée/);
+    await passerDelaiAnnulation();
+    await attendre(() => archiveLe('r-2') !== null, 'archivé à la fin du bandeau');
     expect(archiveLe('r-2'), 'archive_le posé, en instant ISO').toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z$/);
     expect(archiveLe('r-1'), 'l’autre refus n’est pas archivé').toBeNull();
     expect(base.lireDirect<{ n: number }>('SELECT count(*) AS n FROM refus_synchro')[0]?.n, 'rien de supprimé').toBe(2);
@@ -516,9 +532,13 @@ describe('T10l : archiver un refus vu', () => {
     await rendre();
     await attendre(() => elementsRefus().length === 20, '20 refus affichés d’abord');
 
+    // T10n : l'écriture n'a lieu qu'à la fin du bandeau « Annuler » ; minuteurs simulés pour le passer.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     await taper(toutArchiver());
     await attendre(() => elementsRefus().length === 5, `les 5 refus qui n’étaient pas affichés restent (affichés : ${String(elementsRefus().length)})`);
     expect(ids()).toEqual(lignes.slice(20).map((l) => l.id));
+    await passerDelaiAnnulation();
+    await attendre(() => archiveLe(lignes[0]?.id ?? '') !== null, 'archivés à la fin du bandeau');
     for (const l of lignes.slice(0, 20)) expect(archiveLe(l.id), `${l.id} archivé`).not.toBeNull();
     for (const l of lignes.slice(20)) expect(archiveLe(l.id), `${l.id} pas encore vu : pas archivé`).toBeNull();
   });
@@ -635,6 +655,218 @@ describe('T10l : archiver un refus vu', () => {
       const a = action(elementRefus('r-archivage'));
       expect(a).toMatch(/refus n[’']a pas pu être archivé/i);
       expect(a).not.toMatch(/responsable de la ferme/i);
+    });
+  });
+
+  describe('T10n : annuler un archivage', () => {
+    let archiverRefus: MockInstance<PorteDonnees['archiverRefus']>;
+
+    beforeEach(() => {
+      // Appelle la vraie porte : l'écriture arrive dans la base mémoire.
+      archiverRefus = vi.spyOn(porte, 'archiverRefus');
+    });
+
+    /** Fait passer `ms` de temps simulé (faux minuteurs) et laisse React dessiner. */
+    async function avancer(ms: number): Promise<void> {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    }
+
+    const nomAccessible = (b: HTMLElement): string => (b.getAttribute('aria-label') ?? texte(b)).replace(/\s+/g, ' ').trim();
+    const bandeau = (): HTMLElement | null => conteneur.querySelector<HTMLElement>(`[data-testid="${TESTID_BANDEAU_ANNULATION}"]`);
+    const annuler = (): HTMLButtonElement => {
+      const b = bouton(conteneur, TESTID_ANNULER_ARCHIVAGE, /Annuler/, '« Annuler »');
+      const nom = nomAccessible(b);
+      expect(nom, `« Annuler » : nom accessible clair (${nom})`).toMatch(/^Annuler\b/);
+      expect(nom, `« Annuler » : le nom dit ce qu’on annule (${nom})`).toMatch(/archiv/i);
+      return b;
+    };
+    /** Ids passés à archiverRefus, appel par appel, triés. */
+    const appels = (): string[][] => archiverRefus.mock.calls.map(([idsArchives]) => [...idsArchives].sort());
+
+    /** Trois refus affichés (r-3 le plus récent), puis faux minuteurs. */
+    async function troisRefus(): Promise<void> {
+      recevoir(
+        refus({ id: 'r-1', cree_le: '2025-09-14T12:00:00.000Z' }),
+        refus({ id: 'r-2', cree_le: '2025-09-15T12:00:00.000Z' }),
+        refus({ id: 'r-3', cree_le: '2025-09-16T12:00:00.000Z' }),
+      );
+      await rendre();
+      await attendre(() => elementsRefus().length === 3, 'trois refus affichés');
+      await laisserFiler();
+      expect(bandeau(), 'pas de bandeau avant tout archivage').toBeNull();
+      vi.useFakeTimers();
+    }
+
+    it('le délai est exporté par Refus.tsx, 5 s', async () => {
+      const CHEMIN_REFUS = './Refus.tsx';
+      const module = (await import(/* @vite-ignore */ CHEMIN_REFUS)) as { DELAI_ANNULATION_ARCHIVAGE_MS?: number };
+      expect(module.DELAI_ANNULATION_ARCHIVAGE_MS).toBe(DELAI_ANNULATION_ARCHIVAGE_MS);
+      expect(DELAI_ANNULATION_ARCHIVAGE_MS).toBe(5_000);
+    });
+
+    it('« Tout archiver » : les refus disparaissent tout de suite, bandeau « 3 refus archivés — Annuler » en role="status", rien d’écrit', async () => {
+      await troisRefus();
+      await taper(toutArchiver());
+      await avancer(0);
+      expect(elementsRefus(), 'les refus archivés disparaissent tout de suite').toHaveLength(0);
+      const b = bandeau();
+      expect(b, 'le bandeau reste, même quand plus aucune carte n’est affichée').not.toBeNull();
+      expect(b?.getAttribute('role'), 'bandeau annoncé (role="status")').toBe('status');
+      expect(texte(b)).toMatch(/3 refus archivés/);
+      expect(texte(b)).toMatch(/Annuler/);
+      annuler();
+      expect(archiverRefus, 'rien n’est écrit tant qu’on peut annuler').not.toHaveBeenCalled();
+      expect(archiveLe('r-1')).toBeNull();
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS - 100);
+      expect(archiverRefus, 'toujours rien juste avant la fin du délai').not.toHaveBeenCalled();
+      expect(bandeau(), 'bandeau encore là juste avant la fin du délai').not.toBeNull();
+    });
+
+    it('« Tout archiver » puis « Annuler » : les refus reviennent, dans le même ordre, et rien n’est jamais écrit', async () => {
+      await troisRefus();
+      await taper(toutArchiver());
+      await avancer(1_000);
+      expect(elementsRefus()).toHaveLength(0);
+      await taper(annuler());
+      await avancer(0);
+      expect(ids(), 'les refus réapparaissent').toEqual(['r-3', 'r-2', 'r-1']);
+      expect(texte(region())).toMatch(/3 saisies refusées/);
+      expect(bandeau(), 'le bandeau disparaît').toBeNull();
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 3);
+      expect(archiverRefus, 'archiverRefus jamais appelée').not.toHaveBeenCalled();
+      for (const id of ['r-1', 'r-2', 'r-3']) expect(archiveLe(id), `${id} pas archivé`).toBeNull();
+      expect(ids(), 'toujours affichés après le délai').toEqual(['r-3', 'r-2', 'r-1']);
+    });
+
+    it('« Archiver » sur une carte : « 1 refus archivé », le titre se recompte ; écrit à la fin du délai, une fois', async () => {
+      await troisRefus();
+      await taper(archiverUn('r-2'));
+      await avancer(0);
+      expect(ids(), 'la carte disparaît tout de suite').toEqual(['r-3', 'r-1']);
+      expect(texte(region()), 'le titre se recompte').toMatch(/2 saisies refusées/);
+      expect(texte(bandeau())).toMatch(/1 refus archivé\b/);
+      expect(texte(bandeau())).not.toMatch(/archivés/);
+      expect(archiverRefus).not.toHaveBeenCalled();
+
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS);
+      await avancer(0);
+      expect(appels(), 'archiverRefus appelée une fois, avec ce refus').toEqual([['r-2']]);
+      expect(archiveLe('r-2'), 'archivé dans la base').not.toBeNull();
+      expect(archiveLe('r-1')).toBeNull();
+      expect(bandeau(), 'le bandeau disparaît à la fin du délai').toBeNull();
+      expect(ids(), 'le refus archivé ne revient pas').toEqual(['r-3', 'r-1']);
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 2);
+      expect(archiverRefus, 'une seule écriture').toHaveBeenCalledTimes(1);
+    });
+
+    it('fin du délai après « Tout archiver » : une seule écriture avec tous les ids', async () => {
+      await troisRefus();
+      await taper(toutArchiver());
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS);
+      await avancer(0);
+      expect(appels()).toEqual([['r-1', 'r-2', 'r-3']]);
+      for (const id of ['r-1', 'r-2', 'r-3']) expect(archiveLe(id), `${id} archivé`).not.toBeNull();
+      expect(elementsRefus()).toHaveLength(0);
+      expect(bandeau()).toBeNull();
+    });
+
+    it('un second archivage pendant le délai rejoint le bandeau (« 3 refus archivés ») et repousse le délai ; « Annuler » rétablit tout', async () => {
+      await troisRefus();
+      await taper(archiverUn('r-3'));
+      await avancer(3_000);
+      await taper(toutArchiver());
+      await avancer(0);
+      expect(elementsRefus()).toHaveLength(0);
+      expect(conteneur.querySelectorAll(`[data-testid="${TESTID_BANDEAU_ANNULATION}"]`), 'un seul bandeau').toHaveLength(1);
+      expect(texte(bandeau())).toMatch(/3 refus archivés/);
+      // Le premier délai (5 s après le premier tap) est passé : rien n'est parti, le délai a été repoussé.
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS - 1_000);
+      expect(archiverRefus, 'délai repoussé par le second archivage').not.toHaveBeenCalled();
+      expect(bandeau()).not.toBeNull();
+      await taper(annuler());
+      await avancer(0);
+      expect(ids(), 'tout est rétabli').toEqual(['r-3', 'r-2', 'r-1']);
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 3);
+      expect(archiverRefus).not.toHaveBeenCalled();
+    });
+
+    it('un second archivage repousse le délai : une seule écriture, 5 s après le dernier tap, avec tous les ids', async () => {
+      await troisRefus();
+      await taper(archiverUn('r-3'));
+      await avancer(3_000);
+      await taper(archiverUn('r-1'));
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS - 100);
+      expect(archiverRefus, 'pas avant 5 s après le dernier tap').not.toHaveBeenCalled();
+      expect(texte(bandeau())).toMatch(/2 refus archivés/);
+      await avancer(200);
+      expect(appels()).toEqual([['r-1', 'r-3']]);
+      expect(ids()).toEqual(['r-2']);
+    });
+
+    it('quitter l’onglet pendant le délai : l’archivage en attente est écrit tout de suite, une seule fois', async () => {
+      await troisRefus();
+      await taper(toutArchiver());
+      await avancer(1_000);
+      expect(archiverRefus).not.toHaveBeenCalled();
+      // Autre onglet : l'écran Ferme est démonté.
+      await act(async () => {
+        racine.render(createElement('div', null, 'Aujourd’hui'));
+        await Promise.resolve();
+      });
+      await avancer(0);
+      expect(appels(), 'écrit au démontage, avec tous les ids en attente').toEqual([['r-1', 'r-2', 'r-3']]);
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 3);
+      expect(archiverRefus, 'pas une seconde fois à la fin du délai').toHaveBeenCalledTimes(1);
+      for (const id of ['r-1', 'r-2', 'r-3']) expect(archiveLe(id), `${id} archivé`).not.toBeNull();
+    });
+
+    it('page fermée ou rechargée pendant le délai (pagehide) : écrit tout de suite, une seule fois', async () => {
+      await troisRefus();
+      await taper(archiverUn('r-2'));
+      await avancer(1_000);
+      expect(archiverRefus, 'rien d’écrit avant pagehide').not.toHaveBeenCalled();
+      await act(async () => {
+        window.dispatchEvent(new Event('pagehide'));
+        await Promise.resolve();
+      });
+      await avancer(0);
+      expect(appels(), 'écrit dès pagehide').toEqual([['r-2']]);
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 3);
+      expect(archiverRefus, 'une seule écriture').toHaveBeenCalledTimes(1);
+      expect(archiveLe('r-2')).not.toBeNull();
+    });
+
+    it('appli passée en arrière-plan pendant le délai (visibilitychange, hidden) : écrit tout de suite, une seule fois', async () => {
+      await troisRefus();
+      await taper(toutArchiver());
+      await avancer(1_000);
+      expect(archiverRefus, 'rien d’écrit avant le passage en arrière-plan').not.toHaveBeenCalled();
+      const etat = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+      try {
+        await act(async () => {
+          document.dispatchEvent(new Event('visibilitychange'));
+          await Promise.resolve();
+        });
+        await avancer(0);
+        expect(appels(), 'écrit dès le passage en arrière-plan').toEqual([['r-1', 'r-2', 'r-3']]);
+      } finally {
+        etat.mockRestore();
+      }
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 3);
+      expect(archiverRefus, 'une seule écriture').toHaveBeenCalledTimes(1);
+    });
+
+    it('rien en attente : quitter l’onglet ou passer en arrière-plan n’écrit rien', async () => {
+      await troisRefus();
+      await act(async () => {
+        window.dispatchEvent(new Event('pagehide'));
+        racine.render(createElement('div', null, 'Aujourd’hui'));
+        await Promise.resolve();
+      });
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS * 2);
+      expect(archiverRefus).not.toHaveBeenCalled();
     });
   });
 });
