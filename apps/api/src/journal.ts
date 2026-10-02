@@ -45,14 +45,77 @@ const CODE_SUR = /^[0-9A-Z][0-9A-Z_]{0,31}$/;
 /** Nom de classe cité seulement s'il ressemble à un identifiant. */
 const CLASSE_SURE = /^[A-Za-z_$][\w$]{0,63}$/;
 
+/** Emplacement de ce module sous la racine du dépôt (source .ts, ou compilé .js à la même place). */
+const SUFFIXES_MODULE = ['apps/api/src/journal.ts', 'apps/api/src/journal.js'] as const;
+
 /**
- * Racine du dépôt (journal.ts est dans apps/api/src), en URL file:// et en chemin, calculée une
- * fois. Seules les positions sous `node:` ou sous cette racine sont gardées, écrites relatives
- * (apps/api/src/app.ts:12:3, node_modules/pg/lib/client.js:1:2) : un chemin hors du dépôt
- * (/home/<personne>/…) peut citer quelqu'un.
+ * Racine du dépôt (URL file:// finie par « / ») déduite de l'URL de ce module, seulement s'il est
+ * bien à sa place (`<racine>/apps/api/src/journal.ts|js`). Ailleurs (API regroupée en un seul
+ * fichier /app/index.js…), racine « / », URL non file: ou illisible : null, et aucune position
+ * de pile n'est gardée. Pure.
  */
-const RACINE_URL = new URL('../../../', import.meta.url).href;
-const RACINE_CHEMIN = fileURLToPath(RACINE_URL);
+export function racineDepuisModule(urlModule: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(urlModule);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'file:') return null;
+  const href = url.href;
+  for (const suffixe of SUFFIXES_MODULE) {
+    if (!href.endsWith(`/${suffixe}`)) continue;
+    const racine = href.slice(0, href.length - suffixe.length);
+    return racineSure(racine) === null ? null : racine;
+  }
+  return null;
+}
+
+/** Racine en URL et en chemin. */
+interface Racine {
+  readonly url: string;
+  readonly chemin: string;
+}
+
+/**
+ * Garde commune à la racine calculée et à une racine passée : URL file: lisible, finie par « / »,
+ * et pas « / » elle-même (TOUT chemin absolu serait alors « sous la racine »). Sinon null.
+ */
+function racineSure(url: string): Racine | null {
+  let chemin: string;
+  try {
+    if (new URL(url).protocol !== 'file:') return null;
+    chemin = fileURLToPath(url);
+  } catch {
+    return null;
+  }
+  if (!url.endsWith('/') || chemin === '/') return null;
+  return { url, chemin };
+}
+
+/**
+ * Racine du dépôt calculée une fois. Seules les positions sous `node:` ou sous cette racine sont
+ * gardées, écrites relatives (apps/api/src/app.ts:12:3, node_modules/pg/lib/client.js:1:2) : un
+ * chemin hors du dépôt (/home/<personne>/…) peut citer quelqu'un.
+ */
+const RACINE_URL = racineDepuisModule(import.meta.url);
+const RACINE_PAR_DEFAUT = RACINE_URL === null ? null : racineSure(RACINE_URL);
+
+/**
+ * Racine passée à `decrireErreur` : retenue seulement si, une fois normalisée (« .. », « %2e%2e »),
+ * c'est la racine calculée ou un dossier sous elle. Sinon null (aucune position).
+ */
+function racinePassee(racine: string): Racine | null {
+  if (RACINE_URL === null) return null;
+  let href: string;
+  try {
+    href = new URL(racine).href;
+  } catch {
+    return null;
+  }
+  if (!href.startsWith(RACINE_URL)) return null;
+  return racineSure(href);
+}
 
 /** `fichier:ligne:colonne`. */
 const POSITION = /^(.+):(\d+):(\d+)$/;
@@ -62,14 +125,15 @@ const MODULE_NODE = /^node:[\w/.-]+$/;
 const CHEMIN_RELATIF = /^[\w@+-][\w.@+-]*(?:\/[\w@+-][\w.@+-]*)*$/;
 
 /** Position gardée, relative à la racine ou sous node:, sinon null. */
-function positionSure(position: string): string | null {
+function positionSure(position: string, racine: Racine | null): string | null {
   const morceaux = POSITION.exec(position);
   if (morceaux === null) return null;
   const [, fichier = '', ligne = '', colonne = ''] = morceaux;
   let relatif: string;
   if (MODULE_NODE.test(fichier)) relatif = fichier;
-  else if (fichier.startsWith(RACINE_URL)) relatif = fichier.slice(RACINE_URL.length);
-  else if (fichier.startsWith(RACINE_CHEMIN)) relatif = fichier.slice(RACINE_CHEMIN.length);
+  else if (racine === null) return null;
+  else if (fichier.startsWith(racine.url)) relatif = fichier.slice(racine.url.length);
+  else if (fichier.startsWith(racine.chemin)) relatif = fichier.slice(racine.chemin.length);
   else return null;
   if (!MODULE_NODE.test(relatif) && !CHEMIN_RELATIF.test(relatif)) return null;
   return `${relatif}:${ligne}:${colonne}`;
@@ -126,7 +190,7 @@ function sansEnTete(pile: string, nom: string | null, message: string | null): s
  * le « [as …] » ni l'en-tête. S'arrête à la première ligne qui n'est pas une frame (« cause: »
  * suivi de la pile d'une cause, concaténée par une bibliothèque).
  */
-function positions(valeur: unknown): string[] {
+function positions(valeur: unknown, racine: Racine | null): string[] {
   const pile = texte(champ(valeur, 'stack'));
   if (pile === null) return [];
   const suite = sansEnTete(pile, texte(champ(valeur, 'name')), texte(champ(valeur, 'message')));
@@ -141,14 +205,14 @@ function positions(valeur: unknown): string[] {
     const corps = ligne.slice(3);
     const entreParentheses = /\(([^()]*)\)$/.exec(corps);
     const position = entreParentheses === null ? corps : (entreParentheses[1] ?? '');
-    const sure = positionSure(position);
+    const sure = positionSure(position, racine);
     if (sure !== null) gardees.push(sure);
     if (gardees.length >= FRAMES_MAX) break;
   }
   return gardees;
 }
 
-function decrire(erreur: unknown): string {
+function decrire(erreur: unknown, racine: Racine | null): string {
   const morceaux = [classe(erreur)];
   const code = codeSur(erreur);
   if (code !== null) morceaux.push(`code ${code}`);
@@ -157,7 +221,7 @@ function decrire(erreur: unknown): string {
     const codeCause = codeSur(cause);
     morceaux.push(`cause ${classe(cause)}${codeCause === null ? '' : ` code ${codeCause}`}`);
   }
-  const frames = positions(erreur);
+  const frames = positions(erreur, racine);
   if (frames.length > 0) morceaux.push(`pile ${frames.join(' | ')}`);
   return morceaux.join(' ');
 }
@@ -176,10 +240,15 @@ export function journalSur(sortie: (ligne: string) => void): (ligne: string) => 
   };
 }
 
-/** Description d'une erreur inattendue pour le journal : classe, code, cause, positions. Ne lève jamais. */
-export function decrireErreur(erreur: unknown): string {
+/**
+ * Description d'une erreur inattendue pour le journal : classe, code, cause, positions. Ne lève
+ * jamais. `racine` : URL file:// finie par « / », la racine calculée par ce module ou un dossier
+ * sous elle (par défaut la racine calculée) ; sinon, ou si la racine calculée manque, aucune
+ * position de pile n'est gardée.
+ */
+export function decrireErreur(erreur: unknown, racine?: string): string {
   try {
-    return decrire(erreur);
+    return decrire(erreur, racine === undefined ? RACINE_PAR_DEFAUT : racinePassee(racine));
   } catch {
     return 'erreur indescriptible';
   }
