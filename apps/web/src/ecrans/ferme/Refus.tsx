@@ -18,6 +18,11 @@
  *
  * Les REFUS_PAR_PAGE plus récents d'abord, puis un bouton pour voir les suivants : 100 refus ne
  * ralentissent pas l'ouverture de l'onglet.
+ *
+ * T10l : « Archiver » sur chaque carte, « Tout archiver » pour les refus affichés (pas ceux encore
+ * cachés derrière « voir plus »). Sans confirmation : archiver ne supprime rien, la ligne reste
+ * sur le téléphone et le serveur ; elle sort seulement de la liste (porte.surveillerRefus), sur
+ * tous les téléphones de l'utilisateur.
  */
 import { useState, type CSSProperties } from 'react';
 import type { RefusSynchro, ResumeSaisie } from '@planif/sync';
@@ -35,6 +40,7 @@ const TYPE_SAISIE: Readonly<Record<string, string>> = {
   article_stock: 'Article de stock',
   itineraire: 'Itinéraire',
   type_intervention: 'Type d’intervention',
+  refus_synchro: 'Archivage d’un refus',
 };
 
 /** Type d'événement d'un refus qui a un résumé (T10k), à la place de « Événement du journal ». */
@@ -214,7 +220,56 @@ const VOIR_PLUS: CSSProperties = {
   fontSize: 17,
 };
 
-function UnRefus({ refus, maintenant }: { readonly refus: RefusSynchro; readonly maintenant: Date }) {
+/** T10l : « Archiver » d'une carte, discret mais assez grand pour un doigt ganté (56 px). */
+const ARCHIVER: CSSProperties = {
+  justifySelf: 'end',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 8,
+  minHeight: 56,
+  marginTop: 4,
+  padding: '0 18px',
+  border: '2px solid var(--couleur-foret)',
+  borderRadius: 'var(--rayon-bouton)',
+  background: 'var(--couleur-surface)',
+  color: 'var(--couleur-foret)',
+  fontWeight: 700,
+  fontSize: 16,
+};
+
+/** T10l : « Tout archiver », sous l'explication de la carte. */
+const TOUT_ARCHIVER: CSSProperties = {
+  ...ARCHIVER,
+  justifySelf: 'auto',
+  justifyContent: 'center',
+  width: 'calc(100% - 32px)',
+  margin: '0 16px 14px',
+  border: 0,
+  background: 'var(--couleur-foret)',
+  color: 'var(--couleur-sur-foret)',
+  fontSize: 17,
+};
+
+/** Boîte d'archive (trait), sans texte : le libellé du bouton reste « Archiver ». */
+function IconeArchive() {
+  return (
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="5" rx="1.5" />
+      <path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" />
+      <path d="M10 13h4" />
+    </svg>
+  );
+}
+
+function UnRefus({
+  refus,
+  maintenant,
+  archiver,
+}: {
+  readonly refus: RefusSynchro;
+  readonly maintenant: Date;
+  readonly archiver: (() => void) | undefined;
+}) {
   const { titre, message, action, culture, details } = refusLisible(refus, maintenant);
   return (
     <li data-testid="refus" data-refus={refus.id} style={REFUS}>
@@ -239,6 +294,12 @@ function UnRefus({ refus, maintenant }: { readonly refus: RefusSynchro; readonly
         </span>
         <span>{action}</span>
       </p>
+      {archiver !== undefined && (
+        <button type="button" data-testid="refus-archiver" style={ARCHIVER} onClick={archiver}>
+          <IconeArchive />
+          Archiver
+        </button>
+      )}
     </li>
   );
 }
@@ -250,12 +311,33 @@ function libelleVoirPlus(restants: number): string {
   return `Voir les ${String(REFUS_PAR_PAGE)} suivants (encore ${String(restants)})`;
 }
 
-/** Carte « Saisies refusées » ; rien si aucun refus. */
-export function SaisiesRefusees({ refus }: { readonly refus: readonly RefusSynchro[] }) {
+/**
+ * Carte « Saisies refusées » ; rien si aucun refus. `archiver` (T10l, porte.archiverRefus) : sans
+ * elle, pas de bouton d'archivage.
+ */
+export function SaisiesRefusees({
+  refus,
+  archiver,
+}: {
+  readonly refus: readonly RefusSynchro[];
+  readonly archiver?: ((ids: readonly string[]) => Promise<void>) | undefined;
+}) {
   const [montres, setMontres] = useState(REFUS_PAR_PAGE);
+  const [echec, setEchec] = useState(false);
   if (refus.length === 0) return null;
   const maintenant = new Date();
   const restants = refus.length - montres;
+  const affiches = refus.slice(0, montres);
+  const lancer =
+    archiver === undefined
+      ? undefined
+      : (ids: readonly string[]) => () => {
+          setEchec(false);
+          archiver(ids).catch((erreur: unknown) => {
+            console.error('archivage des refus en échec', erreur);
+            setEchec(true);
+          });
+        };
   const titre = refus.length === 1 ? '1 saisie refusée' : `${String(refus.length)} saisies refusées`;
   return (
     <section aria-label="Saisies refusées par le serveur" style={CARTE}>
@@ -263,9 +345,20 @@ export function SaisiesRefusees({ refus }: { readonly refus: readonly RefusSynch
       <p style={{ padding: '0 16px 12px', fontSize: 15, color: 'var(--couleur-secondaire)' }}>
         Le serveur n’a pas enregistré ces saisies. Les autres sont parties normalement.
       </p>
+      {lancer !== undefined && (
+        <button type="button" data-testid="refus-tout-archiver" style={TOUT_ARCHIVER} onClick={lancer(affiches.map((r) => r.id))}>
+          <IconeArchive />
+          {affiches.length === 1 ? 'Tout archiver' : `Tout archiver (${String(affiches.length)})`}
+        </button>
+      )}
+      {echec && (
+        <p role="alert" style={{ padding: '0 16px 12px', fontSize: 15, fontWeight: 700, color: 'var(--couleur-texte-orange)' }}>
+          L’archivage n’a pas abouti. Réessayez.
+        </p>
+      )}
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {refus.slice(0, montres).map((r) => (
-          <UnRefus key={r.id} refus={r} maintenant={maintenant} />
+        {affiches.map((r) => (
+          <UnRefus key={r.id} refus={r} maintenant={maintenant} archiver={lancer?.([r.id])} />
         ))}
       </ul>
       {restants > 0 && (
