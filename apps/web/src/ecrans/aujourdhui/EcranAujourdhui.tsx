@@ -6,25 +6,24 @@
  * Chargé à la demande par App ; reçoit la porte (jamais PowerSync). Tout marche hors ligne : les
  * saisies vont dans la base du téléphone et partent avec la synchro. L'écran suit la base : une
  * saisie arrivée d'un autre téléphone s'y voit.
+ *
+ * T13d : au lancement, l'instantané de la dernière journée dessinée (./instantane.ts) s'affiche
+ * tout de suite, puis la journée relue le remplace et devient le nouvel instantané. Rien n'est
+ * écrit depuis l'instantané : « Fait » y passe par une lecture ciblée de la tâche dans la base.
  */
-import { useCallback, useDeferredValue, useEffect, useId, useRef, useState } from 'react';
-import { chargeSemaine, type EtapeRealisee, type TacheTravail, type UniteRecolte } from '@planif/core';
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import './aujourdhui.css';
 import { journeeEnCache, lectureDe, marquerEcriture, suivreJournee } from './cache.ts';
 import {
   capitale,
-  codesEmplacements,
-  dateCourte,
   ETAPES_FAITES,
-  LIBELLES_CATEGORIES,
-  nombreFrancais,
+  lireTacheCiblee,
   nomCulture,
-  quand,
   quantiteAvecUnite,
   texteCharge,
   texteDuree,
-  VERBES,
   type Culture,
   type EntreeHistorique,
   type EvenementLu,
@@ -33,13 +32,19 @@ import {
 } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
 import { annulerSaisie, changerDate, marquerFait, marquerTravailFait, noterRecolte, type ContexteEcriture } from './ecritures.ts';
+import { garderInstantane, lireInstantane, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
+import { libelleEvenement, vueCarte, vuesHistorique, type CarteVue, type SaisieVue } from './vues.ts';
 
 export interface ProprietesEcranAujourdhui {
   readonly porte: PorteDonnees;
   readonly fermeId: string;
   /** Jour du téléphone, 'AAAA-MM-JJ' ; par défaut celui de l'horloge du téléphone. */
   readonly aujourdhui?: () => string;
+  /** T13d : utilisateur connecté (session) ; sans lui, aucun instantané n'est lu ni gardé. */
+  readonly utilisateurId?: string;
+  /** T13d : où garder l'instantané de la journée (défaut : localStorage). */
+  readonly stockage?: StockageInstantane;
 }
 
 /** Marque de performance posée quand les tâches (ou « rien à faire ») sont dessinées. */
@@ -51,9 +56,17 @@ export const MARQUE_AUJOURDHUI_AFFICHE = 'planif:aujourdhui-affiche';
  */
 const TACHES_PAR_GROUPE = 25;
 
+/**
+ * T13d : cartes du premier dessin à l'ouverture de l'écran (un écran de téléphone et un peu plus) ;
+ * les autres suivent aussitôt, en tâche de fond (interruptible). Au lancement à froid, les tâches
+ * du haut de l'écran se montrent sans attendre la mise en page de toute la liste.
+ */
+const CARTES_PREMIER_DESSIN = 8;
+
 /** Saisies de l'historique dessinées avant « Voir les autres » (une grosse journée de récolte). */
 const SAISIES_HISTORIQUE = 20;
 const AUCUNE_SAISIE: readonly EntreeHistorique[] = [];
+const AUCUNE_VUE: readonly SaisieVue[] = [];
 
 /** Durée d'affichage du bouton « Annuler » après une saisie. */
 export const DELAI_ANNULATION_MS = 10_000;
@@ -83,47 +96,10 @@ interface Annulable {
 }
 
 type Dialogue =
-  | { readonly sorte: 'recolte'; readonly culture: Culture | null }
+  /** `cle` : tâche de début de récolte touchée sur l'instantané (sa culture vient de la journée relue). */
+  | { readonly sorte: 'recolte'; readonly culture: Culture | null; readonly cle: string | null }
   | { readonly sorte: 'date'; readonly entree: EntreeHistorique; readonly max: string }
   | null;
-
-/** Libellé de l'étape faite, pour le bandeau et l'historique. */
-function libelleEvenement(e: EvenementLu): string {
-  const d = e.detail;
-  switch (d.type) {
-    case 'realise':
-      return ETAPES_FAITES[d.etape];
-    case 'recolte':
-      return `Récolte · ${quantiteAvecUnite(d.quantite, d.unite)}`;
-    case 'intervention':
-      return capitale(d.libelle);
-  }
-}
-
-/** Ce que nomme une saisie : « Récolte 12 kg, Tomate Cœur de bœuf, aujourd'hui ». */
-function nomSaisie(h: EntreeHistorique, aujourdhui: string): string {
-  const e = h.evenement;
-  const quoi = e.detail.type === 'recolte' ? `Récolte ${quantiteAvecUnite(e.detail.quantite, e.detail.unite)}` : libelleEvenement(e);
-  return `${quoi}, ${h.culture === null ? 'culture retirée' : nomCulture(h.culture)}, ${quand(e.date, aujourdhui)}`;
-}
-
-function detailTache(t: TacheJour, aujourdhui: string): string {
-  const { tache, culture } = t;
-  const morceaux: string[] = [];
-  if (tache.etape === 'travail') {
-    // Un travail se lit par son libellé : la culture vient ensuite, avec le produit à épandre.
-    morceaux.push(nomCulture(culture));
-    const produit = tache.travail.produit;
-    if (produit !== null) {
-      const dose = `${nombreFrancais(produit.quantite.valeur)} ${produit.quantite.unite}`;
-      morceaux.push(produit.nom.toLocaleLowerCase('fr') === tache.travail.type.toLocaleLowerCase('fr') ? dose : `${produit.nom} ${dose}`);
-    }
-  } else if (tache.variete !== null) morceaux.push(tache.variete);
-  if (tache.taille.unite === 'longueur') morceaux.push(`${String(tache.taille.longueurM).replace('.', ',')} m`);
-  else if (tache.taille.nombrePlants > 0) morceaux.push(`${String(tache.taille.nombrePlants)} plants`);
-  morceaux.push(tache.enRetard ? `prévu le ${dateCourte(tache.datePrevue)}` : quand(tache.datePrevue, aujourdhui));
-  return morceaux.join(' · ');
-}
 
 function texteRetard(jours: number): string {
   return jours === 1 ? '1 jour de retard' : `${String(jours)} jours de retard`;
@@ -132,10 +108,9 @@ function texteRetard(jours: number): string {
 // ── Carte de tâche (maquette Main) ───────────────────────────────────────────────────────────
 
 interface ProprietesCarte {
-  readonly tache: TacheJour;
-  readonly aujourdhui: string;
-  readonly surFait: (t: TacheJour) => void;
-  readonly surPeser: (t: TacheJour) => void;
+  readonly carte: CarteVue;
+  readonly surFait: (cle: string) => void;
+  readonly surPeser: (cle: string) => void;
 }
 
 /** Petite horloge du temps estimé et de la charge de la semaine. */
@@ -148,45 +123,36 @@ function IconeHorloge() {
   );
 }
 
-function CarteTache({ tache: t, aujourdhui, surFait, surPeser }: ProprietesCarte) {
-  const { tache, culture } = t;
-  const travail = tache.etape === 'travail' ? tache : null;
-  const surtitre = tache.etape === 'travail' ? LIBELLES_CATEGORIES[tache.travail.categorie] : VERBES[tache.etape];
-  const titre = travail === null ? culture.espece : capitale(travail.travail.type);
-  const codes = codesEmplacements(tache.emplacements);
-  const bande = tache.enRetard ? 'retard' : travail !== null ? 'travail' : (culture.famille ?? 'neutre');
-  const recolte = tache.etape === 'debut_recolte';
-  const phrase = travail === null ? `${surtitre.toLowerCase()} ${culture.espece.toLowerCase()}` : `${travail.travail.type} ${culture.espece.toLowerCase()}`;
-  const temps = travail?.tempsEstimeMinutes ?? null;
+function CarteTache({ carte: c, surFait, surPeser }: ProprietesCarte) {
   return (
-    <li data-testid="tache" data-cle={t.cle} data-retard={tache.enRetard ? 'oui' : 'non'} className={travail === null ? 'auj-tache' : 'auj-tache auj-tache-travail'}>
-      <span data-testid="bande-famille" aria-hidden="true" className={`auj-bande auj-bande-${bande}`} />
+    <li data-testid="tache" data-cle={c.cle} data-retard={c.retard ? 'oui' : 'non'} className={c.travail ? 'auj-tache auj-tache-travail' : 'auj-tache'}>
+      <span data-testid="bande-famille" aria-hidden="true" className={`auj-bande auj-bande-${c.bande}`} />
       <div className="auj-tache-corps">
         <span data-testid="surtitre" className="auj-tache-verbe">
-          {surtitre}
+          {c.surtitre}
         </span>
-        <span className="auj-tache-titre">{titre}</span>
-        <span className="auj-tache-detail">{detailTache(t, aujourdhui)}</span>
-        {(codes !== null || tache.enRetard || temps !== null) && (
+        <span className="auj-tache-titre">{c.titre}</span>
+        <span className="auj-tache-detail">{c.detail}</span>
+        {(c.codes !== null || c.retard || c.minutes !== null) && (
           <span className="auj-tache-pied">
-            {codes !== null && <span className="auj-code">{codes}</span>}
-            {temps !== null && (
+            {c.codes !== null && <span className="auj-code">{c.codes}</span>}
+            {c.minutes !== null && (
               <span className="auj-temps">
                 <IconeHorloge />
-                <span data-testid="temps-estime">{texteDuree(temps)}</span>
+                <span data-testid="temps-estime">{texteDuree(c.minutes)}</span>
               </span>
             )}
-            {tache.enRetard && <span className="auj-retard">{texteRetard(tache.joursDeRetard)}</span>}
+            {c.retard && <span className="auj-retard">{texteRetard(c.joursRetard)}</span>}
           </span>
         )}
       </div>
-      {recolte ? (
+      {c.peser ? (
         <button
           type="button"
-          aria-label={`Saisir une récolte : ${culture.espece.toLowerCase()}`}
+          aria-label={c.action}
           className="auj-action auj-action-peser"
           onClick={() => {
-            surPeser(t);
+            surPeser(c.cle);
           }}
         >
           <IconePanier />
@@ -195,10 +161,10 @@ function CarteTache({ tache: t, aujourdhui, surFait, surPeser }: ProprietesCarte
       ) : (
         <button
           type="button"
-          aria-label={`Marquer fait : ${phrase}`}
+          aria-label={c.action}
           className="auj-action auj-action-fait"
           onClick={() => {
-            surFait(t);
+            surFait(c.cle);
           }}
         >
           <IconeCoche taille={28} />
@@ -215,6 +181,11 @@ interface ProprietesHistorique {
   readonly id: string;
   readonly entrees: readonly EntreeHistorique[];
   /**
+   * T13d : saisies de l'instantané, montrées tant que la journée relue n'est pas là (`entrees`
+   * vide) ; leurs boutons attendent la journée relue (rien n'est écrit depuis l'instantané).
+   */
+  readonly instantane: { readonly vues: readonly SaisieVue[]; readonly total: number } | null;
+  /**
    * Saisie qui doit recevoir le focus (T13c, après « Changer la date ») : sa correction, une fois
    * la journée relue. Absente de l'historique, le focus va au titre de l'historique.
    */
@@ -226,13 +197,23 @@ interface ProprietesHistorique {
   readonly surChangerDate: (e: EntreeHistorique) => void;
 }
 
-function Historique({ id, entrees, focus, surFocusPlace, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
+function Historique({ id, entrees, instantane, focus, surFocusPlace, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
   const idTitre = useId();
   const [tout, setTout] = useState(false);
   // Dessinées en tâche de fond (interruptible) : l'historique, en bas de l'écran, ne retarde ni
   // l'affichage des tâches ni un tap sur un autre onglet.
   const differees = useDeferredValue(entrees, AUCUNE_SAISIE);
-  const montrees = tout ? differees : differees.slice(0, SAISIES_HISTORIQUE);
+  const vuesInstantane = useDeferredValue(instantane?.vues ?? AUCUNE_VUE, AUCUNE_VUE);
+  const montrees = useMemo(() => (tout ? differees : differees.slice(0, SAISIES_HISTORIQUE)), [tout, differees]);
+  const lignes = useMemo(
+    () =>
+      instantane !== null
+        ? vuesInstantane.map((vue) => ({ vue, entree: null }))
+        : vuesHistorique(montrees, aujourdhui).map((vue, i) => ({ vue, entree: montrees[i] ?? null })),
+    [instantane, vuesInstantane, montrees, aujourdhui],
+  );
+  const total = instantane?.total ?? entrees.length;
+  const autres = (instantane !== null ? instantane.total : differees.length) - lignes.length;
   const section = useRef<HTMLElement>(null);
   const titre = useRef<HTMLHeadingElement>(null);
   // Focus placé UNE fois, à la première journée relue après la correction, puis oublié
@@ -252,7 +233,7 @@ function Historique({ id, entrees, focus, surFocusPlace, aujourdhui, surAnnuler,
     if (entree === undefined && differees !== entrees && entrees.some((h) => h.evenement.id === focus)) return; // pas encore dessinée
     if (entree?.contains(actif) !== true) (entree?.querySelector<HTMLElement>('button') ?? titre.current)?.focus();
     surFocusPlace();
-  }, [focus, entrees, differees, montrees, surFocusPlace]);
+  }, [focus, entrees, differees, lignes, surFocusPlace]);
   return (
     <section ref={section} id={id} aria-labelledby={idTitre} className="auj-historique">
       <div className="auj-historique-tete">
@@ -260,59 +241,53 @@ function Historique({ id, entrees, focus, surFocusPlace, aujourdhui, surAnnuler,
           Historique
         </h2>
         <span className="auj-historique-compte">
-          {entrees.length} {entrees.length > 1 ? 'saisies' : 'saisie'} · 7 jours
+          {total} {total > 1 ? 'saisies' : 'saisie'} · 7 jours
         </span>
       </div>
-      {entrees.length === 0 ? (
+      {total === 0 ? (
         <p className="auj-historique-vide">Aucune saisie ces 7 derniers jours.</p>
       ) : (
         <ul>
-          {montrees.map((h, i) => {
-            const e = h.evenement;
-            const codes = h.culture === null ? null : codesEmplacements(h.culture.emplacements);
-            // Deux saisies identiques le même jour : leurs boutons gardent des noms distincts.
-            const base = nomSaisie(h, aujourdhui);
-            const rang = montrees.slice(0, i).filter((x) => nomSaisie(x, aujourdhui) === base).length;
-            const nom = rang === 0 ? base : `${base} (${String(rang + 1)})`;
-            return (
-              <li key={e.id} data-testid="saisie-historique" data-evenement={e.id} data-type={e.detail.type} className="auj-entree">
-                <div className="auj-entree-texte">
-                  <span className="auj-entree-quoi">{libelleEvenement(e)}</span>
-                  <span className="auj-entree-culture">{h.culture === null ? 'Culture retirée' : nomCulture(h.culture)}</span>
-                  <span className="auj-entree-quand">{[quand(e.date, aujourdhui), codes].filter((x) => x !== null).join(' · ')}</span>
+          {lignes.map(({ vue: v, entree: h }) => (
+            <li key={v.id} data-testid="saisie-historique" data-evenement={v.id} data-type={v.type} className="auj-entree">
+              <div className="auj-entree-texte">
+                <span className="auj-entree-quoi">{v.quoi}</span>
+                <span className="auj-entree-culture">{v.culture}</span>
+                <span className="auj-entree-quand">{v.quand}</span>
+              </div>
+              {v.retiree ? (
+                <p className="auj-entree-retiree">{TEXTE_CULTURE_RETIREE}</p>
+              ) : (
+                <div className="auj-entree-actions">
+                  <button
+                    type="button"
+                    aria-label={`Changer la date : ${v.nom}`}
+                    className="auj-bouton-secondaire"
+                    disabled={h === null}
+                    onClick={() => {
+                      if (h !== null) surChangerDate(h);
+                    }}
+                  >
+                    Changer la date
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Annuler : ${v.nom}`}
+                    className="auj-bouton-secondaire"
+                    disabled={h === null}
+                    onClick={() => {
+                      if (h !== null) surAnnuler(h);
+                    }}
+                  >
+                    Annuler
+                  </button>
                 </div>
-                {h.culture === null ? (
-                  <p className="auj-entree-retiree">{TEXTE_CULTURE_RETIREE}</p>
-                ) : (
-                  <div className="auj-entree-actions">
-                    <button
-                      type="button"
-                      aria-label={`Changer la date : ${nom}`}
-                      className="auj-bouton-secondaire"
-                      onClick={() => {
-                        surChangerDate(h);
-                      }}
-                    >
-                      Changer la date
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Annuler : ${nom}`}
-                      className="auj-bouton-secondaire"
-                      onClick={() => {
-                        surAnnuler(h);
-                      }}
-                    >
-                      Annuler
-                    </button>
-                  </div>
-                )}
-              </li>
-            );
-          })}
+              )}
+            </li>
+          ))}
         </ul>
       )}
-      {montrees.length < differees.length && (
+      {autres > 0 && (
         <button
           type="button"
           className="auj-bouton-secondaire"
@@ -320,7 +295,7 @@ function Historique({ id, entrees, focus, surFocusPlace, aujourdhui, surAnnuler,
             setTout(true);
           }}
         >
-          Voir les {differees.length - montrees.length} autres saisies
+          Voir les {autres} autres saisies
         </button>
       )}
     </section>
@@ -407,13 +382,71 @@ function evenementEcrit(id: string, culture: Culture, date: string, detail: Even
   };
 }
 
-export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: ProprietesEcranAujourdhui) {
+/**
+ * Tâche masquée : écriture en cours, ou journée affichée lue avant la fin de l'écriture (elle n'a
+ * pas pu voir le réalisé, T13e). T13c : une journée lue après l'écriture lève le masque ; une
+ * tâche revenue (réalisé annulé depuis un autre téléphone) se marque faite de nouveau. Sur
+ * l'instantané (aucune journée lue), le masque tient.
+ */
+function masqueTient(m: number | 'attente', affichee: Journee | null): boolean {
+  return m === 'attente' || lectureDe(affichee) < m;
+}
+
+type Masques = ReadonlyMap<string, number | 'attente'>;
+
+function estMasqueeDans(masquees: Masques, journee: Journee | null, cle: string): boolean {
+  const m = masquees.get(cle);
+  return m !== undefined && masqueTient(m, journee);
+}
+
+/** Ce que l'écran dessine de la journée relue (tâches masquées retirées) : c'est aussi l'instantané gardé. */
+function vueDeJournee(journee: Journee, masquees: Masques, toutVoir: boolean): VueJournee {
+  const taches = journee.taches.filter((t) => !estMasqueeDans(masquees, journee, t.cle));
+  const enRetard = taches.filter((t) => t.tache.enRetard);
+  const semaine = taches.filter((t) => !t.tache.enRetard);
+  const groupe = (liste: readonly TacheJour[]) => (toutVoir ? liste : liste.slice(0, TACHES_PAR_GROUPE));
+  return {
+    semaine: journee.semaine,
+    taches: [...groupe(enRetard), ...groupe(semaine)].map((t) => vueCarte(t, journee.aujourdhui)),
+    retard: enRetard.length,
+    cetteSemaine: semaine.length,
+    recoltes: journee.recoltesEnCours.length,
+    // Charge de la semaine (T22) : le cœur additionne les temps estimés des tâches affichées.
+    charge: chargeSemaine(taches.map((t) => t.tache)),
+    historique: vuesHistorique(journee.historique.slice(0, SAISIES_HISTORIQUE), journee.aujourdhui),
+    saisies: journee.historique.length,
+  };
+}
+
+/** L'instantané, moins les tâches marquées faites depuis son affichage. */
+function vueDeInstantane(instantane: VueJournee, masquees: Masques): VueJournee {
+  if (masquees.size === 0) return instantane;
+  const faites = instantane.taches.filter((c) => estMasqueeDans(masquees, null, c.cle));
+  if (faites.length === 0) return instantane;
+  return {
+    ...instantane,
+    taches: instantane.taches.filter((c) => !faites.includes(c)),
+    retard: Math.max(0, instantane.retard - faites.filter((c) => c.retard).length),
+    cetteSemaine: Math.max(0, instantane.cetteSemaine - faites.filter((c) => !c.retard).length),
+    charge: Math.max(0, instantane.charge - faites.reduce((n, c) => n + (c.travail ? (c.minutes ?? 0) : 0), 0)),
+  };
+}
+
+/** Délai avant de garder l'instantané d'une journée relue : les relectures en rafale n'en gardent qu'un. */
+const DELAI_INSTANTANE_MS = 300;
+
+export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage: stockageDonne }: ProprietesEcranAujourdhui) {
   /** Jour du téléphone maintenant (relu à chaque écriture : l'écran peut rester ouvert à minuit). */
   const jourCourant = () => (jourDonne ?? jourDuTelephone)();
   const [jour, setJour] = useState(jourCourant);
   const [lue, setLue] = useState<Journee | null>(() => journeeEnCache(porte, fermeId, jour));
   // Journée du jour affiché : celle lue, sinon celle du cache (changement de jour).
   const journee = lue !== null && lue.aujourdhui === jour ? lue : journeeEnCache(porte, fermeId, jour);
+  // T13d : stockage de l'instantané, et l'instantané lu au premier rendu (synchrone).
+  const [stockage] = useState(() => (utilisateurId === undefined ? null : (stockageDonne ?? stockageParDefaut())));
+  const [instantane] = useState(() => (utilisateurId === undefined || stockage === null ? null : lireInstantane(stockage, { utilisateurId, fermeId, jour })));
+  /** L'instantané n'est montré que tant qu'aucune journée relue n'est là, et pour le jour affiché. */
+  const surInstantane = journee === null && instantane !== null && instantane.jour === jour;
   const [echecLecture, setEchecLecture] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
   const [annulable, setAnnulable] = useState<Annulable | null>(null);
@@ -423,17 +456,8 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
    * Tâches marquées faites et masquées dès le tap (un second tap n'écrit rien) : 'attente'
    * pendant l'écriture, puis le numéro pris à la fin de l'écriture (cache.ts).
    */
-  const [masquees, setMasquees] = useState<ReadonlyMap<string, number | 'attente'>>(new Map());
-  /**
-   * Tâche masquée : écriture en cours, ou journée affichée lue avant la fin de l'écriture (elle n'a
-   * pas pu voir le réalisé, T13e). T13c : une journée lue après l'écriture lève le masque ; une
-   * tâche revenue (réalisé annulé depuis un autre téléphone) se marque faite de nouveau.
-   */
-  const masqueTient = (m: number | 'attente', affichee: Journee | null): boolean => m === 'attente' || lectureDe(affichee) < m;
-  const estMasquee = (cle: string): boolean => {
-    const m = masquees.get(cle);
-    return m !== undefined && masqueTient(m, journee);
-  };
+  const [masquees, setMasquees] = useState<Masques>(new Map());
+  const estMasquee = (cle: string): boolean => estMasqueeDans(masquees, journee, cle);
   const journeeActuelle = useRef<Journee | null>(journee);
   useEffect(() => {
     journeeActuelle.current = journee;
@@ -471,13 +495,30 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     };
   }, [jourDonne]);
 
-  // Une marque par ouverture de l'écran, quand les tâches (ou « rien à faire ») sont dessinées.
+  // Premier dessin : les CARTES_PREMIER_DESSIN premières cartes ; toutes au rendu suivant, différé.
+  const complet = useDeferredValue(true, false);
+
+  // Une marque par ouverture de l'écran, quand les tâches (ou « rien à faire ») sont dessinées,
+  // celles de l'instantané comprises (T13d).
+  const dessinee = journee !== null || surInstantane;
   const marquee = useRef(false);
   useEffect(() => {
-    if (journee === null || marquee.current) return;
+    if (!dessinee || marquee.current) return;
     marquee.current = true;
     performance.mark(MARQUE_AUJOURDHUI_AFFICHE);
-  }, [journee]);
+  }, [dessinee]);
+
+  // T13d : chaque journée relue affichée devient l'instantané du prochain lancement (ce qui est
+  // dessiné, tâches marquées faites retirées), un peu plus tard : rien ne retarde l'affichage.
+  useEffect(() => {
+    if (journee === null || utilisateurId === undefined || stockage === null) return undefined;
+    const minuterie = setTimeout(() => {
+      garderInstantane(stockage, { utilisateurId, fermeId, jour: journee.aujourdhui }, vueDeJournee(journee, masquees, false));
+    }, DELAI_INSTANTANE_MS);
+    return () => {
+      clearTimeout(minuterie);
+    };
+  }, [journee, masquees, utilisateurId, fermeId, stockage]);
 
   // « Annuler » : 10 s après la saisie, puis l'historique.
   useEffect(() => {
@@ -525,35 +566,48 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     });
   }
 
-  /** « Fait » sur un travail prévu (T22) : l'intervention du même type sur la série. */
-  function surTravailFait(t: TacheJour, tache: TacheTravail): void {
-    const travail = tache.travail;
-    void ecrire(async () => {
-      const ctx = contexte();
+  /** Écrit le « Fait » de la tâche `t` (étape ou travail prévu, T22) et montre le bandeau. */
+  async function ecrireFait(t: TacheJour): Promise<void> {
+    const tache = t.tache;
+    const ctx = contexte();
+    if (tache.etape === 'travail') {
+      const travail = tache.travail;
       const id = await marquerTravailFait(ctx, t.culture, travail, tache.datePrevue);
       const detail = { type: 'intervention' as const, categorie: travail.categorie, libelle: travail.type };
       montrerAnnulable(evenementEcrit(id, t.culture, ctx.aujourdhui, detail), t.culture, `Fait · ${capitale(travail.type)}`, nomCulture(t.culture));
-    }).then((ok) => {
-      masquer(t.cle, ok ? marquerEcriture() : undefined);
-    });
-  }
-
-  function surFait(t: TacheJour): void {
-    const tache = t.tache;
-    if (tache.etape === 'debut_recolte' || estMasquee(t.cle) || occupe.current) return;
-    masquer(t.cle, 'attente');
-    if (tache.etape === 'travail') {
-      surTravailFait(t, tache);
       return;
     }
+    if (tache.etape === 'debut_recolte') return;
     const etape = tache.etape;
+    const id = await marquerFait(ctx, t.culture, etape);
+    const detail = { type: 'realise' as const, etape: etape satisfies EtapeRealisee, quantiteReelle: null };
+    montrerAnnulable(evenementEcrit(id, t.culture, ctx.aujourdhui, detail), t.culture, `Fait · ${ETAPES_FAITES[etape]}`, nomCulture(t.culture));
+  }
+
+  /**
+   * « Fait » : la tâche est masquée dès le tap. Sur la journée relue, la saisie s'écrit tout de
+   * suite. Sur l'instantané (T13d), rien n'est écrit depuis lui : une lecture ciblée de la tâche
+   * dans la base (`lireTacheCiblee`) donne ce qu'écrirait la journée relue (emplacements relus,
+   * B2) ; si la tâche n'y est plus (faite ailleurs entre temps), rien n'est écrit.
+   */
+  function surFait(cle: string): void {
+    if (estMasquee(cle) || occupe.current) return;
+    let tache: () => Promise<TacheJour | null>;
+    if (journee !== null) {
+      const t = journee.taches.find((x) => x.cle === cle);
+      if (t === undefined || t.tache.etape === 'debut_recolte') return;
+      tache = () => Promise.resolve(t);
+    } else {
+      const carte = surInstantane ? instantane.taches.find((c) => c.cle === cle) : undefined;
+      if (carte === undefined || carte.peser) return;
+      tache = () => lireTacheCiblee(porte, fermeId, jourCourant(), cle);
+    }
+    masquer(cle, 'attente');
     void ecrire(async () => {
-      const ctx = contexte();
-      const id = await marquerFait(ctx, t.culture, etape);
-      const detail = { type: 'realise' as const, etape: etape satisfies EtapeRealisee, quantiteReelle: null };
-      montrerAnnulable(evenementEcrit(id, t.culture, ctx.aujourdhui, detail), t.culture, `Fait · ${ETAPES_FAITES[etape]}`, nomCulture(t.culture));
+      const t = await tache();
+      if (t !== null) await ecrireFait(t);
     }).then((ok) => {
-      masquer(t.cle, ok ? marquerEcriture() : undefined);
+      masquer(cle, ok ? marquerEcriture() : undefined);
     });
   }
 
@@ -596,32 +650,35 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     );
   }
 
-  const taches = (journee?.taches ?? []).filter((t) => !estMasquee(t.cle));
-  const enRetard = taches.filter((t) => t.tache.enRetard);
-  const semaine = taches.filter((t) => !t.tache.enRetard);
-  const recoltes = journee?.recoltesEnCours ?? [];
-  // Charge de la semaine (T22) : le cœur additionne les temps estimés des tâches affichées.
-  const charge = chargeSemaine(taches.map((t) => t.tache));
-  const peser = (x: TacheJour) => {
-    setDialogue({ sorte: 'recolte', culture: x.culture });
+  // Ce qui est dessiné : la journée relue, sinon l'instantané (T13d), sinon rien encore.
+  const vue = journee !== null ? vueDeJournee(journee, masquees, toutVoir) : surInstantane ? vueDeInstantane(instantane, masquees) : null;
+  const toutes = vue?.taches ?? [];
+  const dessinees = complet ? toutes : toutes.slice(0, CARTES_PREMIER_DESSIN);
+  const enRetard = dessinees.filter((c) => c.retard);
+  const semaine = dessinees.filter((c) => !c.retard);
+  const cachees = vue === null || !complet || (toutVoir && journee !== null) ? 0 : vue.retard - enRetard.length + (vue.cetteSemaine - semaine.length);
+  const peser = (cle: string) => {
+    const t = journee?.taches.find((x) => x.cle === cle);
+    setDialogue({ sorte: 'recolte', culture: t?.culture ?? null, cle: t === undefined ? cle : null });
   };
-  const cachees = toutVoir ? 0 : Math.max(0, enRetard.length - TACHES_PAR_GROUPE) + Math.max(0, semaine.length - TACHES_PAR_GROUPE);
-  const groupe = (liste: readonly TacheJour[]) => (toutVoir ? liste : liste.slice(0, TACHES_PAR_GROUPE));
+  // Récolte ouverte depuis une carte de l'instantané : sa culture vient de la journée relue.
+  const cultureDialogue =
+    dialogue?.sorte !== 'recolte' ? null : (dialogue.culture ?? (dialogue.cle === null ? null : (journee?.taches.find((t) => t.cle === dialogue.cle)?.culture ?? null)));
 
   return (
     <div data-testid="aujourdhui" className={annulable === null ? 'auj' : 'auj auj-avec-bandeau'}>
-      {journee !== null && (
+      {vue !== null && (
         <div className="auj-resume">
-          <span className="auj-semaine">Semaine {journee.semaine}</span>
-          {enRetard.length > 0 && <span className="auj-pastille auj-pastille-urgente">{enRetard.length} en retard</span>}
-          <span className="auj-pastille">{semaine.length} cette semaine</span>
+          <span className="auj-semaine">Semaine {vue.semaine}</span>
+          {vue.retard > 0 && <span className="auj-pastille auj-pastille-urgente">{vue.retard} en retard</span>}
+          <span className="auj-pastille">{vue.cetteSemaine} cette semaine</span>
           <span className="auj-pastille">
-            {recoltes.length} {recoltes.length > 1 ? 'récoltes' : 'récolte'} en cours
+            {vue.recoltes} {vue.recoltes > 1 ? 'récoltes' : 'récolte'} en cours
           </span>
-          {charge > 0 && (
+          {vue.charge > 0 && (
             <span className="auj-pastille auj-pastille-charge">
               <IconeHorloge />
-              <span data-testid="charge-semaine">{texteCharge(charge)}</span>
+              <span data-testid="charge-semaine">{texteCharge(vue.charge)}</span>
             </span>
           )}
         </div>
@@ -632,7 +689,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
           type="button"
           className="auj-bouton-principal auj-noter"
           onClick={() => {
-            setDialogue({ sorte: 'recolte', culture: null });
+            setDialogue({ sorte: 'recolte', culture: null, cle: null });
           }}
         >
           <IconePanier />
@@ -661,9 +718,9 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
         </p>
       )}
 
-      {journee === null ? (
+      {vue === null ? (
         <p className="auj-chargement">Lecture des tâches…</p>
-      ) : taches.length === 0 ? (
+      ) : vue.retard + vue.cetteSemaine === 0 ? (
         <p className="auj-vide">Rien de prévu cette semaine. Les semis, plantations et récoltes du plan s’afficheront ici.</p>
       ) : (
         <>
@@ -671,8 +728,8 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
             <>
               <h2 className="auj-groupe auj-groupe-retard">En retard</h2>
               <ul className="auj-taches">
-                {groupe(enRetard).map((t) => (
-                  <CarteTache key={t.cle} tache={t} aujourdhui={jour} surFait={surFait} surPeser={peser} />
+                {enRetard.map((c) => (
+                  <CarteTache key={c.cle} carte={c} surFait={surFait} surPeser={peser} />
                 ))}
               </ul>
             </>
@@ -681,8 +738,8 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
             <>
               <h2 className="auj-groupe">Cette semaine</h2>
               <ul className="auj-taches">
-                {groupe(semaine).map((t) => (
-                  <CarteTache key={t.cle} tache={t} aujourdhui={jour} surFait={surFait} surPeser={peser} />
+                {semaine.map((c) => (
+                  <CarteTache key={c.cle} carte={c} surFait={surFait} surPeser={peser} />
                 ))}
               </ul>
             </>
@@ -701,10 +758,11 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
         </>
       )}
 
-      {journee !== null && (
+      {vue !== null && (
         <Historique
           id={idHistorique}
-          entrees={journee.historique}
+          entrees={journee?.historique ?? AUCUNE_SAISIE}
+          instantane={journee === null && surInstantane ? { vues: instantane.historique, total: instantane.saisies } : null}
           focus={focusSaisie !== null && focusSaisie.avant !== journee ? focusSaisie.evenementId : null}
           surFocusPlace={oublierFocus}
           aujourdhui={jour}
@@ -742,8 +800,10 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
 
       {dialogue?.sorte === 'recolte' && (
         <Recolte
-          culture={dialogue.culture}
-          recoltesEnCours={recoltes}
+          key={journee === null ? 'attente' : 'lue'}
+          culture={cultureDialogue}
+          recoltesEnCours={journee?.recoltesEnCours ?? []}
+          enAttente={journee === null}
           dernieres={journee?.dernieresRecoltes ?? new Map()}
           erreur={erreur}
           surValider={surValiderRecolte}
