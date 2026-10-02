@@ -12,5 +12,14 @@
 
 ## Critères d'acceptation
 
-- [ ] La carte d'un refus de récolte montre la culture, la date et la quantité saisies.
-- [ ] Test d'isolement : le résumé ne contient rien d'une autre ferme.
+- [x] La carte d'un refus de récolte montre la culture, la date et la quantité saisies.
+- [x] Test d'isolement : le résumé ne contient rien d'une autre ferme.
+
+## Décisions (chef, 2026-10-02)
+
+- Cinq colonnes séparées et typées sur `refus_synchro` (type, culture, date, quantité, unité), jamais la note ni les données reçues.
+- La culture n'est remplie que si la série ou la campagne est de la ferme de l'événement et que l'utilisateur en est membre accepté au moment du lot.
+- Quantité gardée seulement entre 0 et 1 000 000 ; pas de résumé pour les autres tables ni pour un lot trop gros.
+- Les refus restent hors de l'export complet (journal technique, depuis T10i).
+- Limite connue : dans le chemin « chaque écriture à part », la culture est lue une fois par refus (borné à 500 par lot).
+- Question à Théophane : Q25 (un ancien membre garde, dans ses refus, le nom des cultures de la ferme qu'il a quittée).
