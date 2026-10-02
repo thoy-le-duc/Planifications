@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T18 : mode sombre
+
+- **Fait** : l'appli suit le réglage clair/sombre du téléphone sur tous les écrans, avec un choix « Comme le téléphone / Clair / Sombre » dans l'onglet Ferme (Apparence) ; thème sombre « forêt de nuit » (fond vert-noir, en-tête vert profond, boutons sauge), contraste AA vérifié par test sur toutes les paires des deux thèmes ; aucun éclair clair au lancement (petit script bloquant compatible CSP, dans le précache) ; barre du navigateur à la couleur de l'en-tête ; captures de chaque écran dans les deux thèmes.
+- **Décidé** : thème clair conseillé en plein soleil (ligne d'aide) ; l'enregistrement du service worker est chargé juste après le premier affichage pour faire de la place au démarrage (JS de démarrage 70,9/71 Kio, non relevé : le prochain ajout au démarrage devra trouver sa place) ; une paire de contraste impossible et absente de l'écran retirée du contrat. Relecture : 2 bloquants (compte à rebours invisible en sombre, captures manquantes) corrigés, contre-relecture sans bloquant.
+- **Bloquant** : rien. L'écran de lancement de l'appli installée reste clair (le manifeste ne connaît pas le thème sombre).
+
 ## 2026-10-02 — T10p : erreurs d'envoi en flux sans fuite
 
 - **Fait** : une réponse en flux qui échoue en cours d'envoi est journalisée proprement (une ligne, sans message ni donnée), la connexion est coupée pour qu'un export tronqué ne passe jamais pour complet, rien ne part sur la console ni vers le client ; une erreur levée avant toute réponse donne un 500 et une ligne propre ; un téléphone qui coupe n'est pas journalisé comme une erreur.
