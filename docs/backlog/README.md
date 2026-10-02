@@ -63,6 +63,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
 | [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | fait |
 | [T15c](T15c-export-rapide.md) | Export : sous 10 secondes sur un téléphone moyen | T16b | à faire |
+| [T25](T25-demo-en-ligne.md) | Démo en ligne (Vercel) | — | à faire |
 
 T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 300 ms avec la base) : la boucle peut le prendre dès le début, en parallèle du moteur.
 
