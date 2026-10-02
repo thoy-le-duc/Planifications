@@ -2,24 +2,56 @@
  * T25 — habillage du mode démo (chargé avec lui, jamais dans le build de production). Jetons de
  * src/ui (jetons.css) : la bande prolonge l'en-tête vert, la confirmation reprend la feuille du
  * bas des autres écrans.
+ *
+ * Mise en page : le cadre tient exactement dans l'écran (100dvh) ; la bande y prend 44 px et
+ * l'appli le reste. C'est la zone de l'appli qui défile, jamais la page : la barre du bas reste
+ * collée en bas, et les écrans qui tiennent dans l'écran (Planches, connexion) gardent leur
+ * hauteur, bande déduite.
  */
 :root {
-  --demo-hauteur: 40px;
+  --demo-hauteur: 44px;
 }
 
-/* La bande prend sa place en haut : la coquille garde la barre du bas dans l'écran. */
-.coquille,
-.demo-attente {
-  min-height: calc(100dvh - var(--demo-hauteur) - env(safe-area-inset-top, 0px));
+.demo-cadre,
+.demo-page {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.demo-contenu {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Écrans en min-height: 100dvh (coquille, connexion) : la hauteur de la zone, pas de l'écran. */
+.demo-contenu > .coquille,
+.demo-contenu > .connexion,
+.demo-contenu > .demo-attente {
+  flex: 1 0 auto;
+  min-height: 100%;
+}
+
+/* Planches : la coquille tient dans la zone (height: 100dvh dans plan.css), seul le plan défile. */
+.demo-contenu > .coquille-plan {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
 }
 
 .demo-bande {
+  flex: none;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   gap: var(--espace-s);
-  min-height: var(--demo-hauteur);
-  padding: env(safe-area-inset-top, 0px) 14px 0;
+  height: calc(var(--demo-hauteur) + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 8px 0 14px;
   background: var(--couleur-encre);
   color: var(--couleur-sur-foret);
   font-size: 13px;
@@ -30,13 +62,12 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--police-code);
-  letter-spacing: 0.02em;
-  color: var(--couleur-sur-foret-doux);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--police-code);
+  color: var(--couleur-sur-foret-doux);
 }
 
 .demo-etiquette::before {
@@ -49,79 +80,14 @@
   box-shadow: 0 0 0 3px rgba(159, 224, 180, 0.22);
 }
 
+/* Le bouton occupe toute la hauteur de la bande (cible de 44 px) ; la pastille est le dessin. */
 .demo-reinitialiser {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid rgba(244, 247, 239, 0.28);
-  border-radius: var(--rayon-pastille);
-  background: transparent;
-  color: var(--couleur-sur-foret);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.demo-reinitialiser:active {
-  background: rgba(244, 247, 239, 0.12);
-}
-
-.demo-reinitialiser:disabled {
-  opacity: 0.6;
-}
-
-.demo-attente {
-  min-height: calc(100dvh - var(--demo-hauteur) - env(safe-area-inset-top, 0px));
-}
-
-.demo-bande {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--espace-s);
   min-height: var(--demo-hauteur);
-  padding: env(safe-area-inset-top, 0px) 14px 0;
-  background: var(--couleur-encre);
-  color: var(--couleur-sur-foret);
-  font-size: 13px;
-  line-height: 1.2;
-}
-
-.demo-etiquette {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--police-code);
-  letter-spacing: 0.02em;
-  color: var(--couleur-sur-foret-doux);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.demo-etiquette::before {
-  content: '';
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--rayon-pastille);
-  background: var(--couleur-pousse);
-  box-shadow: 0 0 0 3px rgba(159, 224, 180, 0.22);
-}
-
-.demo-reinitialiser {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid rgba(244, 247, 239, 0.28);
-  border-radius: var(--rayon-pastille);
+  padding: 0 6px;
+  border: 0;
   background: transparent;
   color: var(--couleur-sur-foret);
   font: inherit;
@@ -129,21 +95,34 @@
   cursor: pointer;
 }
 
-.demo-reinitialiser:active {
+.demo-reinitialiser-pastille {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(244, 247, 239, 0.28);
+  border-radius: var(--rayon-pastille);
+}
+
+.demo-reinitialiser:active .demo-reinitialiser-pastille {
   background: rgba(244, 247, 239, 0.12);
+}
+
+.demo-reinitialiser:focus-visible {
+  outline: none;
+}
+
+.demo-reinitialiser:focus-visible .demo-reinitialiser-pastille {
+  outline: 3px solid var(--couleur-pousse);
+  outline-offset: 2px;
 }
 
 .demo-reinitialiser:disabled {
   opacity: 0.6;
 }
 
-/* Sur un écran très étroit, l'icône seule dit « réinitialiser » à côté du texte réduit. */
-@media (max-width: 340px) {
-  .demo-reinitialiser {
-    padding: 0 10px;
-  }
-}
-
+/* Attente (préparation, échec, autre compte connecté). */
 .demo-attente {
   display: flex;
   flex-direction: column;
@@ -165,8 +144,8 @@
 }
 
 .demo-attente p {
+  max-width: 30ch;
   color: var(--couleur-sur-foret-doux);
-  max-width: 28ch;
 }
 
 .demo-attente[data-etat='preparation'] p::after {
@@ -178,19 +157,6 @@
   border-radius: var(--rayon-pastille);
   background: var(--couleur-pousse);
   animation: demo-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes demo-pulse {
-  50% {
-    opacity: 0.3;
-    transform: scaleX(0.6);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .demo-attente[data-etat='preparation'] p::after {
-    animation: none;
-  }
 }
 
 /* Confirmation : feuille du bas, voile sur l'appli. */
@@ -246,6 +212,13 @@
   margin-top: var(--espace-s);
 }
 
+@keyframes demo-pulse {
+  50% {
+    opacity: 0.3;
+    transform: scaleX(0.6);
+  }
+}
+
 @keyframes demo-apparition {
   from {
     opacity: 0;
@@ -259,6 +232,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .demo-attente[data-etat='preparation'] p::after,
   .demo-voile,
   .demo-feuille {
     animation: none;

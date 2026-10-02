@@ -5,7 +5,9 @@
  *
  *   - Pas d'écran de connexion : la session de l'utilisateur fictif de la démo est posée sur le
  *     téléphone avant le premier rendu de l'appli (aucun jeton réel : la synchro n'est jamais
- *     branchée, le build n'a ni VITE_API_URL ni VITE_POWERSYNC_URL).
+ *     branchée, le build n'a ni VITE_API_URL ni VITE_POWERSYNC_URL). Un vrai compte déjà connecté
+ *     dans ce navigateur (même origine) n'est jamais remplacé : la démo le dit et s'arrête là,
+ *     sans remplir de base (./session.ts).
  *   - Premier lancement (ou après « Réinitialiser la démo ») : la base locale est remplie avec la
  *     ferme fictive (./remplir.ts, chargé à la demande), datée par rapport au jour du téléphone.
  *     Ensuite, l'appli s'ouvre directement sur la base gardée : les saisies restent sur le
@@ -15,24 +17,14 @@
  *   - Bandeau « Démo — données fictives » et bouton « Réinitialiser la démo » (./Bandeau.tsx).
  */
 import './demo.css';
-import { StrictMode, useEffect, useState } from 'react';
+import { StrictMode, useCallback, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from '../App.tsx';
-import { enregistrerSession, stockageNavigateur, type SessionConnexion } from '../connexion/session.ts';
+import { stockageNavigateur } from '../connexion/session.ts';
 import { baseLocaleExiste } from '../donnees/effacer.ts';
-import { BandeauDemo } from './Bandeau.tsx';
+import { BandeauDemo, ConfirmationDemo } from './Bandeau.tsx';
 import { CLE_REMPLIE, UTILISATEUR_DEMO } from './identite.ts';
-
-/** Session fictive : aucun jeton réel, jamais envoyée (la synchro n'est pas branchée). */
-const SESSION_DEMO: SessionConnexion = {
-  utilisateurId: UTILISATEUR_DEMO,
-  email: 'visiteur@demo',
-  jetonAcces: 'demo',
-  jetonRenouvellement: 'demo',
-};
-
-/** Préfixe des clés de l'appli dans le localStorage (session, ferme active, refus vus…). */
-const PREFIXE_CLES = 'planif.';
+import { poserSessionDemo, reinitialiserStockage } from './session.ts';
 
 /** 'AAAA-MM-JJ' du téléphone (heure locale). */
 function jourDuTelephone(): string {
@@ -56,11 +48,17 @@ function garderLeReseau(): void {
 
 let preparation: Promise<void> | null = null;
 
-/** Session de la démo posée, base remplie si besoin. Une seule fois par page. */
+/** Un vrai compte est connecté dans ce navigateur : la démo ne démarre pas. */
+class AutreCompte extends Error {}
+
+/**
+ * Session de la démo posée, base remplie si besoin. Une seule fois par page. Session d'un autre
+ * compte déjà rangée : rien n'est écrit, aucune base remplie (AutreCompte).
+ */
 function preparer(): Promise<void> {
   return (preparation ??= (async () => {
     const stockage = stockageNavigateur();
-    enregistrerSession(stockage, SESSION_DEMO);
+    if (poserSessionDemo(stockage) === 'autre-compte') throw new AutreCompte();
     let remplie: string | null = null;
     try {
       remplie = stockage.getItem(CLE_REMPLIE);
@@ -81,23 +79,26 @@ function preparer(): Promise<void> {
 
 /** Efface ce que la démo a gardé sur le téléphone puis recharge : la base est remplie à nouveau. */
 function reinitialiser(): void {
-  try {
-    const cles: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const cle = localStorage.key(i);
-      if (cle?.startsWith(PREFIXE_CLES) === true) cles.push(cle);
-    }
-    for (const cle of cles) localStorage.removeItem(cle);
-  } catch {
-    // Stockage indisponible : la base est de toute façon remplie à chaque lancement.
-  }
+  reinitialiserStockage(stockageNavigateur());
   location.reload();
 }
 
-type Etat = 'preparation' | 'prete' | 'echec';
+type Etat = 'preparation' | 'prete' | 'echec' | 'autre-compte';
+
+const MESSAGES: Readonly<Record<Exclude<Etat, 'prete'>, string>> = {
+  preparation: 'Préparation de la ferme de démonstration…',
+  echec: 'La ferme de démonstration n’a pas pu se préparer. Rechargez la page ; si cela recommence, réinitialisez la démo.',
+  'autre-compte':
+    'Ce navigateur est déjà connecté à un compte Planifications : la démo ne le remplace pas. Ouvrez la démo dans une fenêtre de navigation privée.',
+};
 
 function Demo() {
   const [etat, setEtat] = useState<Etat>('preparation');
+  const [confirmer, setConfirmer] = useState(false);
+  const [enCours, setEnCours] = useState(false);
+  const bouton = useRef<HTMLButtonElement>(null);
+  const aRendre = useRef(false);
+
   useEffect(() => {
     let actif = true;
     preparer().then(
@@ -105,6 +106,10 @@ function Demo() {
         if (actif) setEtat('prete');
       },
       (erreur: unknown) => {
+        if (erreur instanceof AutreCompte) {
+          if (actif) setEtat('autre-compte');
+          return;
+        }
         console.error('Démo impossible à préparer', erreur);
         if (actif) setEtat('echec');
       },
@@ -113,22 +118,51 @@ function Demo() {
       actif = false;
     };
   }, []);
+
+  // Confirmation fermée : le focus revient au bouton « Réinitialiser la démo » (page de nouveau active).
+  useEffect(() => {
+    if (confirmer || !aRendre.current) return;
+    aRendre.current = false;
+    bouton.current?.focus();
+  }, [confirmer]);
+
+  const fermer = useCallback(() => {
+    aRendre.current = true;
+    setConfirmer(false);
+  }, []);
+
   return (
-    <>
-      <BandeauDemo surReinitialiser={reinitialiser} />
-      {etat === 'prete' ? (
-        <App />
-      ) : (
-        <div className="demo-attente" data-etat={etat} role="status">
-          <h1>Planifications</h1>
-          <p>
-            {etat === 'echec'
-              ? 'La ferme de démonstration n’a pas pu se préparer. Rechargez la page ; si cela recommence, réinitialisez la démo.'
-              : 'Préparation de la ferme de démonstration…'}
-          </p>
+    <div className="demo-cadre">
+      <div className="demo-page" inert={confirmer}>
+        <BandeauDemo
+          bouton={bouton}
+          enCours={enCours || etat === 'autre-compte'}
+          surOuvrir={() => {
+            setConfirmer(true);
+          }}
+        />
+        <div className="demo-contenu">
+          {etat === 'prete' ? (
+            <App />
+          ) : (
+            <div className="demo-attente" data-etat={etat} role={etat === 'preparation' ? 'status' : 'alert'}>
+              <h1>Planifications</h1>
+              <p>{MESSAGES[etat]}</p>
+            </div>
+          )}
         </div>
+      </div>
+      {confirmer && (
+        <ConfirmationDemo
+          surAnnuler={fermer}
+          surConfirmer={() => {
+            setConfirmer(false);
+            setEnCours(true);
+            reinitialiser();
+          }}
+        />
       )}
-    </>
+    </div>
   );
 }
 
