@@ -12,10 +12,12 @@
     "test": "vitest run",
     "build": "pnpm -r build",
     "build:essais": "pnpm --filter @planif/web build:essais",
+    "build:demo": "pnpm --filter @planif/web build:demo",
     "budget": "pnpm --filter @planif/web budget",
     "e2e": "pnpm --filter @planif/web e2e",
+    "e2e:demo": "pnpm --filter @planif/web e2e:demo",
     "e2e:synchro": "node scripts/e2e-synchro.ts",
-    "verif": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm build:essais && pnpm budget && pnpm e2e"
+    "verif": "pnpm typecheck && pnpm lint && pnpm test && pnpm build && pnpm build:essais && pnpm budget && pnpm e2e && pnpm build:demo && pnpm e2e:demo"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
