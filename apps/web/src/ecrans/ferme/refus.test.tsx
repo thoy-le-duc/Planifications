@@ -11,7 +11,7 @@
  * bloque pas la file ») et, côté serveur, apps/api/src/sync/upload.integration.test.ts
  * (« écritures refusées sans bloquer la file ») ; T10i n'y touche pas.
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { act, createElement, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -183,10 +183,15 @@ function verifierRefusSaisie(l: LigneRefusLocale, typeAttendu: RegExp, dateAtten
 }
 
 describe('T10i : les refus de synchro dans l’onglet Ferme', () => {
-  it('les messages du contrat sont ceux du serveur, mot pour mot (apps/api/src/sync/upload.ts)', () => {
-    const source = readFileSync(join(import.meta.dirname, '../../../../api/src/sync/upload.ts'), 'utf8');
+  it('les messages du contrat sont ceux du serveur, mot pour mot (apps/api/src/sync)', () => {
+    // T10j : les messages peuvent quitter upload.ts (motifs.ts…) : tout le code de la synchro est lu.
+    const dossier = join(import.meta.dirname, '../../../../api/src/sync');
+    const source = readdirSync(dossier)
+      .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+      .map((f) => readFileSync(join(dossier, f), 'utf8'))
+      .join('\n');
     for (const [code, message] of Object.entries(MESSAGES_SERVEUR)) {
-      expect(source.includes(message), `message de « ${code} » introuvable dans upload.ts : mettre à jour test/refus.ts`).toBe(true);
+      expect(source.includes(message), `message de « ${code} » introuvable dans apps/api/src/sync : mettre à jour test/refus.ts`).toBe(true);
     }
   });
 
@@ -236,6 +241,7 @@ describe('T10i : les refus de synchro dans l’onglet Ferme', () => {
       nom_table: 'lot',
       operation: 'PUT',
       motif: 'lot_trop_gros',
+      // Précision d'un serveur d'avant T10j : un refus déjà descendu reste dans la base du téléphone.
       message: messageServeur('lot_trop_gros', '12 autres écritures illisibles, en double ou hors des tables permises'),
     });
     recevoir(lot);

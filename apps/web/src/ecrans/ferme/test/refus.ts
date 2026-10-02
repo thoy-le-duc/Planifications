@@ -9,7 +9,7 @@
  *
  * La table locale `refus_synchro` (packages/sync/src/schema.ts) ne porte que : utilisateur_id,
  * ferme_id, nom_table, ligne_id, operation, motif (CODE stable, ex. 'recolte_annulee'), message
- * (TEXTE en français, écrit par le serveur : MESSAGES d'apps/api/src/sync/upload.ts, suivi de
+ * (TEXTE en français, écrit par le serveur : MESSAGES d'apps/api/src/sync, suivi de
  * « : <précision>. » quand il y en a une) et cree_le (instant ISO du refus, horloge du serveur).
  * Les données de la saisie refusée (`donnees`, jsonb côté serveur) ne descendent JAMAIS
  * (powersync/sync-config.yaml) : ni le type d'événement (récolte, note…), ni la culture, ni la
@@ -71,8 +71,11 @@ import { UTILISATEUR, FERME } from '../../aujourdhui/test/ferme-du-jour.ts';
 export const MARQUE_REFUS_AFFICHES_ATTENDUE = 'planif:refus-affiches';
 
 /**
- * Messages du serveur, recopiés d'apps/api/src/sync/upload.ts (MESSAGES) : l'appli web n'importe
- * pas l'API. ../refus.test.tsx vérifie qu'ils y sont toujours, mot pour mot.
+ * Messages du serveur, recopiés d'apps/api/src/sync (MESSAGES, upload.ts aujourd'hui) : l'appli
+ * web n'importe pas l'API. ../refus.test.tsx vérifie qu'ils y sont toujours, mot pour mot.
+ *
+ * T10j (messages sans jargon) : lot_trop_gros ne cite plus de seuil technique (« plus de 500
+ * saisies ou de 6 Mio ») ; texte proposé par le testeur de T10j, que le serveur reprend mot pour mot.
  */
 export const MESSAGES_SERVEUR = {
   ferme_interdite: "Saisie non enregistrée : elle vise une ferme dont vous n'êtes pas (ou plus) membre.",
@@ -80,7 +83,7 @@ export const MESSAGES_SERVEUR = {
   ajout_seul: 'Un événement enregistré ne se modifie pas et ne se supprime pas : saisissez plutôt une correction ou une annulation.',
   table_interdite: 'Modification refusée : cette donnée ne se modifie pas depuis le téléphone.',
   ecriture_invalide: 'Saisie non enregistrée, données invalides',
-  lot_trop_gros: 'Saisie non enregistrée : envoi trop volumineux (plus de 500 saisies ou de 6 Mio en une fois). Ressaisissez-la.',
+  lot_trop_gros: 'Saisie non enregistrée : envoi trop volumineux. Ressaisissez-la.',
   recolte_annulee: 'Cette récolte a été annulée : elle ne se corrige plus. Pour la rétablir, saisissez une nouvelle récolte.',
 } as const;
 
@@ -147,6 +150,8 @@ export function refusDuJeu(maintenant: Date): LigneRefusLocale[] {
         ligne_id: idLigne(n),
         operation: 'PUT',
         motif: 'lot_trop_gros',
+        // Précision d'un serveur d'avant T10j, gardée exprès : les refus déjà descendus restent dans
+        // la base du téléphone, et l'écran ne doit pas en montrer le jargon.
         message: messageServeur('lot_trop_gros', '12 autres écritures illisibles, en double ou hors des tables permises'),
         cree_le: il(n),
       });
