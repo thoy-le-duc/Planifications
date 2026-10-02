@@ -61,6 +61,25 @@ export interface RefusSynchro {
   readonly message: string;
   /** Instant ISO du refus. */
   readonly creeLe: string;
+  /**
+   * T10k : résumé de la saisie refusée, calculé par le serveur (colonnes saisie_* de
+   * refus_synchro). Absent quand les cinq colonnes sont nulles (serveur d'avant T10k, écriture
+   * illisible, autre table que le journal) : le refus garde alors exactement la forme d'avant.
+   */
+  readonly saisie?: ResumeSaisie;
+}
+
+/** T10k : ce qui avait été saisi, tel que le serveur l'a résumé (chaque champ peut manquer). */
+export interface ResumeSaisie {
+  /** Type d'événement : 'realise', 'recolte', 'intervention', 'irrigation', 'traitement', 'observation'. */
+  readonly type: string | null;
+  /** « Espèce » ou « Espèce Variété », de la ferme de l'événement. */
+  readonly culture: string | null;
+  /** Jour de la saisie, AAAA-MM-JJ. */
+  readonly date: string | null;
+  /** Récolte : quantité et unité ('kg', 'botte', 'piece', 'barquette'). */
+  readonly quantite: number | null;
+  readonly unite: string | null;
 }
 
 /** Ligne `evenement` telle que la porte l'écrit (colonnes du schéma local, sans `cree_le`). */

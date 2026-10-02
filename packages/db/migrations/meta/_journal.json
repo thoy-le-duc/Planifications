@@ -162,6 +162,13 @@
       "when": 1790854798021,
       "tag": "0022_evenement_origine_introuvable",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790937029839,
+      "tag": "0023_refus_resume_saisie",
+      "breakpoints": true
     }
   ]
 }

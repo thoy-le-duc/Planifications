@@ -30,7 +30,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10f](T10f-synchro-debit.md) | Synchro : débit, délais et envois trop lourds | T10d | fait |
 | [T10i](T10i-refus-affiches.md) | Les refus de synchro s'affichent sur le téléphone | T10, T10f | fait |
 | [T10j](T10j-refus-suites.md) | Refus : messages sans jargon | T10i | fait |
-| [T10k](T10k-refus-saisie.md) | Refus : la saisie refusée reconnaissable | T10j | à faire |
+| [T10k](T10k-refus-saisie.md) | Refus : la saisie refusée reconnaissable | T10j | fait |
 | [T10l](T10l-refus-archives.md) | Refus : archiver un refus vu | T10i | à faire |
 | [T10m](T10m-journal-serveur.md) | Journal du serveur : la même règle partout | T10j | à faire |
 | [T10g](T10g-recoltes-annulees.md) | Récoltes annulées et plafonds définitifs (Q20, Q13) | T10d | fait |

@@ -29,9 +29,12 @@ import {
   MESSAGES_SERVEUR,
   messageServeur,
   parametresRefus,
+  parametresRefusResume,
   SQL_INSERER_REFUS,
+  SQL_INSERER_REFUS_RESUME,
   UTILISATEUR_REFUS,
   type LigneRefusLocale,
+  type ResumeSaisieLocal,
 } from './test/refus.ts';
 
 vi.mock('../../donnees/effacer.ts', async (original) => {
@@ -352,5 +355,100 @@ describe('T10i : les refus de synchro dans l’onglet Ferme', () => {
     const posees = marques.filter((x) => x.nom === MARQUE_REFUS_AFFICHES_ATTENDUE);
     expect(posees, 'une seule marque par ouverture').toHaveLength(1);
     expect(posees[0]?.refusAffiches, 'posée quand les refus sont dans le DOM').toBe(2);
+  });
+});
+
+describe('T10k : la saisie refusée reconnaissable', () => {
+  const SANS_RESUME: ResumeSaisieLocal = { saisie_type: null, saisie_culture: null, saisie_date: null, saisie_quantite: null, saisie_unite: null };
+
+  function recevoirAvecResume(l: LigneRefusLocale, resume: Partial<ResumeSaisieLocal>): void {
+    base.recevoir(SQL_INSERER_REFUS_RESUME, parametresRefusResume({ ...l, ...SANS_RESUME, ...resume }));
+  }
+
+  /** Jamais de valeur technique ou manquante affichée. */
+  function sansTrou(t: string, id: string): void {
+    expect(t, `refus ${id} : ni null, ni undefined, ni NaN`).not.toMatch(/\b(null|undefined|NaN)\b/);
+    expect(t, `refus ${id} : jamais le code du type d’événement`).not.toMatch(/\b(recolte|realise|observation)\b/);
+  }
+
+  it('refus d’une récolte : la culture, le jour de la saisie et la quantité saisie, en plus du motif et de la date du refus', async () => {
+    const l = refus({
+      id: 'r-recolte',
+      cree_le: '2025-10-01T12:00:00.000Z',
+      operation: 'PUT',
+      motif: 'recolte_annulee',
+      message: MESSAGES_SERVEUR.recolte_annulee,
+    });
+    recevoirAvecResume(l, {
+      saisie_type: 'recolte',
+      saisie_culture: 'Laitue Batavia blonde',
+      saisie_date: '2025-09-28',
+      saisie_quantite: 12.5,
+      saisie_unite: 'kg',
+    });
+    await rendre();
+    await attendre(() => elementsRefus().length === 1, 'le refus de la récolte est affiché');
+    verifierRefusSaisie(l, /récolte/i, /\b1(er)?\s+oct/i);
+    const t = texte(elementRefus('r-recolte'));
+    expect(t, 'le type d’événement en français').toMatch(/récolte/i);
+    expect(t, 'la culture').toContain('Laitue Batavia blonde');
+    expect(t, 'le jour de la saisie (28 sept.), pas seulement celui du refus').toMatch(/\b28\s+sept/i);
+    expect(t, 'la quantité au format français, avec son unité').toMatch(/12,5\s*kg\b/);
+    sansTrou(t, 'r-recolte');
+  });
+
+  it('unité lisible : « pièces », « bottes », « barquettes », jamais le code', async () => {
+    const lignes = [
+      [refus({ id: 'r-piece', cree_le: '2025-10-03T12:00:00.000Z', operation: 'PUT', motif: 'auteur_invalide', message: MESSAGES_SERVEUR.auteur_invalide }), 30, 'piece', /30\s*pièces/i],
+      [refus({ id: 'r-botte', cree_le: '2025-10-02T12:00:00.000Z', operation: 'PUT', motif: 'auteur_invalide', message: MESSAGES_SERVEUR.auteur_invalide }), 4, 'botte', /4\s*bottes/i],
+      [refus({ id: 'r-barq', cree_le: '2025-10-01T12:00:00.000Z', operation: 'PUT', motif: 'auteur_invalide', message: MESSAGES_SERVEUR.auteur_invalide }), 1, 'barquette', /1\s*barquette\b/i],
+    ] as const;
+    for (const [l, quantite, unite] of lignes) {
+      recevoirAvecResume(l, { saisie_type: 'recolte', saisie_culture: 'Fraise Mara des bois', saisie_date: '2025-09-30', saisie_quantite: quantite, saisie_unite: unite });
+    }
+    await rendre();
+    await attendre(() => elementsRefus().length === 3, 'les trois refus sont affichés');
+    for (const [l, , , attendu] of lignes) {
+      const t = texte(elementRefus(l.id));
+      expect(t, `refus ${l.id}`).toMatch(attendu);
+      expect(t, `refus ${l.id} : jamais le code de l’unité`).not.toMatch(/\bpiece\b/);
+      sansTrou(t, l.id);
+    }
+  });
+
+  it('refus d’un événement « réalisé » : la culture et le jour, sans quantité ni trou', async () => {
+    const l = refus({ id: 'r-realise', cree_le: '2025-10-01T12:00:00.000Z', operation: 'PUT', motif: 'auteur_invalide', message: MESSAGES_SERVEUR.auteur_invalide });
+    recevoirAvecResume(l, { saisie_type: 'realise', saisie_culture: 'Laitue', saisie_date: '2025-08-05' });
+    await rendre();
+    await attendre(() => elementsRefus().length === 1, 'le refus est affiché');
+    verifierRefusSaisie(l, /saisie|événement|journal|réalis|plantation|semis/i, /\b1(er)?\s+oct/i);
+    const t = texte(elementRefus('r-realise'));
+    expect(t).toContain('Laitue');
+    expect(t, 'le jour de la saisie').toMatch(/\b5\s+août/i);
+    sansTrou(t, 'r-realise');
+  });
+
+  it('résumé partiel (culture seule absente, type inconnu) : ce qui est connu, sans trou', async () => {
+    const l = refus({ id: 'r-partiel', cree_le: '2025-10-01T12:00:00.000Z', operation: 'PUT', motif: 'ecriture_invalide', message: messageServeur('ecriture_invalide', 'quantité négative') });
+    recevoirAvecResume(l, { saisie_type: 'type_de_demain', saisie_date: '2025-09-12', saisie_quantite: -3, saisie_unite: 'kg' });
+    await rendre();
+    await attendre(() => elementsRefus().length === 1, 'le refus est affiché');
+    verifierRefusSaisie(l, /saisie|événement|journal/i, /\b1(er)?\s+oct/i);
+    const t = texte(elementRefus('r-partiel'));
+    expect(t, 'le jour de la saisie').toMatch(/\b12\s+sept/i);
+    expect(t, 'jamais le code d’un type inconnu').not.toContain('type_de_demain');
+    sansTrou(t, 'r-partiel');
+  });
+
+  it('refus sans résumé (serveur d’avant T10k, écriture illisible) : affiché comme avant', async () => {
+    const ancien = refus({ id: 'r-ancien', cree_le: '2025-09-14T12:00:00.000Z' });
+    recevoir(ancien);
+    const vide = refus({ id: 'r-vide', cree_le: '2025-09-15T12:00:00.000Z', operation: 'PUT', motif: 'ecriture_invalide', message: MESSAGES_SERVEUR.ecriture_invalide });
+    recevoirAvecResume(vide, {});
+    await rendre();
+    await attendre(() => elementsRefus().length === 2, 'les deux refus sont affichés');
+    verifierRefusSaisie(ancien, /saisie|événement|journal/i, /\b14\s+sept/i);
+    verifierRefusSaisie(vide, /saisie|événement|journal/i, /\b15\s+sept/i);
+    for (const id of ['r-ancien', 'r-vide']) sansTrou(texte(elementRefus(id)), id);
   });
 });

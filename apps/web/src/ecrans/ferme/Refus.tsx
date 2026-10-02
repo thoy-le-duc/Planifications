@@ -4,9 +4,13 @@
  * ./test/refus.ts.
  *
  * Ce que le téléphone sait d'un refus (table refus_synchro) : la table visée, l'opération, le code
- * du motif, le message en français écrit par le serveur et l'heure du refus. Les données de la
- * saisie refusée ne descendent pas : ni la culture ni la date de la saisie ne sont lisibles, d'où
- * un type de saisie (« Événement du journal ») et la date du refus.
+ * du motif, le message en français écrit par le serveur, l'heure du refus et, depuis T10k, un
+ * court résumé de la saisie calculé par le serveur (`RefusSynchro.saisie` : type d'événement,
+ * culture, jour de la saisie, quantité et unité d'une récolte). Les données reçues elles-mêmes ne
+ * descendent toujours pas (ni la note, ni le reste) : seul ce résumé descend. Sans résumé (serveur
+ * d'avant T10k, autre table que le journal, écriture illisible), la carte montre le type de
+ * saisie (« Événement du journal ») et la date du refus, comme en T10i ; un champ du résumé qui
+ * manque ne s'affiche pas.
  *
  * Jamais à l'écran : le code du motif, le nom brut de la table, les identifiants. La ligne
  * récapitulative d'un envoi trop gros (table 'lot', T10f) a sa propre phrase : son message
@@ -16,7 +20,7 @@
  * ralentissent pas l'ouverture de l'onglet.
  */
 import { useState, type CSSProperties } from 'react';
-import type { RefusSynchro } from '@planif/sync';
+import type { RefusSynchro, ResumeSaisie } from '@planif/sync';
 import { CARTE } from '../../ui/elements.tsx';
 
 /** Refus montrés d'un coup, et ajoutés à chaque « voir plus ». */
@@ -31,6 +35,24 @@ const TYPE_SAISIE: Readonly<Record<string, string>> = {
   article_stock: 'Article de stock',
   itineraire: 'Itinéraire',
   type_intervention: 'Type d’intervention',
+};
+
+/** Type d'événement d'un refus qui a un résumé (T10k), à la place de « Événement du journal ». */
+const TYPE_EVENEMENT: Readonly<Record<string, string>> = {
+  realise: 'Étape réalisée',
+  recolte: 'Récolte',
+  intervention: 'Intervention',
+  irrigation: 'Irrigation',
+  traitement: 'Traitement',
+  observation: 'Observation',
+};
+
+/** Unité de récolte lisible : [singulier, pluriel]. */
+const UNITE: Readonly<Record<string, readonly [string, string]>> = {
+  kg: ['kg', 'kg'],
+  botte: ['botte', 'bottes'],
+  piece: ['pièce', 'pièces'],
+  barquette: ['barquette', 'barquettes'],
 };
 
 const OPERATION: Readonly<Record<RefusSynchro['operation'], string>> = { PUT: 'ajout', PATCH: 'modification', DELETE: 'suppression' };
@@ -83,20 +105,64 @@ export function dateDuRefus(creeLe: string, maintenant = new Date()): string {
   return `${jour.format(d)} à ${heure.format(d)}`;
 }
 
+let formatJourSaisie: Intl.DateTimeFormat | null = null;
+let formatJourSaisieAnnee: Intl.DateTimeFormat | null = null;
+let formatQuantite: Intl.NumberFormat | null = null;
+
+/** Jour de la saisie 'AAAA-MM-JJ' : « 28 sept. » (l'année si ce n'est pas l'année en cours) ; '' si illisible. */
+export function jourDeLaSaisie(date: string, maintenant = new Date()): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (m === null) return '';
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  if (Number.isNaN(d.getTime())) return '';
+  const format =
+    d.getUTCFullYear() === maintenant.getFullYear()
+      ? (formatJourSaisie ??= new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', timeZone: 'UTC' }))
+      : (formatJourSaisieAnnee ??= new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }));
+  return format.format(d);
+}
+
+/** « 12,5 kg », « 30 pièces », « 1 barquette » ; '' sans quantité lisible. */
+export function quantiteSaisie(quantite: number | null, unite: string | null): string {
+  if (quantite === null || !Number.isFinite(quantite)) return '';
+  const nombre = (formatQuantite ??= new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 3 })).format(quantite);
+  const formes = unite !== null && Object.hasOwn(UNITE, unite) ? UNITE[unite] : undefined;
+  if (formes === undefined) return nombre;
+  return `${nombre}\u00a0${Math.abs(quantite) >= 2 ? formes[1] : formes[0]}`;
+}
+
 /** Ce que l'écran dit d'un refus. */
 export interface RefusLisible {
   readonly titre: string;
   readonly message: string;
   readonly action: string;
+  /** T10k : la culture saisie, si le serveur l'a résumée. */
+  readonly culture?: string;
+  /** T10k : jour et quantité de la saisie (« Saisie du 28 sept. · 12,5 kg »), si connus. */
+  readonly details?: string;
 }
 
-export function refusLisible(r: RefusSynchro): RefusLisible {
+/** T10k : culture et détails lisibles du résumé ; rien de ce qui manque. */
+function saisieLisible(s: ResumeSaisie, maintenant: Date): Pick<RefusLisible, 'culture' | 'details'> {
+  const jour = s.date === null ? '' : jourDeLaSaisie(s.date, maintenant);
+  const morceaux = [jour === '' ? '' : `Saisie du ${jour}`, quantiteSaisie(s.quantite, s.unite)].filter((m) => m !== '');
+  const culture = s.culture?.trim() ?? '';
+  return {
+    ...(culture === '' ? {} : { culture }),
+    ...(morceaux.length === 0 ? {} : { details: morceaux.join(' · ') }),
+  };
+}
+
+export function refusLisible(r: RefusSynchro, maintenant = new Date()): RefusLisible {
   if (r.nomTable === 'lot') return ENVOI_TROP_GROS;
-  const type = TYPE_SAISIE[r.nomTable] ?? 'Saisie';
+  const codeType = r.nomTable === 'evenement' ? r.saisie?.type : undefined;
+  const typeEvenement = typeof codeType === 'string' && Object.hasOwn(TYPE_EVENEMENT, codeType) ? TYPE_EVENEMENT[codeType] : undefined;
+  const type = typeEvenement ?? TYPE_SAISIE[r.nomTable] ?? 'Saisie';
   return {
     titre: `${type} · ${OPERATION[r.operation]}`,
     message: r.message,
     action: ACTION_PAR_TABLE[r.nomTable]?.[r.motif] ?? ACTION[r.motif] ?? ACTION_GENERALE,
+    ...(r.saisie === undefined ? {} : saisieLisible(r.saisie, maintenant)),
   };
 }
 
@@ -120,6 +186,9 @@ const REFUS: CSSProperties = {
 };
 
 const ENTETE_REFUS: CSSProperties = { display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: '2px 12px' };
+
+/** T10k : ce qui avait été saisi, sous le titre. */
+const SAISIE: CSSProperties = { fontSize: 16, lineHeight: 1.35, color: 'var(--couleur-secondaire)' };
 
 const ACTION_STYLE: CSSProperties = {
   display: 'flex',
@@ -146,7 +215,7 @@ const VOIR_PLUS: CSSProperties = {
 };
 
 function UnRefus({ refus, maintenant }: { readonly refus: RefusSynchro; readonly maintenant: Date }) {
-  const { titre, message, action } = refusLisible(refus);
+  const { titre, message, action, culture, details } = refusLisible(refus, maintenant);
   return (
     <li data-testid="refus" data-refus={refus.id} style={REFUS}>
       <div style={ENTETE_REFUS}>
@@ -155,6 +224,14 @@ function UnRefus({ refus, maintenant }: { readonly refus: RefusSynchro; readonly
           {dateDuRefus(refus.creeLe, maintenant)}
         </span>
       </div>
+      {(culture !== undefined || details !== undefined) && (
+        <p data-testid="refus-saisie" style={SAISIE}>
+          {culture !== undefined && <strong style={{ color: 'var(--couleur-encre)' }}>{culture}</strong>}
+          {culture !== undefined && details !== undefined && ' · '}
+          {details !== undefined && <span>{details}</span>}
+        </p>
+      )}
+      {/* Espace (ignorée par la grille) : le texte de la carte, lu à la suite, garde ses mots séparés. */}{' '}
       <p style={{ fontSize: 16, lineHeight: 1.4, color: 'var(--couleur-encre)' }}>{message}</p>
       <p data-testid="refus-action" style={ACTION_STYLE}>
         <span aria-hidden="true" style={{ color: 'var(--couleur-foret)' }}>

@@ -12,6 +12,7 @@ import type {
   OrdreEcriture,
   PorteDonnees,
   RefusSynchro,
+  ResumeSaisie,
   RequeteSurveillee,
   SaisieEvenement,
 } from './types.ts';
@@ -36,7 +37,8 @@ const COLONNES_EVENEMENT = [
 
 const SQL_SAISIE = `INSERT INTO evenement (${COLONNES_EVENEMENT.join(', ')}) VALUES (${COLONNES_EVENEMENT.map(() => '?').join(', ')})`;
 
-const SQL_REFUS = `SELECT id, nom_table, ligne_id, operation, motif, message, cree_le
+const SQL_REFUS = `SELECT id, nom_table, ligne_id, operation, motif, message, cree_le,
+    saisie_type, saisie_culture, saisie_date, saisie_quantite, saisie_unite
   FROM refus_synchro WHERE utilisateur_id = ? ORDER BY cree_le DESC, id DESC`;
 
 interface LigneRefus {
@@ -47,10 +49,31 @@ interface LigneRefus {
   readonly motif: string;
   readonly message: string;
   readonly cree_le: string;
+  // T10k : nulles pour un refus sans résumé (ou absentes, ligne reçue d'un serveur d'avant).
+  readonly saisie_type?: string | null;
+  readonly saisie_culture?: string | null;
+  readonly saisie_date?: string | null;
+  readonly saisie_quantite?: number | null;
+  readonly saisie_unite?: string | null;
+}
+
+const texteOuNul = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+const nombreOuNul = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/** T10k : résumé de la saisie, ou undefined quand le serveur n'en a calculé aucun. */
+function resumeDepuisLigne(l: LigneRefus): ResumeSaisie | undefined {
+  const resume: ResumeSaisie = {
+    type: texteOuNul(l.saisie_type),
+    culture: texteOuNul(l.saisie_culture),
+    date: texteOuNul(l.saisie_date),
+    quantite: nombreOuNul(l.saisie_quantite),
+    unite: texteOuNul(l.saisie_unite),
+  };
+  return Object.values(resume).every((v) => v === null) ? undefined : resume;
 }
 
 function refusDepuisLigne(l: LigneRefus): RefusSynchro {
-  return {
+  const refus: RefusSynchro = {
     id: l.id,
     nomTable: l.nom_table,
     ligneId: l.ligne_id,
@@ -59,6 +82,8 @@ function refusDepuisLigne(l: LigneRefus): RefusSynchro {
     message: l.message,
     creeLe: l.cree_le,
   };
+  const saisie = resumeDepuisLigne(l);
+  return saisie === undefined ? refus : { ...refus, saisie };
 }
 
 /**

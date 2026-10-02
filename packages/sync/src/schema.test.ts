@@ -16,6 +16,9 @@ const COLONNES_EXCLUES: Readonly<Record<string, readonly string[]>> = {
   refus_synchro: ['donnees'],
 };
 
+/** T10k : résumé de la saisie refusée, calculé par le serveur (apps/api/src/sync/resume-refus.integration.test.ts). */
+const COLONNES_RESUME_SAISIE = ['saisie_type', 'saisie_culture', 'saisie_date', 'saisie_quantite', 'saisie_unite'] as const;
+
 const tablesPostgres = (Object.values(db) as unknown[])
   .filter((v): v is PgTable => v instanceof PgTable)
   .map((t) => getTableConfig(t));
@@ -56,6 +59,36 @@ describe('schéma local', () => {
       modifie_le: 'texte',
       supprime_le: 'texte',
     });
+  });
+
+  it('T10k : le résumé de la saisie refusée (5 colonnes nullables) descend sur le téléphone, jamais les données reçues', () => {
+    const postgres = tablesPostgres.find((t) => t.name === 'refus_synchro')?.columns ?? [];
+    for (const nom of COLONNES_RESUME_SAISIE) {
+      const c = postgres.find((x) => x.name === nom);
+      expect(c, `refus_synchro.${nom} dans Postgres`).toBeDefined();
+      expect(c?.notNull, `refus_synchro.${nom} nullable (un refus sans résumé reste possible)`).toBe(false);
+    }
+    expect(postgres.find((c) => c.name === 'saisie_quantite')?.getSQLType(), 'un nombre, pas un texte : il descend en réel').toBe('double precision');
+    const locale: Readonly<Record<string, string>> = TABLES_LOCALES.refus_synchro;
+    expect(Object.fromEntries(COLONNES_RESUME_SAISIE.map((c) => [c, locale[c]]))).toEqual({
+      saisie_type: 'texte',
+      saisie_culture: 'texte',
+      saisie_date: 'texte',
+      saisie_quantite: 'reel',
+      saisie_unite: 'texte',
+    });
+
+    const regles = readFileSync(new URL('../../../powersync/sync-config.yaml', import.meta.url), 'utf8');
+    // Requête sur une ligne, ou repliée (`>-`) sur les lignes plus indentées qui suivent.
+    const requetes = [...regles.matchAll(/query:[ \t]*(?:>-?[ \t]*\n((?:[ \t]{6,}[^\n]*\n?)+)|(SELECT[^\n]*))/g)]
+      .map((r) => (r[1] ?? r[2] ?? '').replace(/\s+/g, ' ').trim())
+      .filter((q) => /\bFROM refus_synchro\b/.test(q));
+    expect(requetes, 'un seul flux pour refus_synchro').toHaveLength(1);
+    const colonnes = (/^SELECT (.*?) FROM refus_synchro/.exec(requetes[0] ?? '')?.[1] ?? '').split(',').map((c) => c.trim());
+    for (const nom of COLONNES_RESUME_SAISIE) expect(colonnes, `${nom} dans le flux refus_synchro`).toContain(nom);
+    expect(colonnes, 'jamais les données reçues').not.toContain('donnees');
+    expect(colonnes, 'jamais toutes les colonnes').not.toContain('*');
+    expect(requetes[0], 'toujours au seul auteur').toMatch(/WHERE utilisateur_id = auth\.user_id\(\)$/);
   });
 
   it('T23 : les règles de synchro servent les types de la ferme et la liste de départ (ferme_id nul)', () => {
