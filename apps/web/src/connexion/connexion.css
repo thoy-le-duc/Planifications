@@ -7,7 +7,8 @@
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  background: var(--couleur-foret);
+  /* T18 : la forêt de l'en-tête (profonde en sombre) ; la carte du bas garde celle des boutons. */
+  background: var(--couleur-entete);
   overflow: hidden;
 }
 

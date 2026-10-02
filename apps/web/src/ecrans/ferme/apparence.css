@@ -1,0 +1,84 @@
+/* T18 — réglage « Apparence » de l'onglet Ferme : trois grands boutons radio côte à côte, même
+   facture que les choix de mode des itinéraires (.itin-mode). */
+
+.apparence {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 14px;
+}
+
+.apparence-choix {
+  display: grid;
+  /* Trois colonnes sur un téléphone ; une par ligne quand l'écran est étroit ou zoomé. */
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.apparence-option {
+  position: relative;
+  min-height: 76px;
+  padding: 10px 6px;
+  border: 2px solid transparent;
+  border-radius: var(--rayon-case);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  color: var(--couleur-encre);
+  background: var(--couleur-fond);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.apparence-option svg {
+  flex-shrink: 0;
+  color: var(--couleur-secondaire);
+}
+
+/* Le radio natif couvre tout le libellé, sans dessin propre : le tap tombe toujours dessus, et
+   son contour de focus (au clavier) se voit à l'intérieur du bouton. */
+.apparence-option input {
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: inherit;
+}
+
+.apparence-option input:focus-visible {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: -6px;
+}
+
+.apparence-choisie {
+  border-color: var(--couleur-foret);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.apparence-choisie svg {
+  color: var(--couleur-sur-foret);
+}
+
+/* Sur le bouton choisi (forêt), le contour prend la couleur du texte. */
+.apparence-choisie input:focus-visible {
+  outline-color: var(--couleur-sur-foret);
+}
+
+.apparence-aide {
+  padding: 0 4px;
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}

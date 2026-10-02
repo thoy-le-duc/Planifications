@@ -42,7 +42,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10e](T10e-series-synchro.md) | Synchro : le serveur accepte les séries des téléphones | T10, T10b, T10c | fait |
 | [T16](T16-design.md) | Identité visuelle : système de design et habillage | T09b | fait |
 | [T16b](T16b-brancher-export.md) | Brancher l'export dans l'onglet Ferme | T11 | fait |
-| [T18](T18-mode-sombre.md) | Mode sombre | T16 | à faire |
+| [T18](T18-mode-sombre.md) | Mode sombre | T16 | fait |
 | [T11](T11-vue-2d.md) | Vue 2D planches × semaines (et base locale ouverte dans l'appli) | T03, T10, T16 | fait |
 | [T12](T12-plan-de-culture.md) | Plan de culture : créer et modifier une série | T04, T05, T10e, T11 | fait |
 | [T12b](T12b-serie-suites.md) | Formulaire de série : sélecteur de semaine maison et suites de relecture | T12 | fait |

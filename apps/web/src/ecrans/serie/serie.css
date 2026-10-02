@@ -369,7 +369,7 @@ select.serie-champ {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: color-mix(in srgb, var(--couleur-encre) 45%, transparent);
+  background: color-mix(in srgb, var(--couleur-ombre) 45%, transparent);
 }
 
 .semaine-feuille {
@@ -795,7 +795,7 @@ select.serie-champ {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: color-mix(in srgb, var(--couleur-encre) 45%, transparent);
+  background: color-mix(in srgb, var(--couleur-ombre) 45%, transparent);
 }
 
 .serie-confirmation {

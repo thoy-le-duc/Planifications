@@ -305,7 +305,7 @@ export function App() {
     // Maquette « Connexion » : bandeau vert et motif des planches, carte claire en bas.
     return (
       <main data-testid="app" className="connexion">
-        <svg className="connexion-motif" width="390" height="360" viewBox="0 0 390 360" aria-hidden="true">
+        <svg className="connexion-motif zone-entete" width="390" height="360" viewBox="0 0 390 360" aria-hidden="true">
           <path
             d="M-20 90Q195 30 410 90M-20 150Q195 90 410 150M-20 210Q195 150 410 210M-20 270Q195 210 410 270"
             fill="none"
@@ -319,7 +319,7 @@ export function App() {
             ))}
           </g>
         </svg>
-        <div className="connexion-titre">
+        <div className="connexion-titre zone-entete">
           <h1>Planifications</h1>
           <p>Ta ferme dans la poche, même sans réseau.</p>
         </div>

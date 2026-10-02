@@ -12,7 +12,7 @@
 
 ## Critères d'acceptation
 
-- [ ] Captures e2e de chaque écran dans les deux thèmes.
-- [ ] Test de contraste sur toutes les paires des deux thèmes.
+- [x] Captures e2e de chaque écran dans les deux thèmes.
+- [x] Test de contraste sur toutes les paires des deux thèmes.
 
 **Hors périmètre** : thème à fort contraste (plus tard si besoin).

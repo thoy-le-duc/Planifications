@@ -23,7 +23,7 @@
  * tête de l'écran quand il y en a (./Refus.tsx). Marque MARQUE_REFUS_AFFICHES une fois par
  * ouverture, quand la liste est lue et dessinée (même vide).
  */
-import { useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useContext, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { urlApi } from '../../connexion/client.ts';
 import { deconnecterAvecConfirmation, effacementsEnAttente } from '../../connexion/deconnexion.ts';
 import { stockageNavigateur, type SessionConnexion } from '../../connexion/session.ts';
@@ -33,6 +33,7 @@ import type { PorteDonnees, RefusSynchro } from '@planif/sync';
 import type { EtatBase, PoigneeDonnees } from '../../donnees/etat-appli.ts';
 import { AlerteOrange, BoutonSecondaire, CARTE } from '../../ui/elements.tsx';
 import { Confirmation } from '../../ui/confirmation.tsx';
+import { Apparence } from './Apparence.tsx';
 import { SaisiesRefusees, type VidangeArchivage } from './Refus.tsx';
 
 /** Marque de performance : les refus de synchro sont lus et dessinés (T10i, e2e/refus.e2e.ts). */
@@ -153,10 +154,11 @@ function Ligne({ nom, detail, signe, couleur, desactivee, surTap }: ProprietesLi
   );
 }
 
-function Carte({ titre, children }: { readonly titre: string; readonly children: ReactNode }) {
+function Carte({ titre, idTitre, children }: { readonly titre: string; readonly idTitre?: string; readonly children: ReactNode }) {
   return (
     <section aria-label={titre} style={CARTE}>
       <h2
+        id={idTitre}
         style={{
           padding: '12px 16px 6px',
           fontFamily: 'var(--police-texte)',
@@ -178,6 +180,7 @@ function Carte({ titre, children }: { readonly titre: string; readonly children:
 const ALERTE_EFFACEMENT = 'Les données d’un ancien compte n’ont pas encore été effacées de ce téléphone : fermez les autres onglets.';
 
 export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBase }: ProprietesEcranFerme) {
+  const idApparence = useId();
   // Lu à l'ouverture de l'écran : l'effacement n'est repris que sur l'écran de connexion.
   const [effacementEnAttente] = useState(() => effacementsEnAttente(stockageNavigateur()).length > 0);
   const ouverte = useContext(ContexteFerme);
@@ -479,6 +482,10 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
         </p>
       </Carte>
       {etatExport.etape === 'echec' && <AlerteOrange>L’export n’a pas pu se faire. Réessayez ; si cela recommence, signalez-le.</AlerteOrange>}
+
+      <Carte titre="Apparence" idTitre={idApparence}>
+        <Apparence idTitre={idApparence} />
+      </Carte>
 
       <div style={CARTE}>
         <Ligne
