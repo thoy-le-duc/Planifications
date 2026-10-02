@@ -255,3 +255,18 @@ export function lireDateSemaine(c: Cellule, anneeSaison: number | null, options:
   if (n.valeur < 1 || n.valeur > nombreSemainesIso(anneeSaison)) return ko('date_invalide');
   return ok(lundiDeSemaine(anneeSaison, n.valeur));
 }
+
+/**
+ * Numéro de semaine d'une date écrite en semaine : « S14 », « sem 14 », ou un entier nu dans une
+ * colonne en semaines (`enSemaines`). `null` pour toute autre écriture (date complète, série Excel).
+ * À n'appeler que sur une cellule déjà lue sans erreur par `lireDate` / `lireDateSemaine`.
+ */
+export function numeroSemaine(c: Cellule, enSemaines: boolean): number | null {
+  if (typeof c === 'string') {
+    const m = SEMAINE.exec(c.trim());
+    if (m !== null) return Number(m[1]);
+  }
+  if (!enSemaines) return null;
+  const n = lireNombre(c);
+  return n.ok && n.valeur !== null && Number.isInteger(n.valeur) ? n.valeur : null;
+}

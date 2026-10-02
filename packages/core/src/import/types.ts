@@ -182,6 +182,20 @@ export interface ErreurImport {
   readonly message: string;
 }
 
+/**
+ * Avertissement d'une ligne (T14d) : la ligne reste importable, mais l'import a deviné quelque
+ * chose que l'aperçu doit montrer. Seul code : 'annee_suivante', une semaine retombe avant la
+ * précédente et passe à l'année suivante. `champ` / `colonne` : la date qui change d'année ;
+ * `annee` : l'année où elle tombe.
+ */
+export interface AvertissementImport {
+  readonly code: 'annee_suivante';
+  readonly champ: CleChamp;
+  readonly colonne: number | null;
+  readonly annee: number;
+  readonly message: string;
+}
+
 export type StatutLigne = 'valide' | 'erreur' | 'a_decider' | 'doublon';
 
 export interface LignePlan {
@@ -190,6 +204,8 @@ export interface LignePlan {
   readonly valeurs: Readonly<Partial<Record<CleChamp, ValeurImport>>>;
   readonly erreurs: readonly ErreurImport[];
   readonly doublonDe: number | null;
+  /** Présent seulement s'il y a au moins un avertissement (absent sinon, jamais `[]`). */
+  readonly avertissements?: readonly AvertissementImport[];
 }
 
 export interface DecisionValeur {

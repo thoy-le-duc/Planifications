@@ -4,9 +4,11 @@
  * vides et de total ignorées ; hiérarchie du parcellaire reprise des cellules fusionnées.
  */
 import { CHAMPS_IMPORT } from './champs.ts';
-import { LONGUEUR_MAX_CELLULE, cle, lireDate, lireDateSemaine, lireMesure, lireNombre, multiplierPuissanceDix, premiersNombresDate, texteCellule } from './normalisation.ts';
+import { LONGUEUR_MAX_CELLULE, cle, lireDate, lireDateSemaine, lireMesure, lireNombre, multiplierPuissanceDix, numeroSemaine, premiersNombresDate, texteCellule } from './normalisation.ts';
+import { jourAbsolu, lundiDeSemaine, nombreSemainesIso, type DateCalendaire } from '../dates/index.ts';
 import { rapprocher } from './rapprochement.ts';
 import type {
+  AvertissementImport,
   Bibliotheque,
   Cellule,
   ChampReference,
@@ -391,6 +393,52 @@ function datesDansLeDesordre(
   return null;
 }
 
+/** Écart maximal (en jours) entre la première et la dernière date d'une ligne qui change d'année. */
+const ECART_MAX_JOURS = 364;
+
+/**
+ * Dates données en semaines (T14d, Q18) : une semaine qui retombe avant la date précédente passe à
+ * l'année suivante, une seule fois. Corrige `valeurs` en place et renvoie les champs concernés ;
+ * `depassement` est la première date plus de 364 jours après la première de la ligne. Une
+ * deuxième retombée n'est pas corrigée : l'ordre des dates la signale.
+ */
+function passerALAnneeSuivante(
+  valeurs: Partial<Record<CleChamp, ValeurImport>>,
+  semaines: ReadonlyMap<CleChamp, number>,
+  anneeSaison: number | null,
+): { readonly changees: readonly CleChamp[]; readonly depassement: CleChamp | null } {
+  const changees: CleChamp[] = [];
+  let depassement: CleChamp | null = null;
+  let decalage = 0;
+  let precedente: string | null = null;
+  let premiere: DateCalendaire | null = null;
+  for (const c of DATES) {
+    let v = valeurs[c];
+    if (typeof v !== 'string') continue;
+    const semaine = semaines.get(c);
+    if (semaine !== undefined && anneeSaison !== null) {
+      const lundi = (annee: number): DateCalendaire | null => (semaine <= nombreSemainesIso(annee) ? lundiDeSemaine(annee, semaine) : null);
+      let date = lundi(anneeSaison + decalage);
+      if (decalage === 0 && date !== null && precedente !== null && date < precedente) {
+        const suivante = lundi(anneeSaison + 1);
+        if (suivante !== null) {
+          decalage = 1;
+          date = suivante;
+          changees.push(c);
+        }
+      }
+      if (date !== null) {
+        v = date;
+        valeurs[c] = date;
+      }
+    }
+    precedente = v;
+    premiere ??= v as DateCalendaire;
+    if (decalage === 1 && depassement === null && jourAbsolu(v as DateCalendaire) - jourAbsolu(premiere) > ECART_MAX_JOURS) depassement = c;
+  }
+  return { changees, depassement };
+}
+
 function entierBorne(n: number, defaut: number): number {
   return Number.isFinite(n) ? Math.max(-1, Math.floor(n)) : defaut;
 }
@@ -534,6 +582,7 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     const valeurs: Partial<Record<CleChamp, ValeurImport>> = {};
     const erreurs: ErreurImport[] = [...erreursDeCorrespondance];
     const ctxBase = { anneeSaison, referencer };
+    const semaines = new Map<CleChamp, number>();
     for (const col of colonnes) {
       const cellule = remplacees.get(col.indice) ?? brute[col.indice] ?? null;
       const lu = lireCellule(NATURES[col.champ], cellule, { ...ctxBase, unite: col.unite, optionsDate: optionsDates.get(col.indice) ?? optionsParDefaut });
@@ -542,6 +591,10 @@ export function preparerImport(entree: EntreeImport): PlanImport {
         continue;
       }
       valeurs[col.champ] = lu.valeur;
+      if (typeof lu.valeur === 'string' && DATES.includes(col.champ)) {
+        const semaine = numeroSemaine(cellule, col.unite === 'semaine');
+        if (semaine !== null) semaines.set(col.champ, semaine);
+      }
       if (lu.valeur === null && obligatoires.includes(col.champ)) erreurs.push(erreur('champ_manquant', col.champ, col.indice));
     }
 
@@ -551,7 +604,18 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     if (type === 'series' && DATES.every(vide)) {
       erreurs.push(erreur('champ_manquant', null, null, 'Il faut au moins une date : semis, plantation, début ou fin de récolte.'));
     }
+    let avertissements: AvertissementImport[] = [];
     if (type === 'series') {
+      // Semaines qui retombent avant la précédente : année suivante, signalée (T14d).
+      const { changees, depassement } = passerALAnneeSuivante(valeurs, semaines, anneeSaison);
+      avertissements = changees.map((champ) => {
+        const date = valeurs[champ];
+        const annee = typeof date === 'string' ? Number(date.slice(0, 4)) : 0;
+        return { code: 'annee_suivante', champ, colonne: colonneDe.get(champ) ?? null, annee, message: `${libelle(type, champ).toLowerCase()} en ${String(annee)}` };
+      });
+      if (depassement !== null) {
+        erreurs.push(erreur('dates_incoherentes', depassement, colonneDe.get(depassement) ?? null, 'plus d’un an entre la première et la dernière date'));
+      }
       const desordre = datesDansLeDesordre(valeurs);
       if (desordre !== null) {
         const colonne = colonneDe.get(desordre.champ) ?? null;
@@ -590,7 +654,7 @@ export function preparerImport(entree: EntreeImport): PlanImport {
         doublonDe = premiere;
       } else statut = 'valide';
     }
-    lignes.push({ ligne: numero, statut, valeurs, erreurs, doublonDe });
+    lignes.push(erreurs.length === 0 && avertissements.length > 0 ? { ligne: numero, statut, valeurs, erreurs, doublonDe, avertissements } : { ligne: numero, statut, valeurs, erreurs, doublonDe });
   }
 
   let niveaux: PlanImport['niveaux'] = null;
