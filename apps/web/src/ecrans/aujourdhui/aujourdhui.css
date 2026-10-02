@@ -139,6 +139,16 @@
   color: var(--couleur-encre);
 }
 
+/* T13d : « Fait » sur l'instantané sans écriture (déjà notée ailleurs, tâche changée). */
+.auj-avis {
+  background: var(--couleur-surface);
+  border-left: 8px solid var(--couleur-foret);
+  border-radius: var(--rayon-carte);
+  padding: 12px 14px;
+  font-size: 16px;
+  color: var(--couleur-encre);
+}
+
 .auj-chargement,
 .auj-vide {
   margin: var(--espace-s) 6px 0;

@@ -449,6 +449,8 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
   const surInstantane = journee === null && instantane !== null && instantane.jour === jour;
   const [echecLecture, setEchecLecture] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  /** T13d : « Fait » touché sur l'instantané et rien écrit (tâche faite ailleurs, ou changée) : dit pourquoi. */
+  const [avis, setAvis] = useState<string | null>(null);
   const [annulable, setAnnulable] = useState<Annulable | null>(null);
   const [dialogue, setDialogue] = useState<Dialogue>(null);
   const [toutVoir, setToutVoir] = useState(false);
@@ -538,6 +540,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
     if (occupe.current) return false;
     occupe.current = true;
     setErreur(null);
+    setAvis(null);
     setFocusSaisie(null);
     try {
       await action();
@@ -593,6 +596,8 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
   function surFait(cle: string): void {
     if (estMasquee(cle) || occupe.current) return;
     let tache: () => Promise<TacheJour | null>;
+    /** Lecture ciblée : la tâche a changé, la carte revient (pas de masque). */
+    let changee = false;
     if (journee !== null) {
       const t = journee.taches.find((x) => x.cle === cle);
       if (t === undefined || t.tache.etape === 'debut_recolte') return;
@@ -600,14 +605,29 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
     } else {
       const carte = surInstantane ? instantane.taches.find((c) => c.cle === cle) : undefined;
       if (carte === undefined || carte.peser) return;
-      tache = () => lireTacheCiblee(porte, fermeId, jourCourant(), cle);
+      const affichee = carte.action;
+      tache = async () => {
+        const t = await lireTacheCiblee(porte, fermeId, jourCourant(), cle);
+        if (t === null) {
+          setAvis('Déjà notée depuis un autre téléphone : rien de plus n’est enregistré.');
+          return null;
+        }
+        // La base ne décrit plus la tâche comme la carte touchée (itinéraire changé depuis le
+        // bureau) : rien n'est écrit, la carte revient telle que la base la décrit.
+        if (vueCarte(t, jour).action !== affichee) {
+          setAvis('Cette tâche a changé depuis le bureau : rien n’est enregistré, vérifiez-la puis touchez « Fait » de nouveau.');
+          changee = true;
+          return null;
+        }
+        return t;
+      };
     }
     masquer(cle, 'attente');
     void ecrire(async () => {
       const t = await tache();
       if (t !== null) await ecrireFait(t);
     }).then((ok) => {
-      masquer(cle, ok ? marquerEcriture() : undefined);
+      masquer(cle, ok && !changee ? marquerEcriture() : undefined);
     });
   }
 
@@ -715,6 +735,11 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
       {erreur !== null && (
         <p role="alert" className="auj-erreur">
           {erreur}
+        </p>
+      )}
+      {avis !== null && (
+        <p role="status" className="auj-avis">
+          {avis}
         </p>
       )}
 

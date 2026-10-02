@@ -12,6 +12,7 @@
  * - Stockage indisponible ou plein : rien n'est lu ni gardé, l'écran marche comme avant.
  * - Effacé à la déconnexion (connexion/deconnexion.ts, ./cle-instantane.ts).
  */
+import { lireSession } from '../../connexion/session.ts';
 import { cleInstantane } from './cle-instantane.ts';
 import type { CarteVue, SaisieVue, TypeSaisie } from './vues.ts';
 
@@ -117,8 +118,14 @@ export function lireInstantane(stockage: StockageInstantane, attendu: { readonly
   return { version, utilisateurId, fermeId, jour, semaine, taches, retard, cetteSemaine, recoltes, charge, historique, saisies };
 }
 
-/** Garde l'instantané ; stockage plein ou refusé : rien (l'écran marche sans). */
+/**
+ * Garde l'instantané, seulement si la session rangée dans `stockage` est celle de cet
+ * utilisateur ; stockage plein ou refusé : rien (l'écran marche sans).
+ */
 export function garderInstantane(stockage: StockageInstantane, ids: { readonly utilisateurId: string; readonly fermeId: string; readonly jour: string }, vue: VueJournee): void {
+  // Session disparue ou autre compte (déconnexion dans un autre onglet) : plus rien de ce compte
+  // n'est écrit, même par une réécriture différée.
+  if (lireSession(stockage)?.utilisateurId !== ids.utilisateurId) return;
   const instantane: Instantane = { version: VERSION_INSTANTANE, ...ids, ...vue };
   try {
     stockage.setItem(cleInstantane(ids.utilisateurId), JSON.stringify(instantane));
