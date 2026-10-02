@@ -11,7 +11,7 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : une réponse en flux qui échoue en cours d'envoi ne fait apparaître ni le message dans le journal, ni `Error:` au client.
+- [x] Test : une réponse en flux qui échoue en cours d'envoi ne fait apparaître ni le message dans le journal, ni `Error:` au client.
 
 ## Aussi (dernière vérification T10m)
 

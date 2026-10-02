@@ -2,6 +2,11 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-02 — T10p : erreurs d'envoi en flux sans fuite
+
+- **Fait** : une réponse en flux qui échoue en cours d'envoi est journalisée proprement (une ligne, sans message ni donnée), la connexion est coupée pour qu'un export tronqué ne passe jamais pour complet, rien ne part sur la console ni vers le client ; une erreur levée avant toute réponse donne un 500 et une ligne propre ; un téléphone qui coupe n'est pas journalisé comme une erreur.
+- **Décidé** : jamais `hono/streaming` (il ferme proprement un flux en échec) : test statique et règle en tête de `serveur.ts` ; positions de pile seulement si le journal est bien à sa place dans le dépôt (`racineDepuisModule`). Relecture : aucun bloquant, sept retouches, contre-relecture sans bloquant.
+- **Bloquant** : rien. Suite : T10q (HTTP/1.0 derrière un proxy, 500 propre avant le premier octet, tests 400/504).
 ## 2026-10-02 — T10n : annuler un archivage de refus
 
 - **Fait** : après « Archiver » ou « Tout archiver », les refus sortent tout de suite de la liste et un bandeau « N refus archivés — Annuler » reste 5 s ; rien n'est écrit tant qu'on peut annuler ; l'archivage part à la fin du délai, ou tout de suite si l'on quitte l'onglet, ferme l'appli ou se déconnecte.
