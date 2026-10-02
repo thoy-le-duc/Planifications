@@ -29,13 +29,35 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { CodeErreurSaisie } from '@planif/core';
+import { messageRefus, refusDuCoeur } from './messages.ts';
 import type { MotifRefus } from './motifs.ts';
-import { jargon, MOTIFS } from './test/jargon.ts';
+import { defautsDeForme, jargon, MOTIFS } from './test/jargon.ts';
 
 // La liste des motifs du test suit le type du serveur : un motif ajouté sans être testé ne compile pas.
 type MotifsManquants = Exclude<MotifRefus, (typeof MOTIFS)[number]>;
 type MotifsEnTrop = Exclude<(typeof MOTIFS)[number], MotifRefus>;
 const motifsComplets: [MotifsManquants, MotifsEnTrop] extends [never, never] ? true : false = true;
+
+/** Codes d'erreur du cœur ; la liste suit le type de @planif/core (un code ajouté sans être testé ne compile pas). */
+const CODES_DU_COEUR = [
+  'entree_invalide',
+  'colonne_inconnue',
+  'champ_manquant',
+  'champ_invalide',
+  'hors_bornes',
+  'trop_long',
+  'trop_nombreux',
+  'doublon',
+  'incoherent',
+  'json_illisible',
+  'trop_volumineux',
+  'cle_inconnue',
+  'plafond_depasse',
+] as const;
+type CodesManquants = Exclude<CodeErreurSaisie, (typeof CODES_DU_COEUR)[number]>;
+type CodesEnTrop = Exclude<(typeof CODES_DU_COEUR)[number], CodeErreurSaisie>;
+const codesComplets: [CodesManquants, CodesEnTrop] extends [never, never] ? true : false = true;
 
 const DOSSIER = import.meta.dirname;
 
@@ -112,6 +134,67 @@ describe('T10j : textes des refus dans le code de la synchro', () => {
       .map((t) => ({ ...t, jargon: [...jargon(t.texte), ...t.constantes.map((c) => `seuil technique inséré (${c})`)] }))
       .filter((t) => t.jargon.length > 0)
       .map((t) => `${t.fichier} (${t.origine}) « ${t.texte} » : ${t.jargon.join(', ')}`);
+    expect(fautifs).toEqual([]);
+  });
+});
+
+/** Clés de l'objet `const <nom> … = { … };` de `texte` (sans commentaires). */
+function clesDeLObjet(texte: string, nom: string): string[] {
+  const debut = texte.indexOf(`const ${nom}`);
+  if (debut < 0) return [];
+  const ouverture = texte.indexOf('= {', debut);
+  const fin = texte.indexOf('\n};', ouverture);
+  const corps = texte.slice(ouverture + 3, fin);
+  return [...corps.matchAll(/^\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_$][\w$]*))\s*:/gmu)].map((m) => m[1] ?? m[2] ?? m[3] ?? '');
+}
+
+describe('T10j (relecture) : filet des tables de messages.ts et de references.ts', () => {
+  const messages = sansCommentaires(readFileSync(join(DOSSIER, 'messages.ts'), 'utf8'));
+  const champs = clesDeLObjet(messages, 'LIBELLES_DES_CHAMPS');
+
+  /** Défauts (jargon, forme) d'un message affiché, ou vide. */
+  const defauts = (message: string): string[] => [...jargon(message), ...defautsDeForme(message)];
+
+  it('la liste des codes du test est celle du cœur (CodeErreurSaisie), et PRECISIONS_DU_COEUR les couvre tous', () => {
+    expect(codesComplets).toBe(true);
+    expect(clesDeLObjet(messages, 'PRECISIONS_DU_COEUR').sort()).toEqual([...CODES_DU_COEUR].sort());
+    expect(champs.length, 'clés de LIBELLES_DES_CHAMPS lues').toBeGreaterThan(30);
+  });
+
+  it('chaque code du cœur, sans champ, avec chaque champ de LIBELLES_DES_CHAMPS et dans le détail : message sans jargon, forme stable', () => {
+    const fautifs: string[] = [];
+    for (const code of CODES_DU_COEUR) {
+      for (const champ of [null, ...champs, ...champs.map((c) => `detail.${c}`), ...champs.map((c) => `parametres.travauxPrevus.0.${c}`), 'champ_que_personne_ne_connait']) {
+        const message = messageRefus(refusDuCoeur({ code, champ, message: 'message du cœur, jamais affiché' }, null));
+        const d = defauts(message);
+        if (d.length > 0) fautifs.push(`${code} / ${String(champ)} : « ${message} » : ${d.join(', ')}`);
+      }
+    }
+    expect(fautifs).toEqual([]);
+  });
+
+  it('chaque motif, avec et sans précision : forme stable, sans jargon', () => {
+    const fautifs = MOTIFS.flatMap((motif) => [messageRefus({ motif }), messageRefus({ motif, precision: 'série introuvable' })])
+      .map((m) => ({ m, d: defauts(m) }))
+      .filter((x) => x.d.length > 0)
+      .map((x) => `« ${x.m} » : ${x.d.join(', ')}`);
+    expect(fautifs).toEqual([]);
+  });
+
+  it('references.ts : chaque « <libellé> introuvable » et chaque « supprimée » passés par messageRefus : sans jargon, forme stable', () => {
+    const texte = sansCommentaires(readFileSync(join(DOSSIER, 'references.ts'), 'utf8'));
+    const lire = (propriete: string): string[] =>
+      [...texte.matchAll(new RegExp(String.raw`\b${propriete}\s*:\s*${LITTERAL}`, 'gu'))].map((m) => contenu(m[1] ?? ''));
+    const libelles = lire('libelle');
+    const supprimees = lire('supprimee');
+    expect(libelles.length, 'libellés lus').toBeGreaterThanOrEqual(6);
+    expect(supprimees.length, 'textes « supprimée » lus').toBeGreaterThanOrEqual(5);
+    const precisions = [...libelles.map((l) => `${l} introuvable`), ...supprimees];
+    const fautifs = precisions
+      .map((precision) => messageRefus({ motif: 'ecriture_invalide', precision }))
+      .map((m) => ({ m, d: defauts(m) }))
+      .filter((x) => x.d.length > 0)
+      .map((x) => `« ${x.m} » : ${x.d.join(', ')}`);
     expect(fautifs).toEqual([]);
   });
 });

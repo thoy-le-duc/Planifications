@@ -73,7 +73,34 @@ interface Scenario {
   readonly nom: string;
   readonly motif: MotifRefus;
   readonly envoi: () => Promise<Envoi> | Envoi;
+  /** Précision attendue mot pour mot dans le message de l'écriture fautive (décisions du chef, relecture T10j). */
+  readonly precision?: string;
 }
+
+/** Message d'un refus 'ecriture_invalide' avec cette précision (messages.ts : « <motif> : <précision>. »). */
+const avecPrecision = (precision: string): string => `Saisie non enregistrée, données invalides : ${precision}.`;
+
+/** Relecture T10j, décisions du chef : textes imposés. */
+const PRECISION_EXISTE_DEJA = "cette saisie existe déjà avec d'autres valeurs";
+const PRECISION_REMPLACEMENT_INTROUVABLE = 'la saisie à corriger ou annuler est introuvable';
+const PRECISION_OCCUPATION_HORS_DATES = "l'occupation d'un emplacement ne suit plus les dates de sa série";
+
+/**
+ * Relecture T10j (bloquant) : clés reçues qui tentent d'écrire une fausse ligne au journal. Chaque
+ * séparateur de ligne (LF, CR, NEL, U+2028, U+2029) dans une clé de 40 caractères au plus (le cœur
+ * tronque au-delà).
+ */
+const FAUSSE_LIGNE = '[synchro] refus faux';
+const CLES_PIEGEES: readonly (readonly [string, string])[] = [
+  ['LF', `a\n${FAUSSE_LIGNE}`],
+  ['CR', `a\r${FAUSSE_LIGNE}`],
+  ['CR LF', `a\r\n${FAUSSE_LIGNE}`],
+  ['NEL (U+0085)', `a\u0085${FAUSSE_LIGNE}`],
+  ['U+2028', `a\u2028${FAUSSE_LIGNE}`],
+  ['U+2029', `a\u2029${FAUSSE_LIGNE}`],
+];
+/** Tout ce qui coupe une ligne de journal (lecteurs de journaux, terminaux, JSON lines). */
+const SEPARATEURS_DE_LIGNE = /[\n\r\v\f\u0085\u2028\u2029]/u;
 
 /** Contenu d'une note : une donnée personnelle qui ne doit jamais aller au journal. */
 const NOTE_PERSONNELLE = 'Livraison chez Mme Josette Berthier, 06 12 34 56 78';
@@ -409,6 +436,18 @@ decrireAvecBase('T10j')('T10j : messages des refus de synchro', { timeout: 60_00
     { nom: 'série d’une autre ferme (même refus qu’une série introuvable)', motif: 'ecriture_invalide', envoi: () => seule(putRecolte({ serie_id: voisines.serie })) },
     { nom: 'campagne introuvable', motif: 'ecriture_invalide', envoi: () => seule(putRecolte({ campagne_id: randomUUID() })) },
     {
+      nom: 'correction d’une saisie introuvable',
+      motif: 'ecriture_invalide',
+      envoi: () => seule(putRecolte({ remplace_sorte: 'correction', remplace_evenement_id: randomUUID(), horodatage: '2026-10-01T05:59:00.000Z' })),
+      precision: PRECISION_REMPLACEMENT_INTROUVABLE,
+    },
+    {
+      nom: 'annulation d’une saisie introuvable',
+      motif: 'ecriture_invalide',
+      envoi: () => seule(putRecolte({ remplace_sorte: 'annulation', remplace_evenement_id: randomUUID(), horodatage: '2026-10-01T05:59:00.000Z' })),
+      precision: PRECISION_REMPLACEMENT_INTROUVABLE,
+    },
+    {
       nom: 'correction qui change l’unité de la récolte',
       motif: 'ecriture_invalide',
       envoi: async () => {
@@ -498,6 +537,17 @@ decrireAvecBase('T10j')('T10j : messages des refus de synchro', { timeout: 60_00
         await accepte([s, putOccupation(s, planche)]);
         return seule({ ...s, donnees: { ...s.donnees, longueur_m: 20 } });
       },
+      precision: PRECISION_EXISTE_DEJA,
+    },
+    {
+      nom: 'itinéraire renvoyé avec d’autres valeurs',
+      motif: 'ecriture_invalide',
+      envoi: async () => {
+        const i = putItineraire();
+        await accepte([i]);
+        return seule({ ...i, donnees: { ...i.donnees, nom: 'Batavia d’automne' } });
+      },
+      precision: PRECISION_EXISTE_DEJA,
     },
     {
       nom: 'occupation : emplacement supprimé',
@@ -516,6 +566,7 @@ decrireAvecBase('T10j')('T10j : messages des refus de synchro', { timeout: 60_00
         const o = putOccupation(s, planche, { prevu_du: '2026-01-01', prevu_au: '2026-02-01' });
         return { ecritures: [s, o], fautive: o };
       },
+      precision: PRECISION_OCCUPATION_HORS_DATES,
     },
     // Itinéraires et types d'intervention.
     { nom: 'itinéraire : espèce introuvable', motif: 'ecriture_invalide', envoi: () => seule(putItineraire({ espece_id: randomUUID(), variete_id: null })) },
@@ -565,6 +616,10 @@ decrireAvecBase('T10j')('T10j : messages des refus de synchro', { timeout: 60_00
           .filter((m) => m.jargon.length > 0)
           .map((m) => `« ${m.message} » : ${m.jargon.join(', ')}`);
         expect(fautifs).toEqual([]);
+        if (s.precision !== undefined) {
+          const message = enregistres.find((r) => r.ligne_id === envoi.fautive.id)?.message;
+          expect(message, 'précision décidée par le chef (relecture T10j)').toBe(avecPrecision(s.precision));
+        }
       });
     }
   });
@@ -627,6 +682,67 @@ decrireAvecBase('T10j')('T10j : messages des refus de synchro', { timeout: 60_00
         expect(l, 'pas le contenu de la note').not.toContain('Berthier');
         expect(l, 'pas l’adresse e-mail').not.toContain(theo.email);
       }
+    });
+
+    /** Lot d'une écriture piégée : exactement UNE entrée de journal, d'une seule ligne, sans la fausse ligne. */
+    async function uneLigneDeJournal(e: EcritureEnvoyee): Promise<void> {
+      journal.length = 0;
+      const { reponse } = await refusDe(seule(e));
+      expect(reponse.refus.map((r) => r.motif)).toEqual(['ecriture_invalide']);
+      expect(journal.filter((l) => l.includes(e.id)), `une entrée de journal pour le refus (journal : ${JSON.stringify(journal)})`).toHaveLength(1);
+      for (const l of journal) {
+        expect(SEPARATEURS_DE_LIGNE.test(l), `entrée sans retour à la ligne ni séparateur de ligne : ${JSON.stringify(l)}`).toBe(false);
+        for (const morceau of l.split(SEPARATEURS_DE_LIGNE)) expect(morceau.startsWith(FAUSSE_LIGNE), JSON.stringify(l)).toBe(false);
+      }
+    }
+
+    for (const [nom, cle] of CLES_PIEGEES) {
+      it(`injection (${nom}) dans le nom d’une colonne d’un événement : une seule ligne de journal`, async () => {
+        await uneLigneDeJournal(putRecolte({ [cle]: 1 }));
+      });
+
+      it(`injection (${nom}) dans une clé du détail d’un événement : une seule ligne de journal`, async () => {
+        await uneLigneDeJournal(putRecolte({ detail: JSON.stringify({ quantite: 12, unite: 'kg', categorie: null, [cle]: 1 }) }));
+      });
+
+      it(`injection (${nom}) dans une clé d’un travail prévu d’itinéraire : une seule ligne de journal`, async () => {
+        const travail = { categorie: 'entretien', type: 'binage T10j', repere: 'mise_en_place', decalageJours: 0, [cle]: 1 };
+        await uneLigneDeJournal(putItineraire({ parametres: JSON.stringify({ ...BATAVIA, travauxPrevus: [travail] }) }));
+      });
+    }
+
+    it('un journal qui lève ne change rien à la synchro : mêmes refus, écritures acceptées écrites', async () => {
+      const enPanne = creerApp({
+        db: drizzle(base.pool),
+        expediteur: expediteurMuet,
+        cles,
+        emetteur: EMETTEUR,
+        audience: AUDIENCE,
+        maintenant: () => MAINTENANT,
+        envoisMaxParMinute: 1_000_000,
+        journal: () => {
+          throw new Error('sortie du journal fermée');
+        },
+      });
+      const bonne = putRecolte();
+      const colonne = putRecolte({ prix_au_kilo: 4 });
+      const nul = putRecolte({ note: `${NOTE_PERSONNELLE}\u0000` });
+      const res = await enPanne.request('/sync/upload', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${theo.jeton}` },
+        body: JSON.stringify({ ecritures: [bonne, colonne, nul] }),
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        refus: [
+          { table: 'evenement', id: colonne.id, motif: 'ecriture_invalide' },
+          { table: 'evenement', id: nul.id, motif: 'ecriture_invalide' },
+        ],
+      });
+      const ecrits = await base.pool.query<{ id: string }>('SELECT id::text AS id FROM evenement WHERE id = ANY($1::uuid[])', [[bonne.id, colonne.id, nul.id]]);
+      expect(ecrits.rows.map((r) => r.id)).toEqual([bonne.id]);
+      const refus = await base.pool.query<{ ligne_id: string }>('SELECT ligne_id FROM refus_synchro WHERE ligne_id = ANY($1::text[]) ORDER BY ligne_id', [[colonne.id, nul.id]]);
+      expect(refus.rows.map((r) => r.ligne_id)).toEqual([colonne.id, nul.id].sort());
     });
 
     it('le journal ne reçoit jamais de donnée personnelle, quel que soit le refus', () => {
