@@ -27,6 +27,7 @@ export function EnTete({ titre, surtitre, children }: ProprietesEnTete) {
   const taille = surtitre === undefined ? 32 : 34;
   return (
     <header
+      className="zone-entete"
       style={{
         background: 'var(--couleur-foret)',
         color: 'var(--couleur-sur-foret)',

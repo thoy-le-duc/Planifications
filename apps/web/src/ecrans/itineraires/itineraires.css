@@ -919,7 +919,7 @@ select.itin-liste {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: color-mix(in srgb, var(--couleur-encre) 45%, transparent);
+  background: color-mix(in srgb, var(--couleur-ombre) 45%, transparent);
 }
 
 .itin-confirmation {

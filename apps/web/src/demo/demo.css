@@ -52,8 +52,8 @@
   gap: var(--espace-s);
   height: calc(var(--demo-hauteur) + env(safe-area-inset-top, 0px));
   padding: env(safe-area-inset-top, 0px) 8px 0 14px;
-  background: var(--couleur-encre);
-  color: var(--couleur-sur-foret);
+  background: var(--couleur-ombre);
+  color: var(--couleur-sur-entete);
   font-size: 13px;
   line-height: 1.2;
 }
@@ -67,7 +67,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--police-code);
-  color: var(--couleur-sur-foret-doux);
+  color: var(--couleur-sur-entete-doux);
 }
 
 .demo-etiquette::before {
@@ -77,7 +77,7 @@
   height: 8px;
   border-radius: var(--rayon-pastille);
   background: var(--couleur-pousse);
-  box-shadow: 0 0 0 3px rgba(159, 224, 180, 0.22);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--couleur-pousse) 22%, transparent);
 }
 
 /* Le bouton occupe toute la hauteur de la bande (cible de 44 px) ; la pastille est le dessin. */
@@ -89,7 +89,7 @@
   padding: 0 6px;
   border: 0;
   background: transparent;
-  color: var(--couleur-sur-foret);
+  color: var(--couleur-sur-entete);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -101,12 +101,12 @@
   gap: 6px;
   min-height: 30px;
   padding: 0 10px;
-  border: 1px solid rgba(244, 247, 239, 0.28);
+  border: 1px solid color-mix(in srgb, var(--couleur-sur-entete) 28%, transparent);
   border-radius: var(--rayon-pastille);
 }
 
 .demo-reinitialiser:active .demo-reinitialiser-pastille {
-  background: rgba(244, 247, 239, 0.12);
+  background: color-mix(in srgb, var(--couleur-sur-entete) 12%, transparent);
 }
 
 .demo-reinitialiser:focus-visible {
@@ -130,8 +130,8 @@
   justify-content: center;
   gap: var(--espace-l);
   padding: var(--espace-xl);
-  background: var(--couleur-foret);
-  color: var(--couleur-sur-foret);
+  background: var(--couleur-entete);
+  color: var(--couleur-sur-entete);
   text-align: center;
   font-size: 18px;
 }
@@ -145,7 +145,7 @@
 
 .demo-attente p {
   max-width: 30ch;
-  color: var(--couleur-sur-foret-doux);
+  color: var(--couleur-sur-entete-doux);
 }
 
 .demo-attente[data-etat='preparation'] p::after {
@@ -167,7 +167,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgba(21, 32, 26, 0.48);
+  background: color-mix(in srgb, var(--couleur-ombre) 48%, transparent);
   animation: demo-apparition 0.16s ease-out;
 }
 
@@ -181,7 +181,7 @@
   border-radius: var(--rayon-feuille) var(--rayon-feuille) 0 0;
   background: var(--couleur-surface);
   color: var(--couleur-encre);
-  box-shadow: 0 -8px 32px rgba(21, 32, 26, 0.18);
+  box-shadow: 0 -8px 32px color-mix(in srgb, var(--couleur-ombre) 18%, transparent);
   animation: demo-montee 0.2s ease-out;
 }
 

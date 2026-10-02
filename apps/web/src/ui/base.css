@@ -73,6 +73,27 @@ html {
 
 body {
   margin: 0;
+  /* T18 : le fond est aussi celui du <body> (lu par les tests du thème). */
+  background: var(--couleur-fond);
+}
+
+/*
+ * T18 — thème sombre : les couleurs viennent des surcharges de src/jetons.css (téléphone en
+ * sombre, ou « Sombre » forcé par data-theme) ; ici, seulement les commandes natives du
+ * navigateur (listes, cases, barres de défilement) dans le même ton.
+ */
+:root {
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='clair']) {
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='sombre'] {
+  color-scheme: dark;
 }
 
 button,
@@ -111,6 +132,19 @@ h1,
 h2,
 p {
   margin: 0;
+}
+
+/*
+ * T18 — zone d'en-tête (en-tête des écrans, bandeau de l'écran de connexion) : la forêt y est
+ * celle de l'en-tête. En clair, rien ne change (mêmes valeurs) ; en sombre, la forêt de l'en-tête
+ * reste profonde avec un texte clair, alors que la forêt de ce qui se touche devient un vert sauge
+ * clair (src/ui/jetons.ts). Les composants de la zone écrivent toujours --couleur-foret…
+ */
+.zone-entete {
+  --couleur-foret: var(--couleur-entete);
+  --couleur-foret-clair: var(--couleur-entete-clair);
+  --couleur-sur-foret: var(--couleur-sur-entete);
+  --couleur-sur-foret-doux: var(--couleur-sur-entete-doux);
 }
 
 /* Coquille : en-tête, contenu, barre de navigation collée au bas de l'écran. */

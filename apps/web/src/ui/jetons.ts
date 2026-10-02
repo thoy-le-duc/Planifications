@@ -43,9 +43,55 @@ export const COULEURS = {
    * de la bande des solanacées (#C0392B) et lisible en texte sur le fond et la surface.
    */
   conflit: '#B3001B',
+  /**
+   * En-tête des écrans et bandeau de l'écran de connexion (T18). En clair, la forêt elle-même ;
+   * en sombre, une forêt profonde, alors que `foret` (ce qui se touche) y devient un vert sauge
+   * clair : une même couleur ne peut pas être à la fois texte lisible sur le fond sombre et fond
+   * d'un texte clair.
+   */
+  entete: '#1F4D3A',
+  /** Pastilles sur l'en-tête. */
+  enteteClair: '#2C6450',
+  /** Texte sur l'en-tête. */
+  surEntete: '#F4F7EF',
+  /** Texte secondaire sur l'en-tête (date). */
+  surEnteteDoux: '#B9D3C2',
+  /** Ombres portées et voile sous les feuilles : toujours sombre, quel que soit le thème. */
+  ombre: '#15201A',
 } as const satisfies Record<string, string>;
 
 export type CleCouleur = keyof typeof COULEURS;
+
+/**
+ * Thème sombre (T18), mêmes clés : une forêt de nuit plutôt qu'un noir pur. Fond vert-noir, cartes
+ * un cran plus claires (la surface « monte » vers l'œil), texte blanc cassé chaud ; ce qui se
+ * touche passe en vert sauge clair avec un texte forêt profonde dessus ; orange et rouge éclaircis
+ * et adoucis pour rester lisibles sans éblouir. Contraste AA de toutes les PAIRES_CONTRASTE
+ * vérifié par src/ui/jetons-sombres.test.ts. Appliqué par prefers-color-scheme, ou forcé par le
+ * réglage « Apparence » de l'onglet Ferme (src/ui/theme.ts).
+ */
+export const COULEURS_SOMBRES: Readonly<Record<CleCouleur, string>> = {
+  fond: '#111915',
+  surface: '#1A2420',
+  encre: '#E7EEE3',
+  secondaire: '#B2BFB6',
+  tertiaire: '#93A298',
+  trait: '#2D3B34',
+  foret: '#8DCBA6',
+  foretClair: '#A5D8B9',
+  surForet: '#0D1C14',
+  surForetDoux: '#21412F',
+  pousse: '#9FE0B4',
+  orange: '#EE8A3C',
+  texteOrange: '#F2A766',
+  surOrange: '#1B0F05',
+  conflit: '#FF8A8F',
+  entete: '#1C3A2C',
+  enteteClair: '#2A5241',
+  surEntete: '#EEF4EA',
+  surEnteteDoux: '#A9C9B5',
+  ombre: '#040605',
+};
 
 export type CleFamille = 'salades' | 'solanacees' | 'cruciferes' | 'racines';
 
@@ -95,9 +141,9 @@ export const ESPACEMENTS = {
 /** Ombres (box-shadow). */
 export const OMBRES = {
   /** Bouton principal : ombre basse, il se détache sans flotter. */
-  basse: '0 2px 0 rgba(21, 32, 26, 0.28)',
-  /** Cartes : trait sous la carte (maquettes). */
-  carte: `0 1px 0 ${COULEURS.trait}`,
+  basse: '0 2px 0 color-mix(in srgb, var(--couleur-ombre) 28%, transparent)',
+  /** Cartes : trait sous la carte (maquettes), qui suit le thème. */
+  carte: '0 1px 0 var(--couleur-trait)',
 } as const;
 
 export type UsageContraste = 'texte' | 'grand-texte' | 'contour';
@@ -138,19 +184,36 @@ export const PAIRES_CONTRASTE: readonly PaireContraste[] = [
   // Bordure des barres en conflit (T11).
   { texte: 'conflit', fond: 'surface', usage: 'contour' },
   { texte: 'conflit', fond: 'fond', usage: 'contour' },
+  // En-tête (T18) : titre, date, pastilles.
+  { texte: 'surEntete', fond: 'entete', usage: 'texte' },
+  { texte: 'surEnteteDoux', fond: 'entete', usage: 'texte' },
+  { texte: 'surEntete', fond: 'enteteClair', usage: 'texte' },
+  // Puce « déjà utilisée » des itinéraires : texte sur surForetDoux.
+  { texte: 'encre', fond: 'surForetDoux', usage: 'texte' },
 ];
 
 function kebab(cle: string): string {
   return cle.replace(/[A-Z]/g, (l) => `-${l.toLowerCase()}`);
 }
 
-/** Règle `:root{…}` qui déclare une variable CSS par jeton. */
+/** `--couleur-<clé>:<valeur>;` pour chaque couleur. */
+function variablesCouleurs(couleurs: Readonly<Record<string, string>>): string {
+  return Object.entries(couleurs)
+    .map(([cle, v]) => `--couleur-${kebab(cle)}:${v};`)
+    .join('');
+}
+
+/**
+ * Règle `:root{…}` qui déclare une variable CSS par jeton (thème clair), puis les deux surcharges
+ * du thème sombre (T18), qui ne redéfinissent que les couleurs : le téléphone en sombre, sauf
+ * « Clair » forcé ; « Sombre » forcé (`data-theme`, posé par public/theme-initial.js et ui/theme.ts).
+ */
 export function variablesCss(): string {
   const lignes: string[] = [];
   const ajouter = (prefixe: string, valeurs: Readonly<Record<string, string | number>>, unite = '') => {
     for (const [cle, v] of Object.entries(valeurs)) lignes.push(`--${prefixe}-${kebab(cle)}:${String(v)}${unite};`);
   };
-  ajouter('couleur', COULEURS);
+  lignes.push(variablesCouleurs(COULEURS));
   for (const [cle, f] of Object.entries(FAMILLES)) {
     lignes.push(`--famille-${kebab(cle)}:${f.bande};`, `--famille-${kebab(cle)}-texte:${f.texte};`);
   }
@@ -158,7 +221,12 @@ export function variablesCss(): string {
   ajouter('rayon', RAYONS, 'px');
   ajouter('espace', ESPACEMENTS, 'px');
   ajouter('ombre', OMBRES);
-  return `:root{${lignes.join('')}}`;
+  const sombres = variablesCouleurs(COULEURS_SOMBRES);
+  return (
+    `:root{${lignes.join('')}}\n` +
+    `@media (prefers-color-scheme: dark){:root:not([data-theme="clair"]){${sombres}}}\n` +
+    `:root[data-theme="sombre"]{${sombres}}`
+  );
 }
 
 /** Variable CSS d'une couleur : `couleur('foretClair')` → 'var(--couleur-foret-clair)'. */

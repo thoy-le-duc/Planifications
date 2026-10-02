@@ -350,7 +350,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: color-mix(in srgb, var(--couleur-encre) 45%, transparent);
+  background: color-mix(in srgb, var(--couleur-ombre) 45%, transparent);
 }
 
 .plan-detail {
@@ -489,7 +489,7 @@
   border-radius: var(--rayon-carte);
   background: var(--couleur-foret);
   color: var(--couleur-sur-foret);
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--couleur-encre) 30%, transparent);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--couleur-ombre) 30%, transparent);
   overflow: hidden;
   animation: plan-apparition 160ms ease-out;
 }
