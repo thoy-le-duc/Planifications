@@ -20,20 +20,19 @@
  * - `surveillerRefus` ne rend que les refus non archivés : la liste change dès l'archivage local,
  *   et aussi quand l'archivage arrive par la synchro (autre téléphone de l'utilisateur).
  *
- * À ajouter au type `PorteDonnees` (packages/sync/src/types.ts).
+ * Méthode OBLIGATOIRE du type `PorteDonnees` (packages/sync/src/types.ts ; relecture T10l).
  */
 import { ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
 import { creerBaseMemoire, type BaseMemoire } from './test/base-memoire.ts';
 import { chargerSync, type BaseLocale, type ModuleSync, type PorteDonnees, type RefusSynchro } from './test/contrat.ts';
+import type { PorteDonnees as PorteDonneesDuModule } from './types.ts';
 
 const UTILISATEUR = '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b10' as Id<'Utilisateur'>;
 const AUTRE_UTILISATEUR = '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b11';
 const FERME = '0192f0c1-7a6e-7cc3-9b1e-3f6a2d4c5b20' as Id<'Ferme'>;
 const PREMIER_INSTANT = new Date('2026-10-01T06:00:00.000Z');
 const SECOND_INSTANT = new Date('2026-10-02T08:30:00.000Z');
-
-type PorteArchive = PorteDonnees & { archiverRefus?: (ids: readonly string[]) => Promise<void> };
 
 interface LigneRefus {
   id: string;
@@ -68,7 +67,7 @@ async function jusqua(condition: () => boolean, delaiMs = 1000): Promise<void> {
 describe('T10l : la porte archive un refus vu', () => {
   let sync: ModuleSync;
   let base: BaseMemoire;
-  let porte: PorteArchive;
+  let porte: PorteDonnees;
   let instant: Date;
   /** Lignes archivées par chaque transaction d'écriture, dans l'ordre. */
   let archiveesParTransaction: number[];
@@ -104,7 +103,7 @@ describe('T10l : la porte archive un refus vu', () => {
 
   function archiver(ids: readonly string[]): Promise<void> {
     expect(typeof porte.archiverRefus, 'porte.archiverRefus (T10l)').toBe('function');
-    return porte.archiverRefus?.(ids) ?? Promise.reject(new Error('porte.archiverRefus absente'));
+    return porte.archiverRefus(ids);
   }
 
   /** Un refus arrivé par la synchro (avec résumé T10k, pour vérifier que rien d'autre ne bouge). */
@@ -210,5 +209,12 @@ describe('T10l : la porte archive un refus vu', () => {
     expect(compterArchives(), 'tous archivés').toBe(ids.length);
     for (const n of archiveesParTransaction) expect(n, 'lignes modifiées par transaction locale').toBeLessThanOrEqual(ECRITURES_MAX_PAR_LOT);
     expect(archiveesParTransaction.reduce((a, b) => a + b, 0)).toBe(ids.length - ECRITURES_MAX_PAR_LOT);
+  });
+});
+
+describe('T10l (relecture) : archiverRefus est obligatoire sur la porte', () => {
+  it('type : PorteDonnees (types.ts) exige archiverRefus, et il est conforme au contrat', () => {
+    // Vérifié par `pnpm typecheck` : échoue tant que la méthode est facultative (`archiverRefus?`).
+    expectTypeOf<PorteDonneesDuModule['archiverRefus']>().toEqualTypeOf<(ids: readonly string[]) => Promise<void>>();
   });
 });

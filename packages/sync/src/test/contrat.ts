@@ -127,6 +127,8 @@ export interface PorteDonnees {
    * L'archivage lui-même (`archiverRefus`) : contrat en tête de src/porte-archiver.test.ts.
    */
   surveillerRefus(rappel: (refus: RefusSynchro[]) => void): () => void;
+  /** T10l (relecture) : obligatoire. Archive les refus `ids` de l'utilisateur (src/porte-archiver.test.ts). */
+  archiverRefus(ids: readonly string[]): Promise<void>;
 }
 
 // ── Envoi des écritures (uploadData du connecteur PowerSync) ─────────────────────────────────
