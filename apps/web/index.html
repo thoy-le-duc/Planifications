@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#1F4D3A" />
+    <!-- Barre du navigateur : couleur de l'en-tête, une balise par thème du téléphone (T18). -->
+    <meta name="theme-color" content="#1F4D3A" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1C3A2C" media="(prefers-color-scheme: dark)" />
     <!-- T18 : thème clair ou sombre forcé (réglage Apparence) posé avant le premier affichage,
          sans écran clair qui clignote. Script classique bloquant, fichier de l'appli (CSP), généré
          par `pnpm --filter @planif/web jetons` (scripts/theme-initial-contenu.ts). -->

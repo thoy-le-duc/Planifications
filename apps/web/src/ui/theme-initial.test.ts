@@ -16,14 +16,15 @@ function preparer(stocke: string | null, telephoneSombre: boolean): void {
   localStorage.clear();
   if (stocke !== null) localStorage.setItem('planif.theme', stocke);
   document.documentElement.removeAttribute('data-theme');
-  document.head.innerHTML = '<meta name="theme-color" content="#000000">';
+  // Les balises d'index.html, telles quelles : « Comme le téléphone » n'y touche pas.
+  document.head.innerHTML = [...readFileSync(join(RACINE_WEB, 'index.html'), 'utf8').matchAll(/<meta\s+name="theme-color"[^>]*>/g)].map((m) => m[0]).join('');
   vi.stubGlobal('matchMedia', (q: string) => ({ matches: telephoneSombre && q.includes('dark'), media: q }));
 }
 
-function etat(): { theme: string | null; barre: string | null | undefined } {
+function etat(): { theme: string | null; barres: (string | null)[] } {
   return {
     theme: document.documentElement.getAttribute('data-theme'),
-    barre: document.querySelector('meta[name="theme-color"]')?.getAttribute('content'),
+    barres: [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => m.getAttribute('content')),
   };
 }
 
@@ -43,7 +44,7 @@ describe('public/theme-initial.js', () => {
   it('chargé par index.html dans le <head>, après la balise theme-color et avant tout module', () => {
     const html = readFileSync(join(RACINE_WEB, 'index.html'), 'utf8');
     const script = html.search(/<script src="\/theme-initial\.js"><\/script>/);
-    expect(script).toBeGreaterThan(html.search(/<meta\s+name="theme-color"/));
+    expect(script).toBeGreaterThan(html.lastIndexOf('<meta name="theme-color"'));
     expect(script).toBeLessThan(html.search(/<\/head>/));
     expect(script).toBeLessThan(html.search(/<script type="module"/));
   });

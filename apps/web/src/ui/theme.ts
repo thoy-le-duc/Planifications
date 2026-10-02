@@ -20,9 +20,6 @@ export type ChoixTheme = 'systeme' | 'clair' | 'sombre';
 
 export type StockageTheme = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
-/** Requête média du thème sombre du téléphone. */
-export const MEDIA_SOMBRE = '(prefers-color-scheme: dark)';
-
 /** Choix mémorisé ; rien, valeur inconnue ou stockage inaccessible → « Comme le téléphone ». */
 export function lireTheme(stockage: Pick<Storage, 'getItem'>): ChoixTheme {
   let valeur: string | null = null;
@@ -34,19 +31,20 @@ export function lireTheme(stockage: Pick<Storage, 'getItem'>): ChoixTheme {
   return valeur === 'clair' || valeur === 'sombre' ? valeur : 'systeme';
 }
 
-/** Le téléphone est-il réglé en sombre ? (faux là où la question ne se pose pas) */
-function telephoneSombre(doc: Document): boolean {
-  const fenetre = doc.defaultView;
-  return fenetre !== null && typeof fenetre.matchMedia === 'function' && fenetre.matchMedia(MEDIA_SOMBRE).matches;
-}
-
-/** Pose le thème sur la page : `data-theme` et couleur de la barre du navigateur. */
+/**
+ * Pose le thème sur la page : `data-theme`, et couleur de la barre du navigateur (celle de
+ * l'en-tête). index.html porte une balise theme-color par thème du téléphone (attribut `media`) :
+ * en mode forcé, toutes prennent la couleur du thème choisi ; « Comme le téléphone » rend à
+ * chacune la sienne.
+ */
 function poserTheme(choix: ChoixTheme, doc: Document): void {
   const racine = doc.documentElement;
   if (choix === 'systeme') racine.removeAttribute('data-theme');
   else racine.dataset.theme = choix;
-  const sombre = choix === 'sombre' || (choix === 'systeme' && telephoneSombre(doc));
-  doc.querySelector('meta[name="theme-color"]')?.setAttribute('content', sombre ? COULEURS_SOMBRES.foret : COULEURS.foret);
+  for (const balise of doc.querySelectorAll('meta[name="theme-color"]')) {
+    const sombre = choix === 'systeme' ? (balise.getAttribute('media') ?? '').includes('dark') : choix === 'sombre';
+    balise.setAttribute('content', sombre ? COULEURS_SOMBRES.entete : COULEURS.entete);
+  }
 }
 
 /** Applique le choix et le mémorise (« Comme le téléphone » efface la mémoire). Ne lève jamais. */

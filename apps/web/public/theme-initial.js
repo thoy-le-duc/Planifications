@@ -1,1 +1,1 @@
-{let t,m=document.querySelector('meta[name="theme-color"]');try{t=localStorage.getItem("planif.theme")}catch{}if(t=="clair"||t=="sombre")document.documentElement.dataset.theme=t;else t=matchMedia("(prefers-color-scheme: dark)").matches&&"sombre";m&&(m.content=t=="sombre"?"#8DCBA6":"#1F4D3A")}
+{let t;try{t=localStorage.getItem("planif.theme")}catch{}if(t=="clair"||t=="sombre"){document.documentElement.dataset.theme=t;for(const m of document.querySelectorAll('meta[name=theme-color]'))m.content=t=="clair"?"#1F4D3A":"#1C3A2C"}}
