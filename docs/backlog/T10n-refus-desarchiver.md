@@ -16,5 +16,5 @@ Archiver est définitif pour l'utilisateur : le serveur refuse `archive_le = nul
 
 ## Critères d'acceptation
 
-- [ ] Test : « Tout archiver » puis « Annuler » → les refus restent affichés et rien n'est écrit.
-- [ ] Test : sans « Annuler », l'archivage est écrit à la fin du bandeau, et aussi si l'on quitte l'onglet avant.
+- [x] Test : « Tout archiver » puis « Annuler » → les refus restent affichés et rien n'est écrit.
+- [x] Test : sans « Annuler », l'archivage est écrit à la fin du bandeau, et aussi si l'on quitte l'onglet avant.

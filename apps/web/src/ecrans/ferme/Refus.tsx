@@ -24,13 +24,25 @@
  * cachés derrière « voir plus »). Sans confirmation : archiver ne supprime rien, la ligne reste
  * sur le téléphone et le serveur ; elle sort seulement de la liste (porte.surveillerRefus), sur
  * tous les téléphones de l'utilisateur.
+ *
+ * T10n : un tap de travers ne fait rien perdre de vue. « Archiver » et « Tout archiver » cachent
+ * les refus tout de suite, mais rien n'est écrit tant qu'on peut annuler : un bandeau « N refus
+ * archivés — Annuler » reste DELAI_ANNULATION_ARCHIVAGE_MS ; un second archivage le rejoint et
+ * repousse le délai. À la fin du délai, un seul appel à `archiver` avec tous les ids. Quitter
+ * l'écran (démontage), fermer la page (pagehide) ou passer en arrière-plan (visibilitychange
+ * hidden) écrit tout de suite ce qui attend, une seule fois : rien n'est perdu. Aucune règle
+ * serveur nouvelle.
  */
-import { useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import type { RefusSynchro, ResumeSaisie } from '@planif/sync';
 import { CARTE } from '../../ui/elements.tsx';
+import './refus.css';
 
 /** Refus montrés d'un coup, et ajoutés à chaque « voir plus ». */
 export const REFUS_PAR_PAGE = 20;
+
+/** T10n : durée du bandeau « Annuler » après un archivage ; rien n'est écrit avant. */
+export const DELAI_ANNULATION_ARCHIVAGE_MS = 5_000;
 
 /** Ce qui était saisi, selon la table visée (tables écrites depuis le téléphone, apps/api/src/sync/upload.ts). */
 const TYPE_SAISIE: Readonly<Record<string, string>> = {
@@ -315,69 +327,270 @@ function libelleVoirPlus(restants: number): string {
   return `Voir les ${String(REFUS_PAR_PAGE)} suivants (encore ${String(restants)})`;
 }
 
+/** T10n : « 1 refus archivé », « 3 refus archivés ». */
+function libelleArchives(n: number): string {
+  return n === 1 ? '1 refus archivé' : `${String(n)} refus archivés`;
+}
+
 /**
- * Carte « Saisies refusées » ; rien si aucun refus. `archiver` (T10l, porte.archiverRefus) : sans
- * elle, pas de bouton d'archivage.
+ * T10n : archivages en attente d'écriture. `archiverPlusTard` cache les ids et (re)lance le délai ;
+ * `annuler` les rend ; `ecrireMaintenant` envoie tout ce qui attend encore dans la liste, une seule
+ * fois. Les ids envoyés restent cachés jusqu'à ce que la liste ne les contienne plus
+ * (porte.surveillerRefus), ou reviennent si l'écriture échoue. Un id en attente qui sort de la
+ * liste (archivé ailleurs, par la synchro) est oublié : il ne compte plus et n'est pas réécrit.
+ * Plus de porte (`archiver` absente) pendant le délai : l'attente est abandonnée sans écrire, et
+ * `surEchec` le dit ; rien ne part en douce quand la porte revient.
+ */
+function useArchivageDiffere(
+  refus: readonly RefusSynchro[],
+  archiver: ((ids: readonly string[]) => Promise<void>) | undefined,
+  surEchec: () => void,
+) {
+  const [enAttente, setEnAttente] = useState<readonly string[]>([]);
+  const [envoyes, setEnvoyes] = useState<ReadonlySet<string>>(() => new Set());
+  const attente = useRef<readonly string[]>([]);
+  const minuteur = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Écritures parties et pas encore terminées : la déconnexion les attend. */
+  const enCours = useRef(new Set<Promise<void>>());
+  // Derniers refus et fonctions reçus : l'écriture au démontage ou sur pagehide part avec eux.
+  const derniers = useRef({ refus, archiver, surEchec });
+  useEffect(() => {
+    derniers.current = { refus, archiver, surEchec };
+  });
+
+  const arreterMinuteur = useCallback(() => {
+    if (minuteur.current !== null) {
+      clearTimeout(minuteur.current);
+      minuteur.current = null;
+    }
+  }, []);
+
+  const vider = useCallback((): readonly string[] => {
+    arreterMinuteur();
+    const ids = attente.current;
+    attente.current = [];
+    if (ids.length > 0) setEnAttente([]);
+    return ids;
+  }, [arreterMinuteur]);
+
+  const ecrireMaintenant = useCallback((): void => {
+    const presents = new Set(derniers.current.refus.map((r) => r.id));
+    const ids = vider().filter((id) => presents.has(id));
+    if (ids.length === 0) return;
+    const { archiver: ecrire, surEchec: echec } = derniers.current;
+    if (ecrire === undefined) {
+      echec();
+      return;
+    }
+    setEnvoyes((avant) => new Set([...avant, ...ids]));
+    const ecriture = ecrire(ids).catch((erreur: unknown) => {
+      console.error('archivage des refus en échec', erreur);
+      setEnvoyes((avant) => new Set([...avant].filter((id) => !ids.includes(id))));
+      echec();
+    });
+    enCours.current.add(ecriture);
+    void ecriture.finally(() => enCours.current.delete(ecriture));
+  }, [vider]);
+
+  /** Écrit ce qui attend et résout quand toutes les écritures parties sont terminées (déconnexion). */
+  const ecrireEtAttendre = useCallback(async (): Promise<void> => {
+    ecrireMaintenant();
+    await Promise.all([...enCours.current]);
+  }, [ecrireMaintenant]);
+
+  // Démontage, page fermée ou appli en arrière-plan : ce qui attend part tout de suite.
+  useEffect(() => {
+    const surVisibilite = () => {
+      if (document.visibilityState === 'hidden') ecrireMaintenant();
+    };
+    window.addEventListener('pagehide', ecrireMaintenant);
+    document.addEventListener('visibilitychange', surVisibilite);
+    return () => {
+      window.removeEventListener('pagehide', ecrireMaintenant);
+      document.removeEventListener('visibilitychange', surVisibilite);
+      ecrireMaintenant();
+    };
+  }, [ecrireMaintenant]);
+
+  // Plus de porte pendant le délai : on abandonne, sans écrire, en le disant.
+  const sansPorte = archiver === undefined;
+  useEffect(() => {
+    if (sansPorte && vider().length > 0) surEchec();
+  }, [sansPorte, vider, surEchec]);
+
+  // Liste changée (synchro) : on oublie les ids qui n'y sont plus.
+  useEffect(() => {
+    const presents = new Set(refus.map((r) => r.id));
+    if (attente.current.some((id) => !presents.has(id))) {
+      attente.current = attente.current.filter((id) => presents.has(id));
+      setEnAttente(attente.current);
+      if (attente.current.length === 0) arreterMinuteur();
+    }
+    setEnvoyes((avant) => ([...avant].every((id) => presents.has(id)) ? avant : new Set([...avant].filter((id) => presents.has(id)))));
+  }, [refus, arreterMinuteur]);
+
+  function archiverPlusTard(ids: readonly string[]): void {
+    const nouveaux = ids.filter((id) => !attente.current.includes(id));
+    attente.current = [...attente.current, ...nouveaux];
+    setEnAttente(attente.current);
+    arreterMinuteur();
+    minuteur.current = setTimeout(ecrireMaintenant, DELAI_ANNULATION_ARCHIVAGE_MS);
+  }
+
+  function annuler(): void {
+    vider();
+  }
+
+  return { enAttente, envoyes, archiverPlusTard, annuler, ecrireEtAttendre };
+}
+
+/** T10n : « Annuler » du bandeau, 56 px pour un doigt ganté (en ligne : la hauteur se vérifie sans feuille de style). */
+const ANNULER: CSSProperties = {
+  flexShrink: 0,
+  minWidth: 96,
+  minHeight: 56,
+  padding: '0 16px',
+  border: 0,
+  borderRadius: 'var(--rayon-case)',
+  background: 'var(--couleur-surface)',
+  color: 'var(--couleur-foret)',
+  fontWeight: 700,
+  fontSize: 17,
+};
+
+/**
+ * T10n : bandeau « N refus archivés — Annuler », en bas de l'écran, au-dessus des onglets. Il
+ * s'affiche dans la zone d'annonce (role="status"), toujours présente, vide hors attente : un
+ * lecteur d'écran n'annonce que ce qui arrive dans une zone déjà là.
+ */
+function BandeauAnnulation({ nombre, surAnnuler, numero }: { readonly nombre: number; readonly surAnnuler: () => void; readonly numero: number }) {
+  return (
+    <div className="refus-bandeau">
+      <span className="refus-bandeau-icone">
+        <IconeArchive />
+      </span>
+      <span className="refus-bandeau-texte">
+        <strong>{libelleArchives(nombre)}</strong>
+        <span>Ils sortent de la liste ; rien n’est perdu.</span>
+      </span>
+      <button type="button" data-testid="refus-annuler" style={ANNULER} aria-label={`Annuler l’archivage de ${String(nombre)} refus`} onClick={surAnnuler}>
+        Annuler
+      </button>
+      {/* Repart à chaque archivage : le délai a été repoussé. */}
+      <span key={numero} aria-hidden="true" className="refus-bandeau-temps" />
+    </div>
+  );
+}
+
+/** T10n : écrit l'archivage en attente et résout quand il est terminé (déconnexion). */
+export type VidangeArchivage = () => Promise<void>;
+
+/**
+ * Carte « Saisies refusées » ; pas de carte si aucun refus affiché, seulement la zone d'annonce du
+ * bandeau (vide hors attente). `archiver` (T10l, porte.archiverRefus) : sans elle, pas de bouton
+ * d'archivage. `vidangeRef` (T10n) : reçoit, tant que la carte est là, de quoi écrire et attendre
+ * l'archivage en attente (« Se déconnecter » l'appelle avant de fermer la base).
  */
 export function SaisiesRefusees({
   refus,
   archiver,
+  vidangeRef,
 }: {
   readonly refus: readonly RefusSynchro[];
   readonly archiver?: ((ids: readonly string[]) => Promise<void>) | undefined;
+  readonly vidangeRef?: RefObject<VidangeArchivage | null> | undefined;
 }) {
   const [montres, setMontres] = useState(REFUS_PAR_PAGE);
   const [echec, setEchec] = useState(false);
-  if (refus.length === 0) return null;
+  const [numeroArchivage, setNumeroArchivage] = useState(0);
+  const signalerEchec = useCallback(() => {
+    setEchec(true);
+  }, []);
+  const { enAttente, envoyes, archiverPlusTard, annuler, ecrireEtAttendre } = useArchivageDiffere(refus, archiver, signalerEchec);
+  useEffect(() => {
+    if (vidangeRef === undefined) return undefined;
+    vidangeRef.current = ecrireEtAttendre;
+    return () => {
+      if (vidangeRef.current === ecrireEtAttendre) vidangeRef.current = null;
+    };
+  }, [vidangeRef, ecrireEtAttendre]);
+  const caches = enAttente.length === 0 && envoyes.size === 0 ? null : new Set([...enAttente, ...envoyes]);
+  const visibles = caches === null ? refus : refus.filter((r) => !caches.has(r.id));
+  // Seuls comptent les refus en attente encore dans la liste (un autre a pu être archivé ailleurs).
+  const enAttenteListes = enAttente.length === 0 ? 0 : refus.filter((r) => enAttente.includes(r.id)).length;
+  // Zone d'annonce à une seule place de l'arbre : le même nœud, que la carte soit là ou non.
+  const zone = (
+    <div data-testid="refus-annulation" role="status">
+      {enAttenteListes > 0 && (
+        <BandeauAnnulation
+          nombre={enAttenteListes}
+          numero={numeroArchivage}
+          surAnnuler={() => {
+            annuler();
+          }}
+        />
+      )}
+    </div>
+  );
+  if (visibles.length === 0) {
+    return (
+      <>
+        {/* Place de la carte, vide : la zone garde sa position dans l'arbre, donc son nœud. */}
+        {null}
+        {zone}
+      </>
+    );
+  }
   const maintenant = new Date();
-  const restants = refus.length - montres;
-  const affiches = refus.slice(0, montres);
+  const restants = visibles.length - montres;
+  const affiches = visibles.slice(0, montres);
   const lancer =
     archiver === undefined
       ? undefined
       : (ids: readonly string[]) => () => {
           setEchec(false);
-          archiver(ids).catch((erreur: unknown) => {
-            console.error('archivage des refus en échec', erreur);
-            setEchec(true);
-          });
+          setNumeroArchivage((n) => n + 1);
+          archiverPlusTard(ids);
         };
-  const titre = refus.length === 1 ? '1 saisie refusée' : `${String(refus.length)} saisies refusées`;
+  const titre = visibles.length === 1 ? '1 saisie refusée' : `${String(visibles.length)} saisies refusées`;
   return (
-    <section aria-label="Saisies refusées par le serveur" style={CARTE}>
-      <h2 style={TITRE_CARTE}>{titre}</h2>
-      <p style={{ padding: '0 16px 12px', fontSize: 15, color: 'var(--couleur-secondaire)' }}>
-        Le serveur n’a pas enregistré ces saisies. Les autres sont parties normalement.
-      </p>
-      {echec && (
-        <p role="alert" style={{ padding: '0 16px 12px', fontSize: 15, fontWeight: 700, color: 'var(--couleur-texte-orange)' }}>
-          L’archivage n’a pas abouti. Réessayez.
+    <>
+      <section aria-label="Saisies refusées par le serveur" style={CARTE}>
+        <h2 style={TITRE_CARTE}>{titre}</h2>
+        <p style={{ padding: '0 16px 12px', fontSize: 15, color: 'var(--couleur-secondaire)' }}>
+          Le serveur n’a pas enregistré ces saisies. Les autres sont parties normalement.
         </p>
-      )}
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-        {affiches.map((r) => (
-          <UnRefus key={r.id} refus={r} maintenant={maintenant} archiver={lancer?.([r.id])} />
-        ))}
-      </ul>
-      {/* Seulement à partir de deux refus affichés : pour un seul, « Archiver » suffit. */}
-      {lancer !== undefined && affiches.length >= 2 && (
-        <button type="button" data-testid="refus-tout-archiver" style={TOUT_ARCHIVER} onClick={lancer(affiches.map((r) => r.id))}>
-          <IconeArchive />
-          {`Tout archiver (${String(affiches.length)})`}
-        </button>
-      )}
-      {restants > 0 && (
-        <button
-          type="button"
-          className="ligne-carte"
-          style={VOIR_PLUS}
-          onClick={() => {
-            setMontres((n) => n + REFUS_PAR_PAGE);
-          }}
-        >
-          {libelleVoirPlus(restants)}
-        </button>
-      )}
-    </section>
+        {echec && (
+          <p role="alert" style={{ padding: '0 16px 12px', fontSize: 15, fontWeight: 700, color: 'var(--couleur-texte-orange)' }}>
+            L’archivage n’a pas abouti. Réessayez.
+          </p>
+        )}
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          {affiches.map((r) => (
+            <UnRefus key={r.id} refus={r} maintenant={maintenant} archiver={lancer?.([r.id])} />
+          ))}
+        </ul>
+        {/* Seulement à partir de deux refus affichés : pour un seul, « Archiver » suffit. */}
+        {lancer !== undefined && affiches.length >= 2 && (
+          <button type="button" data-testid="refus-tout-archiver" style={TOUT_ARCHIVER} onClick={lancer(affiches.map((r) => r.id))}>
+            <IconeArchive />
+            {`Tout archiver (${String(affiches.length)})`}
+          </button>
+        )}
+        {restants > 0 && (
+          <button
+            type="button"
+            className="ligne-carte"
+            style={VOIR_PLUS}
+            onClick={() => {
+              setMontres((n) => n + REFUS_PAR_PAGE);
+            }}
+          >
+            {libelleVoirPlus(restants)}
+          </button>
+        )}
+      </section>
+      {zone}
+    </>
   );
 }

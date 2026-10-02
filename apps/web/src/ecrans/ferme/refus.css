@@ -1,0 +1,89 @@
+/* T10n — Bandeau « N refus archivés — Annuler » (DELAI_ANNULATION_ARCHIVAGE_MS, 5 s), même
+   facture que le bandeau d'annulation d'Aujourd'hui (.auj-bandeau). */
+
+.refus-bandeau {
+  position: fixed;
+  z-index: 15;
+  left: 12px;
+  right: 12px;
+  bottom: calc(88px + env(safe-area-inset-bottom));
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--espace-m);
+  padding: 10px 10px 14px 14px;
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--couleur-encre) 30%, transparent);
+  overflow: hidden;
+  animation: refus-apparition 160ms ease-out;
+}
+
+.refus-bandeau-icone {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-foret-clair);
+  color: var(--couleur-pousse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refus-bandeau-texte {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 15px;
+  color: var(--couleur-sur-foret-doux);
+  overflow-wrap: anywhere;
+}
+
+.refus-bandeau-texte strong {
+  font-size: 16px;
+  color: var(--couleur-sur-foret);
+}
+
+/* Temps restant pour annuler : la barre se vide en 5 s, et repart à chaque nouvel archivage. */
+.refus-bandeau-temps {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 4px;
+  width: 100%;
+  background: var(--couleur-pousse);
+  transform-origin: left center;
+  animation: refus-compte-a-rebours 5s linear forwards;
+}
+
+@keyframes refus-compte-a-rebours {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes refus-apparition {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+/* Sans animation : le bandeau apparaît d'un coup et la barre de temps reste pleine, immobile. */
+@media (prefers-reduced-motion: reduce) {
+  .refus-bandeau,
+  .refus-bandeau-temps {
+    animation: none;
+  }
+}
