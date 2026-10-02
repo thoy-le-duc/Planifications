@@ -33,6 +33,7 @@ import type { PorteDonnees, RefusSynchro } from '@planif/sync';
 import type { EtatBase, PoigneeDonnees } from '../../donnees/etat-appli.ts';
 import { AlerteOrange, BoutonSecondaire, CARTE } from '../../ui/elements.tsx';
 import { Confirmation } from '../../ui/confirmation.tsx';
+import { Apparence } from './Apparence.tsx';
 import { SaisiesRefusees, type VidangeArchivage } from './Refus.tsx';
 
 /** Marque de performance : les refus de synchro sont lus et dessinés (T10i, e2e/refus.e2e.ts). */
@@ -479,6 +480,10 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
         </p>
       </Carte>
       {etatExport.etape === 'echec' && <AlerteOrange>L’export n’a pas pu se faire. Réessayez ; si cela recommence, signalez-le.</AlerteOrange>}
+
+      <Carte titre="Apparence">
+        <Apparence />
+      </Carte>
 
       <div style={CARTE}>
         <Ligne
