@@ -15,5 +15,9 @@ Garder le masque tant que la journée relue contient encore la tâche ET que l'�
 
 ## Critères d'acceptation
 
-- [ ] Test : relecture lancée avant l'écriture du « Fait », livrée après → la tâche reste masquée, un second tap n'écrit rien.
-- [ ] Test : après une annulation venue d'ailleurs, « Fait » redevient possible (T13c, inchangé).
+- [x] Test : relecture lancée avant l'écriture du « Fait », livrée après → la tâche reste masquée, un second tap n'écrit rien.
+- [x] Test : après une annulation venue d'ailleurs, « Fait » redevient possible (T13c, inchangé).
+
+## Décision (chef, 2026-10-02)
+
+Chaque lecture de la journée porte le numéro de son départ, chaque « Fait » le numéro de la fin de son écriture : le masque tient tant que la journée affichée vient d'une lecture commencée avant l'écriture. Cas restants, déjà possibles avant, renvoyés à T13f.

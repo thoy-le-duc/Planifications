@@ -11,7 +11,7 @@ import { useCallback, useDeferredValue, useEffect, useId, useRef, useState } fro
 import { chargeSemaine, type EtapeRealisee, type TacheTravail, type UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import './aujourdhui.css';
-import { journeeEnCache, suivreJournee } from './cache.ts';
+import { journeeEnCache, lectureDe, marquerEcriture, suivreJournee } from './cache.ts';
 import {
   capitale,
   codesEmplacements,
@@ -421,18 +421,18 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
   const [toutVoir, setToutVoir] = useState(false);
   /**
    * Tâches marquées faites et masquées dès le tap (un second tap n'écrit rien) : 'attente'
-   * pendant l'écriture, puis la journée affichée à ce moment, jusqu'à ce qu'une journée relue
-   * la remplace.
+   * pendant l'écriture, puis le numéro pris à la fin de l'écriture (cache.ts).
    */
-  const [masquees, setMasquees] = useState<ReadonlyMap<string, Journee | null | 'attente'>>(new Map());
+  const [masquees, setMasquees] = useState<ReadonlyMap<string, number | 'attente'>>(new Map());
   /**
-   * Tâche masquée : écriture en cours, ou faite sur la journée encore affichée. T13c : le masque
-   * tombe dès qu'une journée relue arrive ; une tâche revenue (réalisé annulé depuis un autre
-   * téléphone) se marque faite de nouveau.
+   * Tâche masquée : écriture en cours, ou journée affichée lue avant la fin de l'écriture (elle n'a
+   * pas pu voir le réalisé, T13e). T13c : une journée lue après l'écriture lève le masque ; une
+   * tâche revenue (réalisé annulé depuis un autre téléphone) se marque faite de nouveau.
    */
+  const masqueTient = (m: number | 'attente', affichee: Journee | null): boolean => m === 'attente' || lectureDe(affichee) < m;
   const estMasquee = (cle: string): boolean => {
     const m = masquees.get(cle);
-    return m !== undefined && (m === 'attente' || m === journee);
+    return m !== undefined && masqueTient(m, journee);
   };
   const journeeActuelle = useRef<Journee | null>(journee);
   useEffect(() => {
@@ -515,10 +515,10 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
     setAnnulable({ evenement, culture, titre, texte, numero: numero.current });
   }
 
-  function masquer(cle: string, valeur: Journee | null | 'attente' | undefined): void {
+  function masquer(cle: string, valeur: number | 'attente' | undefined): void {
     setMasquees((m) => {
       // Les masques tombés (posés sur une journée déjà remplacée) sont oubliés au passage.
-      const n = new Map([...m].filter(([, v]) => v === 'attente' || v === journeeActuelle.current));
+      const n = new Map([...m].filter(([, v]) => masqueTient(v, journeeActuelle.current)));
       if (valeur === undefined) n.delete(cle);
       else n.set(cle, valeur);
       return n;
@@ -534,7 +534,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
       const detail = { type: 'intervention' as const, categorie: travail.categorie, libelle: travail.type };
       montrerAnnulable(evenementEcrit(id, t.culture, ctx.aujourdhui, detail), t.culture, `Fait · ${capitale(travail.type)}`, nomCulture(t.culture));
     }).then((ok) => {
-      masquer(t.cle, ok ? journeeActuelle.current : undefined);
+      masquer(t.cle, ok ? marquerEcriture() : undefined);
     });
   }
 
@@ -553,7 +553,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne }: Propr
       const detail = { type: 'realise' as const, etape: etape satisfies EtapeRealisee, quantiteReelle: null };
       montrerAnnulable(evenementEcrit(id, t.culture, ctx.aujourdhui, detail), t.culture, `Fait · ${ETAPES_FAITES[etape]}`, nomCulture(t.culture));
     }).then((ok) => {
-      masquer(t.cle, ok ? journeeActuelle.current : undefined);
+      masquer(t.cle, ok ? marquerEcriture() : undefined);
     });
   }
 

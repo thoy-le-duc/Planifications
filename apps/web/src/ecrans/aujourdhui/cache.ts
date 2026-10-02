@@ -33,6 +33,24 @@ import {
 /** Délai sans saisie après lequel une relecture complète vérifie les relectures incrémentales. */
 export const VERIFICATION_MS = 4_000;
 
+/**
+ * T13e : horloge des lectures. Chaque lecture prend un numéro quand elle commence ; la journée
+ * qu'elle produit le porte (`lectureDe`). Une écriture de l'écran prend le sien en finissant
+ * (`marquerEcriture`) : une journée dont la lecture est plus ancienne n'a pas pu voir l'écriture.
+ */
+let horloge = 0;
+const lectures = new WeakMap<Journee, number>();
+
+/** Numéro pris à la fin d'une écriture de l'écran. */
+export function marquerEcriture(): number {
+  return ++horloge;
+}
+
+/** Numéro de la lecture qui a produit `journee` (0 : inconnu, tenu pour ancien). */
+export function lectureDe(journee: Journee | null): number {
+  return journee === null ? 0 : (lectures.get(journee) ?? 0);
+}
+
 /** Ce que la prochaine relecture doit relire : tout, ou le journal de quelques cultures. */
 type ARelire =
   | { readonly sorte: 'tout' }
@@ -55,6 +73,8 @@ interface Suivi {
   readonly jour: string;
   /** Dernières lignes lues en entier ; la journée n'en est calculée que pour un écran qui la montre. */
   lignes: LignesJournee | null;
+  /** Numéro de la lecture qui a produit `lignes`. */
+  numeroLignes: number;
   /** Journée calculée, et de quoi la recalculer culture par culture. */
   etat: EtatJournee | null;
   enCours: Promise<unknown> | null;
@@ -85,6 +105,7 @@ function suiviDe(porte: PorteDonnees, fermeId: string, jour: string): Suivi {
       fermeId,
       jour,
       lignes: null,
+      numeroLignes: 0,
       etat: null,
       enCours: null,
       verificationEnCours: false,
@@ -106,6 +127,7 @@ function journeeDe(s: Suivi): Journee | null {
   if (s.etat === null && s.lignes !== null) {
     s.etat = calculerEtat(s.lignes, s.jour);
     s.lignes = null;
+    lectures.set(s.etat.journee, s.numeroLignes);
   }
   return s.etat?.journee ?? null;
 }
@@ -176,6 +198,7 @@ function relire(porte: PorteDonnees, s: Suivi, options: { readonly apres?: Promi
   let lecture: Promise<unknown>;
   if (besoin.sorte === 'cultures' && etat !== null && s.abonnes.size > 0) {
     const cultures = { series: [...besoin.series], campagnes: [...besoin.campagnes] };
+    const numero = ++horloge;
     lecture = lireCultures(porte, etat.contexte, cultures, besoin.chaines, new Date(), continuer).then((lues) => {
       const suivant = recalculerCultures(etat, lues);
       if (suivant === null) {
@@ -184,6 +207,7 @@ function relire(porte: PorteDonnees, s: Suivi, options: { readonly apres?: Promi
         return;
       }
       s.etat = suivant;
+      lectures.set(suivant.journee, numero);
       remettre(s);
       s.verification = setTimeout(() => {
         s.verification = null;
@@ -196,11 +220,16 @@ function relire(porte: PorteDonnees, s: Suivi, options: { readonly apres?: Promi
     // Une lecture complète voit toutes les saisies écrites avant elle : leurs annonces tombent
     // (au pire, le changement d'une saisie en cours d'écriture fera tout relire).
     s.annonces = [];
+    let numero = 0;
     lecture = (options.apres ?? Promise.resolve())
       .catch(() => undefined)
-      .then(() => lireJournee(porte, s.fermeId, s.jour, new Date(), continuer))
+      .then(() => {
+        numero = ++horloge;
+        return lireJournee(porte, s.fermeId, s.jour, new Date(), continuer);
+      })
       .then((lignes) => {
         s.lignes = lignes;
+        s.numeroLignes = numero;
         s.etat = null;
         remettre(s);
       });
