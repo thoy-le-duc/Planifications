@@ -47,6 +47,16 @@ const ACTION: Readonly<Record<string, string>> = {
   recolte_annulee: 'Si la récolte a bien eu lieu, saisissez-la de nouveau comme une nouvelle récolte.',
 };
 
+/**
+ * Quoi faire, quand cela dépend aussi de la table : un mouvement de stock n'est pas dans
+ * l'historique d'Aujourd'hui, il se corrige par un nouveau mouvement.
+ */
+const ACTION_PAR_TABLE: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  mouvement_stock: {
+    ajout_seul: 'Le stock se corrige par une nouvelle saisie, pas en modifiant l’ancienne : saisissez l’entrée ou la sortie qui rétablit la quantité.',
+  },
+};
+
 /** Quoi faire pour un motif que l'appli ne connaît pas encore. */
 const ACTION_GENERALE = 'Vérifiez cette saisie et refaites-la ; si le refus recommence, signalez-le.';
 
@@ -86,7 +96,7 @@ export function refusLisible(r: RefusSynchro): RefusLisible {
   return {
     titre: `${type} · ${OPERATION[r.operation]}`,
     message: r.message,
-    action: ACTION[r.motif] ?? ACTION_GENERALE,
+    action: ACTION_PAR_TABLE[r.nomTable]?.[r.motif] ?? ACTION[r.motif] ?? ACTION_GENERALE,
   };
 }
 

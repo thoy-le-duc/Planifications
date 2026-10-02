@@ -16,7 +16,9 @@
 /** Refus les plus récents suivis ; au-delà, tenus pour vus. */
 export const VUS_MAX = 200;
 
-const cle = (utilisateurId: string): string => `planif.refus-vus.${utilisateurId}`;
+/** Clé des refus vus d'un utilisateur ; retirée à la déconnexion (connexion/deconnexion.ts). */
+export const cleRefusVus = (utilisateurId: string): string => `planif.refus-vus.${utilisateurId}`;
+const cle = cleRefusVus;
 
 /** Identifiants des refus déjà vus par cet utilisateur sur ce téléphone (vide si illisible). */
 export function lireRefusVus(stockage: Pick<Storage, 'getItem'>, utilisateurId: string): ReadonlySet<string> {
