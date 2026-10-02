@@ -10,6 +10,9 @@
  *   campagne désignée appartient à la ferme de l'événement ET que l'utilisateur est membre accepté
  *   de cette ferme au moment du lot (décision du chef, règle la plus stricte) : jamais le nom d'une
  *   culture d'une autre ferme, même désignée par un id valide.
+ * - Une série (ou campagne) supprimée de sa propre ferme garde son nom dans le résumé : voulu,
+ *   pour que le maraîcher reconnaisse la saisie refusée.
+ * - Quantité d'une récolte : seulement un nombre fini, positif ou nul et au plus QUANTITE_MAX_RESUME.
  */
 import { estDateValide, type DateCalendaire, type TypeEvenement, type UniteRecolte } from '@planif/core';
 import { sql } from 'drizzle-orm';
@@ -18,6 +21,8 @@ import { estUuid } from '../auth/jetons.ts';
 
 /** Longueur au plus de la culture du résumé (unités UTF-16, comme `String.length`). */
 export const LONGUEUR_MAX_CULTURE = 80;
+/** Quantité au plus du résumé (incluse) ; au-delà, ou négative, elle n'est pas résumée. */
+export const QUANTITE_MAX_RESUME = 1_000_000;
 
 const TYPES: readonly TypeEvenement[] = ['realise', 'recolte', 'intervention', 'irrigation', 'traitement', 'observation'];
 const UNITES: readonly UniteRecolte[] = ['kg', 'botte', 'piece', 'barquette'];
@@ -92,7 +97,7 @@ function resumeRecu(donnees: Readonly<Record<string, unknown>>): ResumeSaisie {
     ...RESUME_VIDE,
     saisieType: type,
     saisieDate: date,
-    saisieQuantite: typeof quantite === 'number' && Number.isFinite(quantite) ? quantite : null,
+    saisieQuantite: typeof quantite === 'number' && Number.isFinite(quantite) && quantite >= 0 && quantite <= QUANTITE_MAX_RESUME ? quantite : null,
     saisieUnite: parmi(UNITES, detail?.unite),
   };
 }
