@@ -13,6 +13,9 @@ export const DOSSIER_MIGRATIONS = fileURLToPath(new URL('../migrations', import.
  */
 export async function appliquerMigrations(url: string): Promise<void> {
   const client = new pg.Client({ connectionString: url });
+  // Sans écouteur, une coupure de connexion après connect() serait une exception non rattrapée ;
+  // la requête en cours échoue de toute façon, et c'est ce rejet que la reprise voit.
+  client.on('error', () => undefined);
   await client.connect();
   try {
     await migrate(drizzle(client), { migrationsFolder: DOSSIER_MIGRATIONS });
@@ -21,11 +24,14 @@ export async function appliquerMigrations(url: string): Promise<void> {
   }
 }
 
+/** Codes d'erreur de connexion : réseau (Node) et arrêt ou démarrage du serveur (Postgres 57P01, 57P03). */
+const CODES_CONNEXION: ReadonlySet<string> = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'EPIPE', '57P01', '57P03']);
+
 /** Erreur de connexion (refusée, coupée, expirée) : le serveur n'est pas encore prêt, ou vient de tomber. */
 function estErreurDeConnexion(erreur: unknown): boolean {
   if (typeof erreur !== 'object' || erreur === null) return false;
   const { code, message } = erreur as { code?: unknown; message?: unknown };
-  if (code === 'ECONNREFUSED' || code === 'ECONNRESET' || code === 'ETIMEDOUT') return true;
+  if (typeof code === 'string' && CODES_CONNEXION.has(code)) return true;
   return typeof message === 'string' && message.includes('Connection terminated unexpectedly');
 }
 
