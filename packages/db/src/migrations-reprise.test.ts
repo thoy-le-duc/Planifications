@@ -61,6 +61,14 @@ describe('T26 : appliquerMigrationsAvecReprise', () => {
     expect(appliquer).toHaveBeenCalledTimes(3);
   });
 
+  it.each(['57P01', '57P03', 'ECONNABORTED', 'EPIPE'])('reprise aussi sur le code %s', async (code) => {
+    const transitoire = Object.assign(new Error(`erreur transitoire ${code}`), { code });
+    const appliquer = vi.fn<(url: string) => Promise<void>>();
+    appliquer.mockRejectedValueOnce(transitoire).mockResolvedValueOnce();
+    await expect(appliquerMigrationsAvecReprise(URL_BASE, { essais: 5, delaiMs: 0, appliquer })).resolves.toBeUndefined();
+    expect(appliquer).toHaveBeenCalledTimes(2);
+  });
+
   it('migrer.ts passe par la reprise', () => {
     const source = readFileSync(new URL('./migrer.ts', import.meta.url), 'utf8');
     expect(source).toContain('appliquerMigrationsAvecReprise');
