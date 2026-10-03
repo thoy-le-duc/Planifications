@@ -44,7 +44,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { creerPorte, SCHEMA_LOCAL, type PorteDonnees } from "@planif/sync";
+import { SCHEMA_LOCAL, type PorteDonnees, type creerPorte as CreerPorte } from "@planif/sync";
 import type { Id } from "@planif/core";
 import {
   creerBaseMemoire,
@@ -68,6 +68,11 @@ const RADIS = cleTache(SERIE.radis, "semis_direct");
 const BATAVIA = cleTache(SERIE.batavia, "plantation");
 
 let ecran: ModuleEcranAujourdhui;
+/**
+ * Chargée après `vi.resetModules()`, comme l'écran : une seule instance de @planif/sync, sinon
+ * deux classes DejaFait et `instanceof` échoue (contre-relecture T13l).
+ */
+let creerPorte: typeof CreerPorte;
 
 // ── Base, porte aux écritures retenues ───────────────────────────────────────────────────────
 
@@ -173,6 +178,7 @@ beforeEach(async () => {
   ecran = (await import(
     /* @vite-ignore */ CHEMIN_ECRAN
   )) as ModuleEcranAujourdhui;
+  ({ creerPorte } = await import("@planif/sync"));
   conteneur = document.createElement("div");
   document.body.append(conteneur);
   racine = createRoot(conteneur);
