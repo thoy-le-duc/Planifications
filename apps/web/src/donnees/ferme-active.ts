@@ -6,14 +6,14 @@
  * Le choix mémorisé (./ferme-memorisee.ts) est rangé par utilisateur : deux comptes sur un téléphone
  * ne se mélangent pas.
  *
- * T13g : la ferme active est mémorisée à chaque fois qu'elle est connue (aucune ferme : mémoire
- * vidée). Au lancement suivant, avant l'ouverture de la base, l'écran Aujourd'hui ne montre
+ * T13g : la ferme active est notée comme « dernière ferme montrée » à chaque fois qu'elle est
+ * connue (aucune ferme : vidée), sous une clé à part : le choix de l'utilisateur n'est pas touché. Au lancement suivant, avant l'ouverture de la base, l'écran Aujourd'hui ne montre
  * l'instantané de la journée que s'il est de cette ferme : jamais celui d'une ferme que la base
  * n'a plus désignée comme active (adhésion retirée, autre ferme choisie).
  */
 import type { Id } from '@planif/core';
 import { creerPorte, type BaseLocale, type PorteDonnees } from '@planif/sync';
-import { lireFermeMemorisee, memoriserFerme } from './ferme-memorisee.ts';
+import { lireFermeMemorisee, memoriserFerme, noterFermeMontree } from './ferme-memorisee.ts';
 
 export { lireFermeMemorisee, memoriserFerme };
 
@@ -78,8 +78,8 @@ export function suivreFermeActive(
     const cle = fermeId ?? '';
     if (cle === signalee) return;
     signalee = cle;
-    // '' : lu comme « aucune ferme » (lireFermeMemorisee).
-    memoriserFerme(o.stockage, o.utilisateurId, cle);
+    // T13g : la ferme montrée, à part du choix de l'utilisateur (qui reste intact) ; '' : aucune.
+    noterFermeMontree(o.stockage, o.utilisateurId, cle);
     rappel(
       fermeId === null
         ? { etat: 'sans-ferme' }

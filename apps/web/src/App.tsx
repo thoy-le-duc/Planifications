@@ -350,7 +350,7 @@ export function App() {
             )
           ) : onglet === 'aujourdhui' ? (
             // T13g : dessiné dès l'ouverture de la base, sans attendre la ferme : l'écran montre en
-            // lecture seule l'instantané de la dernière ferme choisie (ecrans/aujourdhui/), puis
+            // lecture seule l'instantané de la dernière ferme montrée (ecrans/aujourdhui/), puis
             // reçoit la porte. T13d : l'utilisateur de la session, pour l'instantané.
             donnees.ferme !== null || donnees.base === 'ouverture' ? (
               <aujourdhui.Composant porte={donnees.ferme?.porte ?? null} fermeId={donnees.ferme?.fermeId ?? null} utilisateurId={session.utilisateurId} />

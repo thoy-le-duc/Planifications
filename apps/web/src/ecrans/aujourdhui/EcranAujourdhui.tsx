@@ -12,16 +12,16 @@
  * écrit depuis l'instantané : « Fait » y passe par une lecture ciblée de la tâche dans la base.
  *
  * T13g : l'instantané s'affiche AVANT l'ouverture de la base (porte encore absente), en lecture
- * seule (boutons des cartes inactifs), s'il est de la dernière ferme choisie par cet utilisateur,
- * mémorisée avec la session (src/donnees/ferme-memorisee.ts). La ferme connue, l'écran reste le même si c'est celle-là,
- * sinon il repart de zéro sur la vraie ferme (l'instantané de l'autre n'est plus montré). Les
+ * seule (boutons des cartes inactifs), s'il est de la dernière ferme montrée à cet utilisateur,
+ * notée par la ferme active (src/donnees/ferme-memorisee.ts). La ferme connue, l'écran reste le
+ * même si c'est celle-là, sinon il repart de zéro sur la vraie ferme (l'instantané de l'autre n'est plus montré). Les
  * « Fait » tapés à la suite passent en file : chacun masqué au tap, écrit dans l'ordre, chacun
  * avec sa vérification.
  */
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
-import { lireFermeMemorisee } from '../../donnees/ferme-memorisee.ts';
+import { lireFermeMontree } from '../../donnees/ferme-memorisee.ts';
 import './aujourdhui.css';
 import { changerMasques, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, suivreJournee, suivreMasques, type Masques } from './cache.ts';
 import {
@@ -47,7 +47,7 @@ import { libelleEvenement, vueCarte, vuesHistorique, type CarteVue, type SaisieV
 export interface ProprietesEcranAujourdhui {
   /**
    * T13g : null tant que la base s'ouvre ; l'écran montre alors, en lecture seule, l'instantané
-   * de la dernière ferme choisie (avec `utilisateurId`), ou dit que la base s'ouvre.
+   * de la dernière ferme montrée (avec `utilisateurId`), ou dit que la base s'ouvre.
    */
   readonly porte: PorteDonnees | null;
   /** Ferme ouverte ; null tant que la base s'ouvre. */
@@ -457,7 +457,7 @@ function Ouverture() {
 
 /**
  * T13g : l'écran sur la ferme ouverte ; tant que la base s'ouvre (`porte` null), sur la dernière
- * ferme choisie par cet utilisateur sur ce téléphone (sans elle, rien n'est montré). Un écran par
+ * ferme montrée à cet utilisateur sur ce téléphone (sans elle, rien n'est montré). Un écran par
  * utilisateur et par ferme (`key`) : ni masques ni instantané ne passent de l'une à l'autre.
  */
 export function EcranAujourdhui(p: ProprietesEcranAujourdhui) {
@@ -465,7 +465,7 @@ export function EcranAujourdhui(p: ProprietesEcranAujourdhui) {
   // T13d : où l'instantané est gardé ; sans utilisateur, aucun instantané n'est lu ni gardé.
   const [stockageDonne] = useState(() => p.stockage ?? stockageParDefaut());
   const stockage = utilisateurId === undefined ? null : stockageDonne;
-  const fermeId = porte !== null ? p.fermeId : utilisateurId === undefined || stockage === null ? null : lireFermeMemorisee(stockage, utilisateurId);
+  const fermeId = porte !== null ? p.fermeId : utilisateurId === undefined || stockage === null ? null : lireFermeMontree(stockage, utilisateurId);
   if (fermeId === null) return <Ouverture />;
   return <Ecran key={`${utilisateurId ?? ''}|${fermeId}`} {...p} porte={porte} fermeId={fermeId} stockage={stockage} />;
 }

@@ -1,27 +1,52 @@
 /**
- * Dernière ferme choisie par un utilisateur sur ce téléphone (T11), rangée à part de
- * ./ferme-active.ts : sans aucun import, elle se lit aussi avant l'ouverture de la base, depuis
- * l'écran Aujourd'hui (T13g, instantané de la journée montré seulement s'il est de cette ferme),
- * sans charger @planif/sync ni PowerSync. Contrat : en-tête de ./ferme-active.test.ts.
+ * Fermes retenues sur ce téléphone, par utilisateur, rangées à part de ./ferme-active.ts : sans
+ * aucun import, elles se lisent aussi avant l'ouverture de la base, sans charger @planif/sync ni
+ * PowerSync. Deux clés distinctes :
+ *   - le CHOIX de l'utilisateur (T11, `planif.ferme-active.<id>`) : jamais réécrit par l'appli,
+ *     il revient avec l'adhésion si elle a disparu un temps. Contrat : en-tête de
+ *     ./ferme-active.test.ts ;
+ *   - la dernière ferme MONTRÉE (T13g, `planif.ferme-montree.<id>`) : la ferme active telle que
+ *     la base l'a désignée la dernière fois ('' : aucune). L'écran Aujourd'hui ne montre avant la
+ *     base que l'instantané de cette ferme-là.
+ * Stockage indisponible (navigation privée, quota) : rien n'est lu (null) ni retenu.
  */
 
-const cleMemoire = (utilisateurId: string) => `planif.ferme-active.${utilisateurId}`;
+const cleChoix = (utilisateurId: string) => `planif.ferme-active.${utilisateurId}`;
+const cleMontree = (utilisateurId: string) => `planif.ferme-montree.${utilisateurId}`;
 
-/** Ferme choisie par cet utilisateur sur ce téléphone ; null si aucune ou stockage indisponible. */
-export function lireFermeMemorisee(stockage: Pick<Storage, 'getItem'>, utilisateurId: string): string | null {
+function lire(stockage: Pick<Storage, 'getItem'>, cle: string): string | null {
   try {
-    const valeur = stockage.getItem(cleMemoire(utilisateurId));
+    const valeur = stockage.getItem(cle);
     return valeur === null || valeur === '' ? null : valeur;
   } catch {
     return null;
   }
 }
 
-/** Retient le choix ('' : aucune ferme) ; un stockage indisponible (navigation privée, quota) est ignoré. */
-export function memoriserFerme(stockage: Pick<Storage, 'setItem'>, utilisateurId: string, fermeId: string): void {
+function ecrire(stockage: Pick<Storage, 'setItem'>, cle: string, valeur: string): void {
   try {
-    stockage.setItem(cleMemoire(utilisateurId), fermeId);
+    stockage.setItem(cle, valeur);
   } catch {
-    // Le choix ne sera pas retenu : la première ferme sera reprise au prochain démarrage.
+    // Non retenu : la première ferme sera reprise (choix), ou rien ne sera montré avant la base.
   }
+}
+
+/** Ferme choisie par cet utilisateur sur ce téléphone ; null si aucune ou stockage indisponible. */
+export function lireFermeMemorisee(stockage: Pick<Storage, 'getItem'>, utilisateurId: string): string | null {
+  return lire(stockage, cleChoix(utilisateurId));
+}
+
+/** Retient le choix de l'utilisateur. */
+export function memoriserFerme(stockage: Pick<Storage, 'setItem'>, utilisateurId: string, fermeId: string): void {
+  ecrire(stockage, cleChoix(utilisateurId), fermeId);
+}
+
+/** T13g : dernière ferme active montrée à cet utilisateur ; null si aucune. */
+export function lireFermeMontree(stockage: Pick<Storage, 'getItem'>, utilisateurId: string): string | null {
+  return lire(stockage, cleMontree(utilisateurId));
+}
+
+/** T13g : retient la ferme active que la base vient de désigner ('' : aucune). */
+export function noterFermeMontree(stockage: Pick<Storage, 'setItem'>, utilisateurId: string, fermeId: string): void {
+  ecrire(stockage, cleMontree(utilisateurId), fermeId);
 }

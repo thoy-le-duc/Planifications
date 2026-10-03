@@ -2,12 +2,13 @@
 /**
  * T13g (tests du développeur, en appui de l'e2e de la grande ferme) — l'instantané montré AVANT
  * l'ouverture de la base (porte null), en lecture seule, seulement s'il est de la dernière ferme
- * choisie par cet utilisateur (src/donnees/ferme-memorisee.ts).
+ * montrée à cet utilisateur (src/donnees/ferme-memorisee.ts).
  *
- *   A1  Ferme mémorisée = ferme de l'instantané : cartes dessinées, boutons inactifs, marque
+ *   A1  Ferme montrée = ferme de l'instantané : cartes dessinées, boutons inactifs, marque
  *       de l'écran posée ; la porte arrivée sur cette ferme, les mêmes cartes deviennent actives.
- *   A2  Ferme mémorisée autre, ou aucune : rien de l'instantané, l'écran dit que la base s'ouvre.
- *   A3  La porte arrive sur une autre ferme que la mémorisée : l'instantané n'est plus montré.
+ *   A2  Ferme montrée autre, ou aucune (même si le choix de l'utilisateur est la bonne) : rien
+ *       de l'instantané, l'écran dit que la base s'ouvre.
+ *   A3  La porte arrive sur une autre ferme que la montrée : l'instantané n'est plus montré.
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -16,7 +17,7 @@ import { creerPorte, SCHEMA_LOCAL, type PorteDonnees } from '@planif/sync';
 import type { Id } from '@planif/core';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
 import { CLE_SESSION } from '../../connexion/session.ts';
-import { memoriserFerme } from '../../donnees/ferme-memorisee.ts';
+import { memoriserFerme, noterFermeMontree } from '../../donnees/ferme-memorisee.ts';
 import { EcranAujourdhui, MARQUE_AUJOURDHUI_AFFICHE } from './EcranAujourdhui.tsx';
 import { garderInstantane, type StockageInstantane } from './instantane.ts';
 import type { CarteVue } from './vues.ts';
@@ -69,7 +70,7 @@ function avecInstantane(memorisee: string | null): StockageInstantane {
     historique: [],
     saisies: 0,
   });
-  if (memorisee !== null) memoriserFerme(s, MOI, memorisee);
+  if (memorisee !== null) noterFermeMontree(s, MOI, memorisee);
   return s;
 }
 
@@ -123,9 +124,12 @@ describe('T13g : instantané avant l’ouverture de la base', () => {
     expect(boutonFait(), 'même écran, sans rechargement').toBe(avant);
   });
 
-  it('A2 : ferme mémorisée autre, ou aucune → rien de l’instantané', async () => {
+  it('A2 : ferme montrée autre, ou aucune → rien de l’instantané (le choix de l’utilisateur ne compte pas)', async () => {
     for (const memorisee of [AUTRE_FERME, null]) {
-      await rendre(null, null, avecInstantane(memorisee));
+      const s = avecInstantane(memorisee);
+      // Le choix de l'utilisateur (T11) est bien cette ferme : il ne suffit pas.
+      memoriserFerme(s, MOI, FERME);
+      await rendre(null, null, s);
       expect(conteneur.querySelectorAll('[data-testid="tache"]'), `mémorisée : ${String(memorisee)}`).toHaveLength(0);
       expect(conteneur.textContent).toContain('Ouverture des données de ce téléphone');
       await act(async () => {
