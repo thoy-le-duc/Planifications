@@ -95,6 +95,9 @@ export const DELAI_ANNULATION_MS = 10_000;
  */
 export const TEXTE_CULTURE_RETIREE = 'Culture retirée : correction impossible depuis le téléphone';
 
+/** T13l : pourquoi « Enregistrer » ou « Valider » attend (file des saisies). */
+const TEXTE_FILE = 'Saisies précédentes en cours d’enregistrement…';
+
 const deux = (n: number) => String(n).padStart(2, '0');
 
 /** Jour du téléphone, 'AAAA-MM-JJ' (heure locale, pas UTC). */
@@ -219,7 +222,7 @@ interface ProprietesHistorique {
   /** Le focus a été placé : il ne sera plus jamais repris (une seule fois, T13c). */
   readonly surFocusPlace: () => void;
   readonly aujourdhui: string;
-  /** T13l : saisies dont l'annulation est en file ou écrite (« Annuler » inactif). */
+  /** T13l : saisies dont l'annulation est en file ou écrite (« Annuler », « Changer la date » inactifs). */
   readonly enAnnulation: ReadonlySet<string>;
   readonly surAnnuler: (e: EntreeHistorique) => void;
   readonly surChangerDate: (e: EntreeHistorique) => void;
@@ -291,7 +294,8 @@ function Historique({ id, entrees, instantane, focus, surFocusPlace, aujourdhui,
                     type="button"
                     aria-label={`Changer la date : ${v.nom}`}
                     className="auj-bouton-secondaire"
-                    disabled={h === null}
+                    // T13l : saisie en annulation : sa date ne change plus (la chaîne revivrait).
+                    disabled={h === null || enAnnulation.has(v.id)}
                     onClick={() => {
                       if (h !== null) surChangerDate(h);
                     }}
@@ -335,15 +339,19 @@ function Historique({ id, entrees, instantane, focus, surFocusPlace, aujourdhui,
 interface ProprietesChangerDate {
   readonly entree: EntreeHistorique;
   readonly aujourdhui: string;
-  /** T13l : des saisies s'écrivent encore : « Enregistrer » attend, inactif. */
+  /** T13l : des saisies s'écrivent encore : « Enregistrer » attend, inactif, et dit pourquoi. */
   readonly occupe: boolean;
+  /** T13l : la saisie est en annulation (ou annulée) : sa date ne change plus. */
+  readonly enAnnulation: boolean;
   readonly surEnregistrer: (date: string) => void;
   readonly surFermer: () => void;
 }
 
-function ChangerDate({ entree, aujourdhui, occupe, surEnregistrer, surFermer }: ProprietesChangerDate) {
+function ChangerDate({ entree, aujourdhui, occupe, enAnnulation, surEnregistrer, surFermer }: ProprietesChangerDate) {
   const [date, setDate] = useState(entree.evenement.date);
   const idChamp = useId();
+  const idRaison = useId();
+  const raison = enAnnulation ? 'Cette saisie est en cours d’annulation : sa date ne peut plus changer.' : occupe ? TEXTE_FILE : null;
   const champ = useRef<HTMLInputElement>(null);
   const garderFocus = useFocusDuDialogue();
   useEffect(() => {
@@ -379,15 +387,21 @@ function ChangerDate({ entree, aujourdhui, occupe, surEnregistrer, surFermer }: 
         <button
           type="button"
           className="auj-bouton-principal"
-          disabled={!valide || occupe}
+          disabled={!valide || raison !== null}
+          aria-describedby={raison === null ? undefined : idRaison}
           onClick={() => {
-            if (!valide || occupe) return;
+            if (!valide || raison !== null) return;
             if (date === entree.evenement.date) surFermer();
             else surEnregistrer(date);
           }}
         >
           Enregistrer
         </button>
+        {raison !== null && (
+          <p id={idRaison} className="auj-feuille-texte">
+            {raison}
+          </p>
+        )}
         <button type="button" className="auj-bouton-secondaire" onClick={surFermer}>
           Retour
         </button>
@@ -609,7 +623,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
 
   // « Annuler » : 10 s après l'écriture de la saisie (T13l : pas pendant son attente en file), puis
   // l'historique.
-  const decompte = annulable !== null && annulable.evenement !== null ? annulable.numero : null;
+  // Annulation demandée : le bandeau reste jusqu'à son écriture (il part alors).
+  const decompte = annulable?.evenement != null && !annulable.demandee ? annulable.numero : null;
   useEffect(() => {
     if (decompte === null) return undefined;
     const minuterie = setTimeout(() => {
@@ -866,6 +881,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
   const cultureDialogue =
     dialogue?.sorte !== 'recolte' ? null : (dialogue.culture ?? (dialogue.cle === null ? null : (journee?.taches.find((t) => t.cle === dialogue.cle)?.culture ?? null)));
 
+  /** « Annuler » du bandeau inactif : demandé ici, ou la saisie est déjà en annulation (historique). */
+  const bandeauEnAnnulation = annulable !== null && (annulable.demandee || (annulable.evenement !== null && enAnnulation.has(annulable.evenement.id)));
+
   return (
     <div data-testid="aujourdhui" className={annulable === null ? 'auj' : 'auj auj-avec-bandeau'}>
       {vue !== null && (
@@ -997,9 +1015,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
           <button
             type="button"
             className="auj-bandeau-annuler"
-            disabled={annulable.demandee}
+            disabled={bandeauEnAnnulation}
             onClick={() => {
-              if (!annulable.demandee) annuler(annulable.evenement ?? annulable.ecrite, annulable.numero);
+              if (!bandeauEnAnnulation) annuler(annulable.evenement ?? annulable.ecrite, annulable.numero);
             }}
           >
             Annuler
@@ -1016,6 +1034,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
           recoltesEnCours={journee?.recoltesEnCours ?? []}
           enAttente={journee === null}
           occupe={occupe}
+          texteOccupe={TEXTE_FILE}
           dernieres={journee?.dernieresRecoltes ?? new Map()}
           erreur={erreur}
           surValider={surValiderRecolte}
@@ -1029,6 +1048,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
           entree={dialogue.entree}
           aujourdhui={dialogue.max}
           occupe={occupe}
+          enAnnulation={enAnnulation.has(dialogue.entree.evenement.id)}
           surEnregistrer={(date) => {
             surChangerDate(dialogue.entree, date);
           }}
