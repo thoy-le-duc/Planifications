@@ -448,11 +448,11 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
   /**
    * Tâches marquées faites et masquées dès le tap (un second tap n'écrit rien) : 'attente'
    * pendant l'écriture, puis le numéro pris à la fin de l'écriture. Gardées dans le cache, par
-   * porte, ferme et jour (T13f).
+   * porte et ferme (T13f).
    */
   const masquees: Masques = useSyncExternalStore(
-    useCallback((rappel: () => void) => suivreMasques(porte, fermeId, jour, rappel), [porte, fermeId, jour]),
-    () => masquesDe(porte, fermeId, jour),
+    useCallback((rappel: () => void) => suivreMasques(porte, fermeId, rappel), [porte, fermeId]),
+    () => masquesDe(porte, fermeId),
   );
   const estMasquee = (cle: string): boolean => estMasqueeDans(masquees, journee, cle);
   const journeeActuelle = useRef<Journee | null>(journee);
@@ -556,7 +556,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
 
   /** Pose ou retire le masque de `cle` (dans le cache : l'écran peut être quitté entre temps). */
   function masquer(cle: string, valeur: number | 'attente' | undefined): void {
-    changerMasques(porte, fermeId, jour, (m) => {
+    changerMasques(porte, fermeId, journeeActuelle.current, (m) => {
       if (valeur === undefined) m.delete(cle);
       else m.set(cle, valeur);
     });

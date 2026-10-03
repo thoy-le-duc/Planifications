@@ -16,8 +16,9 @@
  * toute relecture incrémentale, au calme (`VERIFICATION_MS` sans saisie), et cède la place à la
  * moindre saisie.
  *
- * T13f : les tâches marquées faites (masques) sont gardées ici, avec la journée, par porte, ferme
- * et jour : un écran quitté puis rouvert avant la relecture les retrouve (un second « Fait »
+ * T13f : les tâches marquées faites (masques) sont gardées ici, par porte et ferme (pas par jour :
+ * la clé d'une tâche ne dépend pas du jour, les numéros viennent d'une seule horloge) : un écran
+ * quitté puis rouvert avant la relecture, même le lendemain, les retrouve (un second « Fait »
  * n'écrit rien). Une relecture incrémentale ne porte son numéro que pour les cultures relues.
  */
 import type { PorteDonnees } from '@planif/sync';
@@ -118,9 +119,6 @@ interface Suivi {
   quittee: boolean;
   readonly abonnes: Set<(j: Journee) => void>;
   arreter: (() => void) | null;
-  /** Tâches marquées faites (T13f), remplacées à chaque changement ; et les écrans qui les suivent. */
-  masques: Masques;
-  readonly abonnesMasques: Set<() => void>;
 }
 
 const suivis = new WeakMap<PorteDonnees, Map<string, Suivi>>();
@@ -149,8 +147,6 @@ function suiviDe(porte: PorteDonnees, fermeId: string, jour: string): Suivi {
       quittee: false,
       abonnes: new Set(),
       arreter: null,
-      masques: new Map(),
-      abonnesMasques: new Set(),
     };
     parCle.set(cle, s);
   }
@@ -301,31 +297,54 @@ export function journeeEnCache(porte: PorteDonnees, fermeId: string, jour: strin
   return journeeDe(suiviDe(porte, fermeId, jour));
 }
 
-/** Tâches marquées faites pour ce jour (même objet tant qu'elles ne changent pas). */
-export function masquesDe(porte: PorteDonnees, fermeId: string, jour: string): Masques {
-  return suiviDe(porte, fermeId, jour).masques;
+/** Masques d'une ferme (remplacés à chaque changement), et les écrans qui les suivent. */
+interface MasquesFerme {
+  masques: Masques;
+  readonly abonnes: Set<() => void>;
 }
 
-/** Suit les masques du jour : `rappel` à chaque changement. Rend le désabonnement. */
-export function suivreMasques(porte: PorteDonnees, fermeId: string, jour: string, rappel: () => void): () => void {
-  const s = suiviDe(porte, fermeId, jour);
-  s.abonnesMasques.add(rappel);
+const masquesParPorte = new WeakMap<PorteDonnees, Map<string, MasquesFerme>>();
+
+function masquesFerme(porte: PorteDonnees, fermeId: string): MasquesFerme {
+  let parFerme = masquesParPorte.get(porte);
+  if (parFerme === undefined) {
+    parFerme = new Map();
+    masquesParPorte.set(porte, parFerme);
+  }
+  let m = parFerme.get(fermeId);
+  if (m === undefined) {
+    m = { masques: new Map(), abonnes: new Set() };
+    parFerme.set(fermeId, m);
+  }
+  return m;
+}
+
+/** Tâches marquées faites de la ferme (même objet tant qu'elles ne changent pas). */
+export function masquesDe(porte: PorteDonnees, fermeId: string): Masques {
+  return masquesFerme(porte, fermeId).masques;
+}
+
+/** Suit les masques de la ferme : `rappel` à chaque changement. Rend le désabonnement. */
+export function suivreMasques(porte: PorteDonnees, fermeId: string, rappel: () => void): () => void {
+  const m = masquesFerme(porte, fermeId);
+  m.abonnes.add(rappel);
   return () => {
-    s.abonnesMasques.delete(rappel);
+    m.abonnes.delete(rappel);
   };
 }
 
 /**
- * Change les masques du jour : `changer` reçoit une copie à modifier. Les masques tombés (la
- * journée relue a vu leur écriture) sont oubliés au passage.
+ * Change les masques de la ferme : `changer` reçoit une copie à modifier. Les masques tombés sur
+ * la journée `affichee` (celle que l'écran montre, qui a relu leur culture depuis l'écriture) sont
+ * oubliés au passage ; jamais contre une autre journée, qu'un rendu n'aurait pas encore montrée.
  */
-export function changerMasques(porte: PorteDonnees, fermeId: string, jour: string, changer: (m: Map<string, Masque>) => void): void {
-  const s = suiviDe(porte, fermeId, jour);
-  const affichee = s.etat?.journee ?? null;
-  const n = new Map([...s.masques].filter(([cle]) => estMasquee(s.masques, affichee, cle)));
+export function changerMasques(porte: PorteDonnees, fermeId: string, affichee: Journee | null, changer: (m: Map<string, Masque>) => void): void {
+  const f = masquesFerme(porte, fermeId);
+  const avant = f.masques;
+  const n = affichee === null ? new Map(avant) : new Map([...avant].filter(([cle]) => estMasquee(avant, affichee, cle)));
   changer(n);
-  s.masques = n;
-  for (const rappel of [...s.abonnesMasques]) rappel();
+  f.masques = n;
+  for (const rappel of [...f.abonnes]) rappel();
 }
 
 /**
