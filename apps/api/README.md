@@ -108,6 +108,12 @@ VITE_API_URL=http://localhost:3000 VITE_POWERSYNC_URL=http://localhost:8080 pnpm
 
 Puis, une fois connecté dans l'appli : `http://localhost:5173/diagnostic/synchro.html?ferme=<id de la ferme>`. Le test de bout en bout fait tout cela seul : `pnpm e2e:synchro` (racine).
 
+## Déploiement
+
+Le proxy placé devant l'API (nginx, Caddy, répartiteur de l'hébergeur) doit lui parler en HTTP/1.1 (avec nginx : `proxy_http_version 1.1;`, car nginx parle HTTP/1.0 à l'amont par défaut). En HTTP/1.0, une réponse en flux (export) n'a pas d'envoi par morceaux : sa fin n'est marquée que par la fermeture de la connexion, et un export coupé ressemblerait à un export complet. L'API se protège quand même (T10q) : en HTTP/1.0, un corps en flux sans Content-Length est lu en entier en mémoire puis envoyé avec un Content-Length exact, ou remplacé par un 500 si sa lecture échoue ; c'est un filet, pas un mode de fonctionnement (tout l'export passe en mémoire). En HTTP/1.0, ce corps lu en mémoire est plafonné à 32 Mio (`PLAFOND_CORPS_HTTP10_OCTETS`, option `plafondHttp10Octets`) : au-delà, la source est annulée et l'API répond 505 sans corps, avec une ligne au journal. Une réponse qui annonce déjà son Content-Length reste en flux, même en HTTP/1.0 : sa coupure se voit.
+
+Corps en flux, en HTTP/1.1 : les en-têtes ne partent qu'avec le premier morceau. Une erreur avant lui donne un 500 complet ; une erreur après coupe la connexion sans terminer la réponse (T10p), jamais une réponse tronquée d'apparence complète.
+
 ## Tickets suivants
 
 Décision du chef d'équipe, rien de tout ça dans T09 :

@@ -2,6 +2,11 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T10q : réponses en flux sûres derrière un proxy
+
+- **Fait** : en HTTP/1.0 (proxy mal réglé), une réponse en flux est lue en mémoire et envoyée avec sa taille exacte, plafonnée à 32 Mio (au-delà : 505) ; en HTTP/1.1, un flux qui échoue avant son premier morceau donne un 500 propre ; un téléphone qui coupe annule la lecture des données ; plus aucune erreur piégée ne peut faire arriver son message au téléphone (fuite trouvée par le testeur, fermée).
+- **Décidé** : le README de l'API exige un proxy en HTTP/1.1 ; l'envoi en mémoire n'est qu'un filet de secours. Relecture : 3 bloquants (source non annulée au départ du client, pas de plafond, double annonce de taille) corrigés, contre-relecture sans bloquant.
+- **Bloquant** : rien. Suite : T10r (délai jusqu'au premier morceau d'une réponse en flux).
 ## 2026-10-03 — T13f : plus aucun « Fait » en double sur Aujourd'hui
 
 - **Fait** : les tâches marquées faites restent masquées même si l'on change d'onglet, de ferme ou de jour avant que l'écran ait relu la culture ; une synchro d'une autre culture ne fait plus réapparaître une tâche faite ; « Annuler » ne fait plus réapparaître les autres tâches faites de la même culture. Dans chacun de ces cas, un second « Fait » n'écrit rien.
