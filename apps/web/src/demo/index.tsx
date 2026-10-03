@@ -143,7 +143,7 @@ function Demo() {
         />
         <div className="demo-contenu">
           {etat === 'prete' ? (
-            <App demo />
+            <App />
           ) : (
             <div className="demo-attente" data-etat={etat} role={etat === 'preparation' ? 'status' : 'alert'}>
               <h1>Planifications</h1>

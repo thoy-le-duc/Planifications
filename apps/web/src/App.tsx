@@ -201,8 +201,10 @@ function useRefusNonVus(ferme: FermeOuverte | null, utilisateurId: string | unde
   return ids !== null && vus !== null && refusNonVus(ids, vus);
 }
 
-/** `demo` : démo en ligne (T25b), posé par src/demo/ — ni déconnexion, ni état de synchro. */
-export function App({ demo = false }: { readonly demo?: boolean } = {}) {
+/** Démo en ligne (T25b) : constante du build, éliminée en production. */
+const demo = import.meta.env.MODE === 'demo';
+
+export function App() {
   // Session gardée sur le téléphone : lue une fois, sans réseau.
   const [session, setSession] = useState<SessionConnexion | null>(() => lireSession(stockageNavigateur()));
   /** Échec de la dernière déconnexion, montré sur l'écran de connexion. */
@@ -217,6 +219,11 @@ export function App({ demo = false }: { readonly demo?: boolean } = {}) {
 
   /** Retour à l'écran de connexion (déconnexion ici ou dans un autre onglet). */
   function finDeSession(message: string | null): void {
+    // Démo : session disparue (« Réinitialiser » dans un autre onglet) → on recharge, pas de connexion.
+    if (demo) {
+      location.reload();
+      return;
+    }
     setErreur(message);
     setOnglet('aujourdhui');
     setSession(null);

@@ -490,16 +490,16 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
       </Carte>
 
       {!sansDeconnexion && (
-      <div style={CARTE}>
-        <Ligne
-          nom="Se déconnecter"
-          detail={`${session.email} · efface les données de ce téléphone`}
-          signe=""
-          couleur="var(--couleur-texte-orange)"
-          desactivee={deconnexionEnCours}
-          surTap={() => void seDeconnecter()}
-        />
-      </div>
+        <div style={CARTE}>
+          <Ligne
+            nom="Se déconnecter"
+            detail={`${session.email} · efface les données de ce téléphone`}
+            signe=""
+            couleur="var(--couleur-texte-orange)"
+            desactivee={deconnexionEnCours}
+            surTap={() => void seDeconnecter()}
+          />
+        </div>
       )}
       {confirmation !== null && (
         <Confirmation
