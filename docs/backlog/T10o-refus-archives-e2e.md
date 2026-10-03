@@ -11,4 +11,4 @@ Le critère « sur tous les téléphones » n'est couvert qu'avec la base en mé
 
 ## Critères d'acceptation
 
-- [ ] `pnpm e2e:synchro` : navigateur A archive un refus, navigateur B voit la carte disparaître ; la ligne descend avec `archive_le` rempli ; le PATCH envoyé ne porte que `archive_le`.
+- [x] `pnpm e2e:synchro` : navigateur A archive un refus, navigateur B voit la carte disparaître ; la ligne descend avec `archive_le` rempli ; le PATCH envoyé ne porte que `archive_le`.

@@ -33,7 +33,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10k](T10k-refus-saisie.md) | Refus : la saisie refusée reconnaissable | T10j | fait |
 | [T10l](T10l-refus-archives.md) | Refus : archiver un refus vu | T10i | fait |
 | [T10n](T10n-refus-desarchiver.md) | Refus : annuler un archivage | T10l | fait |
-| [T10o](T10o-refus-archives-e2e.md) | Refus : archivage vérifié entre deux téléphones | T10l | à faire |
+| [T10o](T10o-refus-archives-e2e.md) | Refus : archivage vérifié entre deux téléphones | T10l | fait |
 | [T10m](T10m-journal-serveur.md) | Journal du serveur : la même règle partout | T10j | fait |
 | [T10p](T10p-journal-flux.md) | Journal du serveur : erreurs d’envoi en flux | T10m | fait |
 | [T10q](T10q-flux-suites.md) | Réponses en flux : HTTP/1.0 et erreur au premier octet | T10p | fait |
