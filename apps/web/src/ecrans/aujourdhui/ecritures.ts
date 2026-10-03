@@ -27,7 +27,7 @@ import {
 } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees, SaisieEvenement, VerificationEcriture } from '@planif/sync';
 import { annoncerSaisie } from './cache.ts';
-import { listeTextes, type Culture, type EvenementLu } from './calculs.ts';
+import { CHAINES, listeTextes, type Culture, type EvenementLu } from './calculs.ts';
 
 const nouvelId = creerGenerateurId({
   horloge: () => Date.now(),
@@ -115,21 +115,19 @@ const culturePour = (culture: Culture) => culture.cible;
 
 /**
  * T13h : un « Fait » en vigueur existe-t-il déjà pour la culture (sa colonne), du type donné, dont
- * le detail porte la valeur au chemin JSON donné (l'étape, ou le libellé du travail) et, si elle
- * est donnée, l'occurrence visée ? Paramètres : culture, ferme, type, chemin, valeur, occurrence
- * (deux fois), ferme. Les originaux candidats (index `serie` ou `campagne`), puis leurs chaînes,
- * descendues par remplace_evenement_id (index `remplacement`) : une chaîne qui contient une
- * annulation n'a rien en vigueur ; une annulation reçue du serveur porte aussi l'origine de sa
- * chaîne (origine_id), même si un maillon manque ici. Le cas courant (aucun candidat) ne lit
- * aucune chaîne.
+ * le detail porte les valeurs aux chemins JSON donnés ? « En vigueur » : même règle que
+ * `EN_VIGUEUR` (calculs.ts), sur les chaînes `CHAINES` de la ferme (filtrées par la ferme,
+ * origine_id des lignes reçues compris) : une chaîne annulée n'a rien en vigueur ; sinon sa
+ * correction la plus récente (horodatage, puis id), à défaut l'original. La culture et le detail
+ * sont lus sur cette ligne-là (une correction peut changer l'étape ou la culture). Paramètres :
+ * ferme (chaînes), culture, ferme, type, puis une valeur par chemin. Les candidats viennent de
+ * l'index de la culture : sans candidat, les chaînes ne sont pas lues.
  */
-const sqlDejaFait = (colonne: 'serie_id' | 'campagne_id') => `WITH RECURSIVE
-  faits(id) AS (SELECT id FROM evenement WHERE ${colonne} = ? AND +ferme_id = ? AND type = ? AND remplace_sorte IS NULL
-    AND json_valid(detail) AND json_extract(detail, ?) = ? AND (? IS NULL OR json_extract(detail, '$.occurrenceVisee') = ?)),
-  chaine(origine, id, sorte, n) AS (SELECT id, id, NULL, 0 FROM faits
-    UNION ALL SELECT c.origine, e.id, e.remplace_sorte, c.n + 1 FROM evenement e JOIN chaine c ON e.remplace_evenement_id = c.id WHERE c.n < 1000)
-  SELECT 1 FROM faits f WHERE NOT EXISTS (SELECT 1 FROM chaine c WHERE c.origine = f.id AND c.sorte = 'annulation')
-    AND NOT EXISTS (SELECT 1 FROM evenement a WHERE a.remplace_evenement_id >= '' AND +a.ferme_id = ? AND a.origine_id = f.id AND a.remplace_sorte = 'annulation')
+const sqlDejaFait = (colonne: 'serie_id' | 'campagne_id', chemins: readonly string[]) => `${CHAINES}SELECT 1 FROM evenement e
+  WHERE e.${colonne} = ? AND +e.ferme_id = ? AND e.type = ? AND json_valid(e.detail)
+    AND ${chemins.map((c) => `json_extract(e.detail, '${c}') = ?`).join(' AND ')}
+    AND ((e.remplace_sorte IS NULL AND e.id NOT IN (SELECT origine FROM chaine))
+      OR (e.remplace_sorte = 'correction' AND e.id IN (SELECT id FROM chaine WHERE annulations = 0 AND cle IS NOT NULL)))
   LIMIT 1`;
 
 /**
@@ -137,10 +135,11 @@ const sqlDejaFait = (colonne: 'serie_id' | 'campagne_id') => `WITH RECURSIVE
  * possible entre elle et l'ordre (deux taps, deux onglets sur la même base : PowerSync n'ouvre
  * qu'une transaction d'écriture à la fois). Lève DejaFait si le « Fait » existe déjà.
  */
-function pasDejaFait(ctx: ContexteEcriture, culture: Culture, type: string, chemin: string, valeur: string, occurrence: string | null): VerificationEcriture {
+function pasDejaFait(ctx: ContexteEcriture, culture: Culture, type: string, detail: Readonly<Record<string, string>>): VerificationEcriture {
   const colonne = culture.cible.sorte === 'serie' ? 'serie_id' : 'campagne_id';
+  const chemins = Object.keys(detail);
   return async (lire) => {
-    const deja = await lire(sqlDejaFait(colonne), [culture.cibleId, ctx.fermeId, type, chemin, valeur, occurrence, occurrence, ctx.fermeId]);
+    const deja = await lire(sqlDejaFait(colonne, chemins.map((c) => `$.${c}`)), [ctx.fermeId, culture.cibleId, ctx.fermeId, type, ...chemins.map((c) => detail[c])]);
     if (deja.length > 0) throw new DejaFait('déjà fait');
   };
 }
@@ -185,7 +184,7 @@ export async function marquerFait(ctx: ContexteEcriture, culture: Culture, etape
     remplaceEvenement: null,
     detail,
   });
-  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], pasDejaFait(ctx, culture, 'realise', '$.etape', etape, null));
+  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], pasDejaFait(ctx, culture, 'realise', { etape }));
   return e.id;
 }
 
@@ -215,7 +214,7 @@ export function detailDuTravail(travail: TravailPrevu, occurrenceVisee: DateCale
 /**
  * « Fait » sur un travail prévu (T22) : l'intervention du même type, à la date du jour, qui porte
  * l'occurrence visée `datePrevue` (la date de la carte touchée, T22b). T13h : rejet DejaFait,
- * rien d'écrit, si une intervention de ce travail pour cette occurrence est déjà en vigueur.
+ * rien d'écrit, si une intervention de ce travail (libellé, catégorie) pour cette occurrence est déjà en vigueur.
  */
 export async function marquerTravailFait(
   ctx: ContexteEcriture,
@@ -234,7 +233,7 @@ export async function marquerTravailFait(
     remplaceEvenement: null,
     detail: detailDuTravail(travail, datePrevue),
   });
-  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], pasDejaFait(ctx, culture, 'intervention', '$.type', travail.type, datePrevue));
+  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], pasDejaFait(ctx, culture, 'intervention', { type: travail.type, categorie: travail.categorie, occurrenceVisee: datePrevue }));
   return e.id;
 }
 
