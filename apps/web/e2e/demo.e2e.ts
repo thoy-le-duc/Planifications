@@ -168,3 +168,24 @@ test('la feuille de confirmation garde le focus, et le rend au bouton à la ferm
     expect(await focusSurReinitialiser(page), `${fermeture} : le focus revient sur « Réinitialiser la démo »`).toBe(true);
   }
 });
+
+/** T25b — la démo ne mène jamais à une impasse : ni déconnexion, ni état de synchro. */
+test('T25b : pas de « Se déconnecter » dans Ferme ; l’en-tête dit « Démo », même après un « Fait »', async ({ page }) => {
+  await ouvrirLaDemo(page);
+  const etat = page.getByTestId('etat-synchro');
+  await expect(etat, 'en-tête sur Aujourd’hui').toHaveText('Démo');
+
+  const cible = faisables(page).first();
+  await expect(cible).toBeVisible();
+  await cible.getByRole('button', { name: /^Marquer fait/ }).click();
+  await expect(page.getByTestId('saisie-annulable')).toBeVisible();
+  await expect(etat, 'après un « Fait » : pas de décompte « à envoyer »').toHaveText('Démo');
+  await expect(etat).not.toContainText(/à envoyer|Hors ligne/);
+
+  await onglet(page, 'Ferme').click();
+  await expect(page.getByTestId('app')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Se déconnecter/ }), 'aucun bouton de déconnexion en démo').toHaveCount(0);
+  await expect(etat, 'en-tête sur Ferme').toHaveText('Démo');
+  await onglet(page, 'Planches').click();
+  await expect(etat, 'en-tête sur Planches').toHaveText('Démo');
+});

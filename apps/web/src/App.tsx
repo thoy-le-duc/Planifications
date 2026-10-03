@@ -201,6 +201,9 @@ function useRefusNonVus(ferme: FermeOuverte | null, utilisateurId: string | unde
   return ids !== null && vus !== null && refusNonVus(ids, vus);
 }
 
+/** Démo en ligne (T25b) : constante du build, éliminée en production. */
+const demo = import.meta.env.MODE === 'demo';
+
 export function App() {
   // Session gardée sur le téléphone : lue une fois, sans réseau.
   const [session, setSession] = useState<SessionConnexion | null>(() => lireSession(stockageNavigateur()));
@@ -216,6 +219,11 @@ export function App() {
 
   /** Retour à l'écran de connexion (déconnexion ici ou dans un autre onglet). */
   function finDeSession(message: string | null): void {
+    // Démo : session disparue (« Réinitialiser » dans un autre onglet) → on recharge, pas de connexion.
+    if (demo) {
+      location.reload();
+      return;
+    }
     setErreur(message);
     setOnglet('aujourdhui');
     setSession(null);
@@ -333,13 +341,13 @@ export function App() {
     <main data-testid="app" data-base={donnees.base} className={onglet === 'planches' ? 'coquille coquille-plan' : 'coquille'}>
       <EnTete titre={titre} {...(onglet === 'aujourdhui' ? { surtitre: jourAffiche() } : {})}>
         <span data-testid="etat-synchro" role="status" className="etat-synchro">
-          {libelleSynchro(donnees.synchro, donnees.enAttente)}
+          {demo ? 'Démo' : libelleSynchro(donnees.synchro, donnees.enAttente)}
         </span>
       </EnTete>
       <div className="coquille-contenu">
         <ContexteFerme value={donnees.ferme}>
           {onglet === 'ferme' ? (
-            <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} etatBase={donnees.base} />
+            <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} sansDeconnexion={demo} etatBase={donnees.base} />
           ) : onglet === 'planches' ? (
             <OngletFerme base={donnees.base} ecran={(f) => <planches.Composant key={f.fermeId} porte={f.porte} fermeId={f.fermeId} />} montrera="le plan s’affichera" />
           ) : onglet === 'aujourdhui' ? (
