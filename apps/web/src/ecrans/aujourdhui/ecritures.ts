@@ -333,7 +333,7 @@ type Lire = Parameters<VerificationEcriture>[0];
  * origine_id, ou jusqu'au plus haut connu), puis tous ses remplacements (par origine_id, et en
  * descendant par remplace_evenement_id : index `remplacement`). Rend le nombre d'annulations et
  * la ligne en vigueur : la correction la plus récente (horodatage, puis id), à défaut l'origine.
- * Paramètres : id, ferme (×5).
+ * Paramètres : id, ferme (×5) ; aucune ligne d'une autre ferme n'est lue.
  */
 const SQL_CHAINE_DE = `WITH RECURSIVE
   haut(id, parent, origine, n) AS (
@@ -350,7 +350,7 @@ const SQL_CHAINE_DE = `WITH RECURSIVE
     UNION SELECT e.id FROM evenement e WHERE e.remplace_evenement_id >= '' AND +e.ferme_id = ? AND e.origine_id = (SELECT id FROM racine)
     UNION SELECT e.id FROM evenement e JOIN membre m ON e.remplace_evenement_id = m.id WHERE +e.ferme_id = ?
   ),
-  ligne AS (SELECT e.id, e.remplace_sorte, e.horodatage FROM evenement e WHERE e.id IN (SELECT id FROM membre))
+  ligne AS (SELECT e.id, e.remplace_sorte, e.horodatage FROM evenement e WHERE e.id IN (SELECT id FROM membre) AND +e.ferme_id = ?)
 SELECT
   (SELECT count(*) FROM ligne WHERE remplace_sorte = 'annulation') AS annulations,
   coalesce(
@@ -360,7 +360,7 @@ SELECT
 
 /** Ligne en vigueur de la chaîne de `id` ; lève SaisiePlusEnVigueur si la chaîne est annulée. */
 async function enVigueurDeLaChaine(lire: Lire, fermeId: string, id: string): Promise<string | null> {
-  const r = (await lire<{ annulations: number; en_vigueur: string | null }>(SQL_CHAINE_DE, [id, fermeId, fermeId, fermeId, fermeId]))[0];
+  const r = (await lire<{ annulations: number; en_vigueur: string | null }>(SQL_CHAINE_DE, [id, fermeId, fermeId, fermeId, fermeId, fermeId]))[0];
   if (r === undefined || r.annulations > 0) throw new SaisiePlusEnVigueur('cette saisie a déjà été annulée');
   return r.en_vigueur;
 }
