@@ -14,13 +14,13 @@
  *   3. l'API (apps/api, `node src/index.ts`) avec DATABASE_URL, JWT_CLES_PRIVEES (générées par
  *      `pnpm --filter @planif/api cles` si absentes), JWT_EMETTEUR, JWT_AUDIENCE, PORT, et
  *      COURRIEL_CONSOLE=1 ; elle doit accepter l'origine de la page (CORS_ORIGINES, ex.
- *      http://localhost:4174) ; le service PowerSync lit son JWKS (PS_JWKS_URI) ;
+ *      http://localhost:14174) ; le service PowerSync lit son JWKS (PS_JWKS_URI) ;
  *   4. playwright avec, dans l'environnement :
- *        API_URL            URL de l'API vue par le navigateur (ex. http://localhost:3100)
- *        POWERSYNC_URL      URL du service vue par le navigateur (ex. http://localhost:8080)
+ *        API_URL            URL de l'API vue par le navigateur (ex. http://localhost:13100)
+ *        POWERSYNC_URL      URL du service vue par le navigateur (ex. http://localhost:18080)
  *        DATABASE_URL, JWT_CLES_PRIVEES, JWT_EMETTEUR, JWT_AUDIENCE : ceux de l'API (amorçage)
  *        SYNCHRO_BASE_URL   facultatif : page déjà servie ailleurs (sinon la configuration
- *                           construit dist-synchro/ et le sert sur http://localhost:4174)
+ *                           construit dist-synchro/ et le sert sur http://localhost:14174)
  *   5. arrêt de l'API et des conteneurs, même en cas d'échec.
  *
  * Règle : sans API_URL ou POWERSYNC_URL, ces tests se sautent en local (avec un avertissement)

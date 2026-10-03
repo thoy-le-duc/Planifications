@@ -10,7 +10,7 @@
  * paramétrables (E2E_PORT_POSTGRES, E2E_PORT_POWERSYNC, E2E_PORT_API), scripts/e2e-synchro.ts lit :
  *   E2E_PROJET_COMPOSE  nom du projet docker compose (défaut « planif-e2e-synchro ») : conteneurs,
  *                       volumes et `down -v` de l'arrêt ne touchent que ce projet ;
- *   E2E_PORT_PAGE       port de la page de diagnostic (défaut 4174) : playwright.synchro.config.ts
+ *   E2E_PORT_PAGE       port de la page de diagnostic (défaut 14174 pour le banc ; 4174 si playwright est lancé seul) : playwright.synchro.config.ts
  *                       la construit, la sert et l'attend sur ce port (vérifié par banc.test.ts),
  *                       et l'origine CORS de l'API (CORS_ORIGINES) le suit.
  * Exemple : E2E_PROJET_COMPOSE=planif-e2e-t10c E2E_PORT_PAGE=4274 E2E_PORT_POSTGRES=56532
