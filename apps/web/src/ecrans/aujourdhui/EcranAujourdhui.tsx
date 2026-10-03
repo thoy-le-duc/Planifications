@@ -44,7 +44,7 @@ import {
   type TacheJour,
 } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
-import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, type ContexteEcriture } from './ecritures.ts';
+import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
 import { garderInstantane, lireInstantane, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
 import { libelleEvenement, vueCarte, vuesHistorique, type CarteVue, type SaisieVue } from './vues.ts';
@@ -97,6 +97,9 @@ export const TEXTE_CULTURE_RETIREE = 'Culture retirée : correction impossible d
 
 /** T13l : pourquoi « Enregistrer » ou « Valider » attend (file des saisies). */
 const TEXTE_FILE = 'Saisies précédentes en cours d’enregistrement…';
+
+/** T13l : refus de la garde des remplacements (SaisiePlusEnVigueur), dit comme un « déjà fait ». */
+const AVIS_PLUS_EN_VIGUEUR = 'Saisie déjà annulée ou corrigée ailleurs : rien de plus n’est enregistré.';
 
 const deux = (n: number) => String(n).padStart(2, '0');
 
@@ -624,7 +627,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
   // « Annuler » : 10 s après l'écriture de la saisie (T13l : pas pendant son attente en file), puis
   // l'historique.
   // Annulation demandée : le bandeau reste jusqu'à son écriture (il part alors).
-  const decompte = annulable?.evenement != null && !annulable.demandee ? annulable.numero : null;
+  const decompte = annulable?.demandee === false && annulable.evenement !== null ? annulable.numero : null;
   useEffect(() => {
     if (decompte === null) return undefined;
     const minuterie = setTimeout(() => {
@@ -830,7 +833,15 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
         vise = ev.id;
         noterAnnulation(vise, true);
       }
-      await annulerSaisie(contexte(), ev);
+      try {
+        await annulerSaisie(contexte(), ev);
+      } catch (e) {
+        if (!(e instanceof SaisiePlusEnVigueur)) throw e;
+        // Comme DejaFait : un avis, le bandeau part, la saisie reste en annulation (rien à refaire).
+        setAvis(AVIS_PLUS_EN_VIGUEUR);
+        setAnnulable((a) => (a?.evenement?.id === ev.id || (bandeau !== null && a?.numero === bandeau) ? null : a));
+        return;
+      }
       setAnnulable((a) => (a?.evenement?.id === ev.id ? null : a));
       // Aucun masque n'est retiré (T13f) : l'annulation provoque une relecture de sa culture, plus
       // récente que les masques, qui fait revenir la tâche annulée ; les autres tâches masquées
@@ -846,7 +857,15 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
   function surChangerDate(entree: EntreeHistorique, date: string): void {
     const avant = journeeActuelle.current;
     void ecrire(async () => {
-      const id = await changerDate(contexte(), entree.evenement, date);
+      let id: string;
+      try {
+        id = await changerDate(contexte(), entree.evenement, date);
+      } catch (e) {
+        if (!(e instanceof SaisiePlusEnVigueur)) throw e;
+        setAvis(AVIS_PLUS_EN_VIGUEUR);
+        setDialogue(null);
+        return;
+      }
       // La saisie d'origine quitte l'historique à la relecture : le focus ira à sa correction.
       setFocusSaisie({ evenementId: id, avant });
       setDialogue(null);
