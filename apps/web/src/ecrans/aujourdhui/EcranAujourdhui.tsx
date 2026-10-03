@@ -11,11 +11,11 @@
  * tout de suite, puis la journée relue le remplace et devient le nouvel instantané. Rien n'est
  * écrit depuis l'instantané : « Fait » y passe par une lecture ciblée de la tâche dans la base.
  */
-import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import './aujourdhui.css';
-import { journeeEnCache, lectureDe, marquerEcriture, suivreJournee } from './cache.ts';
+import { changerMasques, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, suivreJournee, suivreMasques, type Masques } from './cache.ts';
 import {
   capitale,
   ETAPES_FAITES,
@@ -382,22 +382,13 @@ function evenementEcrit(id: string, culture: Culture, date: string, detail: Even
   };
 }
 
-/**
- * Tâche masquée : écriture en cours, ou journée affichée lue avant la fin de l'écriture (elle n'a
- * pas pu voir le réalisé, T13e). T13c : une journée lue après l'écriture lève le masque ; une
- * tâche revenue (réalisé annulé depuis un autre téléphone) se marque faite de nouveau. Sur
- * l'instantané (aucune journée lue), le masque tient.
+/*
+ * Tâche masquée (cache.ts) : écriture en cours, ou journée affichée qui n'a pas relu la culture
+ * depuis la fin de l'écriture (elle n'a pas pu voir le réalisé, T13e, T13f). T13c : une journée
+ * qui l'a relue lève le masque ; une tâche revenue (réalisé annulé depuis un autre téléphone) se
+ * marque faite de nouveau. Sur l'instantané (aucune journée lue), le masque tient. Les masques
+ * vivent dans le cache, pas dans l'écran : ils tiennent à un changement d'onglet (T13f).
  */
-function masqueTient(m: number | 'attente', affichee: Journee | null): boolean {
-  return m === 'attente' || lectureDe(affichee) < m;
-}
-
-type Masques = ReadonlyMap<string, number | 'attente'>;
-
-function estMasqueeDans(masquees: Masques, journee: Journee | null, cle: string): boolean {
-  const m = masquees.get(cle);
-  return m !== undefined && masqueTient(m, journee);
-}
 
 /** Ce que l'écran dessine de la journée relue (tâches masquées retirées) : c'est aussi l'instantané gardé. */
 function vueDeJournee(journee: Journee, masquees: Masques, toutVoir: boolean): VueJournee {
@@ -456,9 +447,13 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
   const [toutVoir, setToutVoir] = useState(false);
   /**
    * Tâches marquées faites et masquées dès le tap (un second tap n'écrit rien) : 'attente'
-   * pendant l'écriture, puis le numéro pris à la fin de l'écriture (cache.ts).
+   * pendant l'écriture, puis le numéro pris à la fin de l'écriture. Gardées dans le cache, par
+   * porte, ferme et jour (T13f).
    */
-  const [masquees, setMasquees] = useState<Masques>(new Map());
+  const masquees: Masques = useSyncExternalStore(
+    useCallback((rappel: () => void) => suivreMasques(porte, fermeId, jour, rappel), [porte, fermeId, jour]),
+    () => masquesDe(porte, fermeId, jour),
+  );
   const estMasquee = (cle: string): boolean => estMasqueeDans(masquees, journee, cle);
   const journeeActuelle = useRef<Journee | null>(journee);
   useEffect(() => {
@@ -559,13 +554,11 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
     setAnnulable({ evenement, culture, titre, texte, numero: numero.current });
   }
 
+  /** Pose ou retire le masque de `cle` (dans le cache : l'écran peut être quitté entre temps). */
   function masquer(cle: string, valeur: number | 'attente' | undefined): void {
-    setMasquees((m) => {
-      // Les masques tombés (posés sur une journée déjà remplacée) sont oubliés au passage.
-      const n = new Map([...m].filter(([, v]) => masqueTient(v, journeeActuelle.current)));
-      if (valeur === undefined) n.delete(cle);
-      else n.set(cle, valeur);
-      return n;
+    changerMasques(porte, fermeId, jour, (m) => {
+      if (valeur === undefined) m.delete(cle);
+      else m.set(cle, valeur);
     });
   }
 
@@ -645,8 +638,12 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
     void ecrire(async () => {
       await annulerSaisie(contexte(), evenement);
       setAnnulable((a) => (a?.evenement.id === evenement.id ? null : a));
-      // La tâche faite puis annulée redevient à faire : plus de masque.
-      setMasquees(new Map());
+      // La tâche faite puis annulée redevient à faire : plus de masque sur sa culture. Ceux des
+      // autres cultures tiennent (leur réalisé n'est peut-être pas encore relu, T13f).
+      const cible = evenement.serieId ?? evenement.campagneId;
+      changerMasques(porte, fermeId, jour, (m) => {
+        for (const [cle, v] of m) if (v !== 'attente' && cle.startsWith(`${cible ?? ''}:`)) m.delete(cle);
+      });
     });
   }
 

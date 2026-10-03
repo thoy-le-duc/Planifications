@@ -15,6 +15,10 @@
  * le même avis de changement qu'une saisie passerait inaperçue ; une relecture complète suit donc
  * toute relecture incrémentale, au calme (`VERIFICATION_MS` sans saisie), et cède la place à la
  * moindre saisie.
+ *
+ * T13f : les tâches marquées faites (masques) sont gardées ici, avec la journée, par porte, ferme
+ * et jour : un écran quitté puis rouvert avant la relecture les retrouve (un second « Fait »
+ * n'écrit rien). Une relecture incrémentale ne porte son numéro que pour les cultures relues.
  */
 import type { PorteDonnees } from '@planif/sync';
 import {
@@ -39,16 +43,42 @@ export const VERIFICATION_MS = 4_000;
  * (`marquerEcriture`) : une journée dont la lecture est plus ancienne n'a pas pu voir l'écriture.
  */
 let horloge = 0;
-const lectures = new WeakMap<Journee, number>();
+
+/**
+ * Numéros de lecture d'une journée : celui de sa dernière lecture complète, et, culture par culture
+ * (id de série ou de campagne), celui de la dernière relecture incrémentale qui l'a relue (T13f).
+ */
+interface Numeros {
+  readonly complete: number;
+  readonly cultures: ReadonlyMap<string, number>;
+}
+const lectures = new WeakMap<Journee, Numeros>();
 
 /** Numéro pris à la fin d'une écriture de l'écran. */
 export function marquerEcriture(): number {
   return ++horloge;
 }
 
-/** Numéro de la lecture qui a produit `journee` (0 : inconnu, tenu pour ancien). */
-export function lectureDe(journee: Journee | null): number {
-  return journee === null ? 0 : (lectures.get(journee) ?? 0);
+/**
+ * Numéro de la dernière lecture de `journee` qui a lu la culture `cibleId` (0 : inconnu, tenu pour
+ * ancien). Une relecture incrémentale d'une autre culture ne compte pas : elle n'a pas relu celle-ci.
+ */
+export function lectureDe(journee: Journee | null, cibleId: string): number {
+  const n = journee === null ? undefined : lectures.get(journee);
+  return n === undefined ? 0 : (n.cultures.get(cibleId) ?? n.complete);
+}
+
+/**
+ * Masque d'une tâche marquée faite : 'attente' pendant l'écriture, puis le numéro pris à la fin de
+ * l'écriture. Il tient tant que la journée affichée n'a pas relu la culture de la tâche depuis.
+ */
+export type Masque = number | 'attente';
+export type Masques = ReadonlyMap<string, Masque>;
+
+/** La tâche `cle` (préfixée par l'id de sa culture, calculs.ts) est-elle masquée sur `journee` ? */
+export function estMasquee(masques: Masques, journee: Journee | null, cle: string): boolean {
+  const m = masques.get(cle);
+  return m !== undefined && (m === 'attente' || lectureDe(journee, cle.split(':')[0] ?? '') < m);
 }
 
 /** Ce que la prochaine relecture doit relire : tout, ou le journal de quelques cultures. */
@@ -88,6 +118,9 @@ interface Suivi {
   quittee: boolean;
   readonly abonnes: Set<(j: Journee) => void>;
   arreter: (() => void) | null;
+  /** Tâches marquées faites (T13f), remplacées à chaque changement ; et les écrans qui les suivent. */
+  masques: Masques;
+  readonly abonnesMasques: Set<() => void>;
 }
 
 const suivis = new WeakMap<PorteDonnees, Map<string, Suivi>>();
@@ -116,6 +149,8 @@ function suiviDe(porte: PorteDonnees, fermeId: string, jour: string): Suivi {
       quittee: false,
       abonnes: new Set(),
       arreter: null,
+      masques: new Map(),
+      abonnesMasques: new Set(),
     };
     parCle.set(cle, s);
   }
@@ -127,7 +162,7 @@ function journeeDe(s: Suivi): Journee | null {
   if (s.etat === null && s.lignes !== null) {
     s.etat = calculerEtat(s.lignes, s.jour);
     s.lignes = null;
-    lectures.set(s.etat.journee, s.numeroLignes);
+    lectures.set(s.etat.journee, { complete: s.numeroLignes, cultures: new Map() });
   }
   return s.etat?.journee ?? null;
 }
@@ -207,7 +242,11 @@ function relire(porte: PorteDonnees, s: Suivi, options: { readonly apres?: Promi
         return;
       }
       s.etat = suivant;
-      lectures.set(suivant.journee, numero);
+      // Numéroter seulement les cultures relues : les autres gardent le numéro de leur lecture.
+      const avant = lectures.get(etat.journee);
+      const parCulture = new Map(avant?.cultures);
+      for (const id of [...cultures.series, ...cultures.campagnes]) parCulture.set(id, numero);
+      lectures.set(suivant.journee, { complete: avant?.complete ?? 0, cultures: parCulture });
       remettre(s);
       s.verification = setTimeout(() => {
         s.verification = null;
@@ -260,6 +299,33 @@ function relire(porte: PorteDonnees, s: Suivi, options: { readonly apres?: Promi
 /** Dernière journée connue pour ce jour (calculée au besoin), ou null. */
 export function journeeEnCache(porte: PorteDonnees, fermeId: string, jour: string): Journee | null {
   return journeeDe(suiviDe(porte, fermeId, jour));
+}
+
+/** Tâches marquées faites pour ce jour (même objet tant qu'elles ne changent pas). */
+export function masquesDe(porte: PorteDonnees, fermeId: string, jour: string): Masques {
+  return suiviDe(porte, fermeId, jour).masques;
+}
+
+/** Suit les masques du jour : `rappel` à chaque changement. Rend le désabonnement. */
+export function suivreMasques(porte: PorteDonnees, fermeId: string, jour: string, rappel: () => void): () => void {
+  const s = suiviDe(porte, fermeId, jour);
+  s.abonnesMasques.add(rappel);
+  return () => {
+    s.abonnesMasques.delete(rappel);
+  };
+}
+
+/**
+ * Change les masques du jour : `changer` reçoit une copie à modifier. Les masques tombés (la
+ * journée relue a vu leur écriture) sont oubliés au passage.
+ */
+export function changerMasques(porte: PorteDonnees, fermeId: string, jour: string, changer: (m: Map<string, Masque>) => void): void {
+  const s = suiviDe(porte, fermeId, jour);
+  const affichee = s.etat?.journee ?? null;
+  const n = new Map([...s.masques].filter(([cle]) => estMasquee(s.masques, affichee, cle)));
+  changer(n);
+  s.masques = n;
+  for (const rappel of [...s.abonnesMasques]) rappel();
 }
 
 /**
