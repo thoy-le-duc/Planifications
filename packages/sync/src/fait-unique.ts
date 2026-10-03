@@ -126,13 +126,18 @@ export interface FaitVise {
  * Vérification à passer à l'écriture (`ecrireEnsemble`), ou appelée dans la transaction de
  * `saisirEvenement` : lève DejaFait si un « Fait » identique est déjà en vigueur pour la culture.
  */
+/** Nom de champ du detail admis par `pasDejaFait`. */
+const NOM_DE_CHAMP = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 export function pasDejaFait(fait: FaitVise): VerificationEcriture {
   const cles = Object.keys(fait.detail);
   // Une clé est un NOM de champ, passée en paramètre (chemin JSON entre guillemets), jamais
   // recopiée dans le SQL. Sans clé, la vérification ne viserait rien : refus explicite.
   if (cles.length === 0) throw new Error('vérification « déjà fait » : detail vide, aucun champ à comparer');
-  const cleRefusee = cles.find((c) => c.includes('"'));
-  if (cleRefusee !== undefined) throw new Error(`vérification « déjà fait » : nom de champ refusé (guillemet) : ${cleRefusee}`);
+  // Nom de champ simple seulement : un caractère spécial (\, guillemet…) donnerait un chemin
+  // JSON qui ne trouve rien, et laisserait passer un doublon sans bruit.
+  const cleRefusee = cles.find((c) => !NOM_DE_CHAMP.test(c));
+  if (cleRefusee !== undefined) throw new Error(`vérification « déjà fait » : nom de champ refusé : ${JSON.stringify(cleRefusee)}`);
   const sql = sqlDejaFait(fait.colonne, cles.length);
   const filtre = [fait.cibleId, fait.fermeId, fait.type, ...cles.flatMap((c) => [`$."${c}"`, fait.detail[c]])];
   return async (lire) => {
