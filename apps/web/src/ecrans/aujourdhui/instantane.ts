@@ -98,8 +98,11 @@ function liste<T>(x: unknown, lire: (e: unknown) => T | null): T[] | null {
 /**
  * Instantané de cet utilisateur, s'il vaut pour cette ferme et ce jour ; sinon null (absent,
  * illisible, autre version, autre jour, autre ferme, autre utilisateur, stockage refusé).
+ * T13l : miroir de `garderInstantane`, il n'est rendu que si la session rangée est celle de cet
+ * utilisateur (un autre compte connecté entre temps dans un autre onglet ne le voit pas).
  */
 export function lireInstantane(stockage: StockageInstantane, attendu: { readonly utilisateurId: string; readonly fermeId: string; readonly jour: string }): Instantane | null {
+  if (lireSession(stockage)?.utilisateurId !== attendu.utilisateurId) return null;
   let lu: unknown;
   try {
     const brut = stockage.getItem(cleInstantane(attendu.utilisateurId));
