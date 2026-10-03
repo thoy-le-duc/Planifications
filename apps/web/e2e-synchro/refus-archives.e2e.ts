@@ -181,8 +181,12 @@ test.describe('T10o : un refus archivé sur un téléphone disparaît sur l’au
     const b = await ouvrir(browser, sessionA);
     const envoisRefus: Request[] = [];
     const envoisRefusB: Request[] = [];
+    /** Heure Node (Date.now()) de l'événement 'request' du premier envoi d'archivage de A. */
+    const premierEnvoi: { le: number | null } = { le: null };
     a.contexte.on('request', (r) => {
-      if (estEnvoiRefus(r)) envoisRefus.push(r);
+      if (!estEnvoiRefus(r)) return;
+      premierEnvoi.le ??= Date.now();
+      envoisRefus.push(r);
     });
     b.contexte.on('request', (r) => {
       if (estEnvoiRefus(r)) envoisRefusB.push(r);
@@ -210,8 +214,9 @@ test.describe('T10o : un refus archivé sur un téléphone disparaît sur l’au
 
       // 3. Fin du délai : un seul envoi, un PATCH qui ne porte que archive_le.
       const requete = await envoi;
-      // Départ de la requête (heure epoch en ms, Request.timing().startTime), pas son arrivée côté Node.
-      expect(requete.timing().startTime - avantTap, 'envoi après la fin du délai d’annulation').toBeGreaterThanOrEqual(DELAI_ANNULATION_MS - MARGE_HORLOGE_MS);
+      // Heure notée par Node à l'événement 'request' (Request.timing() vaut -1 tant que la réponse n'est pas là).
+      expect(premierEnvoi.le, 'envoi d’archivage vu par l’écoute du contexte').not.toBeNull();
+      expect((premierEnvoi.le ?? 0) - avantTap, 'envoi après la fin du délai d’annulation').toBeGreaterThanOrEqual(DELAI_ANNULATION_MS - MARGE_HORLOGE_MS);
       const corps = JSON.parse(requete.postData() ?? '{}') as CorpsEnvoi;
       expect(corps.ecritures).toHaveLength(1);
       const [ecriture] = corps.ecritures;
