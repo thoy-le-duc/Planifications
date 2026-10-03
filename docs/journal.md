@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T10o : l'archivage d'un refus vérifié entre deux téléphones
+
+- **Fait** : nouveau test de bout en bout (`e2e-synchro/refus-archives.e2e.ts`) avec la vraie synchro : le téléphone A archive un refus, la carte disparaît chez B ; en base, `archive_le` est rempli à l'instant envoyé ; l'envoi part après le délai d'annulation de 5 s et ne porte que `archive_le` ; un refus témoin reste intact.
+- **Décidé** : B est un second téléphone du même utilisateur (un refus ne descend qu'à son auteur) ; le test passe par le vrai écran Ferme, pas la page de diagnostic. Relecture : aucun bloquant ; délai mesuré au départ de la requête, temps du test porté à 180 s.
+- **Bloquant** : rien. Docker absent du conteneur : le test n'a tourné qu'en CI. Le délai de 5 s est recopié dans le test (Refus.tsx charge une feuille CSS) ; les deux navigateurs partagent une session.
+
 ## 2026-10-03 — T25b : la démo sans impasse
 
 - **Fait** : dans la démo, plus de bouton « Se déconnecter », l'en-tête dit « Démo » au lieu de l'état de synchro, et une réinitialisation faite dans un autre onglet recharge la page au lieu de montrer un écran de connexion sans issue.
