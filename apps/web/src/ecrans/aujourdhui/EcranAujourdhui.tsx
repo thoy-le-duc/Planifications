@@ -19,8 +19,8 @@
  * avec sa vérification.
  *
  * T13l : aucun geste n'est ignoré en silence pendant la file. Le bandeau « Annuler » d'un « Fait »
- * paraît dès le tap ; « Annuler » (bandeau ou historique) passe dans la file, derrière la saisie
- * qu'il annule. « Enregistrer » (changer la date) et « Valider » (récolte) sont inactifs tant que
+ * en file paraît dès le tap ; « Annuler » (bandeau ou historique) passe dans la file, derrière la
+ * saisie qu'il annule. « Enregistrer » (changer la date) et « Valider » (récolte) sont inactifs tant que
  * la file tourne, puis se réactivent : le dialogue reste ouvert, rien de tapé n'est perdu.
  */
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -721,8 +721,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
    * B2) ; si la tâche n'y est plus (faite ailleurs entre temps), rien n'est écrit. T13g : tapé
    * pendant une autre écriture, il passe en file ; la lecture ciblée et la vérification « déjà
    * fait » se font à son tour, après les écritures d'avant. T13l : le bandeau « Annuler » paraît
-   * dès le tap (sur l'instantané, avec le titre de la carte, précisé une fois écrit) ; rien
-   * d'écrit, il s'en va.
+   * dès le tap quand le « Fait » attend son tour derrière d'autres écritures (sur l'instantané, avec
+   * le titre de la carte, précisé une fois écrit) ; rien d'écrit, il s'en va.
    */
   function surFait(cle: string): void {
     if (porte === null || estMasquee(cle)) return;
@@ -761,7 +761,10 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
     const ecrite = new Promise<EvenementLu | null>((r) => {
       rendre = r;
     });
-    const n = provisoire === null ? null : montrerAnnulable(null, ecrite, provisoire.titre, provisoire.texte);
+    // En file derrière d'autres écritures : le bandeau paraît dès le tap. Seul, il paraît une fois
+    // écrit (quelques millisecondes), comme avant : le bandeau dit alors que la saisie est écrite.
+    const n = ecritures.current > 0 && provisoire !== null ? montrerAnnulable(null, ecrite, provisoire.titre, provisoire.texte) : null;
+    const avant = numero.current;
     void ecrire(async () => {
       let fait: FaitEcrit | null = null;
       try {
@@ -771,7 +774,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
         // Avant le tour de l'annulation éventuelle, rangée derrière dans la file.
         rendre(fait?.evenement ?? null);
         const f = fait;
-        setAnnulable((a) => (a?.numero !== n ? a : f === null ? null : { ...a, ...f }));
+        if (n !== null) setAnnulable((a) => (a?.numero !== n ? a : f === null ? null : { ...a, ...f }));
+        // Pas de bandeau au tap : le sien, sauf si une saisie tapée depuis a déjà le sien.
+        else if (f !== null && numero.current === avant) montrerAnnulable(f.evenement, Promise.resolve(f.evenement), f.titre, f.texte);
       }
     }, true).then((ok) => {
       masquer(cle, ok && !changee ? marquerEcriture() : undefined);
