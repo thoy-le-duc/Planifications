@@ -58,6 +58,8 @@ export interface ProprietesEcranFerme {
   readonly surDeconnecte: (erreur: string | null) => void;
   /** État de la base locale (T11) : l'export n'est possible que base 'prete'. */
   readonly etatBase: EtatBase;
+  /** Démo (T25b) : pas de bouton « Se déconnecter ». */
+  readonly sansDeconnexion?: boolean;
 }
 
 /** L'écran d'export, chargé à la demande (morceau à part). */
@@ -179,7 +181,7 @@ function Carte({ titre, idTitre, children }: { readonly titre: string; readonly 
 /** Effacement d'un ancien compte resté en attente (T09b) : le dire, jusqu'à ce qu'il aboutisse. */
 const ALERTE_EFFACEMENT = 'Les données d’un ancien compte n’ont pas encore été effacées de ce téléphone : fermez les autres onglets.';
 
-export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBase }: ProprietesEcranFerme) {
+export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBase, sansDeconnexion = false }: ProprietesEcranFerme) {
   const idApparence = useId();
   // Lu à l'ouverture de l'écran : l'effacement n'est repris que sur l'écran de connexion.
   const [effacementEnAttente] = useState(() => effacementsEnAttente(stockageNavigateur()).length > 0);
@@ -487,6 +489,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
         <Apparence idTitre={idApparence} />
       </Carte>
 
+      {!sansDeconnexion && (
       <div style={CARTE}>
         <Ligne
           nom="Se déconnecter"
@@ -497,6 +500,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
           surTap={() => void seDeconnecter()}
         />
       </div>
+      )}
       {confirmation !== null && (
         <Confirmation
           testId="confirmation-deconnexion"

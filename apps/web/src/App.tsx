@@ -201,7 +201,8 @@ function useRefusNonVus(ferme: FermeOuverte | null, utilisateurId: string | unde
   return ids !== null && vus !== null && refusNonVus(ids, vus);
 }
 
-export function App() {
+/** `demo` : démo en ligne (T25b), posé par src/demo/ — ni déconnexion, ni état de synchro. */
+export function App({ demo = false }: { readonly demo?: boolean } = {}) {
   // Session gardée sur le téléphone : lue une fois, sans réseau.
   const [session, setSession] = useState<SessionConnexion | null>(() => lireSession(stockageNavigateur()));
   /** Échec de la dernière déconnexion, montré sur l'écran de connexion. */
@@ -333,13 +334,13 @@ export function App() {
     <main data-testid="app" data-base={donnees.base} className={onglet === 'planches' ? 'coquille coquille-plan' : 'coquille'}>
       <EnTete titre={titre} {...(onglet === 'aujourdhui' ? { surtitre: jourAffiche() } : {})}>
         <span data-testid="etat-synchro" role="status" className="etat-synchro">
-          {libelleSynchro(donnees.synchro, donnees.enAttente)}
+          {demo ? 'Démo' : libelleSynchro(donnees.synchro, donnees.enAttente)}
         </span>
       </EnTete>
       <div className="coquille-contenu">
         <ContexteFerme value={donnees.ferme}>
           {onglet === 'ferme' ? (
-            <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} etatBase={donnees.base} />
+            <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} sansDeconnexion={demo} etatBase={donnees.base} />
           ) : onglet === 'planches' ? (
             <OngletFerme base={donnees.base} ecran={(f) => <planches.Composant key={f.fermeId} porte={f.porte} fermeId={f.fermeId} />} montrera="le plan s’affichera" />
           ) : onglet === 'aujourdhui' ? (
