@@ -103,6 +103,13 @@ function refusDepuisLigne(l: LigneRefus): RefusSynchro {
  * corps envoyé peut peser plus que les ordres (PowerSync y range toutes les colonnes de la
  * ligne) : la porte s'arrête donc à 5 Mio, pour garder la marge.
  */
+/**
+ * T13j : ordres des « Fait » préparés par `preparerSaisie` (ceux qui rendent une vérification).
+ * Marqués à la préparation, sans lire leur SQL : `ecrireEnsemble` les refuse sans vérificateur.
+ * Commun à toutes les portes (un ordre préparé par l'une, écrit par l'autre, reste reconnu).
+ */
+const faitsPrepares = new WeakSet<OrdreEcriture>();
+
 function verifierTaille(ordres: readonly OrdreEcriture[]): void {
   const octets = new TextEncoder().encode(JSON.stringify(ordres)).length;
   if (octets > TAILLE_MAX_PAR_LOT) {
@@ -155,18 +162,28 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
   }
 
   /**
-   * T13i : vérification « déjà fait » d'une saisie : un réalisé NOUVEAU sur une culture. Une
-   * correction ou une annulation n'est jamais refusée ; les autres types ne sont pas touchés.
+   * T13i : vérification « déjà fait » d'une saisie : un réalisé NOUVEAU sur une culture. T13j :
+   * aussi une intervention NOUVELLE qui solde un travail prévu (occurrence visée), avec la règle
+   * de l'écran : même libellé, même catégorie, même occurrence (ni l'outil, ni le produit, ni la
+   * date). Une correction ou une annulation n'est jamais refusée ; le reste n'est pas touché.
    */
   function verificationDe(saisie: SaisieEvenement): VerificationEcriture | undefined {
-    if (saisie.type !== 'realise' || saisie.remplaceEvenement !== null || saisie.culture === null) return undefined;
+    if (saisie.remplaceEvenement !== null || saisie.culture === null) return undefined;
+    let detail: Readonly<Record<string, string>>;
+    if (saisie.type === 'realise') detail = { etape: saisie.detail.etape };
+    else if (saisie.type !== 'intervention') return undefined;
+    else {
+      const { type, categorie, occurrenceVisee } = saisie.detail;
+      if (typeof occurrenceVisee !== 'string') return undefined;
+      detail = { type, categorie, occurrenceVisee };
+    }
     const c = saisie.culture;
     return pasDejaFait({
       fermeId: options.fermeId,
       colonne: c.sorte === 'serie' ? 'serie_id' : 'campagne_id',
       cibleId: c.sorte === 'serie' ? c.serieId : c.campagneId,
-      type: 'realise',
-      detail: { etape: saisie.detail.etape },
+      type: saisie.type,
+      detail,
     });
   }
 
@@ -189,7 +206,11 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       remplace_evenement_id: saisie.remplaceEvenement?.evenementId ?? null,
       detail: JSON.stringify(saisie.detail),
     };
-    return { id, ligne, ordre: { sql: SQL_SAISIE, parametres: COLONNES_EVENEMENT.map((c) => ligne[c]) } };
+    const ordre: OrdreEcriture = { sql: SQL_SAISIE, parametres: COLONNES_EVENEMENT.map((c) => ligne[c]) };
+    const verification = verificationDe(saisie);
+    if (verification === undefined) return { id, ligne, ordre };
+    faitsPrepares.add(ordre);
+    return { id, ligne, ordre, verification };
   }
 
   return {
@@ -212,6 +233,11 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       }
       // Même règle pour le poids (verifierTaille).
       verifierTaille(ordres);
+      // T13j : un « Fait » préparé ne s'écrit qu'avec une vérification « déjà fait » (celle que
+      // rend preparerSaisie, ou celle de l'écran) : refus explicite, rien n'est écrit.
+      if (verifier === undefined && ordres.some((o) => faitsPrepares.has(o))) {
+        throw new Error('« Fait » préparé sans vérification « déjà fait » : passer la vérification rendue par preparerSaisie');
+      }
       // Une seule transaction locale : PowerSync l'envoie en un seul lot, que le serveur accepte ou
       // refuse en entier. Un ordre qui échoue rejette la promesse et annule tout. La vérification
       // (T13h) lit dans la transaction : rien ne s'écrit entre elle et les ordres.
@@ -224,11 +250,11 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     surveiller,
 
     async saisirEvenement(saisie: SaisieEvenement): Promise<Id<'Evenement'>> {
-      const { id, ordre } = preparerSaisie(saisie);
+      const { id, ordre, verification: verifier } = preparerSaisie(saisie);
       verifierTaille([ordre]);
-      const verifier = verificationDe(saisie);
       // T13i : un réalisé nouveau (voix, agent…) passe par la même règle « déjà fait » que
-      // l'écran, lue dans la transaction d'écriture.
+      // l'écran, lue dans la transaction d'écriture ; T13j : l'intervention qui solde un travail
+      // prévu aussi.
       await base.writeTransaction(async (tx) => {
         if (verifier !== undefined) await verifier((sql, parametres) => tx.getAll(sql, parametres ?? []));
         await tx.execute(ordre.sql, ordre.parametres);

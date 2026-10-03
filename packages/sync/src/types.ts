@@ -107,6 +107,13 @@ export interface EvenementPrepare {
   readonly id: Id<'Evenement'>;
   readonly ligne: LigneEvenementLocale;
   readonly ordre: OrdreEcriture;
+  /**
+   * T13j : vérification « déjà fait » à passer à `ecrireEnsemble` avec `ordre`, présente pour un
+   * « Fait » : réalisé NOUVEAU sur une culture, ou intervention NOUVELLE qui solde un travail
+   * prévu (`occurrenceVisee` non nulle). Absente pour tout le reste (récolte, intervention libre,
+   * correction, annulation…). `ecrireEnsemble` refuse un « Fait » préparé écrit sans vérificateur.
+   */
+  readonly verification?: VerificationEcriture;
 }
 
 /**
@@ -136,6 +143,9 @@ export interface PorteDonnees {
    * T13h : `verifier`, s'il est donné, tourne dans la même transaction avant les ordres ; s'il
    * lève une erreur, la promesse est rejetée avec elle et rien n'est écrit (écriture
    * conditionnelle : « n'écrire que si… », sûre même entre deux onglets sur la même base).
+   *
+   * T13j : sans `verifier`, un ensemble qui contient l'ordre d'un « Fait » préparé par
+   * `preparerSaisie` (celui qui rend `verification`) est refusé, rien n'est écrit.
    */
   ecrireEnsemble(ordres: readonly OrdreEcriture[], verifier?: VerificationEcriture): Promise<void>;
   /**
@@ -149,7 +159,8 @@ export interface PorteDonnees {
    * T13 : prépare l'événement sans l'écrire, complété comme par `saisirEvenement` (id UUID v7,
    * ferme, horodatage, auteur), pour l'écrire avec d'autres lignes en une transaction
    * (`ecrireEnsemble` : récolte + mouvement de stock). Rend la ligne (format local, celui que
-   * `validerSaisie` lit) et l'ordre SQL qui l'insère.
+   * `validerSaisie` lit) et l'ordre SQL qui l'insère. T13j : pour un « Fait », aussi la
+   * vérification « déjà fait » (`verification`) à passer à `ecrireEnsemble`.
    */
   preparerSaisie(saisie: SaisieEvenement): EvenementPrepare;
   /**
