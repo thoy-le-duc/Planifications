@@ -319,32 +319,120 @@ async function mouvementDuRemplacement(
 }
 
 /**
- * T13l : la saisie remplacée n'est plus en vigueur (déjà annulée ou corrigée, ici ou ailleurs) :
- * rien n'est écrit. Sinon une chaîne annulée revivrait (et le stock d'une récolte avec elle).
+ * T13l : la saisie visée n'est plus en vigueur (sa chaîne est annulée, ici ou ailleurs ; ou, pour
+ * changer la date, une autre saisie de la chaîne est en vigueur) : rien n'est écrit. Sinon une
+ * chaîne annulée revivrait, et le stock d'une récolte avec elle.
  */
 export class SaisiePlusEnVigueur extends Error {}
 
-const SQL_DEJA_REMPLACEE = 'SELECT id FROM evenement WHERE remplace_evenement_id = ? AND ferme_id = ? LIMIT 1';
+type Lire = Parameters<VerificationEcriture>[0];
 
-/** Vérification dans la transaction : `ev` n'est remplacé par aucune saisie (T13l). */
+/**
+ * T13l : la chaîne d'un événement (même règle que `enVigueur` de ./calculs.ts et la vue
+ * evenements_en_vigueur) : origine (montée par remplace_evenement_id jusqu'à une ligne qui porte
+ * origine_id, ou jusqu'au plus haut connu), puis tous ses remplacements (par origine_id, et en
+ * descendant par remplace_evenement_id : index `remplacement`). Rend le nombre d'annulations et
+ * la ligne en vigueur : la correction la plus récente (horodatage, puis id), à défaut l'origine.
+ * Paramètres : id, ferme (×5).
+ */
+const SQL_CHAINE_DE = `WITH RECURSIVE
+  haut(id, parent, origine, n) AS (
+    SELECT id, remplace_evenement_id, origine_id, 0 FROM evenement WHERE id = ? AND +ferme_id = ?
+    UNION ALL
+    SELECT p.id, p.remplace_evenement_id, p.origine_id, h.n + 1 FROM haut h JOIN evenement p ON p.id = h.parent
+    WHERE h.origine IS NULL AND +p.ferme_id = ? AND h.n < 1000
+  ),
+  racine(id) AS (
+    SELECT CASE WHEN origine IS NOT NULL THEN origine WHEN parent IS NULL THEN id ELSE parent END FROM haut ORDER BY n DESC LIMIT 1
+  ),
+  membre(id) AS (
+    SELECT id FROM racine
+    UNION SELECT e.id FROM evenement e WHERE e.remplace_evenement_id >= '' AND +e.ferme_id = ? AND e.origine_id = (SELECT id FROM racine)
+    UNION SELECT e.id FROM evenement e JOIN membre m ON e.remplace_evenement_id = m.id WHERE +e.ferme_id = ?
+  ),
+  ligne AS (SELECT e.id, e.remplace_sorte, e.horodatage FROM evenement e WHERE e.id IN (SELECT id FROM membre))
+SELECT
+  (SELECT count(*) FROM ligne WHERE remplace_sorte = 'annulation') AS annulations,
+  coalesce(
+    (SELECT id FROM ligne WHERE remplace_sorte = 'correction' ORDER BY horodatage DESC, id DESC LIMIT 1),
+    (SELECT id FROM ligne WHERE remplace_sorte IS NULL AND id = (SELECT id FROM racine))
+  ) AS en_vigueur`;
+
+/** Ligne en vigueur de la chaîne de `id` ; lève SaisiePlusEnVigueur si la chaîne est annulée. */
+async function enVigueurDeLaChaine(lire: Lire, fermeId: string, id: string): Promise<string | null> {
+  const r = (await lire<{ annulations: number; en_vigueur: string | null }>(SQL_CHAINE_DE, [id, fermeId, fermeId, fermeId, fermeId]))[0];
+  if (r === undefined || r.annulations > 0) throw new SaisiePlusEnVigueur('cette saisie a déjà été annulée');
+  return r.en_vigueur;
+}
+
+/** Vérification dans la transaction : `ev` est toujours la ligne en vigueur de sa chaîne (T13l). */
 function encoreEnVigueur(ctx: ContexteEcriture, ev: EvenementLu): VerificationEcriture {
   return async (lire) => {
-    if ((await lire(SQL_DEJA_REMPLACEE, [ev.id, ctx.fermeId])).length > 0) {
-      throw new SaisiePlusEnVigueur('cette saisie a déjà été annulée ou corrigée');
-    }
+    if ((await enVigueurDeLaChaine(lire, ctx.fermeId, ev.id)) !== ev.id) throw new SaisiePlusEnVigueur('cette saisie a déjà été corrigée');
   };
 }
 
-/** Annule `ev` (en vigueur) : événement d'annulation et, pour une récolte, le mouvement inverse. */
+type Intervention = Extract<EvenementLu['detail'], { readonly type: 'intervention' }>;
+
+/** La ligne `id` du journal, telle que l'écran la garde ; null si absente ou illisible. */
+async function evenementDuJournal(ctx: ContexteEcriture, id: string): Promise<EvenementLu | null> {
+  const l = (
+    await ctx.porte.lire<{ id: string; type: string; date: string; horodatage: string; serie_id: string | null; campagne_id: string | null; remplace_sorte: string | null; remplace_evenement_id: string | null; detail: string | null }>(
+      'SELECT id, type, date, horodatage, serie_id, campagne_id, remplace_sorte, remplace_evenement_id, detail FROM evenement WHERE id = ? AND +ferme_id = ?',
+      [id, ctx.fermeId],
+    )
+  )[0];
+  if (l === undefined) return null;
+  let d: Readonly<Record<string, unknown>>;
+  try {
+    const brut: unknown = JSON.parse(l.detail ?? 'null');
+    if (typeof brut !== 'object' || brut === null) return null;
+    d = brut as Readonly<Record<string, unknown>>;
+  } catch {
+    return null;
+  }
+  const texteOuNul = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  let detail: EvenementLu['detail'];
+  if (l.type === 'realise' && typeof d.etape === 'string') {
+    detail = { type: 'realise', etape: d.etape as EtapeRealisee, quantiteReelle: typeof d.quantiteReelle === 'number' ? d.quantiteReelle : null };
+  } else if (l.type === 'recolte' && typeof d.quantite === 'number' && typeof d.unite === 'string') {
+    detail = { type: 'recolte', quantite: d.quantite, unite: d.unite as UniteRecolte, categorie: texteOuNul(d.categorie) };
+  } else if (l.type === 'intervention' && typeof d.categorie === 'string' && typeof d.type === 'string') {
+    detail = { type: 'intervention', categorie: d.categorie as Intervention['categorie'], libelle: d.type };
+  } else return null;
+  const sorte = l.remplace_sorte;
+  return {
+    id: l.id,
+    date: l.date,
+    horodatage: l.horodatage,
+    serieId: l.serie_id,
+    campagneId: l.campagne_id,
+    remplaceSorte: sorte === 'correction' || sorte === 'annulation' ? sorte : null,
+    remplaceEvenementId: l.remplace_evenement_id,
+    detail,
+  };
+}
+
+/**
+ * Annule la chaîne de `ev` : événement d'annulation de sa ligne en vigueur (T13l : `ev` a pu être
+ * corrigée depuis, le bandeau la garde) et, pour une récolte, le mouvement inverse. Chaîne déjà
+ * annulée (ici ou ailleurs) : SaisiePlusEnVigueur, rien d'écrit (vérifié aussi dans la transaction).
+ */
 export async function annulerSaisie(ctx: ContexteEcriture, ev: EvenementLu): Promise<Id<'Evenement'>> {
-  const saisie = await remplacement(ctx, ev, 'annulation', ev.date);
+  const tete = await enVigueurDeLaChaine((sql, p) => ctx.porte.lire(sql, p), ctx.fermeId, ev.id);
+  const vise = tete === ev.id ? ev : tete === null ? null : await evenementDuJournal(ctx, tete);
+  if (vise === null) throw new SaisiePlusEnVigueur('cette saisie n’est plus en vigueur sur ce téléphone');
+  const saisie = await remplacement(ctx, vise, 'annulation', vise.date);
   const e = evenement(ctx.porte, saisie);
-  const stock = await mouvementDuRemplacement(ctx, ev, 'annulation', e.id);
-  await ecrireSaisie(ctx, saisie.culture, true, [...stock.articles, e.ordre, ...stock.mouvements], encoreEnVigueur(ctx, ev));
+  const stock = await mouvementDuRemplacement(ctx, vise, 'annulation', e.id);
+  await ecrireSaisie(ctx, saisie.culture, true, [...stock.articles, e.ordre, ...stock.mouvements], encoreEnVigueur(ctx, vise));
   return e.id;
 }
 
-/** Change la date de `ev` (en vigueur) : une correction, même détail, nouvelle date. */
+/**
+ * Change la date de `ev`, qui doit être la ligne en vigueur de sa chaîne (vérifié dans la
+ * transaction, sinon SaisiePlusEnVigueur) : une correction, même détail, nouvelle date.
+ */
 export async function changerDate(ctx: ContexteEcriture, ev: EvenementLu, date: string): Promise<Id<'Evenement'>> {
   const saisie = await remplacement(ctx, ev, 'correction', date);
   const e = evenement(ctx.porte, saisie);
