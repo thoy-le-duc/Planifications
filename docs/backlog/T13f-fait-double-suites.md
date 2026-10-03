@@ -16,5 +16,5 @@ Garder les masques dans le cache, par ferme et par jour, plutôt que dans l'écr
 
 ## Critères d'acceptation
 
-- [ ] Test : « Fait », changement d'onglet, retour avant la relecture → la tâche reste masquée, un second « Fait » n'écrit rien.
-- [ ] Test : synchro d'une autre culture entre l'écriture et l'annonce → la tâche reste masquée.
+- [x] Test : « Fait », changement d'onglet, retour avant la relecture → la tâche reste masquée, un second « Fait » n'écrit rien.
+- [x] Test : synchro d'une autre culture entre l'écriture et l'annonce → la tâche reste masquée.

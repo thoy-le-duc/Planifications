@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T13f : plus aucun « Fait » en double sur Aujourd'hui
+
+- **Fait** : les tâches marquées faites restent masquées même si l'on change d'onglet, de ferme ou de jour avant que l'écran ait relu la culture ; une synchro d'une autre culture ne fait plus réapparaître une tâche faite ; « Annuler » ne fait plus réapparaître les autres tâches faites de la même culture. Dans chacun de ces cas, un second « Fait » n'écrit rien.
+- **Décidé** : masques gardés dans le cache par ferme (plus par écran ni par jour), levés seulement par une relecture plus récente que l'écriture ; chaque culture garde la date de sa dernière relecture. Relecture : 2 bloquants (« Annuler » et passage de minuit) corrigés, contre-relecture sans bloquant.
+- **Bloquant** : rien. Suite : T13h (vérifier en base, au moment d'écrire, qu'un réalisé n'existe pas déjà : protège aussi la voix, l'agent et deux onglets).
+
 ## 2026-10-02 — T18 : mode sombre
 
 - **Fait** : l'appli suit le réglage clair/sombre du téléphone sur tous les écrans, avec un choix « Comme le téléphone / Clair / Sombre » dans l'onglet Ferme (Apparence) ; thème sombre « forêt de nuit » (fond vert-noir, en-tête vert profond, boutons sauge), contraste AA vérifié par test sur toutes les paires des deux thèmes ; aucun éclair clair au lancement (petit script bloquant compatible CSP, dans le précache) ; barre du navigateur à la couleur de l'en-tête ; captures de chaque écran dans les deux thèmes.
