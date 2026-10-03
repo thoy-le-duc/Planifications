@@ -73,7 +73,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T15d](T15d-export-tache-longue.md) | Export : jamais de tâche longue sur le fil principal | T15c | à faire |
 | [T25](T25-demo-en-ligne.md) | Démo en ligne (Vercel) | — | fait |
 | [T25b](T25b-demo-finitions.md) | Démo : pas de déconnexion ni d’état de synchro | T25 | à faire |
-| [T26](T26-e2e-synchro-robuste.md) | Synchro de bout en bout : un banc qui ne tombe plus tout seul | — | à faire |
+| [T26](T26-e2e-synchro-robuste.md) | Synchro de bout en bout : un banc qui ne tombe plus tout seul | — | fait |
 
 T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 300 ms avec la base) : la boucle peut le prendre dès le début, en parallèle du moteur.
 

@@ -18,7 +18,7 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : les ports par défaut de `scripts/e2e-synchro.ts` sont < 32768 et ne valent ni 5432, 8080 ni 3000.
-- [ ] Test : le contrôle de santé de `docker-compose.yml` passe par TCP.
-- [ ] Test : la migration réessaie sur une connexion refusée ou coupée, et échoue tout de suite sur une erreur SQL.
-- [ ] CI verte (le banc tourne en CI).
+- [x] Test : les ports par défaut de `scripts/e2e-synchro.ts` sont < 32768 et ne valent ni 5432, 8080 ni 3000.
+- [x] Test : le contrôle de santé de `docker-compose.yml` passe par TCP.
+- [x] Test : la migration réessaie sur une connexion refusée ou coupée, et échoue tout de suite sur une erreur SQL.
+- [x] CI verte (le banc tourne en CI).
