@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T26 : un banc de synchro qui ne tombe plus tout seul
+
+- **Fait** : le test de synchro de bout en bout utilise des ports hors de la plage que Linux prête au hasard aux connexions sortantes (15432, 18080, 13100, 14174) ; Postgres n'est déclaré prêt que quand il écoute vraiment en TCP ; les migrations réessaient sur une connexion refusée ou coupée, jamais sur une erreur SQL.
+- **Décidé** : causes trouvées dans les journaux de CI (port 58080 pris le 3 octobre, connexion coupée par le serveur temporaire d'initialisation de Postgres) ; ticket ouvert par le chef pour que `main` ne passe plus au rouge pour des raisons étrangères au code. Relecture : aucun bloquant, quatre codes d'erreur et des commentaires ajoutés.
+- **Bloquant** : rien. Le banc complet n'a pu être vérifié qu'en CI (pas de Docker dans le conteneur de la boucle).
+
 ## 2026-10-03 — T13h : « Fait » unique vérifié au moment d'écrire
 
 - **Fait** : avant d'écrire un « Fait » (étape ou travail), l'appli vérifie dans la même transaction qu'aucun réalisé en vigueur n'existe déjà pour cette culture ; sinon rien n'est écrit et un avis dit « Déjà notée ». Deux onglets ouverts ne peuvent plus écrire deux fois la même tâche (verrou d'écriture SQLite).

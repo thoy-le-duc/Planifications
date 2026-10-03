@@ -30,7 +30,7 @@ services:
       - planif-postgres:/var/lib/postgresql/data
       - ./powersync/initialiser-stockage.sql:/docker-entrypoint-initdb.d/initialiser-stockage.sql:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U planif -d planif']
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U planif -d planif']
       interval: 2s
       timeout: 5s
       retries: 30

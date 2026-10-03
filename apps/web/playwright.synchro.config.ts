@@ -8,7 +8,7 @@ import { defineConfig, devices } from '@playwright/test';
  * VITE_POWERSYNC_URL, figées au build) dans `dist-synchro/`, selon la recette du build des essais
  * (T11c : build de production, puis pages de test versées à côté, voir scripts/build-essais.ts),
  * puis servie sur le port
- * E2E_PORT_PAGE (4174 par défaut, T10c : deux bancs peuvent tourner en même temps). Sans API_URL
+ * E2E_PORT_PAGE (le port de la page par défaut, 4174 hors banc ; le banc passe 14174, T10c : deux bancs peuvent tourner en même temps). Sans API_URL
  * ni POWERSYNC_URL, aucun serveur n'est lancé et les tests se sautent (hors CI).
  */
 /** Port de la page de diagnostic : E2E_PORT_PAGE, sinon 4174. */
