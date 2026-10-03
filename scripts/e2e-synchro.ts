@@ -9,19 +9,20 @@
  *   4. l'API (apps/api) avec une clé de signature jetable et CORS pour la page de diagnostic ;
  *   5. playwright -c playwright.synchro.config.ts, qui construit l'appli et les pages de test
  *      (recette du build des essais, T11c) avec VITE_API_URL et VITE_POWERSYNC_URL (figées au
- *      build) dans apps/web/dist-synchro/, et la sert sur le port E2E_PORT_PAGE (4174).
+ *      build) dans apps/web/dist-synchro/, et la sert sur le port E2E_PORT_PAGE (14174).
  *
  * Variables facultatives : POSTGRES_IMAGE, POWERSYNC_IMAGE (miroir si Docker Hub est limité ;
  * l'image de PowerSync est figée en 1.26.1 dans docker-compose.yml), CHROMIUM_PATH (Chromium
  * déjà installé), JWT_CLES_PRIVEES (sinon une clé est générée), et les ports si ceux par défaut
- * sont pris : E2E_PORT_POSTGRES (55432), E2E_PORT_POWERSYNC (58080), E2E_PORT_API (3100),
- * E2E_PORT_PAGE (4174). La page est servie par playwright.synchro.config.ts (port
+ * sont pris : E2E_PORT_POSTGRES (15432), E2E_PORT_POWERSYNC (18080), E2E_PORT_API (13100),
+ * E2E_PORT_PAGE (14174), tous sous 32768 (hors plage éphémère de Linux : voir scripts/e2e-synchro-ports.ts). La page est servie par playwright.synchro.config.ts (port
  * E2E_PORT_PAGE, ou SYNCHRO_BASE_URL). T10c : E2E_PROJET_COMPOSE (défaut planif-e2e-synchro)
  * nomme le projet docker compose, pour que deux bancs tournent en même temps sans se croiser
  * (conteneurs, volumes et `down -v` de l'arrêt ne touchent que ce projet).
  */
 import { spawn, spawnSync, type ChildProcess, type SpawnSyncOptions } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { PORTS_PAR_DEFAUT } from './e2e-synchro-ports.ts';
 
 const RACINE = fileURLToPath(new URL('..', import.meta.url));
 const PROJET = projetCompose(process.env.E2E_PROJET_COMPOSE);
@@ -42,10 +43,10 @@ function port(variable: string, defaut: number): number {
   return n;
 }
 
-const PORT_POSTGRES = port('E2E_PORT_POSTGRES', 55432);
-const PORT_POWERSYNC = port('E2E_PORT_POWERSYNC', 58080);
-const PORT_API = port('E2E_PORT_API', 3100);
-const PORT_PAGE = port('E2E_PORT_PAGE', 4174);
+const PORT_POSTGRES = port('E2E_PORT_POSTGRES', PORTS_PAR_DEFAUT.postgres);
+const PORT_POWERSYNC = port('E2E_PORT_POWERSYNC', PORTS_PAR_DEFAUT.powersync);
+const PORT_API = port('E2E_PORT_API', PORTS_PAR_DEFAUT.api);
+const PORT_PAGE = port('E2E_PORT_PAGE', PORTS_PAR_DEFAUT.page);
 const ORIGINE_PAGE = new URL(process.env.SYNCHRO_BASE_URL ?? `http://localhost:${String(PORT_PAGE)}`).origin;
 const AUDIENCE = 'powersync-planif';
 const EMETTEUR = `http://localhost:${String(PORT_API)}`;
@@ -142,7 +143,7 @@ try {
   const r = spawnSync('pnpm', ['--filter', '@planif/web', 'exec', 'playwright', 'test', '-c', 'playwright.synchro.config.ts'], {
     cwd: RACINE,
     stdio: 'inherit',
-    env: { ...envApi, API_URL: URL_API, POWERSYNC_URL: URL_POWERSYNC },
+    env: { ...envApi, API_URL: URL_API, POWERSYNC_URL: URL_POWERSYNC, E2E_PORT_PAGE: String(PORT_PAGE) },
   });
   code = r.status ?? 1;
   if (code !== 0) {

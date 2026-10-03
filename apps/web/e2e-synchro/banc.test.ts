@@ -1,7 +1,7 @@
 /**
  * T10c, décision 7 du chef : deux lancements de `pnpm e2e:synchro` (deux équipes, deux copies de
  * travail) ne se croisent pas. Le port de la page de diagnostic se choisit par E2E_PORT_PAGE
- * (défaut 4174) : playwright.synchro.config.ts construit et sert la page sur ce port, et
+ * (défaut 4174 pour playwright seul ; pnpm e2e:synchro passe 14174) : playwright.synchro.config.ts construit et sert la page sur ce port, et
  * l'attend là (baseURL, webServer.url). SYNCHRO_BASE_URL, si posée, garde la priorité (page déjà
  * servie ailleurs, aucun serveur lancé).
  *
