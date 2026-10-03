@@ -112,12 +112,13 @@ function verifierTaille(ordres: readonly OrdreEcriture[]): void {
 }
 
 /**
- * T13j : un ordre qui nomme le journal (`evenement`, mot entier) peut y écrire ; seuls ces
- * ensembles sont contrôlés. Un ordre qui ne le nomme pas ne peut pas y insérer de ligne (le schéma
- * local n'a pas de déclencheur qui y écrive) : faux positif possible (un contrôle de trop), jamais
- * de faux négatif.
+ * T13j : un ordre qui nomme le journal (`evenement`, même au milieu d'un nom :
+ * `ps_data__evenement`, `"evenement"`, `evenement_id`) peut y écrire ; seuls ces ensembles sont
+ * contrôlés. Un ordre qui ne le nomme pas ne peut pas y insérer de ligne (le schéma local n'a pas
+ * de déclencheur qui y écrive) : faux positif possible (un contrôle de trop), jamais de faux
+ * négatif.
  */
-const NOMME_JOURNAL = /\bevenement\b/i;
+const NOMME_JOURNAL = /evenement/i;
 
 /**
  * Table SQLite où le journal est rangé : `ps_data__evenement` sous PowerSync (la vue `evenement`
@@ -199,13 +200,23 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
    * SQLite donne à une ligne insérée un rowid supérieur à tous ceux de la table, et ni la
    * synchro ni un autre onglet n'écrivent pendant la transaction : sont nouvelles exactement les
    * lignes insérées par ces ordres, quelle que soit la forme de l'INSERT (paramètres, littéraux,
-   * INSERT … SELECT, OR REPLACE). Limites : un UPDATE n'ajoute pas de ligne, et un DELETE de la
-   * dernière ligne dans la même transaction ferait réutiliser son rowid ; le journal est en ajout
-   * seul (le serveur refuse UPDATE et DELETE d'un événement), aucun chemin de l'appli ne le fait.
+   * INSERT … SELECT, OR REPLACE).
+   *
+   * Limites connues (aucun chemin de l'appli ne les emprunte) :
+   *   - un UPDATE qui transforme une ligne existante en « Fait » n'ajoute pas de ligne : il n'est
+   *     pas vu ; un DELETE de la dernière ligne suivi d'un INSERT dans la même transaction ferait
+   *     réutiliser son rowid. Le journal est en ajout seul : le serveur refuse UPDATE et DELETE
+   *     sur `evenement`. Ticket de suite T13o : repérer les lignes par ps_crud ;
+   *   - faux positif : un « Fait » et sa correction écrits dans la même transaction sont refusés
+   *     (la correction en vigueur compte comme un autre « Fait ») ;
+   *   - un déclencheur posé sur une autre table, qui écrirait dans le journal, échapperait au
+   *     filtre NOMME_JOURNAL (le schéma local n'en a aucun).
    *
    * `verifier` (T13h) tourne avant les ordres, comme avant (sauf celle de `preparerSaisie`,
    * refaite après) ; il ne dispense d'aucun contrôle.
-   * `exigerVerificateur` (ecrireEnsemble) : un « Fait » écrit sans vérificateur est refusé.
+   * `exigerVerificateur` (ecrireEnsemble) : un « Fait » écrit sans vérificateur est refusé. Ce
+   * n'est plus qu'une règle d'hygiène d'API (l'appelant passe la vérification rendue) : le
+   * contrôle d'après les lignes écrites protège seul, avec ou sans vérificateur.
    */
   async function ecrireControle(
     tx: TransactionLocale,
