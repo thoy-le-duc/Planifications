@@ -14,7 +14,9 @@
  * T13g : l'instantané s'affiche AVANT l'ouverture de la base (porte encore absente), en lecture
  * seule (boutons des cartes inactifs), s'il est de la dernière ferme choisie par cet utilisateur,
  * mémorisée avec la session (src/donnees/ferme-memorisee.ts). La ferme connue, l'écran reste le même si c'est celle-là,
- * sinon il repart de zéro sur la vraie ferme (l'instantané de l'autre n'est plus montré).
+ * sinon il repart de zéro sur la vraie ferme (l'instantané de l'autre n'est plus montré). Les
+ * « Fait » tapés à la suite passent en file : chacun masqué au tap, écrit dans l'ordre, chacun
+ * avec sa vérification.
  */
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
@@ -514,8 +516,13 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
   const oublierFocus = useCallback(() => {
     setFocusSaisie(null);
   }, []);
-  /** Une écriture à la fois : un double appui n'écrit pas deux fois. */
-  const occupe = useRef(false);
+  /**
+   * Écritures en cours ou en file (T13g). Une à la fois, dans l'ordre : les « Fait » tapés
+   * pendant une écriture (ou la lecture ciblée qui la précède) attendent leur tour ; tout autre
+   * geste d'écriture pendant ce temps est ignoré (un double appui n'écrit pas deux fois).
+   */
+  const ecritures = useRef(0);
+  const file = useRef<Promise<unknown>>(Promise.resolve());
   const numero = useRef(0);
   const idHistorique = useId();
 
@@ -586,22 +593,33 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
     return { porte, fermeId, aujourdhui: jourCourant() };
   };
 
-  const ecrire = useCallback(async (action: () => Promise<void>): Promise<boolean> => {
-    if (occupe.current) return false;
-    occupe.current = true;
-    setErreur(null);
-    setAvis(null);
-    setFocusSaisie(null);
-    try {
-      await action();
-      return true;
-    } catch (e) {
-      console.error('Saisie impossible', e);
-      setErreur(`La saisie n’a pas pu s’enregistrer sur ce téléphone${e instanceof Error && e.message !== '' ? ` : ${e.message}` : ''}. Réessayez ; si cela recommence, signalez-le.`);
-      return false;
-    } finally {
-      occupe.current = false;
+  /**
+   * Écrit `action` à son tour (T13g). `enFile` : « Fait », qui attend la fin des écritures en cours ;
+   * sinon, ignoré s'il y en a une (rend false). Les messages sont effacés au premier geste d'une
+   * série, jamais par une écriture en file : un refus (« déjà ») reste lisible jusqu'au bout.
+   */
+  const ecrire = useCallback((action: () => Promise<void>, enFile = false): Promise<boolean> => {
+    if (ecritures.current > 0 && !enFile) return Promise.resolve(false);
+    if (ecritures.current === 0) {
+      setErreur(null);
+      setAvis(null);
+      setFocusSaisie(null);
     }
+    ecritures.current++;
+    const tour = file.current.then(async () => {
+      try {
+        await action();
+        return true;
+      } catch (e) {
+        console.error('Saisie impossible', e);
+        setErreur(`La saisie n’a pas pu s’enregistrer sur ce téléphone${e instanceof Error && e.message !== '' ? ` : ${e.message}` : ''}. Réessayez ; si cela recommence, signalez-le.`);
+        return false;
+      } finally {
+        ecritures.current--;
+      }
+    });
+    file.current = tour;
+    return tour;
   }, []);
 
   function montrerAnnulable(evenement: EvenementLu, culture: Culture, titre: string, texte: string): void {
@@ -653,10 +671,12 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
    * « Fait » : la tâche est masquée dès le tap. Sur la journée relue, la saisie s'écrit tout de
    * suite. Sur l'instantané (T13d), rien n'est écrit depuis lui : une lecture ciblée de la tâche
    * dans la base (`lireTacheCiblee`) donne ce qu'écrirait la journée relue (emplacements relus,
-   * B2) ; si la tâche n'y est plus (faite ailleurs entre temps), rien n'est écrit.
+   * B2) ; si la tâche n'y est plus (faite ailleurs entre temps), rien n'est écrit. T13g : tapé
+   * pendant une autre écriture, il passe en file ; la lecture ciblée et la vérification « déjà
+   * fait » se font à son tour, après les écritures d'avant.
    */
   function surFait(cle: string): void {
-    if (porte === null || estMasquee(cle) || occupe.current) return;
+    if (porte === null || estMasquee(cle)) return;
     let tache: () => Promise<TacheJour | null>;
     /** Lecture ciblée : la tâche a changé, la carte revient (pas de masque). */
     let changee = false;
@@ -688,7 +708,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
     void ecrire(async () => {
       const t = await tache();
       if (t !== null) await ecrireFait(t);
-    }).then((ok) => {
+    }, true).then((ok) => {
       masquer(cle, ok && !changee ? marquerEcriture() : undefined);
     });
   }
