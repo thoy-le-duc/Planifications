@@ -366,6 +366,18 @@ export function annoncerSaisie(porte: PorteDonnees, fermeId: string, culture: Cu
   };
 }
 
+/** Oublie les journées des jours passés de la ferme qu'aucun écran ne montre (le cache ne grossit pas). */
+function oublierJoursPasses(porte: PorteDonnees, fermeId: string, jour: string): void {
+  const parCle = suivis.get(porte);
+  if (parCle === undefined) return;
+  for (const [cle, s] of parCle) {
+    if (s.fermeId !== fermeId || s.jour >= jour || s.abonnes.size > 0) continue;
+    arreterVerification(s);
+    s.quittee = true;
+    parCle.delete(cle);
+  }
+}
+
 /**
  * Suit la journée : `rappel` à chaque journée relue (tout de suite une relecture, puis à chaque
  * changement des tables lues). `surEchec` si la première lecture échoue. Rend le désabonnement.
@@ -377,6 +389,7 @@ export function suivreJournee(
   rappel: (j: Journee) => void,
   surEchec: (erreur: unknown) => void,
 ): () => void {
+  oublierJoursPasses(porte, fermeId, jour);
   const s = suiviDe(porte, fermeId, jour);
   s.abonnes.add(rappel);
   s.quittee = false;
