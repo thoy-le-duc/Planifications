@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T13h : « Fait » unique vérifié au moment d'écrire
+
+- **Fait** : avant d'écrire un « Fait » (étape ou travail), l'appli vérifie dans la même transaction qu'aucun réalisé en vigueur n'existe déjà pour cette culture ; sinon rien n'est écrit et un avis dit « Déjà notée ». Deux onglets ouverts ne peuvent plus écrire deux fois la même tâche (verrou d'écriture SQLite).
+- **Décidé** : « en vigueur » suit exactement la règle de l'écran (correction la plus récente, annulations, même ferme) ; un travail est identifié par son libellé, sa catégorie et son occurrence. Relecture : 2 bloquants (correction venue d'ailleurs, travaux de même libellé) corrigés, contre-relecture sans bloquant ; trois anciens tests qui court-circuitaient la vérification corrigés.
+- **Bloquant** : rien. Suite : T13i (même vérification pour la voix et l'agent ; coût du refus sur une très grande ferme).
+
 ## 2026-10-03 — T10q : réponses en flux sûres derrière un proxy
 
 - **Fait** : en HTTP/1.0 (proxy mal réglé), une réponse en flux est lue en mémoire et envoyée avec sa taille exacte, plafonnée à 32 Mio (au-delà : 505) ; en HTTP/1.1, un flux qui échoue avant son premier morceau donne un 500 propre ; un téléphone qui coupe annule la lecture des données ; plus aucune erreur piégée ne peut faire arriver son message au téléphone (fuite trouvée par le testeur, fermée).

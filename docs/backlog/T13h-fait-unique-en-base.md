@@ -16,6 +16,6 @@ La garantie repose sur les masques de l'écran Aujourd'hui : elle ne couvre pas 
 
 ## Critères d'acceptation
 
-- [ ] Test : deux appels à `marquerFait` sur la même étape → un seul réalisé, le second rend « déjà fait ».
-- [ ] Test : après annulation du réalisé, un nouveau « Fait » s'écrit.
-- [ ] Aujourd'hui reste sous 300 ms (grande ferme).
+- [x] Test : deux appels à `marquerFait` sur la même étape → un seul réalisé, le second rend « déjà fait ».
+- [x] Test : après annulation du réalisé, un nouveau « Fait » s'écrit.
+- [x] Aujourd'hui reste sous 300 ms (grande ferme).
