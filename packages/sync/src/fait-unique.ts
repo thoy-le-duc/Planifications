@@ -81,15 +81,17 @@ export type ColonneCulture = 'serie_id' | 'campagne_id';
  *     descend d'eux par remplace_evenement_id (même index) : une correction qui a changé de
  *     culture reste dans la chaîne ;
  *   - `chaines` sur ces seuls membres, puis la règle « en vigueur » sur les candidats.
- * Paramètres : culture, ferme, type, puis chemin JSON et valeur par clé du detail (candidats) ;
- * culture, ferme (remplacements de la culture) ; ferme (branche origine_id) ; ferme (départ des
- * chaînes).
+ * Paramètres : culture, ferme, type, puis chemin JSON et valeur par clé du detail, puis les ids
+ * écartés des candidats en tableau JSON (T13j : les « Fait » que la transaction vient d'écrire)
+ * (candidats) ; culture, ferme (remplacements de la culture) ; ferme (branche origine_id) ; ferme
+ * (départ des chaînes).
  */
 const sqlDejaFait = (colonne: ColonneCulture, nombreCles: number) => {
   const filtre = `e.${colonne} = ? AND +e.ferme_id = ? AND e.type = ? AND json_valid(e.detail)
     AND ${Array.from({ length: nombreCles }, () => 'json_extract(e.detail, ?) = ?').join(' AND ')}`;
   const avant = `candidat(id, sorte) AS (
     SELECT e.id, e.remplace_sorte FROM evenement e WHERE ${filtre} AND (e.remplace_sorte IS NULL OR e.remplace_sorte = 'correction')
+      AND e.id NOT IN (SELECT value FROM json_each(?))
   ),
   haut(id, origine, fini) AS (
     SELECT p.id, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL FROM evenement p WHERE p.id IN (SELECT id FROM candidat)
@@ -110,7 +112,7 @@ const sqlDejaFait = (colonne: ColonneCulture, nombreCles: number) => {
   return `${chaines(`id IN (SELECT id FROM membre) AND remplace_evenement_id >= '' AND +ferme_id = ?`, avant)}SELECT 1 FROM candidat c
   WHERE (c.sorte IS NULL AND c.id NOT IN (SELECT origine FROM chaine))
     OR (c.sorte = 'correction' AND c.id IN (SELECT id FROM chaine WHERE annulations = 0 AND cle IS NOT NULL))
-  LIMIT ?`;
+  LIMIT 1`;
 };
 
 /** Le « Fait » à vérifier : culture visée, type d'événement, valeurs attendues du detail. */
@@ -131,17 +133,23 @@ const NOM_DE_CHAMP = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * identique est déjà en vigueur pour la culture.
  */
 export function pasDejaFait(fait: FaitVise): VerificationEcriture {
-  return auPlus(fait, 0);
+  return dejaFaitHors(fait, []);
 }
 
 /**
- * T13j : contrôle APRÈS l'écriture, dans la même transaction : le « Fait » vient d'être écrit,
- * il ne doit pas y en avoir un autre en vigueur (déjà là, ou écrit par la même transaction).
- * Lève DejaFait sinon : la transaction est annulée.
+ * T13j : contrôle APRÈS l'écriture, dans la même transaction : le « Fait » vient d'être écrit
+ * (lignes `ecrits`, écartées des candidats) ; aucun autre identique ne doit être en vigueur, déjà
+ * là ou écrit par la même transaction (une correction comprise). Lève DejaFait sinon : la
+ * transaction est annulée. Écarter les lignes écrites garde le cas courant aussi rapide que la
+ * vérification d'avant l'écriture : sans autre candidat, rien d'autre n'est lu.
  */
-export function faitUnique(fait: FaitVise): VerificationEcriture {
-  return auPlus(fait, 1);
+export function faitUnique(fait: FaitVise, ecrits: readonly string[]): VerificationEcriture {
+  return dejaFaitHors(fait, ecrits);
 }
+
+/** Clé d'un « Fait » : deux « Fait » de même clé sont le même travail sur la même culture. */
+export const cleFait = (f: FaitVise): string =>
+  JSON.stringify([f.fermeId, f.colonne, f.cibleId, f.type, Object.entries(f.detail).sort(([a], [b]) => (a < b ? -1 : 1))]);
 
 /**
  * T13j : le « Fait » que porte une ligne d'événement (format local), ou undefined. Un « Fait » :
@@ -179,8 +187,8 @@ export function faitDeLigne(ligne: Readonly<Record<'ferme_id' | 'type' | 'serie_
   return { fermeId: ligne.ferme_id, colonne: serie ? 'serie_id' : 'campagne_id', cibleId, type: ligne.type, detail };
 }
 
-/** Lève DejaFait si plus de `permis` « Fait » identiques sont en vigueur pour la culture. */
-function auPlus(fait: FaitVise, permis: number): VerificationEcriture {
+/** Lève DejaFait si un « Fait » identique, hors des lignes `exclus`, est en vigueur pour la culture. */
+function dejaFaitHors(fait: FaitVise, exclus: readonly string[]): VerificationEcriture {
   const cles = Object.keys(fait.detail);
   // Une clé est un NOM de champ, passée en paramètre (chemin JSON entre guillemets), jamais
   // recopiée dans le SQL. Sans clé, la vérification ne viserait rien : refus explicite.
@@ -192,7 +200,7 @@ function auPlus(fait: FaitVise, permis: number): VerificationEcriture {
   const sql = sqlDejaFait(fait.colonne, cles.length);
   const filtre = [fait.cibleId, fait.fermeId, fait.type, ...cles.flatMap((c) => [`$."${c}"`, fait.detail[c]])];
   return async (lire) => {
-    const deja = await lire(sql, [...filtre, fait.cibleId, fait.fermeId, fait.fermeId, fait.fermeId, permis + 1]);
-    if (deja.length > permis) throw new DejaFait('déjà fait');
+    const deja = await lire(sql, [...filtre, JSON.stringify(exclus), fait.cibleId, fait.fermeId, fait.fermeId, fait.fermeId]);
+    if (deja.length > 0) throw new DejaFait('déjà fait');
   };
 }

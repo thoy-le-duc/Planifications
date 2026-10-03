@@ -18,7 +18,7 @@ import type {
   TransactionLocale,
   VerificationEcriture,
 } from './types.ts';
-import { faitDeLigne, faitUnique, pasDejaFait, type FaitVise } from './fait-unique.ts';
+import { cleFait, DejaFait, faitDeLigne, faitUnique, pasDejaFait, type FaitVise } from './fait-unique.ts';
 
 const COLONNES_EVENEMENT = [
   'id',
@@ -192,7 +192,8 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
    * T13j : exécute les ordres d'une transaction, puis contrôle CHAQUE « Fait » (faitDeLigne) que
    * la transaction vient d'insérer dans le journal, d'après les lignes écrites, quel que soit
    * l'ordre (préparé, copié, SQL brut) : un autre « Fait » identique en vigueur, déjà là ou écrit
-   * par la même transaction → DejaFait, la transaction est annulée, rien n'est écrit.
+   * par la même transaction → DejaFait, la transaction est annulée, rien n'est écrit. Deux
+   * « Fait » identiques écrits ensemble sont refusés, même si la transaction annule l'un d'eux.
    *
    * Lignes nouvelles : rowid de la table de rangement au-delà du plus grand d'avant les ordres.
    * SQLite donne à une ligne insérée un rowid supérieur à tous ceux de la table, et ni la
@@ -225,13 +226,22 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     const table = await rangement;
     const avant = (await lire<{ m: number | null }>(`SELECT max(rowid) AS m FROM "${table}"`))[0]?.m ?? 0;
     for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
-    const lignes = await lire<Readonly<Record<'ferme_id' | 'type' | 'serie_id' | 'campagne_id' | 'remplace_sorte' | 'detail', unknown>>>(
-      `SELECT ferme_id, type, serie_id, campagne_id, remplace_sorte, detail FROM evenement WHERE id IN (SELECT id FROM "${table}" WHERE rowid > ?)`,
+    const lignes = await lire<Readonly<Record<'id' | 'ferme_id' | 'type' | 'serie_id' | 'campagne_id' | 'remplace_sorte' | 'detail', unknown>>>(
+      `SELECT id, ferme_id, type, serie_id, campagne_id, remplace_sorte, detail FROM evenement WHERE id IN (SELECT id FROM "${table}" WHERE rowid > ?)`,
       [avant],
     );
-    const faits = lignes.map(faitDeLigne).filter((f): f is FaitVise => f !== undefined);
-    for (const fait of faits) await faitUnique(fait)(lire);
-    if (exigerVerificateur && verifier === undefined && faits.length > 0) {
+    // « Fait » écrits, par clé : deux de même clé dans la transaction → DejaFait ; sinon, aucun
+    // autre identique ne doit être en vigueur (faitUnique, qui écarte la ligne écrite).
+    const faits = new Map<string, { readonly fait: FaitVise; readonly id: string }>();
+    for (const ligne of lignes) {
+      const fait = faitDeLigne(ligne);
+      if (fait === undefined) continue;
+      const cle = cleFait(fait);
+      if (faits.has(cle)) throw new DejaFait('déjà fait');
+      faits.set(cle, { fait, id: String(ligne.id) });
+    }
+    for (const { fait, id } of faits.values()) await faitUnique(fait, [id])(lire);
+    if (exigerVerificateur && verifier === undefined && faits.size > 0) {
       throw new Error('« Fait » écrit sans vérification « déjà fait » : passer la vérification rendue par preparerSaisie');
     }
   }
