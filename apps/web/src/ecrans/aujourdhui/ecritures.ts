@@ -318,12 +318,29 @@ async function mouvementDuRemplacement(
   return { articles: [], mouvements: [ordreMouvement(ctx, chaine.article, attendu, remplacantId)] };
 }
 
+/**
+ * T13l : la saisie remplacée n'est plus en vigueur (déjà annulée ou corrigée, ici ou ailleurs) :
+ * rien n'est écrit. Sinon une chaîne annulée revivrait (et le stock d'une récolte avec elle).
+ */
+export class SaisiePlusEnVigueur extends Error {}
+
+const SQL_DEJA_REMPLACEE = 'SELECT id FROM evenement WHERE remplace_evenement_id = ? AND ferme_id = ? LIMIT 1';
+
+/** Vérification dans la transaction : `ev` n'est remplacé par aucune saisie (T13l). */
+function encoreEnVigueur(ctx: ContexteEcriture, ev: EvenementLu): VerificationEcriture {
+  return async (lire) => {
+    if ((await lire(SQL_DEJA_REMPLACEE, [ev.id, ctx.fermeId])).length > 0) {
+      throw new SaisiePlusEnVigueur('cette saisie a déjà été annulée ou corrigée');
+    }
+  };
+}
+
 /** Annule `ev` (en vigueur) : événement d'annulation et, pour une récolte, le mouvement inverse. */
 export async function annulerSaisie(ctx: ContexteEcriture, ev: EvenementLu): Promise<Id<'Evenement'>> {
   const saisie = await remplacement(ctx, ev, 'annulation', ev.date);
   const e = evenement(ctx.porte, saisie);
   const stock = await mouvementDuRemplacement(ctx, ev, 'annulation', e.id);
-  await ecrireSaisie(ctx, saisie.culture, true, [...stock.articles, e.ordre, ...stock.mouvements]);
+  await ecrireSaisie(ctx, saisie.culture, true, [...stock.articles, e.ordre, ...stock.mouvements], encoreEnVigueur(ctx, ev));
   return e.id;
 }
 
@@ -332,6 +349,6 @@ export async function changerDate(ctx: ContexteEcriture, ev: EvenementLu, date: 
   const saisie = await remplacement(ctx, ev, 'correction', date);
   const e = evenement(ctx.porte, saisie);
   const stock = await mouvementDuRemplacement(ctx, ev, 'correction', e.id);
-  await ecrireSaisie(ctx, saisie.culture, true, [...stock.articles, e.ordre, ...stock.mouvements]);
+  await ecrireSaisie(ctx, saisie.culture, true, [...stock.articles, e.ordre, ...stock.mouvements], encoreEnVigueur(ctx, ev));
   return e.id;
 }
