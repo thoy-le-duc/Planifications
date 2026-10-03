@@ -14,8 +14,16 @@
  *   un export tronqué ne passe jamais pour complet. @hono/node-server, lui, écrirait l'erreur
  *   brute sur la console et enverrait `Error: <message>` au client, ou une réponse tronquée
  *   d'apparence complète. Un client parti n'est pas une erreur du serveur : rien au journal.
+ * - Corps en flux qui échoue AVANT son premier morceau (T10q) : les en-têtes ne partent qu'avec
+ *   le premier morceau ; un échec avant donne un 500 complet et une ligne au journal, pas
+ *   « 200 puis coupure ».
+ * - Requête HTTP/1.0 (T10q), corps en flux sans Content-Length : pas d'envoi par morceaux en
+ *   HTTP/1.0, la fin du corps n'y est que la fermeture, indiscernable d'une coupure. Le corps est
+ *   donc lu en mémoire et envoyé avec un Content-Length exact ; lecture qui échoue : 500 complet.
+ *   En production, le proxy parle HTTP/1.1 à l'API (README, « Déploiement »).
  * - Erreur levée par `fetch` lui-même (synchrone ou non : flux verrouillé, `start` qui lève…) :
- *   500 et une ligne au journal, rien sur la console.
+ *   500 et une ligne au journal, rien sur la console ; délai (TimeoutError) : 504 ; requête
+ *   illisible : 400. Ne lève jamais, même sur une erreur piégée (T10q).
  *
  * RÈGLES pour tout corps de réponse en flux (export, téléchargement…) :
  * - Un flux qui échoue doit LEVER (`controller.error(erreur)` ou `throw` dans `pull`), jamais se
@@ -25,9 +33,11 @@
  *   erreurs du flux, les écrit sur la console et termine la réponse proprement (test statique,
  *   serveur-flux.test.ts). Rendre `new Response(readableStream)`.
  *
- * Contrat : serveur.test.ts, serveur-relecture.test.ts, serveur-flux.test.ts.
+ * Contrat : serveur.test.ts, serveur-relecture.test.ts, serveur-flux.test.ts,
+ * serveur-flux-suites.test.ts.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import type { Http2ServerRequest } from 'node:http2';
 import { getRequestListener, RequestError } from '@hono/node-server';
 import { journalParDefaut } from './dependances.ts';
 import { decrireErreur, journalSur } from './journal.ts';
@@ -117,31 +127,43 @@ interface Coupable {
   once(evenement: 'close', ecouteur: () => void): unknown;
 }
 
-/**
- * Corps de `source` relu tel quel ; s'il lève en cours d'envoi, l'erreur va au journal, la
- * connexion est coupée (`reponse.destroy()`), puis le flux se termine pour @hono/node-server, qui
- * n'écrit plus rien sur une réponse détruite. Il ne voit donc jamais l'erreur. Si la réponse est
- * déjà fermée (client parti : la source lève souvent à l'abandon de `requete.signal`), rien au
- * journal et pas de second `destroy()`.
- */
-function corpsSurveille(
-  source: ReadableStream<Uint8Array>,
-  reponse: Coupable,
-  journal: (ligne: string) => void,
-): ReadableStream<Uint8Array> {
-  const lecteur = source.getReader();
+/** Suit la fermeture de la réponse (client parti, ou connexion coupée par nous). */
+function suivreFermeture(reponse: Coupable): () => boolean {
   let fermee = false;
   reponse.once('close', () => {
     fermee = true;
   });
+  return () => fermee || reponse.destroyed;
+}
+
+/**
+ * Corps relu tel quel depuis `lecteur`, `premier` (morceau déjà lu) en tête ; si la source lève en
+ * cours d'envoi, l'erreur va au journal, la connexion est coupée (`reponse.destroy()`), puis le
+ * flux se termine pour @hono/node-server, qui n'écrit plus rien sur une réponse détruite. Il ne
+ * voit donc jamais l'erreur. Si la réponse est déjà fermée (client parti : la source lève souvent
+ * à l'abandon de `requete.signal`), rien au journal et pas de second `destroy()`.
+ */
+function corpsSurveille(
+  lecteur: ReadableStreamDefaultReader<Uint8Array>,
+  premier: Uint8Array,
+  reponse: Coupable,
+  fermee: () => boolean,
+  journal: (ligne: string) => void,
+): ReadableStream<Uint8Array> {
+  let enAttente: Uint8Array | null = premier;
   return new ReadableStream<Uint8Array>(
     {
       async pull(controleur) {
+        if (enAttente !== null) {
+          controleur.enqueue(enAttente);
+          enAttente = null;
+          return;
+        }
         let lu: Awaited<ReturnType<typeof lecteur.read>>;
         try {
           lu = await lecteur.read();
         } catch (erreur) {
-          if (!fermee && !reponse.destroyed) {
+          if (!fermee()) {
             journal(`[réponse] envoi du corps interrompu, connexion coupée : ${decrireErreur(erreur)}`);
             reponse.destroy();
           }
@@ -158,6 +180,58 @@ function corpsSurveille(
     // Rien lu d'avance : on ne tire la source qu'à la demande, comme sans enveloppe.
     { highWaterMark: 0 },
   );
+}
+
+/** Corps entier de `lecteur` en mémoire (HTTP/1.0) ; lève si la source lève. */
+async function lireEnEntier(lecteur: ReadableStreamDefaultReader<Uint8Array>): Promise<Uint8Array> {
+  const morceaux: Uint8Array[] = [];
+  let longueur = 0;
+  for (;;) {
+    const lu = await lecteur.read();
+    if (lu.done) break;
+    morceaux.push(lu.value);
+    longueur += lu.value.byteLength;
+  }
+  const corps = new Uint8Array(longueur);
+  let position = 0;
+  for (const morceau of morceaux) {
+    corps.set(morceau, position);
+    position += morceau.byteLength;
+  }
+  return corps;
+}
+
+/** Requête HTTP/1.0 : ni envoi par morceaux, ni fin de corps distincte d'une coupure. */
+function enHttp10(requete: IncomingMessage | Http2ServerRequest): boolean {
+  return requete.httpVersionMajor === 1 && requete.httpVersionMinor === 0;
+}
+
+/** Erreur de délai (DOMException, nom ou classe TimeoutError) ; une lecture qui lève compte pour non. */
+function estDelai(erreur: unknown): boolean {
+  try {
+    if (!(erreur instanceof Error)) return false;
+  } catch {
+    return false;
+  }
+  try {
+    if (erreur.name === 'TimeoutError') return true;
+  } catch {
+    // Accesseur `name` piégé : on regarde la classe.
+  }
+  try {
+    return erreur.constructor.name === 'TimeoutError';
+  } catch {
+    return false;
+  }
+}
+
+/** Requête illisible (URL, Host) : `instanceof` lui-même peut lever (Proxy piégé). */
+function estRequeteIllisible(erreur: unknown): boolean {
+  try {
+    return erreur instanceof RequestError;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -180,35 +254,75 @@ export function creerServeur(options: OptionsServeur): Server {
   const delaiCorpsMs = options.delaiLectureCorpsMs ?? DELAI_LECTURE_CORPS_MS;
   const delaiEnTetesMs = options.delaiEnTetesMs ?? DELAI_EN_TETES_MS;
   const journal = journalSur(options.journal ?? journalParDefaut);
-  /** Corps en flux enveloppé ; toute autre réponse rendue telle quelle. */
-  const surveiller = (reponse: Response, outgoing: Coupable): Response => {
+  /** 500 sans corps : jamais rien de l'erreur au client. */
+  const reponse500 = (): Response => new Response(null, { status: 500 });
+  /**
+   * Corps en flux pris en main ; toute autre réponse rendue telle quelle.
+   * - HTTP/1.0 sans Content-Length : corps lu en entier, puis envoyé avec un Content-Length exact
+   *   (sinon une coupure ressemblerait à une fin). Lecture qui échoue : 500, une ligne au journal.
+   * - Sinon : premier morceau attendu avant d'envoyer les en-têtes. Échec avant lui : 500 complet,
+   *   une ligne au journal ; échec après : coupure (T10p, `corpsSurveille`).
+   */
+  const surveiller = async (
+    reponse: Response,
+    incoming: IncomingMessage | Http2ServerRequest,
+    outgoing: Coupable,
+  ): Promise<Response> => {
     const flux = fluxDe(reponse);
     if (flux === null) return reponse;
     // Ni `body` ni `statusText` de la réponse d'origine ensuite : ils la convertiraient en
-    // Response native, avec un corps déjà verrouillé par l'enveloppe.
-    return new Response(corpsSurveille(flux, outgoing, journal), {
-      status: reponse.status,
-      headers: reponse.headers,
-    });
+    // Response native, avec un corps déjà verrouillé par le lecteur.
+    const { status, headers } = reponse;
+    const fermee = suivreFermeture(outgoing);
+    const lecteur = flux.getReader();
+    const echec = (erreur: unknown, quand: string): Response => {
+      if (!fermee()) journal(`[réponse] corps en flux en échec ${quand}, 500 : ${decrireErreur(erreur)}`);
+      return reponse500();
+    };
+
+    if (enHttp10(incoming) && !headers.has('content-length')) {
+      let corps: Uint8Array;
+      try {
+        corps = await lireEnEntier(lecteur);
+      } catch (erreur) {
+        return echec(erreur, 'pendant la lecture en mémoire (HTTP/1.0)');
+      }
+      const enTetes = new Headers(headers);
+      enTetes.set('content-length', String(corps.byteLength));
+      return new Response(corps.byteLength === 0 ? null : corps, { status, headers: enTetes });
+    }
+
+    let premier: Awaited<ReturnType<typeof lecteur.read>>;
+    try {
+      premier = await lecteur.read();
+    } catch (erreur) {
+      return echec(erreur, 'avant le premier morceau');
+    }
+    if (premier.done) return new Response(null, { status, headers });
+    return new Response(corpsSurveille(lecteur, premier.value, outgoing, fermee, journal), { status, headers });
   };
   /**
-   * `fetch` (ou l'enveloppe) a levé, avant toute réponse : 500 et une ligne au journal, au lieu du
-   * 500 muet de @hono/node-server. Requête illisible (RequestError) : 400, comme sans ce
-   * gestionnaire ; délai dépassé (TimeoutError) : 504, idem.
+   * Requête illisible (RequestError) : 400 ; `fetch` (ou l'enveloppe) a levé avant toute réponse :
+   * 500 et une ligne au journal, au lieu du 500 muet de @hono/node-server ; délai dépassé
+   * (TimeoutError) : 504. Ne lève jamais, même sur une erreur piégée (accesseur `name` ou
+   * `constructor`, Proxy) : sinon @hono/node-server écrirait l'erreur sur la console et
+   * enverrait `Error: <message>` au client.
    */
   const surErreur = (erreur: unknown): Response => {
-    if (erreur instanceof RequestError) return new Response(null, { status: 400 });
-    journal(`[réponse] erreur avant toute réponse : ${decrireErreur(erreur)}`);
-    const delai = erreur instanceof Error && (erreur.name === 'TimeoutError' || erreur.constructor.name === 'TimeoutError');
-    return new Response(null, { status: delai ? 504 : 500 });
+    try {
+      if (estRequeteIllisible(erreur)) return new Response(null, { status: 400 });
+      journal(`[réponse] erreur avant toute réponse : ${decrireErreur(erreur)}`);
+      return new Response(null, { status: estDelai(erreur) ? 504 : 500 });
+    } catch {
+      return reponse500();
+    }
   };
   const ecouteur = getRequestListener(
-    (requete, { outgoing }) => {
+    (requete, { incoming, outgoing }) => {
       const reponse = options.fetch(requete);
-      // Réponse immédiate gardée immédiate : @hono/node-server l'envoie alors sans attente.
-      return reponse instanceof Promise
-        ? reponse.then((r) => surveiller(r, outgoing))
-        : surveiller(reponse, outgoing);
+      if (reponse instanceof Promise) return reponse.then((r) => surveiller(r, incoming, outgoing));
+      // Réponse immédiate sans flux gardée immédiate : @hono/node-server l'envoie sans attente.
+      return fluxDe(reponse) === null ? reponse : surveiller(reponse, incoming, outgoing);
     },
     { errorHandler: surErreur },
   );
