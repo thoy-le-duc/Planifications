@@ -806,6 +806,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
           type="button"
           aria-label="Historique"
           className="auj-vers-historique"
+          // T13g : rien vers quoi défiler tant que l'historique n'est pas dessiné (avant la base).
+          disabled={!complet}
           onClick={() => {
             document.getElementById(idHistorique)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
