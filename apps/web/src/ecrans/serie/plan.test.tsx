@@ -290,7 +290,7 @@ describe('T12 : corrections de la relecture, écran Planches', () => {
     let refuser = false;
     const porte: PorteDonnees = {
       ...b.porte,
-      ecrireEnsemble: (ordres) => (refuser ? Promise.reject(new Error('écriture refusée (test)')) : b.porte.ecrireEnsemble(ordres)),
+      ecrireEnsemble: (ordres, verifier) => (refuser ? Promise.reject(new Error('écriture refusée (test)')) : b.porte.ecrireEnsemble(ordres, verifier)),
       ecrire: (sql, p) => (refuser ? Promise.reject(new Error('écriture refusée (test)')) : b.porte.ecrire(sql, p)),
     };
     await rendre(porte);
