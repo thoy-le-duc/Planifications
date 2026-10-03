@@ -15,6 +15,7 @@ import type {
   ResumeSaisie,
   RequeteSurveillee,
   SaisieEvenement,
+  VerificationEcriture,
 } from './types.ts';
 
 const COLONNES_EVENEMENT = [
@@ -184,7 +185,7 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       });
     },
 
-    async ecrireEnsemble(ordres: readonly OrdreEcriture[]) {
+    async ecrireEnsemble(ordres: readonly OrdreEcriture[], verifier?: VerificationEcriture) {
       // Liste vide : rien à écrire, aucune transaction (donc rien dans la file d'envoi).
       if (ordres.length === 0) return;
       // Une transaction trop grosse serait refusée par le serveur (400) et bloquerait la file
@@ -195,8 +196,10 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       // Même règle pour le poids (verifierTaille).
       verifierTaille(ordres);
       // Une seule transaction locale : PowerSync l'envoie en un seul lot, que le serveur accepte ou
-      // refuse en entier. Un ordre qui échoue rejette la promesse et annule tout.
+      // refuse en entier. Un ordre qui échoue rejette la promesse et annule tout. La vérification
+      // (T13h) lit dans la transaction : rien ne s'écrit entre elle et les ordres.
       await base.writeTransaction(async (tx) => {
+        if (verifier !== undefined) await verifier((sql, parametres) => tx.getAll(sql, parametres ?? []));
         for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
       });
     },
