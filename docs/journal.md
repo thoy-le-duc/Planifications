@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T10q : réponses en flux sûres derrière un proxy
+
+- **Fait** : en HTTP/1.0 (proxy mal réglé), une réponse en flux est lue en mémoire et envoyée avec sa taille exacte, plafonnée à 32 Mio (au-delà : 505) ; en HTTP/1.1, un flux qui échoue avant son premier morceau donne un 500 propre ; un téléphone qui coupe annule la lecture des données ; plus aucune erreur piégée ne peut faire arriver son message au téléphone (fuite trouvée par le testeur, fermée).
+- **Décidé** : le README de l'API exige un proxy en HTTP/1.1 ; l'envoi en mémoire n'est qu'un filet de secours. Relecture : 3 bloquants (source non annulée au départ du client, pas de plafond, double annonce de taille) corrigés, contre-relecture sans bloquant.
+- **Bloquant** : rien. Suite : T10r (délai jusqu'au premier morceau d'une réponse en flux).
+
 ## 2026-10-02 — T18 : mode sombre
 
 - **Fait** : l'appli suit le réglage clair/sombre du téléphone sur tous les écrans, avec un choix « Comme le téléphone / Clair / Sombre » dans l'onglet Ferme (Apparence) ; thème sombre « forêt de nuit » (fond vert-noir, en-tête vert profond, boutons sauge), contraste AA vérifié par test sur toutes les paires des deux thèmes ; aucun éclair clair au lancement (petit script bloquant compatible CSP, dans le précache) ; barre du navigateur à la couleur de l'en-tête ; captures de chaque écran dans les deux thèmes.

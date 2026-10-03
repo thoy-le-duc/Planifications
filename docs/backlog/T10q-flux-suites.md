@@ -13,6 +13,6 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : une requête HTTP/1.0 qui demande une réponse en flux ne la reçoit pas en flux (réponse en mémoire ou refus explicite) ; la doc de déploiement impose HTTP/1.1 vers l'amont.
-- [ ] Test : un flux qui échoue avant son premier morceau donne un 500 propre.
-- [ ] Tests : 400 (requête illisible) et 504 (délai) de `surErreur` ; `surErreur` ne lève jamais.
+- [x] Test : une requête HTTP/1.0 qui demande une réponse en flux ne la reçoit pas en flux (réponse en mémoire ou refus explicite) ; la doc de déploiement impose HTTP/1.1 vers l'amont.
+- [x] Test : un flux qui échoue avant son premier morceau donne un 500 propre.
+- [x] Tests : 400 (requête illisible) et 504 (délai) de `surErreur` ; `surErreur` ne lève jamais.
