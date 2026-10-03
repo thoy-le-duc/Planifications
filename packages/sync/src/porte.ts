@@ -181,6 +181,14 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
   let rangement: Promise<string> | undefined;
 
   /**
+   * Vérifications rendues par `preparerSaisie` de cette porte : le contrôle d'après les lignes
+   * écrites refait exactement la même règle ; `ecrireEnsemble` ne la lance donc pas une seconde
+   * fois avant les ordres (un seul « déjà fait » par tap). Optimisation seulement : elle ne
+   * dispense d'aucun contrôle.
+   */
+  const verificationsPreparees = new WeakSet<VerificationEcriture>();
+
+  /**
    * T13j : exécute les ordres d'une transaction, puis contrôle CHAQUE « Fait » (faitDeLigne) que
    * la transaction vient d'insérer dans le journal, d'après les lignes écrites, quel que soit
    * l'ordre (préparé, copié, SQL brut) : un autre « Fait » identique en vigueur, déjà là ou écrit
@@ -190,10 +198,12 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
    * SQLite donne à une ligne insérée un rowid supérieur à tous ceux de la table, et ni la
    * synchro ni un autre onglet n'écrivent pendant la transaction : sont nouvelles exactement les
    * lignes insérées par ces ordres, quelle que soit la forme de l'INSERT (paramètres, littéraux,
-   * INSERT … SELECT, OR REPLACE). Un UPDATE n'ajoute pas de ligne (le journal est en ajout seul,
-   * le serveur refuse l'UPDATE d'un événement).
+   * INSERT … SELECT, OR REPLACE). Limites : un UPDATE n'ajoute pas de ligne, et un DELETE de la
+   * dernière ligne dans la même transaction ferait réutiliser son rowid ; le journal est en ajout
+   * seul (le serveur refuse UPDATE et DELETE d'un événement), aucun chemin de l'appli ne le fait.
    *
-   * `verifier` (T13h) tourne avant les ordres, comme avant ; il ne dispense d'aucun contrôle.
+   * `verifier` (T13h) tourne avant les ordres, comme avant (sauf celle de `preparerSaisie`,
+   * refaite après) ; il ne dispense d'aucun contrôle.
    * `exigerVerificateur` (ecrireEnsemble) : un « Fait » écrit sans vérificateur est refusé.
    */
   async function ecrireControle(
@@ -203,7 +213,7 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     exigerVerificateur: boolean,
   ): Promise<void> {
     const lire = <T>(sql: string, parametres?: readonly unknown[]) => tx.getAll<T>(sql, parametres ?? []);
-    if (verifier !== undefined) await verifier(lire);
+    if (verifier !== undefined && !verificationsPreparees.has(verifier)) await verifier(lire);
     if (!ordres.some((o) => NOMME_JOURNAL.test(o.sql))) {
       for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
       return;
@@ -249,7 +259,10 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     // T13j : vérification « déjà fait » d'un « Fait » (réalisé nouveau sur une culture,
     // intervention nouvelle qui solde un travail prévu), selon la règle unique de faitDeLigne.
     const fait = faitDeLigne(ligne);
-    return fait === undefined ? { id, ligne, ordre } : { id, ligne, ordre, verification: pasDejaFait(fait) };
+    if (fait === undefined) return { id, ligne, ordre };
+    const verification = pasDejaFait(fait);
+    verificationsPreparees.add(verification);
+    return { id, ligne, ordre, verification };
   }
 
   return {
