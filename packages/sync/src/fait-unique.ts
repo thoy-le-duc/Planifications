@@ -4,8 +4,9 @@
  * vérification lit la base DANS la transaction d'écriture (`VerificationEcriture`), donc rien ne
  * s'intercale entre elle et l'écriture (deux taps, deux onglets, la voix et l'écran).
  *
- * Appelée par `porte.saisirEvenement` (voix, agent, photo : tout réalisé nouveau) et par l'écran
- * Aujourd'hui (`ecritures.ts`, via `porte.ecrireEnsemble`). Sous-chemin `@planif/sync/fait-unique` :
+ * T13j : construite par la porte seule (`preparerSaisie`, qui la rend avec l'ordre) pour tout
+ * « Fait » nouveau ; `saisirEvenement` l'applique, `ecrireEnsemble` refuse un « Fait » préparé
+ * sans vérificateur. L'écran Aujourd'hui passe celle que rend la porte. Sous-chemin `@planif/sync/fait-unique` :
  * ce module ne tire ni PowerSync ni la porte (l'écran l'importe sans alourdir le démarrage).
  *
  * « En vigueur » : la règle de la vue evenements_en_vigueur (@planif/db, T10g), en SQL (`chaines`) :

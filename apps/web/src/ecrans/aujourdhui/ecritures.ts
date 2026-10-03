@@ -25,8 +25,8 @@ import {
   type TravailPrevu,
   type UniteRecolte,
 } from '@planif/core';
-import type { OrdreEcriture, PorteDonnees, SaisieEvenement, VerificationEcriture } from '@planif/sync';
-import { DejaFait, pasDejaFait as verificationDejaFait } from '@planif/sync/fait-unique';
+import type { EvenementPrepare, OrdreEcriture, PorteDonnees, SaisieEvenement, VerificationEcriture } from '@planif/sync';
+import { DejaFait } from '@planif/sync/fait-unique';
 import { annoncerSaisie } from './cache.ts';
 import { listeTextes, type Culture, type EvenementLu } from './calculs.ts';
 
@@ -79,12 +79,15 @@ const SQL_STOCK_CHAINE = `WITH RECURSIVE
   WHERE recolte_id IN (SELECT id FROM chaine)
   GROUP BY article_stock_id ORDER BY article_stock_id`;
 
-/** Prépare l'événement et le vérifie par les règles du serveur. */
-function evenement(porte: PorteDonnees, saisie: SaisieEvenement): { readonly id: Id<'Evenement'>; readonly ordre: OrdreEcriture } {
-  const { id, ligne, ordre } = porte.preparerSaisie(saisie);
-  const r = validerSaisie(ligne);
+/**
+ * Prépare l'événement et le vérifie par les règles du serveur. T13j : pour un « Fait », la porte
+ * rend aussi la vérification « déjà fait » (`verification`), à passer à l'écriture.
+ */
+function evenement(porte: PorteDonnees, saisie: SaisieEvenement): EvenementPrepare {
+  const e = porte.preparerSaisie(saisie);
+  const r = validerSaisie(e.ligne);
   if (!r.ok) throw new SaisieRefusee(r.erreur.message);
-  return { id, ordre };
+  return e;
 }
 
 function ordreArticle(ctx: ContexteEcriture, culture: Culture, unite: UniteRecolte): { readonly id: string; readonly ordre: OrdreEcriture } {
@@ -116,21 +119,6 @@ async function article(ctx: ContexteEcriture, culture: Culture, unite: UniteReco
 }
 
 const culturePour = (culture: Culture) => culture.cible;
-
-/**
- * Vérification passée à `ecrireEnsemble` (T13h) : la règle partagée de @planif/sync (T13i), lue
- * DANS la transaction d'écriture, donc sans écriture possible entre elle et l'ordre (deux taps,
- * deux onglets sur la même base). Lève DejaFait si le « Fait » est déjà en vigueur.
- */
-function pasDejaFait(ctx: ContexteEcriture, culture: Culture, type: string, detail: Readonly<Record<string, string>>): VerificationEcriture {
-  return verificationDejaFait({
-    fermeId: ctx.fermeId,
-    colonne: culture.cible.sorte === 'serie' ? 'serie_id' : 'campagne_id',
-    cibleId: culture.cibleId,
-    type,
-    detail,
-  });
-}
 
 /**
  * Écrit les ordres d'une saisie en UNE transaction, annoncée d'abord à la journée suivie (T13c) :
@@ -172,7 +160,8 @@ export async function marquerFait(ctx: ContexteEcriture, culture: Culture, etape
     remplaceEvenement: null,
     detail,
   });
-  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], pasDejaFait(ctx, culture, 'realise', { etape }));
+  // Vérification « déjà fait » rendue par la porte (T13j), lue DANS la transaction d'écriture.
+  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], e.verification);
   return e.id;
 }
 
@@ -221,7 +210,8 @@ export async function marquerTravailFait(
     remplaceEvenement: null,
     detail: detailDuTravail(travail, datePrevue),
   });
-  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], pasDejaFait(ctx, culture, 'intervention', { type: travail.type, categorie: travail.categorie, occurrenceVisee: datePrevue }));
+  // Vérification « déjà fait » rendue par la porte (T13j) : libellé, catégorie, occurrence visée.
+  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], e.verification);
   return e.id;
 }
 
