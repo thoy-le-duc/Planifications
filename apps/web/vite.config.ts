@@ -120,6 +120,9 @@ const MORCEAU_IDENTIFIANTS = 'identifiants';
 const MODULES_IDENTIFIANTS = [
   fileURLToPath(new URL('../../packages/core/src/domaine/identifiants.ts', import.meta.url)),
   fileURLToPath(new URL('../../packages/sync/src/fait-unique.ts', import.meta.url)),
+  // T13g : la dernière ferme choisie, lue par l'écran Aujourd'hui avant la base et écrite par la
+  // ferme active (src/donnees/ferme-memorisee.ts) : même raison, pas de morceau à elle.
+  fileURLToPath(new URL('src/donnees/ferme-memorisee.ts', import.meta.url)),
 ];
 
 function morceauManuel(id: string): string | undefined {
