@@ -17,6 +17,7 @@ import type {
   SaisieEvenement,
   VerificationEcriture,
 } from './types.ts';
+import { pasDejaFait } from './fait-unique.ts';
 
 const COLONNES_EVENEMENT = [
   'id',
@@ -153,6 +154,22 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     };
   }
 
+  /**
+   * T13i : vérification « déjà fait » d'une saisie : un réalisé NOUVEAU sur une culture. Une
+   * correction ou une annulation n'est jamais refusée ; les autres types ne sont pas touchés.
+   */
+  function verificationDe(saisie: SaisieEvenement): VerificationEcriture | undefined {
+    if (saisie.type !== 'realise' || saisie.remplaceEvenement !== null || saisie.culture === null) return undefined;
+    const c = saisie.culture;
+    return pasDejaFait({
+      fermeId: options.fermeId,
+      colonne: c.sorte === 'serie' ? 'serie_id' : 'campagne_id',
+      cibleId: c.sorte === 'serie' ? c.serieId : c.campagneId,
+      type: 'realise',
+      detail: { etape: saisie.detail.etape },
+    });
+  }
+
   function preparerSaisie(saisie: SaisieEvenement): EvenementPrepare {
     const id = nouvelId<'Evenement'>();
     const ligne: LigneEvenementLocale = {
@@ -209,7 +226,11 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     async saisirEvenement(saisie: SaisieEvenement): Promise<Id<'Evenement'>> {
       const { id, ordre } = preparerSaisie(saisie);
       verifierTaille([ordre]);
+      const verifier = verificationDe(saisie);
+      // T13i : un réalisé nouveau (voix, agent…) passe par la même règle « déjà fait » que
+      // l'écran, lue dans la transaction d'écriture.
       await base.writeTransaction(async (tx) => {
+        if (verifier !== undefined) await verifier((sql, parametres) => tx.getAll(sql, parametres ?? []));
         await tx.execute(ordre.sql, ordre.parametres);
       });
       return id;

@@ -6,6 +6,7 @@
 export { exporterFerme, type ArchiveExport, type Avancement, type Compresseur, type OptionsExportFerme } from './export.ts';
 export { envoyerEcritures, EchecEnvoi, SessionExpiree } from './envoi.ts';
 export { creerPorte } from './porte.ts';
+export { DejaFait } from './fait-unique.ts';
 export { SCHEMA_LOCAL, TABLES_LOCALES, type NomTableLocale } from './schema.ts';
 export type * from './types.ts';
 /** Écritures au plus par transaction locale (`ecrireEnsemble`), comme par envoi à l'API (T10c). */

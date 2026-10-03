@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T13i : « Fait » unique, partagé avec la voix et l'agent
+
+- **Fait** : la vérification « déjà fait » vit maintenant dans `@planif/sync` (`fait-unique.ts`), seule implémentation, appelée par `porte.saisirEvenement` (future voix, futur agent) et par l'écran Aujourd'hui, dans la même transaction que l'écriture. Le calcul des chaînes est restreint à la culture visée : refus sur la grande ferme en ≈ 5 ms au lieu de ≈ 30 ms.
+- **Décidé** : relecture en deux passages, avec une comparaison aléatoire de l'ancienne et de la nouvelle règle (0 divergence, maillons manquants et cycles compris). Corrigé dans le ticket : un refus à tort quand un maillon manque, un coût doublé sur les chaînes pathologiques, les clés du détail passées en paramètre (plus d'injection possible) et limitées aux noms simples. Le petit morceau partagé est rangé avec `identifiants` (`vite.config.ts`) : JS de démarrage 70,9/71 Kio, 1 octet de moins qu'avant.
+- **Bloquant** : rien. Suite : T13j (les autres chemins d'écriture, l'intervention qui solde un travail prévu, l'index `origine_id` à mesurer).
+
 ## 2026-10-03 — T10o : l'archivage d'un refus vérifié entre deux téléphones
 
 - **Fait** : nouveau test de bout en bout (`e2e-synchro/refus-archives.e2e.ts`) avec la vraie synchro : le téléphone A archive un refus, la carte disparaît chez B ; en base, `archive_le` est rempli à l'instant envoyé ; l'envoi part après le délai d'annulation de 5 s et ne porte que `archive_le` ; un refus témoin reste intact.

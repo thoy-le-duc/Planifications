@@ -33,6 +33,7 @@ import {
   type UniteRecolte,
 } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
+import { CHAINES } from '@planif/sync/fait-unique';
 import { cleFamille, type CleFamille } from '../plan/calculs.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────────────────────────
@@ -328,43 +329,6 @@ const SQL_EMPLACEMENTS = `SELECT em.id, em.code, z.nom AS zone FROM emplacement 
   LEFT JOIN zone z ON z.id = em.zone_id AND z.ferme_id = em.ferme_id
   WHERE em.id IN (${DANS}) AND em.ferme_id = ? AND em.supprime_le IS NULL AND em.actif_du <= ? AND (em.actif_au IS NULL OR em.actif_au > ?)`;
 
-/**
- * Chaînes du journal local (paramètre : la ferme). Une ligne reçue du serveur porte l'origine de
- * sa chaîne (`origine_id`, tenue par la base, T10h) : elle est lue telle quelle. Seules les
- * saisies locales pas encore synchronisées (sans `origine_id`) montent, par l'identifiant,
- * jusqu'au premier parent qui la porte ou jusqu'à l'origine (décision 3 du chef : une chaîne de
- * 1 000 corrections ne se remonte pas). Un parent absent de la base locale sert de clé de chaîne,
- * comme dans `enVigueur`. Profondeur bornée (données corrompues : jamais de boucle sans fin).
- *   - `remplacement` : chaque correction ou annulation, avec l'origine de sa chaîne (le dernier
- *     maillon de sa montée : fini, ou dont le parent est une origine ou absent) ;
- *   - `chaine` : par origine, la clé (horodatage|id) de sa correction la plus récente et son
- *     `id` (colonne nue de SQLite : celle de la ligne du MAX), le nombre de ses annulations et
- *     de ses corrections.
- *
- * T13b : les remplacements se lisent par l'index `remplacement` (`>= ''` : toute valeur non
- * nulle, comme `IS NOT NULL`, que SQLite ne cherche pas dans un index d'expression), qui porte
- * aussi la ferme, l'origine, la sorte et l'horodatage : aucune ligne du journal n'est ouverte,
- * sauf les parents des saisies locales. La ferme est écartée de l'index ferme_date (`+`) :
- * sinon SQLite parcourrait tout le journal de la ferme.
- */
-export const CHAINES = `WITH RECURSIVE montee(id, sorte, horodatage, origine, fini, profondeur) AS (
-    SELECT id, remplace_sorte, horodatage, coalesce(origine_id, remplace_evenement_id), origine_id IS NOT NULL, 0 FROM evenement
-    WHERE remplace_evenement_id >= '' AND +ferme_id = ?
-    UNION ALL
-    SELECT m.id, m.sorte, m.horodatage, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL, m.profondeur + 1
-    FROM montee m JOIN evenement p ON p.id = m.origine
-    WHERE NOT m.fini AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL) AND m.profondeur < 1000
-  ),
-  remplacement AS (
-    SELECT m.id, m.sorte, m.horodatage, m.origine FROM montee m
-    WHERE m.fini OR NOT EXISTS (SELECT 1 FROM evenement p WHERE p.id = m.origine AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL))
-  ),
-  chaine AS (
-    SELECT origine, MAX(CASE WHEN sorte = 'correction' THEN horodatage || '|' || id END) AS cle, id,
-      SUM(sorte = 'annulation') AS annulations, SUM(sorte = 'correction') AS corrections
-    FROM remplacement GROUP BY origine
-  )
-`;
 
 /**
  * Les chaînes, lues UNE fois par journée (avant T13b, chaque requête du journal les recalculait) :

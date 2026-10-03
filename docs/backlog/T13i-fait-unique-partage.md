@@ -17,5 +17,5 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : une écriture de réalisé par `saisirEvenement` passe par la même vérification.
-- [ ] Test de temps : refus « déjà fait » sur la grande ferme sous 50 ms (CPU normal).
+- [x] Test : une écriture de réalisé par `saisirEvenement` passe par la même vérification.
+- [x] Test de temps : refus « déjà fait » sur la grande ferme sous 50 ms (CPU normal).

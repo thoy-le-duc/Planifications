@@ -110,6 +110,22 @@ function nomFichierAnnexe(fichier: { names: readonly string[]; originalFileNames
   return 'assets/[name]-[hash][extname]';
 }
 
+/**
+ * T13i : la règle « déjà fait » (@planif/sync/fait-unique), partagée par la porte et l'écran
+ * Aujourd'hui, va dans le petit morceau partagé `identifiants` (générateur d'UUID de @planif/core,
+ * déjà chargé par les deux) plutôt que dans un morceau à elle : un nom de fichier de moins dans
+ * la table des dépendances du démarrage (budget de poids).
+ */
+const MORCEAU_IDENTIFIANTS = 'identifiants';
+const MODULES_IDENTIFIANTS = [
+  fileURLToPath(new URL('../../packages/core/src/domaine/identifiants.ts', import.meta.url)),
+  fileURLToPath(new URL('../../packages/sync/src/fait-unique.ts', import.meta.url)),
+];
+
+function morceauManuel(id: string): string | undefined {
+  return MODULES_IDENTIFIANTS.includes(id) ? MORCEAU_IDENTIFIANTS : undefined;
+}
+
 /** Module qui enregistre le service worker, au repos, après le premier affichage (T20). */
 const MODULE_ENREGISTREMENT_SW = fileURLToPath(new URL('src/serviceWorker.ts', import.meta.url));
 
@@ -317,6 +333,7 @@ export default defineConfig(({ mode }) => {
           entryFileNames: nomMorceau,
           chunkFileNames: nomMorceau,
           assetFileNames: nomFichierAnnexe,
+          manualChunks: morceauManuel,
         },
       },
     },
