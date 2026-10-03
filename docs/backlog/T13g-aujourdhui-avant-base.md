@@ -18,6 +18,6 @@
 
 ## Critères d'acceptation
 
-- [ ] e2e grande ferme, CPU ×4 : Aujourd'hui à froid sous 600 ms en médiane de 5.
-- [ ] Test : trois « Fait » tapés à la suite au lancement → trois réalisés, aucun perdu, aucun en double.
-- [ ] JS de démarrage sous le budget, non relevé.
+- [x] e2e grande ferme, CPU ×4 : Aujourd'hui à froid sous 600 ms en médiane de 5.
+- [x] Test : trois « Fait » tapés à la suite au lancement → trois réalisés, aucun perdu, aucun en double.
+- [x] JS de démarrage sous le budget, non relevé.
