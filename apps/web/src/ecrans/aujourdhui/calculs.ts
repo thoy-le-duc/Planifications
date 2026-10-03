@@ -347,7 +347,7 @@ const SQL_EMPLACEMENTS = `SELECT em.id, em.code, z.nom AS zone FROM emplacement 
  * sauf les parents des saisies locales. La ferme est écartée de l'index ferme_date (`+`) :
  * sinon SQLite parcourrait tout le journal de la ferme.
  */
-const CHAINES = `WITH RECURSIVE montee(id, sorte, horodatage, origine, fini, profondeur) AS (
+export const CHAINES = `WITH RECURSIVE montee(id, sorte, horodatage, origine, fini, profondeur) AS (
     SELECT id, remplace_sorte, horodatage, coalesce(origine_id, remplace_evenement_id), origine_id IS NOT NULL, 0 FROM evenement
     WHERE remplace_evenement_id >= '' AND +ferme_id = ?
     UNION ALL

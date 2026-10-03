@@ -39,12 +39,12 @@ beforeAll(async () => {
       if (/FROM serie s\b/.test(sql)) lecturesCompletes++;
       return vraie.lire<T>(sql, parametres);
     },
-    ecrireEnsemble: (ordres) => {
+    ecrireEnsemble: (ordres, verifier) => {
       if (echouerEcriture) {
         echouerEcriture = false;
         return Promise.reject(new Error('écriture impossible (simulée)'));
       }
-      return vraie.ecrireEnsemble(ordres);
+      return vraie.ecrireEnsemble(ordres, verifier);
     },
   };
 }, 120_000);

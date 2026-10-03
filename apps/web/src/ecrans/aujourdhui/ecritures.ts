@@ -25,9 +25,9 @@ import {
   type TravailPrevu,
   type UniteRecolte,
 } from '@planif/core';
-import type { OrdreEcriture, PorteDonnees, SaisieEvenement } from '@planif/sync';
+import type { OrdreEcriture, PorteDonnees, SaisieEvenement, VerificationEcriture } from '@planif/sync';
 import { annoncerSaisie } from './cache.ts';
-import { listeTextes, type Culture, type EvenementLu } from './calculs.ts';
+import { CHAINES, listeTextes, type Culture, type EvenementLu } from './calculs.ts';
 
 const nouvelId = creerGenerateurId({
   horloge: () => Date.now(),
@@ -43,6 +43,9 @@ export interface ContexteEcriture {
 
 /** Une ligne refusée par les règles du serveur : jamais écrite. */
 export class SaisieRefusee extends Error {}
+
+/** T13h : « Fait » déjà noté (réalisé ou intervention en vigueur) : rien n'est écrit. */
+export class DejaFait extends Error {}
 
 const SQL_ARTICLE = 'INSERT INTO article_stock (id, ferme_id, espece_id, variete_id, unite, categorie) VALUES (?, ?, ?, ?, ?, ?)';
 const SQL_MOUVEMENT = 'INSERT INTO mouvement_stock (id, ferme_id, article_stock_id, date, quantite, motif, recolte_id) VALUES (?, ?, ?, ?, ?, ?, ?)';
@@ -111,15 +114,52 @@ async function article(ctx: ContexteEcriture, culture: Culture, unite: UniteReco
 const culturePour = (culture: Culture) => culture.cible;
 
 /**
+ * T13h : un « Fait » en vigueur existe-t-il déjà pour la culture (sa colonne), du type donné, dont
+ * le detail porte les valeurs aux chemins JSON donnés ? « En vigueur » : même règle que
+ * `EN_VIGUEUR` (calculs.ts), sur les chaînes `CHAINES` de la ferme (filtrées par la ferme,
+ * origine_id des lignes reçues compris) : une chaîne annulée n'a rien en vigueur ; sinon sa
+ * correction la plus récente (horodatage, puis id), à défaut l'original. La culture et le detail
+ * sont lus sur cette ligne-là (une correction peut changer l'étape ou la culture). Paramètres :
+ * ferme (chaînes), culture, ferme, type, puis une valeur par chemin. Les candidats viennent de
+ * l'index de la culture : sans candidat, les chaînes ne sont pas lues.
+ */
+const sqlDejaFait = (colonne: 'serie_id' | 'campagne_id', chemins: readonly string[]) => `${CHAINES}SELECT 1 FROM evenement e
+  WHERE e.${colonne} = ? AND +e.ferme_id = ? AND e.type = ? AND json_valid(e.detail)
+    AND ${chemins.map((c) => `json_extract(e.detail, '${c}') = ?`).join(' AND ')}
+    AND ((e.remplace_sorte IS NULL AND e.id NOT IN (SELECT origine FROM chaine))
+      OR (e.remplace_sorte = 'correction' AND e.id IN (SELECT id FROM chaine WHERE annulations = 0 AND cle IS NOT NULL)))
+  LIMIT 1`;
+
+/**
+ * Vérification passée à `ecrireEnsemble` : lue DANS la transaction d'écriture, donc sans écriture
+ * possible entre elle et l'ordre (deux taps, deux onglets sur la même base : PowerSync n'ouvre
+ * qu'une transaction d'écriture à la fois). Lève DejaFait si le « Fait » existe déjà.
+ */
+function pasDejaFait(ctx: ContexteEcriture, culture: Culture, type: string, detail: Readonly<Record<string, string>>): VerificationEcriture {
+  const colonne = culture.cible.sorte === 'serie' ? 'serie_id' : 'campagne_id';
+  const chemins = Object.keys(detail);
+  return async (lire) => {
+    const deja = await lire(sqlDejaFait(colonne, chemins.map((c) => `$.${c}`)), [ctx.fermeId, culture.cibleId, ctx.fermeId, type, ...chemins.map((c) => detail[c])]);
+    if (deja.length > 0) throw new DejaFait('déjà fait');
+  };
+}
+
+/**
  * Écrit les ordres d'une saisie en UNE transaction, annoncée d'abord à la journée suivie (T13c) :
  * le changement qui suit ne relit que le journal de la culture touchée. `remplace` : la saisie
  * corrige ou annule une saisie (les chaînes du journal changent). Sans culture, rien n'est
  * annoncé : la journée sera relue en entier.
  */
-async function ecrireSaisie(ctx: ContexteEcriture, culture: SaisieEvenement['culture'], remplace: boolean, ordres: readonly OrdreEcriture[]): Promise<void> {
+async function ecrireSaisie(
+  ctx: ContexteEcriture,
+  culture: SaisieEvenement['culture'],
+  remplace: boolean,
+  ordres: readonly OrdreEcriture[],
+  verifier?: VerificationEcriture,
+): Promise<void> {
   const retirer = culture === null ? () => undefined : annoncerSaisie(ctx.porte, ctx.fermeId, culture, remplace);
   try {
-    await ctx.porte.ecrireEnsemble(ordres);
+    await ctx.porte.ecrireEnsemble(ordres, verifier);
   } catch (e) {
     retirer();
     throw e;
@@ -127,7 +167,10 @@ async function ecrireSaisie(ctx: ContexteEcriture, culture: SaisieEvenement['cul
 }
 const emplacementsDe = (culture: Culture) => culture.emplacements.map((e) => e.id);
 
-/** « Fait » : le réalisé de l'étape, à la date du jour. */
+/**
+ * « Fait » : le réalisé de l'étape, à la date du jour. T13h : rejet DejaFait, rien d'écrit, si un
+ * réalisé de cette étape est déjà en vigueur pour la culture (vérifié dans la transaction).
+ */
 export async function marquerFait(ctx: ContexteEcriture, culture: Culture, etape: EtapeRealisee): Promise<Id<'Evenement'>> {
   const detail: DetailRealise = { etape, quantiteReelle: null };
   const e = evenement(ctx.porte, {
@@ -141,7 +184,7 @@ export async function marquerFait(ctx: ContexteEcriture, culture: Culture, etape
     remplaceEvenement: null,
     detail,
   });
-  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre]);
+  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], pasDejaFait(ctx, culture, 'realise', { etape }));
   return e.id;
 }
 
@@ -170,7 +213,8 @@ export function detailDuTravail(travail: TravailPrevu, occurrenceVisee: DateCale
 
 /**
  * « Fait » sur un travail prévu (T22) : l'intervention du même type, à la date du jour, qui porte
- * l'occurrence visée `datePrevue` (la date de la carte touchée, T22b).
+ * l'occurrence visée `datePrevue` (la date de la carte touchée, T22b). T13h : rejet DejaFait,
+ * rien d'écrit, si une intervention de ce travail (libellé, catégorie) pour cette occurrence est déjà en vigueur.
  */
 export async function marquerTravailFait(
   ctx: ContexteEcriture,
@@ -189,7 +233,7 @@ export async function marquerTravailFait(
     remplaceEvenement: null,
     detail: detailDuTravail(travail, datePrevue),
   });
-  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre]);
+  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], pasDejaFait(ctx, culture, 'intervention', { type: travail.type, categorie: travail.categorie, occurrenceVisee: datePrevue }));
   return e.id;
 }
 

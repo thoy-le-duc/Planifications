@@ -109,6 +109,13 @@ export interface EvenementPrepare {
   readonly ordre: OrdreEcriture;
 }
 
+/**
+ * T13h : vérification lancée DANS la transaction d'écriture, avant le premier ordre : elle lit la
+ * base telle que la transaction la voit (aucune autre écriture ne peut s'intercaler) et lève une
+ * erreur pour ne rien écrire.
+ */
+export type VerificationEcriture = (lire: <T>(sql: string, parametres?: readonly unknown[]) => Promise<T[]>) => Promise<void>;
+
 /** Ordre SQL d'écriture (paramètres `?`), pour `ecrireEnsemble`. */
 export interface OrdreEcriture {
   readonly sql: string;
@@ -125,8 +132,12 @@ export interface PorteDonnees {
    * serveur, accepté ou refusé en entier). Ordres exécutés dans l'ordre ; un ordre qui échoue
    * rejette la promesse et rien n'est écrit. Liste vide : aucune transaction. Les requêtes
    * surveillées sont prévenues une fois l'ensemble validé.
+   *
+   * T13h : `verifier`, s'il est donné, tourne dans la même transaction avant les ordres ; s'il
+   * lève une erreur, la promesse est rejetée avec elle et rien n'est écrit (écriture
+   * conditionnelle : « n'écrire que si… », sûre même entre deux onglets sur la même base).
    */
-  ecrireEnsemble(ordres: readonly OrdreEcriture[]): Promise<void>;
+  ecrireEnsemble(ordres: readonly OrdreEcriture[], verifier?: VerificationEcriture): Promise<void>;
   /**
    * Appelle `rappel` avec le résultat tout de suite, puis après chaque écriture validée sur l'une
    * des `tables` (écriture locale ou arrivée par la synchro). Rend la fonction de désabonnement.

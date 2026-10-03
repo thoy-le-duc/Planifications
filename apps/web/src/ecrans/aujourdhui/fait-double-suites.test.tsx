@@ -193,14 +193,14 @@ function envelopper(vraie: PorteDonnees, fermeGelable: string | null): PorteDonn
       }
       return lignes;
     },
-    ecrireEnsemble: async (ordres) => {
+    ecrireEnsemble: async (ordres, verifier) => {
       const r = fermeGelable === null ? null : ecritureRetenue;
       if (r !== null) {
         ecritureRetenue = null;
         r.signaler();
         if (!(await r.decision)) throw new Error('écriture impossible (simulée)');
       }
-      return vraie.ecrireEnsemble(ordres);
+      return vraie.ecrireEnsemble(ordres, verifier);
     },
     surveiller: (requete, rappel) =>
       vraie.surveiller(requete, (lignes) => {
