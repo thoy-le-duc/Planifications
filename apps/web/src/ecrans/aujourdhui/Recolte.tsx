@@ -34,6 +34,8 @@ export interface ProprietesRecolte {
    * ne sont pas connues (l'instantané ne les garde pas), le choix de la culture les attend.
    */
   readonly enAttente?: boolean;
+  /** T13l : des saisies s'écrivent encore : « Valider » attend, inactif, puis se réactive. */
+  readonly occupe?: boolean;
 }
 
 function IconeRetour() {
@@ -81,7 +83,7 @@ function uniteAffichee(quantite: number, u: UniteRecolte): string {
   return quantiteAvecUnite(quantite, u).replace(/^\S+ /, '');
 }
 
-export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surValider, surFermer, erreur = null, enAttente = false }: ProprietesRecolte) {
+export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surValider, surFermer, erreur = null, enAttente = false, occupe = false }: ProprietesRecolte) {
   const [culture, setCulture] = useState<Culture | null>(initiale);
   const [unite, setUnite] = useState<UniteRecolte>(initiale?.unite ?? 'kg');
   const [texte, setTexte] = useState('');
@@ -98,7 +100,7 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
   const affichee = texte === '' ? '0' : texte;
   const libelleUnite = uniteAffichee(quantite === 0 ? 2 : quantite, unite);
   const valider = () => {
-    if (culture !== null && quantite > 0) surValider(culture, quantite, unite);
+    if (culture !== null && quantite > 0 && !occupe) surValider(culture, quantite, unite);
   };
   const toucher = (t: Touche) => {
     setTexte((x) => appuyer(x, t));
@@ -242,7 +244,7 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
                   {erreur}
                 </p>
               )}
-              <button type="button" className="auj-valider" disabled={!valide} onClick={valider}>
+              <button type="button" className="auj-valider" disabled={!valide || occupe} onClick={valider}>
                 <IconeCoche />
                 {valide ? `Valider ${quantiteAvecUnite(quantite, unite)}` : 'Valider'}
               </button>

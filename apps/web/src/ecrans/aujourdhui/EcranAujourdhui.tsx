@@ -17,6 +17,11 @@
  * même si c'est celle-là, sinon il repart de zéro sur la vraie ferme (l'instantané de l'autre n'est plus montré). Les
  * « Fait » tapés à la suite passent en file : chacun masqué au tap, écrit dans l'ordre, chacun
  * avec sa vérification.
+ *
+ * T13l : aucun geste n'est ignoré en silence pendant la file. Le bandeau « Annuler » d'un « Fait »
+ * paraît dès le tap ; « Annuler » (bandeau ou historique) passe dans la file, derrière la saisie
+ * qu'il annule. « Enregistrer » (changer la date) et « Valider » (récolte) sont inactifs tant que
+ * la file tourne, puis se réactivent : le dialogue reste ouvert, rien de tapé n'est perdu.
  */
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
@@ -100,8 +105,12 @@ export function jourDuTelephone(): string {
 
 /** Saisie que le bandeau permet d'annuler. */
 interface Annulable {
-  readonly evenement: EvenementLu;
-  readonly culture: Culture;
+  /** T13l : null tant que la saisie attend son tour dans la file (bandeau montré dès le tap). */
+  readonly evenement: EvenementLu | null;
+  /** T13l : l'événement une fois écrit (null : rien d'écrit) ; « Annuler » l'attend à son tour. */
+  readonly ecrite: Promise<EvenementLu | null>;
+  /** T13l : « Annuler » touché, l'annulation attend son tour dans la file (bouton inactif). */
+  readonly demandee: boolean;
   readonly titre: string;
   readonly texte: string;
   /** Distingue deux saisies successives (le compte à rebours repart). */
@@ -210,11 +219,13 @@ interface ProprietesHistorique {
   /** Le focus a été placé : il ne sera plus jamais repris (une seule fois, T13c). */
   readonly surFocusPlace: () => void;
   readonly aujourdhui: string;
+  /** T13l : saisies dont l'annulation est en file ou écrite (« Annuler » inactif). */
+  readonly enAnnulation: ReadonlySet<string>;
   readonly surAnnuler: (e: EntreeHistorique) => void;
   readonly surChangerDate: (e: EntreeHistorique) => void;
 }
 
-function Historique({ id, entrees, instantane, focus, surFocusPlace, aujourdhui, surAnnuler, surChangerDate }: ProprietesHistorique) {
+function Historique({ id, entrees, instantane, focus, surFocusPlace, aujourdhui, enAnnulation, surAnnuler, surChangerDate }: ProprietesHistorique) {
   const idTitre = useId();
   const [tout, setTout] = useState(false);
   // Dessinées en tâche de fond (interruptible) : l'historique, en bas de l'écran, ne retarde ni
@@ -291,7 +302,7 @@ function Historique({ id, entrees, instantane, focus, surFocusPlace, aujourdhui,
                     type="button"
                     aria-label={`Annuler : ${v.nom}`}
                     className="auj-bouton-secondaire"
-                    disabled={h === null}
+                    disabled={h === null || enAnnulation.has(v.id)}
                     onClick={() => {
                       if (h !== null) surAnnuler(h);
                     }}
@@ -324,11 +335,13 @@ function Historique({ id, entrees, instantane, focus, surFocusPlace, aujourdhui,
 interface ProprietesChangerDate {
   readonly entree: EntreeHistorique;
   readonly aujourdhui: string;
+  /** T13l : des saisies s'écrivent encore : « Enregistrer » attend, inactif. */
+  readonly occupe: boolean;
   readonly surEnregistrer: (date: string) => void;
   readonly surFermer: () => void;
 }
 
-function ChangerDate({ entree, aujourdhui, surEnregistrer, surFermer }: ProprietesChangerDate) {
+function ChangerDate({ entree, aujourdhui, occupe, surEnregistrer, surFermer }: ProprietesChangerDate) {
   const [date, setDate] = useState(entree.evenement.date);
   const idChamp = useId();
   const champ = useRef<HTMLInputElement>(null);
@@ -366,9 +379,9 @@ function ChangerDate({ entree, aujourdhui, surEnregistrer, surFermer }: Propriet
         <button
           type="button"
           className="auj-bouton-principal"
-          disabled={!valide}
+          disabled={!valide || occupe}
           onClick={() => {
-            if (!valide) return;
+            if (!valide || occupe) return;
             if (date === entree.evenement.date) surFermer();
             else surEnregistrer(date);
           }}
@@ -397,6 +410,20 @@ function evenementEcrit(id: string, culture: Culture, date: string, detail: Even
     remplaceEvenementId: null,
     detail,
   };
+}
+
+/** Ce que dit le bandeau « Annuler » d'un « Fait » (étape ou travail prévu) ; null : rien à écrire. */
+function bandeauFait(t: TacheJour): { readonly titre: string; readonly texte: string } | null {
+  const tache = t.tache;
+  if (tache.etape === 'debut_recolte') return null;
+  return { titre: `Fait · ${tache.etape === 'travail' ? capitale(tache.travail.type) : ETAPES_FAITES[tache.etape]}`, texte: nomCulture(t.culture) };
+}
+
+/** « Fait » écrit : l'événement et ce qu'en dit le bandeau. */
+interface FaitEcrit {
+  readonly evenement: EvenementLu;
+  readonly titre: string;
+  readonly texte: string;
 }
 
 /*
@@ -492,6 +519,11 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
   /** T13d : « Fait » touché sur l'instantané et rien écrit (tâche faite ailleurs, ou changée) : dit pourquoi. */
   const [avis, setAvis] = useState<string | null>(null);
   const [annulable, setAnnulable] = useState<Annulable | null>(null);
+  /** T13l : des écritures tournent (file non vide) : « Enregistrer » et « Valider » attendent. */
+  const [occupe, setOccupe] = useState(false);
+  /** T13l : saisies dont l'annulation est en file ou écrite : une seule annulation par saisie. */
+  const annulations = useRef(new Set<string>());
+  const [enAnnulation, setEnAnnulation] = useState<ReadonlySet<string>>(() => new Set());
   const [dialogue, setDialogue] = useState<Dialogue>(null);
   const [toutVoir, setToutVoir] = useState(false);
   /**
@@ -517,9 +549,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
     setFocusSaisie(null);
   }, []);
   /**
-   * Écritures en cours ou en file (T13g). Une à la fois, dans l'ordre : les « Fait » tapés
-   * pendant une écriture (ou la lecture ciblée qui la précède) attendent leur tour ; tout autre
-   * geste d'écriture pendant ce temps est ignoré (un double appui n'écrit pas deux fois).
+   * Écritures en cours ou en file (T13g). Une à la fois, dans l'ordre : les « Fait » et les
+   * « Annuler » (T13l) tapés pendant une écriture (ou la lecture ciblée qui la précède) attendent
+   * leur tour ; « Enregistrer » et « Valider » sont inactifs pendant ce temps (`occupe`).
    */
   const ecritures = useRef(0);
   const file = useRef<Promise<unknown>>(Promise.resolve());
@@ -575,16 +607,18 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
     };
   }, [journee, masquees, utilisateurId, fermeId, stockage]);
 
-  // « Annuler » : 10 s après la saisie, puis l'historique.
+  // « Annuler » : 10 s après l'écriture de la saisie (T13l : pas pendant son attente en file), puis
+  // l'historique.
+  const decompte = annulable !== null && annulable.evenement !== null ? annulable.numero : null;
   useEffect(() => {
-    if (annulable === null) return undefined;
+    if (decompte === null) return undefined;
     const minuterie = setTimeout(() => {
-      setAnnulable((a) => (a?.numero === annulable.numero ? null : a));
+      setAnnulable((a) => (a?.numero === decompte ? null : a));
     }, DELAI_ANNULATION_MS);
     return () => {
       clearTimeout(minuterie);
     };
-  }, [annulable]);
+  }, [decompte]);
 
   /** Contexte d'une écriture, au jour du téléphone à l'instant de l'écriture. */
   const contexte = (): ContexteEcriture => {
@@ -594,9 +628,10 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
   };
 
   /**
-   * Écrit `action` à son tour (T13g). `enFile` : « Fait », qui attend la fin des écritures en cours ;
-   * sinon, ignoré s'il y en a une (rend false). Les messages sont effacés au premier geste d'une
-   * série, jamais par une écriture en file : un refus (« déjà ») reste lisible jusqu'au bout.
+   * Écrit `action` à son tour (T13g). `enFile` : « Fait » et « Annuler », qui attendent la fin des
+   * écritures en cours ; sinon (récolte, date : boutons inactifs tant que `occupe`), filet contre
+   * un double appui, ignoré s'il y en a une (rend false). Les messages sont effacés au premier
+   * geste d'une série, jamais par une écriture en file : un refus (« déjà ») reste lisible.
    */
   const ecrire = useCallback((action: () => Promise<void>, enFile = false): Promise<boolean> => {
     if (ecritures.current > 0 && !enFile) return Promise.resolve(false);
@@ -604,6 +639,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
       setErreur(null);
       setAvis(null);
       setFocusSaisie(null);
+      setOccupe(true);
     }
     ecritures.current++;
     const tour = file.current.then(async () => {
@@ -616,15 +652,25 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
         return false;
       } finally {
         ecritures.current--;
+        if (ecritures.current === 0) setOccupe(false);
       }
     });
     file.current = tour;
     return tour;
   }, []);
 
-  function montrerAnnulable(evenement: EvenementLu, culture: Culture, titre: string, texte: string): void {
+  /** Montre le bandeau « Annuler » ; `ecrite` : l'événement, attendu s'il est en file (T13l). Rend son numéro. */
+  function montrerAnnulable(evenement: EvenementLu | null, ecrite: Promise<EvenementLu | null>, titre: string, texte: string): number {
     numero.current++;
-    setAnnulable({ evenement, culture, titre, texte, numero: numero.current });
+    setAnnulable({ evenement, ecrite, demandee: false, titre, texte, numero: numero.current });
+    return numero.current;
+  }
+
+  /** Note (ou retire, après un échec) l'annulation de `id` : son « Annuler » est inactif. */
+  function noterAnnulation(id: string, enCours: boolean): void {
+    if (enCours) annulations.current.add(id);
+    else annulations.current.delete(id);
+    setEnAnnulation(new Set(annulations.current));
   }
 
   /** Pose ou retire le masque de `cle` (dans le cache : l'écran peut être quitté entre temps). */
@@ -637,34 +683,35 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
   }
 
   /**
-   * Écrit le « Fait » de la tâche `t` (étape ou travail prévu, T22) et montre le bandeau. T13h :
-   * déjà noté (autre onglet, autre source, pas encore relu ici) → rien d'écrit, la tâche reste
-   * masquée, un avis le dit, sans bandeau « Annuler » ni erreur.
+   * Écrit le « Fait » de la tâche `t` (étape ou travail prévu, T22) ; rend ce qu'en dit le bandeau.
+   * T13h : déjà noté (autre onglet, autre source, pas encore relu ici) → rien d'écrit (null), la
+   * tâche reste masquée, un avis le dit, sans bandeau « Annuler » ni erreur.
    */
-  async function ecrireFait(t: TacheJour): Promise<void> {
+  async function ecrireFait(t: TacheJour): Promise<FaitEcrit | null> {
     try {
-      await ecrireFaitSansAvis(t);
+      return await ecrireFaitSansAvis(t);
     } catch (e) {
       if (!(e instanceof DejaFait)) throw e;
       setAvis('Déjà notée : rien de plus n’est enregistré.');
+      return null;
     }
   }
 
-  async function ecrireFaitSansAvis(t: TacheJour): Promise<void> {
+  async function ecrireFaitSansAvis(t: TacheJour): Promise<FaitEcrit | null> {
     const tache = t.tache;
+    const bandeau = bandeauFait(t);
+    if (tache.etape === 'debut_recolte' || bandeau === null) return null;
     const ctx = contexte();
     if (tache.etape === 'travail') {
       const travail = tache.travail;
       const id = await marquerTravailFait(ctx, t.culture, travail, tache.datePrevue);
       const detail = { type: 'intervention' as const, categorie: travail.categorie, libelle: travail.type };
-      montrerAnnulable(evenementEcrit(id, t.culture, ctx.aujourdhui, detail), t.culture, `Fait · ${capitale(travail.type)}`, nomCulture(t.culture));
-      return;
+      return { evenement: evenementEcrit(id, t.culture, ctx.aujourdhui, detail), ...bandeau };
     }
-    if (tache.etape === 'debut_recolte') return;
     const etape = tache.etape;
     const id = await marquerFait(ctx, t.culture, etape);
     const detail = { type: 'realise' as const, etape: etape satisfies EtapeRealisee, quantiteReelle: null };
-    montrerAnnulable(evenementEcrit(id, t.culture, ctx.aujourdhui, detail), t.culture, `Fait · ${ETAPES_FAITES[etape]}`, nomCulture(t.culture));
+    return { evenement: evenementEcrit(id, t.culture, ctx.aujourdhui, detail), ...bandeau };
   }
 
   /**
@@ -673,21 +720,26 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
    * dans la base (`lireTacheCiblee`) donne ce qu'écrirait la journée relue (emplacements relus,
    * B2) ; si la tâche n'y est plus (faite ailleurs entre temps), rien n'est écrit. T13g : tapé
    * pendant une autre écriture, il passe en file ; la lecture ciblée et la vérification « déjà
-   * fait » se font à son tour, après les écritures d'avant.
+   * fait » se font à son tour, après les écritures d'avant. T13l : le bandeau « Annuler » paraît
+   * dès le tap (sur l'instantané, avec le titre de la carte, précisé une fois écrit) ; rien
+   * d'écrit, il s'en va.
    */
   function surFait(cle: string): void {
     if (porte === null || estMasquee(cle)) return;
     let tache: () => Promise<TacheJour | null>;
+    let provisoire: { readonly titre: string; readonly texte: string } | null;
     /** Lecture ciblée : la tâche a changé, la carte revient (pas de masque). */
     let changee = false;
     if (journee !== null) {
       const t = journee.taches.find((x) => x.cle === cle);
       if (t === undefined || t.tache.etape === 'debut_recolte') return;
       tache = () => Promise.resolve(t);
+      provisoire = bandeauFait(t);
     } else {
       const carte = surInstantane ? instantane.taches.find((c) => c.cle === cle) : undefined;
       if (carte === undefined || carte.peser) return;
       const affichee = carte.action;
+      provisoire = { titre: 'Fait', texte: carte.titre };
       tache = async () => {
         const t = await lireTacheCiblee(porte, fermeId, jourCourant(), cle);
         if (t === null) {
@@ -705,9 +757,22 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
       };
     }
     masquer(cle, 'attente');
+    let rendre: (e: EvenementLu | null) => void = () => undefined;
+    const ecrite = new Promise<EvenementLu | null>((r) => {
+      rendre = r;
+    });
+    const n = provisoire === null ? null : montrerAnnulable(null, ecrite, provisoire.titre, provisoire.texte);
     void ecrire(async () => {
-      const t = await tache();
-      if (t !== null) await ecrireFait(t);
+      let fait: FaitEcrit | null = null;
+      try {
+        const t = await tache();
+        if (t !== null) fait = await ecrireFait(t);
+      } finally {
+        // Avant le tour de l'annulation éventuelle, rangée derrière dans la file.
+        rendre(fait?.evenement ?? null);
+        const f = fait;
+        setAnnulable((a) => (a?.numero !== n ? a : f === null ? null : { ...a, ...f }));
+      }
     }, true).then((ok) => {
       masquer(cle, ok && !changee ? marquerEcriture() : undefined);
     });
@@ -719,17 +784,42 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
       const id = await noterRecolte(ctx, culture, quantite, unite);
       setDialogue(null);
       const detail = { type: 'recolte' as const, quantite, unite, categorie: null };
-      montrerAnnulable(evenementEcrit(id, culture, ctx.aujourdhui, detail), culture, 'Récolte notée', `${nomCulture(culture)} · ${quantiteAvecUnite(quantite, unite)}`);
+      const ev = evenementEcrit(id, culture, ctx.aujourdhui, detail);
+      montrerAnnulable(ev, Promise.resolve(ev), 'Récolte notée', `${nomCulture(culture)} · ${quantiteAvecUnite(quantite, unite)}`);
     });
   }
 
-  function annuler(evenement: EvenementLu): void {
+  /**
+   * « Annuler » (T13l) : passe dans la file, derrière la saisie qu'il annule (`evenement` : connu,
+   * ou attendu tant qu'elle est en file). Une seule annulation par saisie ; rien d'écrit pour elle
+   * (refusée, déjà notée), rien à annuler. `bandeau` : numéro du bandeau d'où il vient.
+   */
+  function annuler(evenement: EvenementLu | Promise<EvenementLu | null>, bandeau: number | null): void {
+    let vise: string | null = null;
+    if (!(evenement instanceof Promise)) {
+      if (annulations.current.has(evenement.id)) return;
+      vise = evenement.id;
+      noterAnnulation(vise, true);
+    }
+    if (bandeau !== null) setAnnulable((a) => (a?.numero === bandeau ? { ...a, demandee: true } : a));
     void ecrire(async () => {
-      await annulerSaisie(contexte(), evenement);
-      setAnnulable((a) => (a?.evenement.id === evenement.id ? null : a));
+      const ev = await evenement;
+      if (ev === null) return;
+      if (vise === null) {
+        if (annulations.current.has(ev.id)) return;
+        vise = ev.id;
+        noterAnnulation(vise, true);
+      }
+      await annulerSaisie(contexte(), ev);
+      setAnnulable((a) => (a?.evenement?.id === ev.id ? null : a));
       // Aucun masque n'est retiré (T13f) : l'annulation provoque une relecture de sa culture, plus
       // récente que les masques, qui fait revenir la tâche annulée ; les autres tâches masquées
       // tiennent tant que leur culture n'a pas été relue.
+    }, true).then((ok) => {
+      if (ok) return;
+      // Échec : l'erreur est dite, « Annuler » redevient possible.
+      if (vise !== null) noterAnnulation(vise, false);
+      if (bandeau !== null) setAnnulable((a) => (a?.numero === bandeau ? { ...a, demandee: false } : a));
     });
   }
 
@@ -879,8 +969,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
           focus={focusSaisie !== null && focusSaisie.avant !== journee ? focusSaisie.evenementId : null}
           surFocusPlace={oublierFocus}
           aujourdhui={jour}
+          enAnnulation={enAnnulation}
           surAnnuler={(h) => {
-            annuler(h.evenement);
+            annuler(h.evenement, null);
           }}
           surChangerDate={(h) => {
             setFocusSaisie(null);
@@ -901,13 +992,15 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
           <button
             type="button"
             className="auj-bandeau-annuler"
+            disabled={annulable.demandee}
             onClick={() => {
-              annuler(annulable.evenement);
+              if (!annulable.demandee) annuler(annulable.evenement ?? annulable.ecrite, annulable.numero);
             }}
           >
             Annuler
           </button>
-          <span aria-hidden="true" className="auj-bandeau-temps" />
+          {/* Le compte à rebours part quand la saisie est écrite (T13l). */}
+          {annulable.evenement !== null && <span aria-hidden="true" className="auj-bandeau-temps" />}
         </div>
       )}
 
@@ -917,6 +1010,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
           culture={cultureDialogue}
           recoltesEnCours={journee?.recoltesEnCours ?? []}
           enAttente={journee === null}
+          occupe={occupe}
           dernieres={journee?.dernieresRecoltes ?? new Map()}
           erreur={erreur}
           surValider={surValiderRecolte}
@@ -929,6 +1023,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
         <ChangerDate
           entree={dialogue.entree}
           aujourdhui={dialogue.max}
+          occupe={occupe}
           surEnregistrer={(date) => {
             surChangerDate(dialogue.entree, date);
           }}
