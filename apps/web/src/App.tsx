@@ -14,7 +14,7 @@
  * PowerSync s'il y a une base à ouvrir), la garde ouverte pour les écrans et la ferme à la
  * déconnexion, avant l'effacement. Les écrans reçoivent la ferme par ContexteFerme.
  */
-import { useContext, useEffect, useMemo, useRef, useState, type ComponentType, type ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { lireSession, stockageNavigateur, surveillerSession, type SessionConnexion } from './connexion/session.ts';
 import './connexion/connexion.css';
 import { ContexteFerme } from './donnees/contexte.ts';
@@ -104,22 +104,16 @@ const BIENTOT: Readonly<Record<Exclude<Onglet, 'ferme' | 'planches' | 'aujourdhu
  * Onglet d'un écran de la ferme (Aujourd'hui, Planches) sans ferme ouverte : ce qui se passe, dit
  * franchement. `sans-ferme` : ce que l'onglet montrera.
  */
-function attente(base: EtatDonnees['base'], montrera: string): string {
-  return base === 'sans-ferme'
-    ? `Aucune ferme sur ce téléphone pour l’instant : ${montrera} après la première synchronisation.`
-    : base === 'echec'
-      ? 'Les données de ce téléphone n’ont pas pu s’ouvrir. Rechargez l’appli ; si cela recommence, signalez-le.'
-      : 'Ouverture des données de ce téléphone…';
-}
-
-/**
- * Un écran chargé à la demande sur la ferme du contexte (fournie par la coquille) : `ecran` le
- * dessine sur la ferme ouverte.
- */
-function OngletFerme({ base, ecran, montrera }: { readonly base: EtatDonnees['base']; readonly ecran: (f: FermeOuverte) => ReactElement; readonly montrera: string }) {
-  const ouverte = useContext(ContexteFerme);
-  if (ouverte === null) return <p className="attente">{attente(base, montrera)}</p>;
-  return ecran(ouverte);
+function Attente({ base, montrera }: { readonly base: EtatDonnees['base']; readonly montrera: string }) {
+  return (
+    <p className="attente">
+      {base === 'sans-ferme'
+        ? `Aucune ferme sur ce téléphone pour l’instant : ${montrera} après la première synchronisation.`
+        : base === 'echec'
+          ? 'Les données de ce téléphone n’ont pas pu s’ouvrir. Rechargez l’appli ; si cela recommence, signalez-le.'
+          : 'Ouverture des données de ce téléphone…'}
+    </p>
+  );
 }
 
 /**
@@ -349,14 +343,20 @@ export function App() {
           {onglet === 'ferme' ? (
             <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} sansDeconnexion={demo} etatBase={donnees.base} />
           ) : onglet === 'planches' ? (
-            <OngletFerme base={donnees.base} ecran={(f) => <planches.Composant key={f.fermeId} porte={f.porte} fermeId={f.fermeId} />} montrera="le plan s’affichera" />
+            donnees.ferme === null ? (
+              <Attente base={donnees.base} montrera="le plan s’affichera" />
+            ) : (
+              <planches.Composant key={donnees.ferme.fermeId} porte={donnees.ferme.porte} fermeId={donnees.ferme.fermeId} />
+            )
           ) : onglet === 'aujourdhui' ? (
-            <OngletFerme
-              base={donnees.base}
-              // T13d : l'utilisateur de la session, pour l'instantané de la journée.
-              ecran={(f) => <aujourdhui.Composant key={f.fermeId} porte={f.porte} fermeId={f.fermeId} utilisateurId={session.utilisateurId} />}
-              montrera="les tâches du jour s’afficheront"
-            />
+            // T13g : dessiné dès l'ouverture de la base, sans attendre la ferme : l'écran montre en
+            // lecture seule l'instantané de la dernière ferme montrée (ecrans/aujourdhui/), puis
+            // reçoit la porte. T13d : l'utilisateur de la session, pour l'instantané.
+            donnees.ferme !== null || donnees.base === 'ouverture' ? (
+              <aujourdhui.Composant porte={donnees.ferme?.porte ?? null} fermeId={donnees.ferme?.fermeId ?? null} utilisateurId={session.utilisateurId} />
+            ) : (
+              <Attente base={donnees.base} montrera="les tâches du jour s’afficheront" />
+            )
           ) : (
             <p className="attente">{BIENTOT[onglet]}</p>
           )}

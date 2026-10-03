@@ -31,7 +31,18 @@ import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, repeterMe
  *   - temps d'ouverture de la base (data-base="prete") à chaque lancement : relevé, non bloquant.
  *   - relecture après une saisie « Fait » (T13c, BLOQUANT) : de l'appui à la saisie en tête de
  *     l'historique, en moins de 500 ms, médiane de 5 saisies sur 5 tâches différentes. Mesurée
- *     à ≈ 884 ms (une seule saisie, non bloquante) à la fin de T13b.
+ *     à ≈ 884 ms (une seule saisie, non bloquante) à la fin de T13b. *   - T13g, lancement à froid hors ligne AVEC instantané (BLOQUANT) : tâches affichées (marque de
+ *     l'écran) moins de 600 ms après le début de la navigation, médiane de 5 ; et à CHAQUE
+ *     lancement, l'instantané est dessiné AVANT que la base soit prête (première carte vue
+ *     pendant que la coquille n'est pas à data-base="prete"), en lecture seule (aucun bouton
+ *     de carte ni de l'historique actif tant que la base n'est pas prête : disabled ou
+ *     aria-disabled="true"), puis « Marquer fait » actif une fois la base prête. Mesure ajoutée
+ *     à côté de celle de T13d (1 s), qui reste telle quelle.
+ *   - T13g, isolement entre fermes (BLOQUANT) : un instantané rangé pour une autre ferme que la
+ *     dernière choisie (même utilisateur, même jour) n'est jamais dessiné, ni avant la base ni
+ *     après. Banc : l'instantané gardé (contrat T13d : texte JSON portant utilisateurId, fermeId,
+ *     jour) est retrouvé dans localStorage et sa ferme remplacée par une autre ; la dernière
+ *     ferme choisie, mémorisée par l'appli, reste celle de la grande ferme.
  */
 
 const BUDGET_TAP_MS = 300;
@@ -42,6 +53,10 @@ const BUDGET_FROID_MS = 1_000;
  * différée possible : requestIdleCallback, minuterie). Le contrat ne fixe pas le moment exact.
  */
 const DELAI_ECRITURE_INSTANTANE_MS = 1_500;
+/** T13g : lancement à froid avec instantané, affiché avant l'ouverture de la base (bloquant). */
+const BUDGET_FROID_AVANT_BASE_MS = 600;
+/** T13g : une ferme qui n'est pas celle de la grande ferme (instantané d'une autre ferme). */
+const AUTRE_FERME = '0192f0c1-13d9-7000-8000-00000000f0f0';
 /** T13c : relecture après une saisie « Fait ». */
 const BUDGET_RELECTURE_MS = 500;
 const DELAI_AMORCAGE_MS = 240_000;
@@ -114,6 +129,79 @@ async function lancementAFroid(page: Page): Promise<TempsLancement> {
   await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 30_000 });
   const baseMs = await page.evaluate(() => (window as unknown as { __basePrete?: number }).__basePrete ?? Number.NaN);
   return { ecran: ecranMs, base: baseMs };
+}
+
+/** T13g : ce qu'a vu la page avant que la base soit prête (window.__avantBase). */
+interface AvantBase {
+  /** performance.now() de la première carte de tâche dessinée, si elle l'a été avant la base. */
+  readonly premiereTache?: number;
+  /** data-base de la coquille au moment de la première carte (null : pas de coquille). */
+  readonly baseALaPremiereTache?: string | null;
+  /** Textes des boutons trouvés actifs (cartes, historique) avant la base prête. */
+  readonly boutonsActifs: readonly string[];
+}
+
+/**
+ * T13g : relève, à chaque chargement, ce qui est dessiné AVANT que la coquille passe à
+ * data-base="prete" : première carte de tâche (moment, état de la base) et tout bouton de carte
+ * ou de l'historique actif (ni disabled, ni aria-disabled="true"). L'observateur s'arrête dès la
+ * base prête : rien n'est observé pendant les mesures suivantes.
+ */
+async function releverAvantBase(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const f = window as unknown as { __avantBase?: { premiereTache?: number; baseALaPremiereTache?: string | null; boutonsActifs: string[] } };
+    const releve: { premiereTache?: number; baseALaPremiereTache?: string | null; boutonsActifs: string[] } = { boutonsActifs: [] };
+    f.__avantBase = releve;
+    const observateur = new MutationObserver(() => {
+      const etat = document.querySelector('[data-testid="app"]')?.getAttribute('data-base') ?? null;
+      if (etat === 'prete') {
+        observateur.disconnect();
+        return;
+      }
+      if (releve.premiereTache === undefined && document.querySelector('[data-testid="tache"]') !== null) {
+        releve.premiereTache = performance.now();
+        releve.baseALaPremiereTache = etat;
+      }
+      for (const b of document.querySelectorAll<HTMLButtonElement>('[data-testid="tache"] button, [data-testid="saisie-historique"] button')) {
+        if (!b.disabled && b.getAttribute('aria-disabled') !== 'true') {
+          const nom = (b.getAttribute('aria-label') ?? b.textContent).trim();
+          if (!releve.boutonsActifs.includes(nom)) releve.boutonsActifs.push(nom);
+        }
+      }
+    });
+    observateur.observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-base', 'disabled', 'aria-disabled'] });
+  });
+}
+
+const lireAvantBase = (page: Page): Promise<AvantBase> =>
+  page.evaluate(() => (window as unknown as { __avantBase?: AvantBase }).__avantBase ?? { boutonsActifs: [] });
+
+/**
+ * T13g : remplace la ferme de l'instantané gardé (contrat T13d : texte JSON portant
+ * utilisateurId, fermeId, jour ; clé libre) par `autre`. Rend le nombre d'instantanés modifiés.
+ */
+async function deplacerInstantane(page: Page, attendu: { readonly utilisateurId: string; readonly fermeId: string }, autre: string): Promise<number> {
+  return page.evaluate(
+    ([cleSession, utilisateurId, fermeId, autreFerme]) => {
+      let n = 0;
+      for (const cle of Object.keys(localStorage)) {
+        if (cle === cleSession) continue;
+        let valeur: unknown;
+        try {
+          valeur = JSON.parse(localStorage.getItem(cle) ?? '');
+        } catch {
+          continue;
+        }
+        if (typeof valeur !== 'object' || valeur === null || Array.isArray(valeur)) continue;
+        const o = valeur as Record<string, unknown>;
+        if (o.utilisateurId !== utilisateurId || o.fermeId !== fermeId || typeof o.version !== 'number') continue;
+        localStorage.setItem(cle, JSON.stringify({ ...o, fermeId: autreFerme }));
+        n++;
+      }
+      return n;
+    },
+    [CLE_SESSION, attendu.utilisateurId, attendu.fermeId, autre] as const,
+  );
 }
 
 /** Vide le stockage du navigateur (localStorage), sauf la session : plus d'instantané. */
@@ -223,6 +311,48 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
     console.log(decrireSerie('Aujourd’hui (grande ferme), lancement à froid hors ligne, avec instantané', series.ecran, BUDGET_FROID_MS));
     console.log(`${decrireSerie('Grande ferme, ouverture de la base (data-base="prete"), avec instantané', series.base, BUDGET_FROID_MS)} : non bloquant`);
     expect(series.ecran.mediane).toBeLessThan(BUDGET_FROID_MS);
+  });
+
+  await test.step(`T13g : lancement à froid hors ligne AVEC instantané, CPU ×4 : affiché AVANT la base, en lecture seule, en moins de ${String(BUDGET_FROID_AVANT_BASE_MS)} ms, médiane de 5`, async () => {
+    await releverAvantBase(page);
+    const vus: AvantBase[] = [];
+    const series = await repeterMesures(REPETITIONS_MESURE, async () => {
+      const t = await lancementAFroid(page);
+      vus.push(await lireAvantBase(page));
+      // Base prête : les boutons de l'instantané (ou de la journée relue) deviennent actifs.
+      await expect(ecran(page).getByRole('button', { name: /^Marquer fait/ }).first()).toBeEnabled();
+      await page.waitForTimeout(DELAI_ECRITURE_INSTANTANE_MS);
+      return t;
+    });
+    console.log(decrireSerie('T13g, Aujourd’hui (grande ferme), lancement à froid hors ligne, avec instantané', series.ecran, BUDGET_FROID_AVANT_BASE_MS));
+    console.log(`${decrireSerie('T13g, grande ferme, ouverture de la base (data-base="prete"), avec instantané', series.base, BUDGET_FROID_MS)} : non bloquant`);
+    console.log(
+      `T13g, première carte vue avant la base prête : ${vus.map((v) => (v.premiereTache === undefined ? 'aucune' : `${v.premiereTache.toFixed(0)} ms (base « ${String(v.baseALaPremiereTache)} »)`)).join(', ')}`,
+    );
+    // Assertions souples : toutes sont rapportées, et les étapes suivantes (isolement, tap,
+    // relecture) tournent quand même ; le test échoue si l'une d'elles échoue.
+    vus.forEach((v, i) => {
+      const n = `lancement ${String(i + 1)}`;
+      expect.soft(v.premiereTache, `${n} : instantané dessiné avant que la base soit prête (aucune carte vue avant data-base="prete")`).toBeDefined();
+      expect.soft(v.baseALaPremiereTache, `${n} : base pas encore prête quand la première carte est dessinée`).not.toBe('prete');
+      expect.soft(v.boutonsActifs, `${n} : instantané en lecture seule, aucun bouton de carte ni de l’historique actif avant la base prête`).toEqual([]);
+    });
+    expect.soft(series.ecran.mediane, `médiane sous ${String(BUDGET_FROID_AVANT_BASE_MS)} ms`).toBeLessThan(BUDGET_FROID_AVANT_BASE_MS);
+  });
+
+  await test.step('T13g : un instantané d’une autre ferme que la dernière choisie n’est jamais dessiné', async () => {
+    await expect(taches(page).first()).toBeVisible();
+    const modifies = await deplacerInstantane(page, ferme, AUTRE_FERME);
+    expect(modifies, 'instantané gardé retrouvé dans localStorage (contrat T13d : JSON avec version, utilisateurId, fermeId)').toBeGreaterThan(0);
+    // Dès la page chargée, toute carte de l'autre ferme serait vue : relevé en continu jusqu'à la journée relue.
+    await page.reload();
+    await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 30_000 });
+    const vu = await lireAvantBase(page);
+    expect(vu.premiereTache, 'aucune carte avant la base : l’instantané est d’une autre ferme que la dernière choisie').toBeUndefined();
+    // Après la base, seule la journée relue de la grande ferme est dessinée, puis gardée.
+    await expect(taches(page).first()).toBeVisible({ timeout: 30_000 });
+    await page.waitForTimeout(DELAI_ECRITURE_INSTANTANE_MS);
+    expect(await deplacerInstantane(page, { utilisateurId: ferme.utilisateurId, fermeId: AUTRE_FERME }, AUTRE_FERME), 'l’instantané de l’autre ferme a été remplacé').toBe(0);
   });
 
   await test.step(`tap sur « Aujourd’hui » depuis Planches : écran affiché en moins de ${String(BUDGET_TAP_MS)} ms (base ouverte), médiane de 5`, async () => {

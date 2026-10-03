@@ -3,10 +3,19 @@
  * montrent les données. Contrat : en-tête de ferme-active.test.ts.
  *
  * Chargé à la demande avec l'ouverture de la base (il importe @planif/sync), jamais au démarrage.
- * Le choix mémorisé est rangé par utilisateur : deux comptes sur un téléphone ne se mélangent pas.
+ * Le choix mémorisé (./ferme-memorisee.ts) est rangé par utilisateur : deux comptes sur un téléphone
+ * ne se mélangent pas.
+ *
+ * T13g : la ferme active est notée comme « dernière ferme montrée » à chaque fois qu'elle est
+ * connue (aucune ferme : vidée), sous une clé à part : le choix de l'utilisateur n'est pas touché. Au lancement suivant, avant l'ouverture de la base, l'écran Aujourd'hui ne montre
+ * l'instantané de la journée que s'il est de cette ferme : jamais celui d'une ferme que la base
+ * n'a plus désignée comme active (adhésion retirée, autre ferme choisie).
  */
 import type { Id } from '@planif/core';
 import { creerPorte, type BaseLocale, type PorteDonnees } from '@planif/sync';
+import { lireFermeMemorisee, memoriserFerme, noterFermeMontree } from './ferme-memorisee.ts';
+
+export { lireFermeMemorisee, memoriserFerme };
 
 export interface FermeDisponible {
   readonly id: string;
@@ -43,27 +52,6 @@ export function choisirFermeActive(fermes: readonly FermeDisponible[], memorisee
   return fermes[0]?.id ?? null;
 }
 
-const cleMemoire = (utilisateurId: string) => `planif.ferme-active.${utilisateurId}`;
-
-/** Ferme choisie par cet utilisateur sur ce téléphone ; null si aucune ou stockage indisponible. */
-export function lireFermeMemorisee(stockage: Pick<Storage, 'getItem'>, utilisateurId: string): string | null {
-  try {
-    const valeur = stockage.getItem(cleMemoire(utilisateurId));
-    return valeur === null || valeur === '' ? null : valeur;
-  } catch {
-    return null;
-  }
-}
-
-/** Retient le choix ; un stockage indisponible (navigation privée, quota) est ignoré. */
-export function memoriserFerme(stockage: Pick<Storage, 'setItem'>, utilisateurId: string, fermeId: string): void {
-  try {
-    stockage.setItem(cleMemoire(utilisateurId), fermeId);
-  } catch {
-    // Le choix ne sera pas retenu : la première ferme sera reprise au prochain démarrage.
-  }
-}
-
 /**
  * Suit la ferme active : `rappel` dès qu'elle est connue, puis à chaque changement des tables
  * `membre` et `ferme` (écriture locale ou synchro). Pas de second rappel pour la même ferme.
@@ -90,6 +78,8 @@ export function suivreFermeActive(
     const cle = fermeId ?? '';
     if (cle === signalee) return;
     signalee = cle;
+    // T13g : la ferme montrée, à part du choix de l'utilisateur (qui reste intact) ; '' : aucune.
+    noterFermeMontree(o.stockage, o.utilisateurId, cle);
     rappel(
       fermeId === null
         ? { etat: 'sans-ferme' }

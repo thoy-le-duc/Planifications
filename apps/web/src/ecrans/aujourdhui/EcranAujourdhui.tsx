@@ -10,10 +10,18 @@
  * T13d : au lancement, l'instantané de la dernière journée dessinée (./instantane.ts) s'affiche
  * tout de suite, puis la journée relue le remplace et devient le nouvel instantané. Rien n'est
  * écrit depuis l'instantané : « Fait » y passe par une lecture ciblée de la tâche dans la base.
+ *
+ * T13g : l'instantané s'affiche AVANT l'ouverture de la base (porte encore absente), en lecture
+ * seule (boutons des cartes inactifs), s'il est de la dernière ferme montrée à cet utilisateur,
+ * notée par la ferme active (src/donnees/ferme-memorisee.ts). La ferme connue, l'écran reste le
+ * même si c'est celle-là, sinon il repart de zéro sur la vraie ferme (l'instantané de l'autre n'est plus montré). Les
+ * « Fait » tapés à la suite passent en file : chacun masqué au tap, écrit dans l'ordre, chacun
+ * avec sa vérification.
  */
 import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
+import { lireFermeMontree } from '../../donnees/ferme-memorisee.ts';
 import './aujourdhui.css';
 import { changerMasques, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, suivreJournee, suivreMasques, type Masques } from './cache.ts';
 import {
@@ -37,8 +45,13 @@ import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
 import { libelleEvenement, vueCarte, vuesHistorique, type CarteVue, type SaisieVue } from './vues.ts';
 
 export interface ProprietesEcranAujourdhui {
-  readonly porte: PorteDonnees;
-  readonly fermeId: string;
+  /**
+   * T13g : null tant que la base s'ouvre ; l'écran montre alors, en lecture seule, l'instantané
+   * de la dernière ferme montrée (avec `utilisateurId`), ou dit que la base s'ouvre.
+   */
+  readonly porte: PorteDonnees | null;
+  /** Ferme ouverte ; null tant que la base s'ouvre. */
+  readonly fermeId: string | null;
   /** Jour du téléphone, 'AAAA-MM-JJ' ; par défaut celui de l'horloge du téléphone. */
   readonly aujourdhui?: () => string;
   /** T13d : utilisateur connecté (session) ; sans lui, aucun instantané n'est lu ni gardé. */
@@ -109,6 +122,8 @@ function texteRetard(jours: number): string {
 
 interface ProprietesCarte {
   readonly carte: CarteVue;
+  /** T13g : base pas encore ouverte, rien ne peut s'écrire : boutons inactifs. */
+  readonly inactive: boolean;
   readonly surFait: (cle: string) => void;
   readonly surPeser: (cle: string) => void;
 }
@@ -123,7 +138,7 @@ function IconeHorloge() {
   );
 }
 
-function CarteTache({ carte: c, surFait, surPeser }: ProprietesCarte) {
+function CarteTache({ carte: c, inactive, surFait, surPeser }: ProprietesCarte) {
   return (
     <li data-testid="tache" data-cle={c.cle} data-retard={c.retard ? 'oui' : 'non'} className={c.travail ? 'auj-tache auj-tache-travail' : 'auj-tache'}>
       <span data-testid="bande-famille" aria-hidden="true" className={`auj-bande auj-bande-${c.bande}`} />
@@ -151,6 +166,7 @@ function CarteTache({ carte: c, surFait, surPeser }: ProprietesCarte) {
           type="button"
           aria-label={c.action}
           className="auj-action auj-action-peser"
+          disabled={inactive}
           onClick={() => {
             surPeser(c.cle);
           }}
@@ -163,6 +179,7 @@ function CarteTache({ carte: c, surFait, surPeser }: ProprietesCarte) {
           type="button"
           aria-label={c.action}
           className="auj-action auj-action-fait"
+          disabled={inactive}
           onClick={() => {
             surFait(c.cle);
           }}
@@ -426,15 +443,47 @@ function vueDeInstantane(instantane: VueJournee, masquees: Masques): VueJournee 
 /** Délai avant de garder l'instantané d'une journée relue : les relectures en rafale n'en gardent qu'un. */
 const DELAI_INSTANTANE_MS = 300;
 
-export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage: stockageDonne }: ProprietesEcranAujourdhui) {
+const AUCUN_MASQUE: Masques = new Map();
+const sansMasques = () => () => undefined;
+
+/** Ce qu'on dit tant que la base s'ouvre et qu'aucun instantané n'est à montrer. */
+function Ouverture() {
+  return (
+    <div data-testid="aujourdhui" className="auj">
+      <p className="attente">Ouverture des données de ce téléphone…</p>
+    </div>
+  );
+}
+
+/**
+ * T13g : l'écran sur la ferme ouverte ; tant que la base s'ouvre (`porte` null), sur la dernière
+ * ferme montrée à cet utilisateur sur ce téléphone (sans elle, rien n'est montré). Un écran par
+ * utilisateur et par ferme (`key`) : ni masques ni instantané ne passent de l'une à l'autre.
+ */
+export function EcranAujourdhui(p: ProprietesEcranAujourdhui) {
+  const { porte, utilisateurId } = p;
+  // T13d : où l'instantané est gardé ; sans utilisateur, aucun instantané n'est lu ni gardé.
+  const [stockageDonne] = useState(() => p.stockage ?? stockageParDefaut());
+  const stockage = utilisateurId === undefined ? null : stockageDonne;
+  const fermeId = porte !== null ? p.fermeId : utilisateurId === undefined || stockage === null ? null : lireFermeMontree(stockage, utilisateurId);
+  if (fermeId === null) return <Ouverture />;
+  return <Ecran key={`${utilisateurId ?? ''}|${fermeId}`} {...p} porte={porte} fermeId={fermeId} stockage={stockage} />;
+}
+
+interface ProprietesEcran extends Omit<ProprietesEcranAujourdhui, 'fermeId' | 'stockage'> {
+  readonly fermeId: string;
+  readonly stockage: StockageInstantane | null;
+}
+
+function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage }: ProprietesEcran) {
   /** Jour du téléphone maintenant (relu à chaque écriture : l'écran peut rester ouvert à minuit). */
   const jourCourant = () => (jourDonne ?? jourDuTelephone)();
   const [jour, setJour] = useState(jourCourant);
-  const [lue, setLue] = useState<Journee | null>(() => journeeEnCache(porte, fermeId, jour));
-  // Journée du jour affiché : celle lue, sinon celle du cache (changement de jour).
-  const journee = lue !== null && lue.aujourdhui === jour ? lue : journeeEnCache(porte, fermeId, jour);
-  // T13d : stockage de l'instantané, et l'instantané lu au premier rendu (synchrone).
-  const [stockage] = useState(() => (utilisateurId === undefined ? null : (stockageDonne ?? stockageParDefaut())));
+  const [lue, setLue] = useState<Journee | null>(() => (porte === null ? null : journeeEnCache(porte, fermeId, jour)));
+  // Journée du jour affiché : celle lue, sinon celle du cache (changement de jour). Base pas
+  // encore ouverte (T13g) : aucune.
+  const journee = porte === null ? null : lue !== null && lue.aujourdhui === jour ? lue : journeeEnCache(porte, fermeId, jour);
+  // T13d : l'instantané, lu au premier rendu (synchrone).
   const [instantane] = useState(() => (utilisateurId === undefined || stockage === null ? null : lireInstantane(stockage, { utilisateurId, fermeId, jour })));
   /** L'instantané n'est montré que tant qu'aucune journée relue n'est là, et pour le jour affiché. */
   const surInstantane = journee === null && instantane !== null && instantane.jour === jour;
@@ -451,8 +500,8 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
    * porte et ferme (T13f).
    */
   const masquees: Masques = useSyncExternalStore(
-    useCallback((rappel: () => void) => suivreMasques(porte, fermeId, rappel), [porte, fermeId]),
-    () => masquesDe(porte, fermeId),
+    useCallback((rappel: () => void) => (porte === null ? sansMasques() : suivreMasques(porte, fermeId, rappel)), [porte, fermeId]),
+    () => (porte === null ? AUCUN_MASQUE : masquesDe(porte, fermeId)),
   );
   const estMasquee = (cle: string): boolean => estMasqueeDans(masquees, journee, cle);
   const journeeActuelle = useRef<Journee | null>(journee);
@@ -467,17 +516,24 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
   const oublierFocus = useCallback(() => {
     setFocusSaisie(null);
   }, []);
-  /** Une écriture à la fois : un double appui n'écrit pas deux fois. */
-  const occupe = useRef(false);
+  /**
+   * Écritures en cours ou en file (T13g). Une à la fois, dans l'ordre : les « Fait » tapés
+   * pendant une écriture (ou la lecture ciblée qui la précède) attendent leur tour ; tout autre
+   * geste d'écriture pendant ce temps est ignoré (un double appui n'écrit pas deux fois).
+   */
+  const ecritures = useRef(0);
+  const file = useRef<Promise<unknown>>(Promise.resolve());
   const numero = useRef(0);
   const idHistorique = useId();
 
   useEffect(
     () =>
-      suivreJournee(porte, fermeId, jour, setLue, (e: unknown) => {
-        console.error('Journée illisible', e);
-        setEchecLecture(true);
-      }),
+      porte === null
+        ? undefined
+        : suivreJournee(porte, fermeId, jour, setLue, (e: unknown) => {
+            console.error('Journée illisible', e);
+            setEchecLecture(true);
+          }),
     [porte, fermeId, jour],
   );
 
@@ -493,7 +549,9 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
   }, [jourDonne]);
 
   // Premier dessin : les CARTES_PREMIER_DESSIN premières cartes ; toutes au rendu suivant, différé.
-  const complet = useDeferredValue(true, false);
+  // T13g : avant la base, seulement elles, sans l'historique : un écran de téléphone, et la page
+  // laisse la main à l'ouverture de la base ; le reste suit, différé, la base ouverte.
+  const complet = useDeferredValue(porte !== null, false);
 
   // Une marque par ouverture de l'écran, quand les tâches (ou « rien à faire ») sont dessinées,
   // celles de l'instantané comprises (T13d).
@@ -529,24 +587,39 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
   }, [annulable]);
 
   /** Contexte d'une écriture, au jour du téléphone à l'instant de l'écriture. */
-  const contexte = (): ContexteEcriture => ({ porte, fermeId, aujourdhui: jourCourant() });
+  const contexte = (): ContexteEcriture => {
+    // Aucun bouton d'écriture n'est actif sans la base (T13g) : filet seulement.
+    if (porte === null) throw new Error('les données de ce téléphone sont encore en cours d’ouverture');
+    return { porte, fermeId, aujourdhui: jourCourant() };
+  };
 
-  const ecrire = useCallback(async (action: () => Promise<void>): Promise<boolean> => {
-    if (occupe.current) return false;
-    occupe.current = true;
-    setErreur(null);
-    setAvis(null);
-    setFocusSaisie(null);
-    try {
-      await action();
-      return true;
-    } catch (e) {
-      console.error('Saisie impossible', e);
-      setErreur(`La saisie n’a pas pu s’enregistrer sur ce téléphone${e instanceof Error && e.message !== '' ? ` : ${e.message}` : ''}. Réessayez ; si cela recommence, signalez-le.`);
-      return false;
-    } finally {
-      occupe.current = false;
+  /**
+   * Écrit `action` à son tour (T13g). `enFile` : « Fait », qui attend la fin des écritures en cours ;
+   * sinon, ignoré s'il y en a une (rend false). Les messages sont effacés au premier geste d'une
+   * série, jamais par une écriture en file : un refus (« déjà ») reste lisible jusqu'au bout.
+   */
+  const ecrire = useCallback((action: () => Promise<void>, enFile = false): Promise<boolean> => {
+    if (ecritures.current > 0 && !enFile) return Promise.resolve(false);
+    if (ecritures.current === 0) {
+      setErreur(null);
+      setAvis(null);
+      setFocusSaisie(null);
     }
+    ecritures.current++;
+    const tour = file.current.then(async () => {
+      try {
+        await action();
+        return true;
+      } catch (e) {
+        console.error('Saisie impossible', e);
+        setErreur(`La saisie n’a pas pu s’enregistrer sur ce téléphone${e instanceof Error && e.message !== '' ? ` : ${e.message}` : ''}. Réessayez ; si cela recommence, signalez-le.`);
+        return false;
+      } finally {
+        ecritures.current--;
+      }
+    });
+    file.current = tour;
+    return tour;
   }, []);
 
   function montrerAnnulable(evenement: EvenementLu, culture: Culture, titre: string, texte: string): void {
@@ -556,6 +629,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
 
   /** Pose ou retire le masque de `cle` (dans le cache : l'écran peut être quitté entre temps). */
   function masquer(cle: string, valeur: number | 'attente' | undefined): void {
+    if (porte === null) return;
     changerMasques(porte, fermeId, journeeActuelle.current, (m) => {
       if (valeur === undefined) m.delete(cle);
       else m.set(cle, valeur);
@@ -597,10 +671,12 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
    * « Fait » : la tâche est masquée dès le tap. Sur la journée relue, la saisie s'écrit tout de
    * suite. Sur l'instantané (T13d), rien n'est écrit depuis lui : une lecture ciblée de la tâche
    * dans la base (`lireTacheCiblee`) donne ce qu'écrirait la journée relue (emplacements relus,
-   * B2) ; si la tâche n'y est plus (faite ailleurs entre temps), rien n'est écrit.
+   * B2) ; si la tâche n'y est plus (faite ailleurs entre temps), rien n'est écrit. T13g : tapé
+   * pendant une autre écriture, il passe en file ; la lecture ciblée et la vérification « déjà
+   * fait » se font à son tour, après les écritures d'avant.
    */
   function surFait(cle: string): void {
-    if (estMasquee(cle) || occupe.current) return;
+    if (porte === null || estMasquee(cle)) return;
     let tache: () => Promise<TacheJour | null>;
     /** Lecture ciblée : la tâche a changé, la carte revient (pas de masque). */
     let changee = false;
@@ -632,7 +708,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
     void ecrire(async () => {
       const t = await tache();
       if (t !== null) await ecrireFait(t);
-    }).then((ok) => {
+    }, true).then((ok) => {
       masquer(cle, ok && !changee ? marquerEcriture() : undefined);
     });
   }
@@ -666,6 +742,9 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
       setDialogue(null);
     });
   }
+
+  // T13g : base pas encore ouverte, rien à montrer de cette ferme.
+  if (porte === null && !surInstantane) return <Ouverture />;
 
   if (echecLecture && journee === null) {
     return (
@@ -727,6 +806,8 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
           type="button"
           aria-label="Historique"
           className="auj-vers-historique"
+          // T13g : rien vers quoi défiler tant que l'historique n'est pas dessiné (avant la base).
+          disabled={!complet}
           onClick={() => {
             document.getElementById(idHistorique)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
@@ -761,7 +842,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
               <h2 className="auj-groupe auj-groupe-retard">En retard</h2>
               <ul className="auj-taches">
                 {enRetard.map((c) => (
-                  <CarteTache key={c.cle} carte={c} surFait={surFait} surPeser={peser} />
+                  <CarteTache key={c.cle} carte={c} inactive={porte === null} surFait={surFait} surPeser={peser} />
                 ))}
               </ul>
             </>
@@ -771,7 +852,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
               <h2 className="auj-groupe">Cette semaine</h2>
               <ul className="auj-taches">
                 {semaine.map((c) => (
-                  <CarteTache key={c.cle} carte={c} surFait={surFait} surPeser={peser} />
+                  <CarteTache key={c.cle} carte={c} inactive={porte === null} surFait={surFait} surPeser={peser} />
                 ))}
               </ul>
             </>
@@ -790,7 +871,7 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
         </>
       )}
 
-      {vue !== null && (
+      {vue !== null && complet && (
         <Historique
           id={idHistorique}
           entrees={journee?.historique ?? AUCUNE_SAISIE}
