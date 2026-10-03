@@ -365,18 +365,11 @@ function sourcePlafond(suite: 'fermer' | 'octet' | 'erreur', apresMs: number) {
   return { etat, flux };
 }
 
-describe('T10r — HTTP/1.0 : plafond exact', { timeout: 10_000 }, () => {
+// Plafond exact retiré du ticket (décision du chef, T10r) : avec une source qui prépare un morceau
+// d'avance, lire un morceau de plus au plafond contredit les garanties de T10q (cancel, tirages bornés).
+// Une source d'exactement le plafond qui ne se ferme que plus tard reçoit 505 : limite assumée.
+describe('T10r — HTTP/1.0 : plafond', { timeout: 10_000 }, () => {
   const petitPlafond = { plafondHttp10Octets: PLAFOND_ESSAI };
-
-  it('exactement le plafond, source fermée 50 ms plus tard : 200, Content-Length exact, corps entier', async () => {
-    const { flux } = sourcePlafond('fermer', 50);
-    const essai = await essayer(() => new Response(flux, EN_TETE_CSV), REQUETE_10, { enPlus: petitPlafond });
-    expect(statut(essai.brut), `200 attendu (avant T10r : 505) :\n${entetesDe(essai.brut)}`).toBe(200);
-    expect(contentLength(essai.brut), 'Content-Length exact').toBe(PLAFOND_ESSAI);
-    expect(corpsDe(essai.brut), 'corps entier').toBe('a'.repeat(PLAFOND_ESSAI));
-    expect(essai.lignes, 'rien au journal').toEqual([]);
-    expect(essai.sorties).toEqual([]);
-  });
 
   it('un octet de plus, 50 ms plus tard : 505, une ligne au journal, cancel, au plus un morceau tiré au-delà', async () => {
     const { etat, flux } = sourcePlafond('octet', 50);
@@ -394,14 +387,4 @@ describe('T10r — HTTP/1.0 : plafond exact', { timeout: 10_000 }, () => {
     expect(etat.octetsTires, 'au plus un morceau (l’octet de trop) tiré au-delà du plafond').toBeLessThanOrEqual(PLAFOND_ESSAI + 1);
   });
 
-  it('exactement le plafond, source qui lève 50 ms plus tard : 500 (lecture en échec), pas 505', async () => {
-    const { flux } = sourcePlafond('erreur', 50);
-    const essai = await essayer(() => new Response(flux, EN_TETE_CSV), REQUETE_10, { enPlus: petitPlafond });
-    expect(statut(essai.brut), essai.brut).toBe(500);
-    expect(corpsDe(essai.brut), 'aucun corps').toBe('');
-    expect(essai.brut, 'rien de l’erreur au client').not.toContain('cassée');
-    expect(essai.lignes, 'exactement une ligne au journal').toHaveLength(1);
-    expect(essai.lignes[0]).not.toContain('cassée');
-    expect(essai.sorties).toEqual([]);
-  });
 });
