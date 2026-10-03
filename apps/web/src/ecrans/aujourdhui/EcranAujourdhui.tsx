@@ -638,12 +638,9 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
     void ecrire(async () => {
       await annulerSaisie(contexte(), evenement);
       setAnnulable((a) => (a?.evenement.id === evenement.id ? null : a));
-      // La tâche faite puis annulée redevient à faire : plus de masque sur sa culture. Ceux des
-      // autres cultures tiennent (leur réalisé n'est peut-être pas encore relu, T13f).
-      const cible = evenement.serieId ?? evenement.campagneId;
-      changerMasques(porte, fermeId, jour, (m) => {
-        for (const [cle, v] of m) if (v !== 'attente' && cle.startsWith(`${cible ?? ''}:`)) m.delete(cle);
-      });
+      // Aucun masque n'est retiré (T13f) : l'annulation provoque une relecture de sa culture, plus
+      // récente que les masques, qui fait revenir la tâche annulée ; les autres tâches masquées
+      // tiennent tant que leur culture n'a pas été relue.
     });
   }
 
