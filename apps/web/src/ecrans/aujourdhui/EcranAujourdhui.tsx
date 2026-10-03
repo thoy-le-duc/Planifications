@@ -31,7 +31,7 @@ import {
   type TacheJour,
 } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
-import { annulerSaisie, changerDate, marquerFait, marquerTravailFait, noterRecolte, type ContexteEcriture } from './ecritures.ts';
+import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, type ContexteEcriture } from './ecritures.ts';
 import { garderInstantane, lireInstantane, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
 import { libelleEvenement, vueCarte, vuesHistorique, type CarteVue, type SaisieVue } from './vues.ts';
@@ -562,8 +562,21 @@ export function EcranAujourdhui({ porte, fermeId, aujourdhui: jourDonne, utilisa
     });
   }
 
-  /** Écrit le « Fait » de la tâche `t` (étape ou travail prévu, T22) et montre le bandeau. */
+  /**
+   * Écrit le « Fait » de la tâche `t` (étape ou travail prévu, T22) et montre le bandeau. T13h :
+   * déjà noté (autre onglet, autre source, pas encore relu ici) → rien d'écrit, la tâche reste
+   * masquée, un avis le dit, sans bandeau « Annuler » ni erreur.
+   */
   async function ecrireFait(t: TacheJour): Promise<void> {
+    try {
+      await ecrireFaitSansAvis(t);
+    } catch (e) {
+      if (!(e instanceof DejaFait)) throw e;
+      setAvis('Déjà notée : rien de plus n’est enregistré.');
+    }
+  }
+
+  async function ecrireFaitSansAvis(t: TacheJour): Promise<void> {
     const tache = t.tache;
     const ctx = contexte();
     if (tache.etape === 'travail') {
