@@ -16,4 +16,4 @@ Le délai de 300 s de Node ne couvre que la réception de la requête. Depuis T1
 
 ## Critères d'acceptation
 
-- [ ] Test : source muette → 504 après le délai (option de délai court pour le test), `cancel` appelé, une ligne au journal.
+- [x] Test : source muette → 504 après le délai (option de délai court pour le test), `cancel` appelé, une ligne au journal.

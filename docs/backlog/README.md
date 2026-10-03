@@ -37,7 +37,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10m](T10m-journal-serveur.md) | Journal du serveur : la même règle partout | T10j | fait |
 | [T10p](T10p-journal-flux.md) | Journal du serveur : erreurs d’envoi en flux | T10m | fait |
 | [T10q](T10q-flux-suites.md) | Réponses en flux : HTTP/1.0 et erreur au premier octet | T10p | fait |
-| [T10r](T10r-flux-delai.md) | Réponses en flux : délai jusqu’au premier morceau | T10q | à faire |
+| [T10r](T10r-flux-delai.md) | Réponses en flux : délai jusqu’au premier morceau | T10q | fait |
 | [T10g](T10g-recoltes-annulees.md) | Récoltes annulées et plafonds définitifs (Q20, Q13) | T10d | fait |
 | [T10h](T10h-en-vigueur-suites.md) | « En vigueur » : performance de la vue et alignement du téléphone | T10g | fait |
 | [T10e](T10e-series-synchro.md) | Synchro : le serveur accepte les séries des téléphones | T10, T10b, T10c | fait |

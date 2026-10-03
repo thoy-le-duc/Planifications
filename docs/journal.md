@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T10r : une réponse en flux n'attend pas sans fin
+
+- **Fait** : une réponse en flux dont la source ne produit rien en 60 s est coupée proprement (504, source annulée, une ligne au journal), en HTTP/1.1 comme en HTTP/1.0 ; le délai ne s'applique plus après le premier morceau ; minuteur toujours nettoyé.
+- **Décidé** : le « plafond exact » en HTTP/1.0 est abandonné : l'obtenir aurait affaibli les garanties de T10q (annulation de la source, lecture bornée) ; une réponse d'exactement 32 Mio qui ne se ferme que plus tard reçoit 505, limite documentée. Relecture : aucun bloquant.
+- **Bloquant** : rien. Une source qui cale après son premier morceau attend tant que le client reste connecté (assumé ; délai entre morceaux si un vrai export le demande).
+
 ## 2026-10-03 — T13h : « Fait » unique vérifié au moment d'écrire
 
 - **Fait** : avant d'écrire un « Fait » (étape ou travail), l'appli vérifie dans la même transaction qu'aucun réalisé en vigueur n'existe déjà pour cette culture ; sinon rien n'est écrit et un avis dit « Déjà notée ». Deux onglets ouverts ne peuvent plus écrire deux fois la même tâche (verrou d'écriture SQLite).
