@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T13j : « Fait » unique sur tous les chemins d'écriture
+
+- **Fait** : la porte contrôle, dans la même transaction et d'après les lignes réellement écrites, chaque « Fait » nouveau (réalisé, ou intervention qui solde un travail prévu) quel que soit le chemin : `saisirEvenement`, `preparerSaisie` + `ecrireEnsemble`, SQL brut. Deux « Fait » identiques dans un même ensemble, un vérificateur vide ou une copie d'ordre ne passent plus. `preparerSaisie` rend la vérification ; l'écran l'utilise. Refus sur la grande ferme en 6 à 7 ms (CPU normal).
+- **Décidé** : relecture en deux passages ; le premier a trouvé qu'un vérificateur quelconque ouvrait la porte à tous les « Fait » d'un ensemble (le chemin de la future voix et de l'agent) : remplacé par un contrôle des lignes écrites (rowid). Pas d'index `origine_id` (sous 50 ms). Relecture après « Fait » en e2e CPU ×4 : 300 à 350 ms (budget 500). JS de démarrage 70,9/71 Kio.
+- **Bloquant** : rien. Suite : T13o (contrôle d'après le journal d'envoi `ps_crud`, pour couvrir aussi un UPDATE ; jamais d'accès SQL brut pour l'agent).
+
 ## 2026-10-03 — T13g : Aujourd'hui s'affiche avant la base, « Fait » en file
 
 - **Fait** : au lancement, l'instantané d'Aujourd'hui s'affiche avant l'ouverture de la base, en lecture seule (≈ 0,4 s au lieu de ≈ 0,8 s, grande ferme, CPU ×4), pour la dernière ferme montrée à cet utilisateur seulement. Les « Fait » tapés à la suite passent dans une file : chacun disparaît au tap, s'écrit dans l'ordre avec sa vérification « déjà fait » ; aucun n'est perdu, aucun en double, y compris hors lancement.
