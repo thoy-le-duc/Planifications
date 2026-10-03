@@ -10,6 +10,14 @@
  * bases locales) du MÊME utilisateur, sessions[0] de l'amorçage, sur la vraie appli (`/`, onglet
  * Ferme, carte « Saisies refusées » de src/ecrans/ferme/Refus.tsx), pas la page de diagnostic.
  *
+ * Session partagée : A et B reçoivent la MÊME session (même jeton d'accès, même jeton de
+ * renouvellement), et rien ne verrouille le renouvellement entre deux contextes de navigateur. Le
+ * jeton d'accès (1 h) couvre le test, donc aucun renouvellement n'est attendu. Si l'un des deux
+ * renouvelait quand même, l'autre présenterait ensuite un jeton de renouvellement déjà tourné ;
+ * dès que le successeur a servi, l'API y voit un rejeu et révoque toute la famille de jetons
+ * (apps/api/src/auth/routes.ts). Symptôme : les deux téléphones
+ * passent en « session expirée » et plus rien ne se synchronise.
+ *
  * Amorçage : amorcer-e2e.ts (sans argument), puis deux refus écrits directement dans Postgres pour
  * cet utilisateur, comme le serveur les écrit (apps/api/src/sync/upload.ts) : celui qu'on archive
  * et un témoin qui doit rester. Aucun code de production n'est touché pour provoquer le refus.
@@ -165,6 +173,8 @@ test.describe('T10o : un refus archivé sur un téléphone disparaît sur l’au
   test('A archive un refus : rien ne part pendant le délai, puis un PATCH { archive_le } seul ; la ligne est archivée en base et la carte disparaît chez B', async ({
     browser,
   }) => {
+    // Deux ouvertures, première synchro, délai d'annulation et redescente chez B : plus que les 120 s par défaut.
+    test.setTimeout(180_000);
     const sessionA = amorcage.sessions[0];
     // Deux navigateurs du même utilisateur : les refus ne descendent qu'à leur auteur.
     const a = await ouvrir(browser, sessionA);
@@ -181,7 +191,8 @@ test.describe('T10o : un refus archivé sur un téléphone disparaît sur l’au
       // 1. Les deux refus descendent sur les deux téléphones.
       for (const t of [a, b]) {
         await expect(carte(t.page, refusArchive)).toHaveCount(1, { timeout: DELAI_SYNCHRO_MS });
-        await expect(carte(t.page, refusTemoin)).toHaveCount(1, { timeout: DELAI_SYNCHRO_MS });
+        // Les deux refus arrivent dans le même point de contrôle : le témoin suit la première carte.
+        await expect(carte(t.page, refusTemoin)).toHaveCount(1, { timeout: DELAI_LOCAL_MS });
       }
       expect(await archiveEnBase(refusArchive)).toBe(false);
 
@@ -199,7 +210,8 @@ test.describe('T10o : un refus archivé sur un téléphone disparaît sur l’au
 
       // 3. Fin du délai : un seul envoi, un PATCH qui ne porte que archive_le.
       const requete = await envoi;
-      expect(Date.now() - avantTap, 'envoi après la fin du délai d’annulation').toBeGreaterThanOrEqual(DELAI_ANNULATION_MS - MARGE_HORLOGE_MS);
+      // Départ de la requête (heure epoch en ms, Request.timing().startTime), pas son arrivée côté Node.
+      expect(requete.timing().startTime - avantTap, 'envoi après la fin du délai d’annulation').toBeGreaterThanOrEqual(DELAI_ANNULATION_MS - MARGE_HORLOGE_MS);
       const corps = JSON.parse(requete.postData() ?? '{}') as CorpsEnvoi;
       expect(corps.ecritures).toHaveLength(1);
       const [ecriture] = corps.ecritures;
