@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T25b : la démo sans impasse
+
+- **Fait** : dans la démo, plus de bouton « Se déconnecter », l'en-tête dit « Démo » au lieu de l'état de synchro, et une réinitialisation faite dans un autre onglet recharge la page au lieu de montrer un écran de connexion sans issue.
+- **Décidé** : le mode démo est lu au build (`import.meta.env.MODE`) : la vraie appli n'embarque aucun octet de ces changements (JS de démarrage 70,9/71 Kio, inchangé). Relecture : aucun bloquant, la variante sans coût proposée par le relecteur est retenue.
+- **Bloquant** : rien.
+
 ## 2026-10-03 — T26 : un banc de synchro qui ne tombe plus tout seul
 
 - **Fait** : le test de synchro de bout en bout utilise des ports hors de la plage que Linux prête au hasard aux connexions sortantes (15432, 18080, 13100, 14174) ; Postgres n'est déclaré prêt que quand il écoute vraiment en TCP ; les migrations réessaient sur une connexion refusée ou coupée, jamais sur une erreur SQL.

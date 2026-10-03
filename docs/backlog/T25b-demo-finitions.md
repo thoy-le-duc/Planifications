@@ -12,5 +12,5 @@
 
 ## Critères d'acceptation
 
-- [ ] e2e démo : pas de bouton « Se déconnecter » ; l'en-tête dit « Démo » au lieu de l'état de synchro.
-- [ ] Le build de production ne change pas (JS de démarrage sous le budget, non relevé).
+- [x] e2e démo : pas de bouton « Se déconnecter » ; l'en-tête dit « Démo » au lieu de l'état de synchro.
+- [x] Le build de production ne change pas (JS de démarrage sous le budget, non relevé).
