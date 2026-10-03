@@ -26,8 +26,9 @@ import {
   type UniteRecolte,
 } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees, SaisieEvenement, VerificationEcriture } from '@planif/sync';
+import { DejaFait, pasDejaFait as verificationDejaFait } from '@planif/sync/fait-unique';
 import { annoncerSaisie } from './cache.ts';
-import { CHAINES, listeTextes, type Culture, type EvenementLu } from './calculs.ts';
+import { listeTextes, type Culture, type EvenementLu } from './calculs.ts';
 
 const nouvelId = creerGenerateurId({
   horloge: () => Date.now(),
@@ -44,8 +45,11 @@ export interface ContexteEcriture {
 /** Une ligne refusée par les règles du serveur : jamais écrite. */
 export class SaisieRefusee extends Error {}
 
-/** T13h : « Fait » déjà noté (réalisé ou intervention en vigueur) : rien n'est écrit. */
-export class DejaFait extends Error {}
+/**
+ * T13h : « Fait » déjà noté (réalisé ou intervention en vigueur) : rien n'est écrit. T13i : la
+ * classe de @planif/sync, la même que lève `porte.saisirEvenement` (voix, agent).
+ */
+export { DejaFait };
 
 const SQL_ARTICLE = 'INSERT INTO article_stock (id, ferme_id, espece_id, variete_id, unite, categorie) VALUES (?, ?, ?, ?, ?, ?)';
 const SQL_MOUVEMENT = 'INSERT INTO mouvement_stock (id, ferme_id, article_stock_id, date, quantite, motif, recolte_id) VALUES (?, ?, ?, ?, ?, ?, ?)';
@@ -114,34 +118,18 @@ async function article(ctx: ContexteEcriture, culture: Culture, unite: UniteReco
 const culturePour = (culture: Culture) => culture.cible;
 
 /**
- * T13h : un « Fait » en vigueur existe-t-il déjà pour la culture (sa colonne), du type donné, dont
- * le detail porte les valeurs aux chemins JSON donnés ? « En vigueur » : même règle que
- * `EN_VIGUEUR` (calculs.ts), sur les chaînes `CHAINES` de la ferme (filtrées par la ferme,
- * origine_id des lignes reçues compris) : une chaîne annulée n'a rien en vigueur ; sinon sa
- * correction la plus récente (horodatage, puis id), à défaut l'original. La culture et le detail
- * sont lus sur cette ligne-là (une correction peut changer l'étape ou la culture). Paramètres :
- * ferme (chaînes), culture, ferme, type, puis une valeur par chemin. Les candidats viennent de
- * l'index de la culture : sans candidat, les chaînes ne sont pas lues.
- */
-const sqlDejaFait = (colonne: 'serie_id' | 'campagne_id', chemins: readonly string[]) => `${CHAINES}SELECT 1 FROM evenement e
-  WHERE e.${colonne} = ? AND +e.ferme_id = ? AND e.type = ? AND json_valid(e.detail)
-    AND ${chemins.map((c) => `json_extract(e.detail, '${c}') = ?`).join(' AND ')}
-    AND ((e.remplace_sorte IS NULL AND e.id NOT IN (SELECT origine FROM chaine))
-      OR (e.remplace_sorte = 'correction' AND e.id IN (SELECT id FROM chaine WHERE annulations = 0 AND cle IS NOT NULL)))
-  LIMIT 1`;
-
-/**
- * Vérification passée à `ecrireEnsemble` : lue DANS la transaction d'écriture, donc sans écriture
- * possible entre elle et l'ordre (deux taps, deux onglets sur la même base : PowerSync n'ouvre
- * qu'une transaction d'écriture à la fois). Lève DejaFait si le « Fait » existe déjà.
+ * Vérification passée à `ecrireEnsemble` (T13h) : la règle partagée de @planif/sync (T13i), lue
+ * DANS la transaction d'écriture, donc sans écriture possible entre elle et l'ordre (deux taps,
+ * deux onglets sur la même base). Lève DejaFait si le « Fait » est déjà en vigueur.
  */
 function pasDejaFait(ctx: ContexteEcriture, culture: Culture, type: string, detail: Readonly<Record<string, string>>): VerificationEcriture {
-  const colonne = culture.cible.sorte === 'serie' ? 'serie_id' : 'campagne_id';
-  const chemins = Object.keys(detail);
-  return async (lire) => {
-    const deja = await lire(sqlDejaFait(colonne, chemins.map((c) => `$.${c}`)), [ctx.fermeId, culture.cibleId, ctx.fermeId, type, ...chemins.map((c) => detail[c])]);
-    if (deja.length > 0) throw new DejaFait('déjà fait');
-  };
+  return verificationDejaFait({
+    fermeId: ctx.fermeId,
+    colonne: culture.cible.sorte === 'serie' ? 'serie_id' : 'campagne_id',
+    cibleId: culture.cibleId,
+    type,
+    detail,
+  });
 }
 
 /**
