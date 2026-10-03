@@ -1,8 +1,11 @@
 {
-  "maj": "3 octobre 2026, 15 h 15 UTC",
-  "resume": "Cette fenêtre : **Aujourd'hui s'affiche deux fois plus vite au lancement (T13g)** — les tâches apparaissent en ≈ 0,4 s au lieu de ≈ 0,8 s, avant même l'ouverture de la base, et plusieurs « Fait » tapés à la suite ne se perdent plus : chacun disparaît au tap et s'écrit dans l'ordre. **Un « Fait » ne peut plus être noté deux fois, quel que soit le chemin (T13i)** — la règle est partagée avec la future voix et le futur agent, et la vérification passe de 30 ms à 5 ms. **Archivage d'un refus vérifié entre deux vrais téléphones (T10o).** Nouveaux tickets : T13j, T13k (attend Q26), T13l.",
-  "en_cours": {},
-  "attente": "Q26 (nouvelle) : accepter « Fait » dès l'affichage d'Aujourd'hui, avant que la base soit prête (≈ 0,6 s gagnées pour taper) ? Q25 : effacer de son téléphone les refus d'une ferme qu'on a quittée ? Confirmer que les refus de synchro restent hors de l'export (T10l). Vercel : désactiver « Vercel Authentication » pour partager les aperçus sans connexion. Fermer la PR #75 (ouverte à l'envers). Pour la mise en ligne : compte Brevo et domaine d'envoi (SPF, DKIM, DMARC), identifiants dans les secrets de production, suivi des ouvertures désactivé ; base de production en locale UTF-8 ; Node 22 ; proxy en HTTP/1.1 vers l'API.",
+  "maj": "3 octobre 2026, 18 h 35 UTC",
+  "resume": "Cette fenêtre : deux tickets prêts, **en attente de la CI** — GitHub Actions refuse de lancer les tests (« paiement échoué ou plafond de dépenses atteint »), donc rien n'est fusionné. **T13j (PR #97)** : un « Fait » ne peut plus être noté deux fois, quel que soit le chemin d'écriture (voix et agent compris). **T13l (PR #96)** : aucun geste ignoré pendant que des « Fait » s'écrivent ; « Annuler » passe dans la file et ne peut plus fausser le stock. Les deux ont passé deux à trois relectures sans faille restante. Nouveaux tickets : T13m, T13n, T13o.",
+  "en_cours": {
+    "T13j": "en revue",
+    "T13l": "en revue"
+  },
+  "attente": "**Urgent : GitHub Actions est bloqué** (Settings → Billing & plans : paiement échoué ou plafond de dépenses) — plus aucune PR ne peut être vérifiée ni fusionnée. Q26 : accepter « Fait » dès l'affichage d'Aujourd'hui, avant que la base soit prête ? Q25 : effacer de son téléphone les refus d'une ferme qu'on a quittée ? Confirmer que les refus de synchro restent hors de l'export (T10l). Vercel : désactiver « Vercel Authentication » pour partager les aperçus. Fermer la PR #75. Mise en ligne : compte Brevo et domaine d'envoi (SPF, DKIM, DMARC), identifiants dans les secrets de production ; base en UTF-8 ; Node 22 ; proxy HTTP/1.1.",
   "visuels": [
     {
       "titre": "Mode sombre",
