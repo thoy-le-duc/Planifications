@@ -15,9 +15,10 @@ import type {
   ResumeSaisie,
   RequeteSurveillee,
   SaisieEvenement,
+  TransactionLocale,
   VerificationEcriture,
 } from './types.ts';
-import { pasDejaFait } from './fait-unique.ts';
+import { faitDeLigne, faitUnique, pasDejaFait, type FaitVise } from './fait-unique.ts';
 
 const COLONNES_EVENEMENT = [
   'id',
@@ -103,18 +104,33 @@ function refusDepuisLigne(l: LigneRefus): RefusSynchro {
  * corps envoyé peut peser plus que les ordres (PowerSync y range toutes les colonnes de la
  * ligne) : la porte s'arrête donc à 5 Mio, pour garder la marge.
  */
-/**
- * T13j : ordres des « Fait » préparés par `preparerSaisie` (ceux qui rendent une vérification).
- * Marqués à la préparation, sans lire leur SQL : `ecrireEnsemble` les refuse sans vérificateur.
- * Commun à toutes les portes (un ordre préparé par l'une, écrit par l'autre, reste reconnu).
- */
-const faitsPrepares = new WeakSet<OrdreEcriture>();
-
 function verifierTaille(ordres: readonly OrdreEcriture[]): void {
   const octets = new TextEncoder().encode(JSON.stringify(ordres)).length;
   if (octets > TAILLE_MAX_PAR_LOT) {
     throw new Error(`transaction de ${String(octets)} octets : ${String(TAILLE_MAX_PAR_LOT)} au plus`);
   }
+}
+
+/**
+ * T13j : un ordre qui nomme le journal (`evenement`, mot entier) peut y écrire ; seuls ces
+ * ensembles sont contrôlés. Un ordre qui ne le nomme pas ne peut pas y insérer de ligne (le schéma
+ * local n'a pas de déclencheur qui y écrive) : faux positif possible (un contrôle de trop), jamais
+ * de faux négatif.
+ */
+const NOMME_JOURNAL = /\bevenement\b/i;
+
+/**
+ * Table SQLite où le journal est rangé : `ps_data__evenement` sous PowerSync (la vue `evenement`
+ * n'a pas de rowid), `evenement` elle-même dans le double de test. Introuvable : refus explicite,
+ * jamais d'écriture sans contrôle.
+ */
+async function rangementJournal(tx: TransactionLocale): Promise<string> {
+  const noms = (await tx.getAll<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('ps_data__evenement', 'evenement')`,
+  )).map((l) => l.name);
+  const nom = ['ps_data__evenement', 'evenement'].find((n) => noms.includes(n));
+  if (nom === undefined) throw new Error('journal local introuvable : la vérification « déjà fait » est impossible, rien n’est écrit');
+  return nom;
 }
 
 export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnees {
@@ -161,30 +177,53 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     };
   }
 
+  /** Rangement du journal, cherché une fois par porte (relu après un échec). */
+  let rangement: Promise<string> | undefined;
+
   /**
-   * T13i : vérification « déjà fait » d'une saisie : un réalisé NOUVEAU sur une culture. T13j :
-   * aussi une intervention NOUVELLE qui solde un travail prévu (occurrence visée), avec la règle
-   * de l'écran : même libellé, même catégorie, même occurrence (ni l'outil, ni le produit, ni la
-   * date). Une correction ou une annulation n'est jamais refusée ; le reste n'est pas touché.
+   * T13j : exécute les ordres d'une transaction, puis contrôle CHAQUE « Fait » (faitDeLigne) que
+   * la transaction vient d'insérer dans le journal, d'après les lignes écrites, quel que soit
+   * l'ordre (préparé, copié, SQL brut) : un autre « Fait » identique en vigueur, déjà là ou écrit
+   * par la même transaction → DejaFait, la transaction est annulée, rien n'est écrit.
+   *
+   * Lignes nouvelles : rowid de la table de rangement au-delà du plus grand d'avant les ordres.
+   * SQLite donne à une ligne insérée un rowid supérieur à tous ceux de la table, et ni la
+   * synchro ni un autre onglet n'écrivent pendant la transaction : sont nouvelles exactement les
+   * lignes insérées par ces ordres, quelle que soit la forme de l'INSERT (paramètres, littéraux,
+   * INSERT … SELECT, OR REPLACE). Un UPDATE n'ajoute pas de ligne (le journal est en ajout seul,
+   * le serveur refuse l'UPDATE d'un événement).
+   *
+   * `verifier` (T13h) tourne avant les ordres, comme avant ; il ne dispense d'aucun contrôle.
+   * `exigerVerificateur` (ecrireEnsemble) : un « Fait » écrit sans vérificateur est refusé.
    */
-  function verificationDe(saisie: SaisieEvenement): VerificationEcriture | undefined {
-    if (saisie.remplaceEvenement !== null || saisie.culture === null) return undefined;
-    let detail: Readonly<Record<string, string>>;
-    if (saisie.type === 'realise') detail = { etape: saisie.detail.etape };
-    else if (saisie.type !== 'intervention') return undefined;
-    else {
-      const { type, categorie, occurrenceVisee } = saisie.detail;
-      if (typeof occurrenceVisee !== 'string') return undefined;
-      detail = { type, categorie, occurrenceVisee };
+  async function ecrireControle(
+    tx: TransactionLocale,
+    ordres: readonly OrdreEcriture[],
+    verifier: VerificationEcriture | undefined,
+    exigerVerificateur: boolean,
+  ): Promise<void> {
+    const lire = <T>(sql: string, parametres?: readonly unknown[]) => tx.getAll<T>(sql, parametres ?? []);
+    if (verifier !== undefined) await verifier(lire);
+    if (!ordres.some((o) => NOMME_JOURNAL.test(o.sql))) {
+      for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
+      return;
     }
-    const c = saisie.culture;
-    return pasDejaFait({
-      fermeId: options.fermeId,
-      colonne: c.sorte === 'serie' ? 'serie_id' : 'campagne_id',
-      cibleId: c.sorte === 'serie' ? c.serieId : c.campagneId,
-      type: saisie.type,
-      detail,
+    rangement ??= rangementJournal(tx).catch((e: unknown) => {
+      rangement = undefined;
+      throw e;
     });
+    const table = await rangement;
+    const avant = (await lire<{ m: number | null }>(`SELECT max(rowid) AS m FROM "${table}"`))[0]?.m ?? 0;
+    for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
+    const lignes = await lire<Readonly<Record<'ferme_id' | 'type' | 'serie_id' | 'campagne_id' | 'remplace_sorte' | 'detail', unknown>>>(
+      `SELECT ferme_id, type, serie_id, campagne_id, remplace_sorte, detail FROM evenement WHERE id IN (SELECT id FROM "${table}" WHERE rowid > ?)`,
+      [avant],
+    );
+    const faits = lignes.map(faitDeLigne).filter((f): f is FaitVise => f !== undefined);
+    for (const fait of faits) await faitUnique(fait)(lire);
+    if (exigerVerificateur && verifier === undefined && faits.length > 0) {
+      throw new Error('« Fait » écrit sans vérification « déjà fait » : passer la vérification rendue par preparerSaisie');
+    }
   }
 
   function preparerSaisie(saisie: SaisieEvenement): EvenementPrepare {
@@ -207,10 +246,10 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       detail: JSON.stringify(saisie.detail),
     };
     const ordre: OrdreEcriture = { sql: SQL_SAISIE, parametres: COLONNES_EVENEMENT.map((c) => ligne[c]) };
-    const verification = verificationDe(saisie);
-    if (verification === undefined) return { id, ligne, ordre };
-    faitsPrepares.add(ordre);
-    return { id, ligne, ordre, verification };
+    // T13j : vérification « déjà fait » d'un « Fait » (réalisé nouveau sur une culture,
+    // intervention nouvelle qui solde un travail prévu), selon la règle unique de faitDeLigne.
+    const fait = faitDeLigne(ligne);
+    return fait === undefined ? { id, ligne, ordre } : { id, ligne, ordre, verification: pasDejaFait(fait) };
   }
 
   return {
@@ -218,9 +257,8 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
 
     async ecrire(sql, parametres) {
       verifierTaille([{ sql, parametres: parametres ?? [] }]);
-      await base.writeTransaction(async (tx) => {
-        await tx.execute(sql, parametres ?? []);
-      });
+      // T13j : le SQL brut passe par le même contrôle « déjà fait » que les autres chemins.
+      await base.writeTransaction((tx) => ecrireControle(tx, [{ sql, parametres: parametres ?? [] }], undefined, false));
     },
 
     async ecrireEnsemble(ordres: readonly OrdreEcriture[], verifier?: VerificationEcriture) {
@@ -233,32 +271,21 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       }
       // Même règle pour le poids (verifierTaille).
       verifierTaille(ordres);
-      // T13j : un « Fait » préparé ne s'écrit qu'avec une vérification « déjà fait » (celle que
-      // rend preparerSaisie, ou celle de l'écran) : refus explicite, rien n'est écrit.
-      if (verifier === undefined && ordres.some((o) => faitsPrepares.has(o))) {
-        throw new Error('« Fait » préparé sans vérification « déjà fait » : passer la vérification rendue par preparerSaisie');
-      }
       // Une seule transaction locale : PowerSync l'envoie en un seul lot, que le serveur accepte ou
       // refuse en entier. Un ordre qui échoue rejette la promesse et annule tout. La vérification
-      // (T13h) lit dans la transaction : rien ne s'écrit entre elle et les ordres.
-      await base.writeTransaction(async (tx) => {
-        if (verifier !== undefined) await verifier((sql, parametres) => tx.getAll(sql, parametres ?? []));
-        for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
-      });
+      // (T13h) lit dans la transaction : rien ne s'écrit entre elle et les ordres. T13j : chaque
+      // « Fait » écrit est contrôlé ensuite, dans la même transaction (ecrireControle).
+      await base.writeTransaction((tx) => ecrireControle(tx, ordres, verifier, true));
     },
 
     surveiller,
 
     async saisirEvenement(saisie: SaisieEvenement): Promise<Id<'Evenement'>> {
-      const { id, ordre, verification: verifier } = preparerSaisie(saisie);
+      const { id, ordre } = preparerSaisie(saisie);
       verifierTaille([ordre]);
-      // T13i : un réalisé nouveau (voix, agent…) passe par la même règle « déjà fait » que
-      // l'écran, lue dans la transaction d'écriture ; T13j : l'intervention qui solde un travail
-      // prévu aussi.
-      await base.writeTransaction(async (tx) => {
-        if (verifier !== undefined) await verifier((sql, parametres) => tx.getAll(sql, parametres ?? []));
-        await tx.execute(ordre.sql, ordre.parametres);
-      });
+      // T13i, T13j : un « Fait » nouveau (voix, agent…) passe par la même règle « déjà fait » que
+      // l'écran, contrôlée dans la transaction d'écriture d'après la ligne écrite.
+      await base.writeTransaction((tx) => ecrireControle(tx, [ordre], undefined, false));
       return id;
     },
 

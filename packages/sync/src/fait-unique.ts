@@ -110,7 +110,7 @@ const sqlDejaFait = (colonne: ColonneCulture, nombreCles: number) => {
   return `${chaines(`id IN (SELECT id FROM membre) AND remplace_evenement_id >= '' AND +ferme_id = ?`, avant)}SELECT 1 FROM candidat c
   WHERE (c.sorte IS NULL AND c.id NOT IN (SELECT origine FROM chaine))
     OR (c.sorte = 'correction' AND c.id IN (SELECT id FROM chaine WHERE annulations = 0 AND cle IS NOT NULL))
-  LIMIT 1`;
+  LIMIT ?`;
 };
 
 /** Le « Fait » à vérifier : culture visée, type d'événement, valeurs attendues du detail. */
@@ -123,14 +123,64 @@ export interface FaitVise {
   readonly detail: Readonly<Record<string, string>>;
 }
 
-/**
- * Vérification à passer à l'écriture (`ecrireEnsemble`), ou appelée dans la transaction de
- * `saisirEvenement` : lève DejaFait si un « Fait » identique est déjà en vigueur pour la culture.
- */
 /** Nom de champ du detail admis par `pasDejaFait`. */
 const NOM_DE_CHAMP = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/**
+ * Vérification AVANT l'écriture, à passer à `ecrireEnsemble` : lève DejaFait si un « Fait »
+ * identique est déjà en vigueur pour la culture.
+ */
 export function pasDejaFait(fait: FaitVise): VerificationEcriture {
+  return auPlus(fait, 0);
+}
+
+/**
+ * T13j : contrôle APRÈS l'écriture, dans la même transaction : le « Fait » vient d'être écrit,
+ * il ne doit pas y en avoir un autre en vigueur (déjà là, ou écrit par la même transaction).
+ * Lève DejaFait sinon : la transaction est annulée.
+ */
+export function faitUnique(fait: FaitVise): VerificationEcriture {
+  return auPlus(fait, 1);
+}
+
+/**
+ * T13j : le « Fait » que porte une ligne d'événement (format local), ou undefined. Un « Fait » :
+ * ligne originale (`remplace_sorte` nulle, comme les candidats de la vérification) sur une
+ * culture, et
+ *   - un réalisé : son étape ;
+ *   - une intervention qui solde un travail prévu (`occurrenceVisee` renseignée) : libellé,
+ *     catégorie, occurrence visée — la règle de l'écran (ni l'outil, ni le produit, ni la date).
+ * Seule définition du « Fait » : la porte s'en sert pour `preparerSaisie` et pour contrôler les
+ * lignes écrites, quel que soit le chemin.
+ */
+export function faitDeLigne(ligne: Readonly<Record<'ferme_id' | 'type' | 'serie_id' | 'campagne_id' | 'remplace_sorte' | 'detail', unknown>>): FaitVise | undefined {
+  if (ligne.remplace_sorte !== null || typeof ligne.ferme_id !== 'string') return undefined;
+  const serie = typeof ligne.serie_id === 'string';
+  const cibleId = serie ? ligne.serie_id : ligne.campagne_id;
+  if (typeof cibleId !== 'string' || typeof ligne.detail !== 'string') return undefined;
+  let d: unknown;
+  try {
+    d = JSON.parse(ligne.detail);
+  } catch {
+    return undefined;
+  }
+  if (typeof d !== 'object' || d === null) return undefined;
+  const champ = (nom: string): string | undefined => {
+    const v: unknown = (d as Record<string, unknown>)[nom];
+    return typeof v === 'string' ? v : undefined;
+  };
+  let detail: Readonly<Record<string, string>>;
+  const etape = champ('etape');
+  const [type, categorie, occurrenceVisee] = [champ('type'), champ('categorie'), champ('occurrenceVisee')];
+  if (ligne.type === 'realise' && etape !== undefined) detail = { etape };
+  else if (ligne.type === 'intervention' && type !== undefined && categorie !== undefined && occurrenceVisee !== undefined) {
+    detail = { type, categorie, occurrenceVisee };
+  } else return undefined;
+  return { fermeId: ligne.ferme_id, colonne: serie ? 'serie_id' : 'campagne_id', cibleId, type: ligne.type, detail };
+}
+
+/** Lève DejaFait si plus de `permis` « Fait » identiques sont en vigueur pour la culture. */
+function auPlus(fait: FaitVise, permis: number): VerificationEcriture {
   const cles = Object.keys(fait.detail);
   // Une clé est un NOM de champ, passée en paramètre (chemin JSON entre guillemets), jamais
   // recopiée dans le SQL. Sans clé, la vérification ne viserait rien : refus explicite.
@@ -142,7 +192,7 @@ export function pasDejaFait(fait: FaitVise): VerificationEcriture {
   const sql = sqlDejaFait(fait.colonne, cles.length);
   const filtre = [fait.cibleId, fait.fermeId, fait.type, ...cles.flatMap((c) => [`$."${c}"`, fait.detail[c]])];
   return async (lire) => {
-    const deja = await lire(sql, [...filtre, fait.cibleId, fait.fermeId, fait.fermeId, fait.fermeId]);
-    if (deja.length > 0) throw new DejaFait('déjà fait');
+    const deja = await lire(sql, [...filtre, fait.cibleId, fait.fermeId, fait.fermeId, fait.fermeId, permis + 1]);
+    if (deja.length > permis) throw new DejaFait('déjà fait');
   };
 }
