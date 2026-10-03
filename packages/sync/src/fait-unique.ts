@@ -72,32 +72,37 @@ export type ColonneCulture = 'serie_id' | 'campagne_id';
  * ferme). Les candidats sont les lignes de la culture (son index) du type et du detail voulus,
  * originales ou corrections ; leurs chaînes, et elles seules, sont reconstituées :
  *   - `candidat` : les candidats ; sans candidat, rien d'autre n'est lu ;
- *   - `haut` : leurs ancêtres (montée par origine_id, sinon remplace_evenement_id), racine comprise ;
- *   - `membre` : ces ancêtres, les remplacements de la culture (une annulation reçue du serveur
- *     dont le maillon intermédiaire manque ici n'est reliée que par origine_id), et tout ce qui
- *     descend d'eux par remplace_evenement_id (index `remplacement`) : une correction qui a changé
- *     de culture reste dans la chaîne ;
+ *   - `haut` : leurs ancêtres (montée par origine_id, sinon remplace_evenement_id), racine
+ *     comprise ; en UNION, chaque ancêtre une seule fois (un cycle de données corrompues s'arrête) ;
+ *   - `membre` : ces ancêtres ; les remplacements de la culture ; ceux dont origine_id est l'un de
+ *     ces ancêtres (une annulation reçue du serveur dont le maillon intermédiaire manque ici, même
+ *     dans une autre culture : index `remplacement`, qui porte origine_id) ; et tout ce qui
+ *     descend d'eux par remplace_evenement_id (même index) : une correction qui a changé de
+ *     culture reste dans la chaîne ;
  *   - `chaines` sur ces seuls membres, puis la règle « en vigueur » sur les candidats.
- * Paramètres : culture, ferme, type, une valeur par chemin (candidats) ; culture, ferme
- * (remplacements de la culture) ; ferme (départ des chaînes).
+ * Paramètres : culture, ferme, type, puis chemin JSON et valeur par clé du detail (candidats) ;
+ * culture, ferme (remplacements de la culture) ; ferme (branche origine_id) ; ferme (départ des
+ * chaînes).
  */
-const sqlDejaFait = (colonne: ColonneCulture, chemins: readonly string[]) => {
+const sqlDejaFait = (colonne: ColonneCulture, nombreCles: number) => {
   const filtre = `e.${colonne} = ? AND +e.ferme_id = ? AND e.type = ? AND json_valid(e.detail)
-    AND ${chemins.map((c) => `json_extract(e.detail, '${c}') = ?`).join(' AND ')}`;
+    AND ${Array.from({ length: nombreCles }, () => 'json_extract(e.detail, ?) = ?').join(' AND ')}`;
   const avant = `candidat(id, sorte) AS (
     SELECT e.id, e.remplace_sorte FROM evenement e WHERE ${filtre} AND (e.remplace_sorte IS NULL OR e.remplace_sorte = 'correction')
   ),
-  haut(id, origine, fini, profondeur) AS (
-    SELECT p.id, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL, 0 FROM evenement p WHERE p.id IN (SELECT id FROM candidat)
-    UNION ALL
-    SELECT p.id, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL, h.profondeur + 1
+  haut(id, origine, fini) AS (
+    SELECT p.id, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL FROM evenement p WHERE p.id IN (SELECT id FROM candidat)
+    UNION
+    SELECT p.id, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL
     FROM haut h JOIN evenement p ON p.id = h.origine
-    WHERE NOT h.fini AND h.origine IS NOT NULL AND h.profondeur < 1000
+    WHERE NOT h.fini AND h.origine IS NOT NULL
   ),
   membre(id) AS (
     SELECT id FROM haut
     UNION SELECT origine FROM haut WHERE origine IS NOT NULL
     UNION SELECT e.id FROM evenement e WHERE e.${colonne} = ? AND +e.ferme_id = ? AND e.remplace_sorte IS NOT NULL
+    UNION SELECT e.id FROM evenement e
+      WHERE e.remplace_evenement_id >= '' AND +e.ferme_id = ? AND e.origine_id IN (SELECT id FROM haut UNION SELECT origine FROM haut)
     UNION SELECT e.id FROM evenement e JOIN membre m ON e.remplace_evenement_id = m.id
   ),
   `;
@@ -122,12 +127,16 @@ export interface FaitVise {
  * `saisirEvenement` : lève DejaFait si un « Fait » identique est déjà en vigueur pour la culture.
  */
 export function pasDejaFait(fait: FaitVise): VerificationEcriture {
-  const chemins = Object.keys(fait.detail);
-  const valeurs = chemins.map((c) => fait.detail[c]);
-  const sql = sqlDejaFait(fait.colonne, chemins.map((c) => `$.${c}`));
-  const filtre = [fait.cibleId, fait.fermeId, fait.type, ...valeurs];
+  const cles = Object.keys(fait.detail);
+  // Une clé est un NOM de champ, passée en paramètre (chemin JSON entre guillemets), jamais
+  // recopiée dans le SQL. Sans clé, la vérification ne viserait rien : refus explicite.
+  if (cles.length === 0) throw new Error('vérification « déjà fait » : detail vide, aucun champ à comparer');
+  const cleRefusee = cles.find((c) => c.includes('"'));
+  if (cleRefusee !== undefined) throw new Error(`vérification « déjà fait » : nom de champ refusé (guillemet) : ${cleRefusee}`);
+  const sql = sqlDejaFait(fait.colonne, cles.length);
+  const filtre = [fait.cibleId, fait.fermeId, fait.type, ...cles.flatMap((c) => [`$."${c}"`, fait.detail[c]])];
   return async (lire) => {
-    const deja = await lire(sql, [...filtre, fait.cibleId, fait.fermeId, fait.fermeId]);
+    const deja = await lire(sql, [...filtre, fait.cibleId, fait.fermeId, fait.fermeId, fait.fermeId]);
     if (deja.length > 0) throw new DejaFait('déjà fait');
   };
 }
