@@ -1,0 +1,133 @@
+/**
+ * T13i : « Fait » unique, une seule règle pour toutes les écritures. Un « Fait » (réalisé d'une
+ * étape, intervention d'un travail prévu) ne s'écrit pas deux fois pour la même culture : la
+ * vérification lit la base DANS la transaction d'écriture (`VerificationEcriture`), donc rien ne
+ * s'intercale entre elle et l'écriture (deux taps, deux onglets, la voix et l'écran).
+ *
+ * Appelée par `porte.saisirEvenement` (voix, agent, photo : tout réalisé nouveau) et par l'écran
+ * Aujourd'hui (`ecritures.ts`, via `porte.ecrireEnsemble`). Sous-chemin `@planif/sync/fait-unique` :
+ * ce module ne tire ni PowerSync ni la porte (l'écran l'importe sans alourdir le démarrage).
+ *
+ * « En vigueur » : la règle de la vue evenements_en_vigueur (@planif/db, T10g), en SQL (`chaines`) :
+ * une chaîne de remplacements qui contient une annulation n'a rien en vigueur ; sinon sa correction
+ * la plus récente (horodatage, puis id), à défaut l'original. La culture et le detail sont lus sur
+ * la ligne en vigueur (une correction peut changer l'étape, voire la culture). Seules les lignes
+ * de la ferme comptent (`origine_id` des lignes reçues du serveur compris).
+ */
+import type { VerificationEcriture } from './types.ts';
+
+/** « Fait » déjà noté (réalisé ou intervention en vigueur) : rien n'est écrit. */
+export class DejaFait extends Error {}
+
+/**
+ * Chaînes de remplacement du journal local, en tête d'une requête (`WITH RECURSIVE …`). Une ligne
+ * reçue du serveur porte l'origine de sa chaîne (`origine_id`, tenue par la base, T10h) : elle est
+ * lue telle quelle. Seules les saisies locales pas encore synchronisées (sans `origine_id`)
+ * montent, par l'identifiant, jusqu'au premier parent qui la porte ou jusqu'à l'origine (une
+ * chaîne de 1 000 corrections ne se remonte pas). Un parent absent de la base locale sert de clé
+ * de chaîne, comme dans `enVigueur` (calculs.ts). Profondeur bornée (données corrompues : jamais
+ * de boucle sans fin).
+ *   - `remplacement` : chaque correction ou annulation, avec l'origine de sa chaîne (le dernier
+ *     maillon de sa montée : fini, ou dont le parent est une origine ou absent) ;
+ *   - `chaine` : par origine, la clé (horodatage|id) de sa correction la plus récente et son
+ *     `id` (colonne nue de SQLite : celle de la ligne du MAX), le nombre de ses annulations et
+ *     de ses corrections.
+ * `depart` filtre les remplacements dont on part ; `avant` : CTE placées avant
+ * (`nom(…) AS (…),`), que `depart` peut lire.
+ *
+ * T13b : les remplacements se lisent par l'index `remplacement` (`>= ''` : toute valeur non
+ * nulle, comme `IS NOT NULL`, que SQLite ne cherche pas dans un index d'expression), qui porte
+ * aussi la ferme, l'origine, la sorte et l'horodatage. La ferme est écartée de l'index
+ * ferme_date (`+`) : sinon SQLite parcourrait tout le journal de la ferme.
+ */
+export const chaines = (depart: string, avant = '') => `WITH RECURSIVE ${avant}montee(id, sorte, horodatage, origine, fini, profondeur) AS (
+    SELECT id, remplace_sorte, horodatage, coalesce(origine_id, remplace_evenement_id), origine_id IS NOT NULL, 0 FROM evenement
+    WHERE ${depart}
+    UNION ALL
+    SELECT m.id, m.sorte, m.horodatage, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL, m.profondeur + 1
+    FROM montee m JOIN evenement p ON p.id = m.origine
+    WHERE NOT m.fini AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL) AND m.profondeur < 1000
+  ),
+  remplacement AS (
+    SELECT m.id, m.sorte, m.horodatage, m.origine FROM montee m
+    WHERE m.fini OR NOT EXISTS (SELECT 1 FROM evenement p WHERE p.id = m.origine AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL))
+  ),
+  chaine AS (
+    SELECT origine, MAX(CASE WHEN sorte = 'correction' THEN horodatage || '|' || id END) AS cle, id,
+      SUM(sorte = 'annulation') AS annulations, SUM(sorte = 'correction') AS corrections
+    FROM remplacement GROUP BY origine
+  )
+`;
+
+/**
+ * Les chaînes de TOUTE la ferme (un paramètre : la ferme). Sert à la journée (calculs.ts de
+ * l'écran Aujourd'hui), qui les lit une fois pour tout le journal.
+ */
+export const CHAINES = chaines(`remplace_evenement_id >= '' AND +ferme_id = ?`);
+
+export type ColonneCulture = 'serie_id' | 'campagne_id';
+
+/**
+ * T13i : « déjà fait ? » restreint à la culture visée (T13h recalculait les chaînes de toute la
+ * ferme). Les candidats sont les lignes de la culture (son index) du type et du detail voulus,
+ * originales ou corrections ; leurs chaînes, et elles seules, sont reconstituées :
+ *   - `candidat` : les candidats ; sans candidat, rien d'autre n'est lu ;
+ *   - `haut` : leurs ancêtres (montée par origine_id, sinon remplace_evenement_id), racine comprise ;
+ *   - `membre` : ces ancêtres, les remplacements de la culture (une annulation reçue du serveur
+ *     dont le maillon intermédiaire manque ici n'est reliée que par origine_id), et tout ce qui
+ *     descend d'eux par remplace_evenement_id (index `remplacement`) : une correction qui a changé
+ *     de culture reste dans la chaîne ;
+ *   - `chaines` sur ces seuls membres, puis la règle « en vigueur » sur les candidats.
+ * Paramètres : culture, ferme, type, une valeur par chemin (candidats) ; culture, ferme
+ * (remplacements de la culture) ; ferme (départ des chaînes).
+ */
+const sqlDejaFait = (colonne: ColonneCulture, chemins: readonly string[]) => {
+  const filtre = `e.${colonne} = ? AND +e.ferme_id = ? AND e.type = ? AND json_valid(e.detail)
+    AND ${chemins.map((c) => `json_extract(e.detail, '${c}') = ?`).join(' AND ')}`;
+  const avant = `candidat(id, sorte) AS (
+    SELECT e.id, e.remplace_sorte FROM evenement e WHERE ${filtre} AND (e.remplace_sorte IS NULL OR e.remplace_sorte = 'correction')
+  ),
+  haut(id, origine, fini, profondeur) AS (
+    SELECT p.id, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL, 0 FROM evenement p WHERE p.id IN (SELECT id FROM candidat)
+    UNION ALL
+    SELECT p.id, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL, h.profondeur + 1
+    FROM haut h JOIN evenement p ON p.id = h.origine
+    WHERE NOT h.fini AND h.origine IS NOT NULL AND h.profondeur < 1000
+  ),
+  membre(id) AS (
+    SELECT id FROM haut
+    UNION SELECT origine FROM haut WHERE origine IS NOT NULL
+    UNION SELECT e.id FROM evenement e WHERE e.${colonne} = ? AND +e.ferme_id = ? AND e.remplace_sorte IS NOT NULL
+    UNION SELECT e.id FROM evenement e JOIN membre m ON e.remplace_evenement_id = m.id
+  ),
+  `;
+  return `${chaines(`id IN (SELECT id FROM membre) AND remplace_evenement_id >= '' AND +ferme_id = ?`, avant)}SELECT 1 FROM candidat c
+  WHERE (c.sorte IS NULL AND c.id NOT IN (SELECT origine FROM chaine))
+    OR (c.sorte = 'correction' AND c.id IN (SELECT id FROM chaine WHERE annulations = 0 AND cle IS NOT NULL))
+  LIMIT 1`;
+};
+
+/** Le « Fait » à vérifier : culture visée, type d'événement, valeurs attendues du detail. */
+export interface FaitVise {
+  readonly fermeId: string;
+  readonly colonne: ColonneCulture;
+  readonly cibleId: string;
+  readonly type: string;
+  /** Champ du detail → valeur attendue (ex. `{ etape: 'plantation' }`). */
+  readonly detail: Readonly<Record<string, string>>;
+}
+
+/**
+ * Vérification à passer à l'écriture (`ecrireEnsemble`), ou appelée dans la transaction de
+ * `saisirEvenement` : lève DejaFait si un « Fait » identique est déjà en vigueur pour la culture.
+ */
+export function pasDejaFait(fait: FaitVise): VerificationEcriture {
+  const chemins = Object.keys(fait.detail);
+  const valeurs = chemins.map((c) => fait.detail[c]);
+  const sql = sqlDejaFait(fait.colonne, chemins.map((c) => `$.${c}`));
+  const filtre = [fait.cibleId, fait.fermeId, fait.type, ...valeurs];
+  return async (lire) => {
+    const deja = await lire(sql, [...filtre, fait.cibleId, fait.fermeId, fait.fermeId]);
+    if (deja.length > 0) throw new DejaFait('déjà fait');
+  };
+}
