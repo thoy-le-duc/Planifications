@@ -25,7 +25,7 @@ import {
   type TravailPrevu,
   type UniteRecolte,
 } from '@planif/core';
-import type { OrdreEcriture, PorteDonnees, SaisieEvenement } from '@planif/sync';
+import type { OrdreEcriture, PorteDonnees, SaisieEvenement, VerificationEcriture } from '@planif/sync';
 import { annoncerSaisie } from './cache.ts';
 import { listeTextes, type Culture, type EvenementLu } from './calculs.ts';
 
@@ -43,6 +43,9 @@ export interface ContexteEcriture {
 
 /** Une ligne refusée par les règles du serveur : jamais écrite. */
 export class SaisieRefusee extends Error {}
+
+/** T13h : « Fait » déjà noté (réalisé ou intervention en vigueur) : rien n'est écrit. */
+export class DejaFait extends Error {}
 
 const SQL_ARTICLE = 'INSERT INTO article_stock (id, ferme_id, espece_id, variete_id, unite, categorie) VALUES (?, ?, ?, ?, ?, ?)';
 const SQL_MOUVEMENT = 'INSERT INTO mouvement_stock (id, ferme_id, article_stock_id, date, quantite, motif, recolte_id) VALUES (?, ?, ?, ?, ?, ?, ?)';
@@ -111,15 +114,53 @@ async function article(ctx: ContexteEcriture, culture: Culture, unite: UniteReco
 const culturePour = (culture: Culture) => culture.cible;
 
 /**
+ * T13h : un « Fait » en vigueur existe-t-il déjà pour la culture (sa colonne), du type donné, dont
+ * le detail porte la valeur au chemin JSON donné (l'étape, ou le libellé du travail) et, si elle
+ * est donnée, l'occurrence visée ? Paramètres : culture, ferme, type, chemin, valeur, occurrence
+ * (deux fois), ferme. Les originaux candidats (index `serie` ou `campagne`), puis leurs chaînes,
+ * descendues par remplace_evenement_id (index `remplacement`) : une chaîne qui contient une
+ * annulation n'a rien en vigueur ; une annulation reçue du serveur porte aussi l'origine de sa
+ * chaîne (origine_id), même si un maillon manque ici. Le cas courant (aucun candidat) ne lit
+ * aucune chaîne.
+ */
+const sqlDejaFait = (colonne: 'serie_id' | 'campagne_id') => `WITH RECURSIVE
+  faits(id) AS (SELECT id FROM evenement WHERE ${colonne} = ? AND +ferme_id = ? AND type = ? AND remplace_sorte IS NULL
+    AND json_valid(detail) AND json_extract(detail, ?) = ? AND (? IS NULL OR json_extract(detail, '$.occurrenceVisee') = ?)),
+  chaine(origine, id, sorte, n) AS (SELECT id, id, NULL, 0 FROM faits
+    UNION ALL SELECT c.origine, e.id, e.remplace_sorte, c.n + 1 FROM evenement e JOIN chaine c ON e.remplace_evenement_id = c.id WHERE c.n < 1000)
+  SELECT 1 FROM faits f WHERE NOT EXISTS (SELECT 1 FROM chaine c WHERE c.origine = f.id AND c.sorte = 'annulation')
+    AND NOT EXISTS (SELECT 1 FROM evenement a WHERE a.remplace_evenement_id >= '' AND +a.ferme_id = ? AND a.origine_id = f.id AND a.remplace_sorte = 'annulation')
+  LIMIT 1`;
+
+/**
+ * Vérification passée à `ecrireEnsemble` : lue DANS la transaction d'écriture, donc sans écriture
+ * possible entre elle et l'ordre (deux taps, deux onglets sur la même base : PowerSync n'ouvre
+ * qu'une transaction d'écriture à la fois). Lève DejaFait si le « Fait » existe déjà.
+ */
+function pasDejaFait(ctx: ContexteEcriture, culture: Culture, type: string, chemin: string, valeur: string, occurrence: string | null): VerificationEcriture {
+  const colonne = culture.cible.sorte === 'serie' ? 'serie_id' : 'campagne_id';
+  return async (lire) => {
+    const deja = await lire(sqlDejaFait(colonne), [culture.cibleId, ctx.fermeId, type, chemin, valeur, occurrence, occurrence, ctx.fermeId]);
+    if (deja.length > 0) throw new DejaFait('déjà fait');
+  };
+}
+
+/**
  * Écrit les ordres d'une saisie en UNE transaction, annoncée d'abord à la journée suivie (T13c) :
  * le changement qui suit ne relit que le journal de la culture touchée. `remplace` : la saisie
  * corrige ou annule une saisie (les chaînes du journal changent). Sans culture, rien n'est
  * annoncé : la journée sera relue en entier.
  */
-async function ecrireSaisie(ctx: ContexteEcriture, culture: SaisieEvenement['culture'], remplace: boolean, ordres: readonly OrdreEcriture[]): Promise<void> {
+async function ecrireSaisie(
+  ctx: ContexteEcriture,
+  culture: SaisieEvenement['culture'],
+  remplace: boolean,
+  ordres: readonly OrdreEcriture[],
+  verifier?: VerificationEcriture,
+): Promise<void> {
   const retirer = culture === null ? () => undefined : annoncerSaisie(ctx.porte, ctx.fermeId, culture, remplace);
   try {
-    await ctx.porte.ecrireEnsemble(ordres);
+    await ctx.porte.ecrireEnsemble(ordres, verifier);
   } catch (e) {
     retirer();
     throw e;
@@ -127,7 +168,10 @@ async function ecrireSaisie(ctx: ContexteEcriture, culture: SaisieEvenement['cul
 }
 const emplacementsDe = (culture: Culture) => culture.emplacements.map((e) => e.id);
 
-/** « Fait » : le réalisé de l'étape, à la date du jour. */
+/**
+ * « Fait » : le réalisé de l'étape, à la date du jour. T13h : rejet DejaFait, rien d'écrit, si un
+ * réalisé de cette étape est déjà en vigueur pour la culture (vérifié dans la transaction).
+ */
 export async function marquerFait(ctx: ContexteEcriture, culture: Culture, etape: EtapeRealisee): Promise<Id<'Evenement'>> {
   const detail: DetailRealise = { etape, quantiteReelle: null };
   const e = evenement(ctx.porte, {
@@ -141,7 +185,7 @@ export async function marquerFait(ctx: ContexteEcriture, culture: Culture, etape
     remplaceEvenement: null,
     detail,
   });
-  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre]);
+  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], pasDejaFait(ctx, culture, 'realise', '$.etape', etape, null));
   return e.id;
 }
 
@@ -170,7 +214,8 @@ export function detailDuTravail(travail: TravailPrevu, occurrenceVisee: DateCale
 
 /**
  * « Fait » sur un travail prévu (T22) : l'intervention du même type, à la date du jour, qui porte
- * l'occurrence visée `datePrevue` (la date de la carte touchée, T22b).
+ * l'occurrence visée `datePrevue` (la date de la carte touchée, T22b). T13h : rejet DejaFait,
+ * rien d'écrit, si une intervention de ce travail pour cette occurrence est déjà en vigueur.
  */
 export async function marquerTravailFait(
   ctx: ContexteEcriture,
@@ -189,7 +234,7 @@ export async function marquerTravailFait(
     remplaceEvenement: null,
     detail: detailDuTravail(travail, datePrevue),
   });
-  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre]);
+  await ecrireSaisie(ctx, culturePour(culture), false, [e.ordre], pasDejaFait(ctx, culture, 'intervention', '$.type', travail.type, datePrevue));
   return e.id;
 }
 
