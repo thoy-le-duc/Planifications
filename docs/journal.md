@@ -5,7 +5,7 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 ## 2026-10-03 — T13g : Aujourd'hui s'affiche avant la base, « Fait » en file
 
 - **Fait** : au lancement, l'instantané d'Aujourd'hui s'affiche avant l'ouverture de la base, en lecture seule (≈ 0,4 s au lieu de ≈ 0,8 s, grande ferme, CPU ×4), pour la dernière ferme montrée à cet utilisateur seulement. Les « Fait » tapés à la suite passent dans une file : chacun disparaît au tap, s'écrit dans l'ordre avec sa vérification « déjà fait » ; aucun n'est perdu, aucun en double, y compris hors lancement.
-- **Décidé** : la ferme montrée est mémorisée sous une clé à part, pour ne pas écraser le choix de ferme de l'utilisateur. Le petit module est rangé avec  (). JS de démarrage 70,9/71 Kio, non relevé. Relecture : isolement entre fermes sans faille, aucun bloquant.
+- **Décidé** : la ferme montrée est mémorisée sous une clé à part, pour ne pas écraser le choix de ferme de l'utilisateur. Le petit module est rangé avec `identifiants` (`vite.config.ts`). JS de démarrage 70,9/71 Kio, non relevé. Relecture : isolement entre fermes sans faille, aucun bloquant.
 - **Bloquant** : rien, mais la base s'ouvre ≈ 0,2 s plus tard (≈ 1 s) : on voit les tâches plus tôt, on peut taper un peu plus tard. Q26 posée (accepter « Fait » avant la base, T13k). Suite T13l : « Annuler » ignoré sans message pendant la file.
 
 ## 2026-10-03 — T13i : « Fait » unique, partagé avec la voix et l'agent
