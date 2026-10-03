@@ -12,9 +12,8 @@ Le délai de 300 s de Node ne couvre que la réception de la requête. Depuis T1
 ## Règles
 
 - Au plus `DELAI_PREMIER_MORCEAU_MS` (60 s) d'attente du premier morceau : au-delà, source annulée, 504 propre, une ligne au journal.
-- Au plafond HTTP/1.0 (T10q), tirer un morceau de plus plutôt qu'attendre un tour de boucle, pour un résultat exact (piste de la contre-relecture).
+- ~~Plafond HTTP/1.0 exact~~ : retiré (décision du chef, 2026-10-03) — lire un morceau de plus contredit les garanties de T10q (annulation, tirages bornés) pour les sources qui préparent un morceau d'avance ; la limite reste assumée.
 
 ## Critères d'acceptation
 
-- [ ] Test : source muette → 504 après le délai (option de délai court pour le test), `cancel` appelé, une ligne au journal.
-- [ ] Test : source d'exactement le plafond, fermée plus tard → 200 avec Content-Length exact.
+- [x] Test : source muette → 504 après le délai (option de délai court pour le test), `cancel` appelé, une ligne au journal.

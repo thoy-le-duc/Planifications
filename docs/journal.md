@@ -8,6 +8,11 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Décidé** : le mode démo est lu au build (`import.meta.env.MODE`) : la vraie appli n'embarque aucun octet de ces changements (JS de démarrage 70,9/71 Kio, inchangé). Relecture : aucun bloquant, la variante sans coût proposée par le relecteur est retenue.
 - **Bloquant** : rien.
 
+## 2026-10-03 — T10r : une réponse en flux n'attend pas sans fin
+
+- **Fait** : une réponse en flux dont la source ne produit rien en 60 s est coupée proprement (504, source annulée, une ligne au journal), en HTTP/1.1 comme en HTTP/1.0 ; le délai ne s'applique plus après le premier morceau ; minuteur toujours nettoyé.
+- **Décidé** : le « plafond exact » en HTTP/1.0 est abandonné : l'obtenir aurait affaibli les garanties de T10q (annulation de la source, lecture bornée) ; une réponse d'exactement 32 Mio qui ne se ferme que plus tard reçoit 505, limite documentée. Relecture : aucun bloquant.
+- **Bloquant** : rien. Une source qui cale après son premier morceau attend tant que le client reste connecté (assumé ; délai entre morceaux si un vrai export le demande).
 ## 2026-10-03 — T26 : un banc de synchro qui ne tombe plus tout seul
 
 - **Fait** : le test de synchro de bout en bout utilise des ports hors de la plage que Linux prête au hasard aux connexions sortantes (15432, 18080, 13100, 14174) ; Postgres n'est déclaré prêt que quand il écoute vraiment en TCP ; les migrations réessaient sur une connexion refusée ou coupée, jamais sur une erreur SQL.

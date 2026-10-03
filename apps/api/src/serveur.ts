@@ -11,6 +11,10 @@
  * - Durée totale d'une requête : celle de Node (300 s), dernier filet. Elle ne couvre que la
  *   réception de la requête : ni la production de la réponse (attente du premier morceau, lecture
  *   en mémoire en HTTP/1.0), ni son envoi.
+ * - Premier morceau d'un corps en flux (T10r) : attendu au plus `delaiPremierMorceauMs` (60 s par
+ *   défaut), en HTTP/1.1 comme en HTTP/1.0 ; au-delà, source annulée, 504 complet sans corps et
+ *   une ligne au journal. Le délai ne s'applique plus après le premier morceau : un export long
+ *   mais vivant n'est pas coupé.
  * - Corps de réponse en flux qui échoue en cours d'envoi (T10p) : l'erreur va au journal
  *   (`decrireErreur`, jamais son message) et la connexion est coupée, sans terminer la réponse :
  *   un export tronqué ne passe jamais pour complet. @hono/node-server, lui, écrirait l'erreur
@@ -25,7 +29,8 @@
  *   au-delà de `plafondHttp10Octets` (32 Mio par défaut) : 505 sans corps. Une réponse qui annonce
  *   déjà son Content-Length reste en flux : sa coupure se voit.
  * - Client parti pendant l'attente du premier morceau ou la lecture en mémoire : la source est
- *   annulée (`cancel`), même si elle ignore `requete.signal` ; rien au journal.
+ *   annulée (`cancel`), même si elle ignore `requete.signal` ; rien au journal, même quand le
+ *   délai du premier morceau expire ensuite.
  *   En production, le proxy parle HTTP/1.1 à l'API (README, « Déploiement »).
  * - Erreur levée par `fetch` lui-même (synchrone ou non : flux verrouillé, `start` qui lève…) :
  *   500 et une ligne au journal, rien sur la console ; délai (TimeoutError) : 504 ; requête
@@ -40,7 +45,7 @@
  *   serveur-flux.test.ts). Rendre `new Response(readableStream)`.
  *
  * Contrat : serveur.test.ts, serveur-relecture.test.ts, serveur-flux.test.ts,
- * serveur-flux-suites.test.ts, serveur-flux-suites-relecture.test.ts.
+ * serveur-flux-suites.test.ts, serveur-flux-suites-relecture.test.ts, serveur-flux-delai.test.ts.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Http2ServerRequest } from 'node:http2';
@@ -54,6 +59,8 @@ export const DELAI_LECTURE_CORPS_MS = 10_000;
 export const DELAI_EN_TETES_MS = 15_000;
 /** Durée au plus d'une requête entière : la valeur par défaut de Node. */
 export const DUREE_MAX_REQUETE_MS = 300_000;
+/** Attente au plus du premier morceau d'un corps en flux (T10r). */
+export const DELAI_PREMIER_MORCEAU_MS = 60_000;
 /** Corps en flux lu en mémoire au plus pour une requête HTTP/1.0 (32 Mio). */
 export const PLAFOND_CORPS_HTTP10_OCTETS = 32 * 1024 * 1024;
 
@@ -66,6 +73,8 @@ export interface OptionsServeur {
   readonly delaiEnTetesMs?: number;
   /** Plafond du corps lu en mémoire en HTTP/1.0 ; par défaut PLAFOND_CORPS_HTTP10_OCTETS. */
   readonly plafondHttp10Octets?: number;
+  /** Attente au plus du premier morceau d'un corps en flux ; par défaut DELAI_PREMIER_MORCEAU_MS. */
+  readonly delaiPremierMorceauMs?: number;
 }
 
 /** Réponse écrite telle quelle sur la socket, comme Node pour son propre délai de requête. */
@@ -193,26 +202,35 @@ function corpsSurveille(
 }
 
 /**
- * Corps entier de `lecteur` en mémoire (HTTP/1.0) ; lève si la source lève. Au-delà de `plafond`
- * octets : lecture arrêtée, source annulée, `null`.
+ * Corps entier de `lecteur` en mémoire (HTTP/1.0), `premier` (morceau déjà lu) en tête ; lève si
+ * la source lève. Au-delà de `plafond` octets : lecture arrêtée, source annulée, `null`.
  *
  * Plafond atteint pile : on ne tire pas un morceau de plus (une source qui a préparé un morceau
  * d'avance en produirait alors un autre). On regarde seulement si la source s'est déjà terminée,
  * au plus tard au tour suivant de la boucle d'événements ; sinon le corps est tenu pour trop gros.
  * Limite assumée : une source d'exactement `plafond` octets qui ne se ferme que plus tard → 505.
  */
-async function lireEnEntier(lecteur: ReadableStreamDefaultReader<Uint8Array>, plafond: number): Promise<Uint8Array | null> {
+async function lireEnEntier(
+  lecteur: ReadableStreamDefaultReader<Uint8Array>,
+  premier: Uint8Array,
+  plafond: number,
+): Promise<Uint8Array | null> {
   const morceaux: Uint8Array[] = [];
   let longueur = 0;
+  let morceau: Uint8Array | null = premier;
   for (;;) {
-    const lu = await lecteur.read();
-    if (lu.done) break;
-    longueur += lu.value.byteLength;
+    if (morceau === null) {
+      const lu = await lecteur.read();
+      if (lu.done) break;
+      morceau = lu.value;
+    }
+    longueur += morceau.byteLength;
     if (longueur > plafond) {
       await lecteur.cancel().catch(() => undefined);
       return null;
     }
-    morceaux.push(lu.value);
+    morceaux.push(morceau);
+    morceau = null;
     if (longueur === plafond) {
       const fin = await finDejaConnue(lecteur);
       if (fin === 'erreur') await lecteur.read(); // lève l'erreur de la source
@@ -225,9 +243,9 @@ async function lireEnEntier(lecteur: ReadableStreamDefaultReader<Uint8Array>, pl
   }
   const corps = new Uint8Array(longueur);
   let position = 0;
-  for (const morceau of morceaux) {
-    corps.set(morceau, position);
-    position += morceau.byteLength;
+  for (const m of morceaux) {
+    corps.set(m, position);
+    position += m.byteLength;
   }
   return corps;
 }
@@ -245,6 +263,32 @@ function finDejaConnue(lecteur: ReadableStreamDefaultReader<Uint8Array>): Promis
       });
     }),
   ]);
+}
+
+/** Résultat d'une lecture de corps en flux. */
+type LectureMorceau = Awaited<ReturnType<ReadableStreamDefaultReader<Uint8Array>['read']>>;
+
+/**
+ * Premier morceau de `lecteur`, attendu au plus `delaiMs` : au-delà, `'delai'` (la source n'est
+ * pas annulée ici). Lève si la source lève. Minuteur toujours nettoyé, et sans retenir le
+ * processus.
+ */
+async function lirePremier(
+  lecteur: ReadableStreamDefaultReader<Uint8Array>,
+  delaiMs: number,
+): Promise<LectureMorceau | 'delai'> {
+  let minuteur: NodeJS.Timeout | undefined;
+  const delai = new Promise<'delai'>((ok) => {
+    minuteur = setTimeout(() => {
+      ok('delai');
+    }, delaiMs);
+    minuteur.unref();
+  });
+  try {
+    return await Promise.race([lecteur.read(), delai]);
+  } finally {
+    clearTimeout(minuteur);
+  }
 }
 
 /** Statut qui n'a jamais de corps (1xx, 204, 304). */
@@ -305,6 +349,7 @@ export function creerServeur(options: OptionsServeur): Server {
   const delaiCorpsMs = options.delaiLectureCorpsMs ?? DELAI_LECTURE_CORPS_MS;
   const delaiEnTetesMs = options.delaiEnTetesMs ?? DELAI_EN_TETES_MS;
   const plafondHttp10 = options.plafondHttp10Octets ?? PLAFOND_CORPS_HTTP10_OCTETS;
+  const delaiPremierMs = options.delaiPremierMorceauMs ?? DELAI_PREMIER_MORCEAU_MS;
   const journal = journalSur(options.journal ?? journalParDefaut);
   /** 500 sans corps : jamais rien de l'erreur au client. */
   const reponse500 = (): Response => new Response(null, { status: 500 });
@@ -336,6 +381,13 @@ export function creerServeur(options: OptionsServeur): Server {
       if (!fermee()) journal(`[réponse] corps en flux en échec ${quand}, 500 : ${decrireErreur(erreur)}`);
       return reponse500();
     };
+    /** Source muette au-delà du délai : annulée, 504 sans corps (client parti : rien au journal). */
+    const sansPremierMorceau = async (): Promise<Response> => {
+      await lecteur.cancel().catch(() => undefined);
+      if (fermee()) return reponse500();
+      journal(`[réponse] aucun morceau du corps en flux en ${String(delaiPremierMs)} ms, source annulée, 504`);
+      return new Response(null, { status: 504 });
+    };
 
     // HTTP/1.0 avec un Content-Length annoncé : reste en flux, sa coupure se voit (corps plus
     // court que l'annonce).
@@ -349,7 +401,9 @@ export function creerServeur(options: OptionsServeur): Server {
       }
       let corps: Uint8Array | null;
       try {
-        corps = await lireEnEntier(lecteur, plafondHttp10);
+        const premier = await lirePremier(lecteur, delaiPremierMs);
+        if (premier === 'delai') return await sansPremierMorceau();
+        corps = premier.done ? new Uint8Array(0) : await lireEnEntier(lecteur, premier.value, plafondHttp10);
       } catch (erreur) {
         return echec(erreur, 'pendant la lecture en mémoire (HTTP/1.0)');
       }
@@ -362,12 +416,13 @@ export function creerServeur(options: OptionsServeur): Server {
       return new Response(corps.byteLength === 0 ? null : corps, { status, headers: enTetes });
     }
 
-    let premier: Awaited<ReturnType<typeof lecteur.read>>;
+    let premier: LectureMorceau | 'delai';
     try {
-      premier = await lecteur.read();
+      premier = await lirePremier(lecteur, delaiPremierMs);
     } catch (erreur) {
       return echec(erreur, 'avant le premier morceau');
     }
+    if (premier === 'delai') return sansPremierMorceau();
     if (premier.done) return new Response(null, { status, headers });
     return new Response(corpsSurveille(lecteur, premier.value, outgoing, fermee, journal), { status, headers });
   };
