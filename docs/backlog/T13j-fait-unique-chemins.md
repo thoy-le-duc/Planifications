@@ -19,6 +19,6 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : un réalisé écrit par `preparerSaisie` + `ecrireEnsemble` sans vérificateur est refusé.
-- [ ] Test : une intervention qui solde un travail déjà soldé, par `saisirEvenement`, est refusée avec `DejaFait`.
-- [ ] Mesure CPU ×4 du refus sur la grande ferme, dans la PR.
+- [x] Test : un réalisé écrit par `preparerSaisie` + `ecrireEnsemble` sans vérificateur est refusé.
+- [x] Test : une intervention qui solde un travail déjà soldé, par `saisirEvenement`, est refusée avec `DejaFait`.
+- [x] Mesure CPU ×4 du refus sur la grande ferme, dans la PR.

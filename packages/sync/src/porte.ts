@@ -15,9 +15,10 @@ import type {
   ResumeSaisie,
   RequeteSurveillee,
   SaisieEvenement,
+  TransactionLocale,
   VerificationEcriture,
 } from './types.ts';
-import { pasDejaFait } from './fait-unique.ts';
+import { cleFait, DejaFait, faitDeLigne, faitUnique, pasDejaFait, type FaitVise } from './fait-unique.ts';
 
 const COLONNES_EVENEMENT = [
   'id',
@@ -110,6 +111,29 @@ function verifierTaille(ordres: readonly OrdreEcriture[]): void {
   }
 }
 
+/**
+ * T13j : un ordre qui nomme le journal (`evenement`, même au milieu d'un nom :
+ * `ps_data__evenement`, `"evenement"`, `evenement_id`) peut y écrire ; seuls ces ensembles sont
+ * contrôlés. Un ordre qui ne le nomme pas ne peut pas y insérer de ligne (le schéma local n'a pas
+ * de déclencheur qui y écrive) : faux positif possible (un contrôle de trop), jamais de faux
+ * négatif.
+ */
+const NOMME_JOURNAL = /evenement/i;
+
+/**
+ * Table SQLite où le journal est rangé : `ps_data__evenement` sous PowerSync (la vue `evenement`
+ * n'a pas de rowid), `evenement` elle-même dans le double de test. Introuvable : refus explicite,
+ * jamais d'écriture sans contrôle.
+ */
+async function rangementJournal(tx: TransactionLocale): Promise<string> {
+  const noms = (await tx.getAll<{ name: string }>(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('ps_data__evenement', 'evenement')`,
+  )).map((l) => l.name);
+  const nom = ['ps_data__evenement', 'evenement'].find((n) => noms.includes(n));
+  if (nom === undefined) throw new Error('journal local introuvable : la vérification « déjà fait » est impossible, rien n’est écrit');
+  return nom;
+}
+
 export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnees {
   const maintenant = options.maintenant ?? (() => new Date());
   const nouvelId =
@@ -154,20 +178,83 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     };
   }
 
+  /** Rangement du journal, cherché une fois par porte (relu après un échec). */
+  let rangement: Promise<string> | undefined;
+
   /**
-   * T13i : vérification « déjà fait » d'une saisie : un réalisé NOUVEAU sur une culture. Une
-   * correction ou une annulation n'est jamais refusée ; les autres types ne sont pas touchés.
+   * Vérifications rendues par `preparerSaisie` de cette porte : le contrôle d'après les lignes
+   * écrites refait exactement la même règle ; `ecrireEnsemble` ne la lance donc pas une seconde
+   * fois avant les ordres (un seul « déjà fait » par tap). Optimisation seulement : elle ne
+   * dispense d'aucun contrôle.
    */
-  function verificationDe(saisie: SaisieEvenement): VerificationEcriture | undefined {
-    if (saisie.type !== 'realise' || saisie.remplaceEvenement !== null || saisie.culture === null) return undefined;
-    const c = saisie.culture;
-    return pasDejaFait({
-      fermeId: options.fermeId,
-      colonne: c.sorte === 'serie' ? 'serie_id' : 'campagne_id',
-      cibleId: c.sorte === 'serie' ? c.serieId : c.campagneId,
-      type: 'realise',
-      detail: { etape: saisie.detail.etape },
+  const verificationsPreparees = new WeakSet<VerificationEcriture>();
+
+  /**
+   * T13j : exécute les ordres d'une transaction, puis contrôle CHAQUE « Fait » (faitDeLigne) que
+   * la transaction vient d'insérer dans le journal, d'après les lignes écrites, quel que soit
+   * l'ordre (préparé, copié, SQL brut) : un autre « Fait » identique en vigueur, déjà là ou écrit
+   * par la même transaction → DejaFait, la transaction est annulée, rien n'est écrit. Deux
+   * « Fait » identiques écrits ensemble sont refusés, même si la transaction annule l'un d'eux.
+   *
+   * Lignes nouvelles : rowid de la table de rangement au-delà du plus grand d'avant les ordres.
+   * SQLite donne à une ligne insérée un rowid supérieur à tous ceux de la table, et ni la
+   * synchro ni un autre onglet n'écrivent pendant la transaction : sont nouvelles exactement les
+   * lignes insérées par ces ordres, quelle que soit la forme de l'INSERT (paramètres, littéraux,
+   * INSERT … SELECT, OR REPLACE).
+   *
+   * Limites connues (aucun chemin de l'appli ne les emprunte) :
+   *   - un UPDATE qui transforme une ligne existante en « Fait » n'ajoute pas de ligne : il n'est
+   *     pas vu ; un DELETE de la dernière ligne suivi d'un INSERT dans la même transaction ferait
+   *     réutiliser son rowid. Le journal est en ajout seul : le serveur refuse UPDATE et DELETE
+   *     sur `evenement`. Ticket de suite T13o : repérer les lignes par ps_crud ;
+   *   - faux positif : un « Fait » et sa correction écrits dans la même transaction sont refusés
+   *     (la correction en vigueur compte comme un autre « Fait ») ;
+   *   - un déclencheur posé sur une autre table, qui écrirait dans le journal, échapperait au
+   *     filtre NOMME_JOURNAL (le schéma local n'en a aucun).
+   *
+   * `verifier` (T13h) tourne avant les ordres, comme avant (sauf celle de `preparerSaisie`,
+   * refaite après) ; il ne dispense d'aucun contrôle.
+   * `exigerVerificateur` (ecrireEnsemble) : un « Fait » écrit sans vérificateur est refusé. Ce
+   * n'est plus qu'une règle d'hygiène d'API (l'appelant passe la vérification rendue) : le
+   * contrôle d'après les lignes écrites protège seul, avec ou sans vérificateur.
+   */
+  async function ecrireControle(
+    tx: TransactionLocale,
+    ordres: readonly OrdreEcriture[],
+    verifier: VerificationEcriture | undefined,
+    exigerVerificateur: boolean,
+  ): Promise<void> {
+    const lire = <T>(sql: string, parametres?: readonly unknown[]) => tx.getAll<T>(sql, parametres ?? []);
+    if (verifier !== undefined && !verificationsPreparees.has(verifier)) await verifier(lire);
+    if (!ordres.some((o) => NOMME_JOURNAL.test(o.sql))) {
+      for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
+      return;
+    }
+    rangement ??= rangementJournal(tx).catch((e: unknown) => {
+      rangement = undefined;
+      throw e;
     });
+    const table = await rangement;
+    const avant = (await lire<{ m: number | null }>(`SELECT max(rowid) AS m FROM "${table}"`))[0]?.m ?? 0;
+    for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
+    const lignes = await lire<Readonly<Record<'id' | 'ferme_id' | 'type' | 'serie_id' | 'campagne_id' | 'remplace_sorte' | 'detail', unknown>>>(
+      `SELECT id, ferme_id, type, serie_id, campagne_id, remplace_sorte, detail FROM evenement WHERE id IN (SELECT id FROM "${table}" WHERE rowid > ?)`,
+      [avant],
+    );
+    // « Fait » écrits, par clé : deux de même clé dans la transaction → DejaFait ; sinon, aucun
+    // autre identique ne doit être en vigueur (faitUnique, qui écarte la ligne écrite).
+    const faits = new Map<string, { readonly fait: FaitVise; readonly id: string }>();
+    for (const ligne of lignes) {
+      const fait = faitDeLigne(ligne);
+      if (fait === undefined) continue;
+      const cle = cleFait(fait);
+      if (faits.has(cle)) throw new DejaFait('déjà fait');
+      faits.set(cle, { fait, id: String(ligne.id) });
+    }
+    for (const { fait, id } of faits.values()) await faitUnique(fait, [id])(lire);
+    if (exigerVerificateur && verifier === undefined && faits.size > 0) {
+      throw new Error('« Fait » écrit sans vérification « déjà fait » : passer la vérification rendue par preparerSaisie');
+    }
   }
 
   function preparerSaisie(saisie: SaisieEvenement): EvenementPrepare {
@@ -189,7 +276,14 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       remplace_evenement_id: saisie.remplaceEvenement?.evenementId ?? null,
       detail: JSON.stringify(saisie.detail),
     };
-    return { id, ligne, ordre: { sql: SQL_SAISIE, parametres: COLONNES_EVENEMENT.map((c) => ligne[c]) } };
+    const ordre: OrdreEcriture = { sql: SQL_SAISIE, parametres: COLONNES_EVENEMENT.map((c) => ligne[c]) };
+    // T13j : vérification « déjà fait » d'un « Fait » (réalisé nouveau sur une culture,
+    // intervention nouvelle qui solde un travail prévu), selon la règle unique de faitDeLigne.
+    const fait = faitDeLigne(ligne);
+    if (fait === undefined) return { id, ligne, ordre };
+    const verification = pasDejaFait(fait);
+    verificationsPreparees.add(verification);
+    return { id, ligne, ordre, verification };
   }
 
   return {
@@ -197,9 +291,8 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
 
     async ecrire(sql, parametres) {
       verifierTaille([{ sql, parametres: parametres ?? [] }]);
-      await base.writeTransaction(async (tx) => {
-        await tx.execute(sql, parametres ?? []);
-      });
+      // T13j : le SQL brut passe par le même contrôle « déjà fait » que les autres chemins.
+      await base.writeTransaction((tx) => ecrireControle(tx, [{ sql, parametres: parametres ?? [] }], undefined, false));
     },
 
     async ecrireEnsemble(ordres: readonly OrdreEcriture[], verifier?: VerificationEcriture) {
@@ -214,11 +307,9 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       verifierTaille(ordres);
       // Une seule transaction locale : PowerSync l'envoie en un seul lot, que le serveur accepte ou
       // refuse en entier. Un ordre qui échoue rejette la promesse et annule tout. La vérification
-      // (T13h) lit dans la transaction : rien ne s'écrit entre elle et les ordres.
-      await base.writeTransaction(async (tx) => {
-        if (verifier !== undefined) await verifier((sql, parametres) => tx.getAll(sql, parametres ?? []));
-        for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
-      });
+      // (T13h) lit dans la transaction : rien ne s'écrit entre elle et les ordres. T13j : chaque
+      // « Fait » écrit est contrôlé ensuite, dans la même transaction (ecrireControle).
+      await base.writeTransaction((tx) => ecrireControle(tx, ordres, verifier, true));
     },
 
     surveiller,
@@ -226,13 +317,9 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
     async saisirEvenement(saisie: SaisieEvenement): Promise<Id<'Evenement'>> {
       const { id, ordre } = preparerSaisie(saisie);
       verifierTaille([ordre]);
-      const verifier = verificationDe(saisie);
-      // T13i : un réalisé nouveau (voix, agent…) passe par la même règle « déjà fait » que
-      // l'écran, lue dans la transaction d'écriture.
-      await base.writeTransaction(async (tx) => {
-        if (verifier !== undefined) await verifier((sql, parametres) => tx.getAll(sql, parametres ?? []));
-        await tx.execute(ordre.sql, ordre.parametres);
-      });
+      // T13i, T13j : un « Fait » nouveau (voix, agent…) passe par la même règle « déjà fait » que
+      // l'écran, contrôlée dans la transaction d'écriture d'après la ligne écrite.
+      await base.writeTransaction((tx) => ecrireControle(tx, [ordre], undefined, false));
       return id;
     },
 

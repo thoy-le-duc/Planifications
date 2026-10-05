@@ -19,7 +19,7 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : trois « Fait » puis « Annuler » tout de suite → le dernier est annulé.
-- [ ] Test : une erreur au milieu de la file n'arrête pas les suivants et reste affichée.
-- [ ] Test : après déconnexion, aucune clé de ferme de l'utilisateur ne reste.
-- [ ] Test : instantané d'un autre utilisateur sur la même ferme jamais affiché avant la base.
+- [x] Test : trois « Fait » puis « Annuler » tout de suite → le dernier est annulé.
+- [x] Test : une erreur au milieu de la file n'arrête pas les suivants et reste affichée.
+- [x] Test : après déconnexion, aucune clé de ferme de l'utilisateur ne reste.
+- [x] Test : instantané d'un autre utilisateur sur la même ferme jamais affiché avant la base.
