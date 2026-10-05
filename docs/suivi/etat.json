@@ -1,11 +1,8 @@
 {
-  "maj": "3 octobre 2026, 18 h 35 UTC",
-  "resume": "Cette fenêtre : deux tickets prêts, **en attente de la CI** — GitHub Actions refuse de lancer les tests (« paiement échoué ou plafond de dépenses atteint »), donc rien n'est fusionné. **T13j (PR #97)** : un « Fait » ne peut plus être noté deux fois, quel que soit le chemin d'écriture (voix et agent compris). **T13l (PR #96)** : aucun geste ignoré pendant que des « Fait » s'écrivent ; « Annuler » passe dans la file et ne peut plus fausser le stock. Les deux ont passé deux à trois relectures sans faille restante. Nouveaux tickets : T13m, T13n, T13o.",
-  "en_cours": {
-    "T13j": "en revue",
-    "T13l": "en revue"
-  },
-  "attente": "**Urgent : GitHub Actions est bloqué** (Settings → Billing & plans : paiement échoué ou plafond de dépenses) — plus aucune PR ne peut être vérifiée ni fusionnée. Q26 : accepter « Fait » dès l'affichage d'Aujourd'hui, avant que la base soit prête ? Q25 : effacer de son téléphone les refus d'une ferme qu'on a quittée ? Confirmer que les refus de synchro restent hors de l'export (T10l). Vercel : désactiver « Vercel Authentication » pour partager les aperçus. Fermer la PR #75. Mise en ligne : compte Brevo et domaine d'envoi (SPF, DKIM, DMARC), identifiants dans les secrets de production ; base en UTF-8 ; Node 22 ; proxy HTTP/1.1.",
+  "maj": "5 octobre 2026, 12 h (heure de Paris)",
+  "resume": "Ces derniers jours : **un « Fait » ne peut plus être noté deux fois, quel que soit le chemin (T13j)** — écran, et demain voix et agent ; la porte contrôle les lignes réellement écrites. **Aucun geste ignoré pendant que les « Fait » s'écrivent (T13l)** — « Annuler » passe dans la file, et une saisie déjà annulée ailleurs ne peut plus fausser le stock. Le quota gratuit de GitHub Actions était épuisé : le dépôt est **public jusqu'au 1er novembre** pour garder la CI. Nouvelle règle de **budget** : la boucle laisse 15 % de la limite Claude chaque semaine (au plus 8 tickets, rien du mardi 10 h au mercredi 10 h) ; aucun nouveau ticket avant mercredi 7 octobre 10 h.",
+  "en_cours": {},
+  "attente": "Q26 : accepter « Fait » dès l'affichage d'Aujourd'hui, avant que la base soit prête ? Q25 : effacer de son téléphone les refus d'une ferme qu'on a quittée ? Confirmer que les refus de synchro restent hors de l'export (T10l). Donner ta jauge Claude de temps en temps (pour régler le budget). 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75. Vercel : désactiver « Vercel Authentication ». Connecteur MonCasierFrais à réautoriser. Mise en ligne : Brevo et domaine d'envoi, secrets de production, base UTF-8, Node 22, proxy HTTP/1.1.",
   "visuels": [
     {
       "titre": "Mode sombre",
