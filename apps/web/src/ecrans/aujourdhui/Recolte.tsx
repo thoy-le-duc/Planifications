@@ -4,7 +4,7 @@
  * (espece.unite_recolte). Valider écrit tout de suite, sans confirmation (saisie manuelle,
  * principe 3) : « Annuler » reste possible 10 s, puis depuis l'historique.
  */
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { UniteRecolte } from '@planif/core';
 import { codesEmplacements, dateCourte, nomCulture, quantiteAvecUnite, type Culture, type DerniereRecolte } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
@@ -34,6 +34,10 @@ export interface ProprietesRecolte {
    * ne sont pas connues (l'instantané ne les garde pas), le choix de la culture les attend.
    */
   readonly enAttente?: boolean;
+  /** T13l : des saisies s'écrivent encore : « Valider » attend, inactif, puis se réactive. */
+  readonly occupe?: boolean;
+  /** T13l : la raison dite sous « Valider » tant que `occupe`. */
+  readonly texteOccupe?: string;
 }
 
 function IconeRetour() {
@@ -81,13 +85,14 @@ function uniteAffichee(quantite: number, u: UniteRecolte): string {
   return quantiteAvecUnite(quantite, u).replace(/^\S+ /, '');
 }
 
-export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surValider, surFermer, erreur = null, enAttente = false }: ProprietesRecolte) {
+export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surValider, surFermer, erreur = null, enAttente = false, occupe = false, texteOccupe = 'Saisies précédentes en cours d’enregistrement…' }: ProprietesRecolte) {
   const [culture, setCulture] = useState<Culture | null>(initiale);
   const [unite, setUnite] = useState<UniteRecolte>(initiale?.unite ?? 'kg');
   const [texte, setTexte] = useState('');
   const retour = useRef<HTMLButtonElement>(null);
   const garderFocus = useFocusDuDialogue();
   const radios = useRef<(HTMLButtonElement | null)[]>([]);
+  const idOccupe = useId();
 
   useEffect(() => {
     retour.current?.focus();
@@ -98,7 +103,7 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
   const affichee = texte === '' ? '0' : texte;
   const libelleUnite = uniteAffichee(quantite === 0 ? 2 : quantite, unite);
   const valider = () => {
-    if (culture !== null && quantite > 0) surValider(culture, quantite, unite);
+    if (culture !== null && quantite > 0 && !occupe) surValider(culture, quantite, unite);
   };
   const toucher = (t: Touche) => {
     setTexte((x) => appuyer(x, t));
@@ -242,10 +247,15 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
                   {erreur}
                 </p>
               )}
-              <button type="button" className="auj-valider" disabled={!valide} onClick={valider}>
+              <button type="button" className="auj-valider" disabled={!valide || occupe} aria-describedby={occupe ? idOccupe : undefined} onClick={valider}>
                 <IconeCoche />
                 {valide ? `Valider ${quantiteAvecUnite(quantite, unite)}` : 'Valider'}
               </button>
+              {occupe && (
+                <span id={idOccupe} className="auj-recolte-note">
+                  {texteOccupe}
+                </span>
+              )}
               <span className="auj-recolte-note">Enregistré sur le téléphone, envoyé dès que le réseau revient. Annulable 10 secondes.</span>
             </div>
           </>

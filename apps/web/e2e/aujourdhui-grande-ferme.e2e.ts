@@ -31,7 +31,8 @@ import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, repeterMe
  *   - temps d'ouverture de la base (data-base="prete") à chaque lancement : relevé, non bloquant.
  *   - relecture après une saisie « Fait » (T13c, BLOQUANT) : de l'appui à la saisie en tête de
  *     l'historique, en moins de 500 ms, médiane de 5 saisies sur 5 tâches différentes. Mesurée
- *     à ≈ 884 ms (une seule saisie, non bloquante) à la fin de T13b. *   - T13g, lancement à froid hors ligne AVEC instantané (BLOQUANT) : tâches affichées (marque de
+ *     à ≈ 884 ms (une seule saisie, non bloquante) à la fin de T13b.
+ *   - T13g, lancement à froid hors ligne AVEC instantané (BLOQUANT) : tâches affichées (marque de
  *     l'écran) moins de 600 ms après le début de la navigation, médiane de 5 ; et à CHAQUE
  *     lancement, l'instantané est dessiné AVANT que la base soit prête (première carte vue
  *     pendant que la coquille n'est pas à data-base="prete"), en lecture seule (aucun bouton

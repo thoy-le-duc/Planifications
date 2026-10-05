@@ -11,8 +11,10 @@
  * Stockage indisponible (navigation privée, quota) : rien n'est lu (null) ni retenu.
  */
 
-const cleChoix = (utilisateurId: string) => `planif.ferme-active.${utilisateurId}`;
-const cleMontree = (utilisateurId: string) => `planif.ferme-montree.${utilisateurId}`;
+/** Clé du choix de la ferme (T11) ; effacée à la déconnexion (connexion/deconnexion.ts, T13l). */
+export const cleChoix = (utilisateurId: string): string => `planif.ferme-active.${utilisateurId}`;
+/** Clé de la dernière ferme montrée (T13g) ; effacée à la déconnexion (T13l). */
+export const cleMontree = (utilisateurId: string): string => `planif.ferme-montree.${utilisateurId}`;
 
 function lire(stockage: Pick<Storage, 'getItem'>, cle: string): string | null {
   try {
