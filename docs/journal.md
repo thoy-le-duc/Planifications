@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-03 — T13j : « Fait » unique sur tous les chemins d'écriture
+
+- **Fait** : la porte contrôle, dans la même transaction et d'après les lignes réellement écrites, chaque « Fait » nouveau (réalisé, ou intervention qui solde un travail prévu) quel que soit le chemin : `saisirEvenement`, `preparerSaisie` + `ecrireEnsemble`, SQL brut. Deux « Fait » identiques dans un même ensemble, un vérificateur vide ou une copie d'ordre ne passent plus. `preparerSaisie` rend la vérification ; l'écran l'utilise. Refus sur la grande ferme en 6 à 7 ms (CPU normal).
+- **Décidé** : relecture en deux passages ; le premier a trouvé qu'un vérificateur quelconque ouvrait la porte à tous les « Fait » d'un ensemble (le chemin de la future voix et de l'agent) : remplacé par un contrôle des lignes écrites (rowid). Pas d'index `origine_id` (sous 50 ms). Relecture après « Fait » en e2e CPU ×4 : 300 à 350 ms (budget 500). JS de démarrage 70,9/71 Kio.
+- **Bloquant** : rien. Suite : T13o (contrôle d'après le journal d'envoi `ps_crud`, pour couvrir aussi un UPDATE ; jamais d'accès SQL brut pour l'agent).
+
 ## 2026-10-03 — T13l : aucun geste ignoré pendant que les « Fait » s'écrivent
 
 - **Fait** : « Annuler » (bandeau et historique) passe dans la file, après la saisie qu'il annule ; le bandeau d'un « Fait » en file paraît dès le tap ; « Enregistrer » et « Valider » sont inactifs pendant la file avec la raison affichée. Une correction ou une annulation vérifie dans la même transaction que la chaîne de la saisie n'est pas déjà annulée (et, pour une correction, qu'elle vise la version en vigueur) : sinon un avis « déjà annulée ou corrigée ailleurs », rien n'est écrit, le stock reste juste. Annuler une saisie corrigée annule toute la chaîne. La déconnexion efface les clés de ferme de l'utilisateur ; l'instantané n'est montré qu'à l'utilisateur de la session.

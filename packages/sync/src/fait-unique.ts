@@ -4,8 +4,9 @@
  * vérification lit la base DANS la transaction d'écriture (`VerificationEcriture`), donc rien ne
  * s'intercale entre elle et l'écriture (deux taps, deux onglets, la voix et l'écran).
  *
- * Appelée par `porte.saisirEvenement` (voix, agent, photo : tout réalisé nouveau) et par l'écran
- * Aujourd'hui (`ecritures.ts`, via `porte.ecrireEnsemble`). Sous-chemin `@planif/sync/fait-unique` :
+ * T13j : construite par la porte seule (`preparerSaisie`, qui la rend avec l'ordre) pour tout
+ * « Fait » nouveau ; `saisirEvenement` l'applique, `ecrireEnsemble` refuse un « Fait » préparé
+ * sans vérificateur. L'écran Aujourd'hui passe celle que rend la porte. Sous-chemin `@planif/sync/fait-unique` :
  * ce module ne tire ni PowerSync ni la porte (l'écran l'importe sans alourdir le démarrage).
  *
  * « En vigueur » : la règle de la vue evenements_en_vigueur (@planif/db, T10g), en SQL (`chaines`) :
@@ -80,15 +81,17 @@ export type ColonneCulture = 'serie_id' | 'campagne_id';
  *     descend d'eux par remplace_evenement_id (même index) : une correction qui a changé de
  *     culture reste dans la chaîne ;
  *   - `chaines` sur ces seuls membres, puis la règle « en vigueur » sur les candidats.
- * Paramètres : culture, ferme, type, puis chemin JSON et valeur par clé du detail (candidats) ;
- * culture, ferme (remplacements de la culture) ; ferme (branche origine_id) ; ferme (départ des
- * chaînes).
+ * Paramètres : culture, ferme, type, puis chemin JSON et valeur par clé du detail, puis les ids
+ * écartés des candidats en tableau JSON (T13j : les « Fait » que la transaction vient d'écrire)
+ * (candidats) ; culture, ferme (remplacements de la culture) ; ferme (branche origine_id) ; ferme
+ * (départ des chaînes).
  */
 const sqlDejaFait = (colonne: ColonneCulture, nombreCles: number) => {
   const filtre = `e.${colonne} = ? AND +e.ferme_id = ? AND e.type = ? AND json_valid(e.detail)
     AND ${Array.from({ length: nombreCles }, () => 'json_extract(e.detail, ?) = ?').join(' AND ')}`;
   const avant = `candidat(id, sorte) AS (
     SELECT e.id, e.remplace_sorte FROM evenement e WHERE ${filtre} AND (e.remplace_sorte IS NULL OR e.remplace_sorte = 'correction')
+      AND e.id NOT IN (SELECT value FROM json_each(?))
   ),
   haut(id, origine, fini) AS (
     SELECT p.id, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL FROM evenement p WHERE p.id IN (SELECT id FROM candidat)
@@ -122,14 +125,70 @@ export interface FaitVise {
   readonly detail: Readonly<Record<string, string>>;
 }
 
-/**
- * Vérification à passer à l'écriture (`ecrireEnsemble`), ou appelée dans la transaction de
- * `saisirEvenement` : lève DejaFait si un « Fait » identique est déjà en vigueur pour la culture.
- */
 /** Nom de champ du detail admis par `pasDejaFait`. */
 const NOM_DE_CHAMP = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
+/**
+ * Vérification AVANT l'écriture, à passer à `ecrireEnsemble` : lève DejaFait si un « Fait »
+ * identique est déjà en vigueur pour la culture.
+ */
 export function pasDejaFait(fait: FaitVise): VerificationEcriture {
+  return dejaFaitHors(fait, []);
+}
+
+/**
+ * T13j : contrôle APRÈS l'écriture, dans la même transaction : le « Fait » vient d'être écrit
+ * (lignes `ecrits`, écartées des candidats) ; aucun autre identique ne doit être en vigueur, déjà
+ * là ou écrit par la même transaction (une correction comprise). Lève DejaFait sinon : la
+ * transaction est annulée. Écarter les lignes écrites garde le cas courant aussi rapide que la
+ * vérification d'avant l'écriture : sans autre candidat, rien d'autre n'est lu.
+ */
+export function faitUnique(fait: FaitVise, ecrits: readonly string[]): VerificationEcriture {
+  return dejaFaitHors(fait, ecrits);
+}
+
+/** Clé d'un « Fait » : deux « Fait » de même clé sont le même travail sur la même culture. */
+export const cleFait = (f: FaitVise): string =>
+  JSON.stringify([f.fermeId, f.colonne, f.cibleId, f.type, Object.entries(f.detail).sort(([a], [b]) => (a < b ? -1 : 1))]);
+
+/**
+ * T13j : le « Fait » que porte une ligne d'événement (format local), ou undefined. Un « Fait » :
+ * ligne originale (`remplace_sorte` nulle, comme les candidats de la vérification) sur une
+ * culture, et
+ *   - un réalisé : son étape ;
+ *   - une intervention qui solde un travail prévu (`occurrenceVisee` renseignée) : libellé,
+ *     catégorie, occurrence visée — la règle de l'écran (ni l'outil, ni le produit, ni la date).
+ * Seule définition du « Fait » : la porte s'en sert pour `preparerSaisie` et pour contrôler les
+ * lignes écrites, quel que soit le chemin.
+ */
+export function faitDeLigne(ligne: Readonly<Record<'ferme_id' | 'type' | 'serie_id' | 'campagne_id' | 'remplace_sorte' | 'detail', unknown>>): FaitVise | undefined {
+  if (ligne.remplace_sorte !== null || typeof ligne.ferme_id !== 'string') return undefined;
+  const serie = typeof ligne.serie_id === 'string';
+  const cibleId = serie ? ligne.serie_id : ligne.campagne_id;
+  if (typeof cibleId !== 'string' || typeof ligne.detail !== 'string') return undefined;
+  let d: unknown;
+  try {
+    d = JSON.parse(ligne.detail);
+  } catch {
+    return undefined;
+  }
+  if (typeof d !== 'object' || d === null) return undefined;
+  const champ = (nom: string): string | undefined => {
+    const v: unknown = (d as Record<string, unknown>)[nom];
+    return typeof v === 'string' ? v : undefined;
+  };
+  let detail: Readonly<Record<string, string>>;
+  const etape = champ('etape');
+  const [type, categorie, occurrenceVisee] = [champ('type'), champ('categorie'), champ('occurrenceVisee')];
+  if (ligne.type === 'realise' && etape !== undefined) detail = { etape };
+  else if (ligne.type === 'intervention' && type !== undefined && categorie !== undefined && occurrenceVisee !== undefined) {
+    detail = { type, categorie, occurrenceVisee };
+  } else return undefined;
+  return { fermeId: ligne.ferme_id, colonne: serie ? 'serie_id' : 'campagne_id', cibleId, type: ligne.type, detail };
+}
+
+/** Lève DejaFait si un « Fait » identique, hors des lignes `exclus`, est en vigueur pour la culture. */
+function dejaFaitHors(fait: FaitVise, exclus: readonly string[]): VerificationEcriture {
   const cles = Object.keys(fait.detail);
   // Une clé est un NOM de champ, passée en paramètre (chemin JSON entre guillemets), jamais
   // recopiée dans le SQL. Sans clé, la vérification ne viserait rien : refus explicite.
@@ -141,7 +200,7 @@ export function pasDejaFait(fait: FaitVise): VerificationEcriture {
   const sql = sqlDejaFait(fait.colonne, cles.length);
   const filtre = [fait.cibleId, fait.fermeId, fait.type, ...cles.flatMap((c) => [`$."${c}"`, fait.detail[c]])];
   return async (lire) => {
-    const deja = await lire(sql, [...filtre, fait.cibleId, fait.fermeId, fait.fermeId, fait.fermeId]);
+    const deja = await lire(sql, [...filtre, JSON.stringify(exclus), fait.cibleId, fait.fermeId, fait.fermeId, fait.fermeId]);
     if (deja.length > 0) throw new DejaFait('déjà fait');
   };
 }
