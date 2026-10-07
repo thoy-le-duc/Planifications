@@ -14,6 +14,8 @@ export type NomEntite =
   | 'Emplacement'
   | 'SecteurIrrigation'
   | 'SecteurEmplacement'
+  /** Bâtiment de la ferme : serre, hangar, magasin (T28a). */
+  | 'Batiment'
   | 'Famille'
   | 'Espece'
   | 'Variete'

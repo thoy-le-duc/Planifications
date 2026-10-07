@@ -24,3 +24,5 @@
 - [ ] e2e:synchro (si le banc tourne) : un bâtiment créé sur un navigateur apparaît sur le second.
 
 **Hors périmètre** : écrans (T28b), 3D (T28c).
+
+**Repris de la relecture de T28a (n°2)** : supprimer (en douceur) une zone abritée par un bâtiment non supprimé, ou supprimer le bâtiment d'une zone, n'est contrôlé ni par la base ni par le serveur. T28s décide de la règle (refus, ou bâtiment détaché) et la teste.

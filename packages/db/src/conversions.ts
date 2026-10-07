@@ -182,6 +182,9 @@ export function ligneDepuisEmplacement(e: Emplacement): LigneEmplacement {
     actifDu: e.actifDu,
     actifAu: e.actifAu,
     remplace: e.remplace,
+    placementXM: e.placementXM,
+    placementYM: e.placementYM,
+    orientationDeg: e.orientationDeg,
   };
 }
 
@@ -197,6 +200,9 @@ export function emplacementDepuisLigne(l: LigneEmplacement): Emplacement {
     actifDu: l.actifDu,
     actifAu: l.actifAu,
     remplace: l.remplace,
+    placementXM: l.placementXM,
+    placementYM: l.placementYM,
+    orientationDeg: l.orientationDeg,
   };
   switch (l.sorte) {
     case 'planche':

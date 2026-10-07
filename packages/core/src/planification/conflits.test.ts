@@ -119,6 +119,9 @@ function planche(code: string, longueurM: number, options: OptionsEmplacement = 
     actifDu: d(options.actifDu ?? '2020-01-01'),
     actifAu: options.actifAu === undefined || options.actifAu === null ? null : d(options.actifAu),
     remplace: [],
+    placementXM: null,
+    placementYM: null,
+    orientationDeg: null,
   };
 }
 
@@ -136,6 +139,9 @@ function gouttiere(code: string, nombrePlaces: number): Emplacement {
     actifDu: d('2020-01-01'),
     actifAu: null,
     remplace: [],
+    placementXM: null,
+    placementYM: null,
+    orientationDeg: null,
   };
 }
 

@@ -325,9 +325,23 @@ describe('Emplacement ↔ table emplacement', () => {
     actifDu: date('2026-01-01'),
     actifAu: null,
     remplace: [],
+    // T28a : pas placé = rangement automatique dans la zone.
+    placementXM: null,
+    placementYM: null,
+    orientationDeg: null,
   } as const;
 
-  const planche: Emplacement = { ...commun, id: id<'Emplacement'>(41), sorte: 'planche', code: 'T2-P03', longueurM: 30 };
+  // T28a : une planche placée dans le repère de sa zone.
+  const planche: Emplacement = {
+    ...commun,
+    id: id<'Emplacement'>(41),
+    sorte: 'planche',
+    code: 'T2-P03',
+    longueurM: 30,
+    placementXM: 2,
+    placementYM: -0.5,
+    orientationDeg: 90,
+  };
   const rang: Emplacement = {
     ...commun,
     id: id<'Emplacement'>(42),
@@ -356,6 +370,7 @@ describe('Emplacement ↔ table emplacement', () => {
     expect(p.actifDu).toBe('2026-01-01');
     expect(p.actifAu).toBeNull();
     expect(p.remplace).toEqual([]);
+    expect({ x: p.placementXM, y: p.placementYM, o: p.orientationDeg }, 'T28a : placement dans la ligne').toEqual({ x: 2, y: -0.5, o: 90 });
 
     const g = ligneDepuisEmplacement(gouttiere);
     expect(g.nombrePlaces).toBe(320);

@@ -36,6 +36,9 @@ streams:
   zone:
     auto_subscribe: true
     query: SELECT * FROM zone WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  batiment:
+    auto_subscribe: true
+    query: SELECT * FROM batiment WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
   emplacement:
     auto_subscribe: true
     query: SELECT * FROM emplacement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)

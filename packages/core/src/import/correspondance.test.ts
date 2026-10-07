@@ -321,6 +321,9 @@ describe('fichiers du jeu de test qui correspondent entièrement, sans correctio
         IGNOREE, // actif_du
         IGNOREE, // actif_au
         IGNOREE, // remplace
+        IGNOREE, // placement_x_m (T28a)
+        IGNOREE, // placement_y_m (T28a)
+        IGNOREE, // orientation_deg (T28a)
         IGNOREE, // cree_le
         IGNOREE, // modifie_le
         IGNOREE, // supprime_le

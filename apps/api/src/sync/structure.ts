@@ -419,7 +419,12 @@ async function modifier(tx: TransactionDb, ctx: Contexte, e: EcritureStructureRe
     return invalide(PRECISION_CHANGE_DE_FERME, fermeId);
   }
 
-  const v = validerStructure(e.table, { ...avant, ...e.donnees, id: avant.id });
+  // Seules les colonnes écrites par le téléphone sont reprises de la ligne existante : celles que
+  // le serveur n'accepte pas encore (placement réel, T28a ; accepté en T28s) restent en base,
+  // intactes, et une colonne inconnue REÇUE est toujours refusée.
+  const colonnesEcrites = new Set(COLONNES_STRUCTURE[e.table]);
+  const base = Object.fromEntries(Object.entries(avant).filter(([c]) => colonnesEcrites.has(c)));
+  const v = validerStructure(e.table, { ...base, ...e.donnees, id: avant.id });
   if (!v.ok) return refusDuCoeur(v.erreur, fermeId);
   const ligne = v.ligne;
   const id = String(ligne.id);

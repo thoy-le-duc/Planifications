@@ -1393,4 +1393,165 @@ decrireAvecBase('T10s')('T10s : POST /sync/upload accepte le parcellaire et le c
       await accepte([supprimer('espece', espece)]);
     });
   });
+
+  // ── T28a, relecture B2 : le placement réel n'entre pas encore par la porte (T28s) ───────────
+  //
+  // Les colonnes du placement (zone.contour, emplacement.placement_x_m, placement_y_m,
+  // orientation_deg) existent en base, mais le téléphone ne les écrit pas avant T28s : reçues,
+  // elles sont refusées comme toute colonne inconnue (code du cœur 'colonne_inconnue', motif
+  // 'ecriture_invalide'), et rien n'est écrit. La table batiment et ferme.origine_plan ne
+  // s'écrivent pas par la porte ('table_interdite'). Un PATCH ordinaire d'une ligne déjà placée
+  // (placée par le gérant, plus tard par T28s) passe et ne touche pas au placement.
+
+  describe('T28a (relecture B2) : lignes placées et colonnes du placement', () => {
+    const CONTOUR = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 20, y: 10 },
+      { x: 0, y: 10 },
+    ];
+
+    async function zonePlacee(): Promise<string> {
+      const id = await zoneEn(ferme);
+      await base.pool.query(`UPDATE zone SET contour = $2::jsonb WHERE id = $1`, [id, JSON.stringify(CONTOUR)]);
+      return id;
+    }
+
+    async function planchePlacee(): Promise<string> {
+      const id = await plancheEn(ferme, zoneFerme);
+      await base.pool.query(`UPDATE emplacement SET placement_x_m = 2, placement_y_m = -0.5, orientation_deg = 92.5 WHERE id = $1`, [id]);
+      return id;
+    }
+
+    async function batimentEn(fermeId: string): Promise<string> {
+      const id = randomUUID();
+      await inserer(
+        `INSERT INTO batiment (id, ferme_id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg)
+         VALUES ($1, $2, 'Hangar', 'hangar', 20, 12, 6, -10, 15, 0)`,
+        [id, fermeId],
+      );
+      return id;
+    }
+
+    async function placement(id: string): Promise<unknown> {
+      const r = await base.pool.query<{ p: unknown }>(
+        `SELECT jsonb_build_object('x', placement_x_m, 'y', placement_y_m, 'o', orientation_deg) AS p FROM emplacement WHERE id = $1`,
+        [id],
+      );
+      return r.rows[0]?.p;
+    }
+
+    it('PATCH du nom d’une zone qui a un contour : accepté, contour inchangé', async () => {
+      const z = await zonePlacee();
+      await accepte([patch('zone', z, { nom: 'Îlot des asperges' })]);
+      expect(await ligne('zone', z)).toMatchObject({ nom: 'Îlot des asperges', contour: CONTOUR });
+      const h = await historique(z);
+      expect(h.at(-1)?.apres).toMatchObject({ contour: CONTOUR });
+    });
+
+    it('PATCH du code d’un emplacement placé : accepté, placement inchangé', async () => {
+      const e = await planchePlacee();
+      await accepte([patch('emplacement', e, { code: unique('T2-PX') })]);
+      expect(await placement(e)).toEqual({ x: 2, y: -0.5, o: 92.5 });
+    });
+
+    it('renvoi identique d’un PATCH sur une zone et un emplacement placés : accepté, rien d’écrit', async () => {
+      const z = await zonePlacee();
+      await accepte([patch('zone', z, { nom: 'Tunnel nord' })]);
+      const avantZone = await ligne('zone', z);
+      const historiqueZone = await modifications(z);
+      await accepte([patch('zone', z, { nom: 'Tunnel nord' })]);
+      expect(await ligne('zone', z)).toEqual(avantZone);
+      expect(await modifications(z)).toBe(historiqueZone);
+
+      const e = await planchePlacee();
+      const code = unique('T2-PY');
+      await accepte([patch('emplacement', e, { code })]);
+      const avantPlanche = await ligne('emplacement', e);
+      const historiquePlanche = await modifications(e);
+      await accepte([patch('emplacement', e, { code })]);
+      expect(await ligne('emplacement', e)).toEqual(avantPlanche);
+      expect(await modifications(e)).toBe(historiquePlanche);
+    });
+
+    it('PUT d’une zone avec contour : refusé (colonne inconnue), rien d’écrit', async () => {
+      const z = putZone({ contour: JSON.stringify(CONTOUR) });
+      await refuseEnEntier([z], z, 'ecriture_invalide');
+      expect(await ligne('zone', z.id)).toBeNull();
+    });
+
+    it('PATCH du contour d’une zone : refusé, contour inchangé', async () => {
+      const z = await zonePlacee();
+      const autre = CONTOUR.map((p) => ({ x: p.x + 5, y: p.y }));
+      const e = patch('zone', z, { contour: JSON.stringify(autre) });
+      await refuseEnEntier([e], e, 'ecriture_invalide');
+      expect((await ligne('zone', z))?.contour).toEqual(CONTOUR);
+      const nue = await zoneEn(ferme);
+      const e2 = patch('zone', nue, { contour: JSON.stringify(CONTOUR) });
+      await refuseEnEntier([e2], e2, 'ecriture_invalide');
+      expect((await ligne('zone', nue))?.contour).toBeNull();
+    });
+
+    it('PUT ou PATCH d’un emplacement avec placement_x_m : refusé (colonne inconnue), rien d’écrit', async () => {
+      const p = putEmplacement(zoneFerme, { placement_x_m: 2, placement_y_m: 0, orientation_deg: 0 });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+      expect(await ligne('emplacement', p.id)).toBeNull();
+
+      const e = await planchePlacee();
+      const pa = patch('emplacement', e, { placement_x_m: 7 });
+      await refuseEnEntier([pa], pa, 'ecriture_invalide');
+      expect(await placement(e)).toEqual({ x: 2, y: -0.5, o: 92.5 });
+
+      const nue = await plancheEn(ferme, zoneFerme);
+      const pb = patch('emplacement', nue, { placement_x_m: 2, placement_y_m: 0, orientation_deg: 0 });
+      await refuseEnEntier([pb], pb, 'ecriture_invalide');
+      expect(await placement(nue)).toEqual({ x: null, y: null, o: null });
+    });
+
+    it('PUT d’un bâtiment : table_interdite, rien d’écrit', async () => {
+      const id = nouvelId();
+      const r = await lot([
+        {
+          op: 'PUT',
+          table: 'batiment',
+          id,
+          donnees: {
+            ferme_id: ferme,
+            nom: 'Serre M3',
+            type: 'serre_tunnel',
+            longueur_m: 40,
+            largeur_m: 8,
+            hauteur_m: 3.5,
+            centre_x_m: 50,
+            centre_y_m: 30,
+            orientation_deg: 90,
+            zone_id: null,
+          },
+        },
+      ]);
+      expect(motifDe(r, id)).toBe('table_interdite');
+      expect(await compter(`SELECT 1 FROM batiment WHERE id = $1`, [id])).toBe(0);
+      expect(await modifications(id)).toBe(0);
+    });
+
+    it('PATCH d’un bâtiment, de la ferme ou d’une ferme voisine : table_interdite, inchangé', async () => {
+      for (const fermeId of [ferme, autreFerme]) {
+        const b = await batimentEn(fermeId);
+        const lire = async () => (await base.pool.query<{ l: unknown }>(`SELECT to_jsonb(b) AS l FROM batiment b WHERE id = $1`, [b])).rows[0]?.l;
+        const avant = await lire();
+        const r = await lot([patch('batiment', b, { nom: 'Renommé', centre_x_m: 4_000 })]);
+        expect(motifDe(r, b)).toBe('table_interdite');
+        expect(await lire()).toEqual(avant);
+        expect(await modifications(b)).toBe(0);
+      }
+    });
+
+    it('PATCH de ferme.origine_plan : table_interdite, origine inchangée', async () => {
+      const lire = async () => (await base.pool.query<{ o: unknown }>(`SELECT origine_plan AS o FROM ferme WHERE id = $1`, [ferme])).rows[0]?.o;
+      const avant = await lire();
+      const r = await lot([patch('ferme', ferme, { origine_plan: JSON.stringify({ latitude: 44, longitude: 1.5 }) })]);
+      expect(motifDe(r, ferme)).toBe('table_interdite');
+      expect(await lire()).toEqual(avant);
+    });
+  });
 });

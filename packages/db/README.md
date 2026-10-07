@@ -48,6 +48,10 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0019_*.sql` | Généré par drizzle-kit (T10h) : `evenement.origine_id`, schéma `interne` et table `chaine_evenement` |
 | `migrations/0020_*.sql` | Migration personnalisée (T10h) : déclencheurs qui remplissent `origine_id` et tiennent `interne.chaine_evenement` à chaque insertion, reprise des lignes existantes, `evenements_en_vigueur` lue sur la chaîne tenue (sans récursion) |
 | `migrations/0021_*.sql` | Généré par drizzle-kit (T10h) : CHECK `evenement_origine_remplie` |
+| `migrations/0025_*.sql` | Migration personnalisée (T28a) : fonction `contour_zone_valide` (bornes simples du contour d'une zone), utilisée par un CHECK de 0027 |
+| `migrations/0026_*.sql` | Généré par drizzle-kit (T28a) : UNIQUE `zone (ferme_id, id)`, cible de la clé étrangère composée de `batiment`, posé avant elle ; `modification.nom_table` accepte `Batiment` |
+| `migrations/0027_*.sql` | Généré par drizzle-kit (T28a) : table `batiment`, `ferme.origine_plan`, `zone.contour`, placement des emplacements, leurs CHECK et index |
+| `migrations/0028_*.sql` | Migration personnalisée (T28a) : déclencheurs « zone abritée sans contour », `batiment` dans la publication `powersync` |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 

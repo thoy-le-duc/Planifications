@@ -78,6 +78,7 @@ function zone(nom: string, typeAbri: TypeAbri, parente: Zone | null = null): Zon
     zoneParenteId: parente?.id ?? null,
     typeAbri,
     surfaceM2: null,
+    contour: null,
   };
 }
 
@@ -92,6 +93,9 @@ const commun = (code: string, z: Zone, remplace: readonly Emplacement[]) => ({
   actifDu: d('2020-01-01'),
   actifAu: null,
   remplace: remplace.map((r) => r.id),
+  placementXM: null,
+  placementYM: null,
+  orientationDeg: null,
 });
 
 function planche(code: string, z: Zone, remplace: readonly Emplacement[] = []): Emplacement {

@@ -19,6 +19,8 @@ import type { Id, NomEntite } from './identifiants.ts';
 export type Instant = number;
 /** Longueur en mètres. */
 export type Metres = number;
+/** Orientation (cap) en degrés, sens horaire depuis le nord, dans [0, 360[ (T28a). */
+export type Degres = number;
 /** Longueur en centimètres, entière (écartements, largeurs semées : calculs entiers de T05). */
 export type Centimetres = number;
 /** Surface en mètres carrés. */
@@ -64,6 +66,15 @@ export interface PositionGeographique {
   readonly longitude: number;
 }
 
+/**
+ * Point du repère local de la ferme (ou d'une zone), en mètres : x vers l'est, y vers le nord
+ * (T28a, Q31). Origine du repère de la ferme : `Ferme.originePlan`.
+ */
+export interface PointLocal {
+  readonly x: number;
+  readonly y: number;
+}
+
 /** Unités d'affichage de la ferme ; le stockage reste en mètres, jours et kilos. */
 export interface UnitesFerme {
   readonly longueur: 'm';
@@ -77,6 +88,11 @@ export interface Ferme {
   readonly fuseauHoraire: string;
   /** Pour la météo. */
   readonly position: PositionGeographique | null;
+  /**
+   * Origine du repère local du plan (T28a, Q31), distincte de `position` : déplacer la position
+   * météo ne déplace pas la ferme. Fixée au premier placement ; `null` tant que rien n'est placé.
+   */
+  readonly originePlan: PositionGeographique | null;
   readonly unites: UnitesFerme;
   readonly supprimeLe: Instant | null;
 }
@@ -89,6 +105,12 @@ export interface Zone extends LigneDeFerme<'Zone'> {
   readonly zoneParenteId: Id<'Zone'> | null;
   readonly typeAbri: TypeAbri;
   readonly surfaceM2: MetresCarres | null;
+  /**
+   * Polygone libre de la zone dans le repère local de la ferme (T28a, Q31), sens antihoraire,
+   * non fermé. `null` : zone pas placée, ou abritée par un bâtiment (sa forme est alors le
+   * rectangle du bâtiment).
+   */
+  readonly contour: readonly PointLocal[] | null;
 }
 
 export type SorteEmplacement = 'planche' | 'rang' | 'gouttiere';
@@ -104,6 +126,13 @@ interface EmplacementCommun extends LigneDeFerme<'Emplacement'> {
   readonly actifAu: DateCalendaire | null;
   /** Anciens emplacements redessinés en celui-ci : garde l'historique de rotation. */
   readonly remplace: readonly Id<'Emplacement'>[];
+  /**
+   * Placement dans le repère de sa zone (T28a) : centre et orientation. Les trois sont nuls
+   * ensemble (rangement automatique dans la zone) ou renseignés ensemble.
+   */
+  readonly placementXM: Metres | null;
+  readonly placementYM: Metres | null;
+  readonly orientationDeg: Degres | null;
 }
 
 export interface Planche extends EmplacementCommun {
@@ -121,6 +150,27 @@ export interface Gouttiere extends EmplacementCommun {
 }
 
 export type Emplacement = Planche | Rang | Gouttiere;
+
+export type TypeBatiment = 'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'magasin' | 'autre';
+
+/**
+ * Bâtiment de la ferme (T28a, Q31) : serre, hangar, magasin. Toujours un rectangle placé dans le
+ * repère local de la ferme. Une serre peut abriter une zone de culture (au plus un bâtiment non
+ * supprimé par zone) : la zone prend alors son rectangle et son repère.
+ */
+export interface Batiment extends LigneDeFerme<'Batiment'> {
+  readonly nom: string;
+  readonly type: TypeBatiment;
+  readonly longueurM: Metres;
+  readonly largeurM: Metres;
+  readonly hauteurM: Metres;
+  readonly centreXM: Metres;
+  readonly centreYM: Metres;
+  /** Cap de l'axe de la longueur. */
+  readonly orientationDeg: Degres;
+  /** Zone de culture abritée (même ferme), ou `null`. */
+  readonly zoneId: Id<'Zone'> | null;
+}
 
 /** Une vanne d'irrigation. */
 export interface SecteurIrrigation extends LigneDeFerme<'SecteurIrrigation'> {

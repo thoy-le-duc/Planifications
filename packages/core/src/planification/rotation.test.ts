@@ -205,6 +205,7 @@ function zone(nom: string, parente: string | null): Zone {
     zoneParenteId: parente === null ? null : id<'Zone'>(parente),
     typeAbri: 'serre',
     surfaceM2: null,
+    contour: null,
   };
 }
 
@@ -225,6 +226,9 @@ function planche(code: string, zoneId: Id<'Zone'>, remplace: readonly string[] =
     actifDu: d('2020-01-01'),
     actifAu: null,
     remplace: remplace.map((r) => id<'Emplacement'>(r)),
+    placementXM: null,
+    placementYM: null,
+    orientationDeg: null,
   };
 }
 

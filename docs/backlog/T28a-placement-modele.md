@@ -24,14 +24,14 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests de `versLocal` / `versGeographique` : exemples chiffrés (un point à 100 m au nord, 100 m à l'est d'une origine à 44° N), aller-retour < 1 cm à 5 km, orientation 0/90/180/270.
-- [ ] Tests de `coinsEmprise` et du repère de zone : planche à (2, 0) dans une serre tournée de 90° → bonnes coordonnées locales ; zone en L sans serre → centroïde et orientation attendus.
-- [ ] Tests de `validerContour` : triangle, carré, L, polygone concave valides ; 2 sommets, 201 sommets, nœud papillon (auto-intersection), sommets alignés (aire nulle), sommets confondus, sommet à 6 km → refusés avec message en français ; un contour horaire est rendu antihoraire.
-- [ ] Tests de `validerPlacement` : chaque refus, avec message en français.
-- [ ] Migration Postgres (nouvelles colonnes nulles, `zone.contour` en jsonb avec taille bornée, table `batiment` avec `ferme_id`, contraintes rejouant `validerPlacement`, index, publication PowerSync) ; test d'intégration du schéma ; les fermes existantes ne changent pas.
-- [ ] Schéma PowerSync local et flux `batiment` (même découpage par ferme que `zone`) ; test du schéma.
-- [ ] Export JSON + CSV : `batiment.csv`, nouvelles colonnes de `zone`, `emplacement`, `ferme` décrites ; test d'export.
-- [ ] `docs/modele-donnees.md` : section v1.x « validée le 2026-10-07 (Q31) », avec les exemples chiffrés ci-dessus et la règle de droits (gérant seulement, contrôlée par T28s).
+- [x] Tests de `versLocal` / `versGeographique` : exemples chiffrés (un point à 100 m au nord, 100 m à l'est d'une origine à 44° N), aller-retour < 1 cm à 5 km, orientation 0/90/180/270.
+- [x] Tests de `coinsEmprise` et du repère de zone : planche à (2, 0) dans une serre tournée de 90° → bonnes coordonnées locales ; zone en L sans serre → centroïde et orientation attendus.
+- [x] Tests de `validerContour` : triangle, carré, L, polygone concave valides ; 2 sommets, 201 sommets, nœud papillon (auto-intersection), sommets alignés (aire nulle), sommets confondus, sommet à 6 km → refusés avec message en français ; un contour horaire est rendu antihoraire.
+- [x] Tests de `validerPlacement` : chaque refus, avec message en français.
+- [x] Migration Postgres (nouvelles colonnes nulles, `zone.contour` en jsonb avec taille bornée, table `batiment` avec `ferme_id`, contraintes rejouant `validerPlacement`, index, publication PowerSync) ; test d'intégration du schéma ; les fermes existantes ne changent pas.
+- [x] Schéma PowerSync local et flux `batiment` (même découpage par ferme que `zone`) ; test du schéma.
+- [x] Export JSON + CSV : `batiment.csv`, nouvelles colonnes de `zone`, `emplacement`, `ferme` décrites ; test d'export.
+- [x] `docs/modele-donnees.md` : section v1.x « validée le 2026-10-07 (Q31) », avec les exemples chiffrés ci-dessus et la règle de droits (gérant seulement, contrôlée par T28s).
 
 ## Risques
 

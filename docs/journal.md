@@ -8,6 +8,12 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Décidé** : palette de 17 familles, ΔE CIE76 minimum 33 en clair et 22 en sombre (seuils des tests : 10 et 20), aucune famille regroupée ; filtre culture sur le libellé de la barre, variété comprise, pour cette version ; l'écran Aujourd'hui garde ses 4 bandes (`bandeFamille`) pour ne pas changer sa référence figée.
 - **Bloquant** : rien. Deux tests de durée ont dépassé d'un cheveu sous charge (export 51 ms pour 50, test de perf du cœur 65 ms pour 60) et passent à la relance : à surveiller.
 
+## 2026-10-07 — T28a : la ferme peut enregistrer où sont ses zones, planches et bâtiments
+
+- **Fait** : repère local de la ferme (mètres, x à l'est, y au nord, origine `ferme.origine_plan` distincte de la position météo), contour libre des zones, planches placées dans le repère de leur zone, nouvelle table `batiment` (serres, hangar, magasin, rectangles orientés). Calcul pur et testé dans `packages/core/src/placement` (projection locale au centimètre à 5 km, repère de zone, contrôle des contours et des placements, messages en français) ; base (colonnes nulles, contraintes, une serre par zone, zone abritée sans contour même sous écritures concurrentes), synchro de `batiment` par ferme, export `batiment.csv` et nouvelles colonnes. Rien ne change pour une ferme qui ne place rien ; JS de démarrage inchangé (70,9/71 Kio).
+- **Décidé** : modèle v1.x validé (Q31) et décrit dans `modele-donnees.md`. La base ne rejoue que les bornes simples ; la géométrie (auto-intersection, aire, sens) et la règle « gérant seulement » restent au serveur (T28s). D'ici là, le téléphone ne peut écrire aucun placement (refusé par le serveur). Tests anciens complétés pour les nouveaux champs (objets de test, export de T15), sans assertion changée sur le fond. Relecture : une faille de concurrence (verrou de la zone conditionnel) corrigée et testée.
+- **Bloquant** : rien. Reporté à T28s : suppression d'une zone abritée ou de sa serre ; acceptation des placements par le serveur.
+
 ## 2026-10-07 — T27 : prototype de vue 3D
 
 - **Fait** : bouton « Voir en 3D » sur Planches (ordinateur seulement, ≥ 1024 px) : planches et cultures en relief, couleur par famille, curseur de semaine, liste texte à côté. Chargée à la demande (181 Kio, nouveau budget dédié 200 Kio), JS de démarrage inchangé (71,0/71). Affichage 85 ms, changement de semaine 19 ms, aucune saccade (SwiftShader). Repli 2D avec message si pas de WebGL, erreur, ou lenteur.
