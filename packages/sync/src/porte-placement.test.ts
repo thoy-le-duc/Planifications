@@ -493,6 +493,61 @@ describe('T28s : la porte écrit le placement, et rend de quoi l’annuler', () 
     });
   });
 
+  describe('relecture T28s : les mêmes refus que le serveur', () => {
+    it.each([
+      ['un mot', 'demain'],
+      ['une date sans heure', '2026-10-07'],
+      ['un instant sans fuseau', '2026-10-07T06:00:00'],
+      ['un instant impossible', '2026-02-30T06:00:00Z'],
+    ])('supprime_le qui n’est pas un instant complet avec fuseau (%s) : rejet, rien d’écrit', async (_cas, valeur) => {
+      await rejete([{ sorte: 'batiment', id: SERRE, valeurs: { supprime_le: valeur } }], /.+/u);
+    });
+
+    it('supprime_le avec un fuseau : accepté, rangé en ISO UTC comme le serveur', async () => {
+      await placer([{ sorte: 'batiment', id: SERRE, valeurs: { supprime_le: '2026-10-07T08:00:00+02:00' } }]);
+      expect(batiment(SERRE)?.supprime_le).toBe('2026-10-07T06:00:00.000Z');
+    });
+
+    it('créer un bâtiment déjà supprimé : rejet, rien d’écrit', async () => {
+      await rejete([{ sorte: 'batiment', id: NOUVELLE_SERRE, valeurs: { ...SERRE_M3, supprime_le: INSTANT.toISOString() } }], /.+/u);
+      expect(batiment(NOUVELLE_SERRE)).toBeUndefined();
+    });
+
+    it('nom contenant le caractère nul : rejet, rien d’écrit', async () => {
+      await rejete([{ sorte: 'batiment', id: SERRE, valeurs: { nom: 'Serre\u0000M3' } }], /.+/u);
+      await rejete([{ sorte: 'batiment', id: NOUVELLE_SERRE, valeurs: { ...SERRE_M3, nom: '\u0000' } }], /.+/u);
+    });
+
+    it.each([
+      ['un texte quelconque', 'serre-1'],
+      ['un UUID tronqué', NOUVELLE_SERRE.slice(0, -1)],
+      ['une chaîne vide', ''],
+    ])('id de bâtiment qui n’est pas un UUID (%s) : rejet, rien d’écrit', async (_cas, id) => {
+      await rejete([{ sorte: 'batiment', id, valeurs: SERRE_M3 }], /.+/u);
+    });
+
+    it('UUID en majuscules : normalisé en minuscules comme le serveur (même ligne, pas de doublon)', async () => {
+      const n = base.lireDirect<{ n: number }>('SELECT count(*) AS n FROM batiment')[0]?.n;
+      const annulation = await placer([{ sorte: 'batiment', id: SERRE.toUpperCase(), valeurs: { centre_x_m: 70 } }]);
+      expect(base.lireDirect<{ n: number }>('SELECT count(*) AS n FROM batiment')[0]?.n, 'aucune ligne en plus').toBe(n);
+      expect(batiment(SERRE)?.centre_x_m).toBe(70);
+      expect(annulation).toEqual([{ sorte: 'batiment', id: SERRE, valeurs: { centre_x_m: -10 } }]);
+
+      await placer([{ sorte: 'batiment', id: NOUVELLE_SERRE.toUpperCase(), valeurs: SERRE_M3 }]);
+      expect(batiment(NOUVELLE_SERRE)?.id).toBe(NOUVELLE_SERRE);
+      expect(base.lireDirect('SELECT id FROM batiment WHERE id = ?', [NOUVELLE_SERRE.toUpperCase()])).toEqual([]);
+    });
+
+    it('UUID en majuscules pour une zone ou une planche : la même ligne que l’id en minuscules', async () => {
+      await placer([
+        { sorte: 'zone', id: ZONE.toUpperCase(), contour: CARRE },
+        { sorte: 'emplacement', id: PLANCHE.toUpperCase(), placement: { x: 1, y: 1, orientation_deg: 0 } },
+      ]);
+      expect(contourLu(ZONE)).toEqual(CARRE);
+      expect(placement(PLANCHE)).toEqual({ x: 1, y: 1, o: 0 });
+    });
+  });
+
   describe('isolement : seulement la ferme de la porte', () => {
     it.each([
       ['un bâtiment de la ferme voisine (même gérant)', { sorte: 'batiment', id: SERRE_VOISINE, valeurs: { centre_x_m: 0 } }],

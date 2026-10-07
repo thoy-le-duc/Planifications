@@ -849,6 +849,95 @@ decrireAvecBase('T28s')('T28s : POST /sync/upload accepte le placement réel du 
     });
   });
 
+  // ── 3 bis. Relecture T28s (chef) : rétablir une ligne placée, changer de zone ───────────────
+
+  describe('relecture T28s : rétablir une ligne placée, déplacer une planche dans une autre zone', () => {
+    async function zonePlaceeSupprimee(fermeId: string): Promise<string> {
+      return zoneEn(fermeId, { contour: CARRE, supprimee: true });
+    }
+
+    async function plancheplaceeSupprimee(): Promise<string> {
+      const e = await plancheEn(ferme, zoneFerme, { x: 2, y: 0, o: 0 });
+      await requete(`UPDATE emplacement SET supprime_le = $2 WHERE id = $1`, [e, MAINTENANT]);
+      return e;
+    }
+
+    it('R1 : un équipier rétablit une zone supprimée qui a un contour : refusé (gérant), toujours supprimée', async () => {
+      const z = await zonePlaceeSupprimee(ferme);
+      const p = patch('zone', z, { supprime_le: null });
+      await refuseAvecMessage([p], p, SEUL_LE_GERANT, equipier.jeton);
+      expect((await ligne('zone', z))?.supprime_le).not.toBeNull();
+    });
+
+    it('R2 : un équipier rétablit une planche placée supprimée : refusé (gérant), toujours supprimée', async () => {
+      const e = await plancheplaceeSupprimee();
+      const p = patch('emplacement', e, { supprime_le: null });
+      await refuseAvecMessage([p], p, SEUL_LE_GERANT, equipier.jeton);
+      expect((await ligne('emplacement', e))?.supprime_le).not.toBeNull();
+    });
+
+    it('le gérant rétablit une zone placée et une planche placée, origine posée : accepté', async () => {
+      const z = await zonePlaceeSupprimee(ferme);
+      const e = await plancheplaceeSupprimee();
+      await accepte([patch('zone', z, { supprime_le: null }), patch('emplacement', e, { supprime_le: null })]);
+      expect((await ligne('zone', z))?.supprime_le).toBeNull();
+      expect((await ligne('emplacement', e))?.supprime_le).toBeNull();
+    });
+
+    it('un équipier rétablit une zone supprimée SANS contour et une planche non placée : accepté (droits ordinaires)', async () => {
+      const z = await zoneEn(ferme, { supprimee: true });
+      const e = await plancheEn(ferme, zoneFerme);
+      await requete(`UPDATE emplacement SET supprime_le = $2 WHERE id = $1`, [e, MAINTENANT]);
+      await accepte([patch('zone', z, { supprime_le: null }), patch('emplacement', e, { supprime_le: null })], equipier.jeton);
+    });
+
+    it('R3 : le gérant supprime la zone placée, efface l’origine, puis rétablit la zone : refusé (origine), origine toujours nulle', async () => {
+      const f = await nouvelleFerme(ORIGINE);
+      const z = await zoneEn(f, { contour: CARRE });
+      await accepte([supprimer('zone', z)]);
+      await accepte([patch('ferme', f, { origine_plan: null })]);
+      const p = patch('zone', z, { supprime_le: null });
+      await refuseAvecMessage([p], p, /origine|point de départ/iu);
+      expect((await ligne('zone', z))?.supprime_le).not.toBeNull();
+      expect((await ligne('ferme', f))?.origine_plan).toBeNull();
+    });
+
+    it('R3 bis : de même pour une planche placée et un bâtiment rétablis sans origine', async () => {
+      const f = await nouvelleFerme(ORIGINE);
+      const z = await zoneEn(f);
+      const e = await plancheEn(f, z, { x: 1, y: 1, o: 0 });
+      const b = await batimentEn(f);
+      await accepte([supprimer('emplacement', e), supprimer('batiment', b)]);
+      await accepte([patch('ferme', f, { origine_plan: null })]);
+      const pe = patch('emplacement', e, { supprime_le: null });
+      await refuseAvecMessage([pe], pe, /origine|point de départ/iu);
+      const pb = patch('batiment', b, { supprime_le: null });
+      await refuseAvecMessage([pb], pb, /origine|point de départ/iu);
+    });
+
+    it('R4 : un équipier change la zone d’une planche placée (la déplace, Q31.3) : refusé (gérant), zone inchangée', async () => {
+      const e = await plancheEn(ferme, zoneFerme, { x: 2, y: 0, o: 0 });
+      const autreZone = await zoneEn(ferme);
+      const p = patch('emplacement', e, { zone_id: autreZone });
+      await refuseAvecMessage([p], p, SEUL_LE_GERANT, equipier.jeton);
+      expect((await ligne('emplacement', e))?.zone_id).toBe(zoneFerme);
+    });
+
+    it('le gérant change la zone d’une planche placée : accepté', async () => {
+      const e = await plancheEn(ferme, zoneFerme, { x: 2, y: 0, o: 0 });
+      const autreZone = await zoneEn(ferme);
+      await accepte([patch('emplacement', e, { zone_id: autreZone })]);
+      expect((await ligne('emplacement', e))?.zone_id).toBe(autreZone);
+    });
+
+    it('un équipier change la zone d’une planche NON placée : accepté (droits ordinaires)', async () => {
+      const e = await plancheEn(ferme, zoneFerme);
+      const autreZone = await zoneEn(ferme);
+      await accepte([patch('emplacement', e, { zone_id: autreZone })], equipier.jeton);
+      expect((await ligne('emplacement', e))?.zone_id).toBe(autreZone);
+    });
+  });
+
   // ── 4. Isolement entre fermes ───────────────────────────────────────────────────────────────
 
   describe('isolement : bâtiments', () => {
