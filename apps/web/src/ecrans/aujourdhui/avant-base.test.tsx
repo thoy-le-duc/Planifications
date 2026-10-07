@@ -4,8 +4,10 @@
  * l'ouverture de la base (porte null), en lecture seule, seulement s'il est de la dernière ferme
  * montrée à cet utilisateur (src/donnees/ferme-memorisee.ts).
  *
- *   A1  Ferme montrée = ferme de l'instantané : cartes dessinées, boutons inactifs, marque
- *       de l'écran posée ; la porte arrivée sur cette ferme, les mêmes cartes deviennent actives.
+ *   A1  Ferme montrée = ferme de l'instantané : cartes dessinées, marque de l'écran posée ;
+ *       la porte arrivée sur cette ferme, les mêmes cartes, actives. T13k (Q26, 2026-10-07) :
+ *       « Fait » est actif dès l'instantané (il était inactif avant la base en T13g) ; le détail
+ *       est dans ./fait-avant-base.test.tsx.
  *   A2  Ferme montrée autre, ou aucune (même si le choix de l'utilisateur est la bonne) : rien
  *       de l'instantané, l'écran dit que la base s'ouvre.
  *   A3  La porte arrive sur une autre ferme que la montrée : l'instantané n'est plus montré.
@@ -115,7 +117,8 @@ describe('T13g : instantané avant l’ouverture de la base', () => {
     const s = avecInstantane(FERME);
     await rendre(null, null, s);
     expect(conteneur.querySelector('[data-testid="tache"]')?.getAttribute('data-cle')).toBe(carte.cle);
-    expect(boutonFait()?.disabled, 'bouton inactif avant la base').toBe(true);
+    // T13k (Q26) : « Fait » accepté dès l'instantané, avant la base.
+    expect(boutonFait()?.disabled, '« Fait » actif avant la base (Q26)').toBe(false);
     expect(performance.getEntriesByName(MARQUE_AUJOURDHUI_AFFICHE, 'mark').length).toBe(1);
 
     const avant = boutonFait();

@@ -38,7 +38,8 @@ import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, repeterMe
  *     pendant que la coquille n'est pas à data-base="prete"), en lecture seule (aucun bouton
  *     de carte ni de l'historique actif tant que la base n'est pas prête : disabled ou
  *     aria-disabled="true"), puis « Marquer fait » actif une fois la base prête. Mesure ajoutée
- *     à côté de celle de T13d (1 s), qui reste telle quelle.
+ *     à côté de celle de T13d (1 s), qui reste telle quelle. T13k (Q26, 2026-10-07) : « Marquer
+ *     fait » est accepté dès l'instantané ; la lecture seule vaut pour les autres boutons.
  *   - T13g, isolement entre fermes (BLOQUANT) : un instantané rangé pour une autre ferme que la
  *     dernière choisie (même utilisateur, même jour) n'est jamais dessiné, ni avant la base ni
  *     après. Banc : l'instantané gardé (contrat T13d : texte JSON portant utilisateurId, fermeId,
@@ -166,6 +167,8 @@ async function releverAvantBase(page: Page): Promise<void> {
       for (const b of document.querySelectorAll<HTMLButtonElement>('[data-testid="tache"] button, [data-testid="saisie-historique"] button')) {
         if (!b.disabled && b.getAttribute('aria-disabled') !== 'true') {
           const nom = (b.getAttribute('aria-label') ?? b.textContent).trim();
+          // T13k (Q26) : « Fait » est accepté avant la base ; les autres boutons restent inactifs.
+          if (nom.startsWith('Marquer fait')) continue;
           if (!releve.boutonsActifs.includes(nom)) releve.boutonsActifs.push(nom);
         }
       }
@@ -336,7 +339,7 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
       const n = `lancement ${String(i + 1)}`;
       expect.soft(v.premiereTache, `${n} : instantané dessiné avant que la base soit prête (aucune carte vue avant data-base="prete")`).toBeDefined();
       expect.soft(v.baseALaPremiereTache, `${n} : base pas encore prête quand la première carte est dessinée`).not.toBe('prete');
-      expect.soft(v.boutonsActifs, `${n} : instantané en lecture seule, aucun bouton de carte ni de l’historique actif avant la base prête`).toEqual([]);
+      expect.soft(v.boutonsActifs, `${n} : instantané en lecture seule (sauf « Marquer fait », Q26), aucun autre bouton de carte ni de l’historique actif avant la base prête`).toEqual([]);
     });
     expect.soft(series.ecran.mediane, `médiane sous ${String(BUDGET_FROID_AVANT_BASE_MS)} ms`).toBeLessThan(BUDGET_FROID_AVANT_BASE_MS);
   });
