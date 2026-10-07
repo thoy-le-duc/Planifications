@@ -7,7 +7,7 @@
 
 ## Règles
 
-- **Disposition** : l'adaptateur pur place zones, planches et bâtiments selon T28a (fonctions de `packages/core/src/placement`) ; une zone ou planche sans placement garde le rangement automatique de T27, à côté de la partie placée, sans chevauchement.
+- **Disposition** : l'adaptateur pur place zones, planches et bâtiments selon T28a (fonctions de `packages/core/src/placement`, dont `repereZone`) ; le sol d'une zone sans serre est **extrudé depuis son polygone** (socle peu épais, triangulation d'un polygone concave, par exemple `ShapeGeometry` de three) ; une zone abritée prend le rectangle de sa serre ; une zone ou planche sans placement garde le rangement automatique de T27, à côté de la partie placée, sans chevauchement.
 - **Serre tunnel** : arceaux (un tous les 2 m environ) + bâche translucide, cultures visibles à travers ; **serre chapelle** : chapelles accolées de même facture ; **hangar, magasin, autre** : volumes simples (murs + toit), couleurs des jetons.
 - **Sol** : neutre, uni ; la photo aérienne au sol est une idée pour plus tard (noter dans le journal).
 - Géométrie partagée et instanciée (un seul arceau, une seule bâche par taille), rendu à la demande comme T27, transparence sans tri coûteux.
@@ -16,7 +16,7 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests de l'adaptateur : serre tournée de 30° → planches tournées avec elle ; zone non placée rangée à côté sans chevauchement ; bâtiment sans zone ; nombre d'arceaux selon la longueur.
+- [ ] Tests de l'adaptateur : serre tournée de 30° → planches tournées avec elle ; zone en L → socle au contour en L (sommets attendus) ; zone non placée rangée à côté sans chevauchement ; bâtiment sans zone ; nombre d'arceaux selon la longueur.
 - [ ] e2e (ordinateur, grande ferme placée) : mesures de T27 tenues (affichage < 1 s après chargement du module, semaine < 100 ms, pas de rafale de plus de 2 images perdues).
 - [ ] Budget `jsVue3dGzKio` (200 Kio) tenu, ou hausse chiffrée et justifiée dans la PR ; JS de démarrage inchangé.
 - [ ] e2e démo : la vue 3D de la démo s'ouvre hors ligne avec ses serres.
