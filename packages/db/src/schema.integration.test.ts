@@ -155,6 +155,8 @@ const TABLES = [
   'produit_phyto',
   'proposition',
   'modification',
+  // T28a : bâtiments de la ferme (serres, hangar, magasin).
+  'batiment',
 ] as const;
 type NomTable = (typeof TABLES)[number];
 
@@ -1388,9 +1390,13 @@ decrireAvecBase('T08 : schéma PostgreSQL', { timeout: 30_000 }, () => {
         actifDu: jour('2026-01-01'),
         actifAu: null,
         remplace: [],
+        placementXM: null,
+        placementYM: null,
+        orientationDeg: null,
       } as const;
       const emplacements: readonly Emplacement[] = [
-        { ...commun, id: idDe<'Emplacement'>(randomUUID()), sorte: 'planche', code: 'T2-P04', longueurM: 30 },
+        // T28a : une planche placée dans le repère de sa zone, relue à l'identique (numeric).
+        { ...commun, id: idDe<'Emplacement'>(randomUUID()), sorte: 'planche', code: 'T2-P04', longueurM: 30, placementXM: 2.25, placementYM: -0.5, orientationDeg: 92.5 },
         {
           ...commun,
           id: idDe<'Emplacement'>(randomUUID()),

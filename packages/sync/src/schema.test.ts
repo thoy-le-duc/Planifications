@@ -123,4 +123,59 @@ describe('schéma local', () => {
     expect(requetes).toContain('SELECT * FROM type_intervention WHERE ferme_id IS NULL');
     expect(requetes).toHaveLength(2);
   });
+  // ── T28a : placement réel (docs/backlog/T28a-placement-modele.md, critère 6) ──────────────
+
+  it('T28a : batiment descend sur le téléphone, colonnes du modèle (nombres en réel)', () => {
+    const locale: Readonly<Record<string, string>> | undefined = (TABLES_LOCALES as Readonly<Record<string, Readonly<Record<string, string>>>>).batiment;
+    expect(locale).toEqual({
+      ferme_id: 'texte',
+      nom: 'texte',
+      type: 'texte',
+      longueur_m: 'reel',
+      largeur_m: 'reel',
+      hauteur_m: 'reel',
+      centre_x_m: 'reel',
+      centre_y_m: 'reel',
+      orientation_deg: 'reel',
+      zone_id: 'texte',
+      cree_le: 'texte',
+      modifie_le: 'texte',
+      supprime_le: 'texte',
+    });
+    expect(SCHEMA_LOCAL.tables.some((t) => t.name === 'batiment')).toBe(true);
+  });
+
+  it('T28a : nouvelles colonnes de ferme, zone et emplacement (contour et origine en texte JSON)', () => {
+    const tables = TABLES_LOCALES as Readonly<Record<string, Readonly<Record<string, string>>>>;
+    expect(tables.ferme?.origine_plan).toBe('texte');
+    expect(tables.ferme?.position, 'la position météo reste à part').toBe('texte');
+    expect(tables.zone?.contour).toBe('texte');
+    expect(tables.emplacement?.placement_x_m).toBe('reel');
+    expect(tables.emplacement?.placement_y_m).toBe('reel');
+    expect(tables.emplacement?.orientation_deg).toBe('reel');
+  });
+
+  it('T28a : dans Postgres, contour et origine_plan en jsonb nullable, placement en numeric nullable', () => {
+    const colonne = (t: string, c: string) => tablesPostgres.find((x) => x.name === t)?.columns.find((x) => x.name === c);
+    expect(colonne('ferme', 'origine_plan')?.getSQLType()).toBe('jsonb');
+    expect(colonne('ferme', 'origine_plan')?.notNull).toBe(false);
+    expect(colonne('zone', 'contour')?.getSQLType()).toBe('jsonb');
+    expect(colonne('zone', 'contour')?.notNull).toBe(false);
+    for (const c of ['placement_x_m', 'placement_y_m', 'orientation_deg']) {
+      expect(colonne('emplacement', c)?.getSQLType(), c).toBe('numeric');
+      expect(colonne('emplacement', c)?.notNull, `${c} nullable : les fermes existantes ne changent pas`).toBe(false);
+    }
+  });
+
+  it('T28a : un flux batiment, même découpage par ferme que zone', () => {
+    const regles = readFileSync(new URL('../../../powersync/sync-config.yaml', import.meta.url), 'utf8');
+    const requetes = [...regles.matchAll(/query:[ \t]*(?:>-?[ \t]*\n((?:[ \t]{6,}[^\n]*\n?)+)|(SELECT[^\n]*))/g)]
+      .map((r) => (r[1] ?? r[2] ?? '').replace(/\s+/g, ' ').trim())
+      .filter((q) => /\bFROM (batiment|zone)\b/.test(q));
+    expect([...requetes].sort()).toEqual([
+      'SELECT * FROM batiment WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)',
+      'SELECT * FROM zone WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)',
+    ]);
+    expect(regles).toMatch(/^ {2}batiment:\n {4}auto_subscribe: true\n/m);
+  });
 });
