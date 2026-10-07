@@ -290,6 +290,31 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q31 — Placement réel : le modèle (posée le 2026-10-07, T28a)
+
+Question : point de départ du plan, forme des zones, planches dans leur zone, lien serre ↔ zone, qui peut placer.
+
+Réponses (2026-10-07) :
+1. Point de départ du plan : champ à part (`ferme.origine_plan`), distinct de la position météo, figé après le premier placement.
+2. Zones en **formes libres** (polygones) dès le départ ; les serres et bâtiments restent des rectangles.
+3. Les planches se placent dans le repère de leur zone et la suivent.
+4. Une serre abrite une zone au plus ; la zone abritée prend le rectangle de la serre, les zones sans serre ont leur polygone.
+5. **Gérant seulement** pour tout placement (zones, planches, bâtiments, origine), contrôlé par le serveur.
+
+Tickets : T28a, T28s, T28b, T28d, T28c.
+
+### Q30 — Vue 3D : filtres, jumeau numérique, vol de caméra (posée le 2026-10-07, après le prototype T27)
+
+Demande, après avoir vu le prototype T27 : juger les types de cultures d'un coup d'œil ; une ferme qui n'est pas alignée comme un tableau, avec bâtiments, serres et zones à leur vraie place et orientation, joli visuellement ; cliquer sur « serre M3 » et y aller.
+
+Réponses (2026-10-07) :
+- des filtres pour juger les types de cultures (par famille, culture, zone) ;
+- un jumeau numérique : placement sur la photo aérienne IGN (orthophoto gratuite de la Géoplateforme, sans clé), à la souris, en déplaçant et en faisant pivoter ; serres rendues en tunnels stylisés (arceaux + bâche translucide, cultures visibles à travers) ;
+- cliquer sur « serre M3 », dans la liste ou dans la scène : la caméra vole et se cale pile sur cette serre ;
+- avancer vite, beau et efficace : priorité à la 3D cette semaine.
+
+Tickets : T27b (filtres et couleurs), T28a (modèle du placement), T28s (serveur), T28b (éditeur sur photo aérienne), T28c (jumeau 3D), T29 (vol de caméra).
+
 ### Q29 — Vue 3D (posée le 2026-10-07)
 
 Questions : que voir en 3D, à quoi elle sert, sur quel appareil, que faire si ça rame.
@@ -321,7 +346,6 @@ Question : quand quelqu'un quitte une ferme (ou en est retiré), ses anciens ref
 Réponse (2026-10-07) : les effacer ; rien d'une ferme ne reste chez quelqu'un qui n'en fait plus partie. Ticket T10u. Les refus de synchro restent hors de l'export complet (confirmé le 2026-10-07).
 
 ### À suivre
-
 
 ## Questions ouvertes du brief
 
