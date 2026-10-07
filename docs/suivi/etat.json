@@ -1,8 +1,10 @@
 {
-  "maj": "5 octobre 2026, 12 h (heure de Paris)",
-  "resume": "Ces derniers jours : **un « Fait » ne peut plus être noté deux fois, quel que soit le chemin (T13j)** — écran, et demain voix et agent ; la porte contrôle les lignes réellement écrites. **Aucun geste ignoré pendant que les « Fait » s'écrivent (T13l)** — « Annuler » passe dans la file, et une saisie déjà annulée ailleurs ne peut plus fausser le stock. Le quota gratuit de GitHub Actions était épuisé : le dépôt est **public jusqu'au 1er novembre** pour garder la CI. Nouvelle règle de **budget** : la boucle laisse 15 % de la limite Claude chaque semaine (au plus 8 tickets, rien du mardi 10 h au mercredi 10 h) ; aucun nouveau ticket avant mercredi 7 octobre 10 h.",
-  "en_cours": {},
-  "attente": "Q26 : accepter « Fait » dès l'affichage d'Aujourd'hui, avant que la base soit prête ? Q25 : effacer de son téléphone les refus d'une ferme qu'on a quittée ? Confirmer que les refus de synchro restent hors de l'export (T10l). Donner ta jauge Claude de temps en temps (pour régler le budget). 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75. Vercel : désactiver « Vercel Authentication ». Connecteur MonCasierFrais à réautoriser. Mise en ligne : Brevo et domaine d'envoi, secrets de production, base UTF-8, Node 22, proxy HTTP/1.1.",
+  "maj": "7 octobre 2026, 12 h (heure de Paris)",
+  "resume": "Ce matin, quatre tickets fusionnés : **l'export complet de la ferme passe sous 10 s (T15c)**, 7 à 8,5 s au lieu de 11 à 15 s, archive identique au bit près ; **le serveur accepte le parcellaire et le catalogue de la ferme (T10s)**, prérequis de l'import, sans faille d'isolement après deux relectures de sécurité ; **« Fait » unique contrôlé d'après le journal d'envoi (T13o)** ; **une seule règle « chaîne d'une saisie » (T13m)**, vérifiée sur 18 000 journaux tirés au hasard. En cours : **l'écran d'import (T14b)**, écrit par lots de 500 pour tenir dans les limites de la synchro. La 3D est spécifiée et attend tes réponses.",
+  "en_cours": {
+    "T14b": "en cours"
+  },
+  "attente": "3D : tes réponses aux quatre questions (que voir, à quoi ça sert, sur quel appareil, que faire si ça rame). Q27 : deux planches avec le même code ? Q28 : changer d'onglet pendant un export ? Q26 : « Fait » avant que la base soit prête ? Q25 : refus d'une ferme quittée. Ta jauge Claude de temps en temps. 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75. Vercel : désactiver « Vercel Authentication ». Connecteur MonCasierFrais à réautoriser. Mise en ligne : Brevo, domaine d'envoi, secrets de production.",
   "visuels": [
     {
       "titre": "Mode sombre",
