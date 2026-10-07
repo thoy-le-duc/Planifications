@@ -38,6 +38,4 @@
 - Le téléphone ne doit rien tirer de neuf au démarrage : les colonnes en plus ne changent ni les requêtes ni le budget de 300 ms (mesures e2e inchangées).
 - Ticket le plus large de la série : si la migration et l'export débordent, couper l'export dans un ticket à part (le dire dans la PR).
 
-**Reporté à T28s** (relecture T28a, n°2) : supprimer (en douceur) une zone abritée par un bâtiment non supprimé, ou supprimer le bâtiment d'une zone, n'est contrôlé ni par la base ni par le serveur ; T28s décide de la règle (refus, ou bâtiment détaché) et la teste. Le fichier du ticket T28s n'existant pas encore sur cette branche, la ligne est notée ici pour être reprise à sa rédaction.
-
 **Hors périmètre** : acceptation par le serveur et écriture par la porte (T28s), éditeurs (T28b, T28d), rendu 3D (T28c), bâtiments non rectangulaires, trous dans un polygone.

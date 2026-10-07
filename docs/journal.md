@@ -8,6 +8,12 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Décidé** : modèle v1.x validé (Q31) et décrit dans `modele-donnees.md`. La base ne rejoue que les bornes simples ; la géométrie (auto-intersection, aire, sens) et la règle « gérant seulement » restent au serveur (T28s). D'ici là, le téléphone ne peut écrire aucun placement (refusé par le serveur). Tests anciens complétés pour les nouveaux champs (objets de test, export de T15), sans assertion changée sur le fond. Relecture : une faille de concurrence (verrou de la zone conditionnel) corrigée et testée.
 - **Bloquant** : rien. Reporté à T28s : suppression d'une zone abritée ou de sa serre ; acceptation des placements par le serveur.
 
+## 2026-10-07 — T27 : prototype de vue 3D
+
+- **Fait** : bouton « Voir en 3D » sur Planches (ordinateur seulement, ≥ 1024 px) : planches et cultures en relief, couleur par famille, curseur de semaine, liste texte à côté. Chargée à la demande (181 Kio, nouveau budget dédié 200 Kio), JS de démarrage inchangé (71,0/71). Affichage 85 ms, changement de semaine 19 ms, aucune saccade (SwiftShader). Repli 2D avec message si pas de WebGL, erreur, ou lenteur.
+- **Décidé** : three + fiber sans drei ni `<Canvas>` (245 Kio sinon) ; greffon d'interop dans `vite.config.ts` pour garder le démarrage sous 71 Kio ; antialiasing coupé. Théophane l'a vu : filtres, jumeau numérique sur photo aérienne (formes libres, gérant seulement), vol caméra → T27b, T28a, T28s, T28b, T28c, T28d, T29 (Q30, Q31).
+- **Bloquant** : rien. 12 familles sur 16 sans couleur (grises comme le vide) → T27b. Le test e2e « contour rogné » de l'export (T15c) a échoué une fois sous charge et passe seul : à surveiller.
+
 ## 2026-10-07 — T13k : « Fait » accepté dès l'affichage d'Aujourd'hui
 
 - **Fait** : au lancement, « Fait » répond dès l'instantané (≈ 0,3 s), sans attendre la base : la tâche disparaît au tap, le « Fait » attend en file et s'écrit dès que la base est prête, avec la même vérification « déjà fait ». Si la ferme ou le compte change entre-temps, rien n'est écrit et un message le dit ; si l'appli est fermée trop tôt, un message prévient au lancement suivant (« n'ont peut-être pas été enregistrés : vérifiez la liste »).

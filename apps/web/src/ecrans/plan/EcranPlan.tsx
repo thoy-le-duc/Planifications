@@ -17,12 +17,15 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentType,
   type CSSProperties,
   type PointerEvent as EvenementPointeur,
   type ReactNode,
 } from 'react';
 import type { PorteDonnees } from '@planif/sync';
 import type { DepartSerie, SaisieSerieAnnulable } from '../serie/index.ts';
+import { chargerVue3d, MARQUE_MODULE_3D, webglDisponible } from '../plan3d/entree.ts';
+import type { ProprietesVue3d } from '../plan3d/index.ts';
 import './plan.css';
 import { obtenirDebutDePlan, obtenirPlan, obtenirSaisons, planEnCache, saisonsEnCache, surChangement, type PlanLu } from './cache.ts';
 import {
@@ -60,6 +63,13 @@ const DELAI_APPUI_LONG_MS = 500;
 const TOLERANCE_APPUI_PX = 10;
 /** Durée du bandeau « Annuler » après l'enregistrement d'une série (comme T13). */
 const DELAI_ANNULATION_MS = 10_000;
+
+/** Vue 3D (T27) : messages du repli sur la 2D. */
+const REPLI_SANS_WEBGL = 'La vue 3D n’est pas disponible sur cet appareil (WebGL absent ou désactivé) : le plan reste en 2D.';
+const REPLI_CHARGEMENT = 'La vue 3D n’a pas pu se charger : le plan reste en 2D. Réessayez plus tard.';
+
+/** Vue 3D : fermée, en cours de chargement (module), ou ouverte. */
+type EtatVue3d = { readonly sorte: 'fermee' } | { readonly sorte: 'chargement' } | { readonly sorte: 'ouverte'; readonly Vue: ComponentType<ProprietesVue3d> };
 
 /** Marque de performance posée quand les premières lignes sont dessinées (e2e/plan.e2e.ts). */
 export const MARQUE_PLAN_AFFICHE = 'planif:plan-affiche';
@@ -365,6 +375,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   const numeroAnnulable = useRef(0);
   /** Annulation par le bandeau refusée : ce qui n'a pas pu être défait (message affiché). */
   const [echecAnnulation, setEchecAnnulation] = useState<{ readonly titre: string; readonly texte: string } | null>(null);
+  const [vue3d, setVue3d] = useState<EtatVue3d>({ sorte: 'fermee' });
+  const [repli3d, setRepli3d] = useState<string | null>(null);
   const defilement = useRef<HTMLDivElement>(null);
   const total = plan?.lignes.length ?? 0;
   const [vue, setVue] = useState(() => fenetre(null, total));
@@ -595,6 +607,34 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
     );
   }, []);
 
+  // Vue 3D (T27) : sans WebGL, rien n'est téléchargé et la 2D reste, avec un message.
+  const ouvrir3d = useCallback(() => {
+    setRepli3d(null);
+    if (!webglDisponible()) {
+      setRepli3d(REPLI_SANS_WEBGL);
+      return;
+    }
+    setVue3d((v) => (v.sorte === 'fermee' ? { sorte: 'chargement' } : v));
+    chargerVue3d().then(
+      (m) => {
+        performance.mark(MARQUE_MODULE_3D);
+        setVue3d((v) => (v.sorte === 'chargement' ? { sorte: 'ouverte', Vue: m.Vue3d } : v));
+      },
+      (erreur: unknown) => {
+        console.error('Vue 3D non chargée', erreur);
+        setVue3d({ sorte: 'fermee' });
+        setRepli3d(REPLI_CHARGEMENT);
+      },
+    );
+  }, []);
+  const fermer3d = useCallback(() => {
+    setVue3d({ sorte: 'fermee' });
+  }, []);
+  const echec3d = useCallback((message: string) => {
+    setVue3d({ sorte: 'fermee' });
+    setRepli3d(message);
+  }, []);
+
   const lignesVisibles = useMemo(() => {
     if (plan === null) return [];
     const r: { ligne: LignePlan; index: number }[] = [];
@@ -622,6 +662,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
   // complet est réservée (le défilement ne bute pas sur la fin du début).
   const suite = lu !== null && !lu.complet;
   const hauteur = HAUTEUR_ENTETE + Math.max(total + (suite ? 1 : 0), lu?.totalLignes ?? 0) * HAUTEUR_LIGNE_PX;
+  // La 2D reste montée sous la 3D (défilement et lignes visibles intacts au retour).
+  const en3d = vue3d.sorte === 'ouverte' && plan !== null;
   return (
     <div className="plan">
       <div className="plan-outils">
@@ -639,6 +681,21 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
             </option>
           ))}
         </select>
+        {!en3d && (
+          <button
+            type="button"
+            data-testid="voir-en-3d"
+            className="plan-voir-3d"
+            disabled={plan === null}
+            aria-busy={vue3d.sorte === 'chargement'}
+            onClick={ouvrir3d}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM4 7.5l8 4.5 8-4.5M12 12v9" />
+            </svg>
+            Voir en 3D
+          </button>
+        )}
         <button
           type="button"
           className="plan-nouvelle"
@@ -652,7 +709,13 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
           Nouvelle série
         </button>
       </div>
-      <div data-testid="plan-defilement" ref={defilement} className="plan-defilement">
+      {repli3d !== null && (
+        <p data-testid="repli-2d" role="status" className="plan-repli-3d">
+          {repli3d}
+        </p>
+      )}
+      {en3d && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} />}
+      <div data-testid="plan-defilement" ref={defilement} className="plan-defilement" hidden={en3d}>
         <div
           className="plan-grille"
           style={{ width: largeur, height: hauteur }}
@@ -685,7 +748,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
           )}
         </div>
       </div>
-      <Legende />
+      {!en3d && <Legende />}
       {detail?.sorte === 'serie' && <DetailSerie ligne={detail.ligne} barre={detail.barre} surFermer={fermerDetail} surModifier={modifierSerie} />}
       {detail?.sorte === 'conflits' && <DetailConflits ligne={detail.ligne} surFermer={fermerDetail} />}
       {formulaire !== null && (
