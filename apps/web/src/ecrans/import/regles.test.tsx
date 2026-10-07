@@ -18,6 +18,7 @@
  * (./modeles.test.ts).
  */
 import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { preparerExport, validerSerie } from '@planif/core';
 import { ECRITURES_MAX_PAR_LOT } from '@planif/sync';
@@ -370,12 +371,13 @@ describe('correspondance refusée par creerModele', () => {
 });
 
 describe('docs/import/ : comment importer, en une page', () => {
-  const DOSSIER = new URL('../../../../../docs/import/', import.meta.url);
+  // Chemin sur le disque : sous happy-dom, Vite réécrit `new URL('<littéral>', import.meta.url)` en http://…
+  const DOSSIER = join(import.meta.dirname, '../../../../../docs/import');
 
   it('une page Markdown, pour un maraîcher, qui couvre le parcours', () => {
     const pages = readdirSync(DOSSIER).filter((f) => f.endsWith('.md'));
     expect(pages.length, 'au moins une page .md dans docs/import/').toBeGreaterThan(0);
-    const texteDoc = pages.map((p) => readFileSync(new URL(p, DOSSIER), 'utf8')).join('\n');
+    const texteDoc = pages.map((p) => readFileSync(join(DOSSIER, p), 'utf8')).join('\n');
     for (const mot of [/CSV/, /\.xlsx|Excel/i, /parcellaire/i, /séries/i, /assolement/i, /colonnes?/i, /aperçu/i, /modèle/i, /annuler/i, /Importer un tableur/]) {
       expect(texteDoc, `la page parle de ${String(mot)}`).toMatch(mot);
     }

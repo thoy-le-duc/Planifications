@@ -6,6 +6,7 @@
  * typage ne dépend pas du code pas encore écrit. Gestes DOM communs : ../../itineraires/test/outils.ts.
  */
 import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
@@ -178,11 +179,15 @@ export function verifierOrdres(b: Banc): void {
 
 // ── Fichiers ─────────────────────────────────────────────────────────────────────────────────
 
-const DOSSIER_FIXTURES = new URL('../../../../../../packages/core/src/import/__fixtures__/', import.meta.url);
+/**
+ * Chemin sur le disque (pas `new URL('<littéral>', import.meta.url)` : sous happy-dom, Vite
+ * réécrit ce littéral en http://localhost:3000/…, que readFileSync refuse).
+ */
+const DOSSIER_FIXTURES = join(import.meta.dirname, '../../../../../../packages/core/src/import/__fixtures__');
 
 /** Octets d'un fichier du jeu de T14 (packages/core/src/import/__fixtures__/). */
 export function fixture(nom: string): Uint8Array {
-  return new Uint8Array(readFileSync(new URL(nom, DOSSIER_FIXTURES)));
+  return new Uint8Array(readFileSync(join(DOSSIER_FIXTURES, nom)));
 }
 
 export const utf8 = (t: string): Uint8Array => new TextEncoder().encode(t);
