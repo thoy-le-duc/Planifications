@@ -369,9 +369,10 @@ describe('T11 : ferme de T07 (jeu de T15), lue par la porte', () => {
     const b = emplacements(plan).flatMap((l) => l.barres);
     for (const x of b) expect(x.libelle).toMatch(/^Espèce \d+ Variété \d+-\d$/);
     const cles = new Set(b.map((x) => x.cleFamille));
-    // Solanacées, Brassicacées, Astéracées, Apiacées et des familles sans couleur attitrée.
+    // Solanacées, Brassicacées, Astéracées, Apiacées et des familles qui ont leur couleur depuis T27b.
     expect(cles).toContain('solanacees');
-    expect(cles).toContain(null);
+    expect(cles).toContain('rosacees');
+    expect(cles).not.toContain(null);
   });
 
   it('calcul rapide : construirePlan sur toute la ferme en moins de 80 ms (médiane de 5, Node)', () => {
