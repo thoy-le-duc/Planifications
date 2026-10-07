@@ -1,9 +1,10 @@
 /**
  * Export complet de la ferme depuis la base locale du téléphone (T15, principe 5, puis T15b) :
  * hors ligne, lecture seule par la porte, aucun réseau. Le format de l'archive est dans
- * @planif/core ; l'archive est construite morceau par morceau et compressée (deflate).
+ * @planif/core ; l'archive est construite morceau par morceau et compressée (deflate), table par
+ * table pendant la lecture (T15c).
  */
-import { annulable, construireArchive, nomArchive, TABLES_EXPORTEES, type Avancement, type Compresseur, type LigneLocale } from '@planif/core';
+import { annulable, creerConstructeurArchive, nomArchive, TABLES_EXPORTEES, type Avancement, type Compresseur, type LigneLocale } from '@planif/core';
 import type { PorteDonnees } from './types.ts';
 
 export type { Avancement, Compresseur };
@@ -163,31 +164,59 @@ async function lireTable(porte: PorteDonnees, table: string, fermeId: string, si
   }
 }
 
-/** Lit les tables l'une après l'autre (une seule lecture à la fois dans le worker). */
-async function lireTables(porte: PorteDonnees, noms: readonly string[], fermeId: string, signal: AbortSignal | undefined): Promise<Record<string, readonly LigneLocale[]>> {
-  const tables: Record<string, readonly LigneLocale[]> = {};
-  for (const table of noms) tables[table] = await lireTable(porte, table, fermeId, signal);
-  return tables;
-}
-
-/** Construit l'archive ZIP de la ferme, depuis la base locale seulement. */
+/**
+ * Construit l'archive ZIP de la ferme, depuis la base locale seulement.
+ *
+ * Lecture et construction en parallèle (T15c) : chaque table lue est donnée aussitôt au
+ * constructeur de @planif/core (son CSV et sa part de ferme.json s'écrivent et partent au
+ * compresseur), pendant que la lecture continue avec la table suivante. La lecture se fait dans
+ * le worker de la base ; le fil principal écrit l'archive pendant qu'il attend les pages. Le
+ * constructeur traite les tables l'une après l'autre, dans l'ordre de lecture.
+ */
 export async function exporterFerme(porte: PorteDonnees, options: OptionsExportFerme): Promise<ArchiveExport> {
   const { fermeId, genereLe, jour, avancement, signal } = options;
-  const noms = Object.keys(TABLES_EXPORTEES);
-  // Annulé pendant la lecture : rejet immédiat, sans attendre la base ; plus aucune page lue ensuite.
-  const tables = await annulable(signal, () => lireTables(porte, noms, fermeId, signal));
-
   const compresseur = options.compresseur ?? compresseurParDefaut();
-  const { octets, lignes } = await construireArchive(
-    { fermeId, genereLe, tables },
-    {
-      date: jour,
-      ...(compresseur === undefined ? {} : { compresseur }),
-      ...(avancement === undefined ? {} : { avancement }),
-      ...(signal === undefined ? {} : { signal }),
-    },
-  );
-  const ferme = tables.ferme?.find((l) => l.id === fermeId);
-  const nom = typeof ferme?.nom === 'string' ? ferme.nom : null;
-  return { nomFichier: nomArchive(nom, jour), octets, lignes };
+  // Annulé : rejet immédiat, sans attendre la base ni le compresseur ; plus aucune page lue ensuite.
+  return annulable(signal, async () => {
+    // Arrêt du constructeur : annulation de l'export, ou lecture en échec (plus rien à écrire).
+    const arretConstruction = new AbortController();
+    const relayer = () => {
+      arretConstruction.abort(signal?.reason);
+    };
+    signal?.addEventListener('abort', relayer, { once: true });
+    try {
+      const constructeur = creerConstructeurArchive({
+        fermeId,
+        genereLe,
+        date: jour,
+        ...(compresseur === undefined ? {} : { compresseur }),
+        ...(avancement === undefined ? {} : { avancement }),
+        signal: arretConstruction.signal,
+      });
+      // Dans un objet : posé depuis une fermeture, TypeScript ne le suit pas sur une variable.
+      const etat: { echec: { readonly erreur: unknown } | undefined; nom: string | null } = { echec: undefined, nom: null };
+      let derniere: Promise<void> = Promise.resolve();
+      for (const table of Object.keys(TABLES_EXPORTEES)) {
+        // La construction a échoué : inutile de lire la suite.
+        if (etat.echec !== undefined) throw etat.echec.erreur;
+        const lignes = await lireTable(porte, table, fermeId, signal);
+        if (table === 'ferme') {
+          const ferme = lignes.find((l) => l.id === fermeId);
+          etat.nom = typeof ferme?.nom === 'string' ? ferme.nom : null;
+        }
+        derniere = constructeur.ajouterTable(table, lignes);
+        derniere.catch((erreur: unknown) => {
+          etat.echec ??= { erreur };
+        });
+      }
+      await derniere;
+      const { octets, lignes } = await constructeur.terminer();
+      return { nomFichier: nomArchive(etat.nom, jour), octets, lignes };
+    } catch (erreur: unknown) {
+      arretConstruction.abort(erreur);
+      throw erreur;
+    } finally {
+      signal?.removeEventListener('abort', relayer);
+    }
+  });
 }
