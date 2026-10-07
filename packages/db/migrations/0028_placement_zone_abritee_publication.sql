@@ -6,16 +6,25 @@
 -- L'écran (T28b) efface le contour, avec confirmation, avant de rattacher le bâtiment.
 -- Refus en check_violation (23514), comme les autres règles rejouées par la base.
 --
--- Concurrence : le bâtiment pose un verrou partagé sur la ligne de sa zone (FOR SHARE), qui
--- attend une modification en cours du contour ; chaque requête du déclencheur relit l'état
--- validé (READ COMMITTED). Les deux écritures ne peuvent donc pas passer ensemble.
+-- Concurrence (relecture B1) : le bâtiment pose TOUJOURS un verrou partagé sur la ligne de sa
+-- zone (FOR SHARE), quel que soit son contour, avant de lire ce contour.
+--   - Contour en cours de modification (non validé) : le verrou attend la fin de cette
+--     transaction, puis relit la version validée de la ligne (READ COMMITTED) : contour vu, refus.
+--   - Bâtiment rattaché (non validé) : son verrou partagé fait attendre l'UPDATE du contour, dont
+--     le déclencheur s'exécute ensuite avec un nouvel instantané et voit le bâtiment validé : refus.
+-- Les deux écritures ne peuvent donc pas passer ensemble, dans un ordre comme dans l'autre.
+-- (Un verrou conditionné par « contour IS NOT NULL » ne verrouillait rien quand le contour
+-- n'était pas encore validé : c'était la faille.)
 
 CREATE FUNCTION verifier_batiment_zone_sans_contour() RETURNS trigger
 LANGUAGE plpgsql AS $$
+DECLARE
+  a_contour boolean;
 BEGIN
   IF NEW.zone_id IS NOT NULL AND NEW.supprime_le IS NULL THEN
-    PERFORM 1 FROM zone WHERE id = NEW.zone_id AND contour IS NOT NULL FOR SHARE;
-    IF FOUND THEN
+    -- Verrou sans condition sur la zone, puis lecture de la version validée de son contour.
+    SELECT contour IS NOT NULL INTO a_contour FROM zone WHERE id = NEW.zone_id FOR SHARE;
+    IF a_contour THEN
       RAISE EXCEPTION 'la zone % a un contour : effacer le contour avant de la faire abriter par un bâtiment', NEW.zone_id
         USING ERRCODE = 'check_violation';
     END IF;
@@ -34,6 +43,9 @@ CREATE FUNCTION verifier_zone_abritee_sans_contour() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
   IF NEW.contour IS NOT NULL THEN
+    -- La ligne de la zone est déjà verrouillée par cet UPDATE : un bâtiment en cours de
+    -- rattachement l'a verrouillée en partage avant (l'UPDATE l'a attendu) ou l'attendra (son
+    -- déclencheur verra alors ce contour). Nouvel instantané : les bâtiments validés sont vus.
     PERFORM 1 FROM batiment WHERE zone_id = NEW.id AND supprime_le IS NULL;
     IF FOUND THEN
       RAISE EXCEPTION 'la zone % est abritée par un bâtiment : elle n''a pas de contour à elle', NEW.id

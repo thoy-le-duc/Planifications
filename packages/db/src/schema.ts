@@ -170,7 +170,7 @@ export const zone = pgTable(
     surfaceM2: decimal('surface_m2'),
     /**
      * Polygone libre dans le repère local de la ferme (T28a), `[{x, y}, …]` en mètres ; nul = pas
-     * placée, ou abritée par un bâtiment (déclencheurs de la migration 0027).
+     * placée, ou abritée par un bâtiment (déclencheurs de la migration 0028).
      */
     contour: jsonb('contour').$type<readonly PointLocal[]>(),
     ...horodatages(),
@@ -244,7 +244,7 @@ export const emplacement = pgTable(
 /**
  * Bâtiment de la ferme (T28a, Q31) : serre, hangar, magasin. Un rectangle toujours placé dans le
  * repère local de la ferme (centre, orientation = cap de la longueur). Une serre abrite au plus
- * une zone de sa ferme ; une zone abritée n'a pas de contour (déclencheurs, migration 0027).
+ * une zone de sa ferme ; une zone abritée n'a pas de contour (déclencheurs, migration 0028).
  * Bornes : celles de validerPlacement (@planif/core).
  */
 export const batiment = pgTable(
