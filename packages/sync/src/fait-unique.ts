@@ -223,7 +223,7 @@ export interface ChaineDe {
  * trop longue (rien en vigueur). Aucune ligne : `id` absent de la ferme.
  */
 const SQL_ORIGINE_DE = `${chaines(`id = ? AND remplace_evenement_id >= '' AND +ferme_id = ?`)}SELECT e.remplace_sorte AS sorte,
-    (SELECT origine FROM remplacement) AS origine
+    e.origine_id AS origine_recue, (SELECT origine FROM remplacement) AS origine
   FROM evenement e WHERE e.id = ? AND +e.ferme_id = ?`;
 
 /**
@@ -246,19 +246,24 @@ const SQL_CHAINE_DE_L_ORIGINE = `${chaines(
 /**
  * T13m : la chaîne de remplacements de la ligne `id` de la ferme, selon la règle de `chaines`
  * (la seule) : la journée la lit pour toute la ferme (`CHAINES`), les écritures pour une saisie.
- * Chaîne qui contient une annulation, ou cycle : `annulee`, rien en vigueur ; sinon la correction
+ * Chaîne qui contient une annulation, cycle, chaîne remplacée sans correction lisible, origine
+ * dont `origine_id` désigne une autre ligne (données corrompues) : `annulee`, rien en vigueur
+ * (le sens sûr : refus plutôt qu'écriture) ; sinon la correction
  * la plus récente (horodatage, puis id), à défaut l'origine. Ligne absente de la ferme : ni annulée,
  * ni rien en vigueur.
  */
 export async function chaineDe(lire: Lire, fermeId: string, id: string): Promise<ChaineDe> {
-  const ligne = (await lire<{ sorte: string | null; origine: string | null }>(SQL_ORIGINE_DE, [id, fermeId, id, fermeId]))[0];
+  const ligne = (await lire<{ sorte: string | null; origine_recue: string | null; origine: string | null }>(SQL_ORIGINE_DE, [id, fermeId, id, fermeId]))[0];
   if (ligne === undefined) return { annulee: false, enVigueur: null };
+  // Une origine reçue porte son propre id en origine_id ; tout autre (données corrompues) : refus.
+  if (ligne.sorte === null && ligne.origine_recue !== null && ligne.origine_recue !== id) return { annulee: true, enVigueur: null };
   const origine = ligne.sorte === null ? id : ligne.origine;
   if (origine === null) return { annulee: true, enVigueur: null };
   const c = (
     await lire<{ annulations: number; cle: string | null; id: string | null }>(SQL_CHAINE_DE_L_ORIGINE, [origine, fermeId, origine, fermeId, fermeId, origine])
   )[0];
   if (c === undefined) return { annulee: false, enVigueur: origine };
-  if (c.annulations > 0) return { annulee: true, enVigueur: null };
-  return { annulee: false, enVigueur: c.cle === null ? origine : c.id };
+  // Annulation, ou chaîne remplacée sans correction lisible : rien en vigueur (comme EN_VIGUEUR).
+  if (c.annulations > 0 || c.cle === null) return { annulee: true, enVigueur: null };
+  return { annulee: false, enVigueur: c.id };
 }
