@@ -5,8 +5,10 @@
  * l'archive ; ici, elle se fait pendant que le fil principal écrit les CSV suivants.
  *
  * Protocole (./compression.ts) : chaque entrée de l'archive est un flux numéroté.
- *   reçu  { id, type: 'morceau', octets } | { id, type: 'fin' } | { id, type: 'abandon' }
- *   rendu { id, type: 'morceau', octets } (tampon transféré) | { id, type: 'fin' } | { id, type: 'erreur', message }
+ *   reçu  { type: 'bonjour' } | { id, type: 'morceau', octets } | { id, type: 'fin' } | { id, type: 'abandon' }
+ *   rendu { type: 'pret' } (réponse à « bonjour » : le script est chargé)
+ *         | { id, type: 'recu', taille } (morceau reçu pris par le flux : contre-pression, T15c)
+ *         | { id, type: 'morceau', octets } (tampon transféré) | { id, type: 'fin' } | { id, type: 'erreur', message }
  */
 import type { MessageCompression, ReponseCompression } from './compression.ts';
 
@@ -53,7 +55,18 @@ function ouvrir(id: number): Flux {
 
 self.onmessage = (e: MessageEvent<MessageCompression>) => {
   const m = e.data;
-  if (abandonnes.has(m.id)) return;
+  if (m.type === 'bonjour') {
+    repondre({ type: 'pret' });
+    return;
+  }
+  // Accusé de réception d'un morceau : il libère sa place côté page (contre-pression, T15c).
+  const recu = () => {
+    if (m.type === 'morceau') repondre({ id: m.id, type: 'recu', taille: m.octets.byteLength });
+  };
+  if (abandonnes.has(m.id)) {
+    recu();
+    return;
+  }
   if (m.type === 'abandon') {
     abandonnes.add(m.id);
     const f = flux.get(m.id);
@@ -65,6 +78,7 @@ self.onmessage = (e: MessageEvent<MessageCompression>) => {
   const f = ouvrir(m.id);
   // Écritures mises en file dans l'ordre ; une erreur arrive par le lecteur (renvoyer).
   // Reçu par clonage structuré : toujours un ArrayBuffer ordinaire (jamais partagé).
-  if (m.type === 'morceau') f.ecrivain.write(m.octets as Uint8Array<ArrayBuffer>).catch(() => undefined);
+  // L'accusé part quand le flux a pris le morceau : la contre-pression va jusqu'au deflate.
+  if (m.type === 'morceau') f.ecrivain.write(m.octets as Uint8Array<ArrayBuffer>).then(recu, recu);
   else f.ecrivain.close().catch(() => undefined);
 };

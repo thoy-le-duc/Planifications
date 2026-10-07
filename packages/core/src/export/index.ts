@@ -4,14 +4,15 @@
  * base locale est dans `exporterFerme` (@planif/sync).
  *
  * Chaque fichier est PRODUIT par morceaux (générateurs plus bas) : `construireExport` les met bout
- * à bout en texte (la référence du contenu) ; `construireArchive` les passe un par un au ZIP, qui
- * les encode et les compresse aussitôt : jamais un fichier entier en mémoire. Mêmes générateurs,
- * donc mêmes octets.
+ * à bout en texte (la référence du contenu) ; `creerConstructeurArchive` (T15c) les passe au ZIP
+ * table par table, au fil de la lecture de la base, qui les encode et les compresse aussitôt :
+ * jamais un fichier entier en mémoire. `construireArchive` donne au constructeur une entrée déjà
+ * en mémoire. Mêmes générateurs, donc mêmes octets.
  *
  * Contrat détaillé : ./test/contrat.ts.
  */
 import { TABLES_EXPORTEES, type DescriptionTable, type TypeExport } from './tables.ts';
-import { annulable, creerZip, verifierAnnulation, type Compresseur, type FichierZip, type MorceauZip, type SignalAnnulation } from './zip.ts';
+import { annulable, assemblerZip, dateDos, EN_VOL, lancerEntree, verifierAnnulation, type Compressee, type Compresseur, type EntreeLancee, type MorceauZip, type SignalAnnulation } from './zip.ts';
 
 export { TABLES_EXPORTEES, type DescriptionColonne, type DescriptionTable, type TypeExport } from './tables.ts';
 export { annulable, creerZip, type Compresseur, type FichierZip, type MorceauZip, type OptionsZip, type SignalAnnulation } from './zip.ts';
@@ -189,40 +190,61 @@ function ligneJson(noms: readonly string[], types: readonly TypeExport[], l: Lig
 
 /**
  * ferme.json écrit table par table et ligne par ligne, sans arbre d'objets : exactement le texte
- * de `JSON.stringify({ format, version, ferme_id, genere_le, tables, bibliotheque })`.
+ * de `JSON.stringify({ format, version, ferme_id, genere_le, tables, bibliotheque })`. Les tables
+ * peuvent arriver une à une (construction au fil de la lecture, T15c) : l'écrivain garde le
+ * morceau en cours d'une table à l'autre.
  */
-function* fermeJson(entree: EntreeExport, tables: readonly TableRepartie[], c: Compteur): Generator<string, void, undefined> {
-  let morceau = `{"format":"planifications-export","version":1,"ferme_id":${JSON.stringify(entree.fermeId)},"genere_le":${JSON.stringify(entree.genereLe)},"tables":{`;
-  const ecrire = function* (cle: 'ferme' | 'bibliotheque', liste: readonly TableRepartie[]): Generator<string, void, undefined> {
-    for (let n = 0; n < liste.length; n++) {
-      const t = liste[n];
-      if (t === undefined) continue;
-      const colonnes = Object.entries(t.d.colonnes);
-      const noms = colonnes.map(([x]) => x);
-      const types = colonnes.map(([, x]) => x.type);
-      morceau += `${n === 0 ? '' : ','}${JSON.stringify(t.nom)}:[`;
-      const lignes = t[cle];
-      for (let i = 0; i < lignes.length; i++) {
-        const l = lignes[i];
-        if (l === undefined) continue;
-        morceau += (i === 0 ? '' : ',') + ligneJson(noms, types, l);
-        c.lignes++;
-        if (morceau.length >= MORCEAU) {
-          yield morceau;
-          morceau = '';
-        }
+class EcrivainJson {
+  private morceau: string;
+
+  constructor(fermeId: string, genereLe: string) {
+    this.morceau = `{"format":"planifications-export","version":1,"ferme_id":${JSON.stringify(fermeId)},"genere_le":${JSON.stringify(genereLe)},"tables":{`;
+  }
+
+  /** Une table, `rang` : sa place dans sa section (« tables » ou « bibliotheque »). */
+  *table(rang: number, nom: string, d: DescriptionTable, lignes: readonly LigneLocale[], c: Compteur): Generator<string, void, undefined> {
+    const colonnes = Object.entries(d.colonnes);
+    const noms = colonnes.map(([x]) => x);
+    const types = colonnes.map(([, x]) => x.type);
+    this.morceau += `${rang === 0 ? '' : ','}${JSON.stringify(nom)}:[`;
+    for (let i = 0; i < lignes.length; i++) {
+      const l = lignes[i];
+      if (l === undefined) continue;
+      this.morceau += (i === 0 ? '' : ',') + ligneJson(noms, types, l);
+      c.lignes++;
+      if (this.morceau.length >= MORCEAU) {
+        yield this.morceau;
+        this.morceau = '';
       }
-      morceau += ']';
     }
-  };
-  yield* ecrire('ferme', tables);
-  morceau += '},"bibliotheque":{';
-  yield* ecrire(
-    'bibliotheque',
-    tables.filter((t) => t.d.bibliotheque),
-  );
-  morceau += '}}';
-  yield morceau;
+    this.morceau += ']';
+  }
+
+  /** Fin de la section « tables », début de « bibliotheque ». */
+  bibliotheque(): void {
+    this.morceau += '},"bibliotheque":{';
+  }
+
+  *fin(): Generator<string, void, undefined> {
+    this.morceau += '}}';
+    yield this.morceau;
+    this.morceau = '';
+  }
+}
+
+function* fermeJson(entree: EntreeExport, tables: readonly TableRepartie[], c: Compteur): Generator<string, void, undefined> {
+  const e = new EcrivainJson(entree.fermeId, entree.genereLe);
+  for (let n = 0; n < tables.length; n++) {
+    const t = tables[n];
+    if (t !== undefined) yield* e.table(n, t.nom, t.d, t.ferme, c);
+  }
+  e.bibliotheque();
+  const biblio = tables.filter((t) => t.d.bibliotheque);
+  for (let n = 0; n < biblio.length; n++) {
+    const t = biblio[n];
+    if (t !== undefined) yield* e.table(n, t.nom, t.d, t.bibliotheque, c);
+  }
+  yield* e.fin();
 }
 
 /** `nomFerme` : nom de la ligne `ferme` ; l'identifiant sert seulement si la ferme est absente ou sans nom. */
@@ -394,19 +416,26 @@ function creerRendeur(): { rendre: () => Promise<void>; fermer: () => void } {
   if (g.MessageChannel !== undefined) {
     const canal = new g.MessageChannel();
     const enAttente: (() => void)[] = [];
+    let ferme = false;
     canal.port1.onmessage = () => {
       enAttente.shift()?.();
     };
     return {
+      // Canal fermé (export fini, annulé ou en échec) : plus rien n'attend un message qui ne viendra pas.
       rendre: () =>
-        new Promise<void>((ok) => {
-          enAttente.push(ok);
-          canal.port2.postMessage(0);
-        }),
+        ferme
+          ? Promise.resolve()
+          : new Promise<void>((ok) => {
+              enAttente.push(ok);
+              canal.port2.postMessage(0);
+            }),
       fermer: () => {
+        if (ferme) return;
+        ferme = true;
         canal.port1.onmessage = null;
         canal.port1.close();
         canal.port2.close();
+        for (const ok of enAttente.splice(0)) ok();
       },
     };
   }
@@ -423,47 +452,120 @@ function creerRendeur(): { rendre: () => Promise<void>; fermer: () => void } {
 
 const BOM_OCTETS = [0xef, 0xbb, 0xbf] as const;
 
+// ── Construction au fil de la lecture (T15c) ─────────────────────────────────────────────────
+
+export interface OptionsConstructeurArchive extends OptionsArchive {
+  readonly fermeId: string;
+  /** Instant ISO de l'export (ferme.json `genere_le`). */
+  readonly genereLe: string;
+}
+
 /**
- * L'archive complète, légère : chaque fichier est produit, encodé et compressé morceau par
- * morceau (BOM en octets, ferme.json table par table), en rendant la main régulièrement.
- * Mêmes octets décompressés que `construireExport`.
+ * Archive construite table par table, au fil de la lecture de la base (T15c) : chaque table
+ * donnée est aussitôt filtrée, écrite (son CSV, sa part de ferme.json) et envoyée au compresseur.
  */
-export async function construireArchive(entree: EntreeExport, options: OptionsArchive): Promise<ArchiveConstruite> {
-  const { signal } = options;
-  verifierAnnulation(signal);
+export interface ConstructeurArchive {
+  /**
+   * Lignes d'une table, telles que la base les rend : au plus une fois par table, dans l'ordre de
+   * TABLES_EXPORTEES ; une table sautée est vide. Les appels sont traités l'un après l'autre, dans
+   * l'ordre où ils sont faits ; la promesse est tenue quand la table est entièrement écrite.
+   */
+  ajouterTable(nom: string, lignes: readonly LigneLocale[]): Promise<void>;
+  /** Fin de la lecture (les tables jamais données sont vides) : l'archive complète. */
+  terminer(): Promise<ArchiveConstruite>;
+}
+
+interface Attente<T> {
+  readonly promesse: Promise<T>;
+  readonly tenir: (v: T) => void;
+}
+
+function attente<T>(): Attente<T> {
+  let tenir: (v: T) => void = () => undefined;
+  const promesse = new Promise<T>((ok) => {
+    tenir = ok;
+  });
+  return { promesse, tenir };
+}
+
+/** Table filtrée, remise à l'écrivain de ferme.json avec le compteur de sa part de la barre. */
+interface TableRemise {
+  readonly t: TableRepartie;
+  readonly compteur: Compteur;
+}
+
+/**
+ * Part de la barre d'avancement de chaque table (lignes écrites dans son CSV et dans ferme.json) ;
+ * la fin (bibliothèque de ferme.json, puis compression des dernières entrées) en a une de plus.
+ * Le total est connu dès le départ, sans savoir combien de lignes chaque table aura.
+ */
+const PART = 1_000;
+
+export function creerConstructeurArchive(options: OptionsConstructeurArchive): ConstructeurArchive {
+  const { fermeId, genereLe, compresseur, avancement, signal } = options;
+  const date = dateDos(options.date);
+  const methode: 0 | 8 = compresseur === undefined ? 0 : 8;
+  const noms = Object.keys(TABLES_EXPORTEES);
+  const nTables = noms.length;
+  const nBiblio = noms.filter((n) => TABLES_EXPORTEES[n]?.bibliotheque === true).length;
+  // Place de chaque entrée dans l'archive : ferme.json, LISEZMOI.txt, les CSV des tables, bibliotheque/.
+  const entrees: (EntreeLancee | undefined)[] = Array.from({ length: 2 + nTables + nBiblio }, () => undefined);
+  const lignes: Record<string, number> = {};
+  const membres = new Set<unknown>();
+  const bibliotheques: TableRepartie[] = [];
+  let nomFerme: unknown;
+  /** Tables remises une à une à l'écrivain de ferme.json, puis la fin (bibliothèque) ; null : abandon. */
+  const remises = Array.from({ length: nTables }, () => attente<TableRemise | null>());
+  const remiseFin = attente<Compteur | null>();
+  /** Tables entièrement écrites dans ferme.json. */
+  const ecrites = Array.from({ length: nTables }, () => attente<undefined>());
+  let json: EntreeLancee | undefined;
+  /** Entrées CSV dans l'ordre où elles sont lancées (EN_VOL au plus en cours de compression). */
+  const enVol: EntreeLancee[] = [];
+  let suivante = 0;
+  let file: Promise<unknown> = Promise.resolve();
+  let finie = false;
+
+  // Dans un objet : l'échec est posé depuis des fermetures, TypeScript ne le suit pas sur une variable.
+  const arret: { echec: { readonly erreur: unknown } | undefined } = { echec: undefined };
+  /**
+   * Source à arrêter (échec ou annulation). Une source annulée s'arrête sans lever : le compresseur
+   * finit son entrée sans erreur (un flux Node coupé par une erreur de sa source la lève hors de
+   * toute promesse), plus rien n'est écrit, et l'archive n'est jamais rendue.
+   */
+  const aArreter = () => arret.echec !== undefined || signal?.aborted === true;
+  const verifierArret = () => {
+    verifierAnnulation(signal);
+    if (arret.echec !== undefined) throw arret.echec.erreur;
+  };
+
+  // Fil principal : au plus TRANCHE_MS de calcul d'affilée, même quand plusieurs fichiers s'écrivent en même temps.
   const rendeur = creerRendeur();
   let tranche = Date.now();
-  const peutEtreRendre = async () => {
-    verifierAnnulation(signal);
+  const rendreSiLongtemps = async () => {
     if (Date.now() - tranche < TRANCHE_MS) return;
     await rendeur.rendre();
     tranche = Date.now();
+  };
+  const peutEtreRendre = async () => {
+    verifierAnnulation(signal);
+    await rendreSiLongtemps();
     verifierAnnulation(signal);
   };
-  try {
-    // Annulé : rejet immédiat, même si le compresseur ne rend plus la main ; le canal est fermé.
-    return await annulable(signal, () => archiver(entree, options, peutEtreRendre));
-  } finally {
+  const liberer = () => {
     rendeur.fermer();
-  }
-}
+    signal?.removeEventListener('abort', liberer);
+    for (const r of remises) r.tenir(null);
+    remiseFin.tenir(null);
+  };
+  signal?.addEventListener('abort', liberer, { once: true });
 
-async function archiver(entree: EntreeExport, options: OptionsArchive, peutEtreRendre: () => Promise<void>): Promise<ArchiveConstruite> {
-  const plans = planifier(entree);
-  let etape = plans.next();
-  while (etape.done !== true) {
-    await peutEtreRendre();
-    etape = plans.next();
-  }
-  const plan = etape.value;
-  const total = plan.fichiers.reduce((n, f) => n + f.lignes + 1, 0);
-  const pas = Math.max(1, Math.floor(total / 60));
+  // Avancement : entiers, jamais en recul, total constant.
+  const total = (nTables + 1) * PART;
+  const pas = Math.max(1, Math.floor(total / 200));
   let fait = 0;
   let signale = -1;
-  // Dans un objet : l'échec est posé depuis des fermetures, TypeScript ne le suit pas sur une variable.
-  const arret: { echec: { readonly erreur: unknown } | undefined } = { echec: undefined };
-  const arrete = () => arret.echec !== undefined;
-  const { avancement } = options;
+  let part: { rang: number; compteur: Compteur; lignes: number; entreesFinies: number } = { rang: 0, compteur: { lignes: 0 }, lignes: 0, entreesFinies: 0 };
   const signaler = () => {
     if (avancement === undefined || arret.echec !== undefined || fait === signale) return;
     signale = fait;
@@ -474,33 +576,199 @@ async function archiver(entree: EntreeExport, options: OptionsArchive, peutEtreR
       arret.echec = { erreur };
     }
   };
+  const avancer = (force: boolean) => {
+    const ecrit = Math.min(part.compteur.lignes, part.lignes);
+    const proportion = (n: number, sur: number, poids: number) => (sur === 0 ? poids : Math.floor((poids * n) / sur));
+    const dans =
+      part.rang < nTables
+        ? proportion(ecrit, part.lignes, PART)
+        : proportion(ecrit, part.lignes, PART / 2) + proportion(part.entreesFinies, entrees.length, PART / 2);
+    fait = Math.max(fait, Math.min(total, part.rang * PART + Math.min(PART, dans)));
+    if (force ? fait !== signale : fait - signale >= pas) signaler();
+  };
+  const ouvrirPart = (rang: number, nLignes: number): Compteur => {
+    const compteur: Compteur = { lignes: 0 };
+    part = { rang, compteur, lignes: nLignes, entreesFinies: 0 };
+    avancer(true);
+    return compteur;
+  };
 
-  async function* flux(f: FichierPrevu): AsyncGenerator<MorceauZip, void, undefined> {
-    if (arrete()) return;
-    if (f.bom) yield Uint8Array.from(BOM_OCTETS);
-    const c: Compteur = { lignes: 0 };
-    let compte = 0;
-    for (const morceau of f.produire(c)) {
+  /** Un fichier produit morceau par morceau (BOM en octets), en rendant la main entre deux morceaux. */
+  async function* flux(bom: boolean, produire: Iterable<string>): AsyncGenerator<MorceauZip, void, undefined> {
+    if (aArreter()) return;
+    if (bom) yield Uint8Array.from(BOM_OCTETS);
+    for (const morceau of produire) {
       yield morceau;
-      fait += c.lignes - compte;
-      compte = c.lignes;
-      if (fait - signale >= pas) signaler();
-      await peutEtreRendre();
-      if (arrete()) return;
+      avancer(false);
+      await rendreSiLongtemps();
+      if (aArreter()) return;
     }
-    fait += c.lignes - compte + 1;
-    signaler();
   }
 
-  signaler();
-  const fichiers: FichierZip[] = plan.fichiers.map((f) => ({ chemin: f.chemin, contenu: flux(f) }));
-  const octets = await creerZip(fichiers, {
-    date: options.date,
-    ...(options.compresseur === undefined ? {} : { compresseur: options.compresseur }),
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-  });
-  if (arret.echec !== undefined) throw arret.echec.erreur;
-  return { octets, lignes: plan.lignes };
+  /** ferme.json : ouvert dès la première table, écrit table par table à mesure qu'elles arrivent. */
+  async function* sourceJson(): AsyncGenerator<MorceauZip, void, undefined> {
+    const e = new EcrivainJson(fermeId, genereLe);
+    for (let k = 0; k < nTables; k++) {
+      const r = await remises[k]?.promesse;
+      if (r === null || r === undefined || aArreter()) return;
+      yield* flux(false, e.table(k, r.t.nom, r.t.d, r.t.ferme, r.compteur));
+      ecrites[k]?.tenir(undefined);
+    }
+    const compteur = await remiseFin.promesse;
+    if (compteur === null || aArreter()) return;
+    e.bibliotheque();
+    for (let n = 0; n < bibliotheques.length; n++) {
+      const t = bibliotheques[n];
+      if (t !== undefined) yield* flux(false, e.table(n, t.nom, t.d, t.bibliotheque, compteur));
+    }
+    yield* flux(false, e.fin());
+  }
+
+  const demarrerJson = (): EntreeLancee => {
+    json ??= entrees[0] = lancerEntree({ chemin: 'ferme.json', contenu: sourceJson() }, compresseur, undefined);
+    return json;
+  };
+
+  /** Lance une entrée CSV (ou LISEZMOI.txt) à sa place dans l'archive, EN_VOL au plus en cours de compression. */
+  const lancer = async (place: number, chemin: string, contenu: AsyncIterable<MorceauZip>): Promise<EntreeLancee> => {
+    const ancien = enVol.length >= EN_VOL ? enVol[enVol.length - EN_VOL] : undefined;
+    if (ancien !== undefined) await ancien.travail;
+    verifierArret();
+    // Sans le signal : la source s'arrête d'elle-même à l'annulation (voir `aArreter`).
+    const e = lancerEntree({ chemin, contenu }, compresseur, undefined);
+    entrees[place] = e;
+    enVol.push(e);
+    return e;
+  };
+
+  /**
+   * Promesse attendue plus tard : son rejet est lu par l'appelant, jamais « non traité » si
+   * l'appelant échoue avant de l'attendre.
+   */
+  const plusTard = <T>(p: Promise<T>): Promise<T> => {
+    p.catch(() => undefined);
+    return p;
+  };
+  /** Source lue en entier par le compresseur (ou son échec). */
+  const lue = (e: EntreeLancee) => plusTard(Promise.race([e.sourceFinie, e.travail]));
+
+  async function traiter(k: number, brutes: readonly LigneLocale[]): Promise<void> {
+    verifierArret();
+    const nom = noms[k] ?? '';
+    const d = TABLES_EXPORTEES[nom];
+    if (d === undefined) throw new Error(`table inconnue de l’export : ${nom}`);
+    const repartition = repartir(nom, d, brutes, fermeId, membres);
+    let etape = repartition.next();
+    while (etape.done !== true) {
+      await peutEtreRendre();
+      etape = repartition.next();
+    }
+    const t = etape.value;
+    if (nom === 'membre') for (const m of t.ferme) membres.add(m.utilisateur_id);
+    if (nom === 'ferme') nomFerme = t.ferme[0]?.nom;
+    lignes[nom] = t.ferme.length;
+    if (d.bibliotheque) {
+      lignes[`bibliotheque/${nom}`] = t.bibliotheque.length;
+      bibliotheques.push(t);
+    }
+    const compteur = ouvrirPart(k, 2 * t.ferme.length + (d.bibliotheque ? t.bibliotheque.length : 0));
+    verifierArret();
+    const j = demarrerJson();
+    remises[k]?.tenir({ t, compteur });
+    const attendues: Promise<unknown>[] = [plusTard(Promise.race([ecrites[k]?.promesse, j.travail]))];
+    attendues.push(lue(await lancer(2 + k, `${nom}.csv`, flux(true, csv(d, t.ferme, compteur)))));
+    if (d.bibliotheque) {
+      const place = 2 + nTables + bibliotheques.length - 1;
+      attendues.push(lue(await lancer(place, `bibliotheque/${nom}.csv`, flux(true, csv(d, t.bibliotheque, compteur)))));
+    }
+    await Promise.all(attendues);
+    verifierArret();
+    compteur.lignes = part.lignes;
+    avancer(true);
+  }
+
+  async function finir(): Promise<ArchiveConstruite> {
+    while (suivante < nTables) await traiter(suivante++, []);
+    verifierArret();
+    const j = demarrerJson();
+    const compteur = ouvrirPart(
+      nTables,
+      bibliotheques.reduce((n, t) => n + t.bibliotheque.length, 0),
+    );
+    remiseFin.tenir(compteur);
+    const titre = typeof nomFerme === 'string' && nomFerme.trim() !== '' ? nomFerme : fermeId;
+    const l = await lancer(
+      1,
+      'LISEZMOI.txt',
+      flux(
+        false,
+        (function* () {
+          yield lisezmoi(titre, genereLe);
+        })(),
+      ),
+    );
+    await Promise.all([lue(j), lue(l)]);
+    verifierArret();
+    const compressees: Compressee[] = [];
+    for (const e of entrees) {
+      if (e === undefined) throw new Error('entrée de l’archive jamais lancée');
+      compressees.push(await e.travail);
+      part.entreesFinies++;
+      avancer(true);
+    }
+    verifierArret();
+    const octets = assemblerZip(entrees as EntreeLancee[], compressees, date, methode);
+    return { octets, lignes };
+  }
+
+  /** Les appels passent l'un après l'autre ; le premier échec arrête le constructeur. */
+  const enFile = <T>(travail: () => Promise<T>): Promise<T> => {
+    const p = file.then(async () => {
+      verifierArret();
+      if (finie) throw new Error('archive déjà terminée');
+      try {
+        return await travail();
+      } catch (erreur: unknown) {
+        arret.echec ??= { erreur };
+        liberer();
+        throw erreur;
+      }
+    });
+    file = p.catch(() => undefined);
+    // Annulé : rejet immédiat, même si le compresseur ne rend plus la main.
+    return annulable(signal, () => p);
+  };
+
+  return {
+    ajouterTable: (nom, lignesTable) =>
+      enFile(async () => {
+        const k = noms.indexOf(nom);
+        if (k < 0) throw new Error(`table inconnue de l’export : ${nom}`);
+        if (k < suivante) throw new Error(`table ${nom} donnée deux fois, ou hors de l’ordre de TABLES_EXPORTEES`);
+        while (suivante < k) await traiter(suivante++, []);
+        suivante++;
+        await traiter(k, lignesTable);
+      }),
+    terminer: () =>
+      enFile(async () => {
+        const archive = await finir();
+        finie = true;
+        liberer();
+        return archive;
+      }),
+  };
+}
+
+/**
+ * L'archive complète, légère : l'entrée donnée table par table au constructeur (une seule
+ * implémentation, celle de la construction au fil de la lecture). Mêmes octets décompressés que
+ * `construireExport`.
+ */
+export async function construireArchive(entree: EntreeExport, options: OptionsArchive): Promise<ArchiveConstruite> {
+  verifierAnnulation(options.signal);
+  const c = creerConstructeurArchive({ ...options, fermeId: entree.fermeId, genereLe: entree.genereLe });
+  for (const nom of Object.keys(TABLES_EXPORTEES)) await c.ajouterTable(nom, entree.tables[nom] ?? []);
+  return c.terminer();
 }
 
 /** 'planifications-<nom de la ferme sans accents>-<AAAA-MM-JJ>.zip'. */

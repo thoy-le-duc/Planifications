@@ -94,18 +94,29 @@ const TRANCHE_TEXTE = 16_000;
 /** Octets plus courts que ça : recopiés dans le bloc courant plutôt que passés seuls. */
 const PETITS_OCTETS = 4_096;
 /** Entrées dont le compresseur finit encore pendant qu'on lit les suivantes (chacune tient un contexte deflate). */
-const EN_VOL = 8;
+export const EN_VOL = 8;
 
 let tableCrc: Int32Array | undefined;
 
-/** Table du CRC-32 (polynôme 0xEDB88320), calculée au premier export : rien au chargement du module. */
+/**
+ * Tables du CRC-32 (polynôme 0xEDB88320), calculées au premier export : rien au chargement du
+ * module. Huit tables de 256 (« slicing-by-8 », T15c) : huit octets par tour au lieu d'un, même
+ * CRC, environ quatre fois moins de calcul sur le fil principal.
+ */
 function crcTable(): Int32Array {
   if (tableCrc !== undefined) return tableCrc;
-  const t = new Int32Array(256);
+  const t = new Int32Array(8 * 256);
   for (let n = 0; n < 256; n++) {
     let c = n;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
     t[n] = c;
+  }
+  for (let n = 0; n < 256; n++) {
+    let c = t[n] ?? 0;
+    for (let k = 1; k < 8; k++) {
+      c = (t[c & 0xff] ?? 0) ^ (c >>> 8);
+      t[k * 256 + n] = c;
+    }
   }
   tableCrc = t;
   return t;
@@ -115,8 +126,37 @@ function crcTable(): Int32Array {
 function crcSuite(crc: number, octets: Uint8Array): number {
   const t = crcTable();
   let c = crc;
-  for (const o of octets) c = (t[(c ^ o) & 0xff] ?? 0) ^ (c >>> 8);
+  const n = octets.length;
+  let i = 0;
+  for (const fin = n - 8; i <= fin; i += 8) {
+    const a = c ^ ((octets[i] ?? 0) | ((octets[i + 1] ?? 0) << 8) | ((octets[i + 2] ?? 0) << 16) | ((octets[i + 3] ?? 0) << 24));
+    c =
+      (t[1792 + (a & 0xff)] ?? 0) ^
+      (t[1536 + ((a >>> 8) & 0xff)] ?? 0) ^
+      (t[1280 + ((a >>> 16) & 0xff)] ?? 0) ^
+      (t[1024 + (a >>> 24)] ?? 0) ^
+      (t[768 + (octets[i + 4] ?? 0)] ?? 0) ^
+      (t[512 + (octets[i + 5] ?? 0)] ?? 0) ^
+      (t[256 + (octets[i + 6] ?? 0)] ?? 0) ^
+      (t[octets[i + 7] ?? 0] ?? 0);
+  }
+  for (; i < n; i++) c = (t[(c ^ (octets[i] ?? 0)) & 0xff] ?? 0) ^ (c >>> 8);
   return c;
+}
+
+/** `TextEncoder` réduit à ce que l'encodeur en prend (le cœur n'a pas les types du DOM ni de Node). */
+interface EncodeurNatif {
+  encodeInto(source: string, destination: Uint8Array): { readonly read: number; readonly written: number };
+}
+
+let encodeurNatif: EncodeurNatif | null | undefined;
+
+/** `TextEncoder` du fil courant (navigateur, Node), ou null : l'encodeur écrit alors tout lui-même. */
+function natif(): EncodeurNatif | null {
+  if (encodeurNatif !== undefined) return encodeurNatif;
+  const Classe = (globalThis as unknown as { readonly TextEncoder?: new () => EncodeurNatif }).TextEncoder;
+  encodeurNatif = Classe === undefined ? null : new Classe();
+  return encodeurNatif;
 }
 
 /**
@@ -135,7 +175,39 @@ class Encodeur {
     this.p = 0;
   }
 
+  /**
+   * T15c : l'essentiel par `TextEncoder.encodeInto` (natif, bien plus rapide que la boucle plus
+   * bas), mêmes octets ET mêmes blocs : un caractère commence dans un bloc tant que la position y
+   * est au plus BLOC − 4 (la règle de la boucle) ; celui qui commence à la limite sans y tenir
+   * entier passe par la boucle, seul.
+   */
   texte(texte: string): void {
+    const enc = natif();
+    if (enc === null) {
+      this.texteJs(texte);
+      return;
+    }
+    const limite = BLOC - 4;
+    const n = texte.length;
+    let i = 0;
+    while (i < n) {
+      if (this.p > limite) this.pousser();
+      const { read, written } = enc.encodeInto(i === 0 ? texte : texte.slice(i), this.bloc.subarray(this.p, limite + 1));
+      this.p += written;
+      i += read;
+      if (i < n && this.p <= limite) {
+        // Le caractère suivant commence avant la limite mais n'y tient pas : la boucle l'écrit (jusqu'à BLOC).
+        const c = texte.charCodeAt(i);
+        const paire = c >= 0xd800 && c <= 0xdbff && i + 1 < n && (texte.charCodeAt(i + 1) & 0xfc00) === 0xdc00;
+        const long = paire ? 2 : 1;
+        this.texteJs(texte.slice(i, i + long));
+        i += long;
+      }
+    }
+  }
+
+  /** Encodage caractère par caractère (sans TextEncoder, et aux bords des blocs). */
+  private texteJs(texte: string): void {
     const n = texte.length;
     const limite = BLOC - 4;
     let bloc = this.bloc;
@@ -219,7 +291,7 @@ function utf8(texte: string): Uint8Array {
 }
 
 /** Date DOS (jour à 00:00) : ((année − 1980) << 9) | (mois << 5) | jour. */
-function dateDos(jour: string | undefined): number {
+export function dateDos(jour: string | undefined): number {
   if (jour === undefined) return (1 << 5) | 1;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(jour);
   const annee = Number(m?.[1]);
@@ -231,7 +303,8 @@ function dateDos(jour: string | undefined): number {
   return ((annee - 1980) << 9) | (mois << 5) | j;
 }
 
-interface Suivi {
+/** CRC-32 et taille d'une entrée, tenus au fil de la lecture de sa source. */
+export interface Suivi {
   crc: number;
   taille: number;
   /** Source lue jusqu'au bout (et pas seulement abandonnée par le compresseur). */
@@ -299,7 +372,7 @@ function garder(m: Uint8Array): Uint8Array {
   return m.byteLength * 2 < m.buffer.byteLength ? m.slice() : m;
 }
 
-interface Compressee {
+export interface Compressee {
   readonly donnees: readonly Uint8Array[];
   readonly tailleComp: number;
 }
@@ -324,6 +397,43 @@ interface Centrale {
   readonly decalage: number;
 }
 
+/** Une entrée lancée : sa source est lue, et compressée s'il y a un compresseur, au fil de l'eau. */
+export interface EntreeLancee {
+  readonly chemin: string;
+  readonly nom: Uint8Array;
+  readonly suivi: Suivi;
+  /** Résolue quand la source est épuisée (ou abandonnée). */
+  readonly sourceFinie: Promise<void>;
+  /** Octets de l'entrée tels qu'ils iront dans l'archive ; rejetée si la source n'a pas été lue en entier. */
+  readonly travail: Promise<Compressee>;
+}
+
+/**
+ * Lance une entrée : le compresseur (s'il y en a un) est appelé tout de suite, la source est lue
+ * à son rythme. Les entrées d'une archive peuvent être lancées dans n'importe quel ordre, et
+ * plusieurs à la fois : `assemblerZip` les range ensuite dans l'ordre voulu.
+ */
+export function lancerEntree(f: FichierZip, compresseur: Compresseur | undefined, signal: SignalAnnulation | undefined): EntreeLancee {
+  const nom = utf8(f.chemin);
+  if (nom.length > 0xffff) throw new RangeError(`chemin trop long : ${f.chemin.slice(0, 40)}…`);
+  const suivi: Suivi = { crc: -1, taille: 0, lue: false };
+  let sourceLue: () => void = () => undefined;
+  const sourceFinie = new Promise<void>((ok) => {
+    sourceLue = ok;
+  });
+  const brut = blocsBruts(f.contenu, suivi, signal, () => {
+    sourceLue();
+  });
+  // Sans cette vérification, un compresseur qui s'arrête tôt donnerait une entrée valide mais
+  // tronquée (CRC et taille d'un début de fichier seulement).
+  const travail = collecter(compresseur === undefined ? brut : compresseur(brut)).then((c) => {
+    if (!suivi.lue) throw new Error(`source non lue en entier par le compresseur : ${f.chemin}`);
+    return c;
+  });
+  travail.catch(() => undefined); // rejet lu par l'appelant ; évite un rejet « non traité » entre-temps
+  return { chemin: f.chemin, nom, suivi, sourceFinie, travail };
+}
+
 /**
  * Construit une archive ZIP : en-têtes locaux, répertoire central, fin de répertoire.
  * Deux chemins identiques, une archive de plus de 4 Gio, une source que le compresseur n'a pas
@@ -342,49 +452,36 @@ async function construireZip(fichiers: readonly FichierZip[], options: OptionsZi
     vus.add(f.chemin);
   }
   const { compresseur, signal } = options;
-  const methode = compresseur === undefined ? 0 : 8;
+  const methode: 0 | 8 = compresseur === undefined ? 0 : 8;
 
   // Entrées en chaîne : dès que la source d'une entrée est lue, la suivante commence, pendant que
   // le compresseur finit la précédente (sa dernière étape est asynchrone : sans ce recouvrement,
   // chaque entrée attendrait la sienne). Les sources restent lues une à une, dans l'ordre.
-  const travaux: Promise<Compressee>[] = [];
-  const suivis: Suivi[] = [];
-  const noms: Uint8Array[] = [];
+  const lancees: EntreeLancee[] = [];
   for (const f of fichiers) {
-    const nom = utf8(f.chemin);
-    if (nom.length > 0xffff) throw new RangeError(`chemin trop long : ${f.chemin.slice(0, 40)}…`);
-    noms.push(nom);
     verifierAnnulation(signal);
-    const suivi: Suivi = { crc: -1, taille: 0, lue: false };
-    suivis.push(suivi);
-    let sourceLue: () => void = () => undefined;
-    const finSource = new Promise<void>((ok) => {
-      sourceLue = ok;
-    });
-    const brut = blocsBruts(f.contenu, suivi, signal, () => {
-      sourceLue();
-    });
-    // Sans cette vérification, un compresseur qui s'arrête tôt donnerait une entrée valide mais
-    // tronquée (CRC et taille d'un début de fichier seulement).
-    const travail = collecter(compresseur === undefined ? brut : compresseur(brut)).then((c) => {
-      if (!suivi.lue) throw new Error(`source non lue en entier par le compresseur : ${f.chemin}`);
-      return c;
-    });
-    travail.catch(() => undefined); // rejet lu plus bas ; évite un rejet « non traité » entre-temps
-    travaux.push(travail);
-    await Promise.race([finSource, travail]);
-    const ancien = travaux.length > EN_VOL ? travaux[travaux.length - 1 - EN_VOL] : undefined;
-    if (ancien !== undefined) await ancien;
+    const e = lancerEntree(f, compresseur, signal);
+    lancees.push(e);
+    await Promise.race([e.sourceFinie, e.travail]);
+    const ancien = lancees.length > EN_VOL ? lancees[lancees.length - 1 - EN_VOL] : undefined;
+    if (ancien !== undefined) await ancien.travail;
   }
-  const compressees = await Promise.all(travaux);
+  const compressees = await Promise.all(lancees.map((e) => e.travail));
   verifierAnnulation(signal);
+  return assemblerZip(lancees, compressees, date, methode);
+}
 
+/**
+ * Archive finale, entrées dans l'ordre de `entrees` (`compressees[k]` : octets de `entrees[k]`).
+ * Les tableaux de `compressees` sont vidés au fil de l'assemblage.
+ */
+export function assemblerZip(entrees: readonly EntreeLancee[], compressees: Compressee[], date: number, methode: 0 | 8): Uint8Array {
   const parties: Uint8Array[] = [];
   const centrales: Centrale[] = [];
   let p = 0;
   compressees.forEach(({ donnees, tailleComp }, k) => {
-    const nom = noms[k] ?? new Uint8Array(0);
-    const suivi = suivis[k] ?? { crc: -1, taille: 0, lue: true };
+    const nom = entrees[k]?.nom ?? new Uint8Array(0);
+    const suivi = entrees[k]?.suivi ?? { crc: -1, taille: 0, lue: true };
     const crc = (suivi.crc ^ -1) >>> 0;
     if (suivi.taille > MAX_32 || p + EN_TETE_LOCAL + nom.length + tailleComp > MAX_32) {
       throw new RangeError('archive de plus de 4 Gio : ZIP64 non pris en charge');
