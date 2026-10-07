@@ -97,6 +97,10 @@ export interface LigneEmplacementPlan {
   readonly zoneId: string;
   /** Chapelle (sous-zone) de rattachement, null si l'emplacement est directement dans la zone. */
   readonly chapelleId: string | null;
+  /** Longueur de l'emplacement (m), recopiée de la base (T27 : taille des volumes de la 3D). */
+  readonly longueurM: number;
+  /** Largeur de l'emplacement (m), nulle si non renseignée (T27). */
+  readonly largeurM: number | null;
   readonly barres: readonly BarrePlan[];
   readonly conflits: readonly ConflitPlan[];
 }
@@ -472,7 +476,17 @@ export function construirePlan(donnees: DonneesPlan, options: OptionsPlan): Plan
       });
     }
     barres.sort((a, b) => a.debutJour - b.debutJour || (a.occupationId < b.occupationId ? -1 : a.occupationId > b.occupationId ? 1 : 0));
-    return { sorte: 'emplacement', id: emplacement.id, code: emplacement.code, zoneId, chapelleId, barres, conflits };
+    return {
+      sorte: 'emplacement',
+      id: emplacement.id,
+      code: emplacement.code,
+      zoneId,
+      chapelleId,
+      longueurM: emplacement.longueurM,
+      largeurM: emplacement.largeurM,
+      barres,
+      conflits,
+    };
   }
 
   const lignes: LignePlan[] = [];

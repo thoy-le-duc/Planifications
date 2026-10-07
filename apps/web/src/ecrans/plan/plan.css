@@ -473,6 +473,50 @@
   font-size: 18px;
 }
 
+/* « Voir en 3D » (T27, Q29) : sur ordinateur seulement ; au téléphone, le plan reste en 2D. */
+.plan-voir-3d {
+  display: none;
+  margin-left: auto;
+  min-height: 56px;
+  padding: 0 16px 0 12px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  align-items: center;
+  gap: 6px;
+  font-family: var(--police-titre);
+  font-weight: 700;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.plan-voir-3d[aria-busy='true'] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+@media (min-width: 1024px) {
+  .plan-voir-3d {
+    display: flex;
+  }
+
+  .plan-voir-3d + .plan-nouvelle {
+    margin-left: 0;
+  }
+}
+
+/* Repli de la 3D sur la 2D (WebGL absent, trop lente) : message au-dessus du plan. */
+.plan-repli-3d {
+  margin: 0;
+  padding: var(--espace-s) var(--espace-m);
+  border-left: 4px solid var(--couleur-orange);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font-size: 15px;
+}
+
 /* Bandeau « Annuler » (10 s) après l'enregistrement d'une série, comme sur Aujourd'hui. */
 .plan-bandeau {
   position: fixed;
