@@ -1,15 +1,21 @@
-# T14e — Import : écriture des séries importées
+# T14e — Import : suites
 
-**Objectif** : les séries d'un fichier importé deviennent de vraies séries de la ferme (itinéraire déduit des dates, saisons créées), annulables comme le reste de l'import.
+**Objectif** : fermer les points laissés ouverts par T14b.
 
-**Dépend de** : T14b, T10s
-**Périmètre** : `apps/web/src/ecrans/import/**`, `packages/core/src/import/**`
+**Dépend de** : T14b
+**Périmètre** : `apps/web/src/ecrans/import/**`, `packages/sync/src/import*`
 
-## Constat (testeur T14b)
+## Constat (T14b)
 
-L'écriture des séries importées est le plus gros morceau de T14b ; ses tests sont isolés et passent dans ce ticket. L'annulation d'un import dont les lignes ont servi depuis (une série posée sur une planche importée) n'est pas encore couverte.
+L'écriture des séries, le refus d'annuler un import dont une ligne sert encore et l'annulation par lots ont été faits dans T14b. Restent :
+
+- La vérification « sert encore » ne voit que le téléphone : une série posée depuis un autre appareil et pas encore reçue fera refuser l'annulation par le serveur (le message le signale, le refus apparaît dans « Saisies refusées »).
+- Au-delà de 500 écritures, l'import part en plusieurs envois et n'est plus tout ou rien côté serveur ; un lot refusé laisse les autres (« Annuler cet import » nettoie tout).
+- Modèles et historique d'import sont propres au téléphone (`localStorage`), effacés à la déconnexion ; un historique plein n'est plus rangé (l'écran prévient).
+- `actif_du` d'un emplacement et bornes d'une saison créée sont déduits de la date : à montrer à l'aperçu.
 
 ## Critères d'acceptation
 
-- [ ] Les tests « séries » écrits pour T14b passent.
-- [ ] Test : annuler un import dont une planche porte depuis une série saisie à la main → refus explicite, rien n'est retiré.
+- [ ] Test : une annulation refusée par le serveur est montrée dans l'historique de l'import, pas seulement dans « Saisies refusées ».
+- [ ] Historique d'import rangé en IndexedDB (taille), ou décision écrite de le garder en `localStorage`.
+- [ ] `actif_du` et bornes de saison affichés à l'aperçu.
