@@ -144,6 +144,21 @@ describe('« Importer » : des lots d’au plus 500 écritures et 5 Mio (limites
   });
 });
 
+describe('année de la saison proposée (décision du chef)', () => {
+  for (const [instant, attendue] of [
+    ['2027-01-15T08:00:00.000Z', '2027'],
+    ['2027-08-31T08:00:00.000Z', '2027'],
+    ['2027-09-01T08:00:00.000Z', '2028'],
+    ['2027-12-20T08:00:00.000Z', '2028'],
+  ] as const) {
+    it(`le ${instant.slice(0, 10)} : ${attendue} (l’année suivante à partir de septembre)`, async () => {
+      await h.ouvrir(FERME, new Date(instant));
+      await deposerEtLire('series-semaines.tsv', fixture('series-semaines.tsv'));
+      expect(champ('Année de la saison', ecran()).value).toBe(attendue);
+    });
+  }
+});
+
 describe('zone par défaut quand le parcellaire n’a pas de colonne de zone', () => {
   const FICHIER = csv([
     ['Planche', 'Longueur (m)'],

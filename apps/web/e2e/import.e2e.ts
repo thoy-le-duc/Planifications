@@ -92,6 +92,13 @@ async function deposer(page: Page, nom: string, octets: Buffer | string): Promis
     .getByLabel('Choisir un fichier')
     .setInputFiles({ name: nom, mimeType: nom.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv', buffer: typeof octets === 'string' ? Buffer.from(octets, 'utf8') : octets });
   await expect(ecran(page)).toHaveAttribute('data-etape', 'type', { timeout: 30_000 });
+  // Année proposée (décision du chef) : celle du téléphone, la suivante à partir de septembre.
+  // Les fichiers du jeu sont en 2027 : si le jour de l'essai propose une autre année, on la
+  // remet à 2027 (réglage de l'essai, pas une correction du maraîcher).
+  const annee = ecran(page).getByLabel('Année de la saison');
+  const ajd = new Date();
+  await expect(annee).toHaveValue(String(ajd.getMonth() >= 8 ? ajd.getFullYear() + 1 : ajd.getFullYear()));
+  if ((await annee.inputValue()) !== '2027') await annee.fill('2027');
 }
 
 async function continuer(page: Page): Promise<void> {

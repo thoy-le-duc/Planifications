@@ -70,8 +70,9 @@
  *     itinéraires », « Séries », « Assolement passé » (value = TypeContenu) ; le type proposé
  *     par le moteur (proposerType) est coché ; aucun n'est coché s'il n'en propose pas, et
  *     « Continuer » est alors désactivé ;
- *   - un champ <input> « Année de la saison » (nombre), prérempli avec l'année de maintenant()
- *     (dates en semaines, EntreeImport.anneeSaison) ;
+ *   - un champ <input> « Année de la saison » (nombre), prérempli (décision du chef) avec l'année
+ *     de maintenant() de janvier à août, l'année SUIVANTE de septembre à décembre (on prépare
+ *     la saison qui vient) ; il sert aux dates en semaines (EntreeImport.anneeSaison) ;
  *   - un modèle d'import de la ferme qui convient aux en-têtes (appliquerModele non nul) impose
  *     son type (coché d'office) et sa correspondance à l'étape 3 ;
  *   - bouton « Continuer ».

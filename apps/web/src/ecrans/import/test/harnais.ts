@@ -212,8 +212,8 @@ export interface Harnais {
   banc(): Banc;
   module(): ModuleEcranImport;
   fermetures(): number;
-  /** Rend l'écran (ferme FERME par défaut) et attend l'étape 'depot'. */
-  ouvrir(fermeId?: string): Promise<HTMLElement>;
+  /** Rend l'écran (ferme FERME, horloge MAINTENANT par défaut) et attend l'étape 'depot'. */
+  ouvrir(fermeId?: string, maintenant?: Date): Promise<HTMLElement>;
   /** Démonte l'écran (même banc) : pour vérifier ce qui survit à la fermeture. */
   demonter(): void;
 }
@@ -270,7 +270,7 @@ export function harnais(): Harnais {
     module,
     fermetures: () => fermetures,
     demonter,
-    async ouvrir(fermeId = FERME) {
+    async ouvrir(fermeId = FERME, maintenant = MAINTENANT) {
       demonter();
       conteneur = document.createElement('div');
       document.body.append(conteneur);
@@ -284,7 +284,7 @@ export function harnais(): Harnais {
             surFermer: () => {
               fermetures++;
             },
-            maintenant: () => MAINTENANT,
+            maintenant: () => maintenant,
           }),
         );
         await Promise.resolve();
