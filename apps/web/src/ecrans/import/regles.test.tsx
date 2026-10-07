@@ -316,10 +316,12 @@ describe('avertissements de l’aperçu (T14d)', () => {
     await h.ouvrir();
     await jusquApercu(
       'hiver.csv',
+      // Longueur donnée (relecture B1) : sans elle, la série de 1 m par défaut serait aussi un
+      // avertissement « à vérifier », sur les deux lignes.
       csv([
-        ['Culture', 'Semis', 'Plantation', 'Début récolte'],
-        ['Tomate', 'S40', 'S2', 'S20'],
-        ['Laitue', 'S10', 'S14', 'S20'],
+        ['Culture', 'Semis', 'Plantation', 'Début récolte', 'Longueur (m)'],
+        ['Tomate', 'S40', 'S2', 'S20', '20'],
+        ['Laitue', 'S10', 'S14', 'S20', '20'],
       ]),
     );
     expect(compteur('valides')).toBe(2);
