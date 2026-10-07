@@ -15,6 +15,17 @@
  * (`fermesDeLUtilisateur`, relu en base à chaque lot). Un membre retiré ou un invité qui n'a pas
  * encore accepté n'écrit rien ('ferme_interdite').
  *
+ * T28s (Q31) : le placement réel est réservé au GÉRANT de la ferme de la ligne (rôle relu dans la
+ * transaction du lot) : créer, modifier ou supprimer un bâtiment ; poser, redessiner ou effacer le
+ * contour d'une zone ; placer, déplacer ou ranger un emplacement. Un renvoi identique est accepté
+ * avant ce contrôle (rien n'est écrit) ; supprimer une zone ou un emplacement placés, ou les
+ * modifier sans toucher au placement, reste ouvert à tout membre actif. Les règles du cœur
+ * (validerPlacement, validerContour) sont rejouées sur la ligne complète (structure-lignes.ts) ;
+ * ici s'ajoute ce que la base seule sait : zone d'un bâtiment de la ferme, non supprimée, sans
+ * contour et sans autre bâtiment ; contour refusé sur une zone abritée ; une zone abritée ne se
+ * supprime pas tant que son bâtiment n'est pas supprimé ou détaché. L'origine du plan :
+ * structure-origine.ts.
+ *
  * Bibliothèque commune (ferme_id nul) : en lecture seule. Un PUT à ferme_id nul est refusé par
  * les règles de la ligne ; une telle ligne se comporte, pour un PATCH, exactement comme une ligne
  * inexistante (la requête du verrou ne voit que les fermes de l'utilisateur), et un PUT sur son id
@@ -39,7 +50,7 @@
  * dans le même lot se référence (import), et ce qui occupe un emplacement ne change pas pendant
  * qu'on vérifie qu'il est libre (séries et occupations s'écrivent sous le même verrou).
  */
-import type { Id } from '@planif/core';
+import { validerPlacement, type Id } from '@planif/core';
 import { modification } from '@planif/db';
 import { sql, type SQL } from 'drizzle-orm';
 import { estUuid } from '../auth/jetons.ts';
@@ -50,15 +61,27 @@ import {
   PRECISION_CREEE_SUPPRIMEE,
   PRECISION_EXISTE_DEJA,
   PRECISION_INTROUVABLE,
+  PRECISION_SEUL_LE_GERANT,
+  PRECISION_ZONE_A_UN_CONTOUR,
+  PRECISION_ZONE_ABRITEE_SUPPRIMEE,
+  PRECISION_ZONE_DEJA_ABRITEE,
   refusDuCoeur,
+  refusDuPlacement,
 } from './messages.ts';
 import type { Refus } from './motifs.ts';
 import { visibleParLaFerme, type TransactionDb } from './references.ts';
-import { COLONNES_STRUCTURE, validerStructure, type Ligne, type TableStructure } from './structure-lignes.ts';
+import {
+  COLONNES_PLACEMENT_EMPLACEMENT,
+  COLONNES_STRUCTURE,
+  validerStructure,
+  type Ligne,
+  type ResultatStructure,
+  type TableEcrite,
+} from './structure-lignes.ts';
 
 export { estTableStructure, TABLES_STRUCTURE } from './structure-lignes.ts';
 
-const NOM_ENTITE: Readonly<Record<TableStructure, 'Zone' | 'Emplacement' | 'Famille' | 'Espece' | 'Variete' | 'Saison' | 'Assolement'>> = {
+const NOM_ENTITE: Readonly<Record<TableEcrite, 'Zone' | 'Emplacement' | 'Famille' | 'Espece' | 'Variete' | 'Saison' | 'Assolement' | 'Batiment'>> = {
   zone: 'Zone',
   emplacement: 'Emplacement',
   famille: 'Famille',
@@ -66,6 +89,7 @@ const NOM_ENTITE: Readonly<Record<TableStructure, 'Zone' | 'Emplacement' | 'Fami
   variete: 'Variete',
   saison: 'Saison',
   assolement: 'Assolement',
+  batiment: 'Batiment',
 };
 
 /** Statuts d'une série qui occupe encore sa place et sa culture (décision du chef). */
@@ -76,15 +100,48 @@ const PROFONDEUR_MAX_ZONES = 100;
 /** Écriture reçue sur une table de structure : id de l'écriture PowerSync et colonnes (sans confiance). */
 export interface EcritureStructureRecue {
   readonly op: 'PUT' | 'PATCH';
-  readonly table: TableStructure;
+  readonly table: TableEcrite;
   readonly id: string;
   readonly donnees: Readonly<Record<string, unknown>>;
 }
 
 const invalide = (precision: string, fermeId: string | null): Refus => ({ motif: 'ecriture_invalide', precision, fermeId });
 
+/** Refus d'une ligne que les règles de la ligne n'acceptent pas : règle du placement (T28s) ou du cœur. */
+function refusDeLigne(v: Extract<ResultatStructure, { ok: false }>, fermeId: string | null): Refus {
+  return v.placement === undefined ? refusDuCoeur(v.erreur, fermeId) : refusDuPlacement(v.placement, fermeId);
+}
+
+/** Deux valeurs de placement (nombres, contours) égales, quelle que soit leur provenance (reçue, ou to_jsonb de Postgres). */
+const memeValeur = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+/**
+ * La ligne `l` (validée) touche-t-elle au placement réel par rapport à `avant` (null : création) ?
+ * Q31 : réservé au gérant. Un bâtiment est toujours placé : le créer, le modifier ou le supprimer
+ * touche au placement. Une zone : son contour change (créée avec un contour, contour posé, redessiné
+ * ou effacé). Un emplacement : sa position ou son orientation change. Supprimer une zone ou un
+ * emplacement placés, ou les modifier sans toucher à leur placement, reste ouvert à tout membre (T10s).
+ */
+function touchePlacement(table: TableEcrite, l: Ligne, avant: Ligne | null): boolean {
+  switch (table) {
+    case 'batiment':
+      return true;
+    case 'zone':
+      return !memeValeur(l.contour, avant?.contour);
+    case 'emplacement':
+      return COLONNES_PLACEMENT_EMPLACEMENT.some((c) => !memeValeur(l[c], avant?.[c]));
+    default:
+      return false;
+  }
+}
+
+/** Refus de droits (Q31) si `l` touche au placement et que l'auteur n'est pas gérant de sa ferme. */
+function droitsDuPlacement(table: TableEcrite, l: Ligne, avant: Ligne | null, fermeId: string, gerees: ReadonlySet<string>): Refus | null {
+  return touchePlacement(table, l, avant) && !gerees.has(fermeId) ? invalide(PRECISION_SEUL_LE_GERANT, fermeId) : null;
+}
+
 /** Colonnes de `table`, préfixées par `alias`, séparées par des virgules. */
-function colonnes(table: TableStructure, alias: string): SQL {
+function colonnes(table: TableEcrite, alias: string): SQL {
   return sql.join(
     COLONNES_STRUCTURE[table].map((c) => sql`${sql.identifier(alias)}.${sql.identifier(c)}`),
     sql`, `,
@@ -92,7 +149,7 @@ function colonnes(table: TableStructure, alias: string): SQL {
 }
 
 /** `jsonb_populate_record` de `ligne` sur le type ligne de `table`, sous l'alias r. */
-function enregistrement(table: TableStructure, ligne: Ligne): SQL {
+function enregistrement(table: TableEcrite, ligne: Ligne): SQL {
   return sql`jsonb_populate_record(NULL::${sql.identifier(table)}, ${JSON.stringify(ligne)}::jsonb) r`;
 }
 
@@ -102,7 +159,7 @@ function enregistrement(table: TableStructure, ligne: Ligne): SQL {
  * ferme ou de la bibliothèque n'est jamais identique (ferme_id diffère), et rien de ses valeurs
  * n'est rendu.
  */
-async function identique(tx: TransactionDb, table: TableStructure, ligne: Ligne, id: string): Promise<boolean | null> {
+async function identique(tx: TransactionDb, table: TableEcrite, ligne: Ligne, id: string): Promise<boolean | null> {
   const r = await tx.execute<{ identique: boolean }>(
     sql`SELECT (${colonnes(table, 'r')}) IS NOT DISTINCT FROM (${colonnes(table, 't')}) AS identique
         FROM ${sql.identifier(table)} t, ${enregistrement(table, ligne)}
@@ -113,7 +170,7 @@ async function identique(tx: TransactionDb, table: TableStructure, ligne: Ligne,
 }
 
 /** La ligne `id` existe-t-elle dans la ferme `fermeId` ? */
-async function deLaFerme(tx: TransactionDb, table: TableStructure, id: string, fermeId: string): Promise<boolean> {
+async function deLaFerme(tx: TransactionDb, table: TableEcrite, id: string, fermeId: string): Promise<boolean> {
   const r = await tx.execute<{ existe: boolean }>(
     sql`SELECT EXISTS (SELECT 1 FROM ${sql.identifier(table)} WHERE id = ${id}::uuid AND ferme_id = ${fermeId}::uuid) AS existe`,
   );
@@ -192,11 +249,37 @@ const plantationsEnPlace = (colonne: 'espece_id' | 'variete_id', id: string, fer
   sql`SELECT 1 FROM plantation p WHERE p.${sql.identifier(colonne)} = ${id}::uuid AND p.ferme_id = ${fermeId}::uuid
         AND p.supprime_le IS NULL AND ${enPlace(fermeId, maintenant)}`;
 
+/** Un bâtiment non supprimé de la ferme abrite-t-il la zone `zoneId` ? */
+function abritee(tx: TransactionDb, zoneId: string, fermeId: string): Promise<boolean> {
+  return existe(tx, sql`SELECT 1 FROM batiment b WHERE b.zone_id = ${zoneId}::uuid AND b.ferme_id = ${fermeId}::uuid AND b.supprime_le IS NULL`);
+}
+
+/**
+ * Zone abritée par le bâtiment `l` (T28s, Q31) : de la ferme, non supprimée (verrouillée FOR SHARE,
+ * comme le fait le déclencheur de la base avant de lire son contour), sans contour, et pas déjà
+ * abritée par un autre bâtiment non supprimé. null si tout va bien.
+ */
+async function verifierZoneAbritee(tx: TransactionDb, zoneId: string, batimentId: string, fermeId: string): Promise<Refus | null> {
+  const r = await tx.execute<{ supprimee: boolean; a_contour: boolean }>(
+    sql`SELECT supprime_le IS NOT NULL AS supprimee, contour IS NOT NULL AS a_contour
+        FROM zone WHERE id = ${zoneId}::uuid AND ${visibleParLaFerme(fermeId, false)} FOR SHARE`,
+  );
+  const zone = r.rows[0];
+  if (zone === undefined) return invalide('zone introuvable', fermeId);
+  if (zone.supprimee) return invalide('zone supprimée', fermeId);
+  if (zone.a_contour) return invalide(PRECISION_ZONE_A_UN_CONTOUR, fermeId);
+  const autre = await existe(
+    tx,
+    sql`SELECT 1 FROM batiment b WHERE b.zone_id = ${zoneId}::uuid AND b.ferme_id = ${fermeId}::uuid AND b.supprime_le IS NULL AND b.id <> ${batimentId}::uuid`,
+  );
+  return autre ? invalide(PRECISION_ZONE_DEJA_ABRITEE, fermeId) : null;
+}
+
 /**
  * Suppression douce (décisions du chef) : refusée tant que la ligne sert encore. null si elle est
  * libre, sinon le refus qui dit pourquoi.
  */
-async function verifierLibre(tx: TransactionDb, table: TableStructure, id: string, fermeId: string, maintenant: Date): Promise<Refus | null> {
+async function verifierLibre(tx: TransactionDb, table: TableEcrite, id: string, fermeId: string, maintenant: Date): Promise<Refus | null> {
   switch (table) {
     case 'emplacement': {
       // Occupation non supprimée d'une série active ou d'une plantation en place ; une occupation
@@ -213,6 +296,9 @@ async function verifierLibre(tx: TransactionDb, table: TableStructure, id: strin
       return occupe ? invalide('cet emplacement est occupé par une culture prévue, en cours ou en place : libérez-le avant de le supprimer', fermeId) : null;
     }
     case 'zone': {
+      // T28s (relecture T28a n°2) : une zone abritée par un bâtiment non supprimé ne se supprime pas ;
+      // un bâtiment supprimé ou détaché plus haut dans le même lot ne l'abrite plus.
+      if (await abritee(tx, id, fermeId)) return invalide(PRECISION_ZONE_ABRITEE_SUPPRIMEE, fermeId);
       const pleine =
         (await existe(tx, sql`SELECT 1 FROM emplacement e WHERE e.zone_id = ${id}::uuid AND e.ferme_id = ${fermeId}::uuid AND e.supprime_le IS NULL`)) ||
         (await existe(tx, sql`SELECT 1 FROM zone z WHERE z.zone_parente_id = ${id}::uuid AND z.ferme_id = ${fermeId}::uuid AND z.supprime_le IS NULL`));
@@ -235,6 +321,8 @@ async function verifierLibre(tx: TransactionDb, table: TableStructure, id: strin
       return utilisee ? invalide('cette saison contient encore des séries prévues ou en cours', fermeId) : null;
     }
     case 'assolement':
+    case 'batiment':
+      // Supprimer le bâtiment d'une zone : la zone et ses planches restent, la zone redevient « pas placée ».
       return null;
   }
 }
@@ -244,7 +332,7 @@ async function verifierLibre(tx: TransactionDb, table: TableStructure, id: strin
  * la colonne change (une référence supprimée depuis ne bloque pas une modification sans rapport).
  * Ensuite, une suppression douce exige une ligne libre. null si tout va bien.
  */
-async function verifierEnBase(tx: TransactionDb, table: TableStructure, l: Ligne, avant: Ligne | null, maintenant: Date): Promise<Refus | null> {
+async function verifierEnBase(tx: TransactionDb, table: TableEcrite, l: Ligne, avant: Ligne | null, maintenant: Date): Promise<Refus | null> {
   const f = String(l.ferme_id);
   const retablie = avant?.supprime_le != null && l.supprime_le === null;
   const change = (c: string): boolean => avant === null || retablie || JSON.stringify(l[c] ?? null) !== JSON.stringify(avant[c] ?? null);
@@ -271,6 +359,16 @@ async function verifierEnBase(tx: TransactionDb, table: TableStructure, l: Ligne
       if (refus === null && avant !== null && parente !== null && change('zone_parente_id') && (await boucleDeZones(tx, String(l.id), parente, f))) {
         refus = invalide('une zone ne se range pas dans l’une de ses sous-zones', f);
       }
+      if (refus === null && l.contour !== null && change('contour')) {
+        // T28s : la règle complète du cœur, avec ce que la base seule sait (un bâtiment abrite la zone).
+        const v = validerPlacement({ table: 'zone', ligne: l, abritee: await abritee(tx, String(l.id), f) });
+        if (!v.ok) refus = refusDuPlacement(v.erreur, f);
+      }
+      break;
+    }
+    case 'batiment': {
+      const zone = valeur('zone_id');
+      if (zone !== null && l.supprime_le === null && change('zone_id')) refus = await verifierZoneAbritee(tx, zone, String(l.id), f);
       break;
     }
     case 'emplacement': {
@@ -321,7 +419,7 @@ async function verifierEnBase(tx: TransactionDb, table: TableStructure, l: Ligne
 async function historiser(
   tx: TransactionDb,
   ctx: Contexte,
-  table: TableStructure,
+  table: TableEcrite,
   ligneId: string,
   fermeId: string,
   auteurId: Id<'Utilisateur'>,
@@ -348,7 +446,7 @@ async function historiser(
 }
 
 /** INSERT de la ligne validée, depuis l'objet JSON aux colonnes de la table. true si écrite. */
-async function inserer(tx: TransactionDb, table: TableStructure, ligne: Ligne, maintenant: Date): Promise<boolean> {
+async function inserer(tx: TransactionDb, table: TableEcrite, ligne: Ligne, maintenant: Date): Promise<boolean> {
   const ecrite = await tx.execute<{ id: string }>(
     sql`INSERT INTO ${sql.identifier(table)} (${sql.join(
       COLONNES_STRUCTURE[table].map((c) => sql.identifier(c)),
@@ -362,9 +460,16 @@ async function inserer(tx: TransactionDb, table: TableStructure, ligne: Ligne, m
 }
 
 /** PUT : création. Renvoi identique accepté sans rien écrire ; même id, autres valeurs : refusé. */
-async function creer(tx: TransactionDb, ctx: Contexte, e: EcritureStructureRecue, fermeDonnee: string | null, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
+async function creer(
+  tx: TransactionDb,
+  ctx: Contexte,
+  e: EcritureStructureRecue,
+  fermeDonnee: string | null,
+  gerees: ReadonlySet<string>,
+  auteurId: Id<'Utilisateur'>,
+): Promise<Refus | null> {
   const v = validerStructure(e.table, { ...e.donnees, id: e.id });
-  if (!v.ok) return refusDuCoeur(v.erreur, fermeDonnee);
+  if (!v.ok) return refusDeLigne(v, fermeDonnee);
   const ligne = v.ligne;
   const id = String(ligne.id);
   // ferme_id lu par les règles de la ligne (UUID non nul), déjà vérifié parmi les fermes de l'utilisateur (upload.ts).
@@ -381,7 +486,7 @@ async function creer(tx: TransactionDb, ctx: Contexte, e: EcritureStructureRecue
   }
 
   const maintenant = ctx.maintenant();
-  const refus = await verifierEnBase(tx, e.table, ligne, null, maintenant);
+  const refus = droitsDuPlacement(e.table, ligne, null, fermeId, gerees) ?? (await verifierEnBase(tx, e.table, ligne, null, maintenant));
   if (refus !== null) return refus;
 
   if (!(await inserer(tx, e.table, ligne, maintenant))) {
@@ -398,7 +503,14 @@ async function creer(tx: TransactionDb, ctx: Contexte, e: EcritureStructureRecue
  * Ligne introuvable, d'une autre ferme ou de la bibliothèque : même refus, sans ferme (T10d). Un
  * PATCH qui ne change rien est accepté sans rien écrire (renvoi après une réponse perdue).
  */
-async function modifier(tx: TransactionDb, ctx: Contexte, e: EcritureStructureRecue, fermes: ReadonlySet<string>, auteurId: Id<'Utilisateur'>): Promise<Refus | null> {
+async function modifier(
+  tx: TransactionDb,
+  ctx: Contexte,
+  e: EcritureStructureRecue,
+  fermes: ReadonlySet<string>,
+  gerees: ReadonlySet<string>,
+  auteurId: Id<'Utilisateur'>,
+): Promise<Refus | null> {
   if (!estUuid(e.id) || fermes.size === 0) return invalide(PRECISION_INTROUVABLE, null);
   // Ferme dans la requête du verrou : une ligne d'une autre ferme ou de la bibliothèque (ferme_id
   // nul) n'est ni lue ni verrouillée.
@@ -419,20 +531,25 @@ async function modifier(tx: TransactionDb, ctx: Contexte, e: EcritureStructureRe
     return invalide(PRECISION_CHANGE_DE_FERME, fermeId);
   }
 
-  // Seules les colonnes écrites par le téléphone sont reprises de la ligne existante : celles que
-  // le serveur n'accepte pas encore (placement réel, T28a ; accepté en T28s) restent en base,
-  // intactes, et une colonne inconnue REÇUE est toujours refusée.
+  // Seules les colonnes écrites par le téléphone sont reprises de la ligne existante (les autres
+  // restent en base, intactes), et une colonne inconnue REÇUE est toujours refusée. Le contour
+  // existant (jsonb, rendu en tableau) est remis en texte JSON, la seule forme qu'un contour reçu
+  // peut avoir (structure-lignes.ts) : un tableau forgé dans les données reste refusé.
   const colonnesEcrites = new Set(COLONNES_STRUCTURE[e.table]);
-  const base = Object.fromEntries(Object.entries(avant).filter(([c]) => colonnesEcrites.has(c)));
+  const base = Object.fromEntries(
+    Object.entries(avant)
+      .filter(([c]) => colonnesEcrites.has(c))
+      .map(([c, x]) => [c, c === 'contour' && x !== null ? JSON.stringify(x) : x]),
+  );
   const v = validerStructure(e.table, { ...base, ...e.donnees, id: avant.id });
-  if (!v.ok) return refusDuCoeur(v.erreur, fermeId);
+  if (!v.ok) return refusDeLigne(v, fermeId);
   const ligne = v.ligne;
   const id = String(ligne.id);
 
   if ((await identique(tx, e.table, ligne, id)) === true) return null;
 
   const maintenant = ctx.maintenant();
-  const refus = await verifierEnBase(tx, e.table, ligne, avant, maintenant);
+  const refus = droitsDuPlacement(e.table, ligne, avant, fermeId, gerees) ?? (await verifierEnBase(tx, e.table, ligne, avant, maintenant));
   if (refus !== null) return refus;
 
   await tx.execute(
@@ -450,7 +567,8 @@ async function modifier(tx: TransactionDb, ctx: Contexte, e: EcritureStructureRe
 /**
  * Écriture sur une table de structure (PUT ou PATCH), dans la transaction du lot : null si
  * acceptée, sinon le refus. `fermeDonnee` : ferme déclarée par les données (déjà vérifiée parmi
- * celles de l'utilisateur pour un PUT).
+ * celles de l'utilisateur pour un PUT). `gerees` : fermes dont l'auteur est gérant actif, relues
+ * en base pour ce lot (T28s, Q31 : seul le gérant place).
  */
 export async function ecrireStructure(
   tx: TransactionDb,
@@ -458,10 +576,11 @@ export async function ecrireStructure(
   e: EcritureStructureRecue,
   fermeDonnee: string | null,
   fermes: ReadonlySet<string>,
+  gerees: ReadonlySet<string>,
   auteurId: Id<'Utilisateur'>,
 ): Promise<Refus | null> {
   // Un id glissé dans les données : colonne inconnue (l'id est celui de l'écriture).
   if (Object.hasOwn(e.donnees, 'id')) return refusDuCoeur(ID_GLISSE, fermeDonnee);
-  if (e.op === 'PATCH') return modifier(tx, ctx, e, fermes, auteurId);
-  return creer(tx, ctx, e, fermeDonnee, auteurId);
+  if (e.op === 'PATCH') return modifier(tx, ctx, e, fermes, gerees, auteurId);
+  return creer(tx, ctx, e, fermeDonnee, gerees, auteurId);
 }
