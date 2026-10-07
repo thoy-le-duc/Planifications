@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-07 — T28s : le gérant place sa ferme, le serveur l'accepte
+
+- **Fait** : le serveur accepte le placement réel venu d'un appareil, hors ligne compris : bâtiments (création, déplacement, suppression douce), contours des zones, position des planches, point de départ du plan. Mêmes règles du cœur rejouées avant d'écrire, contour borné en taille avant d'être lu, tout ou rien avec le reste de l'envoi, sous le verrou de la ferme, historique. Seul le gérant place (Q31) ; une autre ferme est toujours introuvable. Côté appareil, `porte.placer` écrit en une transaction et rend de quoi annuler ; chargée à la demande, le JS de démarrage ne grossit pas (72 657 octets gzip contre 72 664 avant le ticket, affiché 71,0/71 Kio).
+- **Décidé** (chef) : refus de droits en « données invalides » avec un message précis ; renvoi identique d'un équipier accepté sans rien écrire ; supprimer une zone placée sans bâtiment reste ouvert à tout membre ; pas d'origine exigée avant le premier bâtiment ; une zone abritée ne se supprime pas tant que son bâtiment n'est pas supprimé ou détaché. Cinq fausses portes de tests web complétées d'une ligne (`placer`), comme en T10l, sans assertion changée.
+- **Bloquant** : rien. À trancher : la porte accepte d'effacer le point de départ du plan (annuler sa pose) alors que des éléments sont placés, le serveur le refuse ; cette annulation serait refusée au retour du réseau. e2e:synchro non lancé (Docker absent).
+
 ## 2026-10-07 — T28a : la ferme peut enregistrer où sont ses zones, planches et bâtiments
 
 - **Fait** : repère local de la ferme (mètres, x à l'est, y au nord, origine `ferme.origine_plan` distincte de la position météo), contour libre des zones, planches placées dans le repère de leur zone, nouvelle table `batiment` (serres, hangar, magasin, rectangles orientés). Calcul pur et testé dans `packages/core/src/placement` (projection locale au centimètre à 5 km, repère de zone, contrôle des contours et des placements, messages en français) ; base (colonnes nulles, contraintes, une serre par zone, zone abritée sans contour même sous écritures concurrentes), synchro de `batiment` par ferme, export `batiment.csv` et nouvelles colonnes. Rien ne change pour une ferme qui ne place rien ; JS de démarrage inchangé (70,9/71 Kio).

@@ -16,13 +16,13 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests d'isolement : bâtiment dans une autre ferme, `zone_id` d'une autre ferme, changer `ferme_id`, changer `ferme.nom` ou `ferme.position` par la synchro, déplacer l'origine alors qu'un placement existe → refusés.
-- [ ] Test : placement invalide (champs à moitié remplis, orientation 360, 6 km de l'origine, contour auto-intersectant, 201 sommets, JSON trop gros, contour sur une zone abritée) → refusé avec message clair, rien du lot écrit.
-- [ ] Test de droits : un équipier (membre actif non gérant) qui crée un bâtiment, déplace une planche, change un contour ou pose l'origine → refusé avec le message ci-dessus ; le même envoi par le gérant passe ; un équipier peut toujours créer une planche sans placement.
-- [ ] Test : suppression douce d'un bâtiment ; zone supprimée alors qu'un bâtiment l'abrite → refusée.
-- [ ] Test de la porte : écrire puis annuler un déplacement rend les valeurs d'avant.
-- [ ] e2e:synchro (si le banc tourne) : un bâtiment créé sur un navigateur apparaît sur le second.
+- [x] Tests d'isolement : bâtiment dans une autre ferme, `zone_id` d'une autre ferme, changer `ferme_id`, changer `ferme.nom` ou `ferme.position` par la synchro, déplacer l'origine alors qu'un placement existe → refusés.
+- [x] Test : placement invalide (champs à moitié remplis, orientation 360, 6 km de l'origine, contour auto-intersectant, 201 sommets, JSON trop gros, contour sur une zone abritée) → refusé avec message clair, rien du lot écrit.
+- [x] Test de droits : un équipier (membre actif non gérant) qui crée un bâtiment, déplace une planche, change un contour ou pose l'origine → refusé avec le message ci-dessus ; le même envoi par le gérant passe ; un équipier peut toujours créer une planche sans placement.
+- [x] Test : suppression douce d'un bâtiment ; zone supprimée alors qu'un bâtiment l'abrite → refusée.
+- [x] Test de la porte : écrire puis annuler un déplacement rend les valeurs d'avant.
+- [ ] e2e:synchro (si le banc tourne) : un bâtiment créé sur un navigateur apparaît sur le second. *(non fait : banc indisponible, Docker absent du conteneur ; aucun test e2e écrit pour le bâtiment.)*
 
 **Hors périmètre** : écrans (T28b), 3D (T28c).
 
-**Repris de la relecture de T28a (n°2)** : supprimer (en douceur) une zone abritée par un bâtiment non supprimé, ou supprimer le bâtiment d'une zone, n'est contrôlé ni par la base ni par le serveur. T28s décide de la règle (refus, ou bâtiment détaché) et la teste.
+**Repris de la relecture de T28a (n°2)** : supprimer (en douceur) une zone abritée par un bâtiment non supprimé, ou supprimer le bâtiment d'une zone, n'est contrôlé ni par la base ni par le serveur. T28s décide de la règle (refus, ou bâtiment détaché) et la teste. **Décidé** : refus tant qu'un bâtiment non supprimé l'abrite (le supprimer ou le détacher d'abord, au besoin plus haut dans le même envoi) ; supprimer le bâtiment laisse la zone telle quelle.
