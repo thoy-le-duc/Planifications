@@ -69,6 +69,43 @@ erDiagram
 | Secteur d'irrigation | numéro de vanne, nom, débit (facultatif), adresse Modbus (phase 3) | Les 60 vannes. |
 | Secteur ↔ emplacement | secteur, emplacement, du / au | Plusieurs emplacements par vanne, éventuellement dans plusieurs zones. Datée pour garder l'historique si le réseau change. |
 
+## 1 bis. Placement réel — v1.x (proposée)
+
+Proposée le 2026-10-07 (T28a), d'après les réponses de Théophane à Q30 et Q31 ; **à valider par Théophane**. Elle ajoute des colonnes nulles et une table : une ferme qui ne place rien ne change pas.
+
+**Repère local de la ferme** : mètres, x vers l'est, y vers le nord. Son origine est un champ à part, `ferme.origine_plan` (latitude, longitude), distinct de `ferme.position` (météo) : changer la position météo ne déplace pas la ferme. Elle est fixée au premier placement et ne change plus tant qu'un placement existe (règle du serveur, T28s). **Orientation** : cap en degrés, sens horaire depuis le nord, dans [0, 360[.
+
+| Entité | Champs ajoutés | Remarques |
+| --- | --- | --- |
+| Ferme | origine du plan (latitude, longitude), facultative | Point (0, 0) de toutes les positions en mètres. |
+| Zone | contour : liste de sommets `{x, y}` en mètres, facultatif | Polygone libre (Q31), 3 à 200 sommets, rangé en sens antihoraire. Nul : zone pas placée, ou abritée par un bâtiment. |
+| Emplacement | position x, position y (m), orientation (°), facultatives | **Dans le repère de sa zone** : bouger la serre bouge ses planches. Les trois nulles ensemble : rangement automatique dans la zone. |
+| Bâtiment (nouvelle) | nom, type (serre tunnel, serre chapelle, hangar, magasin, autre), longueur, largeur, hauteur (m), centre x, y (m), orientation (°), zone abritée (facultative) | Toujours un rectangle, toujours placé. Une serre abrite au plus une zone de sa ferme, et une zone au plus un bâtiment non supprimé. Suppression douce, historique, UUID v7, comme le reste du parcellaire. |
+
+**Serre et zone** : une zone abritée par un bâtiment n'a pas de contour à elle. Sa forme est le rectangle du bâtiment, son repère celui du bâtiment (centre, orientation). Une zone sans bâtiment a son polygone ; son repère est le centroïde de surface du polygone et le cap de son plus long côté, ramené dans [0, 180[ (le premier dans l'ordre des sommets à égalité). Rattacher un bâtiment à une zone qui a un contour : l'écran efface le contour, avec confirmation (T28b) ; la base refuse les deux à la fois.
+
+**Repère d'une zone** : l'axe y' suit la longueur (cap θ), l'axe x' est à sa droite (cap θ + 90°). Les coins d'un bâtiment sont (±largeur/2, ±longueur/2) dans ce repère.
+
+**Exemples chiffrés** (`packages/core/src/placement`, tests à l'appui) :
+
+- Origine à 44° N, 1,5° E : le point 44,000 898 3° N, 1,501 248 8° E est à 100 m au nord et 100 m à l'est, soit (100, 100). Projection locale : x = R·Δλ·cos φ0, y = R·Δφ, R = 6 378 137 m ; aller-retour à moins de 1 cm dans un rayon de 5 km.
+- Planche à (2, 0) dans une serre centrée en (50, 30), tournée de 90° (longueur vers l'est) : (50, 28) dans la ferme. La serre déplacée en (150, 30), orientation 0 : la même planche est en (152, 30).
+- Zone en L sans serre, sommets (0, 0) (20, 0) (20, 10) (10, 10) (10, 30) (0, 30) : aire 400 m², centroïde (7,5 ; 12,5) (pas la moyenne des sommets), plus long côté nord-sud, orientation 0°.
+
+**Règles d'un placement** (`validerPlacement`, `validerContour`, rejouées par le serveur en T28s) :
+
+- Contour : 3 à 200 sommets aux coordonnées finies, à 5 km au plus de l'origine, pas deux sommets consécutifs à moins de 1 mm (un contour fermé, premier sommet répété, est refusé), pas d'auto-intersection (deux côtés non adjacents sans point commun), aire de plus de 0,1 m². Un contour horaire est rendu antihoraire.
+- Emplacement : tout ou rien des trois champs, orientation dans [0, 360[, à 5 km au plus du centre de sa zone.
+- Bâtiment : tous les champs obligatoires, dimensions > 0 avec plafonds de 500 m de long, 200 m de large, 30 m de haut, orientation dans [0, 360[, centre à 5 km au plus de l'origine.
+- Zone abritée : pas de contour.
+- Messages de refus en français.
+
+**Ce que la base rejoue** (migrations 0025 à 0028) : les bornes simples (tout ou rien, orientation, distance, dimensions et plafonds, type, contour : tableau de 3 à 200 objets `{x, y}` numériques à 5 km au plus, texte de 16 384 caractères au plus), la zone d'un bâtiment de la même ferme (clé étrangère composée), un bâtiment non supprimé par zone (index unique partiel), zone abritée sans contour (déclencheurs). La géométrie (auto-intersection, aire, sens) reste au serveur. `origine_plan` n'a pas de bornes en base.
+
+**Droits** : **gérant seulement** pour tout placement (zones, planches, bâtiments, origine du plan), contrôlé par le serveur (T28s). D'ici là, le serveur refuse toute écriture de ces colonnes (colonne inconnue) et de la table `batiment` (table interdite) venue d'un téléphone.
+
+**Synchro et export** : `batiment` descend sur les téléphones avec le même découpage par ferme que `zone` ; l'export ajoute `batiment.csv` et les nouvelles colonnes, décrites dans LISEZMOI.txt.
+
 ## 2. Bibliothèque de cultures
 
 | Entité | Champs principaux | Remarques |
