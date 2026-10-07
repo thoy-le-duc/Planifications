@@ -1179,4 +1179,218 @@ decrireAvecBase('T10s')('T10s : POST /sync/upload accepte le parcellaire et le c
       },
     );
   });
+
+  // ── Relecture : règles ajoutées par le développeur, et contournements ──────────────────────
+
+  describe('relecture : règles de la base ajoutées par le développeur', () => {
+    /** Série batavia de la ferme sur `espece` (et son itinéraire), dans `saisonId`, au statut donné. */
+    async function serieSur(o: { espece: string; itineraire: string; saison?: string; variete?: string | null; statut: string }): Promise<string> {
+      const id = randomUUID();
+      await inserer(
+        `INSERT INTO serie (id, ferme_id, saison_id, espece_id, variete_id, itineraire_id, parametres, ancre_type, ancre_date,
+                            prevu_semis_pepiniere, prevu_mise_en_place, prevu_debut_recolte, prevu_fin_recolte, longueur_m, statut)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'debut_recolte', '2027-05-31', '2027-03-15', '2027-04-12', '2027-05-31', '2027-06-14', 30, $8)`,
+        [id, ferme, o.saison ?? saison, o.espece, o.variete ?? null, o.itineraire, JSON.stringify(BATAVIA), o.statut],
+      );
+      return id;
+    }
+
+    it('boucle de zones : ranger une zone dans sa sous-zone, ou dans la sous-zone de sa sous-zone, est refusé', async () => {
+      const a = putZone();
+      const b = putZone({ zone_parente_id: a.id });
+      const c = putZone({ zone_parente_id: b.id });
+      await accepte([a, b, c]);
+      for (const parente of [b.id, c.id]) {
+        const p = patch('zone', a.id, { zone_parente_id: parente });
+        await refuseEnEntier([p], p, 'ecriture_invalide');
+        expect((await ligne('zone', a.id))?.zone_parente_id).toBeNull();
+        await messageDe(a.id);
+      }
+    });
+
+    it('zone qui a une sous-zone active : suppression refusée ; sous-zone supprimée d’abord (même lot) : acceptée', async () => {
+      const mere = putZone();
+      const fille = putZone({ zone_parente_id: mere.id });
+      await accepte([mere, fille]);
+      const s = supprimer('zone', mere.id);
+      await refuseEnEntier([s], s, 'ecriture_invalide');
+      await messageDe(mere.id);
+      await accepte([supprimer('zone', fille.id), supprimer('zone', mere.id)]);
+      expect((await ligne('zone', mere.id))?.supprime_le).not.toBeNull();
+    });
+
+    it('famille qui contient une espèce de la ferme : suppression refusée ; famille vide : acceptée', async () => {
+      const f = putFamille();
+      const e = putEspece(f.id);
+      await accepte([f, e]);
+      const s = supprimer('famille', f.id);
+      await refuseEnEntier([s], s, 'ecriture_invalide');
+      await messageDe(f.id);
+      const vide = putFamille();
+      await accepte([vide]);
+      await accepte([supprimer('famille', vide.id)]);
+      expect((await ligne('famille', vide.id))?.supprime_le).not.toBeNull();
+    });
+
+    it('saison qui contient une série en cours : suppression refusée ; seulement une série terminée : acceptée', async () => {
+      const pleine = await saisonEn(ferme);
+      await serieSur({ espece: laitue, itineraire, saison: pleine, statut: 'en_cours' });
+      const s = supprimer('saison', pleine);
+      await refuseEnEntier([s], s, 'ecriture_invalide');
+      await messageDe(pleine);
+      const passee = await saisonEn(ferme);
+      await serieSur({ espece: laitue, itineraire, saison: passee, statut: 'terminee' });
+      await accepte([supprimer('saison', passee)]);
+      expect((await ligne('saison', passee))?.supprime_le).not.toBeNull();
+    });
+
+    it('variété utilisée par une série prévue : suppression refusée ; inutilisée : acceptée', async () => {
+      const utilisee = await varieteEn(ferme, laitue);
+      await serieSur({ espece: laitue, itineraire, variete: utilisee, statut: 'prevue' });
+      const s = supprimer('variete', utilisee);
+      await refuseEnEntier([s], s, 'ecriture_invalide');
+      await messageDe(utilisee);
+      const libre = await varieteEn(ferme, laitue);
+      await accepte([supprimer('variete', libre)]);
+      expect((await ligne('variete', libre))?.supprime_le).not.toBeNull();
+    });
+
+    it('assolement dont l’espèce n’est pas de sa famille : refusé ; de sa famille : accepté', async () => {
+      const autreFamille = await familleEn(ferme);
+      const fautive = putAssolement(saison, autreFamille, { espece_id: laitue });
+      await refuseEnEntier(lotAvec(fautive), fautive, 'ecriture_invalide');
+      await messageDe(fautive.id);
+      await accepte([putAssolement(saison, famille, { espece_id: laitue })]);
+    });
+
+    it('PATCH qui change la famille d’un assolement sans son espèce : refusé', async () => {
+      const a = putAssolement(saison, famille, { espece_id: laitue });
+      await accepte([a]);
+      const p = patch('assolement', a.id, { famille_id: await familleEn(ferme) });
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+    });
+
+    it('rétablir un emplacement dont la zone a été supprimée : refusé', async () => {
+      const zone = putZone();
+      const planche = putEmplacement(zone.id);
+      await accepte([zone, planche]);
+      await accepte([supprimer('emplacement', planche.id), supprimer('zone', zone.id)]);
+      const r = patch('emplacement', planche.id, { supprime_le: null });
+      await refuseEnEntier([r], r, 'ecriture_invalide');
+      expect((await ligne('emplacement', planche.id))?.supprime_le).not.toBeNull();
+      await messageDe(planche.id);
+    });
+
+    it('rétablir une espèce dont la famille a été supprimée : refusé', async () => {
+      const f = putFamille();
+      const e = putEspece(f.id);
+      await accepte([f, e]);
+      await accepte([supprimer('espece', e.id), supprimer('famille', f.id)]);
+      const r = patch('espece', e.id, { supprime_le: null });
+      await refuseEnEntier([r], r, 'ecriture_invalide');
+      expect((await ligne('espece', e.id))?.supprime_le).not.toBeNull();
+    });
+
+    it('rétablir une variété dont l’espèce a été supprimée : refusé', async () => {
+      const e = putEspece(famille);
+      const v = putVariete(e.id);
+      await accepte([e, v]);
+      await accepte([supprimer('variete', v.id), supprimer('espece', e.id)]);
+      const r = patch('variete', v.id, { supprime_le: null });
+      await refuseEnEntier([r], r, 'ecriture_invalide');
+    });
+
+    it('rétablir un assolement dont la saison a été supprimée : refusé', async () => {
+      const s = putSaison();
+      const a = putAssolement(s.id, famille);
+      await accepte([s, a]);
+      await accepte([supprimer('assolement', a.id), supprimer('saison', s.id)]);
+      const r = patch('assolement', a.id, { supprime_le: null });
+      await refuseEnEntier([r], r, 'ecriture_invalide');
+    });
+  });
+
+  describe('relecture : contournements de la suppression douce', () => {
+    async function serieTermineeSur(espece: string, it: string): Promise<string> {
+      const id = randomUUID();
+      await inserer(
+        `INSERT INTO serie (id, ferme_id, saison_id, espece_id, itineraire_id, parametres, ancre_type, ancre_date,
+                            prevu_semis_pepiniere, prevu_mise_en_place, prevu_debut_recolte, prevu_fin_recolte, longueur_m, statut)
+         VALUES ($1, $2, $3, $4, $5, $6, 'debut_recolte', '2027-05-31', '2027-03-15', '2027-04-12', '2027-05-31', '2027-06-14', 30, 'terminee')`,
+        [id, ferme, saison, espece, it, JSON.stringify(BATAVIA)],
+      );
+      return id;
+    }
+
+    it.each(['prevue', 'en_cours'])(
+      'série terminée, son emplacement supprimé (accepté), puis la série repassée « %s » : refusé (série active sur un emplacement supprimé)',
+      async (statut) => {
+        const planche = await plancheEn(ferme, zoneFerme);
+        const serie = await serieTermineeSur(laitue, itineraire);
+        await occupationEn(planche, serie);
+        await accepte([supprimer('emplacement', planche)]);
+        const p = patch('serie', serie, { statut });
+        await refuseEnEntier([p], p, 'ecriture_invalide');
+        expect((await ligne('serie', serie))?.statut).toBe('terminee');
+      },
+    );
+
+    it.each(['prevue', 'en_cours'])(
+      'série terminée, son espèce supprimée (acceptée), puis la série repassée « %s » : refusé (série active sur une espèce supprimée)',
+      async (statut) => {
+        const espece = await especeEn(ferme, famille, 'Roquette');
+        const it = randomUUID();
+        await inserer(
+          `INSERT INTO itineraire (id, ferme_id, espece_id, nom, mode, parametres) VALUES ($1, $2, $3, 'Batavia de printemps', 'plant_maison', $4)`,
+          [it, ferme, espece, JSON.stringify(BATAVIA)],
+        );
+        const serie = await serieTermineeSur(espece, it);
+        await accepte([supprimer('espece', espece)]);
+        const p = patch('serie', serie, { statut });
+        await refuseEnEntier([p], p, 'ecriture_invalide');
+        expect((await ligne('serie', serie))?.statut).toBe('terminee');
+      },
+    );
+  });
+
+  describe('relecture : une plantation à arracher plus tard retient encore sa place et son espèce', () => {
+    async function plantation(espece: string, arrachage: string): Promise<string> {
+      const id = randomUUID();
+      await inserer(
+        `INSERT INTO plantation (id, ferme_id, espece_id, date_plantation, nombre_plants, date_arrachage) VALUES ($1, $2, $3, '2019-03-15', 120, $4)`,
+        [id, ferme, espece, arrachage],
+      );
+      return id;
+    }
+
+    async function occupe(emplacement: string, plantationId: string, au: string): Promise<void> {
+      await inserer(
+        `INSERT INTO occupation (id, ferme_id, emplacement_id, plantation_id, longueur_m, prevu_du, prevu_au) VALUES ($1, $2, $3, $4, 30, '2019-03-15', $5)`,
+        [randomUUID(), ferme, emplacement, plantationId, au],
+      );
+    }
+
+    it('arrachage prévu dans le futur : suppression de l’emplacement refusée', async () => {
+      const planche = await plancheEn(ferme, zoneFerme);
+      await occupe(planche, await plantation(laitue, '2027-06-30'), '2027-06-30');
+      const s = supprimer('emplacement', planche);
+      await refuseEnEntier([s], s, 'ecriture_invalide');
+      expect(await messageDe(planche)).toMatch(/occup/iu);
+    });
+
+    it('arrachage prévu dans le futur : suppression de l’espèce refusée', async () => {
+      const espece = await especeEn(ferme, famille, 'Asperge');
+      await plantation(espece, '2027-06-30');
+      const s = supprimer('espece', espece);
+      await refuseEnEntier([s], s, 'ecriture_invalide');
+    });
+
+    it('arrachée dans le passé : l’emplacement et l’espèce se suppriment', async () => {
+      const planche = await plancheEn(ferme, zoneFerme);
+      const espece = await especeEn(ferme, famille, 'Pivoine');
+      await occupe(planche, await plantation(espece, '2025-06-30'), '2025-06-30');
+      await accepte([supprimer('emplacement', planche)]);
+      await accepte([supprimer('espece', espece)]);
+    });
+  });
 });
