@@ -8,7 +8,7 @@
  *   ../parcours.test.tsx      critère 1 : chaque fichier du jeu de T14, de bout en bout, écrit en base ;
  *   ../annulation.test.tsx    critère 2 : import annulé depuis l'historique (aucune trace), modèle
  *                             enregistré pour la ferme et réutilisé sur un second fichier ;
- *   ../regles.test.tsx        une règle par test : une seule opération, zone par défaut, doublons
+ *   ../regles.test.tsx        une règle par test : lots ≤ 500 écritures et 5 Mio, zone par défaut, doublons
  *                             contre la base, cellule fautive, avertissements, plafond du
  *                             rapprochement, docs/import/ ;
  *   ../modeles.test.ts        garde à l'exécution sur un modèle relu (relireModele) ;
@@ -134,12 +134,19 @@
  *
  * ── Écriture (« Importer ») ──────────────────────────────────────────────────────────────────
  *
- * UNE seule opération : un seul `porte.ecrireEnsemble` (une transaction locale, un seul envoi au
- * serveur), quel que soit le nombre de lignes. Annuler = une seule opération aussi. Jamais
- * d'écriture dans `modification` (le serveur l'écrit), jamais de DELETE ni de REPLACE
+ * En LOTS (décision du chef, option A) : la porte refuse plus de ECRITURES_MAX_PAR_LOT (500)
+ * ordres par `ecrireEnsemble`, le serveur plus de 500 écritures par lot (`lot_trop_gros` ; plus
+ * de 2 000, c'est un 413 qui bloque la synchro) et plus de TAILLE_MAX_PAR_LOT (5 Mio). Donc :
+ *   - chaque lot = un `porte.ecrireEnsemble` d'au plus 500 ordres (un ordre = une ligne écrite)
+ *     et d'au plus 5 Mio ; « une opération » = un lot ; un import de moins de 500 écritures
+ *     tient en UN lot, un import de E écritures en ⌈E / 500⌉ lots ;
+ *   - une série est toujours dans le même lot que ses occupations ;
+ *   - tous les lots d'un import portent le même identifiant d'import (celui de l'historique) ;
+ *   - « Annuler cet import » s'écrit en lots aussi, et nettoie TOUS les lots de l'import.
+ * Jamais d'écriture dans `modification` (le serveur l'écrit), jamais de DELETE ni de REPLACE
  * (suppression douce : `supprime_le`). Ids : UUID v7 de la porte ou de @planif/core.
  * Écriture dans la base locale via @planif/sync (périmètre : packages/sync, nouveau fichier, PAS
- * porte.ts ni fait-unique.ts, pris par T13o).
+ * porte.ts ni fait-unique.ts, pris par T13o). Vérifié par `verifierLots` (./harnais.ts).
  *
  * Ce qu'écrit chaque type (lignes valides seulement, ferme_id = la ferme) :
  *   - parcellaire : `zone` (une par nom distinct ; une zone de la ferme de même nom, comparé sans
@@ -172,7 +179,7 @@
  * ── Annulation depuis l'historique ───────────────────────────────────────────────────────────
  *
  * « Annuler cet import » (étape 'fini' ou région « Imports récents », même après avoir fermé
- * et rouvert l'écran) : en UNE opération, chaque ligne créée par l'import reçoit supprime_le ;
+ * et rouvert l'écran) : en lots (voir « Écriture »), chaque ligne créée par l'import reçoit supprime_le ;
  * aucune ligne d'avant l'import n'est modifiée. « Aucune trace » : pour chaque table, les lignes
  * actives (supprime_le nul) sont exactement celles d'avant l'import, et aucune ligne nouvelle
  * dans une table sans supprime_le (evenement, mouvement_stock). Le modèle d'import, lui, reste

@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, expect, vi } from 'vitest';
-import { creerPorte, SCHEMA_LOCAL, TABLES_LOCALES, type BaseLocale, type NomTableLocale, type PorteDonnees } from '@planif/sync';
+import { creerPorte, ECRITURES_MAX_PAR_LOT, SCHEMA_LOCAL, TABLES_LOCALES, TAILLE_MAX_PAR_LOT, type BaseLocale, type NomTableLocale, type PorteDonnees } from '@planif/sync';
 import type { Id } from '@planif/core';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../../packages/sync/src/test/base-memoire.ts';
 import { bouton, champ, desactive, dialogue, liste, nomAccessible, radio, remplir, texte, toucher } from '../../itineraires/test/outils.ts';
@@ -27,27 +27,77 @@ export const ISO = MAINTENANT.toISOString();
 
 export type Ligne = Readonly<Record<string, string | number | null>>;
 
+/**
+ * Un lot d'écriture (décision du chef, T14b) : une transaction passée par la porte. La porte
+ * refuse plus de ECRITURES_MAX_PAR_LOT ordres par `ecrireEnsemble`, le serveur plus de 500
+ * écritures (`lot_trop_gros`) ou 5 Mio par lot : un import s'écrit en lots.
+ */
+export interface Lot {
+  /** Ordres d'écriture (INSERT, UPDATE…) exécutés dans la transaction : une ligne par ordre. */
+  readonly ordres: number;
+  /** Taille approchée de ce qui part au serveur : octets UTF-8 du JSON des paramètres. */
+  readonly octets: number;
+  /** Séries créées par ce lot. */
+  readonly series: ReadonlySet<string>;
+  /** Occupations créées par ce lot → leur serie_id. */
+  readonly occupations: ReadonlyMap<string, string | null>;
+}
+
 export interface Banc {
   readonly base: BaseMemoire;
   readonly porte: PorteDonnees;
   /** Transactions d'écriture passées par la porte depuis le dernier `remiseAZero()`. */
   transactions(): number;
+  /** Les lots (transactions) depuis le dernier `remiseAZero()`, dans l'ordre. */
+  lots(): readonly Lot[];
   remiseAZero(): void;
   /** Ordres SQL d'écriture exécutés depuis le dernier `remiseAZero()`. */
   ordres(): string[];
 }
 
+const octetsJson = (v: unknown): number => new TextEncoder().encode(JSON.stringify(v ?? null)).length;
+
 export async function creerBanc(): Promise<Banc> {
   const base = creerBaseMemoire(SCHEMA_LOCAL);
   await ecrireFermeImport(base);
-  let transactions = 0;
+  let lots: Lot[] = [];
   let ecrituresAvant = base.ecritures.length;
+  const seriesVues = new Set(base.lireDirect<{ id: string }>('SELECT id FROM serie').map((l) => l.id));
+  const occupationsVues = new Set(base.lireDirect<{ id: string }>('SELECT id FROM occupation').map((l) => l.id));
   const compteuse: BaseLocale = {
     getAll: (sql, p) => base.getAll(sql, p),
     execute: (sql, p) => base.execute(sql, p),
-    writeTransaction: (fn) => {
-      transactions++;
-      return base.writeTransaction(fn);
+    writeTransaction: async (fn) => {
+      let ordres = 0;
+      let octets = 0;
+      const r = await base.writeTransaction((tx) =>
+        fn({
+          getAll: (sql, p) => tx.getAll(sql, p),
+          execute: (sql, p) => {
+            if (/^\s*(INSERT|UPDATE|DELETE|REPLACE)\b/i.test(sql)) {
+              ordres++;
+              octets += octetsJson(p);
+            }
+            return tx.execute(sql, p);
+          },
+        }),
+      );
+      const series = new Set<string>();
+      for (const l of base.lireDirect<{ id: string }>('SELECT id FROM serie')) {
+        if (!seriesVues.has(l.id)) {
+          seriesVues.add(l.id);
+          series.add(l.id);
+        }
+      }
+      const occupations = new Map<string, string | null>();
+      for (const l of base.lireDirect<{ id: string; serie_id: string | null }>('SELECT id, serie_id FROM occupation')) {
+        if (!occupationsVues.has(l.id)) {
+          occupationsVues.add(l.id);
+          occupations.set(l.id, l.serie_id);
+        }
+      }
+      lots.push({ ordres, octets, series, occupations });
+      return r;
     },
     onChange: (g, o) => base.onChange(g, o),
   };
@@ -55,13 +105,39 @@ export async function creerBanc(): Promise<Banc> {
   return {
     base,
     porte,
-    transactions: () => transactions,
+    transactions: () => lots.length,
+    lots: () => lots,
     remiseAZero: () => {
-      transactions = 0;
+      lots = [];
       ecrituresAvant = base.ecritures.length;
     },
     ordres: () => base.ecritures.slice(ecrituresAvant),
   };
+}
+
+/**
+ * Chaque lot depuis le dernier `remiseAZero()` tient dans les limites de la porte et du serveur
+ * (ECRITURES_MAX_PAR_LOT ordres, TAILLE_MAX_PAR_LOT octets), et une série n'est jamais séparée
+ * de ses occupations (créées dans le même lot qu'elle).
+ */
+export function verifierLots(b: Banc): void {
+  const lots = b.lots();
+  lots.forEach((l, i) => {
+    expect(l.ordres, `lot ${String(i + 1)} : au plus ${String(ECRITURES_MAX_PAR_LOT)} écritures`).toBeLessThanOrEqual(ECRITURES_MAX_PAR_LOT);
+    expect(l.octets, `lot ${String(i + 1)} : au plus ${String(TAILLE_MAX_PAR_LOT)} octets`).toBeLessThanOrEqual(TAILLE_MAX_PAR_LOT);
+  });
+  const lotDeSerie = new Map<string, number>();
+  lots.forEach((l, i) => {
+    for (const s of l.series) lotDeSerie.set(s, i);
+  });
+  const separees: string[] = [];
+  lots.forEach((l, i) => {
+    for (const [o, s] of l.occupations) {
+      const ls = s === null ? undefined : lotDeSerie.get(s);
+      if (ls !== undefined && ls !== i) separees.push(`occupation ${o} (lot ${String(i + 1)}) séparée de sa série ${String(s)} (lot ${String(ls + 1)})`);
+    }
+  });
+  expect(separees, 'une série toujours dans le même lot que ses occupations').toEqual([]);
 }
 
 export const lire = (b: Banc, sql: string, p: readonly unknown[] = []): Ligne[] => b.base.lireDirect<Ligne>(sql, p);

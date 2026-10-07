@@ -8,7 +8,8 @@
  * « Aucune trace » : pour chaque table du schéma local, les lignes actives (supprime_le nul)
  * sont exactement celles d'avant l'import (suppression douce : les lignes créées restent,
  * marquées supprimées, pour la synchro) ; aucune ligne nouvelle dans une table sans
- * supprime_le ; rien dans `modification` ; annuler = une seule opération.
+ * supprime_le ; rien dans `modification`. Annuler s'écrit en lots comme l'import (au plus
+ * 500 écritures et 5 Mio par lot, décision du chef) : un seul lot pour ces petits fichiers.
  */
 import { describe, expect, it } from 'vitest';
 import { AUTRE_FERME, espece } from './test/ferme-import.ts';
@@ -37,6 +38,7 @@ import {
   texte,
   toucher,
   typeCoche,
+  verifierLots,
   verifierOrdres,
   type Banc,
 } from './test/harnais.ts';
@@ -105,7 +107,8 @@ describe('T14b, critère 2 : annuler un import ne laisse aucune trace', () => {
     await toucher(bouton('Annuler cet import', ecran()));
     await attendreDurant(() => /annulé/i.test(texte(ecran().querySelector('[role="status"]'))), 'statut « annulé »');
     expect(alertes()).toEqual([]);
-    expect(b().transactions(), 'annuler = une seule opération').toBe(1);
+    expect(b().transactions(), 'annuler moins de 500 lignes = un seul lot').toBe(1);
+    verifierLots(b());
     verifierOrdres(b());
     expect([...ecran().querySelectorAll('button')].some((x) => texte(x) === 'Annuler cet import'), 'plus de bouton d’annulation').toBe(false);
 
@@ -143,6 +146,7 @@ describe('T14b, critère 2 : annuler un import ne laisse aucune trace', () => {
     await toucher(bouton('Annuler cet import', series));
     await attendreDurant(() => importsPasses()[0]?.dataset.etat === 'annule', 'import des séries marqué annulé');
     expect(b().transactions()).toBe(1);
+    verifierLots(b());
     verifierOrdres(b());
     expect(texte(importsPasses()[0])).toMatch(/annulé/i);
     expect([...(importsPasses()[0]?.querySelectorAll('button') ?? [])].some((x) => texte(x) === 'Annuler cet import')).toBe(false);

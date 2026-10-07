@@ -33,6 +33,7 @@ import {
   lignesImportees,
   lire,
   typeCoche,
+  verifierLots,
   verifierOrdres,
   autreFichier,
   type Banc,
@@ -90,7 +91,9 @@ async function passer(nom: string, c: Corrections = {}): Promise<Passage> {
   expect(etape(), `${nom} : aperçu`).toBe('apercu');
   expect(b().transactions(), `${nom} : rien n’est écrit avant « Importer »`).toBe(0);
   const statut = await importer();
-  expect(b().transactions(), `${nom} : « Importer » écrit en une seule opération`).toBe(1);
+  // Moins de 500 écritures : un seul lot (une transaction, un seul envoi au serveur).
+  expect(b().transactions(), `${nom} : « Importer » écrit en un seul lot`).toBe(1);
+  verifierLots(b());
   verifierOrdres(b());
   const nouvelles = (table: string) => {
     const vus = avant[table] ?? new Set<string>();

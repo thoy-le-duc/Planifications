@@ -4,7 +4,8 @@
  * et « Suites de la relecture de T14c »), sur le vrai écran rendu dans un DOM simulé et la base
  * mémoire de la ferme de l'import. Contrat : ./test/contrat.ts.
  *
- *   - « Importer » écrit en UNE opération, quel que soit le nombre de lignes (ferme complète) ;
+ *   - « Importer » écrit en lots d'au plus 500 écritures et 5 Mio (limites de la porte et du
+ *     serveur), une série toujours avec ses occupations ; l'annulation aussi, en lots ;
  *   - zone par défaut proposée quand le parcellaire n'a pas de colonne de zone ;
  *   - doublons cherchés aussi contre la base (parcellaire et séries) ; planche inconnue en erreur ;
  *   - l'aperçu montre la cellule fautive à côté du message, y compris une zone reprise de la
@@ -19,6 +20,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { preparerExport, validerSerie } from '@planif/core';
+import { ECRITURES_MAX_PAR_LOT } from '@planif/sync';
 import { fermeComplete, VOLUMES } from '../../../../../packages/core/src/import/test/jeu-ferme.ts';
 import { PLAFOND_VALEURS_A_RAPPROCHER_ATTENDU } from './test/contrat.ts';
 import { EMPLACEMENT, espece, FERME, ZONE } from './test/ferme-import.ts';
@@ -42,6 +44,10 @@ import {
   ligneApercu,
   lire,
   nomAccessible,
+  photographie,
+  toucher,
+  verifierLots,
+  verifierOrdres,
   remplir,
   texte,
   utf8,
@@ -65,8 +71,11 @@ const csv = (lignes: readonly (readonly string[])[]): Uint8Array => utf8(`${lign
 
 const boutonImporter = (): HTMLElement | undefined => [...ecran().querySelectorAll<HTMLElement>('button')].find((x) => texte(x).startsWith('Importer') && texte(x) !== 'Importer un autre fichier');
 
-describe('« Importer » : une seule opération', () => {
-  it('ferme complète (jeu de T07 exporté par T15) : 400 emplacements puis 3 000 séries, chacun en UNE transaction', { timeout: 180_000 }, async () => {
+/** Écritures (ordres) de tous les lots depuis le dernier `remiseAZero()`. */
+const ecritures = (): number => b().lots().reduce((n, l) => n + l.ordres, 0);
+
+describe('« Importer » : des lots d’au plus 500 écritures et 5 Mio (limites de la porte et du serveur)', () => {
+  it('ferme complète (jeu de T07 exporté par T15) : emplacement.csv en un lot, serie.csv en ⌈écritures / 500⌉ lots', { timeout: 180_000 }, async () => {
     const ferme = fermeComplete();
     const fichiers = preparerExport({ fermeId: ferme.fermeId, genereLe: '2026-09-29T06:30:00.000Z', tables: ferme.tables }).fichiers;
     const octetsDe = (chemin: string) => utf8(fichiers.find((f) => f.chemin === chemin)?.contenu ?? '');
@@ -77,7 +86,9 @@ describe('« Importer » : une seule opération', () => {
     expect(compteur('valides')).toBe(VOLUMES.emplacements);
     expect(b().transactions()).toBe(0);
     expect(lignesImportees(await importer())).toBe(VOLUMES.emplacements);
-    expect(b().transactions(), 'emplacement.csv : une transaction').toBe(1);
+    // 400 emplacements + 30 zones = 430 écritures : un seul lot.
+    expect(b().transactions(), 'emplacement.csv : un lot').toBe(1);
+    verifierLots(b());
     expect(lire(b(), 'SELECT COUNT(*) AS n FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL', [FERME])[0]?.n).toBe(VOLUMES.emplacements + 7);
     expect(lire(b(), 'SELECT COUNT(*) AS n FROM zone WHERE ferme_id = ? AND supprime_le IS NULL', [FERME])[0]?.n).toBe(VOLUMES.zones + 3);
 
@@ -88,7 +99,9 @@ describe('« Importer » : une seule opération', () => {
     expect(valides + compteur('doublons')).toBe(VOLUMES.series);
     expect(compteur('erreurs')).toBe(0);
     expect(lignesImportees(await importer())).toBe(valides);
-    expect(b().transactions(), 'serie.csv : une transaction').toBe(1);
+    expect(ecritures(), 'au moins une écriture par série').toBeGreaterThanOrEqual(valides);
+    expect(b().transactions(), `serie.csv : ⌈${String(ecritures())} / ${String(ECRITURES_MAX_PAR_LOT)}⌉ lots`).toBe(Math.ceil(ecritures() / ECRITURES_MAX_PAR_LOT));
+    verifierLots(b());
     const series = lire(b(), 'SELECT * FROM serie WHERE ferme_id = ? AND supprime_le IS NULL', [FERME]);
     expect(series).toHaveLength(valides);
     const refusees = series.map((s) => validerSerie({ ...s })).filter((r) => !r.ok);
@@ -97,6 +110,36 @@ describe('« Importer » : une seule opération', () => {
       lire(b(), "SELECT nom FROM saison WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY nom", [FERME]).map((s) => s.nom),
       'saisons 2023 à 2027 (2026 et 2027 reprises)',
     ).toEqual(['2023', '2024', '2025', '2026', '2027']);
+  });
+
+  it('700 séries sur des planches : aucun lot au-delà de 500 écritures ni de 5 Mio, une série jamais séparée de ses occupations ; l’annulation, en lots aussi, nettoie tout', { timeout: 120_000 }, async () => {
+    const lignes = [['Culture', 'Planche', 'Plantation', 'Début récolte', 'Longueur (m)']];
+    for (const culture of ['Laitue', 'Poireau']) {
+      for (const planche of ['GP1', 'GP2', 'GP3', 'GP4', 'GP5', 'N3', 'N4']) {
+        for (let s = 1; s <= 50; s++) lignes.push([culture, planche, `S${String(s)}`, `S${String(Math.min(52, s + 2))}`, '10']);
+      }
+    }
+    await h.ouvrir();
+    const avant = photographie(b());
+    b().remiseAZero();
+    await jusquApercu('series-nombreuses.csv', csv(lignes));
+    expect(compteur('valides')).toBe(700);
+    expect(lignesImportees(await importer())).toBe(700);
+    const lots = b().lots();
+    expect(lots.length, 'au moins 1 400 écritures (séries et occupations) : plusieurs lots').toBeGreaterThanOrEqual(3);
+    expect(lots.length).toBe(Math.ceil(ecritures() / ECRITURES_MAX_PAR_LOT));
+    verifierLots(b());
+    expect(lots.reduce((n, l) => n + l.series.size, 0)).toBe(700);
+    expect(lots.reduce((n, l) => n + l.occupations.size, 0)).toBe(700);
+    verifierOrdres(b());
+
+    b().remiseAZero();
+    await toucher(bouton('Annuler cet import', ecran()));
+    await attendreDurant(() => /annulé/i.test(texte(ecran().querySelector('[role="status"]'))), 'import annulé', 60_000);
+    expect(b().transactions(), 'annulation en lots').toBe(Math.ceil(ecritures() / ECRITURES_MAX_PAR_LOT));
+    verifierLots(b());
+    verifierOrdres(b());
+    expect(photographie(b()), '« Annuler cet import » nettoie tous les lots').toStrictEqual(avant);
   });
 });
 
