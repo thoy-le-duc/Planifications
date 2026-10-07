@@ -20,12 +20,13 @@ const T = 'texte';
 export const TABLES_LOCALES = {
   article_stock: { ferme_id: T, espece_id: T, variete_id: T, unite: T, categorie: T, cree_le: T, modifie_le: T, supprime_le: T },
   assolement: { ferme_id: T, saison_id: T, zone_id: T, emplacement_id: T, famille_id: T, espece_id: T, nature: T, source_import: T, cree_le: T, modifie_le: T, supprime_le: T },
+  batiment: { ferme_id: T, nom: T, type: T, longueur_m: 'reel', largeur_m: 'reel', hauteur_m: 'reel', centre_x_m: 'reel', centre_y_m: 'reel', orientation_deg: 'reel', zone_id: T, cree_le: T, modifie_le: T, supprime_le: T },
   campagne: { ferme_id: T, plantation_id: T, annee: 'entier', debut_recolte_prevu: T, fin_recolte_prevue: T, rendement_prevu: T, cree_le: T, modifie_le: T, supprime_le: T },
-  emplacement: { ferme_id: T, zone_id: T, code: T, sorte: T, longueur_m: 'reel', largeur_m: 'reel', nombre_places: 'entier', actif_du: T, actif_au: T, remplace: T, cree_le: T, modifie_le: T, supprime_le: T },
+  emplacement: { ferme_id: T, zone_id: T, code: T, sorte: T, longueur_m: 'reel', largeur_m: 'reel', nombre_places: 'entier', actif_du: T, actif_au: T, remplace: T, placement_x_m: 'reel', placement_y_m: 'reel', orientation_deg: 'reel', cree_le: T, modifie_le: T, supprime_le: T },
   espece: { ferme_id: T, famille_id: T, nom: T, categorie: T, perenne: 'entier', unite_recolte: T, delai_retour_minimal_ans: 'entier', delai_retour_conseille_ans: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
   evenement: { ferme_id: T, type: T, date: T, horodatage: T, auteur_id: T, source: T, serie_id: T, campagne_id: T, emplacement_ids: T, note: T, photos: T, remplace_sorte: T, remplace_evenement_id: T, detail: T, cree_le: T, origine_id: T },
   famille: { ferme_id: T, nom: T, delai_retour_minimal_ans: 'entier', delai_retour_conseille_ans: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
-  ferme: { nom: T, fuseau_horaire: T, position: T, unites: T, cree_le: T, modifie_le: T, supprime_le: T },
+  ferme: { nom: T, fuseau_horaire: T, position: T, origine_plan: T, unites: T, cree_le: T, modifie_le: T, supprime_le: T },
   itineraire: { ferme_id: T, espece_id: T, variete_id: T, nom: T, mode: T, parametres: T, cree_le: T, modifie_le: T, supprime_le: T },
   membre: { utilisateur_id: T, ferme_id: T, role: T, cree_le: T, modifie_le: T, supprime_le: T, etat: T, invite_par: T, invite_le: T },
   modification: { ferme_id: T, nom_table: T, ligne_id: T, auteur_id: T, horodatage: T, operation: T, avant: T, apres: T, proposition_id: T, cree_le: T, modifie_le: T, supprime_le: T },
@@ -42,7 +43,7 @@ export const TABLES_LOCALES = {
   type_intervention: { ferme_id: T, categorie: T, libelle: T, masque: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
   utilisateur: { nom: T, cree_le: T, modifie_le: T, supprime_le: T },
   variete: { ferme_id: T, espece_id: T, nom: T, fournisseur: T, poids_mille_graines_g: 'reel', taux_germination: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
-  zone: { ferme_id: T, nom: T, zone_parente_id: T, type_abri: T, surface_m2: 'reel', cree_le: T, modifie_le: T, supprime_le: T },
+  zone: { ferme_id: T, nom: T, zone_parente_id: T, type_abri: T, surface_m2: 'reel', contour: T, cree_le: T, modifie_le: T, supprime_le: T },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, TypeLocal>>>>;
 
 export type NomTableLocale = keyof typeof TABLES_LOCALES;
