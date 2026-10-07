@@ -70,11 +70,11 @@ const TACHE_MAX_MS = 50;
  *   - développeur T16b (lecture par pages, compression dans un worker, aucune tâche longue) :
  *     11,7 à 13,1 s, dont ≈ 6 s de lecture de la base (limitée par IndexedDB) et 3,7 à 5,5 s
  *     de construction de l'archive sur le fil principal.
- * Décision du chef (T16b) : borne à 15 s. Geste rare, barre d'avancement, annulable, et le fil
- * principal ne gèle jamais (TACHE_MAX_MS = 50 inchangé). Le ticket T15c ramènera l'export
- * sous 10 s (archive construite au fil de la lecture).
+ * Décision du chef (T16b) : borne provisoire à 15 s. T15c (archive construite au fil de la
+ * lecture) la ramène à 10 s, comme le demande le ticket ; TACHE_MAX_MS = 50 inchangé.
+ * Avant le code de T15c : 10,8 s sur la machine du testeur, 11,5 à 15,4 s selon la charge.
  */
-const DUREE_MAX_MS = 15_000;
+const DUREE_MAX_MS = 10_000;
 
 const EXPORTER = 'Exporter toute ma ferme';
 
