@@ -16,3 +16,9 @@
 ## Critères d'acceptation
 
 - [ ] `export.e2e.ts` passe 10 fois de suite en local sous CPU ×4 sans dépasser 50 ms.
+
+## Suites de la relecture T15c
+
+- La lecture n'a pas de contre-pression vers la construction : les tables lues restent en mémoire tant que la construction est en retard (pas pire qu'avant). Attendre l'ajout de la table k−1 avant de lire k+1.
+- Un worker tué après « pret » sans aucun événement : couvert par le chien de garde de 15 s, mais la barre reste figée pendant ce temps.
+- La barre d'avancement donne une part fixe à chaque table : elle avance par sauts pendant la lecture des événements.

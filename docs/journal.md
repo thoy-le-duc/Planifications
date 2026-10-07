@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-07 — T15c : l'export complet en moins de 10 secondes
+
+- **Fait** : l'archive est construite table par table pendant la lecture (`creerConstructeurArchive`), CRC-32 et encodage accélérés, worker de compression rangé à part et toujours précaché, repli sur le fil principal s'il ne se charge pas, contre-pression vers le worker, chien de garde de 15 s et une nouvelle tentative si le worker tombe. Ferme de T07, CPU ×4 : 7,3 à 8,6 s (avant 11,5 à 15,4 s), aucune tâche longue. La borne de l'e2e revient à 10 s.
+- **Décidé** : archive identique au bit près (vérifiée par le relecteur sur 3 360 archives et le CRC sur toutes les longueurs jusqu'à 300 000 octets). Testeur et relecteur sur Sonnet (ticket sans stock ni synchro). JS de démarrage inchangé.
+- **Bloquant** : rien. Q28 posée (changer d'onglet arrête l'export sans le dire). Suites dans T15d (contre-pression de la lecture, barre par sauts).
+
 ## 2026-10-07 — T13o : « Fait » unique contrôlé d'après le journal d'envoi
 
 - **Fait** : la porte relit aussi les lignes touchées par une modification (via le journal d'envoi de PowerSync, `ps_crud`) : un UPDATE qui transformerait une ligne en « Fait » déjà fait est refusé, comme un rowid réutilisé après une suppression ; un « Fait » et sa correction écrits ensemble ne sont plus refusés à tort. Le brief interdit tout accès SQL brut à l'agent et au serveur MCP.

@@ -290,6 +290,10 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q28 — Changer d'onglet pendant un export (posée le 2026-10-07, T15c)
+
+Question : si l'on quitte l'onglet Ferme pendant l'export de toute la ferme, l'export s'arrête aujourd'hui sans le dire. Proposition : l'export continue en arrière-plan et le téléchargement arrive quand il est prêt, avec un petit bandeau « Export en cours » sur les autres écrans. Ça te va, ou préfères-tu qu'il s'arrête avec un message ?
+
 ### Q26 — Taper « Fait » avant que la base soit prête (posée le 2026-10-03, T13g)
 
 Question : au lancement, l'écran Aujourd'hui s'affiche maintenant en ≈ 0,4 s au lieu de ≈ 0,8 s, mais en lecture seule : les boutons « Fait » ne s'activent qu'à l'ouverture de la base, vers ≈ 1 s sur un téléphone moyen (≈ 0,2 s plus tard qu'avant, car le dessin de l'écran ralentit l'ouverture). Proposition : accepter le tap sur « Fait » dès l'affichage ; la tâche disparaît tout de suite et s'écrit dès que la base est prête, avec la même vérification « déjà fait ». Ça te va, ou préfères-tu des boutons inactifs tant que la base n'est pas prête ?
