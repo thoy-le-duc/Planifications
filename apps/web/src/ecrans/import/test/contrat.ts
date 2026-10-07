@@ -186,6 +186,31 @@
  * dans une table sans supprime_le (evenement, mouvement_stock). Le modèle d'import, lui, reste
  * (décision testeur : c'est un réglage, pas une donnée de la ferme).
  *
+ * ── Relecture (B1, B2, mineurs) — tests : ../relecture.test.tsx ───────────────────────────────
+ *
+ * B1, rien d'inventé en douce. Chaque valeur que l'import écrit sans que le fichier la donne est
+ *   montrée à l'aperçu : sur sa ligne, un data-testid="avertissement-import" (la ligne compte dans
+ *   data-testid="compteur-avertissements", dont le texte contient « à vérifier ») ; et dans un
+ *   encart data-testid="valeurs-par-defaut" (absent s'il n'y en a aucune), un élément
+ *   data-testid="defaut-import" par sorte, data-defaut = 'densite' (« 1 rang × 30 cm »),
+ *   'marge' (« 10 % »), 'delais-famille' (« 3 ans », « 4 ans », nom de la famille), 'abri'
+ *   (« plein champ », nom de la zone), 'longueur-serie' (« 1 m »), 'variete-inconnue'.
+ *   Culture créée (« Créer « X » » à l'étape « Valeurs ») : trois <select> de plus, sans valeur
+ *   choisie d'office (value ""), « Continuer » désactivé tant qu'ils ne sont pas remplis :
+ *   « Catégorie pour « X » » (CATEGORIES_ESPECE), « Culture pérenne pour « X » » ('oui' | 'non'),
+ *   « Unité de récolte pour « X » » (UNITES_RECOLTE) ; écrits tels quels dans `espece`.
+ * B2, annulation honnête : un lot d'annulation par lot importé, dans l'ordre inverse (le 1er
+ *   retire exactement les lignes du dernier lot importé) ; un lot refusé n'empêche pas les autres,
+ *   l'import reste annulable (pas « annulé ») et « Annuler » à nouveau finit ; si une ligne créée
+ *   par l'import sert à une ligne active qui n'en vient pas (série d'un autre import ou saisie sur
+ *   une planche importée), l'annulation est refusée avant d'écrire : role="alert" qui dit quoi,
+ *   rien de retiré, l'historique reste « actif ».
+ * Mineurs : pendant l'écriture, Échap et « Fermer » ne ferment pas l'écran (ou demandent
+ *   confirmation, role="alertdialog") ; la déconnexion (connexion/deconnexion.ts) retire toutes
+ *   les clés planif:import:* ; l'annulation ne retire que des lignes de la ferme (ferme_id, dans
+ *   l'UPDATE) ; un import arrêté en route est noté dans « Imports récents » : « interrompu »,
+ *   « 1 envoi sur 3 », et reste annulable.
+ *
  * ── Modèle d'import de la ferme ──────────────────────────────────────────────────────────────
  *
  * À « Importer », la correspondance validée et les choix de valeurs sont enregistrés comme modèle

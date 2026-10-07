@@ -42,6 +42,10 @@ export interface Lot {
   readonly series: ReadonlySet<string>;
   /** Occupations créées par ce lot → leur serie_id. */
   readonly occupations: ReadonlyMap<string, string | null>;
+  /** Lignes créées par ce lot, « table:id » (toutes les tables à suppression douce). */
+  readonly creees: ReadonlySet<string>;
+  /** Lignes qui ont reçu supprime_le dans ce lot, « table:id ». */
+  readonly supprimees: ReadonlySet<string>;
 }
 
 export interface Banc {
@@ -65,6 +69,14 @@ export async function creerBanc(): Promise<Banc> {
   let ecrituresAvant = base.ecritures.length;
   const seriesVues = new Set(base.lireDirect<{ id: string }>('SELECT id FROM serie').map((l) => l.id));
   const occupationsVues = new Set(base.lireDirect<{ id: string }>('SELECT id FROM occupation').map((l) => l.id));
+  const tablesDouces = (Object.keys(TABLES_LOCALES) as NomTableLocale[]).filter((t) => 'supprime_le' in TABLES_LOCALES[t]);
+  /** « table:id » → supprimée ou non, pour attribuer à chaque lot ce qu'il crée et ce qu'il supprime. */
+  const etatLignes = (): Map<string, boolean> => {
+    const m = new Map<string, boolean>();
+    for (const t of tablesDouces) for (const l of base.lireDirect<{ id: string; supprime_le: string | null }>(`SELECT id, supprime_le FROM "${t}"`)) m.set(`${t}:${l.id}`, l.supprime_le !== null);
+    return m;
+  };
+  let etatAvant = etatLignes();
   const compteuse: BaseLocale = {
     getAll: (sql, p) => base.getAll(sql, p),
     execute: (sql, p) => base.execute(sql, p),
@@ -97,7 +109,16 @@ export async function creerBanc(): Promise<Banc> {
           occupations.set(l.id, l.serie_id);
         }
       }
-      lots.push({ ordres, octets, series, occupations });
+      const etatApres = etatLignes();
+      const creees = new Set<string>();
+      const supprimees = new Set<string>();
+      for (const [k, supprimee] of etatApres) {
+        const avant = etatAvant.get(k);
+        if (avant === undefined) creees.add(k);
+        else if (!avant && supprimee) supprimees.add(k);
+      }
+      etatAvant = etatApres;
+      lots.push({ ordres, octets, series, occupations, creees, supprimees });
       return r;
     },
     onChange: (g, o) => base.onChange(g, o),
@@ -212,8 +233,11 @@ export interface Harnais {
   banc(): Banc;
   module(): ModuleEcranImport;
   fermetures(): number;
-  /** Rend l'écran (ferme FERME, horloge MAINTENANT par défaut) et attend l'étape 'depot'. */
-  ouvrir(fermeId?: string, maintenant?: Date): Promise<HTMLElement>;
+  /**
+   * Rend l'écran (ferme FERME, horloge MAINTENANT, porte du banc par défaut) et attend l'étape
+   * 'depot'. `porte` : une porte enveloppée (écriture retenue ou refusée) sur la même base.
+   */
+  ouvrir(fermeId?: string, maintenant?: Date, porte?: PorteDonnees): Promise<HTMLElement>;
   /** Démonte l'écran (même banc) : pour vérifier ce qui survit à la fermeture. */
   demonter(): void;
 }
@@ -270,7 +294,7 @@ export function harnais(): Harnais {
     module,
     fermetures: () => fermetures,
     demonter,
-    async ouvrir(fermeId = FERME, maintenant = MAINTENANT) {
+    async ouvrir(fermeId = FERME, maintenant = MAINTENANT, porte?: PorteDonnees) {
       demonter();
       conteneur = document.createElement('div');
       document.body.append(conteneur);
@@ -279,7 +303,7 @@ export function harnais(): Harnais {
       await act(async () => {
         racine?.render(
           createElement(Ecran, {
-            porte: banc().porte,
+            porte: porte ?? banc().porte,
             fermeId,
             surFermer: () => {
               fermetures++;
@@ -402,4 +426,23 @@ export function lignesImportees(statut: string): number {
 export async function autreFichier(): Promise<void> {
   await toucher(bouton('Importer un autre fichier', ecran()));
   await attendreDurant(() => etape() === 'depot', 'retour à l’étape 1');
+}
+
+// ── Porte enveloppée (relecture T14b : écriture retenue, lot refusé) ─────────────────────────
+
+/**
+ * Porte du banc dont chaque `ecrireEnsemble` passe d'abord par `avant(n)` (n = numéro de
+ * l'appel, à partir de 1) : il peut attendre (écriture en cours) ou lever (lot refusé par la base
+ * locale : rien de ce lot n'est écrit).
+ */
+export function porteEnveloppee(b: Banc, avant: (n: number) => Promise<void> | void): PorteDonnees {
+  let n = 0;
+  return {
+    ...b.porte,
+    ecrireEnsemble: async (ordres, verifier) => {
+      n++;
+      await avant(n);
+      await b.porte.ecrireEnsemble(ordres, verifier);
+    },
+  };
 }
