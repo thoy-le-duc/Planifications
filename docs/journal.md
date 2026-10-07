@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-07 — T13o : « Fait » unique contrôlé d'après le journal d'envoi
+
+- **Fait** : la porte relit aussi les lignes touchées par une modification (via le journal d'envoi de PowerSync, `ps_crud`) : un UPDATE qui transformerait une ligne en « Fait » déjà fait est refusé, comme un rowid réutilisé après une suppression ; un « Fait » et sa correction écrits ensemble ne sont plus refusés à tort. Le brief interdit tout accès SQL brut à l'agent et au serveur MCP.
+- **Décidé** : le relecteur a vérifié la lecture de `ps_crud` sur le vrai moteur PowerSync (pas seulement le double de test) : format conforme, refus et acceptations attendus. Refus sur la grande ferme ≈ 3 à 6 ms. JS de démarrage inchangé.
+- **Bloquant** : rien. Limites connues : UPDATE ou DELETE+INSERT directs dans les tables internes de PowerSync ; un UPDATE d'un « Fait » qui a déjà un double reçu de la synchro serait refusé (aucun chemin de l'appli ne modifie un événement).
+
 ## 2026-10-03 — T13j : « Fait » unique sur tous les chemins d'écriture
 
 - **Fait** : la porte contrôle, dans la même transaction et d'après les lignes réellement écrites, chaque « Fait » nouveau (réalisé, ou intervention qui solde un travail prévu) quel que soit le chemin : `saisirEvenement`, `preparerSaisie` + `ecrireEnsemble`, SQL brut. Deux « Fait » identiques dans un même ensemble, un vérificateur vide ou une copie d'ordre ne passent plus. `preparerSaisie` rend la vérification ; l'écran l'utilise. Refus sur la grande ferme en 6 à 7 ms (CPU normal).
