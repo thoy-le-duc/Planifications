@@ -331,6 +331,8 @@ export const DEBUT_FORMULE = /^[=+\-@\t\r]/;
 export const TABLES_ATTENDUES = [
   'article_stock',
   'assolement',
+  // T28a : bâtiments de la ferme (serres, hangar, magasin), placés dans le repère local.
+  'batiment',
   'campagne',
   'emplacement',
   'espece',

@@ -9,6 +9,8 @@ export * from './saisies/serie.ts';
 export * from './saisies/itineraire.ts';
 export * from './export/index.ts';
 export * from './import/index.ts';
+// Placement réel (T28a) : repère local, repère des zones, règles d'un placement.
+export * from './placement/index.ts';
 
 // Planification (T03), exposée pour la vue 2D (T11) : conflits de place et période effective
 // d'une occupation. Les écrans montrent ce que ce moteur trouve, sans réécrire de règle.

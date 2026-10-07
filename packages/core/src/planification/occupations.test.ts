@@ -141,6 +141,9 @@ function planche(code: string, longueurM: number): Emplacement {
     actifDu: d('2020-01-01'),
     actifAu: null,
     remplace: [],
+    placementXM: null,
+    placementYM: null,
+    orientationDeg: null,
   };
 }
 
@@ -158,6 +161,9 @@ function gouttiere(code: string, nombrePlaces: number): Emplacement {
     actifDu: d('2020-01-01'),
     actifAu: null,
     remplace: [],
+    placementXM: null,
+    placementYM: null,
+    orientationDeg: null,
   };
 }
 

@@ -23,6 +23,9 @@ export function versEmplacement(l: LigneLocale): Emplacement {
     actifDu: texte(l.actif_du) as DateCalendaire,
     actifAu: texteOuNul(l.actif_au) as DateCalendaire | null,
     remplace: [] as readonly Id<'Emplacement'>[],
+    placementXM: null,
+    placementYM: null,
+    orientationDeg: null,
   };
   if (l.sorte === 'gouttiere') return { ...commun, sorte: 'gouttiere', nombrePlaces: nombre(l.nombre_places) };
   return { ...commun, sorte: l.sorte === 'rang' ? 'rang' : 'planche' };

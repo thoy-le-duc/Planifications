@@ -180,6 +180,10 @@ export function versEmplacement(l: LigneLocale): Emplacement {
     actifDu: texte(l.actif_du) as DateCalendaire,
     actifAu: texteOuNul(l.actif_au) as DateCalendaire | null,
     remplace: [],
+    // Placement dans le repère de la zone (T28a) : nul tant que la planche n'est pas placée.
+    placementXM: nombreOuNul(l.placement_x_m),
+    placementYM: nombreOuNul(l.placement_y_m),
+    orientationDeg: nombreOuNul(l.orientation_deg),
   };
   if (l.sorte === 'gouttiere') return { ...commun, sorte: 'gouttiere', nombrePlaces: nombre(l.nombre_places) };
   return { ...commun, sorte: l.sorte === 'rang' ? 'rang' : 'planche' };

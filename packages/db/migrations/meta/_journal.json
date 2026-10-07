@@ -176,6 +176,34 @@
       "when": 1790954973737,
       "tag": "0024_refus_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791394769382,
+      "tag": "0025_placement_fonction_contour",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791394822668,
+      "tag": "0026_zone_ferme_id_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1791394823623,
+      "tag": "0027_placement",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1791394827949,
+      "tag": "0028_placement_zone_abritee_publication",
+      "breakpoints": true
     }
   ]
 }

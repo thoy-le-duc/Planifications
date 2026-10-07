@@ -1,0 +1,3 @@
+ALTER TABLE "modification" DROP CONSTRAINT "modification_nom_table";--> statement-breakpoint
+ALTER TABLE "zone" ADD CONSTRAINT "zone_ferme_id_id_unique" UNIQUE("ferme_id","id");--> statement-breakpoint
+ALTER TABLE "modification" ADD CONSTRAINT "modification_nom_table" CHECK ("modification"."nom_table" IN ('Ferme', 'Zone', 'Emplacement', 'SecteurIrrigation', 'SecteurEmplacement', 'Famille', 'Espece', 'Variete', 'Itineraire', 'Saison', 'Serie', 'Plantation', 'Campagne', 'Occupation', 'Assolement', 'Evenement', 'ArticleStock', 'MouvementStock', 'ProduitPhyto', 'Proposition', 'TypeIntervention', 'Batiment'));
