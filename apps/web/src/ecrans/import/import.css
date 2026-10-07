@@ -583,3 +583,24 @@ select.imp-liste-deroulante {
   color: var(--couleur-secondaire);
   box-shadow: none;
 }
+
+/* ── Relecture : culture créée, valeurs par défaut ────────────────────────────────────────── */
+
+.imp-attributs {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.imp-defauts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 400;
+  color: var(--couleur-encre);
+}
+
+.imp-defauts strong {
+  color: var(--couleur-texte-orange);
+}

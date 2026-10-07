@@ -23,11 +23,11 @@ import {
 import type { PorteDonnees } from '@planif/sync';
 import './import.css';
 import { lireContexte } from './contexte-base.ts';
-import { annulerImport, importsDeLaFerme, noterImport, type ImportPasse } from './historique.ts';
+import { annulerImport, importsDeLaFerme, interruption, noterImport, noterLotsEcrits, type ImportPasse } from './historique.ts';
 import { modeleQuiConvient, rangerModele } from './modeles.ts';
 import { creerPreparateur } from './preparateur.ts';
-import { enFrancais, PLAFOND_VALEURS_A_RAPPROCHER } from './constantes.ts';
-import type { Analyse, Apercu, ContexteBase, DecisionAffichee, LigneApercu, Preparateur, ResultatLecture } from './types.ts';
+import { CATEGORIES_CULTURE, enFrancais, PLAFOND_VALEURS_A_RAPPROCHER, UNITES_CULTURE } from './constantes.ts';
+import type { Analyse, Apercu, AttributsEspece, ContexteBase, DecisionAffichee, LigneApercu, Preparateur, ResultatLecture, SorteDefaut } from './types.ts';
 
 export interface ProprietesEcranImport {
   readonly porte: PorteDonnees;
@@ -111,9 +111,13 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
   const [contexte, setContexte] = useState<ContexteBase | null>(null);
   const [decisions, setDecisions] = useState<readonly DecisionAffichee[]>([]);
   const [choixPris, setChoixPris] = useState<Readonly<Record<string, string>>>({});
+  /** Culture créée (« Créer ») : catégorie, pérenne, unité de récolte, rien d'office (relecture B1). */
+  const [attributs, setAttributs] = useState<Readonly<Record<string, SaisieAttributs>>>({});
   const [apercu, setApercu] = useState<Apercu | null>(null);
   const [fini, setFini] = useState<{ readonly passe: ImportPasse; readonly annule: boolean } | null>(null);
   const [avancement, setAvancement] = useState<string | null>(null);
+  /** Écriture en cours (import ou annulation) : l'écran ne se ferme pas. */
+  const [ecriture, setEcriture] = useState(false);
   // Étape 3 : les colonnes se dessinent par tranches (aucune tâche de plus de 50 ms, CPU lent).
   const [colonnesVisibles, setColonnesVisibles] = useState(TRANCHE_COLONNES);
   const toutesVisibles = etape !== 'colonnes' || colonnesVisibles >= (fichier?.analyse.entetes.length ?? 0);
@@ -168,6 +172,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
     setContexte(null);
     setDecisions([]);
     setChoixPris({});
+    setAttributs({});
     setApercu(null);
     setFini(null);
     setAlerte(null);
@@ -287,6 +292,18 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
     return [...pr, ...modele];
   }
 
+  /** Ce que l'utilisateur a choisi pour chaque culture créée, par nom normalisé (lu par le moteur). */
+  function attributsDesCultures(liste: readonly DecisionAffichee[], pris: Readonly<Record<string, string>>): Record<string, AttributsEspece> {
+    const r: Record<string, AttributsEspece> = {};
+    for (const d of liste) {
+      const k = cleDecision(d.champ, d.valeur);
+      if (d.champ !== 'espece' || pris[k] !== 'nouvelle') continue;
+      const a = attributsComplets(attributs[k]);
+      if (a !== null) r[d.valeur] = a;
+    }
+    return r;
+  }
+
   async function preparer(liste: readonly DecisionAffichee[], pris: Readonly<Record<string, string>>, relire: boolean): Promise<void> {
     if (fichier === null || correspondance === null || occupe) return;
     setOccupe(true);
@@ -304,6 +321,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
         maintenant: maintenant().toISOString(),
         nomFichier: fichier.analyse.nomFichier,
         plafondValeurs: PLAFOND_VALEURS_A_RAPPROCHER,
+        attributsEspeces: attributsDesCultures(liste, pris),
       });
       if (r.sorte === 'plafond') {
         setAlerte(
@@ -347,22 +365,29 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
       le: instant,
       etat: 'actif',
       creees: apercu.creees,
+      lots: apercu.lotsCreees,
+      ecrits: 0,
     };
     // Le modèle validé est gardé pour la ferme (même si l'import est annulé ensuite).
     const modele = creerModele(entetes, correspondance, choixCourants(decisions, choixPris));
     if (modele.ok) rangerModele(fermeId, modele.modele);
     // Noté avant d'écrire : un import interrompu s'annule aussi depuis l'historique.
-    noterImport(fermeId, passe);
+    const range = noterImport(fermeId, passe);
     let faits = 0;
+    setEcriture(true);
     try {
       for (let i = 0; i < apercu.lots; i++) {
         if (apercu.lots > 1) setAvancement(`Envoi ${enFrancais(i + 1)} sur ${enFrancais(apercu.lots)}…`);
         const ordres = await obtenirPreparateur().lot(i);
         await porte.ecrireEnsemble(ordres);
         faits++;
+        noterLotsEcrits(fermeId, passe.id, faits);
       }
-      setFini({ passe, annule: false });
+      setFini({ passe: { ...passe, ecrits: faits }, annule: false });
       setEtape('fini');
+      if (!range) {
+        setAlerte('Import fait, mais ce téléphone n’a pas pu le noter dans « Imports récents » (stockage plein ou refusé) : il ne pourra pas être annulé d’ici.');
+      }
     } catch (e) {
       console.error('Import interrompu', e);
       setAlerte(
@@ -371,6 +396,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
           : `Import interrompu après ${enFrancais(faits)} envois sur ${enFrancais(apercu.lots)}. Ce qui est écrit s’annule depuis « Imports récents ».`,
       );
     } finally {
+      setEcriture(false);
       setAvancement(null);
       setOccupe(false);
     }
@@ -380,13 +406,22 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
     if (occupe) return;
     setOccupe(true);
     setAlerte(null);
+    setEcriture(true);
     try {
-      await annulerImport(porte, fermeId, passe, maintenant().toISOString());
-      if (fini?.passe.id === passe.id) setFini({ passe, annule: true });
+      // L'état rangé le plus récent (lots déjà annulés, lots écrits).
+      const actuel = importsDeLaFerme(fermeId).find((x) => x.id === passe.id) ?? passe;
+      const r = await annulerImport(porte, fermeId, actuel, maintenant().toISOString());
+      if (r.sorte === 'refuse') setAlerte(r.message);
+      else if (r.sorte === 'incomplet') {
+        setAlerte(
+          `Annulation incomplète : ${r.lotsRefuses === 1 ? '1 envoi n’a' : `${enFrancais(r.lotsRefuses)} envois n’ont`} pas pu être retiré${r.lotsRefuses === 1 ? '' : 's'}, le reste l’est. Touchez « Annuler cet import » à nouveau pour finir.`,
+        );
+      } else if (fini?.passe.id === passe.id) setFini({ passe: r.passe, annule: true });
     } catch (e) {
       console.error('Annulation de l’import impossible', e);
-      setAlerte('L’import n’a pas pu être annulé entièrement. Réessayez.');
+      setAlerte('L’import n’a pas pu être annulé. Rien n’a été retiré ; réessayez.');
     } finally {
+      setEcriture(false);
       setHistorique(importsDeLaFerme(fermeId));
       setOccupe(false);
     }
@@ -402,7 +437,13 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
     else if (etape === 'apercu') setEtape(decisions.length > 0 ? 'valeurs' : 'colonnes');
   }
 
-  const valeursCompletes = decisions.every((d) => (choixPris[cleDecision(d.champ, d.valeur)] ?? '') !== '');
+  const valeursCompletes = decisions.every((d) => {
+    const k = cleDecision(d.champ, d.valeur);
+    const v = choixPris[k] ?? '';
+    if (v === '') return false;
+    if (d.champ !== 'espece' || v !== 'nouvelle') return true;
+    return attributsComplets(attributs[k]) !== null;
+  });
   let continuerActif = false;
   let surContinuer: () => void = () => undefined;
   let aideContinuer = '';
@@ -420,7 +461,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
   } else if (etape === 'valeurs') {
     continuerActif = !occupe && valeursCompletes;
     surContinuer = () => void preparer(decisions, choixPris, false);
-    aideContinuer = valeursCompletes ? 'Vos choix sont gardés pour le prochain fichier.' : 'Choisissez une culture pour chaque valeur.';
+    aideContinuer = valeursCompletes ? 'Vos choix sont gardés pour le prochain fichier.' : 'Choisissez une culture pour chaque valeur (et, pour une culture créée, sa catégorie, si elle est pérenne et son unité).';
   }
 
   // ── Rendu ───────────────────────────────────────────────────────────────────────────────────
@@ -451,7 +492,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
         data-etape={etape}
         className="imp-feuille"
         onKeyDown={(e) => {
-          if (e.key === 'Escape') surFermer();
+          if (e.key === 'Escape' && !ecriture) surFermer();
         }}
       >
         <header className="imp-tete">
@@ -466,7 +507,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
             </span>
             <h2 id={idTitre}>{TITRE[etape]}</h2>
           </span>
-          <button type="button" aria-label="Fermer" className="imp-bouton-rond" onClick={surFermer}>
+          <button type="button" aria-label="Fermer" title={ecriture ? 'Écriture en cours : patientez' : undefined} className="imp-bouton-rond" disabled={ecriture} onClick={surFermer}>
             <Icone chemin={CROIX} />
           </button>
         </header>
@@ -531,7 +572,13 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
                         <span className="imp-passe-textes">
                           <strong>{i.fichier}</strong>{' '}
                           <span>
-                            {lignesImportees(i.lignes)} · {dateCourte(i.le)}
+                            {(() => {
+                              const arret = interruption(i);
+                              return arret === null
+                                ? lignesImportees(i.lignes)
+                                : `interrompu : ${enFrancais(arret.ecrits)} ${arret.ecrits === 1 ? 'envoi' : 'envois'} sur ${enFrancais(arret.envois)}`;
+                            })()}{' '}
+                            · {dateCourte(i.le)}
                             {i.etat === 'annule' ? ' · annulé' : ''}
                           </span>
                         </span>
@@ -700,6 +747,15 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
                           ))}
                         <option value="nouvelle">Créer « {d.valeur} »</option>
                       </select>
+                      {d.champ === 'espece' && choixPris[k] === 'nouvelle' && (
+                        <AttributsCulture
+                          nom={d.valeur}
+                          saisie={attributs[k] ?? SAISIE_VIDE}
+                          surChange={(a) => {
+                            setAttributs((p) => ({ ...p, [k]: a }));
+                          }}
+                        />
+                      )}
                     </li>
                   );
                 })}
@@ -761,6 +817,82 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
 
 const STATUTS: Readonly<Record<string, string>> = { erreur: 'Erreur', doublon: 'Doublon', valide: 'À importer', a_decider: 'À décider' };
 
+interface SaisieAttributs {
+  readonly categorie: string;
+  readonly perenne: string;
+  readonly unite: string;
+}
+
+const SAISIE_VIDE: SaisieAttributs = { categorie: '', perenne: '', unite: '' };
+
+/** Les trois choix d'une culture créée, complets ; null tant qu'il en manque un. */
+function attributsComplets(a: SaisieAttributs | undefined): AttributsEspece | null {
+  const categorie = CATEGORIES_CULTURE.find((c) => c.valeur === a?.categorie)?.valeur;
+  const unite = UNITES_CULTURE.find((u) => u.valeur === a?.unite)?.valeur;
+  if (categorie === undefined || unite === undefined || (a?.perenne !== 'oui' && a?.perenne !== 'non')) return null;
+  return { categorie, perenne: a.perenne === 'oui' ? 1 : 0, uniteRecolte: unite };
+}
+
+function AttributsCulture({ nom, saisie, surChange }: { readonly nom: string; readonly saisie: SaisieAttributs; readonly surChange: (a: SaisieAttributs) => void }): ReactElement {
+  return (
+    <span className="imp-attributs">
+      <select
+        aria-label={`Catégorie pour « ${nom} »`}
+        className="imp-champ imp-liste-deroulante"
+        value={saisie.categorie}
+        onChange={(e) => {
+          surChange({ ...saisie, categorie: e.currentTarget.value });
+        }}
+      >
+        <option value="">Catégorie ?</option>
+        {CATEGORIES_CULTURE.map((c) => (
+          <option key={c.valeur} value={c.valeur}>
+            {c.libelle}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label={`Culture pérenne pour « ${nom} »`}
+        className="imp-champ imp-liste-deroulante"
+        value={saisie.perenne}
+        onChange={(e) => {
+          surChange({ ...saisie, perenne: e.currentTarget.value });
+        }}
+      >
+        <option value="">Pérenne ?</option>
+        <option value="non">Annuelle</option>
+        <option value="oui">Pérenne</option>
+      </select>
+      <select
+        aria-label={`Unité de récolte pour « ${nom} »`}
+        className="imp-champ imp-liste-deroulante"
+        value={saisie.unite}
+        onChange={(e) => {
+          surChange({ ...saisie, unite: e.currentTarget.value });
+        }}
+      >
+        <option value="">Unité de récolte ?</option>
+        {UNITES_CULTURE.map((u) => (
+          <option key={u.valeur} value={u.valeur}>
+            {u.libelle}
+          </option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
+const TITRES_DEFAUTS: Readonly<Record<SorteDefaut, string>> = {
+  densite: 'Densité',
+  marge: 'Marge de sécurité',
+  'delais-famille': 'Délais de retour d’une famille créée',
+  abri: 'Type d’abri d’une zone créée',
+  'longueur-serie': 'Longueur d’une série',
+  'variete-inconnue': 'Variété inconnue',
+  pepiniere: 'Pépinière, semis',
+  'duree-recolte': 'Durées de récolte',
+};
+
 function VueApercu({ apercu }: { readonly apercu: Apercu }): ReactElement {
   const montrees = apercu.lignes.filter((l) => l.statut !== 'valide' || l.avertissements.length > 0);
   return (
@@ -786,10 +918,19 @@ function VueApercu({ apercu }: { readonly apercu: Apercu }): ReactElement {
           Import en {enFrancais(apercu.lots)} envois ({enFrancais(apercu.ecritures)} écritures) : le serveur accepte ou refuse chaque envoi à part. Un envoi refusé apparaît dans « Saisies refusées » ; « Annuler cet import » retire tout.
         </p>
       )}
-      {apercu.sansTaille > 0 && (
-        <p className="imp-note imp-note-orange">
-          {apercu.sansTaille === 1 ? '1 série' : `${enFrancais(apercu.sansTaille)} séries`} sans longueur, sans nombre de plants ni planche : comptées pour 1 m, à compléter dans la série.
-        </p>
+      {apercu.defauts.length > 0 && (
+        <section data-testid="valeurs-par-defaut" aria-label="Valeurs par défaut" className="imp-note imp-note-orange imp-defauts">
+          <strong>Valeurs mises par défaut, à vérifier</strong>
+          <span className="imp-aide">Le fichier ne les donne pas : elles seront écrites telles quelles, modifiables ensuite.</span>
+          <ul className="imp-liste">
+            {apercu.defauts.map((x) => (
+              <li key={x.sorte} data-testid="defaut-import" data-defaut={x.sorte}>
+                <strong>{TITRES_DEFAUTS[x.sorte]}</strong> : {x.textes.join(' ; ')}
+                {x.nombre > x.textes.length ? ` … (${enFrancais(x.nombre)} en tout)` : ''}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       {apercu.ignorees > 0 && <p className="imp-aide">{apercu.ignorees === 1 ? '1 ligne vide ou de total ignorée.' : `${enFrancais(apercu.ignorees)} lignes vides ou de total ignorées.`}</p>}
       {montrees.length > 0 && (
