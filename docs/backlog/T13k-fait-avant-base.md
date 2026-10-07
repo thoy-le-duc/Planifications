@@ -16,5 +16,5 @@ Avant la base, les boutons sont inactifs : un tap entre ≈ 0,4 s et ≈ 1 s ne 
 
 ## Critères d'acceptation
 
-- [ ] e2e grande ferme CPU ×4 : trois « Fait » tapés avant la base → trois réalisés, aucun perdu, aucun en double.
-- [ ] Test : ferme montrée ≠ ferme réelle → rien n'est écrit, message affiché.
+- [x] e2e grande ferme CPU ×4 : trois « Fait » tapés avant la base → trois réalisés, aucun perdu, aucun en double.
+- [x] Test : ferme montrée ≠ ferme réelle → rien n'est écrit, message affiché.

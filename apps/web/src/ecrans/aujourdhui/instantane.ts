@@ -142,3 +142,41 @@ export function garderInstantane(stockage: StockageInstantane, ids: { readonly u
     }
   }
 }
+
+// ── T13k : « Fait » tapés avant la base, pas encore écrits ────────────────────────────────────
+
+/**
+ * T13k : nombre de « Fait » tapés sur l'instantané avant l'ouverture de la base et pas encore
+ * écrits, noté DANS l'enregistrement de l'instantané (même clé : la déconnexion l'efface avec lui).
+ * Rien que le nombre : ni culture ni tâche. Si l'appli est fermée avant la base, le lancement
+ * suivant le lit et dit que ces « Fait » n'ont pas été enregistrés (jamais perdus en silence).
+ * Session d'un autre compte, instantané absent ou illisible, stockage refusé : rien n'est noté.
+ */
+export function noterFaitsEnAttente(stockage: StockageInstantane, utilisateurId: string, nombre: number): void {
+  if (lireSession(stockage)?.utilisateurId !== utilisateurId) return;
+  try {
+    const brut = stockage.getItem(cleInstantane(utilisateurId));
+    if (brut === null) return;
+    const lu: unknown = JSON.parse(brut);
+    if (!estObjet(lu) || lu.utilisateurId !== utilisateurId) return;
+    const note: Record<string, unknown> = { ...lu, faitsEnAttente: nombre };
+    if (nombre <= 0) delete note.faitsEnAttente;
+    stockage.setItem(cleInstantane(utilisateurId), JSON.stringify(note));
+  } catch {
+    // Illisible, plein ou refusé : rien de noté (l'écran le dit tant qu'il est ouvert).
+  }
+}
+
+/** T13k : nombre de « Fait » d'avant la base restés sans écriture (0 si aucun ou illisible). */
+export function lireFaitsEnAttente(stockage: StockageInstantane, utilisateurId: string): number {
+  if (lireSession(stockage)?.utilisateurId !== utilisateurId) return 0;
+  try {
+    const brut = stockage.getItem(cleInstantane(utilisateurId));
+    if (brut === null) return 0;
+    const lu: unknown = JSON.parse(brut);
+    if (!estObjet(lu) || lu.utilisateurId !== utilisateurId) return 0;
+    return estEntier(lu.faitsEnAttente) ? lu.faitsEnAttente : 0;
+  } catch {
+    return 0;
+  }
+}

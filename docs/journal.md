@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-07 — T13k : « Fait » accepté dès l'affichage d'Aujourd'hui
+
+- **Fait** : au lancement, « Fait » répond dès l'instantané (≈ 0,3 s), sans attendre la base : la tâche disparaît au tap, le « Fait » attend en file et s'écrit dès que la base est prête, avec la même vérification « déjà fait ». Si la ferme ou le compte change entre-temps, rien n'est écrit et un message le dit ; si l'appli est fermée trop tôt, un message prévient au lancement suivant (« n'ont peut-être pas été enregistrés : vérifiez la liste »).
+- **Décidé** : réponse de Théophane à Q26. Les tests de T13g qui exigeaient « Fait » inactif avant la base ont été adaptés (commit séparé, justifié par Q26). « Annuler » sur un « Fait » encore en attente l'écrit puis l'annule (règle T13l). Le message d'abandon peut s'afficher à un autre compte, sans aucun nom de culture. Relecture : aucun bloquant, isolement tenu.
+- **Bloquant** : rien. Limite : changer d'onglet avant l'ouverture de la base abandonne les « Fait » en attente (signalé au retour).
+
 ## 2026-10-07 — T14b : importer ses fichiers en quelques gestes
 
 - **Fait** : écran d'import depuis l'onglet Ferme (« Importer un tableur ») : déposer, dire ce que c'est, faire correspondre colonnes et valeurs, aperçu, importer. Lecteur Excel et préparation dans un Web Worker, chargés à la demande ; parcellaire, cultures, assolements et séries ; écriture par lots de 500 (limites de la synchro), une série toujours avec ses planches ; modèle d'import gardé par ferme ; « Annuler cet import » lot par lot, refusé en clair si une ligne importée sert déjà. Ferme complète (T07) en 9 à 11 s, CPU ×4, aucune tâche longue ; JS de démarrage inchangé.

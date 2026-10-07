@@ -22,13 +22,23 @@
  * en file paraît dès le tap ; « Annuler » (bandeau ou historique) passe dans la file, derrière la
  * saisie qu'il annule. « Enregistrer » (changer la date) et « Valider » (récolte) sont inactifs tant que
  * la file tourne, puis se réactivent : le dialogue reste ouvert, rien de tapé n'est perdu.
+ *
+ * T13k (Q26) : « Fait » est actif dès l'instantané, avant la base. La carte part au tap, le « Fait »
+ * entre dans la file, qui attend la porte ; la porte venue, chacun à son tour : lecture ciblée,
+ * puis écriture vérifiée (DejaFait), comme sur l'instantané base ouverte. « Peser » et l'historique
+ * restent inactifs avant la base. Un écran par utilisateur et par ferme (`key`) : si la vraie ferme
+ * ou l'utilisateur n'est pas celui de l'instantané, l'écran est remplacé, les « Fait » en attente
+ * sont abandonnés (rien n'est écrit, sur aucune ferme) et un message, gardé par EcranAujourdhui (il
+ * survit au remplacement), dit combien n'ont pas été enregistrés, sans nommer de culture. Appli
+ * fermée (ou onglet quitté) avant la base : le nombre en attente est noté avec l'instantané
+ * (`noterFaitsEnAttente`), le lancement suivant le dit de la même façon.
  */
-import { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { lireFermeMontree } from '../../donnees/ferme-memorisee.ts';
 import './aujourdhui.css';
-import { changerMasques, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, suivreJournee, suivreMasques, type Masques } from './cache.ts';
+import { changerMasques, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, suivreJournee, suivreMasques, type Masque, type Masques } from './cache.ts';
 import {
   capitale,
   ETAPES_FAITES,
@@ -45,7 +55,7 @@ import {
 } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
 import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
-import { garderInstantane, lireInstantane, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
+import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
 import { libelleEvenement, vueCarte, vuesHistorique, type CarteVue, type SaisieVue } from './vues.ts';
 
@@ -101,6 +111,14 @@ const TEXTE_FILE = 'Saisies précédentes en cours d’enregistrement…';
 /** T13l : refus de la garde des remplacements (SaisiePlusEnVigueur), dit comme un « déjà fait ». */
 const AVIS_PLUS_EN_VIGUEUR = 'Saisie déjà annulée ou corrigée ailleurs : rien de plus n’est enregistré.';
 
+/**
+ * T13k : « Fait » tapés avant la base sans écriture sûre (autre ferme, autre compte, appli fermée
+ * avant la fin de leur tour : « peut-être »). Sans nom de culture : un autre compte peut le lire.
+ */
+export function texteFaitsAbandonnes(n: number): string {
+  return `${n === 1 ? '1 « Fait » tapé' : `${String(n)} « Fait » tapés`} avant l’ouverture ${n === 1 ? 'n’a' : 'n’ont'} peut-être pas été ${n === 1 ? 'enregistré' : 'enregistrés'} : vérifiez la liste.`;
+}
+
 const deux = (n: number) => String(n).padStart(2, '0');
 
 /** Jour du téléphone, 'AAAA-MM-JJ' (heure locale, pas UTC). */
@@ -137,7 +155,7 @@ function texteRetard(jours: number): string {
 
 interface ProprietesCarte {
   readonly carte: CarteVue;
-  /** T13g : base pas encore ouverte, rien ne peut s'écrire : boutons inactifs. */
+  /** T13g : base pas encore ouverte : « Peser » inactif (T13k : « Fait » reste actif, en file). */
   readonly inactive: boolean;
   readonly surFait: (cle: string) => void;
   readonly surPeser: (cle: string) => void;
@@ -194,7 +212,6 @@ function CarteTache({ carte: c, inactive, surFait, surPeser }: ProprietesCarte) 
           type="button"
           aria-label={c.action}
           className="auj-action auj-action-fait"
-          disabled={inactive}
           onClick={() => {
             surFait(c.cle);
           }}
@@ -490,10 +507,20 @@ const DELAI_INSTANTANE_MS = 300;
 const AUCUN_MASQUE: Masques = new Map();
 const sansMasques = () => () => undefined;
 
+/** T13k : message des « Fait » d'avant la base abandonnés (0 : rien). */
+function MessageAbandon({ nombre }: { readonly nombre: number }) {
+  return nombre > 0 ? (
+    <p role="status" className="auj-avis">
+      {texteFaitsAbandonnes(nombre)}
+    </p>
+  ) : null;
+}
+
 /** Ce qu'on dit tant que la base s'ouvre et qu'aucun instantané n'est à montrer. */
-function Ouverture() {
+function Ouverture({ abandonnes }: { readonly abandonnes: number }) {
   return (
     <div data-testid="aujourdhui" className="auj">
+      <MessageAbandon nombre={abandonnes} />
       <p className="attente">Ouverture des données de ce téléphone…</p>
     </div>
   );
@@ -509,17 +536,59 @@ export function EcranAujourdhui(p: ProprietesEcranAujourdhui) {
   // T13d : où l'instantané est gardé ; sans utilisateur, aucun instantané n'est lu ni gardé.
   const [stockageDonne] = useState(() => p.stockage ?? stockageParDefaut());
   const stockage = utilisateurId === undefined ? null : stockageDonne;
+  // T13k : « Fait » d'avant la base abandonnés ; gardé ici, le message survit au remplacement de
+  // l'écran (autre ferme, autre utilisateur).
+  const [abandonnes, setAbandonnes] = useState(0);
+  // Le plus grand nombre, pas la somme : un même abandon peut être dit deux fois, par l'écran
+  // remplacé (au démontage) et par le nouvel écran du même utilisateur (note de l'instantané).
+  const surAbandon = useCallback((n: number) => {
+    setAbandonnes((a) => Math.max(a, n));
+  }, []);
+  const oublierAbandon = useCallback(() => {
+    setAbandonnes(0);
+  }, []);
   const fermeId = porte !== null ? p.fermeId : utilisateurId === undefined || stockage === null ? null : lireFermeMontree(stockage, utilisateurId);
-  if (fermeId === null) return <Ouverture />;
-  return <Ecran key={`${utilisateurId ?? ''}|${fermeId}`} {...p} porte={porte} fermeId={fermeId} stockage={stockage} />;
+  if (fermeId === null) return <Ouverture abandonnes={abandonnes} />;
+  return (
+    <Ecran
+      key={`${utilisateurId ?? ''}|${fermeId}`}
+      {...p}
+      porte={porte}
+      fermeId={fermeId}
+      stockage={stockage}
+      abandonnes={abandonnes}
+      surAbandon={surAbandon}
+      oublierAbandon={oublierAbandon}
+    />
+  );
 }
 
 interface ProprietesEcran extends Omit<ProprietesEcranAujourdhui, 'fermeId' | 'stockage'> {
   readonly fermeId: string;
   readonly stockage: StockageInstantane | null;
+  /** T13k : « Fait » d'avant la base abandonnés, à dire (0 : rien). */
+  readonly abandonnes: number;
+  /** T13k : `n` « Fait » d'avant la base ne seront jamais écrits. */
+  readonly surAbandon: (n: number) => void;
+  /** T13k : le message d'abandon a été vu (nouveau geste). */
+  readonly oublierAbandon: () => void;
 }
 
-function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage }: ProprietesEcran) {
+/** Attente de la porte par la file (T13k) : rendue avec la porte, ou null si l'écran est remplacé. */
+interface AttentePorte {
+  readonly promesse: Promise<PorteDonnees | null>;
+  readonly rendre: (porte: PorteDonnees | null) => void;
+}
+
+function nouvelleAttente(): AttentePorte {
+  let rendre: (porte: PorteDonnees | null) => void = () => undefined;
+  const promesse = new Promise<PorteDonnees | null>((r) => {
+    rendre = r;
+  });
+  return { promesse, rendre };
+}
+
+function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage, abandonnes, surAbandon, oublierAbandon }: ProprietesEcran) {
   /** Jour du téléphone maintenant (relu à chaque écriture : l'écran peut rester ouvert à minuit). */
   const jourCourant = () => (jourDonne ?? jourDuTelephone)();
   const [jour, setJour] = useState(jourCourant);
@@ -552,7 +621,16 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
     useCallback((rappel: () => void) => (porte === null ? sansMasques() : suivreMasques(porte, fermeId, rappel)), [porte, fermeId]),
     () => (porte === null ? AUCUN_MASQUE : masquesDe(porte, fermeId)),
   );
-  const estMasquee = (cle: string): boolean => estMasqueeDans(masquees, journee, cle);
+  /**
+   * T13k : tâches touchées avant la base, masquées ici (le cache des masques suit la porte) jusqu'à
+   * la fin de leur tour dans la file ; ensuite, le masque du cache prend le relais.
+   */
+  const [masquesAvantBase, setMasquesAvantBase] = useState<ReadonlySet<string>>(() => new Set());
+  const masquesVus: Masques = useMemo(
+    () => (masquesAvantBase.size === 0 ? masquees : new Map<string, Masque>([...masquees, ...[...masquesAvantBase].map((c): [string, Masque] => [c, 'attente'])])),
+    [masquees, masquesAvantBase],
+  );
+  const estMasquee = (cle: string): boolean => estMasqueeDans(masquesVus, journee, cle);
   const journeeActuelle = useRef<Journee | null>(journee);
   useEffect(() => {
     journeeActuelle.current = journee;
@@ -574,6 +652,66 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
   const file = useRef<Promise<unknown>>(Promise.resolve());
   const numero = useRef(0);
   const idHistorique = useId();
+  /**
+   * T13k : la porte, pour les écritures en file (un « Fait » tapé avant la base s'écrit après).
+   * `attentePorte` : la file attend la porte (créée au premier « Fait » d'avant la base).
+   * `avantBase` : « Fait » d'avant la base dont le tour n'est pas fini (noté avec l'instantané) ;
+   * chacun quitte le compte à la fin de son tour, jamais avant : au pire, un message de trop.
+   * `demonte` : écran remplacé ou quitté ; plus aucun « Fait » ne reçoit la porte.
+   */
+  const porteActuelle = useRef(porte);
+  const attentePorte = useRef<AttentePorte | null>(null);
+  const avantBase = useRef(0);
+  const demonte = useRef(false);
+
+  /** T13k : note avec l'instantané le nombre de « Fait » d'avant la base pas encore traités. */
+  const noterEnAttente = useCallback(() => {
+    if (utilisateurId !== undefined && stockage !== null) noterFaitsEnAttente(stockage, utilisateurId, avantBase.current);
+  }, [utilisateurId, stockage]);
+
+  /** T13k : la porte, tout de suite si la base est ouverte ; sinon à son arrivée (null : abandon). */
+  function porteVenue(): Promise<PorteDonnees | null> {
+    if (demonte.current) return Promise.resolve(null);
+    if (porteActuelle.current !== null) return Promise.resolve(porteActuelle.current);
+    attentePorte.current ??= nouvelleAttente();
+    return attentePorte.current.promesse;
+  }
+
+  // T13k : la porte arrive (même utilisateur, même ferme : sinon l'écran est remplacé, `key`) :
+  // la file des « Fait » d'avant la base repart, dans l'ordre.
+  useLayoutEffect(() => {
+    porteActuelle.current = porte;
+    if (porte === null || attentePorte.current === null) return;
+    attentePorte.current.rendre(porte);
+    attentePorte.current = null;
+  }, [porte]);
+
+  // T13k : écran remplacé (autre ferme, autre utilisateur) ou quitté avant la base : les « Fait »
+  // en attente sont abandonnés, rien n'est écrit ; le nombre reste noté avec l'instantané (le
+  // prochain écran de cet utilisateur le dit) et EcranAujourdhui le dit tout de suite.
+  useEffect(() => {
+    demonte.current = false;
+    // Le compteur lui-même (pas sa valeur) : lu au démontage, ce qui attend encore la porte.
+    const compte = avantBase;
+    return () => {
+      demonte.current = true;
+      const attente = attentePorte.current;
+      if (attente === null) return;
+      attentePorte.current = null;
+      attente.rendre(null);
+      if (compte.current > 0) surAbandon(compte.current);
+    };
+  }, [surAbandon]);
+
+  // T13k : « Fait » tapés avant la base à un lancement précédent, jamais écrits (appli fermée ou
+  // écran quitté avant la base) : on le dit, une fois.
+  useEffect(() => {
+    if (utilisateurId === undefined || stockage === null || avantBase.current > 0) return;
+    const n = lireFaitsEnAttente(stockage, utilisateurId);
+    if (n === 0) return;
+    noterFaitsEnAttente(stockage, utilisateurId, 0);
+    surAbandon(n);
+  }, [utilisateurId, stockage, surAbandon]);
 
   useEffect(
     () =>
@@ -618,11 +756,13 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
     if (journee === null || utilisateurId === undefined || stockage === null) return undefined;
     const minuterie = setTimeout(() => {
       garderInstantane(stockage, { utilisateurId, fermeId, jour: journee.aujourdhui }, vueDeJournee(journee, masquees, false));
+      // T13k : l'instantané réécrit garde le nombre de « Fait » d'avant la base encore en file.
+      if (avantBase.current > 0) noterEnAttente();
     }, DELAI_INSTANTANE_MS);
     return () => {
       clearTimeout(minuterie);
     };
-  }, [journee, masquees, utilisateurId, fermeId, stockage]);
+  }, [journee, masquees, utilisateurId, fermeId, stockage, noterEnAttente]);
 
   // « Annuler » : 10 s après l'écriture de la saisie (T13l : pas pendant son attente en file), puis
   // l'historique.
@@ -640,9 +780,11 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
 
   /** Contexte d'une écriture, au jour du téléphone à l'instant de l'écriture. */
   const contexte = (): ContexteEcriture => {
-    // Aucun bouton d'écriture n'est actif sans la base (T13g) : filet seulement.
-    if (porte === null) throw new Error('les données de ce téléphone sont encore en cours d’ouverture');
-    return { porte, fermeId, aujourdhui: jourCourant() };
+    // T13k : la porte du moment (un « Fait » d'avant la base s'écrit après son arrivée). Aucune
+    // écriture ne part sans elle : filet seulement.
+    const p = porteActuelle.current;
+    if (p === null) throw new Error('les données de ce téléphone sont encore en cours d’ouverture');
+    return { porte: p, fermeId, aujourdhui: jourCourant() };
   };
 
   /**
@@ -656,6 +798,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
     if (ecritures.current === 0) {
       setErreur(null);
       setAvis(null);
+      oublierAbandon();
       setFocusSaisie(null);
       setOccupe(true);
     }
@@ -675,7 +818,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
     });
     file.current = tour;
     return tour;
-  }, []);
+  }, [oublierAbandon]);
 
   /** Montre le bandeau « Annuler » ; `ecrite` : l'événement, attendu s'il est en file (T13l). Rend son numéro. */
   function montrerAnnulable(evenement: EvenementLu | null, ecrite: Promise<EvenementLu | null>, titre: string, texte: string): number {
@@ -693,8 +836,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
 
   /** Pose ou retire le masque de `cle` (dans le cache : l'écran peut être quitté entre temps). */
   function masquer(cle: string, valeur: number | 'attente' | undefined): void {
-    if (porte === null) return;
-    changerMasques(porte, fermeId, journeeActuelle.current, (m) => {
+    const p = porteActuelle.current;
+    if (p === null) return;
+    changerMasques(p, fermeId, journeeActuelle.current, (m) => {
       if (valeur === undefined) m.delete(cle);
       else m.set(cle, valeur);
     });
@@ -741,13 +885,18 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
    * fait » se font à son tour, après les écritures d'avant. T13l : le bandeau « Annuler » paraît
    * dès le tap quand le « Fait » attend son tour derrière d'autres écritures (sur l'instantané, avec
    * le titre de la carte, précisé une fois écrit) ; rien d'écrit, il s'en va.
+   * T13k : avant la base, le « Fait » attend la porte dans la file (bandeau dès le tap) ; écran
+   * remplacé avant elle (autre ferme, autre utilisateur) : abandonné, rien n'est lu ni écrit.
    */
   function surFait(cle: string): void {
-    if (porte === null || estMasquee(cle)) return;
+    if (estMasquee(cle)) return;
+    const avantLaBase = porte === null;
     let tache: () => Promise<TacheJour | null>;
     let provisoire: { readonly titre: string; readonly texte: string } | null;
     /** Lecture ciblée : la tâche a changé, la carte revient (pas de masque). */
     let changee = false;
+    /** T13k : écran remplacé avant la base : rien d'écrit, rien à démasquer ni à compter. */
+    let abandonne = false;
     if (journee !== null) {
       const t = journee.taches.find((x) => x.cle === cle);
       if (t === undefined || t.tache.etape === 'debut_recolte') return;
@@ -759,7 +908,12 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
       const affichee = carte.action;
       provisoire = { titre: 'Fait', texte: carte.titre };
       tache = async () => {
-        const t = await lireTacheCiblee(porte, fermeId, jourCourant(), cle);
+        const venue = await porteVenue();
+        if (venue === null) {
+          abandonne = true;
+          return null;
+        }
+        const t = await lireTacheCiblee(venue, fermeId, jourCourant(), cle);
         if (t === null) {
           setAvis('Déjà notée depuis un autre téléphone : rien de plus n’est enregistré.');
           return null;
@@ -774,14 +928,19 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
         return t;
       };
     }
-    masquer(cle, 'attente');
+    if (avantLaBase) {
+      setMasquesAvantBase((m) => new Set(m).add(cle));
+      avantBase.current++;
+      noterEnAttente();
+    } else masquer(cle, 'attente');
     let rendre: (e: EvenementLu | null) => void = () => undefined;
     const ecrite = new Promise<EvenementLu | null>((r) => {
       rendre = r;
     });
-    // En file derrière d'autres écritures : le bandeau paraît dès le tap. Seul, il paraît une fois
-    // écrit (quelques millisecondes), comme avant : le bandeau dit alors que la saisie est écrite.
-    const n = ecritures.current > 0 && provisoire !== null ? montrerAnnulable(null, ecrite, provisoire.titre, provisoire.texte) : null;
+    // En file derrière d'autres écritures (ou derrière la porte, T13k) : le bandeau paraît dès le
+    // tap. Seul, il paraît une fois écrit (quelques millisecondes), comme avant : le bandeau dit
+    // alors que la saisie est écrite.
+    const n = (ecritures.current > 0 || avantLaBase) && provisoire !== null ? montrerAnnulable(null, ecrite, provisoire.titre, provisoire.texte) : null;
     const avant = numero.current;
     void ecrire(async () => {
       let fait: FaitEcrit | null = null;
@@ -797,7 +956,19 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
         else if (f !== null && numero.current === avant) montrerAnnulable(f.evenement, Promise.resolve(f.evenement), f.titre, f.texte);
       }
     }, true).then((ok) => {
+      if (abandonne) return;
       masquer(cle, ok && !changee ? marquerEcriture() : undefined);
+      if (!avantLaBase) return;
+      // Le masque du cache a pris le relais (ou la carte revient : tâche changée, échec).
+      setMasquesAvantBase((m) => {
+        const reste = new Set(m);
+        reste.delete(cle);
+        return reste;
+      });
+      // Quitte le compte noté une fois son tour fini (écrit, déjà fait, changé ou en erreur dite) :
+      // appli fermée avant, le lancement suivant le signale.
+      avantBase.current--;
+      noterEnAttente();
     });
   }
 
@@ -873,7 +1044,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
   }
 
   // T13g : base pas encore ouverte, rien à montrer de cette ferme.
-  if (porte === null && !surInstantane) return <Ouverture />;
+  if (porte === null && !surInstantane) return <Ouverture abandonnes={abandonnes} />;
 
   if (echecLecture && journee === null) {
     return (
@@ -886,7 +1057,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
   }
 
   // Ce qui est dessiné : la journée relue, sinon l'instantané (T13d), sinon rien encore.
-  const vue = journee !== null ? vueDeJournee(journee, masquees, toutVoir) : surInstantane ? vueDeInstantane(instantane, masquees) : null;
+  const vue = journee !== null ? vueDeJournee(journee, masquesVus, toutVoir) : surInstantane ? vueDeInstantane(instantane, masquesVus) : null;
   const toutes = vue?.taches ?? [];
   const dessinees = complet ? toutes : toutes.slice(0, CARTES_PREMIER_DESSIN);
   const enRetard = dessinees.filter((c) => c.retard);
@@ -962,6 +1133,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage 
           {avis}
         </p>
       )}
+      <MessageAbandon nombre={abandonnes} />
 
       {vue === null ? (
         <p className="auj-chargement">Lecture des tâches…</p>
