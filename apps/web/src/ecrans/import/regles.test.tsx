@@ -255,6 +255,11 @@ describe('doublons cherchés aussi contre la base', () => {
 describe('l’aperçu montre la cellule fautive à côté du message', () => {
   it('series-semaines.tsv : « abc » (longueur) et « S53 » (semis), à côté du message du moteur', async () => {
     await h.ouvrir();
+    // Les planches N1, N2 et TA1 viennent du parcellaire (comme dans parcours.test.tsx) : sans lui,
+    // elles sont inconnues de la ferme neuve et leurs lignes seraient aussi en erreur.
+    await jusquApercu('parcellaire-anglais.csv', fixture('parcellaire-anglais.csv'));
+    expect(lignesImportees(await importer())).toBe(4);
+    await autreFichier();
     await jusquApercu('series-semaines.tsv', fixture('series-semaines.tsv'));
     expect(compteur('erreurs')).toBe(2);
     expect(compteur('doublons')).toBe(1);
