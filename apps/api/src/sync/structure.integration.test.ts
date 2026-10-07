@@ -156,6 +156,8 @@ let horloge = MAINTENANT.getTime();
 const maintenant = (): Date => new Date(horloge++);
 
 const MOTIFS_DELETE = ['table_interdite', 'ajout_seul'];
+/** Id d'une zone qui n'existe pas, tiré une seule fois : le PATCH et la lecture du refus visent le même. */
+const ZONE_INTROUVABLE = randomUUID();
 const SUPPRIME_LE = '2026-10-01T06:30:00.000Z';
 /** Début du message d'un refus 'ecriture_invalide' (messages.ts), suivi de « : <précision>. ». */
 const DEBUT_INVALIDE = 'Saisie non enregistrée, données invalides : ';
@@ -893,7 +895,7 @@ decrireAvecBase('T10s')('T10s : POST /sync/upload accepte le parcellaire et le c
       ['famille voisine', 'famille', () => familleVoisine, { nom: 'à moi' }],
       ['espèce voisine', 'espece', () => especeVoisine, { nom: 'à moi' }],
       ['variété voisine', 'variete', () => varieteVoisine, { nom: 'à moi' }],
-      ['ligne introuvable', 'zone', () => randomUUID(), { nom: 'rien' }],
+      ['ligne introuvable', 'zone', () => ZONE_INTROUVABLE, { nom: 'rien' }],
     ] as const)('PATCH d’une %s : ecriture_invalide, comme une ligne inexistante, rien ne change', async (_cas, table, id, donnees) => {
       const avant = await ligne(table, id());
       const p = patch(table, id(), donnees);
