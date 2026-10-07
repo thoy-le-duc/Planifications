@@ -15,6 +15,11 @@
  * - T23 : un itinéraire et un type d'intervention (itineraire.ts) se créent et se modifient de même,
  *   tout ou rien avec les séries du même lot ; la bibliothèque commune reste en lecture seule.
  *   Contrat : itineraire.integration.test.ts.
+ * - T10s : le parcellaire (zone, emplacement, saison, assolement) et le catalogue propre à la ferme
+ *   (famille, espèce, variété ; structure.ts) se créent et se modifient de même, tout ou rien avec
+ *   le reste du lot (un import hors ligne) ; la bibliothèque commune reste en lecture seule, la
+ *   suppression n'est que douce et refusée tant que la ligne sert encore.
+ *   Contrat : structure.integration.test.ts.
  * - Un refus métier répond 200 (une 4xx bloquerait la file de PowerSync) et s'enregistre dans
  *   `refus_synchro`, qui redescend sur le téléphone de son auteur par la synchro.
  * - Une panne (base injoignable…) lève : 500, PowerSync renverra le lot. Jamais de refus
@@ -71,6 +76,7 @@ import { verifierCorrection, verifierReferences, verifierRemplacementRecolte, ty
 import { ecrireItineraire, estTableItineraire, TABLES_ITINERAIRE } from './itineraire.ts';
 import { ecrireSerie, fermesDesLignesVisees, TABLES_SERIE, verifierFinDeLot, type SeriesTouchees } from './serie.ts';
 import { RESUME_VIDE, resumerSaisies, type ResumeSaisie } from './resume.ts';
+import { ecrireStructure, estTableStructure, TABLES_STRUCTURE } from './structure.ts';
 import { completerStock, ecrireArticle, ecrireMouvement, type RemplacementEcrit } from './stock.ts';
 
 export type { MotifRefus } from './motifs.ts';
@@ -113,11 +119,15 @@ const REFUS_PAR_REQUETE = 100;
 const TABLES_STOCK = new Set(['article_stock', 'mouvement_stock']);
 /**
  * Tables d'une saisie tout ou rien (T10c : le stock ; T10e : une série et ses occupations ; T23 :
- * les itinéraires et les types d'intervention) : un lot qui en écrit une est accepté ou refusé en
- * entier, sous le verrou de chaque ferme touchée.
+ * les itinéraires et les types d'intervention ; T10s : le parcellaire et le catalogue de la
+ * ferme) : un lot qui en écrit une est accepté ou refusé en entier, sous le verrou de chaque
+ * ferme touchée.
  */
-const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE, ...TABLES_ITINERAIRE]);
-/** Tables que le téléphone écrit (T10 : le journal ; T10c : le stock ; T10e : les séries ; T23 : les itinéraires ; les autres suivront avec leurs écrans). */
+const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE, ...TABLES_ITINERAIRE, ...TABLES_STRUCTURE]);
+/**
+ * Tables que le téléphone écrit (T10 : le journal ; T10c : le stock ; T10e : les séries ; T23 : les
+ * itinéraires ; T10s : le parcellaire et le catalogue ; les autres suivront avec leurs écrans).
+ */
 const TABLES_ECRITES = new Set(['evenement', ...TABLES_TOUT_OU_RIEN]);
 /** Tables en ajout seul : ni modification ni suppression (sinon : création seule, 'table_interdite'). */
 const TABLES_AJOUT_SEUL = new Set(['evenement', 'mouvement_stock']);
@@ -439,6 +449,10 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       // T23 : un itinéraire et un type d'intervention se modifient (suppression douce et masque compris).
       return ecrireItineraire(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, utilisateurId);
     }
+    if (e.op === 'PATCH' && estTableStructure(e.table)) {
+      // T10s : une ligne du parcellaire ou du catalogue de la ferme se modifie (suppression douce comprise).
+      return ecrireStructure(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, utilisateurId);
+    }
     if (e.op !== 'PUT') return modificationRefusee(tx, e, fermes);
 
     if (fermeDonnee !== null && !fermes.has(fermeDonnee)) return { motif: 'ferme_interdite', fermeId: fermeDonnee };
@@ -454,6 +468,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       return ecrireSerie(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId, touchees, index);
     }
     if (estTableItineraire(e.table)) return ecrireItineraire(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
+    if (estTableStructure(e.table)) return ecrireStructure(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
     // Stock : la ferme, validée par le cœur, est forcément celle de fermeDonnee (UUID de la ferme du jeton).
     const ferme = fermeDonnee ?? '';
     const put = { id: e.id, donnees };
