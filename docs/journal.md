@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-07 — T10s : le serveur accepte le parcellaire et le catalogue de la ferme
+
+- **Fait** : zones, emplacements, saisons, assolements et familles/espèces/variétés propres à la ferme passent maintenant la synchro au lieu d'être refusés (prérequis de l'import T14b). Isolement strict : jamais une autre ferme ni la bibliothèque commune, références relues sous la ferme, pas de changement de ferme, tout ou rien par lot, suppression douce refusée tant qu'une ligne sert (planche occupée, espèce utilisée, zone non vide…). Règles en français, plafonds contre les fautes de frappe. 859 tests d'intégration verts.
+- **Décidé** : mêmes droits que les séries (gérant et équipier). Relecture de sécurité en deux passages : aucune faille d'isolement ; elle a fait ajouter les tests manquants et fermé un contournement (réactiver une série terminée sur une planche supprimée). Postgres lancé localement pour les tests (pas de Docker).
+- **Bloquant** : rien. Q27 posée (deux planches avec le même code). Suites : T10t (tests positifs, lignes laissées actives après une suppression, unicité du code) ; la redescente sur un second téléphone sera vérifiée par l'e2e de l'import.
+
 ## 2026-10-07 — T13o : « Fait » unique contrôlé d'après le journal d'envoi
 
 - **Fait** : la porte relit aussi les lignes touchées par une modification (via le journal d'envoi de PowerSync, `ps_crud`) : un UPDATE qui transformerait une ligne en « Fait » déjà fait est refusé, comme un rowid réutilisé après une suppression ; un « Fait » et sa correction écrits ensemble ne sont plus refusés à tort. Le brief interdit tout accès SQL brut à l'agent et au serveur MCP.

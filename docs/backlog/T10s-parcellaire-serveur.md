@@ -19,7 +19,7 @@
 
 ## Critères d'acceptation
 
-- [ ] Test d'intégration : un import hors ligne (zones + emplacements + espèces de la ferme) arrive intact au serveur et redescend sur un second téléphone.
-- [ ] Tests d'isolement : écrire dans une autre ferme, viser une référence d'une autre ferme, modifier une ligne de la bibliothèque commune, changer `ferme_id` → refusés.
-- [ ] Test : un lot dont une ligne est invalide n'écrit rien.
-- [ ] Test : suppression d'un emplacement occupé refusée avec un message clair.
+- [ ] Test d'intégration (e2e:synchro, reporté) : un import hors ligne (zones + emplacements + espèces de la ferme) arrive intact au serveur et redescend sur un second téléphone.
+- [x] Tests d'isolement : écrire dans une autre ferme, viser une référence d'une autre ferme, modifier une ligne de la bibliothèque commune, changer `ferme_id` → refusés.
+- [x] Test : un lot dont une ligne est invalide n'écrit rien.
+- [x] Test : suppression d'un emplacement occupé refusée avec un message clair.
