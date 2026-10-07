@@ -62,14 +62,16 @@ function lireOrigine(v: unknown): Origine | null | undefined {
 
 /**
  * Fermes de `fermes` (celles dont l'auteur est membre actif) où il est gérant, relues dans la
- * transaction du lot : le rôle est celui de chaque ferme visée, jamais celui d'une autre.
+ * transaction du lot : le rôle est celui de chaque ferme visée, jamais celui d'une autre. Lignes
+ * `membre` verrouillées (FOR SHARE) jusqu'à la fin du lot : le rôle ne change pas pendant qu'on écrit.
  */
 export async function fermesGerees(tx: TransactionDb, utilisateurId: Id<'Utilisateur'>, fermes: ReadonlySet<string>): Promise<ReadonlySet<string>> {
   if (fermes.size === 0) return new Set();
   const r = await tx.execute<{ ferme_id: string }>(
     sql`SELECT ferme_id::text AS ferme_id FROM membre
         WHERE utilisateur_id = ${utilisateurId}::uuid AND role = 'gerant' AND etat = 'accepte' AND supprime_le IS NULL
-          AND ferme_id = ANY(${sql.param([...fermes])}::uuid[])`,
+          AND ferme_id = ANY(${sql.param([...fermes])}::uuid[])
+        FOR SHARE`,
   );
   return new Set(r.rows.map((l) => l.ferme_id));
 }

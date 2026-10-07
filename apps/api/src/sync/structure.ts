@@ -116,29 +116,9 @@ function refusDeLigne(v: Extract<ResultatStructure, { ok: false }>, fermeId: str
 /** Deux valeurs de placement (nombres, contours) égales, quelle que soit leur provenance (reçue, ou to_jsonb de Postgres). */
 const memeValeur = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
-/**
- * La ligne `l` (validée) touche-t-elle au placement réel par rapport à `avant` (null : création) ?
- * Q31 : réservé au gérant. Un bâtiment est toujours placé : le créer, le modifier ou le supprimer
- * touche au placement. Une zone : son contour change (créée avec un contour, contour posé, redessiné
- * ou effacé). Un emplacement : sa position ou son orientation change. Supprimer une zone ou un
- * emplacement placés, ou les modifier sans toucher à leur placement, reste ouvert à tout membre (T10s).
- */
-function touchePlacement(table: TableEcrite, l: Ligne, avant: Ligne | null): boolean {
-  switch (table) {
-    case 'batiment':
-      return true;
-    case 'zone':
-      return !memeValeur(l.contour, avant?.contour);
-    case 'emplacement':
-      return COLONNES_PLACEMENT_EMPLACEMENT.some((c) => !memeValeur(l[c], avant?.[c]));
-    default:
-      return false;
-  }
-}
-
 /** La ligne `l` (validée) est-elle un placement en vigueur (bâtiment, contour, emplacement placé, non supprimés) ? */
 function estPlacee(table: TableEcrite, l: Ligne): boolean {
-  if (l.supprime_le !== null) return false;
+  if (l.supprime_le != null) return false;
   switch (table) {
     case 'batiment':
       return true;
@@ -146,6 +126,32 @@ function estPlacee(table: TableEcrite, l: Ligne): boolean {
       return l.contour !== null;
     case 'emplacement':
       return l.placement_x_m !== null;
+    default:
+      return false;
+  }
+}
+
+/**
+ * La ligne `l` (validée) touche-t-elle au placement réel par rapport à `avant` (null : création) ?
+ * Q31 : réservé au gérant. Un bâtiment est toujours placé : le créer, le modifier ou le supprimer
+ * touche au placement. Une zone : son contour change. Un emplacement : sa position ou son
+ * orientation change, ou (relecture B2) sa zone change alors qu'il est placé avant ou après : il
+ * suit sa zone, donc il se déplace. Relecture B1 : rétablir une ligne placée (elle redevient un
+ * placement en vigueur) y touche aussi. Supprimer une zone ou un emplacement placés, ou les
+ * modifier sans toucher à leur placement, reste ouvert à tout membre (T10s).
+ */
+function touchePlacement(table: TableEcrite, l: Ligne, avant: Ligne | null): boolean {
+  if (estPlacee(table, l) && (avant === null || !estPlacee(table, avant))) return true;
+  switch (table) {
+    case 'batiment':
+      return true;
+    case 'zone':
+      return !memeValeur(l.contour, avant?.contour);
+    case 'emplacement': {
+      if (COLONNES_PLACEMENT_EMPLACEMENT.some((c) => !memeValeur(l[c], avant?.[c]))) return true;
+      const place = l.placement_x_m != null || avant?.placement_x_m != null;
+      return place && !memeValeur(l.zone_id, avant?.zone_id);
+    }
     default:
       return false;
   }

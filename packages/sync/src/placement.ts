@@ -14,7 +14,7 @@
  * l'ordre inverse ; annuler une création est une suppression douce (le serveur n'accepte pas de
  * DELETE). Les messages de rejet sont en français (ceux du cœur pour ses règles).
  */
-import { TAILLE_MAX_PAR_LOT, TYPES_BATIMENT, validerPlacement } from '@planif/core';
+import { identifiantNormalise, instantNormalise, TAILLE_MAX_PAR_LOT, TYPES_BATIMENT, validerPlacement } from '@planif/core';
 import type { BaseLocale, ChangementPlacement, PointPlacement, TransactionLocale, ValeursBatiment } from './types.ts';
 
 export const SEUL_LE_GERANT = 'Seul le gérant peut placer les éléments de la ferme.';
@@ -99,14 +99,23 @@ async function placerBatiment(tx: TransactionLocale, ctx: ContextePlacement, id:
   const [existant] = await lire<LigneBatiment>(tx, `SELECT ferme_id, ${COLONNES_BATIMENT.join(', ')} FROM batiment WHERE id = ?`, [id]);
   if (existant !== undefined && existant.ferme_id !== ctx.fermeId) throw new Error('Bâtiment introuvable dans cette ferme.');
 
-  const ligne: Readonly<Record<string, unknown>> = { zone_id: null, supprime_le: null, ...existant, ...valeurs };
+  // Mêmes formats que le serveur (@planif/core) : zone en minuscules, suppression en instant ISO UTC.
+  const recues: Record<string, unknown> = { ...valeurs };
+  if (valeurs.zone_id !== undefined && valeurs.zone_id !== null) {
+    recues.zone_id = identifiantNormalise(valeurs.zone_id) ?? fautif('Zone introuvable dans cette ferme.');
+  }
+  if (valeurs.supprime_le !== undefined && valeurs.supprime_le !== null) {
+    if (existant === undefined) throw new Error('Un bâtiment ne se crée pas déjà supprimé.');
+    recues.supprime_le = instantNormalise(valeurs.supprime_le) ?? fautif('Date de suppression illisible : un instant complet avec son fuseau est attendu.');
+  }
+  const ligne: Readonly<Record<string, unknown>> = { zone_id: null, supprime_le: null, ...existant, ...recues };
   if (typeof ligne.nom !== 'string' || ligne.nom.trim() === '') throw new Error('Il manque le nom du bâtiment.');
+  if (ligne.nom.includes('\u0000')) throw new Error('Le nom du bâtiment contient un caractère interdit.');
   if (ligne.nom.length > NOM_CARACTERES_MAX) throw new Error('Le nom du bâtiment est trop long.');
   if (typeof ligne.type !== 'string' || !(TYPES_BATIMENT as readonly string[]).includes(ligne.type)) throw new Error('Type de bâtiment inconnu.');
   const r = validerPlacement({ table: 'batiment', ligne });
   if (!r.ok) throw new Error(r.erreur.message);
   const supprime = ligne.supprime_le;
-  if (supprime !== null && (typeof supprime !== 'string' || !Number.isFinite(Date.parse(supprime)))) throw new Error('Date de suppression illisible.');
   const zone = ligne.zone_id;
   if (zone !== null && typeof zone !== 'string') throw new Error('Zone introuvable dans cette ferme.');
   const zoneChange = existant?.zone_id !== zone || existant.supprime_le !== null;
@@ -204,14 +213,21 @@ async function placerOrigine(
   return { sorte: 'origine', origine: avant };
 }
 
+/** Arrête l'écriture : rien n'est écrit (la transaction est annulée). */
+function fautif(message: string): never {
+  throw new Error(message);
+}
+
 function appliquer(tx: TransactionLocale, ctx: ContextePlacement, c: ChangementPlacement): Promise<ChangementPlacement> {
+  // Comme le serveur : un identifiant est un UUID, rangé en minuscules (la même ligne, quelle que soit la casse).
+  const id = c.sorte === 'origine' ? '' : (identifiantNormalise(c.id) ?? fautif('Identifiant invalide : rien n’est écrit.'));
   switch (c.sorte) {
     case 'batiment':
-      return placerBatiment(tx, ctx, c.id, c.valeurs);
+      return placerBatiment(tx, ctx, id, c.valeurs);
     case 'zone':
-      return placerZone(tx, ctx, c.id, c.contour);
+      return placerZone(tx, ctx, id, c.contour);
     case 'emplacement':
-      return placerEmplacement(tx, ctx, c.id, c.placement);
+      return placerEmplacement(tx, ctx, id, c.placement);
     case 'origine':
       return placerOrigine(tx, ctx, c.origine);
   }

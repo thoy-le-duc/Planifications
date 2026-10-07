@@ -21,6 +21,8 @@
  */
 import {
   estDateValide,
+  identifiantNormalise,
+  instantNormalise,
   LIMITES_SAISIE,
   TYPES_BATIMENT,
   validerContour,
@@ -105,10 +107,6 @@ export const PLAFONDS_STRUCTURE = {
 const DATE_MIN = '1900-01-01';
 const DATE_MAX = '2100-12-31';
 
-const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** Instant ISO 8601 complet avec fuseau (supprime_le ; to_jsonb de Postgres rend '+00:00'). */
-const MOTIF_INSTANT = /^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,6})?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/;
-
 export type Ligne = Readonly<Record<string, unknown>>;
 
 /**
@@ -149,8 +147,7 @@ function lecteurs(l: Ligne) {
   function id(c: string, obligatoire: boolean): string | null {
     const v = brut(c);
     if (absent(v)) return obligatoire ? arreter('champ_manquant', c, `${c} manquant`) : null;
-    if (typeof v !== 'string' || !MOTIF_UUID.test(v)) return arreter('champ_invalide', c, `${c} : identifiant invalide`);
-    return v.toLowerCase();
+    return identifiantNormalise(v) ?? arreter('champ_invalide', c, `${c} : identifiant invalide`);
   }
 
   /** Texte : obligatoire et non blanc, ou facultatif (blanc lu comme absent). */
@@ -209,10 +206,8 @@ function lecteurs(l: Ligne) {
   function instant(c: string): string | null {
     const v = brut(c);
     if (absent(v)) return null;
-    if (typeof v !== 'string' || !MOTIF_INSTANT.test(v)) return arreter('champ_invalide', c, `${c} : instant invalide`);
-    const t = Date.parse(v);
-    if (!Number.isFinite(t)) return arreter('champ_invalide', c, `${c} : instant invalide`);
-    return new Date(t).toISOString();
+    // Format partagé avec la porte du téléphone (@planif/core, T28s) : pas de 30 février.
+    return instantNormalise(v) ?? arreter('champ_invalide', c, `${c} : instant invalide`);
   }
 
   /** Liste d'identifiants : texte JSON (PowerSync) ou tableau (Postgres), sans doublon. */
@@ -228,7 +223,7 @@ function lecteurs(l: Ligne) {
     }
     if (!Array.isArray(v)) return arreter('champ_invalide', c, `${c} : liste attendue`);
     if (v.length > max) return arreter('trop_nombreux', c, `${c} : ${String(max)} au plus`);
-    const ids = v.map((x: unknown) => (typeof x === 'string' && MOTIF_UUID.test(x) ? x.toLowerCase() : arreter('champ_invalide', c, `${c} : identifiant invalide`)));
+    const ids = v.map((x: unknown) => identifiantNormalise(x) ?? arreter('champ_invalide', c, `${c} : identifiant invalide`));
     if (new Set(ids).size !== ids.length) return arreter('doublon', c, `${c} : identifiant en double`);
     return ids;
   }
