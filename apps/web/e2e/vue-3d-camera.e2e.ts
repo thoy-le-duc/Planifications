@@ -286,7 +286,7 @@ function zonesAvecPlanches(scene: Scene): SocleScene[] {
 }
 
 /** Pixel (page) du dessus d’une planche de la zone, vue depuis la caméra actuelle. */
-async function pixelPlancheDeZone(page: Page, scene: Scene, zoneId: string): Promise<{ x: number; y: number }> {
+async function pixelPlancheDeZone(page: Page, scene: Scene, zoneId: string): Promise<{ x: number; y: number } | null> {
   const pose = await lirePose(page);
   const champ = await lireNombre(page, 'data-champ');
   const b = await boiteToile(page);
@@ -302,12 +302,12 @@ async function pixelPlancheDeZone(page: Page, scene: Scene, zoneId: string): Pro
       meilleur = { x: b.x + px.x, y: b.y + px.y, ecart };
     }
   }
-  if (meilleur === null) throw new Error(`aucune planche de la zone ${zoneId} à l’écran`);
-  return { x: meilleur.x, y: meilleur.y };
+  return meilleur === null ? null : { x: meilleur.x, y: meilleur.y };
 }
 
 async function cliquerDansLaScene(page: Page, scene: Scene, zoneId: string): Promise<void> {
   const p = await pixelPlancheDeZone(page, scene, zoneId);
+  if (p === null) throw new Error(`aucune planche de la zone ${zoneId} à l’écran`);
   await page.mouse.move(p.x, p.y);
   await page.mouse.down();
   await page.mouse.up();
@@ -356,9 +356,7 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
   const { scene } = attendu;
   const zones = zonesAvecPlanches(scene);
   expect(zones.length, 'la ferme de T07 a au moins deux zones avec des planches').toBeGreaterThanOrEqual(2);
-  const [zoneA, zoneB] = [zones.at(0), zones.at(-1)];
-  if (zoneA === undefined || zoneB === undefined) throw new Error('zones absentes');
-  expect(zoneB.id).not.toBe(zoneA.id);
+  // La caméra de départ regarde le centre de la scène : la zone à cliquer est la première dont une planche est à l'écran.
   const violations = await surveillerCsp(page);
 
   await ouvrirPlanches(page, attendu);
@@ -366,6 +364,15 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
   await installerOutils(page);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
 
+  let zoneA: SocleScene | undefined;
+  for (const z of zones) {
+    if ((await pixelPlancheDeZone(page, scene, z.id)) !== null) {
+      zoneA = z;
+      break;
+    }
+  }
+  const zoneB = zones.findLast((z) => z.id !== zoneA?.id);
+  if (zoneA === undefined || zoneB === undefined) throw new Error('aucune zone avec des planches à l’écran au départ');
   await test.step('la liste texte propose un bouton par zone et « Vue d’ensemble », nommés et au clavier', async () => {
     await expect(boutonZone(page, zoneA.id)).toHaveAccessibleName(`Aller à ${zoneA.nom}`);
     await expect(page.getByTestId(T.zone)).toHaveCount(scene.socles.length);
