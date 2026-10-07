@@ -73,7 +73,7 @@ erDiagram
 
 Validée par Théophane le 2026-10-07 (réponses à Q30 et Q31), posée par T28a. Elle ajoute des colonnes nulles et une table : une ferme qui ne place rien ne change pas.
 
-**Repère local de la ferme** : mètres, x vers l'est, y vers le nord. Son origine est un champ à part, `ferme.origine_plan` (latitude, longitude), distinct de `ferme.position` (météo) : changer la position météo ne déplace pas la ferme. Elle est fixée au premier placement et ne change plus tant qu'un placement existe (règle du serveur, T28s). **Orientation** : cap en degrés, sens horaire depuis le nord, dans [0, 360[.
+**Repère local de la ferme** : mètres, x vers l'est, y vers le nord. Son origine est un champ à part, `ferme.origine_plan` (latitude, longitude), distinct de `ferme.position` (météo) : changer la position météo ne déplace pas la ferme. Elle se pose avant tout placement et ne change plus (ni ne s'efface) tant qu'un placement existe (règle du serveur et de la porte, T28s). **Orientation** : cap en degrés, sens horaire depuis le nord, dans [0, 360[.
 
 | Entité | Champs ajoutés | Remarques |
 | --- | --- | --- |
@@ -102,7 +102,7 @@ Validée par Théophane le 2026-10-07 (réponses à Q30 et Q31), posée par T28a
 
 **Ce que la base rejoue** (migrations 0025 à 0028) : les bornes simples (tout ou rien, orientation, distance, dimensions et plafonds, type, contour : tableau de 3 à 200 objets `{x, y}` numériques à 5 km au plus, texte de 16 384 caractères au plus), la zone d'un bâtiment de la même ferme (clé étrangère composée), un bâtiment non supprimé par zone (index unique partiel), zone abritée sans contour (déclencheurs). La géométrie (auto-intersection, aire, sens) reste au serveur. `origine_plan` n'a pas de bornes en base.
 
-**Droits** : **gérant seulement** pour tout placement (zones, planches, bâtiments, origine du plan), contrôlé par le serveur (T28s). D'ici là, le serveur refuse toute écriture de ces colonnes (colonne inconnue) et de la table `batiment` (table interdite) venue d'un téléphone.
+**Droits** : **gérant seulement** pour tout placement (zones, planches, bâtiments, origine du plan), contrôlé par le serveur (T28s, voir « Placement réel écrit par le téléphone » plus bas).
 
 **Synchro et export** : `batiment` descend sur les téléphones avec le même découpage par ferme que `zone` ; l'export ajoute `batiment.csv` et les nouvelles colonnes, décrites dans LISEZMOI.txt.
 
@@ -222,6 +222,19 @@ Le serveur (`apps/api/src/sync/structure.ts`, règles de ligne dans `structure-l
 - **Historique** : une ligne `modification` par ligne touchée (création, modification, suppression), écrite par le serveur.
 - **Série réactivée** : une série terminée ou abandonnée qui redevient prévue ou en cours est revérifiée comme un rétablissement (saison, espèce, variété actives, emplacements de ses occupations non supprimés).
 - **Pas encore contrôlé** : l'unicité du code d'emplacement dans la ferme (question posée à Théophane).
+
+### Placement réel écrit par le téléphone (T28s)
+
+Le serveur (`structure.ts`, `structure-lignes.ts`, `structure-origine.ts`) accepte le placement fait sur un appareil, hors ligne compris ; la porte (`porte.placer`, `packages/sync/src/placement.ts`) rejoue les mêmes règles avant d'écrire et rend de quoi annuler.
+
+- **Ce qui s'écrit** : `batiment` (création, modification, suppression douce et rétablissement ; pas de DELETE) ; `zone.contour` ; `placement_x_m`, `placement_y_m`, `orientation_deg` d'un emplacement ; de `ferme`, **seulement** `origine_plan` (toute autre colonne refusée ; une ferme ne se crée ni ne s'efface par la synchro).
+- **Droits (Q31)** : gérant actif de la ferme de la ligne, rôle relu à chaque envoi. Un équipier qui crée, modifie ou supprime un bâtiment, pose, redessine ou efface un contour, place, déplace ou range une planche, ou pose l'origine, rétablit une ligne placée ou change la zone d'une planche placée : refusé (« seul le gérant peut placer les éléments de la ferme »). Reste ouvert à tout membre : créer une zone ou une planche sans placement, les modifier sans toucher au placement, les supprimer (règles de T10s), et renvoyer à l'identique une ligne placée (rien n'est écrit).
+- **Isolement** : comme T10s ; la zone d'un bâtiment est de sa ferme (une zone d'une autre ferme, même du même utilisateur, est introuvable). Une ferme dont on n'est pas membre actif est introuvable.
+- **Validation** : `validerPlacement` et `validerContour` du cœur, sur la ligne complète. Contour reçu en texte JSON de 16 384 caractères au plus, mesuré avant de le lire (sinon refusé sans être parcouru), rangé en sens antihoraire, x et y seulement. Bâtiment : nom, type, dimensions, centre et orientation ; sa zone est non supprimée, sans contour, et sans autre bâtiment non supprimé. Contour refusé sur une zone abritée.
+- **Origine du plan** (décision du chef) : **aucun placement sans origine** : un bâtiment, un contour ou un emplacement placé est refusé tant que `ferme.origine_plan` est nulle (supprimer, effacer ou ranger reste permis). L'origine ne se pose, ne se modifie ni ne s'efface que si la ferme n'a aucun placement (bâtiment non supprimé, zone non supprimée avec contour, emplacement non supprimé placé). Un envoi est jugé dans l'ordre : origine puis premier bâtiment passe, l'annulation en ordre inverse (bâtiment supprimé, puis origine effacée) aussi ; bâtiment puis origine est refusé. Même règle dans la porte.
+- **Suppression** : supprimer le bâtiment d'une zone la laisse telle quelle (elle redevient « pas placée ») ; supprimer une zone abritée par un bâtiment non supprimé est refusé (supprimer ou détacher le bâtiment d'abord, éventuellement plus haut dans le même envoi).
+- **Tout ou rien et concurrence** : `batiment` et `ferme` rejoignent les envois tout ou rien, écrits sous le verrou de chaque ferme touchée ; interblocage ou échec de sérialisation : erreur à réessayer (5xx), jamais un refus définitif.
+- **Historique** : une ligne `modification` par ligne touchée (`Batiment`, `Zone`, `Emplacement`, `Ferme`).
 
 ## 8. Ce qui est calculé, pas stocké
 

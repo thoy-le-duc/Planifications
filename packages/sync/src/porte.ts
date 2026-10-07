@@ -6,6 +6,7 @@
 import { creerGenerateurId, ECRITURES_MAX_PAR_LOT, TAILLE_MAX_PAR_LOT, type Id } from '@planif/core';
 import type {
   BaseLocale,
+  ChangementPlacement,
   EvenementPrepare,
   LigneEvenementLocale,
   OptionsPorte,
@@ -405,6 +406,18 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
           await tx.execute(sqlArchiverRefus(lot.length), [maintenant().toISOString(), options.utilisateurId, ...lot]);
         });
       }
+    },
+
+    async placer(changements: readonly ChangementPlacement[]): Promise<readonly ChangementPlacement[]> {
+      // Liste vide : rien à écrire, aucune transaction (donc rien dans la file d'envoi).
+      if (changements.length === 0) return [];
+      // Une transaction = un envoi, que le serveur refuserait au-delà : rejet avant d'ouvrir quoi que ce soit.
+      if (changements.length > ECRITURES_MAX_PAR_LOT) {
+        throw new Error(`${String(changements.length)} changements de placement à la fois : ${String(ECRITURES_MAX_PAR_LOT)} au plus`);
+      }
+      // T28s : chargé à la demande (règles du placement du cœur), hors du JavaScript de démarrage.
+      const { ecrirePlacement } = await import('./placement.ts');
+      return ecrirePlacement(base, { fermeId: options.fermeId, utilisateurId: options.utilisateurId, maintenant }, changements);
     },
   };
 }
