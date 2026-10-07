@@ -248,6 +248,55 @@ describe('T11c : build des essais (dist-essais/), l’appli et les pages de test
 });
 
 /**
+ * T15c (docs/backlog/T15c-export-rapide.md), suite de la relecture de T16b : le worker de
+ * compression de l'export (src/ecrans/export/compression.worker.ts) n'est pas un morceau de la
+ * base locale. Il ne doit pas être rangé sous `assets/sqlite/` (là va tout ce que le worker de
+ * PowerSync charge) ni sous `assets/sqlite-annexe/` (hors précache), et il doit entrer dans le
+ * précache du service worker : l'export marche hors ligne dès la première visite.
+ * Le worker se reconnaît à son contenu : un fichier JavaScript qui compresse en `deflate-raw`,
+ * répond aux messages (`self.onmessage`) et n'en crée pas d'autre (`new Worker`). Il y en a un seul.
+ * Ce bloc lit le dist/ du premier bloc, avant les gardes qui l'abîment.
+ */
+describe('T15c : worker de compression de l’export (dist/)', () => {
+  function workerCompression(): string[] {
+    return fichiers(DIST).filter((f) => {
+      if (!f.endsWith('.js')) return false;
+      const code = lire(DIST, f).toString('utf8');
+      return code.includes('deflate-raw') && /\bself\.onmessage\b/.test(code) && !code.includes('new Worker(');
+    });
+  }
+
+  it('témoin : un seul fichier est le worker de compression, et l’écran d’export le charge', () => {
+    const w = workerCompression();
+    expect(w, 'worker de compression dans dist/').toHaveLength(1);
+    const nom = (w[0] ?? '').split('/').at(-1) ?? '';
+    const ecran = fichiers(DIST).filter((f) => f.endsWith('.js') && lire(DIST, f).toString('utf8').includes('new Worker(') && lire(DIST, f).toString('utf8').includes(nom));
+    expect(ecran.length, 'un morceau qui crée ce worker (new Worker)').toBeGreaterThan(0);
+  });
+
+  it('rangé hors de assets/sqlite/ et de assets/sqlite-annexe/', () => {
+    const [w] = workerCompression();
+    expect(w).toBeDefined();
+    expect(w?.startsWith('assets/sqlite/'), `${String(w)} sous assets/sqlite/`).toBe(false);
+    expect(w?.startsWith('assets/sqlite-annexe/'), `${String(w)} sous assets/sqlite-annexe/`).toBe(false);
+  });
+
+  it('dans le précache du service worker (sw.js)', () => {
+    const [w] = workerCompression();
+    expect(w).toBeDefined();
+    const sw = lire(DIST, 'sw.js').toString('utf8');
+    expect(sw.includes(w ?? ''), `${String(w)} dans le précache de sw.js`).toBe(true);
+  });
+
+  it('garde : le worker de PowerSync reste sous assets/sqlite/, précaché', () => {
+    const sw = lire(DIST, 'sw.js').toString('utf8');
+    const sqlite = fichiers(DIST).filter((f) => f.startsWith('assets/sqlite/') && f.endsWith('.js') && !workerCompression().includes(f));
+    expect(sqlite.length, 'JavaScript de PowerSync sous assets/sqlite/').toBeGreaterThan(0);
+    for (const f of sqlite) expect(sw.includes(f), `${f} dans le précache`).toBe(true);
+  });
+});
+
+/**
  * Gardes demandées par la relecture de T11c (contrat) :
  *
  *   1. Liste blanche en production : le build de production n'accepte que l'entrée `index`

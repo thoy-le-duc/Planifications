@@ -200,6 +200,71 @@ async function lireSondes(page: Page): Promise<{ taches: number[]; valeurs: numb
   });
 }
 
+interface ContourFocus {
+  readonly nom: string;
+  readonly style: string;
+  readonly largeur: number;
+  readonly couleur: string;
+  readonly fond: string;
+  readonly rogne: string | null;
+}
+
+/** Contour de focus de l'élément actif : style, épaisseur, couleur, fond derrière, et ce qui le rogne. */
+async function contourDuFocus(page: Page): Promise<ContourFocus | null> {
+  return page.evaluate(() => {
+    const el = document.activeElement;
+    if (!(el instanceof HTMLElement) || el === document.body) return null;
+    const cs = getComputedStyle(el);
+    const decalage = parseFloat(cs.outlineOffset);
+    const largeur = parseFloat(cs.outlineWidth);
+    const fondOpaque = (depart: Element | null): string => {
+      for (let e = depart; e !== null; e = e.parentElement) {
+        const f = getComputedStyle(e).backgroundColor;
+        if (f !== 'rgba(0, 0, 0, 0)' && f !== 'transparent') return f;
+      }
+      return 'rgb(255, 255, 255)';
+    };
+    const r = el.getBoundingClientRect();
+    const e = decalage + largeur;
+    const bord = { g: r.left - e, h: r.top - e, d: r.right + e, b: r.bottom + e };
+    const zones: { nom: string; g: number; h: number; d: number; b: number }[] = [
+      { nom: 'écran', g: 0, h: 0, d: document.documentElement.clientWidth, b: window.innerHeight },
+    ];
+    for (let a = el.parentElement; a !== null && a !== document.documentElement; a = a.parentElement) {
+      const ca = getComputedStyle(a);
+      if (ca.overflowX === 'visible' && ca.overflowY === 'visible') continue;
+      const ra = a.getBoundingClientRect();
+      const g = ra.left + a.clientLeft;
+      const h = ra.top + a.clientTop;
+      zones.push({ nom: `${a.tagName.toLowerCase()} (overflow ${ca.overflowX}/${ca.overflowY})`, g, h, d: g + a.clientWidth, b: h + a.clientHeight });
+    }
+    const rogne = zones.find((z) => bord.g < z.g - 0.5 || bord.h < z.h - 0.5 || bord.d > z.d + 0.5 || bord.b > z.b + 0.5);
+    return {
+      nom: (el.getAttribute('aria-label') ?? el.textContent).replace(/\s+/g, ' ').trim(),
+      style: cs.outlineStyle,
+      largeur,
+      couleur: cs.outlineColor,
+      fond: decalage >= 0 ? fondOpaque(el.parentElement) : fondOpaque(el),
+      rogne: rogne === undefined ? null : `rogné par ${rogne.nom}`,
+    };
+  });
+}
+
+function luminance(couleur: string): number {
+  const m = /^rgba?\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)/.exec(couleur);
+  if (m === null) throw new Error(`couleur illisible : ${couleur}`);
+  const [r, v, b] = [m[1], m[2], m[3]].map((c) => {
+    const x = Number(c) / 255;
+    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * (r ?? 0) + 0.7152 * (v ?? 0) + 0.0722 * (b ?? 0);
+}
+
+function contraste(a: string, b: string): number {
+  const [claire, sombre] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return ((claire ?? 0) + 0.05) / ((sombre ?? 0) + 0.05);
+}
+
 test('sans ferme sur ce téléphone : bouton d’export désactivé, avec une explication', async ({ page }) => {
   await page.goto('/');
   // Utilisateur de test sans aucune base : l'appli ouvre une base vide, sans ferme.
@@ -257,6 +322,30 @@ test('export de toute la ferme depuis l’onglet Ferme : hors ligne, CPU ×4, fe
     await expect(bouton).toBeEnabled();
     const boite = await bouton.boundingBox();
     expect(boite?.height ?? 0, 'cible au gant').toBeGreaterThanOrEqual(CIBLE_GANT_PX);
+  });
+
+  await test.step('focus au clavier sur le bouton d’export actif : contour visible, contrasté, jamais rogné (T15c)', async () => {
+    // T16 : le parcours de habillage.e2e.ts saute ce bouton (désactivé sans ferme) ; ici il est actif.
+    await page.evaluate(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    });
+    let contour: ContourFocus | null = null;
+    const vus: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      await page.keyboard.press('Tab');
+      contour = await contourDuFocus(page);
+      vus.push(contour?.nom ?? '—');
+      if (contour?.nom === EXPORTER) break;
+    }
+    expect(contour?.nom, `« ${EXPORTER} » atteint au clavier (vus : ${vus.join(' | ')})`).toBe(EXPORTER);
+    if (contour === null) return;
+    expect(['none', 'hidden', 'auto'], 'style du contour').not.toContain(contour.style);
+    expect(contour.largeur, 'épaisseur du contour').toBeGreaterThanOrEqual(3);
+    expect(contraste(contour.couleur, contour.fond), `contraste ${contour.couleur} / ${contour.fond}`).toBeGreaterThanOrEqual(3);
+    expect(contour.rogne, 'contour rogné').toBeNull();
+    await page.evaluate(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    });
   });
 
   await test.step('un tap : barre qui monte, fil principal jamais gelé, archive téléchargée', async () => {
