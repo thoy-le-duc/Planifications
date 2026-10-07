@@ -16,10 +16,12 @@
  * Aucun calcul agronomique : tout vient de `versScene`, qui ne fait que placer le plan de la 2D.
  */
 import { createRoot, extend, useFrame, useThree, type ReconcilerRoot, type RootState } from '@react-three/fiber';
-import { Component, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode } from 'react';
-import { AmbientLight, BoxGeometry, Color, DirectionalLight, InstancedMesh, MeshLambertMaterial, Object3D } from 'three';
+import { Component, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type RefObject, type ReactNode } from 'react';
+import { AmbientLight, BoxGeometry, Color, DirectionalLight, InstancedMesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
 import type { Plan } from '../plan/calculs.ts';
 import { COULEURS, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
+import { boiteDe, cadrage, demarrerVol, poseAu, type CibleVol, type Point3, type Pose, type Vol } from './cadrage.ts';
+import { zoneSousRayon, type BoiteZone } from './pointage.ts';
 import {
   appliquerFiltres,
   basculerFiltre,
@@ -51,6 +53,7 @@ export interface ProprietesVue3d {
 const MARQUE_AFFICHEE = 'planif:vue-3d-affichee';
 const MARQUE_SEMAINE = 'planif:vue-3d-semaine';
 const MARQUE_FILTRE = 'planif:vue-3d-filtre';
+const MARQUE_VOL_FIN = 'planif:vue-3d-vol-fin';
 
 /** Épaisseur des socles (m de scène), posés sous le sol. */
 const EPAISSEUR_SOCLE = 0.2;
@@ -67,6 +70,8 @@ const ELEVATION_MAX = 1.5;
 const RADIANS_PAR_PX = 0.008;
 const PAS_CLAVIER = 0.12;
 const CHAMP_DEGRES = 40;
+/** Un clic est un appui relâché sans avoir glissé de plus de tant de pixels (T29). */
+const SEUIL_CLIC_PX = 4;
 
 const MESSAGE_TROP_LENTE = 'La vue 3D est trop lente sur cet appareil : retour au plan en 2D.';
 const MESSAGE_ERREUR = 'La vue 3D s’est arrêtée (carte graphique indisponible) : retour au plan en 2D.';
@@ -115,15 +120,20 @@ interface Suivi {
   glisse: boolean;
   dernier: number;
   intervalles: number[];
+  /** Caméra (T29) : ce que regarde la caméra, un vol est en cours, vols lancés depuis l'ouverture, cible du vol arrivé (marque à l'image suivante). */
+  cible: Point3;
+  vol: boolean;
+  vols: number;
+  volFinEnAttente: string | null;
 }
 
 // ── Scène three (fiber) ──────────────────────────────────────────────────────────────────────
 
 /** Dessine l'image (priorité 1 : fiber nous laisse le rendu), puis compte. */
-function Rendu({ surImage }: { readonly surImage: (gl: RootState['gl']) => void }) {
-  useFrame(({ gl, scene, camera }) => {
-    gl.render(scene, camera);
-    surImage(gl);
+function Rendu({ surImage }: { readonly surImage: (etat: RootState) => void }) {
+  useFrame((etat) => {
+    etat.gl.render(etat.scene, etat.camera);
+    surImage(etat);
   }, 1);
   return null;
 }
@@ -225,61 +235,210 @@ interface Orbite {
   azimut: number;
   elevation: number;
   distance: number;
+  /** Le point regardé : l'origine au départ, le centre de la zone après un vol. */
+  cible: Point3;
+}
+
+/** Un vol en cours : son interpolation, l'heure de départ, et ce que la marque de fin nommera. */
+interface VolEnCours {
+  readonly vol: Vol;
+  readonly debut: number;
+  readonly cible: string;
+}
+
+/** Les pilotes de la caméra, donnés à la vue pour ses boutons : voler vers une cible. */
+type Pilote = (cible: CibleVol) => void;
+
+/** `prefers-reduced-motion: reduce`, relu à chaque vol (le réglage peut changer sans recharger). */
+function mouvementReduit(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 /**
- * Caméra en orbite autour de la ferme : glissé du pointeur (bouton principal) pour tourner,
- * molette pour s'approcher, flèches du clavier (toile focalisée) aussi. Une image par geste.
+ * Caméra en orbite autour d'un point (la ferme au départ) : glissé du pointeur (bouton principal)
+ * pour tourner, molette pour s'approcher, flèches du clavier (toile focalisée) aussi. Une image
+ * par geste. Un clic sur une zone ou une planche (T29) lance un vol vers la zone ; les boutons de
+ * la liste font de même par `pilote`. La boucle d'images ne tourne que pendant le vol.
  */
-function Camera({ rayon, surGlisse }: { readonly rayon: number; readonly surGlisse: (enCours: boolean) => void }) {
+function Camera({
+  rayon,
+  scene,
+  boites,
+  suiviRef,
+  piloteRef,
+  surGlisse,
+}: {
+  readonly rayon: number;
+  readonly scene: Scene;
+  readonly boites: readonly BoiteZone[];
+  readonly suiviRef: RefObject<Suivi>;
+  readonly piloteRef: RefObject<Pilote | null>;
+  readonly surGlisse: (enCours: boolean) => void;
+}) {
   const lireEtat = useThree((s) => s.get);
   const toile = useThree((s) => s.gl.domElement);
   const invalider = useThree((s) => s.invalidate);
   const orbite = useRef<Orbite | null>(null);
+  const enVol = useRef<VolEnCours | null>(null);
+  const imageDuVol = useRef<(() => void) | null>(null);
+  const sceneRef = useRef(scene);
+  const boitesRef = useRef(boites);
+  useLayoutEffect(() => {
+    sceneRef.current = scene;
+    boitesRef.current = boites;
+  }, [scene, boites]);
+
+  // Priorité 0 : avant l'image (priorité 1, ./Rendu), la pose du vol est posée sur la caméra.
+  useFrame(() => {
+    imageDuVol.current?.();
+  }, 0);
 
   useEffect(() => {
     const champ = (CHAMP_DEGRES * Math.PI) / 180;
     // Le rayon englobe large (diagonale) : la ferme vue de biais remplit la toile à ce recul.
     const distanceDepart = (rayon / Math.tan(champ / 2)) * 0.72;
-    const o: Orbite = orbite.current ?? { azimut: AZIMUT_DEPART, elevation: ELEVATION_DEPART, distance: distanceDepart };
+    const o: Orbite = orbite.current ?? { azimut: AZIMUT_DEPART, elevation: ELEVATION_DEPART, distance: distanceDepart, cible: { x: 0, y: 0, z: 0 } };
     orbite.current = o;
-    const placer = () => {
-      const { camera } = lireEtat();
+
+    const poseDeOrbite = (): Pose => {
       const horizontal = o.distance * Math.cos(o.elevation);
-      camera.position.set(horizontal * Math.sin(o.azimut), o.distance * Math.sin(o.elevation), horizontal * Math.cos(o.azimut));
-      camera.lookAt(0, 0, 0);
-      camera.near = Math.max(0.1, o.distance / 100);
-      camera.far = o.distance * 4 + rayon * 2;
+      return {
+        position: { x: o.cible.x + horizontal * Math.sin(o.azimut), y: o.cible.y + o.distance * Math.sin(o.elevation), z: o.cible.z + horizontal * Math.cos(o.azimut) },
+        cible: o.cible,
+      };
+    };
+    const orbiteDepuis = (pose: Pose): void => {
+      const dx = pose.position.x - pose.cible.x;
+      const dy = pose.position.y - pose.cible.y;
+      const dz = pose.position.z - pose.cible.z;
+      const d = Math.hypot(dx, dy, dz);
+      o.cible = pose.cible;
+      if (d <= 0) return;
+      o.distance = d;
+      o.elevation = Math.min(ELEVATION_MAX, Math.max(ELEVATION_MIN, Math.asin(dy / d)));
+      if (Math.hypot(dx, dz) > 1e-9) o.azimut = Math.atan2(dx, dz);
+    };
+    const appliquer = (pose: Pose): void => {
+      const { camera } = lireEtat();
+      const d = Math.hypot(pose.position.x - pose.cible.x, pose.position.y - pose.cible.y, pose.position.z - pose.cible.z);
+      camera.position.set(pose.position.x, pose.position.y, pose.position.z);
+      camera.lookAt(pose.cible.x, pose.cible.y, pose.cible.z);
+      camera.near = Math.max(0.1, d / 100);
+      camera.far = d * 4 + rayon * 2 + Math.hypot(pose.cible.x, pose.cible.z);
       camera.updateProjectionMatrix();
+      suiviRef.current.cible = pose.cible;
+    };
+    const placer = () => {
+      appliquer(poseDeOrbite());
       invalider();
     };
     placer();
 
-    let pointeur: { id: number; x: number; y: number } | null = null;
+    const poseCourante = (): Pose => {
+      const v = enVol.current;
+      return v === null ? poseDeOrbite() : poseAu(v.vol, performance.now() - v.debut);
+    };
+    /** Le geste de l'utilisateur reprend la main : le vol s'arrête là où il en est. */
+    const arreterVol = () => {
+      if (enVol.current === null) return;
+      const pose = poseCourante();
+      enVol.current = null;
+      suiviRef.current.vol = false;
+      orbiteDepuis(pose);
+      placer();
+    };
+
+    const aller: Pilote = (cible) => {
+      const boite = boiteDe(sceneRef.current, cible);
+      if (boite === null) return;
+      const depart = poseCourante();
+      const dx = depart.position.x - depart.cible.x;
+      const dz = depart.position.z - depart.cible.z;
+      const direction = Math.hypot(dx, dz) > 1e-9 ? { x: dx, z: dz } : { x: Math.sin(o.azimut), z: Math.cos(o.azimut) };
+      const cadre = toile.getBoundingClientRect();
+      const rapport = cadre.width > 0 && cadre.height > 0 ? cadre.width / cadre.height : 1;
+      const vol = demarrerVol(depart, cadrage(boite, CHAMP_DEGRES, rapport, direction), mouvementReduit());
+      enVol.current = { vol, debut: performance.now(), cible: cible.sorte === 'ferme' ? 'ferme' : cible.id };
+      suiviRef.current.vol = vol.dureeMs > 0;
+      suiviRef.current.vols += 1;
+      toile.dataset.vols = String(suiviRef.current.vols);
+      invalider();
+    };
+    piloteRef.current = aller;
+
+    imageDuVol.current = () => {
+      const v = enVol.current;
+      if (v === null) return;
+      const ecoule = performance.now() - v.debut;
+      const pose = poseAu(v.vol, ecoule);
+      appliquer(pose);
+      if (ecoule >= v.vol.dureeMs) {
+        enVol.current = null;
+        suiviRef.current.vol = false;
+        suiviRef.current.volFinEnAttente = v.cible;
+        orbiteDepuis(pose);
+      } else {
+        invalider();
+      }
+    };
+
+    /** Clic sur la scène : la zone touchée par le rayon du pointeur, socle ou planche. */
+    const cliquer = (e: PointerEvent) => {
+      const cadre = toile.getBoundingClientRect();
+      if (cadre.width <= 0 || cadre.height <= 0) return;
+      const { raycaster, camera } = lireEtat();
+      camera.updateMatrixWorld();
+      raycaster.setFromCamera(new Vector2(((e.clientX - cadre.left) / cadre.width) * 2 - 1, -(((e.clientY - cadre.top) / cadre.height) * 2 - 1)), camera);
+      const zone = zoneSousRayon(raycaster.ray.origin, raycaster.ray.direction, boitesRef.current);
+      if (zone !== null) aller({ sorte: 'zone', id: zone });
+    };
+
+    let pointeur: { id: number; x: number; y: number; x0: number; y0: number; glisse: boolean } | null = null;
     const bas = (e: PointerEvent) => {
       if (!e.isPrimary || e.button !== 0) return;
-      pointeur = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      pointeur = { id: e.pointerId, x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, glisse: false };
       toile.setPointerCapture(e.pointerId);
       surGlisse(true);
     };
     const bouge = (e: PointerEvent) => {
       if (pointeur?.id !== e.pointerId) return;
+      if (!pointeur.glisse) {
+        // Sous le seuil, c'est encore un clic : la vue ne bouge pas.
+        if (Math.hypot(e.clientX - pointeur.x0, e.clientY - pointeur.y0) <= SEUIL_CLIC_PX) return;
+        pointeur.glisse = true;
+        arreterVol();
+      }
       o.azimut -= (e.clientX - pointeur.x) * RADIANS_PAR_PX;
       o.elevation = Math.min(ELEVATION_MAX, Math.max(ELEVATION_MIN, o.elevation + (e.clientY - pointeur.y) * RADIANS_PAR_PX));
-      pointeur = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      pointeur = { ...pointeur, x: e.clientX, y: e.clientY };
       placer();
     };
     const haut = (e: PointerEvent) => {
       if (pointeur?.id !== e.pointerId) return;
+      const clic = !pointeur.glisse;
       pointeur = null;
       surGlisse(false);
+      if (clic) cliquer(e);
     };
     const molette = (e: WheelEvent) => {
       e.preventDefault();
-      o.distance = Math.min(distanceDepart * 3, Math.max(distanceDepart * 0.15, o.distance * Math.exp(e.deltaY * 0.001)));
+      arreterVol();
+      o.distance = Math.min(Math.max(distanceDepart * 3, o.distance), Math.max(Math.min(distanceDepart * 0.15, o.distance), o.distance * Math.exp(e.deltaY * 0.001)));
       placer();
     };
     const touche = (e: KeyboardEvent) => {
+      switch (e.key) {
+        case 'ArrowLeft':
+        case 'ArrowRight':
+        case 'ArrowUp':
+        case 'ArrowDown':
+        case '+':
+        case '-':
+          arreterVol();
+          break;
+        default:
+          return;
+      }
       switch (e.key) {
         case 'ArrowLeft':
           o.azimut += PAS_CLAVIER;
@@ -294,13 +453,11 @@ function Camera({ rayon, surGlisse }: { readonly rayon: number; readonly surGlis
           o.elevation = Math.max(ELEVATION_MIN, o.elevation - PAS_CLAVIER);
           break;
         case '+':
-          o.distance = Math.max(distanceDepart * 0.15, o.distance * 0.85);
-          break;
-        case '-':
-          o.distance = Math.min(distanceDepart * 3, o.distance / 0.85);
+          o.distance = Math.max(Math.min(distanceDepart * 0.15, o.distance), o.distance * 0.85);
           break;
         default:
-          return;
+          o.distance = Math.min(Math.max(distanceDepart * 3, o.distance), o.distance / 0.85);
+          break;
       }
       e.preventDefault();
       placer();
@@ -312,6 +469,8 @@ function Camera({ rayon, surGlisse }: { readonly rayon: number; readonly surGlis
     toile.addEventListener('wheel', molette, { passive: false });
     toile.addEventListener('keydown', touche);
     return () => {
+      piloteRef.current = null;
+      imageDuVol.current = null;
       toile.removeEventListener('pointerdown', bas);
       toile.removeEventListener('pointermove', bouge);
       toile.removeEventListener('pointerup', haut);
@@ -319,7 +478,7 @@ function Camera({ rayon, surGlisse }: { readonly rayon: number; readonly surGlis
       toile.removeEventListener('wheel', molette);
       toile.removeEventListener('keydown', touche);
     };
-  }, [lireEtat, toile, invalider, rayon, surGlisse]);
+  }, [lireEtat, toile, invalider, rayon, suiviRef, piloteRef, surGlisse]);
   return null;
 }
 
@@ -462,16 +621,25 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
   }, []);
   const estCoche = (dimension: DimensionFiltre, valeur: string): boolean => filtres[dimension]?.has(valeur) ?? true;
 
-  const suivi = useRef<Suivi>({ rendus: 0, premiere: false, semaineEnAttente: null, filtreEnAttente: null, geometries: 0, glisse: false, dernier: -1, intervalles: [] });
+  const suivi = useRef<Suivi>({ rendus: 0, premiere: false, semaineEnAttente: null, filtreEnAttente: null, geometries: 0, glisse: false, dernier: -1, intervalles: [], cible: { x: 0, y: 0, z: 0 }, vol: false, vols: 0, volFinEnAttente: null });
   const surEchecRef = useRef(surEchec);
   useLayoutEffect(() => {
     surEchecRef.current = surEchec;
   }, [surEchec]);
 
-  const surImage = useCallback((gl: RootState['gl']) => {
+  const surImage = useCallback(({ gl, camera }: RootState) => {
     const s = suivi.current;
     s.rendus += 1;
-    gl.domElement.dataset.rendus = String(s.rendus);
+    const ds = gl.domElement.dataset;
+    ds.rendus = String(s.rendus);
+    // La caméra de cette image (T29) : lue par les tests et, plus tard, par la voix.
+    ds.camera = JSON.stringify({ position: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, cible: s.cible });
+    ds.champ = String(CHAMP_DEGRES);
+    ds.vol = s.vol ? 'oui' : 'non';
+    if (s.volFinEnAttente !== null) {
+      performance.mark(MARQUE_VOL_FIN, { detail: { cible: s.volFinEnAttente } });
+      s.volFinEnAttente = null;
+    }
     if (!s.premiere) {
       s.premiere = true;
       performance.mark(MARQUE_AFFICHEE);
@@ -493,6 +661,11 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
   }, []);
 
   const toileRef = useRef<HTMLCanvasElement>(null);
+  /** Donné par la caméra : les boutons de la liste s'en servent pour voler vers une zone (T29). */
+  const pilote = useRef<Pilote | null>(null);
+  const aller = useCallback((cible: CibleVol) => {
+    pilote.current?.(cible);
+  }, []);
 
   // Couleurs posées : la marque « semaine » ou « filtre » suit à l'image suivante (pas la première).
   const couleursPosees = useRef(false);
@@ -584,6 +757,15 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
     };
   }, []);
 
+  // Ce que le pointeur peut toucher : les socles (au ras du sol) et les planches telles que dessinées.
+  const boites = useMemo<readonly BoiteZone[]>(() => {
+    if (filtree === null) return [];
+    return [
+      ...filtree.socles.map((s) => ({ zoneId: s.id, min: { x: s.x - s.largeur / 2, y: -EPAISSEUR_SOCLE, z: s.z - s.profondeur / 2 }, max: { x: s.x + s.largeur / 2, y: 0, z: s.z + s.profondeur / 2 } })),
+      ...filtree.volumes.map((v) => ({ zoneId: v.zoneId, min: { x: v.x - v.longueur / 2, y: 0, z: v.z - v.largeur / 2 }, max: { x: v.x + v.longueur / 2, y: v.hauteurRendue, z: v.z + v.largeur / 2 } })),
+    ];
+  }, [filtree]);
+
   const nbVolumes = geometrie?.volumes.length ?? 0;
   const libelleCourant = plan.semaines[semaineBornee]?.libelle ?? '';
   const description = `Vue 3D des planches, semaine ${libelleCourant}. Glisser pour tourner, molette pour s’approcher ; au clavier, flèches et + ou -.`;
@@ -597,7 +779,7 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
         <directionalLight position={[rayon * 0.3, rayon, rayon * 0.5]} intensity={1.8} />
         <Socles scene={geometrie} />
         <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
-        <Camera rayon={rayon} surGlisse={surGlisse} />
+        <Camera rayon={rayon} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
         <Rendu surImage={surImage} />
       </GardeErreur>,
     );
@@ -635,10 +817,21 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
         <output data-testid="semaine-3d" htmlFor={idCurseur} className="plan3d-semaine">
           {libelle}
         </output>
+        <button
+          type="button"
+          data-testid="vue-ensemble-3d"
+          className="plan3d-bouton"
+          disabled={nbSemaines === 0}
+          onClick={() => {
+            aller({ sorte: 'ferme' });
+          }}
+        >
+          Vue d’ensemble
+        </button>
       </div>
       <div className="plan3d-corps">
         <div className="plan3d-scene">
-          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-rendus={0} data-geometries={0} data-estompes={0} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-rendus={0} data-geometries={0} data-estompes={0} data-vols={0} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
         </div>
         <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
           <div className="plan3d-filtres">
@@ -663,6 +856,23 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
               <summary>
                 Zones <span className="plan3d-nombre">({options.zones.length})</span>
               </summary>
+              <ul role="list" className="plan3d-cases plan3d-cases-defilantes">
+                {scene?.socles.map((z) => (
+                  <li key={z.id}>
+                    <button
+                      type="button"
+                      data-testid="aller-zone-3d"
+                      data-id={z.id}
+                      className="plan3d-bouton"
+                      onClick={() => {
+                        aller({ sorte: 'zone', id: z.id });
+                      }}
+                    >
+                      Aller à {z.nom}
+                    </button>
+                  </li>
+                ))}
+              </ul>
               <BoutonsToutRien dimension="zones" surTout={toutCocher} surRien={toutDecocher} />
               <ul role="list" className="plan3d-cases plan3d-cases-defilantes">
                 {options.zones.map((z) => (
