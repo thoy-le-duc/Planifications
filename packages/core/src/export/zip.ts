@@ -98,14 +98,25 @@ export const EN_VOL = 8;
 
 let tableCrc: Int32Array | undefined;
 
-/** Table du CRC-32 (polynôme 0xEDB88320), calculée au premier export : rien au chargement du module. */
+/**
+ * Tables du CRC-32 (polynôme 0xEDB88320), calculées au premier export : rien au chargement du
+ * module. Huit tables de 256 (« slicing-by-8 », T15c) : huit octets par tour au lieu d'un, même
+ * CRC, environ quatre fois moins de calcul sur le fil principal.
+ */
 function crcTable(): Int32Array {
   if (tableCrc !== undefined) return tableCrc;
-  const t = new Int32Array(256);
+  const t = new Int32Array(8 * 256);
   for (let n = 0; n < 256; n++) {
     let c = n;
     for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
     t[n] = c;
+  }
+  for (let n = 0; n < 256; n++) {
+    let c = t[n] ?? 0;
+    for (let k = 1; k < 8; k++) {
+      c = (t[c & 0xff] ?? 0) ^ (c >>> 8);
+      t[k * 256 + n] = c;
+    }
   }
   tableCrc = t;
   return t;
@@ -115,8 +126,37 @@ function crcTable(): Int32Array {
 function crcSuite(crc: number, octets: Uint8Array): number {
   const t = crcTable();
   let c = crc;
-  for (const o of octets) c = (t[(c ^ o) & 0xff] ?? 0) ^ (c >>> 8);
+  const n = octets.length;
+  let i = 0;
+  for (const fin = n - 8; i <= fin; i += 8) {
+    const a = c ^ ((octets[i] ?? 0) | ((octets[i + 1] ?? 0) << 8) | ((octets[i + 2] ?? 0) << 16) | ((octets[i + 3] ?? 0) << 24));
+    c =
+      (t[1792 + (a & 0xff)] ?? 0) ^
+      (t[1536 + ((a >>> 8) & 0xff)] ?? 0) ^
+      (t[1280 + ((a >>> 16) & 0xff)] ?? 0) ^
+      (t[1024 + (a >>> 24)] ?? 0) ^
+      (t[768 + (octets[i + 4] ?? 0)] ?? 0) ^
+      (t[512 + (octets[i + 5] ?? 0)] ?? 0) ^
+      (t[256 + (octets[i + 6] ?? 0)] ?? 0) ^
+      (t[octets[i + 7] ?? 0] ?? 0);
+  }
+  for (; i < n; i++) c = (t[(c ^ (octets[i] ?? 0)) & 0xff] ?? 0) ^ (c >>> 8);
   return c;
+}
+
+/** `TextEncoder` réduit à ce que l'encodeur en prend (le cœur n'a pas les types du DOM ni de Node). */
+interface EncodeurNatif {
+  encodeInto(source: string, destination: Uint8Array): { readonly read: number; readonly written: number };
+}
+
+let encodeurNatif: EncodeurNatif | null | undefined;
+
+/** `TextEncoder` du fil courant (navigateur, Node), ou null : l'encodeur écrit alors tout lui-même. */
+function natif(): EncodeurNatif | null {
+  if (encodeurNatif !== undefined) return encodeurNatif;
+  const Classe = (globalThis as unknown as { readonly TextEncoder?: new () => EncodeurNatif }).TextEncoder;
+  encodeurNatif = Classe === undefined ? null : new Classe();
+  return encodeurNatif;
 }
 
 /**
@@ -135,7 +175,39 @@ class Encodeur {
     this.p = 0;
   }
 
+  /**
+   * T15c : l'essentiel par `TextEncoder.encodeInto` (natif, bien plus rapide que la boucle plus
+   * bas), mêmes octets ET mêmes blocs : un caractère commence dans un bloc tant que la position y
+   * est au plus BLOC − 4 (la règle de la boucle) ; celui qui commence à la limite sans y tenir
+   * entier passe par la boucle, seul.
+   */
   texte(texte: string): void {
+    const enc = natif();
+    if (enc === null) {
+      this.texteJs(texte);
+      return;
+    }
+    const limite = BLOC - 4;
+    const n = texte.length;
+    let i = 0;
+    while (i < n) {
+      if (this.p > limite) this.pousser();
+      const { read, written } = enc.encodeInto(i === 0 ? texte : texte.slice(i), this.bloc.subarray(this.p, limite + 1));
+      this.p += written;
+      i += read;
+      if (i < n && this.p <= limite) {
+        // Le caractère suivant commence avant la limite mais n'y tient pas : la boucle l'écrit (jusqu'à BLOC).
+        const c = texte.charCodeAt(i);
+        const paire = c >= 0xd800 && c <= 0xdbff && i + 1 < n && (texte.charCodeAt(i + 1) & 0xfc00) === 0xdc00;
+        const long = paire ? 2 : 1;
+        this.texteJs(texte.slice(i, i + long));
+        i += long;
+      }
+    }
+  }
+
+  /** Encodage caractère par caractère (sans TextEncoder, et aux bords des blocs). */
+  private texteJs(texte: string): void {
     const n = texte.length;
     const limite = BLOC - 4;
     let bloc = this.bloc;
