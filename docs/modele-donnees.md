@@ -69,9 +69,9 @@ erDiagram
 | Secteur d'irrigation | numéro de vanne, nom, débit (facultatif), adresse Modbus (phase 3) | Les 60 vannes. |
 | Secteur ↔ emplacement | secteur, emplacement, du / au | Plusieurs emplacements par vanne, éventuellement dans plusieurs zones. Datée pour garder l'historique si le réseau change. |
 
-## 1 bis. Placement réel — v1.x (proposée)
+## 1 bis. Placement réel — v1.x (validée le 2026-10-07, Q31)
 
-Proposée le 2026-10-07 (T28a), d'après les réponses de Théophane à Q30 et Q31 ; **à valider par Théophane**. Elle ajoute des colonnes nulles et une table : une ferme qui ne place rien ne change pas.
+Validée par Théophane le 2026-10-07 (réponses à Q30 et Q31), posée par T28a. Elle ajoute des colonnes nulles et une table : une ferme qui ne place rien ne change pas.
 
 **Repère local de la ferme** : mètres, x vers l'est, y vers le nord. Son origine est un champ à part, `ferme.origine_plan` (latitude, longitude), distinct de `ferme.position` (météo) : changer la position météo ne déplace pas la ferme. Elle est fixée au premier placement et ne change plus tant qu'un placement existe (règle du serveur, T28s). **Orientation** : cap en degrés, sens horaire depuis le nord, dans [0, 360[.
 

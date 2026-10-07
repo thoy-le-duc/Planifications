@@ -109,3 +109,4 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T11d](T11d-defilement-plan-fiable.md) | Mesure du défilement du plan : fiable sans relever la limite | T11, T20 | fait |
 | [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | à faire |
 | [T27](T27-vue-3d-prototype.md) | Vue 3D : prototype mesurable (planches et cultures, curseur de semaine) | T11 | à faire |
+| [T28a](T28a-placement-modele.md) | Placement réel : modèle, calcul et base | — | fait |

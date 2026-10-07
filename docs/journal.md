@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-07 — T28a : la ferme peut enregistrer où sont ses zones, planches et bâtiments
+
+- **Fait** : repère local de la ferme (mètres, x à l'est, y au nord, origine `ferme.origine_plan` distincte de la position météo), contour libre des zones, planches placées dans le repère de leur zone, nouvelle table `batiment` (serres, hangar, magasin, rectangles orientés). Calcul pur et testé dans `packages/core/src/placement` (projection locale au centimètre à 5 km, repère de zone, contrôle des contours et des placements, messages en français) ; base (colonnes nulles, contraintes, une serre par zone, zone abritée sans contour même sous écritures concurrentes), synchro de `batiment` par ferme, export `batiment.csv` et nouvelles colonnes. Rien ne change pour une ferme qui ne place rien ; JS de démarrage inchangé (70,9/71 Kio).
+- **Décidé** : modèle v1.x validé (Q31) et décrit dans `modele-donnees.md`. La base ne rejoue que les bornes simples ; la géométrie (auto-intersection, aire, sens) et la règle « gérant seulement » restent au serveur (T28s). D'ici là, le téléphone ne peut écrire aucun placement (refusé par le serveur). Tests anciens complétés pour les nouveaux champs (objets de test, export de T15), sans assertion changée sur le fond. Relecture : une faille de concurrence (verrou de la zone conditionnel) corrigée et testée.
+- **Bloquant** : rien. Reporté à T28s : suppression d'une zone abritée ou de sa serre ; acceptation des placements par le serveur.
+
 ## 2026-10-07 — T13k : « Fait » accepté dès l'affichage d'Aujourd'hui
 
 - **Fait** : au lancement, « Fait » répond dès l'instantané (≈ 0,3 s), sans attendre la base : la tâche disparaît au tap, le « Fait » attend en file et s'écrit dès que la base est prête, avec la même vérification « déjà fait ». Si la ferme ou le compte change entre-temps, rien n'est écrit et un message le dit ; si l'appli est fermée trop tôt, un message prévient au lancement suivant (« n'ont peut-être pas été enregistrés : vérifiez la liste »).
