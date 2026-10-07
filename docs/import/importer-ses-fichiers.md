@@ -34,7 +34,7 @@ Quand vous importez, la correspondance validée (colonnes et choix de valeurs) d
 
 ## Annuler
 
-Juste après l'import, ou plus tard depuis « Imports récents », **Annuler cet import** retire tout ce qu'il a créé, et seulement cela : vos planches et cultures d'avant ne bougent pas. Le modèle d'import, lui, est gardé.
+Juste après l'import, ou plus tard depuis « Imports récents », **Annuler cet import** retire tout ce qu'il a créé, et seulement cela : vos planches et cultures d'avant ne bougent pas. Le modèle d'import, lui, est gardé. Si quelque chose sert depuis (une série posée sur une planche importée), l'annulation est refusée et dit pourquoi : rien n'est retiré.
 
 ## Gros fichiers
 
@@ -47,5 +47,5 @@ Un fichier qui nomme plus de 2 000 cultures différentes est refusé : c'est pre
 - Lignes vides et lignes de total sont ignorées.
 - Nombres à virgule ou à point ; unités reconnues dans l'en-tête ou la cellule (m, cm, kg, g).
 - Dates : `JJ/MM/AAAA`, `AAAA-MM-JJ`, date Excel, ou semaine (`S14`).
-- Une série sans longueur, sans nombre de plants et sans planche est comptée pour 1 m : complétez-la ensuite.
+- Ce que le fichier ne dit pas et que l'appli doit mettre par défaut (densité, marge, type d'abri, longueur d'une série…) est listé à l'aperçu, « à vérifier ». Une culture créée vous demande sa catégorie, si elle est pérenne et son unité de récolte.
 - Vos données restent les vôtres : l'export de la ferme (même carte « Mes données ») ressort tout en JSON et CSV.
