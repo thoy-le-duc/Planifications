@@ -14,6 +14,11 @@ const RAD = Math.PI / 180;
 /**
  * Projection locale équirectangulaire autour de l'origine : x = R·Δλ·cos φ0, y = R·Δφ.
  * Exacte au centimètre près dans un rayon de 5 km (aller-retour exact, c'est la même formule).
+ *
+ * Antiméridien (±180° de longitude) : Δλ n'est pas ramené dans [−180°, 180°[. Une ferme dont le
+ * plan chevaucherait l'antiméridien (îles Fidji, Tchoukotka…) aurait des x faux de toute la
+ * circonférence ; hors de ce cas, rien à faire. Aux pôles, cos φ0 → 0 : la projection n'a pas de
+ * sens au-delà de ±89°. Ni l'un ni l'autre ne concerne une ferme en Europe (hébergement UE).
  */
 export function versLocal(origine: PositionGeographique, point: PositionGeographique): PointLocal {
   const cosPhi0 = Math.cos(origine.latitude * RAD);
@@ -126,7 +131,7 @@ export function repereZone(
       cap = Math.atan2(b.x - a.x, b.y - a.y) / RAD;
     }
   }
-  if (aire2 === 0) return null;
+  if (!Number.isFinite(aire2) || aire2 === 0) return null;
   let orientation = ((cap % 180) + 180) % 180;
   if (orientation >= 180 || 180 - orientation < 1e-12) orientation = 0;
   return {

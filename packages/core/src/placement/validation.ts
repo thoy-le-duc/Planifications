@@ -183,7 +183,10 @@ function validerContourSansGarde(entree: unknown): ResultatPlacement<readonly Po
     const a = sommets[i];
     const b = sommets[(i + 1) % sommets.length];
     if (a !== undefined && b !== undefined && Math.hypot(b.x - a.x, b.y - a.y) < SOMMETS_CONFONDUS_M) {
-      return refus('sommets_confondus', null, `Les sommets ${String(i + 1)} et ${String(((i + 1) % sommets.length) + 1)} sont confondus.`);
+      if (i === sommets.length - 1) {
+        return refus('sommets_confondus', null, 'Le dernier sommet est confondu avec le premier : ne répétez pas le premier sommet à la fin du contour.');
+      }
+      return refus('sommets_confondus', null, `Les sommets ${String(i + 1)} et ${String(i + 2)} sont confondus.`);
     }
   }
   if (autoIntersecte(sommets)) {
