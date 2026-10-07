@@ -290,6 +290,19 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q31 — Placement réel : le modèle (posée le 2026-10-07, T28a)
+
+Question : point de départ du plan, forme des zones, planches dans leur zone, lien serre ↔ zone, qui peut placer.
+
+Réponses (2026-10-07) :
+1. Point de départ du plan : champ à part (`ferme.origine_plan`), distinct de la position météo, figé après le premier placement.
+2. Zones en **formes libres** (polygones) dès le départ ; les serres et bâtiments restent des rectangles.
+3. Les planches se placent dans le repère de leur zone et la suivent.
+4. Une serre abrite une zone au plus ; la zone abritée prend le rectangle de la serre, les zones sans serre ont leur polygone.
+5. **Gérant seulement** pour tout placement (zones, planches, bâtiments, origine), contrôlé par le serveur.
+
+Tickets : T28a, T28s, T28b, T28d, T28c.
+
 ### Q30 — Vue 3D : filtres, jumeau numérique, vol de caméra (posée le 2026-10-07, après le prototype T27)
 
 Demande, après avoir vu le prototype T27 : juger les types de cultures d'un coup d'œil ; une ferme qui n'est pas alignée comme un tableau, avec bâtiments, serres et zones à leur vraie place et orientation, joli visuellement ; cliquer sur « serre M3 » et y aller.
@@ -333,17 +346,6 @@ Question : quand quelqu'un quitte une ferme (ou en est retiré), ses anciens ref
 Réponse (2026-10-07) : les effacer ; rien d'une ferme ne reste chez quelqu'un qui n'en fait plus partie. Ticket T10u. Les refus de synchro restent hors de l'export complet (confirmé le 2026-10-07).
 
 ### À suivre
-
-### Q31 — Placement réel : le modèle proposé (posée le 2026-10-07, T28a)
-
-Pour le jumeau numérique, voici ce qu'on propose d'enregistrer (détail dans `docs/modele-donnees.md`, section v1.x, une fois T28a fait). Dis-nous si l'un des points ne colle pas à ta ferme :
-
-1. **Un point de départ du plan**, posé au premier placement sur la photo aérienne, séparé de la position de la ferme qui sert à la météo (changer l'une ne déplace pas l'autre). Il ne bouge plus ensuite.
-2. **Zones en rectangles** (centre, longueur, largeur, orientation). Un polygone libre viendrait plus tard si une parcelle ne rentre vraiment pas dans un rectangle.
-3. **Les planches se placent dans leur zone** : bouger ou tourner la serre bouge ses planches. Une planche non placée est rangée automatiquement.
-4. **Bâtiment** = une nouvelle fiche : serre tunnel, serre chapelle, hangar, magasin ou autre, avec dimensions (dont la hauteur), place et orientation. Une serre est reliée à la zone de culture qu'elle abrite (une serre par zone au plus) et lui donne sa forme.
-5. **Qui peut placer** : tout membre de la ferme, comme pour les planches ; seul le gérant pose le point de départ du plan.
-
 
 ## Questions ouvertes du brief
 
