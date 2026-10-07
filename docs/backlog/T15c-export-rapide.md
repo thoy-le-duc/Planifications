@@ -31,5 +31,5 @@ La borne de l'e2e a été relevée à 15 s dans T16b, provisoirement.
 
 ## Critères d'acceptation
 
-- [ ] `export.e2e.ts` passe avec `DUREE_MAX_MS = 10_000` et `TACHE_MAX_MS = 50`.
-- [ ] Un test par règle.
+- [x] `export.e2e.ts` passe avec `DUREE_MAX_MS = 10_000` et `TACHE_MAX_MS = 50`.
+- [x] Un test par règle.

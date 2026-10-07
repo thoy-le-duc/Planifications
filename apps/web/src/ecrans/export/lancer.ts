@@ -4,7 +4,7 @@
  * Aucun réseau : fonctionne hors ligne.
  */
 import { exporterFerme, type ArchiveExport, type Avancement, type Compresseur, type PorteDonnees } from '@planif/sync/export';
-import { compresseurEnWorker } from './compression.ts';
+import { compresseurEnWorker, ErreurWorkerCompression } from './compression.ts';
 
 export interface OptionsLancerExport {
   readonly porte: PorteDonnees;
@@ -33,17 +33,36 @@ export function jourLocal(d: Date): string {
 export async function lancerExport(o: OptionsLancerExport): Promise<ArchiveExport> {
   const quand = o.maintenant();
   const enWorker = o.compresseur === undefined ? compresseurEnWorker() : null;
-  const compresseur = o.compresseur ?? enWorker?.compresseur;
-  let archive: ArchiveExport;
-  try {
-    archive = await exporterFerme(o.porte, {
+  // Barre d'avancement : jamais en recul, même si l'export recommence sans le worker.
+  const vu = { fait: 0, total: 0 };
+  const avancement =
+    o.avancement === undefined
+      ? undefined
+      : (a: Avancement) => {
+          if (a.total === vu.total && a.fait < vu.fait) return;
+          vu.fait = a.fait;
+          vu.total = a.total;
+          o.avancement?.(a);
+        };
+  const exporter = (compresseur: Compresseur | undefined) =>
+    exporterFerme(o.porte, {
       fermeId: o.fermeId,
       genereLe: quand.toISOString(),
       jour: jourLocal(quand),
       ...(compresseur === undefined ? {} : { compresseur }),
-      ...(o.avancement === undefined ? {} : { avancement: o.avancement }),
+      ...(avancement === undefined ? {} : { avancement }),
       ...(o.signal === undefined ? {} : { signal: o.signal }),
     });
+  let archive: ArchiveExport;
+  try {
+    archive = await exporter(o.compresseur ?? enWorker?.compresseur);
+  } catch (erreur: unknown) {
+    // Le worker de compression a lâché (pas la base, pas une annulation) : une seule nouvelle
+    // tentative, compression au fil principal. La base se relit sans risque (lecture seule).
+    if (!(erreur instanceof ErreurWorkerCompression) || o.signal?.aborted === true) throw erreur;
+    enWorker?.fermer();
+    console.warn(`Export : ${erreur.message} ; nouvelle tentative sans le worker.`);
+    archive = await exporter(undefined);
   } finally {
     enWorker?.fermer();
   }

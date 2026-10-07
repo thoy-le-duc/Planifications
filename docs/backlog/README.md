@@ -69,7 +69,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T13g](T13g-aujourdhui-avant-base.md) | Aujourd'hui : instantané avant la base, « Fait » en file au lancement | T13d | fait |
 | [T13k](T13k-fait-avant-base.md) | Aujourd'hui : « Fait » accepté avant la base | T13g | à préciser |
 | [T13l](T13l-gestes-pendant-file.md) | Aujourd'hui : « Annuler » et gestes pendant la file des « Fait » | T13g | fait |
-| [T13m](T13m-chaine-unique.md) | Une seule règle « chaîne d'une saisie » | T13l, T13j | à faire |
+| [T13m](T13m-chaine-unique.md) | Une seule règle « chaîne d'une saisie » | T13l, T13j | fait |
 | [T13n](T13n-horodatages.md) | Horodatages comparés comme des dates | T13l | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16, T10s | à faire |
@@ -78,7 +78,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T14d](T14d-import-annee-suivante.md) | Import : saison à cheval sur deux années (Q18) | T14 | fait |
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
 | [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | fait |
-| [T15c](T15c-export-rapide.md) | Export : sous 10 secondes sur un téléphone moyen | T16b | à faire |
+| [T15c](T15c-export-rapide.md) | Export : sous 10 secondes sur un téléphone moyen | T16b | fait |
 | [T15d](T15d-export-tache-longue.md) | Export : jamais de tâche longue sur le fil principal | T15c | à faire |
 | [T25](T25-demo-en-ligne.md) | Démo en ligne (Vercel) | — | fait |
 | [T25b](T25b-demo-finitions.md) | Démo : pas de déconnexion ni d’état de synchro | T25 | fait |
