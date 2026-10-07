@@ -157,7 +157,18 @@ export async function deconnecter(session: SessionConnexion, options: OptionsDec
     // fermes retenues (choix T11, dernière montrée T13g ; T13l) ne restent pas, quoi qu'il arrive
     // ensuite. Celles d'un autre compte ne sont pas touchées.
     const id = session.utilisateurId;
-    for (const cle of [cleRefusVus(id), cleInstantane(id), cleChoix(id), cleMontree(id)]) {
+    // T14b : modèles et imports récents (planif:import:*), de toutes les fermes du téléphone.
+    const s = options.stockage as Partial<Storage>;
+    const cles = [cleRefusVus(id), cleInstantane(id), cleChoix(id), cleMontree(id)];
+    try {
+      for (let i = 0; i < (s.length ?? 0); i++) {
+        const c = s.key?.(i);
+        if (c?.startsWith('planif:import:') === true) cles.push(c);
+      }
+    } catch {
+      // Stockage illisible : rien à lister.
+    }
+    for (const cle of cles) {
       try {
         options.stockage.removeItem(cle);
       } catch {
