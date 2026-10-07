@@ -26,8 +26,10 @@ export class DejaFait extends Error {}
  * lue telle quelle. Seules les saisies locales pas encore synchronisées (sans `origine_id`)
  * montent, par l'identifiant, jusqu'au premier parent qui la porte ou jusqu'à l'origine (une
  * chaîne de 1 000 corrections ne se remonte pas). Un parent absent de la base locale sert de clé
- * de chaîne, comme dans `enVigueur` (calculs.ts). Profondeur bornée (données corrompues : jamais
- * de boucle sans fin).
+ * de chaîne, comme dans `enVigueur` (calculs.ts). T13m : la montée ne passe jamais par une ligne
+ * d'une autre ferme (`ferme`, portée par chaque maillon) : pour la ferme, une telle ligne est
+ * absente. Profondeur bornée : un cycle (données corrompues) n'atteint aucune origine, ses
+ * maillons et ce qui y remonte ne sont pas dans `remplacement` : rien n'y est en vigueur.
  *   - `remplacement` : chaque correction ou annulation, avec l'origine de sa chaîne (le dernier
  *     maillon de sa montée : fini, ou dont le parent est une origine ou absent) ;
  *   - `chaine` : par origine, la clé (horodatage|id) de sa correction la plus récente et son
@@ -41,17 +43,18 @@ export class DejaFait extends Error {}
  * aussi la ferme, l'origine, la sorte et l'horodatage. La ferme est écartée de l'index
  * ferme_date (`+`) : sinon SQLite parcourrait tout le journal de la ferme.
  */
-export const chaines = (depart: string, avant = '') => `WITH RECURSIVE ${avant}montee(id, sorte, horodatage, origine, fini, profondeur) AS (
-    SELECT id, remplace_sorte, horodatage, coalesce(origine_id, remplace_evenement_id), origine_id IS NOT NULL, 0 FROM evenement
+export const chaines = (depart: string, avant = '') => `WITH RECURSIVE ${avant}montee(id, sorte, horodatage, origine, fini, profondeur, ferme) AS (
+    SELECT id, remplace_sorte, horodatage, coalesce(origine_id, remplace_evenement_id), origine_id IS NOT NULL, 0, ferme_id FROM evenement
     WHERE ${depart}
     UNION ALL
-    SELECT m.id, m.sorte, m.horodatage, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL, m.profondeur + 1
-    FROM montee m JOIN evenement p ON p.id = m.origine
+    SELECT m.id, m.sorte, m.horodatage, coalesce(p.origine_id, p.remplace_evenement_id), p.origine_id IS NOT NULL, m.profondeur + 1, m.ferme
+    FROM montee m JOIN evenement p ON p.id = m.origine AND +p.ferme_id = m.ferme
     WHERE NOT m.fini AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL) AND m.profondeur < 1000
   ),
   remplacement AS (
     SELECT m.id, m.sorte, m.horodatage, m.origine FROM montee m
-    WHERE m.fini OR NOT EXISTS (SELECT 1 FROM evenement p WHERE p.id = m.origine AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL))
+    WHERE m.fini OR NOT EXISTS (SELECT 1 FROM evenement p
+      WHERE p.id = m.origine AND +p.ferme_id = m.ferme AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL))
   ),
   chaine AS (
     SELECT origine, MAX(CASE WHEN sorte = 'correction' THEN horodatage || '|' || id END) AS cle, id,
@@ -203,4 +206,59 @@ function dejaFaitHors(fait: FaitVise, exclus: readonly string[]): VerificationEc
     const deja = await lire(sql, [...filtre, JSON.stringify(exclus), fait.cibleId, fait.fermeId, fait.fermeId, fait.fermeId]);
     if (deja.length > 0) throw new DejaFait('déjà fait');
   };
+}
+
+/** Lecture d'une vérification : `chaineDe` sert dans la transaction d'écriture comme hors d'elle. */
+export type Lire = Parameters<VerificationEcriture>[0];
+
+/** La chaîne d'une saisie : annulée (rien en vigueur), sinon sa ligne en vigueur. */
+export interface ChaineDe {
+  readonly annulee: boolean;
+  readonly enVigueur: string | null;
+}
+
+/**
+ * T13m : origine de la chaîne de la ligne `id` (paramètres : id, ferme, id, ferme), par la montée
+ * de `chaines` partie de cette seule ligne. `origine` nulle pour un remplacement : cycle ou montée
+ * trop longue (rien en vigueur). Aucune ligne : `id` absent de la ferme.
+ */
+const SQL_ORIGINE_DE = `${chaines(`id = ? AND remplace_evenement_id >= '' AND +ferme_id = ?`)}SELECT e.remplace_sorte AS sorte,
+    (SELECT origine FROM remplacement) AS origine
+  FROM evenement e WHERE e.id = ? AND +e.ferme_id = ?`;
+
+/**
+ * T13m : la chaîne de l'origine `o` (paramètres : o, ferme, o, ferme, ferme, o), par `chaines`
+ * partie de ses seuls membres possibles : `o`, les remplacements reçus qui la portent en
+ * `origine_id`, et ce qui descend d'eux par remplace_evenement_id (index `remplacement`). Toute
+ * ligne dont la montée aboutit à `o` en fait partie ; `chaines` les juge, la chaîne de `o` est
+ * lue à la fin (un membre dont la montée aboutit ailleurs n'y compte pas).
+ */
+const SQL_CHAINE_DE_L_ORIGINE = `${chaines(
+  `id IN (SELECT id FROM membre) AND remplace_evenement_id >= '' AND +ferme_id = ?`,
+  `membre(id) AS (
+    SELECT ?
+    UNION SELECT e.id FROM evenement e WHERE e.remplace_evenement_id >= '' AND +e.ferme_id = ? AND e.origine_id = ?
+    UNION SELECT e.id FROM evenement e JOIN membre m ON e.remplace_evenement_id = m.id WHERE +e.ferme_id = ?
+  ),
+  `,
+)}SELECT annulations, cle, id FROM chaine WHERE origine = ?`;
+
+/**
+ * T13m : la chaîne de remplacements de la ligne `id` de la ferme, selon la règle de `chaines`
+ * (la seule) : la journée la lit pour toute la ferme (`CHAINES`), les écritures pour une saisie.
+ * Chaîne qui contient une annulation, ou cycle : `annulee`, rien en vigueur ; sinon la correction
+ * la plus récente (horodatage, puis id), à défaut l'origine. Ligne absente de la ferme : ni annulée,
+ * ni rien en vigueur.
+ */
+export async function chaineDe(lire: Lire, fermeId: string, id: string): Promise<ChaineDe> {
+  const ligne = (await lire<{ sorte: string | null; origine: string | null }>(SQL_ORIGINE_DE, [id, fermeId, id, fermeId]))[0];
+  if (ligne === undefined) return { annulee: false, enVigueur: null };
+  const origine = ligne.sorte === null ? id : ligne.origine;
+  if (origine === null) return { annulee: true, enVigueur: null };
+  const c = (
+    await lire<{ annulations: number; cle: string | null; id: string | null }>(SQL_CHAINE_DE_L_ORIGINE, [origine, fermeId, origine, fermeId, fermeId, origine])
+  )[0];
+  if (c === undefined) return { annulee: false, enVigueur: origine };
+  if (c.annulations > 0) return { annulee: true, enVigueur: null };
+  return { annulee: false, enVigueur: c.cle === null ? origine : c.id };
 }
