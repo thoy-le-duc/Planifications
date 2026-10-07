@@ -257,9 +257,10 @@ export type ResultatAnnulation =
 /** Annule l'import `i` (voir l'en-tête du fichier). */
 export async function annulerImport(porte: PorteDonnees, fermeId: string, i: ImportPasse, instant: string): Promise<ResultatAnnulation> {
   const lots = lotsDe(i);
-  const ecrits = Math.min(i.ecrits ?? lots.length, lots.length);
   const dejaAnnules = new Set(i.lotsAnnules ?? []);
-  const aAnnuler = lots.map((_, k) => k).filter((k) => k < ecrits && !dejaAnnules.has(k));
+  // Tous les lots, même ceux qu'on ne sait pas écrits (l'appli a pu s'arrêter juste après une
+  // écriture, avant de la noter) : une suppression qui vise une ligne jamais écrite ne touche rien.
+  const aAnnuler = lots.map((_, k) => k).filter((k) => !dejaAnnules.has(k));
   const usage = await premierUsage(porte, fermeId, aAnnuler.flatMap((k) => lignesDe(lots[k] ?? [])));
   if (usage !== null) return { sorte: 'refuse', message: usage };
 
