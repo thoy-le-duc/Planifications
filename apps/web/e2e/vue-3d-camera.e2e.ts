@@ -189,11 +189,16 @@ async function installerOutils(page: Page): Promise<void> {
       const c = document.querySelector('[data-testid="toile-3d"]');
       return c instanceof HTMLElement ? c : null;
     };
+    // Souris : le relâchement du pointeur ; clavier : l'appui sur Entrée ou Espace (aucun pointerup).
+    const prendre = (e: Event) => {
+      const c = lire();
+      f.__clic = { t: e.timeStamp, pose: JSON.parse(c?.dataset.camera ?? 'null') as unknown };
+    };
+    document.addEventListener('pointerup', prendre, true);
     document.addEventListener(
-      'pointerup',
+      'keydown',
       (e) => {
-        const c = lire();
-        f.__clic = { t: e.timeStamp, pose: JSON.parse(c?.dataset.camera ?? 'null') as unknown };
+        if (e.key === 'Enter' || e.key === ' ') prendre(e);
       },
       true,
     );
