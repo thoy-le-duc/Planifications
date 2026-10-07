@@ -17,5 +17,5 @@
 
 ## Critères d'acceptation
 
-- [ ] Test de propriété aléatoire : `chaineDe`, `chaines` et `enVigueur` donnent la même chaîne annulée et la même ligne en vigueur (maillons manquants, horloges décalées, cycles).
-- [ ] Plus aucune copie de la règle dans `ecritures.ts`.
+- [x] Test de propriété aléatoire : `chaineDe`, `chaines` et `enVigueur` donnent la même chaîne annulée et la même ligne en vigueur (maillons manquants, horloges décalées, cycles).
+- [x] Plus aucune copie de la règle dans `ecritures.ts`.

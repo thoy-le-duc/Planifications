@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-07 — T13m : une seule règle « chaîne d'une saisie »
+
+- **Fait** : la règle qui dit si une saisie est annulée et quelle version est en vigueur n'existe plus qu'à un endroit : `chaineDe` (dans `@planif/sync/fait-unique`) réutilise `chaines`, que lisent la journée et le « déjà fait » ; l'écran (`enVigueur`) s'y aligne. `ecritures.ts` n'a plus sa copie ; une saisie relue pour être annulée est lue comme à l'écran. Au passage, la montée d'une chaîne ne traverse plus une ligne d'une autre ferme (correctif d'isolement).
+- **Décidé** : sur des données corrompues (cycle, maillon manquant d'une annulation reçue, origine incohérente), la chaîne est tenue pour annulée : refus plutôt qu'écriture. Relecture : 18 000 journaux comparés (≈ 200 000 appels), aucune différence entre écran, journée et écritures ; seul écart avec l'ancienne règle, dans le sens sûr. Index et budget JS inchangés.
+- **Bloquant** : rien. À surveiller : la recherche des annulations reçues par `origine_id` parcourt l'index des remplacements (déjà le cas avant) ; à mesurer sur la grande ferme.
+
 ## 2026-10-07 — T13o : « Fait » unique contrôlé d'après le journal d'envoi
 
 - **Fait** : la porte relit aussi les lignes touchées par une modification (via le journal d'envoi de PowerSync, `ps_crud`) : un UPDATE qui transformerait une ligne en « Fait » déjà fait est refusé, comme un rowid réutilisé après une suppression ; un « Fait » et sa correction écrits ensemble ne sont plus refusés à tort. Le brief interdit tout accès SQL brut à l'agent et au serveur MCP.
