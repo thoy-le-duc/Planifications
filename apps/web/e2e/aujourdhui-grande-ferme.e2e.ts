@@ -38,12 +38,19 @@ import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, repeterMe
  *     pendant que la coquille n'est pas à data-base="prete"), en lecture seule (aucun bouton
  *     de carte ni de l'historique actif tant que la base n'est pas prête : disabled ou
  *     aria-disabled="true"), puis « Marquer fait » actif une fois la base prête. Mesure ajoutée
- *     à côté de celle de T13d (1 s), qui reste telle quelle.
+ *     à côté de celle de T13d (1 s), qui reste telle quelle. T13k (Q26, 2026-10-07) : « Marquer
+ *     fait » est accepté dès l'instantané ; la lecture seule vaut pour les autres boutons.
  *   - T13g, isolement entre fermes (BLOQUANT) : un instantané rangé pour une autre ferme que la
  *     dernière choisie (même utilisateur, même jour) n'est jamais dessiné, ni avant la base ni
  *     après. Banc : l'instantané gardé (contrat T13d : texte JSON portant utilisateurId, fermeId,
  *     jour) est retrouvé dans localStorage et sa ferme remplacée par une autre ; la dernière
  *     ferme choisie, mémorisée par l'appli, reste celle de la grande ferme.
+ *   - T13k, « Fait » avant la base (BLOQUANT, Q26) : au lancement à froid hors ligne, CPU ×4,
+ *     trois « Marquer fait » tapés sur l'instantané AVANT data-base="prete" (taps faits par la
+ *     page dès que les cartes sont là, sur trois tâches différentes) → trois réalisés, aucun
+ *     perdu, aucun en double : le compteur « saisies en attente » de la synchro monte de 3
+ *     exactement et y reste ; les trois tâches ne reviennent pas, ni après la base ni après un
+ *     rechargement.
  */
 
 const BUDGET_TAP_MS = 300;
@@ -166,6 +173,8 @@ async function releverAvantBase(page: Page): Promise<void> {
       for (const b of document.querySelectorAll<HTMLButtonElement>('[data-testid="tache"] button, [data-testid="saisie-historique"] button')) {
         if (!b.disabled && b.getAttribute('aria-disabled') !== 'true') {
           const nom = (b.getAttribute('aria-label') ?? b.textContent).trim();
+          // T13k (Q26) : « Fait » est accepté avant la base ; les autres boutons restent inactifs.
+          if (nom.startsWith('Marquer fait')) continue;
           if (!releve.boutonsActifs.includes(nom)) releve.boutonsActifs.push(nom);
         }
       }
@@ -203,6 +212,57 @@ async function deplacerInstantane(page: Page, attendu: { readonly utilisateurId:
     },
     [CLE_SESSION, attendu.utilisateurId, attendu.fermeId, autre] as const,
   );
+}
+
+/** T13k : ce qu'a fait la page avant la base (window.__faitAvantBase). */
+interface FaitAvantBase {
+  /** data-cle des tâches touchées, dans l'ordre des taps. */
+  readonly cles: readonly string[];
+  /** data-base de la coquille à chaque tap (jamais « prete » attendu). */
+  readonly bases: readonly (string | null)[];
+}
+
+/** T13k : drapeau (sessionStorage) qui arme les taps du prochain chargement, une seule fois. */
+const DRAPEAU_FAIT_AVANT_BASE = 'e2e.t13k.fait-avant-base';
+
+/**
+ * T13k : au chargement armé par DRAPEAU_FAIT_AVANT_BASE, tape « Marquer fait » sur trois tâches
+ * différentes de l'instantané dès qu'elles sont dessinées et actives, tant que la coquille n'est
+ * pas à data-base="prete" (un tap par mutation : chaque tap redessine la liste). Le drapeau est
+ * consommé : les chargements suivants ne tapent rien.
+ */
+async function armerFaitAvantBase(page: Page): Promise<void> {
+  await page.addInitScript((drapeau) => {
+    if (sessionStorage.getItem(drapeau) === null) return;
+    sessionStorage.removeItem(drapeau);
+    const releve: { cles: string[]; bases: (string | null)[] } = { cles: [], bases: [] };
+    (window as unknown as { __faitAvantBase?: unknown }).__faitAvantBase = releve;
+    const observateur = new MutationObserver(() => {
+      const etat = document.querySelector('[data-testid="app"]')?.getAttribute('data-base') ?? null;
+      if (etat === 'prete' || releve.cles.length >= 3) {
+        observateur.disconnect();
+        return;
+      }
+      for (const t of document.querySelectorAll<HTMLElement>('[data-testid="tache"]')) {
+        const cle = t.getAttribute('data-cle');
+        if (cle === null || releve.cles.includes(cle)) continue;
+        const b = [...t.querySelectorAll<HTMLButtonElement>('button')].find((x) => (x.getAttribute('aria-label') ?? '').startsWith('Marquer fait'));
+        if (b === undefined || b.disabled || b.getAttribute('aria-disabled') === 'true') continue;
+        releve.cles.push(cle);
+        releve.bases.push(etat);
+        b.click();
+        return;
+      }
+    });
+    observateur.observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-base', 'disabled', 'aria-disabled'] });
+  }, DRAPEAU_FAIT_AVANT_BASE);
+}
+
+/** Nombre de saisies en attente d'envoi, d'après l'état de la synchro (« Hors ligne · N saisies en attente »). */
+async function saisiesEnAttente(page: Page): Promise<number> {
+  const t = (await page.getByTestId('etat-synchro').textContent()) ?? '';
+  const m = /(\d+)\s+saisies?\s+en attente/.exec(t);
+  return m === null ? 0 : Number(m[1]);
 }
 
 /** Vide le stockage du navigateur (localStorage), sauf la session : plus d'instantané. */
@@ -336,7 +396,7 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
       const n = `lancement ${String(i + 1)}`;
       expect.soft(v.premiereTache, `${n} : instantané dessiné avant que la base soit prête (aucune carte vue avant data-base="prete")`).toBeDefined();
       expect.soft(v.baseALaPremiereTache, `${n} : base pas encore prête quand la première carte est dessinée`).not.toBe('prete');
-      expect.soft(v.boutonsActifs, `${n} : instantané en lecture seule, aucun bouton de carte ni de l’historique actif avant la base prête`).toEqual([]);
+      expect.soft(v.boutonsActifs, `${n} : instantané en lecture seule (sauf « Marquer fait », Q26), aucun autre bouton de carte ni de l’historique actif avant la base prête`).toEqual([]);
     });
     expect.soft(series.ecran.mediane, `médiane sous ${String(BUDGET_FROID_AVANT_BASE_MS)} ms`).toBeLessThan(BUDGET_FROID_AVANT_BASE_MS);
   });
@@ -354,6 +414,41 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
     await expect(taches(page).first()).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(DELAI_ECRITURE_INSTANTANE_MS);
     expect(await deplacerInstantane(page, { utilisateurId: ferme.utilisateurId, fermeId: AUTRE_FERME }, AUTRE_FERME), 'l’instantané de l’autre ferme a été remplacé').toBe(0);
+  });
+
+  await test.step('T13k : trois « Fait » tapés avant la base (CPU ×4, hors ligne) → trois réalisés, aucun perdu, aucun en double', async () => {
+    // La journée relue de la grande ferme est affichée : son instantané est gardé.
+    await expect(taches(page).first()).toBeVisible();
+    await page.waitForTimeout(DELAI_ECRITURE_INSTANTANE_MS);
+    const avant = await saisiesEnAttente(page);
+    await armerFaitAvantBase(page);
+    await page.evaluate((drapeau) => {
+      sessionStorage.setItem(drapeau, 'oui');
+    }, DRAPEAU_FAIT_AVANT_BASE);
+    await page.reload();
+    await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 30_000 });
+    const releve = await page.evaluate(() => (window as unknown as { __faitAvantBase?: FaitAvantBase }).__faitAvantBase ?? null);
+    expect(releve, 'relevé des taps armé pour ce chargement').not.toBeNull();
+    const fait = releve ?? { cles: [], bases: [] };
+    console.log(`T13k, « Fait » tapés avant la base : ${String(fait.cles.length)} (base aux taps : ${fait.bases.map(String).join(', ')})`);
+    expect(fait.cles, 'trois « Marquer fait » actifs et tapés avant data-base="prete" (Q26)').toHaveLength(3);
+    expect(new Set(fait.cles).size, 'trois tâches différentes').toBe(3);
+    for (const b of fait.bases) expect(b, 'chaque tap avant que la base soit prête').not.toBe('prete');
+
+    // Trois réalisés : le compteur monte de 3, exactement, et y reste (aucun perdu, aucun en double).
+    await expect.poll(() => saisiesEnAttente(page), { timeout: 30_000, message: 'trois saisies écrites' }).toBe(avant + 3);
+    await page.waitForTimeout(DELAI_ECRITURE_INSTANTANE_MS);
+    expect(await saisiesEnAttente(page), 'toujours trois de plus : aucun « Fait » écrit deux fois').toBe(avant + 3);
+    await expect(ecran(page).getByRole('alert')).toHaveCount(0);
+    for (const cle of fait.cles) await expect(page.locator(`[data-testid="tache"][data-cle="${cle}"]`), `${cle} faite, ne revient pas`).toHaveCount(0);
+
+    // Rechargement, toujours hors ligne : les trois restent faites, rien de plus n'est écrit.
+    await page.reload();
+    await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 30_000 });
+    await expect(taches(page).first()).toBeVisible({ timeout: 30_000 });
+    await page.waitForTimeout(DELAI_ECRITURE_INSTANTANE_MS);
+    expect(await saisiesEnAttente(page), 'après rechargement : trois de plus, pas une de plus').toBe(avant + 3);
+    for (const cle of fait.cles) await expect(page.locator(`[data-testid="tache"][data-cle="${cle}"]`), `${cle} reste faite après rechargement`).toHaveCount(0);
   });
 
   await test.step(`tap sur « Aujourd’hui » depuis Planches : écran affiché en moins de ${String(BUDGET_TAP_MS)} ms (base ouverte), médiane de 5`, async () => {
