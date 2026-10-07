@@ -7,6 +7,11 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Fait** : l'archive est construite table par table pendant la lecture (`creerConstructeurArchive`), CRC-32 et encodage accélérés, worker de compression rangé à part et toujours précaché, repli sur le fil principal s'il ne se charge pas, contre-pression vers le worker, chien de garde de 15 s et une nouvelle tentative si le worker tombe. Ferme de T07, CPU ×4 : 7,3 à 8,6 s (avant 11,5 à 15,4 s), aucune tâche longue. La borne de l'e2e revient à 10 s.
 - **Décidé** : archive identique au bit près (vérifiée par le relecteur sur 3 360 archives et le CRC sur toutes les longueurs jusqu'à 300 000 octets). Testeur et relecteur sur Sonnet (ticket sans stock ni synchro). JS de démarrage inchangé.
 - **Bloquant** : rien. Q28 posée (changer d'onglet arrête l'export sans le dire). Suites dans T15d (contre-pression de la lecture, barre par sauts).
+## 2026-10-07 — T10s : le serveur accepte le parcellaire et le catalogue de la ferme
+
+- **Fait** : zones, emplacements, saisons, assolements et familles/espèces/variétés propres à la ferme passent maintenant la synchro au lieu d'être refusés (prérequis de l'import T14b). Isolement strict : jamais une autre ferme ni la bibliothèque commune, références relues sous la ferme, pas de changement de ferme, tout ou rien par lot, suppression douce refusée tant qu'une ligne sert (planche occupée, espèce utilisée, zone non vide…). Règles en français, plafonds contre les fautes de frappe. 859 tests d'intégration verts.
+- **Décidé** : mêmes droits que les séries (gérant et équipier). Relecture de sécurité en deux passages : aucune faille d'isolement ; elle a fait ajouter les tests manquants et fermé un contournement (réactiver une série terminée sur une planche supprimée). Postgres lancé localement pour les tests (pas de Docker).
+- **Bloquant** : rien. Q27 posée (deux planches avec le même code). Suites : T10t (tests positifs, lignes laissées actives après une suppression, unicité du code) ; la redescente sur un second téléphone sera vérifiée par l'e2e de l'import.
 
 ## 2026-10-07 — T13o : « Fait » unique contrôlé d'après le journal d'envoi
 

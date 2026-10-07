@@ -36,6 +36,7 @@ import {
 } from './messages.ts';
 import type { Refus } from './motifs.ts';
 import { visibleParLaFerme, type TransactionDb } from './references.ts';
+import { TABLES_STRUCTURE } from './structure-lignes.ts';
 
 /** Tables de la planification ouvertes au téléphone (T10e). */
 export const TABLES_SERIE = new Set(['serie', 'occupation']);
@@ -103,6 +104,9 @@ type Ligne = Readonly<Record<string, unknown>>;
 const invalide = (precision: string, fermeId: string | null): Refus => ({ motif: 'ecriture_invalide', precision, fermeId });
 /** Série enregistrée que le cœur ne relit pas (ne devrait pas arriver) : le détail va au journal. */
 const PRECISION_SERIE_ILLISIBLE = 'la série enregistrée est illisible';
+
+/** Statuts d'une série qui retient sa place et sa culture (T10s : structure.ts en tient compte pour une suppression). */
+const STATUTS_ACTIFS: ReadonlySet<string> = new Set(['prevue', 'en_cours']);
 
 const estTableSerie = (table: string): table is TableSerie => TABLES_SERIE.has(table);
 
@@ -418,7 +422,11 @@ async function modifier(
   if ((await identique(tx, e.table, ligne, valeur.id)) === true) return null;
 
   // Rétablissement (décision 2) : toutes les références sont revérifiées, comme si elles changeaient.
-  const retablie = avant.supprime_le != null && valeur.supprimeLe === null;
+  // T10s (relecture) : une série terminée ou abandonnée qui redevient prévue ou en cours se
+  // rétablit aussi ; ce qu'elle désigne a pu être supprimé entre-temps (sa place et sa culture ne
+  // la retenaient plus). Ses occupations se revérifient en fin de lot (emplacement actif).
+  const reactivee = e.table === 'serie' && !STATUTS_ACTIFS.has(String(avant.statut)) && STATUTS_ACTIFS.has(String(ligne.statut));
+  const retablie = (avant.supprime_le != null && valeur.supprimeLe === null) || reactivee;
   const change = (colonne: string): boolean => retablie || JSON.stringify(ligne[colonne] ?? null) !== JSON.stringify(avant[colonne] ?? null);
   if (e.table === 'serie') {
     const refus = await verifierReferencesSerie(tx, valeur as Serie, {
@@ -483,8 +491,9 @@ export async function fermesDesLignesVisees(
   fermes: ReadonlySet<string>,
 ): Promise<string[]> {
   const trouvees = new Set<string>();
-  // T23 : les itinéraires et les types d'intervention se modifient aussi, sous le même verrou.
-  for (const table of ['serie', 'occupation', 'itineraire', 'type_intervention'] as const) {
+  // T23 : les itinéraires et les types d'intervention se modifient aussi, sous le même verrou ;
+  // T10s : le parcellaire et le catalogue de la ferme de même.
+  for (const table of ['serie', 'occupation', 'itineraire', 'type_intervention', ...TABLES_STRUCTURE]) {
     const ids = [...new Set(ecritures.filter((e) => e.table === table && e.op === 'PATCH' && estUuid(e.id)).map((e) => e.id.toLowerCase()))];
     if (ids.length === 0) continue;
     const r = await tx.execute<{ ferme_id: string }>(
@@ -523,6 +532,18 @@ export async function verifierFinDeLot(
     );
     if (occupations.rows.length > 0 && serie.valeur.supprimeLe !== null) {
       return { index, refus: invalide('la série est supprimée mais occupe encore un emplacement', fermeId) };
+    }
+    if (serie.valeur.supprimeLe === null && STATUTS_ACTIFS.has(serie.valeur.statut)) {
+      // T10s (relecture) : une série prévue ou en cours n'occupe que des emplacements actifs de sa ferme.
+      const r = await tx.execute<{ inactif: boolean }>(
+        sql`SELECT EXISTS (
+              SELECT 1 FROM occupation o
+              LEFT JOIN emplacement e ON e.id = o.emplacement_id AND e.ferme_id = o.ferme_id
+              WHERE o.serie_id = ${serieId}::uuid AND o.ferme_id = ${fermeId}::uuid AND o.supprime_le IS NULL
+                AND (e.id IS NULL OR e.supprime_le IS NOT NULL)
+            ) AS inactif`,
+      );
+      if (r.rows[0]?.inactif === true) return { index, refus: invalide('la série occupe un emplacement supprimé', fermeId) };
     }
     for (const o of occupations.rows) {
       const lecture = validerOccupation(o.l, serie.valeur);
