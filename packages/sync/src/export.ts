@@ -178,7 +178,8 @@ export async function exporterFerme(porte: PorteDonnees, options: OptionsExportF
   const compresseur = options.compresseur ?? compresseurParDefaut();
   // Annulé : rejet immédiat, sans attendre la base ni le compresseur ; plus aucune page lue ensuite.
   return annulable(signal, async () => {
-    // Arrêt du constructeur : annulation de l'export, ou lecture en échec (plus rien à écrire).
+    // Arrêt commun de la lecture et de la construction : annulation de l'export, lecture en échec
+    // (plus rien à écrire) ou construction en échec (plus rien à lire).
     const arretConstruction = new AbortController();
     const relayer = () => {
       arretConstruction.abort(signal?.reason);
@@ -199,7 +200,8 @@ export async function exporterFerme(porte: PorteDonnees, options: OptionsExportF
       for (const table of Object.keys(TABLES_EXPORTEES)) {
         // La construction a échoué : inutile de lire la suite.
         if (etat.echec !== undefined) throw etat.echec.erreur;
-        const lignes = await lireTable(porte, table, fermeId, signal);
+        // Construction en échec pendant une lecture : rejet aussitôt, sans attendre la page en cours.
+        const lignes = await annulable(arretConstruction.signal, () => lireTable(porte, table, fermeId, arretConstruction.signal));
         if (table === 'ferme') {
           const ferme = lignes.find((l) => l.id === fermeId);
           etat.nom = typeof ferme?.nom === 'string' ? ferme.nom : null;
@@ -207,6 +209,7 @@ export async function exporterFerme(porte: PorteDonnees, options: OptionsExportF
         derniere = constructeur.ajouterTable(table, lignes);
         derniere.catch((erreur: unknown) => {
           etat.echec ??= { erreur };
+          arretConstruction.abort(erreur);
         });
       }
       await derniere;
