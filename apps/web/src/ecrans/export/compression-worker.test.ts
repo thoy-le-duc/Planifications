@@ -224,6 +224,7 @@ function porteLente(delaiMs: number): PorteDonnees {
     preparerSaisie: interdit('preparerSaisie'),
     surveillerRefus: interdit('surveillerRefus'),
     archiverRefus: () => Promise.resolve(),
+    placer: () => Promise.resolve([]),
   };
 }
 
