@@ -1,0 +1,164 @@
+/*
+ * Vue 3D (T27) : même habillage que le plan 2D (src/ecrans/plan/plan.css), jetons seulement.
+ * Sur ordinateur : la scène à gauche, la liste des planches et cultures de la semaine à droite.
+ */
+.plan3d {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-s);
+}
+
+.plan3d-outils {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-m);
+  font-weight: 700;
+}
+
+.plan3d-retour {
+  min-height: 48px;
+  padding: 0 16px 0 10px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--police-titre);
+  font-weight: 700;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.plan3d-etiquette {
+  margin-left: var(--espace-s);
+}
+
+.plan3d-curseur {
+  flex: 1 1 auto;
+  min-width: 160px;
+  max-width: 640px;
+  height: 32px;
+  margin: 0;
+  accent-color: var(--couleur-foret);
+}
+
+.plan3d-semaine {
+  min-width: 3.5em;
+  font-family: var(--police-code);
+  font-size: 18px;
+  color: var(--couleur-encre);
+}
+
+.plan3d-corps {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: var(--espace-s);
+}
+
+.plan3d-scene {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--couleur-surface);
+  border-radius: var(--rayon-carte);
+  box-shadow: var(--ombre-carte);
+  overflow: hidden;
+}
+
+.plan3d-toile {
+  position: absolute;
+  inset: 0;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+
+.plan3d-toile:active {
+  cursor: grabbing;
+}
+
+.plan3d-toile:focus-visible {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: -3px;
+}
+
+.plan3d-legende {
+  position: absolute;
+  left: var(--espace-s);
+  bottom: var(--espace-s);
+  padding: 4px 8px;
+  border-radius: var(--rayon-etiquette);
+  background: color-mix(in srgb, var(--couleur-surface) 88%, transparent);
+  pointer-events: none;
+}
+
+.plan3d-cote {
+  flex: 0 0 260px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--couleur-surface);
+  border-radius: var(--rayon-carte);
+  box-shadow: var(--ombre-carte);
+  overflow: hidden;
+}
+
+.plan3d-titre-liste {
+  margin: 0;
+  padding: var(--espace-m) var(--espace-m) var(--espace-s);
+  font-family: var(--police-titre);
+  font-size: 15px;
+  color: var(--couleur-encre);
+  border-bottom: 1px solid var(--couleur-trait);
+}
+
+.plan3d-liste {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: var(--espace-xs) 0;
+  overflow-y: auto;
+  list-style: none;
+  font-size: 14px;
+}
+
+.plan3d-liste li {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-s);
+  padding: 3px var(--espace-m);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 24px;
+}
+
+.plan3d-liste i {
+  flex: 0 0 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.plan3d-code {
+  flex: 0 0 auto;
+  min-width: 5.5em;
+  font-family: var(--police-code);
+  font-size: 12px;
+  color: var(--couleur-secondaire);
+}
+
+.plan3d-culture {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--couleur-encre);
+}
+
+.plan3d-vide .plan3d-culture {
+  color: var(--couleur-tertiaire);
+  font-style: italic;
+}
