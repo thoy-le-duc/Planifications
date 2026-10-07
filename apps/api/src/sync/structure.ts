@@ -61,6 +61,7 @@ import {
   PRECISION_CREEE_SUPPRIMEE,
   PRECISION_EXISTE_DEJA,
   PRECISION_INTROUVABLE,
+  PRECISION_SANS_ORIGINE,
   PRECISION_SEUL_LE_GERANT,
   PRECISION_ZONE_A_UN_CONTOUR,
   PRECISION_ZONE_ABRITEE_SUPPRIMEE,
@@ -135,9 +136,40 @@ function touchePlacement(table: TableEcrite, l: Ligne, avant: Ligne | null): boo
   }
 }
 
-/** Refus de droits (Q31) si `l` touche au placement et que l'auteur n'est pas gérant de sa ferme. */
-function droitsDuPlacement(table: TableEcrite, l: Ligne, avant: Ligne | null, fermeId: string, gerees: ReadonlySet<string>): Refus | null {
-  return touchePlacement(table, l, avant) && !gerees.has(fermeId) ? invalide(PRECISION_SEUL_LE_GERANT, fermeId) : null;
+/** La ligne `l` (validée) est-elle un placement en vigueur (bâtiment, contour, emplacement placé, non supprimés) ? */
+function estPlacee(table: TableEcrite, l: Ligne): boolean {
+  if (l.supprime_le !== null) return false;
+  switch (table) {
+    case 'batiment':
+      return true;
+    case 'zone':
+      return l.contour !== null;
+    case 'emplacement':
+      return l.placement_x_m !== null;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Droits et origine du placement : refus (Q31) si `l` touche au placement et que l'auteur n'est
+ * pas gérant de sa ferme ; puis (décision du chef, T28s) aucun placement tant que l'origine du plan
+ * de la ferme est nulle (relue dans la transaction : une origine posée plus haut dans le lot compte).
+ * Supprimer, effacer ou ranger reste permis sans origine.
+ */
+async function droitsDuPlacement(
+  tx: TransactionDb,
+  table: TableEcrite,
+  l: Ligne,
+  avant: Ligne | null,
+  fermeId: string,
+  gerees: ReadonlySet<string>,
+): Promise<Refus | null> {
+  if (!touchePlacement(table, l, avant)) return null;
+  if (!gerees.has(fermeId)) return invalide(PRECISION_SEUL_LE_GERANT, fermeId);
+  if (!estPlacee(table, l)) return null;
+  const sansOrigine = await existe(tx, sql`SELECT 1 FROM ferme f WHERE f.id = ${fermeId}::uuid AND f.origine_plan IS NULL`);
+  return sansOrigine ? invalide(PRECISION_SANS_ORIGINE, fermeId) : null;
 }
 
 /** Colonnes de `table`, préfixées par `alias`, séparées par des virgules. */
@@ -486,7 +518,7 @@ async function creer(
   }
 
   const maintenant = ctx.maintenant();
-  const refus = droitsDuPlacement(e.table, ligne, null, fermeId, gerees) ?? (await verifierEnBase(tx, e.table, ligne, null, maintenant));
+  const refus = (await droitsDuPlacement(tx, e.table, ligne, null, fermeId, gerees)) ?? (await verifierEnBase(tx, e.table, ligne, null, maintenant));
   if (refus !== null) return refus;
 
   if (!(await inserer(tx, e.table, ligne, maintenant))) {
@@ -549,7 +581,7 @@ async function modifier(
   if ((await identique(tx, e.table, ligne, id)) === true) return null;
 
   const maintenant = ctx.maintenant();
-  const refus = droitsDuPlacement(e.table, ligne, avant, fermeId, gerees) ?? (await verifierEnBase(tx, e.table, ligne, avant, maintenant));
+  const refus = (await droitsDuPlacement(tx, e.table, ligne, avant, fermeId, gerees)) ?? (await verifierEnBase(tx, e.table, ligne, avant, maintenant));
   if (refus !== null) return refus;
 
   await tx.execute(

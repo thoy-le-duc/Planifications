@@ -38,7 +38,9 @@ export const PRECISION_CHANGE_DE_FERME = 'une saisie ne change pas de ferme';
 export const PRECISION_SEUL_LE_GERANT = 'seul le gérant peut placer les éléments de la ferme';
 /** T28s : l'origine du plan ne bouge plus dès qu'un élément est placé (Q31). */
 export const PRECISION_ORIGINE_FIGEE =
-  'le point de départ du plan ne se déplace plus une fois des éléments placés : retirez-les d’abord du plan';
+  'le point de départ du plan ne se déplace ni ne s’efface tant que des éléments sont placés : retirez-les d’abord du plan';
+/** T28s (décision du chef) : aucun placement tant que l'origine du plan n'est pas posée. */
+export const PRECISION_SANS_ORIGINE = 'posez d’abord le point de départ du plan de la ferme, avant d’y placer des éléments';
 export const PRECISION_ORIGINE_INVALIDE = 'le point de départ du plan doit avoir une latitude et une longitude valables';
 export const PRECISION_FERME_SEULE_ORIGINE = 'de la ferme, seul le point de départ du plan se modifie ici';
 export const PRECISION_ZONE_A_UN_CONTOUR = 'cette zone a ses propres contours : effacez-les avant de l’abriter sous un bâtiment';

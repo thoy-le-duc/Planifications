@@ -10,9 +10,11 @@
  *   ligne introuvable (T10d), sans ferme dans le refus.
  * - Gérant seulement (Q31). Un renvoi de la même valeur est accepté sans rien écrire, par tout
  *   membre (réponse perdue).
- * - Figée : l'origine s'écrit si elle est nulle, ou si la ferme n'a encore AUCUN placement
- *   (bâtiment non supprimé, zone non supprimée avec contour, emplacement non supprimé placé). Les
- *   écritures plus haut dans le même lot comptent (même transaction).
+ * - Figée (décision du chef) : l'origine ne se pose, ne se modifie ni ne s'efface que si la ferme
+ *   n'a AUCUN placement (bâtiment non supprimé, zone non supprimée avec contour, emplacement non
+ *   supprimé placé) ; en retour, aucun placement sans origine (structure.ts). Les écritures plus
+ *   haut dans le même lot comptent (même transaction) : origine puis bâtiment passe, l'annulation
+ *   en ordre inverse (bâtiment supprimé, puis origine effacée) aussi.
  * - Écrite sous le verrou consultatif de la ferme (upload.ts) ; la ligne de la ferme est relue
  *   FOR NO KEY UPDATE (ne bloque pas les lignes qui la référencent), historique « Ferme ».
  */
@@ -119,7 +121,7 @@ export async function ecrireOrigine(
   // Renvoi de la même valeur (réponse perdue) : accepté, rien d'écrit.
   if (avant === null ? origine === null : origine !== null && avant.latitude === origine.latitude && avant.longitude === origine.longitude) return null;
   if (!gerees.has(fermeId)) return invalide(PRECISION_SEUL_LE_GERANT, fermeId);
-  if (avant !== null && (await aUnPlacement(tx, fermeId))) return invalide(PRECISION_ORIGINE_FIGEE, fermeId);
+  if (await aUnPlacement(tx, fermeId)) return invalide(PRECISION_ORIGINE_FIGEE, fermeId);
 
   const maintenant = ctx.maintenant();
   await tx.execute(

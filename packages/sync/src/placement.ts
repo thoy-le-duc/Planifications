@@ -7,7 +7,7 @@
  * structure-origine.ts), pour qu'un placement fait hors ligne ne soit pas refusé au retour du
  * réseau : gérant actif de la ferme de la porte (Q31), règles du cœur (validerPlacement,
  * validerContour), lignes de la ferme de la porte seulement, zone abritée sans contour, un
- * bâtiment par zone, origine figée dès qu'un placement existe. Tout se lit et s'écrit dans UNE
+ * bâtiment par zone, aucun placement sans origine, origine figée dès qu'un placement existe. Tout se lit et s'écrit dans UNE
  * transaction locale : un seul envoi, que le serveur accepte ou refuse en entier.
  *
  * L'annulation rendue remet les valeurs lues dans la base locale au moment de l'écriture, dans
@@ -65,6 +65,24 @@ async function verifierGerant(tx: TransactionLocale, ctx: ContextePlacement): Pr
   if (lignes.length === 0) throw new Error(SEUL_LE_GERANT);
 }
 
+/** Décision du chef (T28s) : aucun placement tant que l'origine du plan de la ferme n'est pas posée. */
+async function exigerOrigine(tx: TransactionLocale, ctx: ContextePlacement): Promise<void> {
+  const [ferme] = await lire<{ o: unknown }>(tx, 'SELECT origine_plan AS o FROM ferme WHERE id = ?', [ctx.fermeId]);
+  if (ferme === undefined || ferme.o === null) throw new Error('Posez d’abord le point de départ du plan de la ferme, avant d’y placer des éléments.');
+}
+
+/** La ferme de la porte a-t-elle un placement (bâtiment, zone avec contour, emplacement placé, non supprimés) ? */
+async function aUnPlacement(tx: TransactionLocale, ctx: ContextePlacement): Promise<boolean> {
+  const [p] = await lire<{ existe: number }>(
+    tx,
+    `SELECT (EXISTS (SELECT 1 FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL)
+          OR EXISTS (SELECT 1 FROM zone WHERE ferme_id = ? AND supprime_le IS NULL AND contour IS NOT NULL)
+          OR EXISTS (SELECT 1 FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND placement_x_m IS NOT NULL)) AS existe`,
+    [ctx.fermeId, ctx.fermeId, ctx.fermeId],
+  );
+  return p?.existe === 1;
+}
+
 /** Zone que le bâtiment `id` peut abriter : de la ferme, non supprimée, sans contour, sans autre bâtiment. */
 async function verifierZoneAbritee(tx: TransactionLocale, ctx: ContextePlacement, zoneId: string, batimentId: string): Promise<void> {
   const [zone] = await lire<{ ferme_id: unknown; contour: unknown; supprime_le: unknown }>(tx, 'SELECT ferme_id, contour, supprime_le FROM zone WHERE id = ?', [zoneId]);
@@ -93,6 +111,7 @@ async function placerBatiment(tx: TransactionLocale, ctx: ContextePlacement, id:
   if (zone !== null && typeof zone !== 'string') throw new Error('Zone introuvable dans cette ferme.');
   const zoneChange = existant?.zone_id !== zone || existant.supprime_le !== null;
   if (zone !== null && supprime === null && zoneChange) await verifierZoneAbritee(tx, ctx, zone, id);
+  if (supprime === null) await exigerOrigine(tx, ctx);
 
   const instant = ctx.maintenant().toISOString();
   if (existant === undefined) {
@@ -122,6 +141,7 @@ async function placerZone(tx: TransactionLocale, ctx: ContextePlacement, id: str
   let texte: string | null = null;
   if (contour !== null) {
     if (zone.supprime_le !== null) throw new Error('Cette zone est supprimée.');
+    await exigerOrigine(tx, ctx);
     const abritee = await lire(tx, 'SELECT 1 AS n FROM batiment WHERE zone_id = ? AND ferme_id = ? AND supprime_le IS NULL', [id, ctx.fermeId]);
     const r = validerPlacement({ table: 'zone', ligne: { contour }, abritee: abritee.length > 0 });
     if (!r.ok) throw new Error(r.erreur.message);
@@ -147,6 +167,7 @@ async function placerEmplacement(
   const ligne = { placement_x_m: placement?.x ?? null, placement_y_m: placement?.y ?? null, orientation_deg: placement?.orientation_deg ?? null };
   const r = validerPlacement({ table: 'emplacement', ligne });
   if (!r.ok) throw new Error(r.erreur.message);
+  if (placement !== null) await exigerOrigine(tx, ctx);
   await tx.execute('UPDATE emplacement SET placement_x_m = ?, placement_y_m = ?, orientation_deg = ?, modifie_le = ? WHERE id = ?', [
     r.valeur.placement_x_m,
     r.valeur.placement_y_m,
@@ -175,17 +196,9 @@ async function placerOrigine(
     typeof lu === 'object' && lu !== null && coordonnee((lu as { latitude?: unknown }).latitude, 90) && coordonnee((lu as { longitude?: unknown }).longitude, 180)
       ? { latitude: (lu as { latitude: number }).latitude, longitude: (lu as { longitude: number }).longitude }
       : null;
-  const deplacee = avant !== null && origine !== null && (avant.latitude !== origine.latitude || avant.longitude !== origine.longitude);
-  if (deplacee) {
-    const [p] = await lire<{ existe: number }>(
-      tx,
-      `SELECT (EXISTS (SELECT 1 FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL)
-            OR EXISTS (SELECT 1 FROM zone WHERE ferme_id = ? AND supprime_le IS NULL AND contour IS NOT NULL)
-            OR EXISTS (SELECT 1 FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND placement_x_m IS NOT NULL)) AS existe`,
-      [ctx.fermeId, ctx.fermeId, ctx.fermeId],
-    );
-    if (p?.existe === 1) throw new Error('Le point de départ du plan ne se déplace plus une fois des éléments placés.');
-  }
+  const change = avant === null ? origine !== null : avant.latitude !== origine?.latitude || avant.longitude !== origine.longitude;
+  // Décision du chef (T28s) : l'origine ne se pose, ne se déplace ni ne s'efface tant qu'un placement existe.
+  if (change && (await aUnPlacement(tx, ctx))) throw new Error('Le point de départ du plan ne se déplace ni ne s’efface tant que des éléments sont placés.');
   // Seule l'origine change : le serveur refuse toute autre colonne de la ferme.
   await tx.execute('UPDATE ferme SET origine_plan = ? WHERE id = ?', [origine === null ? null : JSON.stringify({ latitude: origine.latitude, longitude: origine.longitude }), ctx.fermeId]);
   return { sorte: 'origine', origine: avant };
