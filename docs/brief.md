@@ -90,6 +90,7 @@ Le plan a été attaqué brique par brique. Voici ce qui peut casser et la répo
 | Hors-ligne ajouté trop tard | Réécriture quasi complète | Architecture local-first dès le premier commit |
 | Voix au champ (vent, tracteur, variétés) | Saisies fausses, perte de confiance | Vocabulaire tiré de la bibliothèque de la ferme, validation en un tap, file d'attente hors réseau |
 | Coût IA par utilisateur | Marge détruite | Petits modèles en production, mesure du coût par ferme dès la phase 2 |
+| L'agent écrit dans la base en contournant les règles | Doublons (« Fait » noté deux fois), saisies qui ne partent jamais vers le serveur | **L'agent et le serveur MCP ne reçoivent jamais d'accès SQL brut à la porte** : seulement des actions typées (`preparerSaisie`, `saisirEvenement`…), chacune validée par le maraîcher. Le contrôle « déjà fait » de la porte (T13o) ne voit pas un UPDATE direct des tables internes de PowerSync |
 | Détection de ravageurs imprécise | Mauvais traitement | Présentée comme piste, jamais comme diagnostic |
 | Boucle autonome qui dérive | Dette technique, régressions | Tickets avec tests d'acceptation, sandbox isolée, revue humaine quotidienne |
 | Concurrence gratuite (Brinjel, Qrop) | Pas de raison de payer | Différenciation sur voix, agent, vitesse, intégrations |
