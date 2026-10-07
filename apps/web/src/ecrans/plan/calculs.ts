@@ -23,10 +23,11 @@ import {
   type SorteConflit,
 } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
+import type { CleFamille } from '../../ui/jetons.ts';
 
 // ── Types (contrat : ./test/contrat.ts) ──────────────────────────────────────────────────────
 
-export type CleFamille = 'salades' | 'solanacees' | 'cruciferes' | 'racines';
+export type { CleFamille };
 export type { SorteConflit };
 
 /** Ligne de la base locale telle que la porte la lit (snake_case, valeurs SQLite). */
@@ -266,22 +267,24 @@ function normaliser(nom: string): string {
     .trim();
 }
 
-/** Couleur de la famille (jetons FAMILLES de T16) ; les autres familles restent neutres. */
-export function cleFamille(nomFamille: string | null): CleFamille | null {
-  if (nomFamille === null) return null;
-  switch (normaliser(nomFamille)) {
-    case 'solanacees':
-      return 'solanacees';
-    case 'brassicacees':
-    case 'cruciferes':
-      return 'cruciferes';
-    case 'asteracees':
-      return 'salades';
-    case 'apiacees':
-      return 'racines';
-    default:
-      return null;
-  }
+/**
+ * Clé de couleur de la famille (jetons FAMILLES, T27b) : les 4 de T16 (Astéracées = salades,
+ * Brassicacées ou Crucifères = cruciferes, Apiacées = racines), les autres familles de la
+ * bibliothèque commune sous leur nom sans accents, et « autre » pour tout le reste (famille propre
+ * à la ferme, inconnue, absente).
+ */
+const CLES_PAR_NOM: ReadonlyMap<string, CleFamille> = new Map<string, CleFamille>([
+  ['asteracees', 'salades'],
+  ['brassicacees', 'cruciferes'],
+  ['cruciferes', 'cruciferes'],
+  ['apiacees', 'racines'],
+  ...(
+    ['solanacees', 'alliacees', 'amaranthacees', 'asparagacees', 'convolvulacees', 'cucurbitacees', 'fabacees', 'lamiacees', 'paeoniacees', 'poacees', 'polygonacees', 'rosacees', 'valerianacees'] as const
+  ).map((cle) => [cle, cle] as const),
+]);
+
+export function cleFamille(nomFamille: string | null): CleFamille {
+  return (nomFamille === null ? undefined : CLES_PAR_NOM.get(normaliser(nomFamille))) ?? 'autre';
 }
 
 // ── Plan ─────────────────────────────────────────────────────────────────────────────────────
@@ -302,10 +305,10 @@ function recoupe(du: string, au: string | null, saison: SaisonPlan): boolean {
 interface Culture {
   readonly libelle: string;
   readonly famille: string | null;
-  readonly cleFamille: CleFamille | null;
+  readonly cleFamille: CleFamille;
 }
 
-const COUVERTURE: Culture = { libelle: 'Couverture', famille: null, cleFamille: null };
+const COUVERTURE: Culture = { libelle: 'Couverture', famille: null, cleFamille: 'autre' };
 
 /**
  * Libellé et famille de chaque occupation : série ou plantation → espèce, variété, famille.
