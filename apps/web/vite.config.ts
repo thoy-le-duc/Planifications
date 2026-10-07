@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadEnv } from 'vite';
@@ -272,6 +273,46 @@ function cspEnBalise(options: OptionsCsp): Plugin {
   };
 }
 
+/**
+ * T27 — vue 3D sans un octet de plus au démarrage. @react-three/fiber et ses dépendances
+ * importent des paquets CommonJS (react, scheduler, use-sync-external-store) par import par
+ * défaut ou d'espace de noms : rolldown ajoute alors ses aides d'interopérabilité (`__toESM`,
+ * `__export`) au module d'exécution, qui vit dans le morceau d'entrée (≈ 0,4 Kio gzip au
+ * démarrage, au-delà du budget). Pour ces seuls importeurs, le paquet CommonJS est servi par un
+ * module ES qui en réexporte les noms un à un (imports nommés : simple accès à une propriété,
+ * sans aide) et un objet par défaut. Mêmes objets, même instance de React : rien ne change à
+ * l'exécution.
+ */
+const MOTIF_IMPORTEURS_3D = /[\\/]node_modules[\\/](?:\.pnpm[\\/][^\\/]+[\\/]node_modules[\\/])?(?:@react-three[\\/]fiber|its-fine|zustand|suspend-react|react-use-measure)[\\/]/;
+const PAQUETS_COMMONJS_3D: readonly string[] = ['react', 'scheduler', 'use-sync-external-store/shim/with-selector', 'use-sync-external-store/shim/with-selector.js'];
+const PREFIXE_INTEROP_3D = '\0planif-esm:';
+const IDENTIFIANT = /^[A-Za-z_$][\w$]*$/;
+
+function interopCommonJs3d(): Plugin {
+  const exiger = createRequire(import.meta.url);
+  return {
+    name: 'planif:interop-commonjs-3d',
+    enforce: 'pre',
+    async resolveId(source, importer) {
+      if (importer === undefined || !PAQUETS_COMMONJS_3D.includes(source) || !MOTIF_IMPORTEURS_3D.test(importer)) return null;
+      const resolu = await this.resolve(source, importer, { skipSelf: true });
+      if (resolu?.external !== false) return null;
+      return `${PREFIXE_INTEROP_3D}${resolu.id}`;
+    },
+    load(id) {
+      if (!id.startsWith(PREFIXE_INTEROP_3D)) return null;
+      const fichier = id.slice(PREFIXE_INTEROP_3D.length);
+      const valeur: unknown = exiger(fichier);
+      const noms = valeur !== null && (typeof valeur === 'object' || typeof valeur === 'function') ? Object.keys(valeur).filter((n) => IDENTIFIANT.test(n) && n !== 'default') : [];
+      const liste = noms.join(', ');
+      const chemin = JSON.stringify(fichier);
+      return noms.length === 0
+        ? `import * as tout from ${chemin};\nexport default tout;\n`
+        : `import { ${liste} } from ${chemin};\nexport { ${liste} };\nexport default { ${liste} };\n`;
+    },
+  };
+}
+
 /** Entrées du build : l'appli seule en production, les pages de test seules pour les essais. */
 function entrees(essais: boolean): Record<string, string> {
   const chemin = (fichier: string): string => fileURLToPath(new URL(fichier, import.meta.url));
@@ -291,6 +332,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
+      interopCommonJs3d(),
       // Hors-ligne d'abord : le service worker met toute l'appli en cache dès la première visite.
       // Pas dans le build des essais : il écrirait un autre `sw.js` (T11c).
       !essais &&

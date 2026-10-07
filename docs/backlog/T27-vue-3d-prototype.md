@@ -16,9 +16,9 @@
 
 ## Critères d'acceptation
 
-- [ ] Test unitaire de `versScene` : planches, couleurs par culture, semaine vide, zone sans planche.
-- [ ] Test de build : rien de la 3D dans le JS de démarrage ; morceau 3D sous son budget dédié et dans le précache.
-- [ ] e2e (ordinateur, grande ferme) : vue affichée en moins de 1 s après le chargement du module ; changer de semaine en moins de 100 ms ; navigation fluide (60 images/s visées, pas de rafale de plus de 2 images perdues).
-- [ ] e2e : sans WebGL, repli sur la 2D avec message ; alternative texte présente.
+- [x] Test unitaire de `versScene` : planches, couleurs par culture, semaine vide, zone sans planche.
+- [x] Test de build : rien de la 3D dans le JS de démarrage ; morceau 3D sous son budget dédié et dans le précache.
+- [x] e2e (ordinateur, grande ferme) : vue affichée en moins de 1 s après le chargement du module ; changer de semaine en moins de 100 ms ; navigation fluide (60 images/s visées, pas de rafale de plus de 2 images perdues).
+- [x] e2e : sans WebGL, repli sur la 2D avec message ; alternative texte présente.
 
 **Hors périmètre** : forme réelle de la ferme (géométrie), sélection d'une planche et détail d'une série (T27b, T27c à spécifier), usage au champ.
