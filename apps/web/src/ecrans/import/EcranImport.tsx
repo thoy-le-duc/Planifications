@@ -8,7 +8,7 @@
  * se charge au dépôt d'un .xlsx seulement. Rien n'est écrit avant « Importer » ; l'import s'écrit
  * en lots d'au plus 500 écritures (un envoi chacun), annulable depuis « Imports récents ».
  */
-import { startTransition, useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactElement } from 'react';
+import { memo, startTransition, useEffect, useId, useMemo, useRef, useState, type DragEvent, type ReactElement } from 'react';
 import {
   CHAMPS_IMPORT,
   creerModele,
@@ -58,7 +58,7 @@ const TYPES: readonly { readonly valeur: TypeContenu; readonly libelle: string; 
 
 const ZONE_PROPOSEE = 'Ma ferme';
 /** Colonnes dessinées par tranche à l'étape 3. */
-const TRANCHE_COLONNES = 10;
+const TRANCHE_COLONNES = 6;
 const CROIX = 'M18 6 6 18M6 6l12 12';
 const CHEVRON = 'M15 18l-6-6 6-6';
 
@@ -452,7 +452,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
     surContinuer = versColonnes;
     aideContinuer = type === null ? 'Choisissez ce que contient le fichier.' : 'Rien n’est écrit avant « Importer ».';
   } else if (etape === 'colonnes') {
-    continuerActif = !occupe && toutesVisibles && refusModele === null && (!demandeZone || zoneParDefaut.trim() !== '');
+    continuerActif = !occupe && refusModele === null && (!demandeZone || zoneParDefaut.trim() !== '');
     surContinuer = () => {
       setDecisions([]);
       void preparer([], {}, true);
@@ -763,7 +763,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
             </>
           )}
 
-          {etape === 'apercu' && apercu !== null && <VueApercu apercu={apercu} />}
+          {etape === 'apercu' && apercu !== null && <VueApercuMemo apercu={apercu} />}
 
           {etape === 'fini' && fini !== null && (
             <div className="imp-carte imp-fin">
@@ -934,15 +934,27 @@ function VueApercu({ apercu }: { readonly apercu: Apercu }): ReactElement {
       )}
       {apercu.ignorees > 0 && <p className="imp-aide">{apercu.ignorees === 1 ? '1 ligne vide ou de total ignorée.' : `${enFrancais(apercu.ignorees)} lignes vides ou de total ignorées.`}</p>}
       {montrees.length > 0 && (
-        <ul className="imp-liste">
-          {montrees.map((l) => (
-            <LigneVue key={l.ligne} l={l} />
-          ))}
-        </ul>
+        // Beaucoup de lignes : repliées (un tap les déplie), l'écran reste léger sur un téléphone lent.
+        <details className="imp-details" open={montrees.length <= LIGNES_DEPLIEES}>
+          <summary className="imp-resume-lignes">
+            {montrees.length === 1 ? '1 ligne à regarder' : `${enFrancais(montrees.length)} lignes à regarder`}
+          </summary>
+          <ul className="imp-liste">
+            {montrees.map((l) => (
+              <LigneVue key={l.ligne} l={l} />
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   );
 }
+
+/** Aperçu redessiné seulement quand il change (pas à chaque envoi pendant l'écriture). */
+const VueApercuMemo = memo(VueApercu);
+
+/** Au-delà, la liste des lignes de l'aperçu est repliée. */
+const LIGNES_DEPLIEES = 20;
 
 function LigneVue({ l }: { readonly l: LigneApercu }): ReactElement {
   return (

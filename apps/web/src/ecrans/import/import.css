@@ -604,3 +604,19 @@ select.imp-liste-deroulante {
 .imp-defauts strong {
   color: var(--couleur-texte-orange);
 }
+
+.imp-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.imp-resume-lignes {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  font-weight: 700;
+  color: var(--couleur-foret);
+  cursor: pointer;
+}
