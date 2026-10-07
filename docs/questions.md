@@ -290,20 +290,35 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q29 — Vue 3D (posée le 2026-10-07)
+
+Questions : que voir en 3D, à quoi elle sert, sur quel appareil, que faire si ça rame.
+
+Réponses (2026-10-07) : d'abord les zones et planches en volumes simples, colorées par culture, avec un curseur de semaine ; surtout au bureau, sur ordinateur, pour préparer la saison ; au téléphone, repli automatique sur la 2D si ça rame. Ticket T27.
+
 ### Q28 — Changer d'onglet pendant un export (posée le 2026-10-07, T15c)
 
 Question : si l'on quitte l'onglet Ferme pendant l'export de toute la ferme, l'export s'arrête aujourd'hui sans le dire. Proposition : l'export continue en arrière-plan et le téléchargement arrive quand il est prêt, avec un petit bandeau « Export en cours » sur les autres écrans. Ça te va, ou préfères-tu qu'il s'arrête avec un message ?
+
+Réponse (2026-10-07) : l'export continue en arrière-plan ; le téléchargement arrive quand il est prêt, avec un bandeau « Export en cours » sur les autres écrans. Ticket T15e.
+
 ### Q27 — Deux planches avec le même code (posée le 2026-10-07, T10s)
 
 Question : deux planches (emplacements) de la même ferme peuvent-elles porter le même code, par exemple deux « P3 » dans deux tunnels différents ? Aujourd'hui c'est accepté sans rien dire. Refuser rendrait un import fait hors ligne refusé en entier s'il contient un doublon ; seulement avertir laisse passer l'import avec un message. Proposition : unique par zone (deux « P3 » possibles dans deux tunnels, pas dans le même), avec un avertissement à l'import.
+
+Réponse (2026-10-07) : code unique par zone (deux « P3 » possibles dans deux tunnels, pas dans le même) ; un doublon à l'import donne un avertissement, pas un refus. Ticket T10t.
 
 ### Q26 — Taper « Fait » avant que la base soit prête (posée le 2026-10-03, T13g)
 
 Question : au lancement, l'écran Aujourd'hui s'affiche maintenant en ≈ 0,4 s au lieu de ≈ 0,8 s, mais en lecture seule : les boutons « Fait » ne s'activent qu'à l'ouverture de la base, vers ≈ 1 s sur un téléphone moyen (≈ 0,2 s plus tard qu'avant, car le dessin de l'écran ralentit l'ouverture). Proposition : accepter le tap sur « Fait » dès l'affichage ; la tâche disparaît tout de suite et s'écrit dès que la base est prête, avec la même vérification « déjà fait ». Ça te va, ou préfères-tu des boutons inactifs tant que la base n'est pas prête ?
 
+Réponse (2026-10-07) : oui, « Fait » est accepté dès l'affichage ; la tâche disparaît au tap et s'écrit dès que la base est prête, avec la même vérification « déjà fait ». Ticket T13k.
+
 ### Q25 — Refus d'un ancien membre (posée le 2026-10-02, T10k)
 
 Question : quand quelqu'un quitte une ferme (ou en est retiré), ses anciens refus de synchro restent sur son téléphone, avec le nom de la culture concernée (par exemple « Tomate Cœur de bœuf »). Ce sont des informations qu'il voyait légitimement à l'époque. Faut-il les lui laisser, ou effacer de son téléphone les refus liés à une ferme qu'il a quittée ? Proposition : les effacer, pour que rien d'une ferme ne reste chez quelqu'un qui n'en fait plus partie.
+
+Réponse (2026-10-07) : les effacer ; rien d'une ferme ne reste chez quelqu'un qui n'en fait plus partie. Ticket T10u. Les refus de synchro restent hors de l'export complet (confirmé le 2026-10-07).
 
 ### À suivre
 

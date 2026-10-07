@@ -3,14 +3,13 @@
 **Objectif** : au lancement, un « Fait » tapé sur l'instantané (avant l'ouverture de la base) n'est jamais perdu ni ignoré.
 
 **Dépend de** : T13g
-**Statut d'entrée** : à préciser (Q26)
 **Périmètre** : `apps/web/src/ecrans/aujourdhui/**`
 
 ## Constat (relecture T13g)
 
 Avant la base, les boutons sont inactifs : un tap entre ≈ 0,4 s et ≈ 1 s ne fait rien, sans message. Dessiner l'instantané retarde l'ouverture de la base de 200 à 270 ms (CPU ×4).
 
-## Règles (si Q26 est acceptée)
+## Règles (Q26 acceptée le 2026-10-07)
 
 - « Fait » actif dès l'instantané : la carte est masquée au tap, la file attend la porte, puis lecture ciblée et vérification `DejaFait` comme aujourd'hui.
 - Si la vraie ferme diffère de la ferme montrée, les « Fait » en attente sont abandonnés avec un message, jamais écrits sur une autre ferme.
