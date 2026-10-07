@@ -2,7 +2,7 @@
  * Types partagés par l'écran d'import (T14b), son moteur (./preparation.ts) et le Web Worker de
  * préparation : tout ce qui traverse `postMessage` est ici, en données simples (clonables).
  */
-import type { ChoixValeur, Correspondance, LigneBrute, PropositionValeur, SystemeDates, TypeContenu } from '@planif/core';
+import type { CategorieEspece, ChoixValeur, Correspondance, LigneBrute, PropositionValeur, SystemeDates, TypeContenu, UniteRecolte } from '@planif/core';
 import type { OrdreEcriture } from '@planif/sync';
 
 // ── Ce que la base locale sait déjà (lu par la page, envoyé au moteur) ─────────────────────────
@@ -121,8 +121,16 @@ export interface DemandePreparation {
   /** Instant ISO de l'import (horodatages, identifiants). */
   readonly maintenant: string;
   readonly nomFichier: string;
+  /** Cultures créées (« Créer » à l'étape 4), par valeur du fichier : ce que l'utilisateur a choisi. */
+  readonly attributsEspeces: Readonly<Record<string, AttributsEspece>>;
   /** Valeurs distinctes (espèces + familles) au-delà desquelles on ne rapproche plus. */
   readonly plafondValeurs: number;
+}
+
+export interface AttributsEspece {
+  readonly categorie: CategorieEspece;
+  readonly perenne: 0 | 1;
+  readonly uniteRecolte: UniteRecolte;
 }
 
 export interface DecisionAffichee {
@@ -151,6 +159,9 @@ export interface LigneApercu {
   readonly doublonDe?: number | null;
 }
 
+/** Sortes de valeurs par défaut (relecture B1), data-defaut de l'encart. */
+export type SorteDefaut = 'densite' | 'marge' | 'delais-famille' | 'abri' | 'longueur-serie' | 'variete-inconnue' | 'pepiniere' | 'duree-recolte';
+
 export interface Apercu {
   readonly valides: number;
   readonly erreurs: number;
@@ -163,8 +174,10 @@ export interface Apercu {
   /** Écritures (une par ligne de la base) et lots d'envoi. */
   readonly ecritures: number;
   readonly lots: number;
-  /** Séries importées sans longueur, sans plants ni emplacement (1 m par défaut, à compléter). */
-  readonly sansTaille: number;
+  /** Valeurs écrites par défaut (le fichier ne les donne pas), par sorte : l'encart de l'aperçu. */
+  readonly defauts: readonly { readonly sorte: SorteDefaut; readonly textes: readonly string[]; readonly nombre: number }[];
+  /** Lignes créées par chaque lot d'envoi, « table:id », dans l'ordre d'écriture. */
+  readonly lotsCreees: readonly (readonly string[])[];
   /** Lignes créées, par table : de quoi annuler l'import. */
   readonly creees: Readonly<Record<string, readonly string[]>>;
 }

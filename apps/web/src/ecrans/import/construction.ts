@@ -146,6 +146,16 @@ const nombreDe = (v: ValeurImport | undefined): number | null => (typeof v === '
 const reference = (v: ValeurImport | undefined): ReferenceImport | null => (typeof v === 'object' && v !== null ? v : null);
 const date = (v: ValeurImport | undefined): DateCalendaire | null => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? (v as DateCalendaire) : null);
 
+type SorteDefaut = Apercu['defauts'][number]['sorte'];
+
+interface Defaut {
+  readonly sorte: SorteDefaut;
+  /** Texte de l'avertissement sur la ligne. */
+  readonly surLaLigne: string;
+  /** Texte dans l'encart « valeurs par défaut ». */
+  readonly dansEncart: string;
+}
+
 interface Marques {
   readonly ecritures: number;
   readonly saisons: number;
@@ -235,6 +245,14 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
     return id;
   }
 
+  // Valeurs par défaut écrites par la ligne en cours (relecture B1) : montrées sur la ligne et
+  // dans l'encart de l'aperçu, jamais en douce.
+  let defautsLigne: Defaut[] = [];
+  const encart = new Map<SorteDefaut, Set<string>>();
+  const noterDefaut = (sorte: SorteDefaut, surLaLigne: string, dansEncart: string): void => {
+    defautsLigne.push({ sorte, surLaLigne, dansEncart });
+  };
+
   // Familles et espèces nouvelles (décision « Créer »), une par nom.
   const famillesCreees = new Map<string, string>();
   function familleDe(r: ReferenceImport | null): string | null {
@@ -246,6 +264,14 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
     const deja = famillesCreees.get(k);
     if (deja !== undefined) return deja;
     const defaut = FAMILLES_PAR_DEFAUT.find((f) => normaliser(f.nom) === k);
+    if (defaut === undefined) {
+      const { minimal, conseille } = DELAIS_FAMILLE_NOUVELLE;
+      noterDefaut(
+        'delais-famille',
+        `famille « ${r.nom.trim()} » : délais de retour ${String(minimal)} ans (minimal) et ${String(conseille)} ans (conseillé) par défaut`,
+        `${r.nom.trim()} : ${String(minimal)} ans et ${String(conseille)} ans`,
+      );
+    }
     const id = nouvelId<'Famille'>();
     famillesCreees.set(k, id);
     ecr.familles.push([
@@ -262,14 +288,19 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
   }
 
   const nouvellesEspeces = new Map<string, { readonly nom: string; readonly familleId: string }>();
+  const attributsParNom = new Map(Object.entries(d.attributsEspeces).map(([nom, a]) => [normaliser(nom), a]));
+  const especesParNom = new Map<string, string>();
+  for (const x of ctx.especes) if (!especesParNom.has(normaliser(x.nom))) especesParNom.set(normaliser(x.nom), x.id);
   const especesCreees = new Map<string, string>();
   /** Espèce de la ligne ; une nouvelle est créée avec sa famille (obligatoire). */
   function especeDe(r: ReferenceImport | null, famille: ReferenceImport | null): string | null {
     if (r === null || r.sorte === 'a_decider') return null;
     if (r.sorte === 'existante') return r.id;
     const k = normaliser(r.nom);
-    const deja = especesCreees.get(k);
+    const deja = especesCreees.get(k) ?? especesParNom.get(k);
     if (deja !== undefined) return deja;
+    const attributs = attributsParNom.get(k);
+    if (attributs === undefined) throw new Refus(`Culture nouvelle « ${r.nom.trim()} » : choisissez sa catégorie, si elle est pérenne et son unité de récolte (étape « Valeurs »).`, 'espece');
     const familleId = familleDe(famille);
     if (familleId === null) throw new Refus(`Culture nouvelle « ${r.nom.trim()} » : il faut sa famille botanique (importez d’abord vos cultures avec une colonne Famille).`, 'espece');
     const id = nouvelId<'Espece'>();
@@ -281,9 +312,9 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
         ferme_id: ferme,
         famille_id: familleId,
         nom: r.nom.trim(),
-        categorie: 'legume',
-        perenne: 0,
-        unite_recolte: 'kg',
+        categorie: attributs.categorie,
+        perenne: attributs.perenne,
+        unite_recolte: attributs.uniteRecolte,
         delai_retour_minimal_ans: null,
         delai_retour_conseille_ans: null,
       }),
@@ -299,6 +330,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
     if (nom === null) return null;
     if (MOTIF_UUID.test(nom.trim())) {
       const v = ctx.varietes.find((x) => x.id.toLowerCase() === nom.trim().toLowerCase() && x.especeId === especeId);
+      if (v === undefined) noterDefaut('variete-inconnue', `variété inconnue (identifiant ${nom.trim().slice(0, 13)}…) : série écrite sans variété`, `${nom.trim()} : sans variété`);
       return v?.id ?? null;
     }
     const k = normaliser(nom);
@@ -330,7 +362,6 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
   }
 
   const issues = new Map<number, Issue>();
-  let sansTailleValides = 0;
   const resumeDe = (l: LignePlan): string =>
     Object.values(l.valeurs)
       .map((v) => (v === null ? '' : typeof v === 'object' ? (v.sorte === 'existante' ? (especes.get(v.id)?.nom ?? ctx.familles.find((f) => f.id === v.id)?.nom ?? '') : v.sorte === 'nouvelle' ? v.nom : v.valeur) : String(v)))
@@ -339,13 +370,22 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
       .join(' · ');
 
   const erreurLigne = (l: LignePlan, r: Refus): void => {
+    defautsLigne = [];
     issues.set(l.ligne, { statut: 'erreur', erreurs: [{ message: r.message, cellule: cellule(l.ligne, colonne(r.champ)) }], avertissements: [], doublonDe: null, resume: resumeDe(l) });
   };
   const doublonBase = (l: LignePlan, de: number | null = null): void => {
+    defautsLigne = [];
     issues.set(l.ligne, { statut: 'doublon', erreurs: [], avertissements: [], doublonDe: de, resume: resumeDe(l) });
   };
   const valide = (l: LignePlan, avertissements: string[] = []): void => {
-    issues.set(l.ligne, { statut: 'valide', erreurs: [], avertissements: [...(l.avertissements ?? []).map((a) => a.message), ...avertissements], doublonDe: null, resume: resumeDe(l) });
+    const parDefaut = defautsLigne.map((x) => `${x.surLaLigne} : à vérifier`);
+    for (const x of defautsLigne) {
+      const liste = encart.get(x.sorte) ?? new Set<string>();
+      liste.add(x.dansEncart);
+      encart.set(x.sorte, liste);
+    }
+    defautsLigne = [];
+    issues.set(l.ligne, { statut: 'valide', erreurs: [], avertissements: [...(l.avertissements ?? []).map((a) => a.message), ...avertissements, ...parDefaut], doublonDe: null, resume: resumeDe(l) });
   };
 
   const anneeImport = d.anneeSaison ?? new Date(Number.isFinite(horloge) ? horloge : Date.now()).getUTCFullYear();
@@ -360,6 +400,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
       const k = `${parente ?? ''}\u0001${normaliser(nom)}`;
       const connue = zonesParCle.get(k) ?? (parente === null ? zonesParNom.get(normaliser(nom)) : undefined);
       if (connue !== undefined) return connue;
+      if (abri === null) noterDefaut('abri', `zone « ${nom.trim()} » : plein champ par défaut`, `${nom.trim()} : plein champ`);
       const id = nouvelId<'Zone'>();
       zonesParCle.set(k, id);
       profondeurDe.set(id, profondeur);
@@ -465,6 +506,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
           if (avantRecolte === null) throw new Refus('Jours avant récolte : obligatoire pour un itinéraire.', e.colonneDe.has('duree_avant_recolte_jours') ? 'duree_avant_recolte_jours' : 'espece');
           if (fenetre === null) throw new Refus('Fenêtre de récolte : obligatoire pour un itinéraire.', e.colonneDe.has('fenetre_recolte_jours') ? 'fenetre_recolte_jours' : 'espece');
           const parametres = parametresNeufs(mode, avantRecolte, fenetre, pepiniere, rangs, ecartement);
+          const pourDefauts = nomEspece(especeId);
           const cle = `${especeId}\u0001${varieteId ?? ''}\u0001${JSON.stringify(parametres)}`;
           const memeEnBase = ctx.itineraires.some(
             (i) => i.deLaFerme && i.especeId === especeId && (i.varieteId ?? null) === varieteId && memesDurees(lireJson(i.parametres), parametres),
@@ -482,6 +524,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
             const ligne = { id: nouvelId<'Itineraire'>(), ferme_id: ferme, espece_id: especeId, variete_id: varieteId, nom, mode, parametres: JSON.stringify(parametres) };
             const r = validerItineraire({ ...ligne }, { typesIntervention: [] });
             if (!r.ok) throw new Refus(`Itinéraire refusé : ${r.erreur.message}.`, null);
+            noterDefautsParametres(parametres, { rangs, ecartement }, pourDefauts, noterDefaut);
             ecr.itineraires.push([inserer('itineraire', ligne)]);
             ecr.noter('itineraire', ligne.id);
           }
@@ -555,7 +598,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
           if (miseEnPlaceConnue === null) throw new Refus('Durée avant récolte inconnue pour cette culture : ajoutez la date de plantation ou de semis.', 'espece');
           if (fin !== null) throw new Refus('Début de récolte manquant, et aucun itinéraire de cette culture ne donne la durée avant récolte.', e.colonneDe.has('date_debut_recolte') ? 'date_debut_recolte' : 'espece');
           avantRecolte = 0;
-          avertissements.push('récolte inconnue : à compléter');
+          noterDefaut('duree-recolte', 'début de récolte inconnu : à la mise en place par défaut', `${nomEspece(especeId)} : récolte dès la mise en place`);
         }
         const ancre: AncreSerie =
           plantation !== null
@@ -569,11 +612,13 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
         fenetre ??= duree('fenetreRecolteJours');
         if (fenetre === null) {
           fenetre = 0;
-          if (avertissements.length === 0) avertissements.push('fin de récolte inconnue : à compléter');
+          noterDefaut('duree-recolte', 'fin de récolte inconnue : fenêtre de 0 jour par défaut', `${nomEspece(especeId)} : fenêtre de récolte de 0 jour`);
         }
         if (fenetre < 0) throw new Refus('Fin de récolte avant le début de récolte.', 'date_fin_recolte');
 
         const parametres = parametresSerie(p0, mode, avantRecolte, fenetre, pepiniere);
+        // Ce que les paramètres de la série prennent par défaut (ni le fichier, ni l'itinéraire).
+        noterDefautsParametres(parametres, p0 === null ? { rangs: null, ecartement: null } : null, nomEspece(especeId), noterDefaut, p0?.mode === mode ? p0 : null);
         const datesP = parametres as unknown as ParametresDatesSerie;
         const dates = calculerDatesSerie(datesP, ancre);
         const miseEnPlace = dates.miseEnPlace;
@@ -603,6 +648,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
             // Ni longueur, ni plants, ni planche : le serveur exige une taille. 1 m, signalé dans
             // l'aperçu (à compléter dans la série).
             longueur = LONGUEUR_PAR_DEFAUT_M;
+            noterDefaut('longueur-serie', `longueur ${String(LONGUEUR_PAR_DEFAUT_M)} m par défaut (ni longueur, ni plants, ni planche)`, `${nomEspece(especeId)} : ${String(LONGUEUR_PAR_DEFAUT_M)} m`);
           }
         }
 
@@ -679,7 +725,6 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
           ecr.seriesSeules.push(groupe);
           ecr.noter('serie', serie.id);
         }
-        if (longueurFichier === null && plants === null && emplacement === null) sansTailleValides++;
         if (nouvelItineraire !== null && itineraireNeuf !== null) {
           ecr.itineraires.push([nouvelItineraire]);
           ecr.noter('itineraire', serie.itineraire_id);
@@ -808,7 +853,12 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
     ecritures: ecr.ecritures,
     lots: lots.length,
     creees: ecr.creees,
-    sansTaille: sansTailleValides,
+    defauts: [...encart].map(([sorte, textes]) => ({ sorte, textes: [...textes].slice(0, 20), nombre: textes.size })),
+    lotsCreees: lots.map((lot) => lot.flatMap((o) => {
+      const table = /^INSERT INTO (\w+)/.exec(o.sql)?.[1];
+      const id = o.parametres?.[0];
+      return table !== undefined && typeof id === 'string' ? [`${table}:${id}`] : [];
+    })),
   };
   return { apercu, lots };
 }
@@ -897,4 +947,33 @@ function parametresSerie(p0: Objet | null, mode: Mode, avantRecolte: number, fen
 function memesDurees(a: Objet | null, b: Objet): boolean {
   if (a === null) return false;
   return a.mode === b.mode && a.dureeAvantRecolteJours === b.dureeAvantRecolteJours && a.fenetreRecolteJours === b.fenetreRecolteJours && (a.dureePepiniereJours ?? null) === (b.dureePepiniereJours ?? null);
+}
+
+/**
+ * Valeurs par défaut des paramètres d'un itinéraire ou d'une série (relecture B1) : densité et
+ * marge quand `densiteLue` est donnée (null : la densité et la marge viennent d'un itinéraire),
+ * pépinière ou poquet quand elles ne viennent pas de `source` (l'itinéraire de même mode).
+ */
+function noterDefautsParametres(
+  p: Objet,
+  densiteLue: { readonly rangs: number | null; readonly ecartement: number | null } | null,
+  culture: string,
+  noter: (sorte: SorteDefaut, surLaLigne: string, dansEncart: string) => void,
+  source: Objet | null = null,
+): void {
+  if (densiteLue !== null) {
+    if (densiteLue.rangs === null || densiteLue.ecartement === null) {
+      const rangs = densiteLue.rangs ?? DENSITE_PAR_DEFAUT.rangsParPlanche;
+      const ecart = densiteLue.ecartement ?? DENSITE_PAR_DEFAUT.ecartementSurRangCm;
+      const texte = `${String(rangs)} rang${rangs > 1 ? 's' : ''} × ${String(ecart)} cm`;
+      noter('densite', `densité ${texte} par défaut`, `${culture} : ${texte}`);
+    }
+    noter('marge', `marge de sécurité ${String(PARAMETRES_COMMUNS.margeSecurite)} % par défaut`, `${culture} : ${String(PARAMETRES_COMMUNS.margeSecurite)} %`);
+  }
+  if (source !== null) return;
+  if (p.mode === 'plant_maison') {
+    noter('pepiniere', 'pépinière : 1 graine et 1 plant par motte, 0 % de perte par défaut', `${culture} : 1 graine, 1 plant par motte, 0 % de perte`);
+  } else if (p.mode === 'semis_direct') {
+    noter('pepiniere', '1 graine par poquet par défaut', `${culture} : 1 graine par poquet`);
+  }
 }
