@@ -143,6 +143,24 @@ export class MoteurImport {
       return { sorte: 'decisions', decisions };
     }
 
+    // Un modèle garde « Créer » pour une culture qui n'existe pas (ou plus) dans la ferme, sans ses
+    // catégorie, pérenne et unité : l'étape « Valeurs » est rouverte pour les demander.
+    const connues = new Set(d.contexte.especes.map((x) => normaliser(x.nom)));
+    const renseignees = new Set(Object.keys(d.attributsEspeces).map(normaliser));
+    const aCreer = new Map<string, { valeur: string; lignes: number }>();
+    for (const l of plan.lignes) {
+      const v = l.valeurs.espece;
+      if (typeof v !== 'object' || v?.sorte !== 'nouvelle') continue;
+      const k = normaliser(v.nom);
+      if (connues.has(k) || renseignees.has(k)) continue;
+      const deja = aCreer.get(k);
+      if (deja === undefined) aCreer.set(k, { valeur: v.nom, lignes: 1 });
+      else deja.lignes++;
+    }
+    if (aCreer.size > 0) {
+      return { sorte: 'decisions', decisions: [...aCreer.values()].map((x) => ({ champ: 'espece', valeur: x.valeur, lignes: x.lignes, propositions: [], creer: true })) };
+    }
+
     const colonneDe = new Map<CleChamp, number>();
     correspondance.colonnes.forEach((c, i) => {
       if (c.champ !== null && !colonneDe.has(c.champ)) colonneDe.set(c.champ, i);

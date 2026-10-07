@@ -138,6 +138,8 @@ export interface DecisionAffichee {
   readonly valeur: string;
   readonly lignes: number;
   readonly propositions: readonly PropositionValeur[];
+  /** Culture à créer (choix « Créer » d'un modèle) dont il manque catégorie, pérenne ou unité. */
+  readonly creer?: true;
 }
 
 export interface ErreurAffichee {

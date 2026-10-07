@@ -333,7 +333,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
         const nouveaux: Record<string, string> = { ...pris };
         for (const d of r.decisions) {
           const k = cleDecision(d.champ, d.valeur);
-          nouveaux[k] ??= d.propositions[0]?.id ?? '';
+          nouveaux[k] ??= d.creer === true ? 'nouvelle' : (d.propositions[0]?.id ?? '');
         }
         setDecisions(r.decisions);
         setChoixPris(nouveaux);
@@ -768,7 +768,9 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
           {etape === 'fini' && fini !== null && (
             <div className="imp-carte imp-fin">
               <p role="status" className="imp-statut">
-                {fini.annule ? `Import annulé : les ${lignesImportees(fini.passe.lignes)} sont retirées.` : `${lignesImportees(fini.passe.lignes)}.`}
+                {fini.annule
+                  ? `Import annulé : les ${lignesImportees(fini.passe.lignes)} sont retirées. Si le serveur en refuse une partie à la synchronisation, elle apparaîtra dans « Saisies refusées » (onglet Ferme).`
+                  : `${lignesImportees(fini.passe.lignes)}.`}
               </p>
               {!fini.annule && <p className="imp-aide">Annulable à tout moment depuis « Imports récents ». La synchronisation l’enverra dès que le réseau revient.</p>}
             </div>
