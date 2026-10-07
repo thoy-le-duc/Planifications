@@ -123,6 +123,10 @@ interface Suivi {
   /** Caméra (T29) : ce que regarde la caméra, un vol est en cours, vols lancés depuis l'ouverture, cible du vol arrivé (marque à l'image suivante). */
   cible: Point3;
   vol: boolean;
+  /** Valeur de `data-vol` déjà écrite. */
+  volEcrit: boolean;
+  /** La caméra a bougé depuis la dernière écriture de `data-camera`. */
+  cameraAEcrire: boolean;
   vols: number;
   volFinEnAttente: string | null;
 }
@@ -327,6 +331,7 @@ function Camera({
       camera.far = d * 4 + rayon * 2 + Math.hypot(pose.cible.x, pose.cible.z);
       camera.updateProjectionMatrix();
       suiviRef.current.cible = pose.cible;
+      suiviRef.current.cameraAEcrire = true;
     };
     const placer = () => {
       appliquer(poseDeOrbite());
@@ -376,7 +381,7 @@ function Camera({
         enVol.current = null;
         suiviRef.current.vol = false;
         suiviRef.current.volFinEnAttente = v.cible;
-        orbiteDepuis(pose);
+          orbiteDepuis(pose);
       } else {
         invalider();
       }
@@ -426,39 +431,31 @@ function Camera({
       o.distance = Math.min(Math.max(distanceDepart * 3, o.distance), Math.max(Math.min(distanceDepart * 0.15, o.distance), o.distance * Math.exp(e.deltaY * 0.001)));
       placer();
     };
+    const actions: Readonly<Record<string, () => void>> = {
+      ArrowLeft: () => {
+        o.azimut += PAS_CLAVIER;
+      },
+      ArrowRight: () => {
+        o.azimut -= PAS_CLAVIER;
+      },
+      ArrowUp: () => {
+        o.elevation = Math.min(ELEVATION_MAX, o.elevation + PAS_CLAVIER);
+      },
+      ArrowDown: () => {
+        o.elevation = Math.max(ELEVATION_MIN, o.elevation - PAS_CLAVIER);
+      },
+      '+': () => {
+        o.distance = Math.max(Math.min(distanceDepart * 0.15, o.distance), o.distance * 0.85);
+      },
+      '-': () => {
+        o.distance = Math.min(Math.max(distanceDepart * 3, o.distance), o.distance / 0.85);
+      },
+    };
     const touche = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'ArrowLeft':
-        case 'ArrowRight':
-        case 'ArrowUp':
-        case 'ArrowDown':
-        case '+':
-        case '-':
-          arreterVol();
-          break;
-        default:
-          return;
-      }
-      switch (e.key) {
-        case 'ArrowLeft':
-          o.azimut += PAS_CLAVIER;
-          break;
-        case 'ArrowRight':
-          o.azimut -= PAS_CLAVIER;
-          break;
-        case 'ArrowUp':
-          o.elevation = Math.min(ELEVATION_MAX, o.elevation + PAS_CLAVIER);
-          break;
-        case 'ArrowDown':
-          o.elevation = Math.max(ELEVATION_MIN, o.elevation - PAS_CLAVIER);
-          break;
-        case '+':
-          o.distance = Math.max(Math.min(distanceDepart * 0.15, o.distance), o.distance * 0.85);
-          break;
-        default:
-          o.distance = Math.min(Math.max(distanceDepart * 3, o.distance), o.distance / 0.85);
-          break;
-      }
+      const action = Object.hasOwn(actions, e.key) ? actions[e.key] : undefined;
+      if (action === undefined) return;
+      arreterVol();
+      action();
       e.preventDefault();
       placer();
     };
@@ -621,7 +618,7 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
   }, []);
   const estCoche = (dimension: DimensionFiltre, valeur: string): boolean => filtres[dimension]?.has(valeur) ?? true;
 
-  const suivi = useRef<Suivi>({ rendus: 0, premiere: false, semaineEnAttente: null, filtreEnAttente: null, geometries: 0, glisse: false, dernier: -1, intervalles: [], cible: { x: 0, y: 0, z: 0 }, vol: false, vols: 0, volFinEnAttente: null });
+  const suivi = useRef<Suivi>({ rendus: 0, premiere: false, semaineEnAttente: null, filtreEnAttente: null, geometries: 0, glisse: false, dernier: -1, intervalles: [], cible: { x: 0, y: 0, z: 0 }, vol: false, volEcrit: false, cameraAEcrire: true, vols: 0, volFinEnAttente: null });
   const surEchecRef = useRef(surEchec);
   useLayoutEffect(() => {
     surEchecRef.current = surEchec;
@@ -632,10 +629,17 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
     s.rendus += 1;
     const ds = gl.domElement.dataset;
     ds.rendus = String(s.rendus);
-    // La caméra de cette image (T29) : lue par les tests et, plus tard, par la voix.
-    ds.camera = JSON.stringify({ position: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, cible: s.cible });
-    ds.champ = String(CHAMP_DEGRES);
-    ds.vol = s.vol ? 'oui' : 'non';
+    // La caméra (T29), lue par les tests et, plus tard, par la voix : réécrite seulement quand elle a bougé, par gabarit.
+    if (s.cameraAEcrire) {
+      const { x, y, z } = camera.position;
+      const c = s.cible;
+      ds.camera = `{"position":{"x":${String(x)},"y":${String(y)},"z":${String(z)}},"cible":{"x":${String(c.x)},"y":${String(c.y)},"z":${String(c.z)}}}`;
+      s.cameraAEcrire = false;
+    }
+    if (s.volEcrit !== s.vol) {
+      ds.vol = s.vol ? 'oui' : 'non';
+      s.volEcrit = s.vol;
+    }
     if (s.volFinEnAttente !== null) {
       performance.mark(MARQUE_VOL_FIN, { detail: { cible: s.volFinEnAttente } });
       s.volFinEnAttente = null;
@@ -831,7 +835,7 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
       </div>
       <div className="plan3d-corps">
         <div className="plan3d-scene">
-          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-rendus={0} data-geometries={0} data-estompes={0} data-vols={0} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-rendus={0} data-geometries={0} data-estompes={0} data-vols={0} data-vol="non" data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
         </div>
         <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
           <div className="plan3d-filtres">
