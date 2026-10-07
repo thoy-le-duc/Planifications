@@ -61,7 +61,7 @@ TypeScript partout, en monorepo. Rust a été écarté volontairement : sa robus
 | Backend | Node (Hono ou Fastify) | API typée, partage des types avec le front |
 | Base serveur | PostgreSQL + Drizzle ORM | Hébergement UE |
 | Moteur métier | `packages/core`, TypeScript pur | Aucune dépendance réseau ni IA ; 100 % testable |
-| Agent | Serveur MCP (SDK TypeScript officiel) | Expose lecture de la ferme et actions, chaque action passe par la validation |
+| Agent | Serveur MCP (SDK TypeScript officiel) | Expose lecture de la ferme et actions, chaque action passe par la validation ; jamais d'accès SQL brut à la porte (voir « Risques ») |
 | Voix | Transcription + extraction structurée par un petit modèle | Opus sert à construire l'appli, pas à la faire tourner : coût par utilisateur maîtrisé |
 | Tests | Vitest (unitaires), Playwright (bout en bout) | Budget de performance en CI |
 
@@ -90,6 +90,7 @@ Le plan a été attaqué brique par brique. Voici ce qui peut casser et la répo
 | Hors-ligne ajouté trop tard | Réécriture quasi complète | Architecture local-first dès le premier commit |
 | Voix au champ (vent, tracteur, variétés) | Saisies fausses, perte de confiance | Vocabulaire tiré de la bibliothèque de la ferme, validation en un tap, file d'attente hors réseau |
 | Coût IA par utilisateur | Marge détruite | Petits modèles en production, mesure du coût par ferme dès la phase 2 |
+| L'agent écrit dans la base en contournant les règles | Doublons (« Fait » noté deux fois), saisies qui ne partent jamais vers le serveur | **L'agent et le serveur MCP ne reçoivent jamais d'accès SQL brut à la porte** : seulement des actions typées (`preparerSaisie`, `saisirEvenement`…), chacune validée par le maraîcher. Le contrôle « déjà fait » de la porte (T13o) ne voit ni un UPDATE direct des tables internes de PowerSync, ni un DELETE puis INSERT directs dans ces tables |
 | Détection de ravageurs imprécise | Mauvais traitement | Présentée comme piste, jamais comme diagnostic |
 | Boucle autonome qui dérive | Dette technique, régressions | Tickets avec tests d'acceptation, sandbox isolée, revue humaine quotidienne |
 | Concurrence gratuite (Brinjel, Qrop) | Pas de raison de payer | Différenciation sur voix, agent, vitesse, intégrations |

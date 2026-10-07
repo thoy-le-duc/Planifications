@@ -38,6 +38,8 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10p](T10p-journal-flux.md) | Journal du serveur : erreurs d’envoi en flux | T10m | fait |
 | [T10q](T10q-flux-suites.md) | Réponses en flux : HTTP/1.0 et erreur au premier octet | T10p | fait |
 | [T10r](T10r-flux-delai.md) | Réponses en flux : délai jusqu’au premier morceau | T10q | fait |
+| [T10s](T10s-parcellaire-serveur.md) | Serveur : accepter le parcellaire et le catalogue de la ferme | T10r | fait |
+| [T10t](T10t-structure-suites.md) | Parcellaire et catalogue : suites de la relecture | T10s | à faire |
 | [T10g](T10g-recoltes-annulees.md) | Récoltes annulées et plafonds définitifs (Q20, Q13) | T10d | fait |
 | [T10h](T10h-en-vigueur-suites.md) | « En vigueur » : performance de la vue et alignement du téléphone | T10g | fait |
 | [T10e](T10e-series-synchro.md) | Synchro : le serveur accepte les séries des téléphones | T10, T10b, T10c | fait |
@@ -62,7 +64,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T13h](T13h-fait-unique-en-base.md) | « Fait » unique vérifié au moment d'écrire | T13f | fait |
 | [T13i](T13i-fait-unique-partage.md) | « Fait » unique : partagé avec la voix et l'agent | T13h | fait |
 | [T13j](T13j-fait-unique-chemins.md) | « Fait » unique : tous les chemins d'écriture | T13i | fait |
-| [T13o](T13o-fait-unique-ps-crud.md) | « Fait » unique : contrôle d'après le journal d'envoi | T13j | à faire |
+| [T13o](T13o-fait-unique-ps-crud.md) | « Fait » unique : contrôle d'après le journal d'envoi | T13j | fait |
 | [T13d](T13d-aujourdhui-froid.md) | Aujourd'hui : ouverture à froid sous 1 s sur une grande ferme (instantané de la journée) | T13b, T13c | fait |
 | [T13g](T13g-aujourdhui-avant-base.md) | Aujourd'hui : instantané avant la base, « Fait » en file au lancement | T13d | fait |
 | [T13k](T13k-fait-avant-base.md) | Aujourd'hui : « Fait » accepté avant la base | T13g | à préciser |
@@ -70,7 +72,8 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T13m](T13m-chaine-unique.md) | Une seule règle « chaîne d'une saisie » | T13l, T13j | à faire |
 | [T13n](T13n-horodatages.md) | Horodatages comparés comme des dates | T13l | à faire |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
-| [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16 | à faire |
+| [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16, T10s | à faire |
+| [T14e](T14e-import-series.md) | Import : écriture des séries importées | T14b, T10s | à faire |
 | [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | fait |
 | [T14d](T14d-import-annee-suivante.md) | Import : saison à cheval sur deux années (Q18) | T14 | fait |
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
