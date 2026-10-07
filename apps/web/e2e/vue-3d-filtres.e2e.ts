@@ -364,3 +364,36 @@ test('vue 3D : filtres et légende, grande ferme de T07, ordinateur', async ({ p
 
   expect(await violations(), 'violations de la CSP').toEqual([]);
 });
+
+/**
+ * T27b, relecture : sur la démo (`pnpm e2e:demo`, 1280 × 800), les familles de la semaine tiennent dans
+ * le panneau sans défiler : cucurbitacees et rosacees, dont la courgette et la fraise de la démo,
+ * sont dans la fenêtre visible du panneau et de la page.
+ */
+test('vue 3D sur la démo : toutes les familles de la semaine sont visibles dans le panneau, sans défiler', async ({ page }) => {
+  test.skip(process.env.E2E_DEMO !== '1', 'ne tourne que sur la démo (pnpm e2e:demo)');
+  await page.goto('/');
+  await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 30_000 });
+  await onglet(page, 'Planches').click();
+  await expect(page.getByTestId('barre').first()).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId(TESTID_3D.bouton).click();
+  await expect(vue(page)).toHaveAttribute('data-etat', 'pret', { timeout: 30_000 });
+
+  const bp = await panneau(page).boundingBox();
+  if (bp === null) throw new Error('panneau introuvable');
+  const familles = await cases(page, T.famille).evaluateAll((els) => els.map((e) => e.getAttribute('data-valeur') ?? ''));
+  for (const cle of ['cucurbitacees', 'rosacees']) {
+    expect(familles, `la démo a des ${cle} cette semaine`).toContain(cle);
+    const c = caseDe(page, T.famille, cle);
+    await expect(c, `${cle} dans la fenêtre`).toBeInViewport({ ratio: 1 });
+    const b = await c.boundingBox();
+    if (b === null) throw new Error(`case ${cle} introuvable`);
+    expect(b.y, `${cle} sous le haut du panneau`).toBeGreaterThanOrEqual(bp.y - 0.5);
+    expect(b.y + b.height, `${cle} au-dessus du bas du panneau`).toBeLessThanOrEqual(bp.y + bp.height + 0.5);
+  }
+  // Toutes les familles de la semaine sont dans la fenêtre visible du panneau.
+  for (const cle of familles) {
+    const b = await caseDe(page, T.famille, cle).boundingBox();
+    expect(b !== null && b.y + b.height <= bp.y + bp.height + 0.5, `${cle} visible sans défiler`).toBe(true);
+  }
+});

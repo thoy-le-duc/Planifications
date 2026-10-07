@@ -433,9 +433,6 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
   const [prete, setPrete] = useState(false);
   const idCurseur = useId();
   const idListe = useId();
-  const idLegende = useId();
-  const idZones = useId();
-  const idCultures = useId();
 
   // Géométrie : posée par le plan seul (la semaine ne change que les couleurs).
   const geometrie = useMemo(() => (nbSemaines === 0 ? null : versScene(plan, 0)), [plan, nbSemaines]);
@@ -645,13 +642,11 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
         </div>
         <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
           <div className="plan3d-filtres">
-            <section data-testid="legende-3d" aria-labelledby={idLegende} className="plan3d-groupe">
-              <div className="plan3d-entete-groupe">
-                <h2 id={idLegende} className="plan3d-titre-groupe">
-                  Familles
-                </h2>
-                <BoutonsToutRien dimension="familles" surTout={toutCocher} surRien={toutDecocher} />
-              </div>
+            <details open data-testid="legende-3d" className="plan3d-groupe">
+              <summary>
+                Familles <span className="plan3d-nombre">({options.familles.length})</span>
+              </summary>
+              <BoutonsToutRien dimension="familles" surTout={toutCocher} surRien={toutDecocher} />
               <ul role="list" className="plan3d-cases">
                 {options.familles.map((cle) => (
                   <CaseFiltre key={cle} testid="filtre-famille-3d" dimension="familles" valeur={cle} libelle={nomFamille(cle)} coche={estCoche('familles', cle)} couleur={FAMILLES[cle as CleFamille].bande} surBascule={basculer} />
@@ -663,33 +658,29 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
                 <i aria-hidden="true" style={{ background: COULEUR_ESTOMPEE }} />
                 Estompée
               </p>
-            </section>
-            <section aria-labelledby={idZones} className="plan3d-groupe">
-              <div className="plan3d-entete-groupe">
-                <h2 id={idZones} className="plan3d-titre-groupe">
-                  Zones
-                </h2>
-                <BoutonsToutRien dimension="zones" surTout={toutCocher} surRien={toutDecocher} />
-              </div>
+            </details>
+            <details open className="plan3d-groupe">
+              <summary>
+                Zones <span className="plan3d-nombre">({options.zones.length})</span>
+              </summary>
+              <BoutonsToutRien dimension="zones" surTout={toutCocher} surRien={toutDecocher} />
               <ul role="list" className="plan3d-cases plan3d-cases-defilantes">
                 {options.zones.map((z) => (
                   <CaseFiltre key={z.id} testid="filtre-zone-3d" dimension="zones" valeur={z.id} libelle={z.nom} coche={estCoche('zones', z.id)} surBascule={basculer} />
                 ))}
               </ul>
-            </section>
-            <section aria-labelledby={idCultures} className="plan3d-groupe">
-              <div className="plan3d-entete-groupe">
-                <h2 id={idCultures} className="plan3d-titre-groupe">
-                  Cultures
-                </h2>
-                <BoutonsToutRien dimension="cultures" surTout={toutCocher} surRien={toutDecocher} />
-              </div>
+            </details>
+            <details open className="plan3d-groupe">
+              <summary>
+                Cultures <span className="plan3d-nombre">({options.cultures.length})</span>
+              </summary>
+              <BoutonsToutRien dimension="cultures" surTout={toutCocher} surRien={toutDecocher} />
               <ul role="list" className="plan3d-cases plan3d-cases-defilantes">
                 {options.cultures.map((c) => (
                   <CaseFiltre key={c} testid="filtre-culture-3d" dimension="cultures" valeur={c} libelle={c} coche={estCoche('cultures', c)} surBascule={basculer} />
                 ))}
               </ul>
-            </section>
+            </details>
           </div>
           <h2 id={idListe} className="plan3d-titre-liste">
             Planches et cultures, {libelle}

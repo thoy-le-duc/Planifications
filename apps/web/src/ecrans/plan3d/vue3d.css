@@ -109,8 +109,8 @@
 }
 
 .plan3d-liste {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
+  max-height: 260px;
   margin: 0;
   padding: var(--espace-xs) 0;
   overflow-y: auto;
@@ -156,28 +156,36 @@
 
 /* T27b : légende-filtre et filtres, dans le panneau à côté de la scène. */
 .plan3d-filtres {
-  flex: 0 1 auto;
-  max-height: 60%;
-  overflow-y: auto;
+  flex: 0 0 auto;
   border-bottom: 1px solid var(--couleur-trait);
+}
+
+/* Tout le panneau défile d'un bloc (barre visible) : rien n'est caché sous un pli sans indice. */
+.plan3d-cote {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+.plan3d-groupe > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-xs);
+  min-height: 36px;
+  cursor: pointer;
+  font-family: var(--police-titre);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--couleur-encre);
+}
+
+.plan3d-nombre {
+  font-weight: 400;
+  color: var(--couleur-secondaire);
 }
 
 .plan3d-groupe {
   padding: var(--espace-s) var(--espace-m);
-}
-
-.plan3d-entete-groupe {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--espace-s);
-}
-
-.plan3d-titre-groupe {
-  margin: 0;
-  font-family: var(--police-titre);
-  font-size: 15px;
-  color: var(--couleur-encre);
 }
 
 .plan3d-toutrien {

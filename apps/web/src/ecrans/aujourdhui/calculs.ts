@@ -38,7 +38,6 @@ import { cleFamille } from '../plan/calculs.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────────────────────────
 
-/** Série ou campagne, telle que l'écran la montre et l'écrit. */
 /**
  * Bandes de couleur de l'écran Aujourd'hui (T16) : quatre familles seulement. Les autres (T27b : 12
  * familles de plus et « autre » pour le plan et la vue 3D) restent sans bande ici, comme avant.
@@ -50,6 +49,7 @@ function bandeFamille(nomFamille: string | null): BandeFamille | null {
   return cle === 'salades' || cle === 'solanacees' || cle === 'cruciferes' || cle === 'racines' ? cle : null;
 }
 
+/** Série ou campagne, telle que l'écran la montre et l'écrit. */
 export interface Culture {
   readonly cible: CultureConcernee;
   /** Id de la série ou de la campagne (data-cle, data-cible). */
