@@ -290,6 +290,9 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q28 — Changer d'onglet pendant un export (posée le 2026-10-07, T15c)
+
+Question : si l'on quitte l'onglet Ferme pendant l'export de toute la ferme, l'export s'arrête aujourd'hui sans le dire. Proposition : l'export continue en arrière-plan et le téléchargement arrive quand il est prêt, avec un petit bandeau « Export en cours » sur les autres écrans. Ça te va, ou préfères-tu qu'il s'arrête avec un message ?
 ### Q27 — Deux planches avec le même code (posée le 2026-10-07, T10s)
 
 Question : deux planches (emplacements) de la même ferme peuvent-elles porter le même code, par exemple deux « P3 » dans deux tunnels différents ? Aujourd'hui c'est accepté sans rien dire. Refuser rendrait un import fait hors ligne refusé en entier s'il contient un doublon ; seulement avertir laisse passer l'import avec un message. Proposition : unique par zone (deux « P3 » possibles dans deux tunnels, pas dans le même), avec un avertissement à l'import.

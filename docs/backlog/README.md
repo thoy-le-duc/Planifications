@@ -78,7 +78,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T14d](T14d-import-annee-suivante.md) | Import : saison à cheval sur deux années (Q18) | T14 | fait |
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
 | [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | fait |
-| [T15c](T15c-export-rapide.md) | Export : sous 10 secondes sur un téléphone moyen | T16b | à faire |
+| [T15c](T15c-export-rapide.md) | Export : sous 10 secondes sur un téléphone moyen | T16b | fait |
 | [T15d](T15d-export-tache-longue.md) | Export : jamais de tâche longue sur le fil principal | T15c | à faire |
 | [T25](T25-demo-en-ligne.md) | Démo en ligne (Vercel) | — | fait |
 | [T25b](T25b-demo-finitions.md) | Démo : pas de déconnexion ni d’état de synchro | T25 | fait |

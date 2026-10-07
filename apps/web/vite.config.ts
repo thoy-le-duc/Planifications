@@ -90,8 +90,25 @@ function nomMorceau(morceau: MorceauNomme): string {
   return 'assets/[name]-[hash].js';
 }
 
+/**
+ * T15c : le worker de compression de l'export n'est pas un morceau de la base locale. Il va avec
+ * le reste de l'appli (`assets/`), hors de `assets/sqlite/`, et entre dans le précache comme lui :
+ * l'export marche hors ligne dès la première visite.
+ */
+const MODULE_WORKER_COMPRESSION = fileURLToPath(new URL('src/ecrans/export/compression.worker.ts', import.meta.url));
+
+function estWorkerCompression(morceau: MorceauNomme): boolean {
+  return morceau.moduleIds.includes(MODULE_WORKER_COMPRESSION);
+}
+
+/** Entrée d'un worker : celui de la compression de l'export dans `assets/`, ceux de PowerSync dans `assets/sqlite/`. */
+function nomEntreeWorker(morceau: MorceauNomme): string {
+  return estWorkerCompression(morceau) ? 'assets/[name]-[hash].js' : nomSortie('sqlite', '.js');
+}
+
 /** Morceaux du worker de PowerSync : ce que l'appli charge dans `assets/sqlite/`, le reste en annexe. */
 function nomMorceauWorker(morceau: MorceauNomme): string {
+  if (estWorkerCompression(morceau)) return 'assets/[name]-[hash].js';
   if (morceau.isEntry || morceau.moduleIds.some((id) => MOTIF_SQLITE_UTILISE.test(id))) return nomSortie('sqlite', '.js');
   if (morceau.moduleIds.some((id) => MOTIF_SQLITE_ANNEXE.test(id))) return nomSortie('sqlite-annexe', '.js');
   return nomSortie('sqlite', '.js');
@@ -344,10 +361,10 @@ export default defineConfig(({ mode }) => {
     optimizeDeps: { exclude: ['@powersync/web'] },
     worker: {
       format: 'es',
-      // Les workers de PowerSync ne servent qu'à la base locale.
+      // Les workers de PowerSync ne servent qu'à la base locale ; celui de la compression de l'export, à part (T15c).
       rollupOptions: {
         output: {
-          entryFileNames: nomSortie('sqlite', '.js'),
+          entryFileNames: nomEntreeWorker,
           chunkFileNames: nomMorceauWorker,
           assetFileNames: nomFichierAnnexe,
         },
