@@ -540,6 +540,8 @@ export function EcranAujourdhui(p: ProprietesEcranAujourdhui) {
   // T13k : « Fait » d'avant la base abandonnés ; gardé ici, le message survit au remplacement de
   // l'écran (autre ferme, autre utilisateur).
   const [abandonnes, setAbandonnes] = useState(0);
+  // Le plus grand nombre, pas la somme : un même abandon peut être dit deux fois, par l'écran
+  // remplacé (au démontage) et par le nouvel écran du même utilisateur (note de l'instantané).
   const surAbandon = useCallback((n: number) => {
     setAbandonnes((a) => Math.max(a, n));
   }, []);
@@ -654,11 +656,14 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   /**
    * T13k : la porte, pour les écritures en file (un « Fait » tapé avant la base s'écrit après).
    * `attentePorte` : la file attend la porte (créée au premier « Fait » d'avant la base).
-   * `avantBase` : « Fait » d'avant la base pas encore traités (noté avec l'instantané).
+   * `avantBase` : « Fait » d'avant la base qui attendent encore la porte (noté avec l'instantané) ;
+   * la porte venue, chacun quitte le compte (il s'écrit à son tour, sur la bonne ferme).
+   * `demonte` : écran remplacé ou quitté ; plus aucun « Fait » ne reçoit la porte.
    */
   const porteActuelle = useRef(porte);
   const attentePorte = useRef<AttentePorte | null>(null);
   const avantBase = useRef(0);
+  const demonte = useRef(false);
 
   /** T13k : note avec l'instantané le nombre de « Fait » d'avant la base pas encore traités. */
   const noterEnAttente = useCallback(() => {
@@ -667,6 +672,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
 
   /** T13k : la porte, tout de suite si la base est ouverte ; sinon à son arrivée (null : abandon). */
   function porteVenue(): Promise<PorteDonnees | null> {
+    if (demonte.current) return Promise.resolve(null);
     if (porteActuelle.current !== null) return Promise.resolve(porteActuelle.current);
     attentePorte.current ??= nouvelleAttente();
     return attentePorte.current.promesse;
@@ -684,16 +690,19 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   // T13k : écran remplacé (autre ferme, autre utilisateur) ou quitté avant la base : les « Fait »
   // en attente sont abandonnés, rien n'est écrit ; le nombre reste noté avec l'instantané (le
   // prochain écran de cet utilisateur le dit) et EcranAujourdhui le dit tout de suite.
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    demonte.current = false;
+    // Le compteur lui-même (pas sa valeur) : lu au démontage, ce qui attend encore la porte.
+    const compte = avantBase;
+    return () => {
+      demonte.current = true;
       const attente = attentePorte.current;
       if (attente === null) return;
       attentePorte.current = null;
       attente.rendre(null);
-      if (avantBase.current > 0) surAbandon(avantBase.current);
-    },
-    [surAbandon],
-  );
+      if (compte.current > 0) surAbandon(compte.current);
+    };
+  }, [surAbandon]);
 
   // T13k : « Fait » tapés avant la base à un lancement précédent, jamais écrits (appli fermée ou
   // écran quitté avant la base) : on le dit, une fois.
@@ -905,6 +914,11 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
           abandonne = true;
           return null;
         }
+        if (avantLaBase) {
+          // La porte est là : ce « Fait » n'attend plus, il quitte le compte noté.
+          avantBase.current--;
+          noterEnAttente();
+        }
         const t = await lireTacheCiblee(venue, fermeId, jourCourant(), cle);
         if (t === null) {
           setAvis('Déjà notée depuis un autre téléphone : rien de plus n’est enregistré.');
@@ -957,8 +971,6 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         reste.delete(cle);
         return reste;
       });
-      avantBase.current--;
-      noterEnAttente();
     });
   }
 
