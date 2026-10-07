@@ -338,7 +338,11 @@ describe('avertissements de l’aperçu (T14d)', () => {
 
   it('pas d’avertissement : pas de compteur d’avertissements', async () => {
     await h.ouvrir();
-    await jusquApercu('series-anglais.csv', fixture('series-anglais.csv'));
+    // Un fichier où rien n'est deviné : ni année suivante (T14d), ni valeur par défaut (relecture
+    // B1). series-anglais.csv ne convient plus : dans la ferme neuve, le Radis n'a pas
+    // d'itinéraire, l'import en crée un avec densité et marge par défaut, montrées « à vérifier ».
+    await jusquApercu('parcellaire-anglais.csv', fixture('parcellaire-anglais.csv'));
+    expect(compteur('valides')).toBe(4);
     expect(ecran().querySelector('[data-testid="compteur-avertissements"]')).toBeNull();
   });
 });
