@@ -48,6 +48,7 @@ Déroulé d'un ticket : testeur → développeur → relecteur → corrections d
 - **Suivi des PR léger** : le chef vérifie la CI par un point de contrôle programmé plutôt qu'en s'abonnant à chaque événement de la PR.
 - **Tickets petits et bornés** : un ticket = une règle ou un écran ; les cas limites qu'on découvre deviennent des tickets de suite plutôt que d'agrandir le ticket en cours.
 - **On ne coupe jamais** : les tests écrits d'abord, la relecture, `pnpm verif` avant la PR.
+- **Choix des modèles** (décision de Théophane, 2026-10-07) : Haiku pour le mécanique (captures, suivi de CI, journal, `etat.json`, page de suivi, première relecture des tickets sans risque) ; Sonnet pour le développeur des tickets d'interface et le testeur des tickets sans données ; Opus pour tout ce qui touche la base, la synchro, l'isolement entre fermes, le stock, la sécurité, et leurs tests et relectures. Les tests restent l'arbitre, quel que soit le modèle.
 
 **Parallélisme** : deux tickets indépendants au plus en même temps, chacun dans sa propre copie de travail et sur sa propre branche. Des tickets qui dépendent l'un de l'autre passent l'un après l'autre, sur des branches empilées. Plus d'agents en parallèle ne rendrait pas la boucle plus sûre : les conflits coûteraient plus que le temps gagné.
 
@@ -68,7 +69,7 @@ Jamais de fusion avec une CI rouge ou en cours, jamais de push direct sur `main`
 
 Décision de Théophane (2026-10-05) : chaque semaine, la boucle laisse **au moins 15 % de sa limite d'utilisation Claude** pour qu'il finisse la semaine tranquillement. La semaine de la limite va du **mercredi 10 h au mercredi 10 h (heure de Paris)**. La boucle ne voit pas la jauge : elle tient un budget en tickets, à ajuster quand Théophane donne le pourcentage.
 
-- **Au plus 8 tickets par semaine** (repère : environ 5 à 6 % de la limite par ticket avec relectures). Compter les PR `ticket/…` fusionnées et ouvertes depuis le dernier mercredi 10 h : `git log origin/main --merges --since=<mercredi 10 h> --grep "ticket/"` et les PR `ticket/…` encore ouvertes.
+- **Au plus 10 tickets par semaine** (décision de Théophane du 2026-10-07, travail de nuit autorisé ; repère : environ 5 à 6 % de la limite par ticket avec relectures). Au-delà, seulement sur la jauge donnée par Théophane. Compter les PR `ticket/…` fusionnées et ouvertes depuis le dernier mercredi 10 h : `git log origin/main --merges --since=<mercredi 10 h> --grep "ticket/"` et les PR `ticket/…` encore ouvertes.
 - **Aucun nouveau ticket du mardi 10 h au mercredi 10 h** : les fenêtres de ce créneau surveillent et fusionnent seulement les PR déjà ouvertes.
 - **Jauge donnée par Théophane** : si elle dépasse 70 % avant mardi, plus de nouveau ticket jusqu'au mercredi 10 h. La dernière valeur connue est notée ici : 76 % le lundi 5 octobre 2026 à 11 h (aucun nouveau ticket jusqu'au mercredi 7 octobre à 10 h).
 - **Économies systématiques** : Sonnet pour le testeur et le relecteur des tickets sans risque (ni stock, ni synchro, ni sécurité, ni isolement entre fermes) ; une fenêtre sans ticket s'arrête après la surveillance des PR, sans relancer d'agent.
