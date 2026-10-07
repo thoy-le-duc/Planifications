@@ -8,6 +8,8 @@
  *   - deux InstancedMesh (socles, planches) : deux appels de dessin, quelle que soit la ferme ;
  *   - rendu à la demande (frameloop « demand ») : aucune image quand rien ne bouge ;
  *   - changer de semaine ne recolore que les instances, la géométrie ne bouge pas ;
+ *   - les filtres (T27b : famille, culture, zone) estompent des planches sans les retirer : seules
+ *     les couleurs des instances changent, l'état est local à la vue et n'est jamais stocké ;
  *   - WebGL perdu, erreur, ou images trop lentes : retour à la 2D avec un message ;
  *   - une liste texte des planches et cultures de la semaine, toujours présente (accessibilité).
  *
@@ -18,7 +20,23 @@ import { Component, memo, useCallback, useEffect, useId, useLayoutEffect, useMem
 import { AmbientLight, BoxGeometry, Color, DirectionalLight, InstancedMesh, MeshLambertMaterial, Object3D } from 'three';
 import type { Plan } from '../plan/calculs.ts';
 import { COULEURS, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
-import { COULEUR_NEUTRE, versScene, type Scene } from './scene.ts';
+import {
+  appliquerFiltres,
+  basculerFiltre,
+  cocherRien,
+  cocherTout,
+  COULEUR_ESTOMPEE,
+  COULEUR_NEUTRE,
+  FILTRES_TOUT,
+  hauteurRendue,
+  optionsFiltres,
+  versScene,
+  type DimensionFiltre,
+  type FiltresScene,
+  type Scene,
+  type SceneFiltree,
+
+} from './scene.ts';
 import './vue3d.css';
 
 export interface ProprietesVue3d {
@@ -32,6 +50,7 @@ export interface ProprietesVue3d {
 /** Marques de performance (e2e/vue-3d.e2e.ts) ; celle du module est posée par l'écran Planches (./entree.ts). */
 const MARQUE_AFFICHEE = 'planif:vue-3d-affichee';
 const MARQUE_SEMAINE = 'planif:vue-3d-semaine';
+const MARQUE_FILTRE = 'planif:vue-3d-filtre';
 
 /** Épaisseur des socles (m de scène), posés sous le sol. */
 const EPAISSEUR_SOCLE = 0.2;
@@ -58,12 +77,30 @@ const MESSAGE_ERREUR = 'La vue 3D s’est arrêtée (carte graphique indisponibl
  */
 extend({ AmbientLight, BoxGeometry, DirectionalLight, InstancedMesh, MeshLambertMaterial });
 
-const LEGENDE: readonly (readonly [CleFamille, string])[] = [
-  ['salades', 'Salades'],
-  ['solanacees', 'Solanacées'],
-  ['cruciferes', 'Crucifères et feuilles'],
-  ['racines', 'Racines'],
-];
+/** Nom affiché de chaque famille (légende et cases), dans l'ordre des clés. */
+const NOMS_FAMILLES: Readonly<Record<CleFamille, string>> = {
+  salades: 'Astéracées (salades)',
+  solanacees: 'Solanacées',
+  cruciferes: 'Brassicacées (crucifères)',
+  racines: 'Apiacées (racines)',
+  alliacees: 'Alliacées',
+  amaranthacees: 'Amaranthacées',
+  asparagacees: 'Asparagacées',
+  convolvulacees: 'Convolvulacées',
+  cucurbitacees: 'Cucurbitacées',
+  fabacees: 'Fabacées',
+  lamiacees: 'Lamiacées',
+  paeoniacees: 'Paeoniacées',
+  poacees: 'Poacées',
+  polygonacees: 'Polygonacées',
+  rosacees: 'Rosacées',
+  valerianacees: 'Valérianacées',
+  autre: 'Autre famille',
+};
+
+function nomFamille(cle: string): string {
+  return cle in NOMS_FAMILLES ? NOMS_FAMILLES[cle as CleFamille] : cle;
+}
 
 /** Suivi des images dessinées, hors de React (rien ne se redessine pour un compteur). */
 interface Suivi {
@@ -71,6 +108,10 @@ interface Suivi {
   premiere: boolean;
   /** Semaine dont les couleurs viennent d'être posées : marquée à l'image suivante. */
   semaineEnAttente: number | null;
+  /** Filtres dont les couleurs viennent d'être posées (nombre de planches estompées) : marqués à l'image suivante. */
+  filtreEnAttente: number | null;
+  /** Fois que les matrices des planches ont été posées depuis l'ouverture (jamais pour un filtre). */
+  geometries: number;
   glisse: boolean;
   dernier: number;
   intervalles: number[];
@@ -114,39 +155,66 @@ function Socles({ scene }: { readonly scene: Scene }) {
   );
 }
 
+/** Ce qu'un changement de couleurs des planches a de nouveau, pour les marques de performance. */
+interface Recoloration {
+  readonly semaine: number;
+  readonly semaineChangee: boolean;
+  readonly filtresChanges: boolean;
+  readonly estompes: number;
+}
+
 /**
- * Les planches : un seul InstancedMesh. La géométrie se pose quand le plan change ; les couleurs
- * seules changent avec la semaine.
+ * Les planches : un seul InstancedMesh. Les matrices se posent quand le plan ou la semaine change
+ * (une planche vide est à plat) ; les couleurs seules changent avec un filtre.
  */
-function Volumes({ geometrie, scene, surCouleurs }: { readonly geometrie: Scene; readonly scene: Scene; readonly surCouleurs: (semaine: number) => void }) {
+function Volumes({
+  scene,
+  filtres,
+  filtree,
+  surGeometrie,
+  surCouleurs,
+}: {
+  readonly scene: Scene;
+  readonly filtres: FiltresScene;
+  readonly filtree: SceneFiltree;
+  readonly surGeometrie: () => void;
+  readonly surCouleurs: (r: Recoloration) => void;
+}) {
   const maillage = useRef<InstancedMesh>(null);
   const invalider = useThree((s) => s.invalidate);
   useLayoutEffect(() => {
     const m = maillage.current;
     if (m === null) return;
-    geometrie.volumes.forEach((v, i) => {
-      temporaire.position.set(v.x, v.hauteur / 2, v.z);
-      temporaire.scale.set(v.longueur, v.hauteur, v.largeur);
+    scene.volumes.forEach((v, i) => {
+      const h = hauteurRendue(v);
+      temporaire.position.set(v.x, h / 2, v.z);
+      temporaire.scale.set(v.longueur, h, v.largeur);
       temporaire.updateMatrix();
       m.setMatrixAt(i, temporaire.matrix);
     });
     m.instanceMatrix.needsUpdate = true;
     m.computeBoundingSphere();
+    surGeometrie();
     invalider();
-  }, [geometrie, invalider]);
+  }, [scene, surGeometrie, invalider]);
+  const precedent = useRef<{ readonly scene: Scene; readonly filtres: FiltresScene } | null>(null);
   useLayoutEffect(() => {
     const m = maillage.current;
     if (m === null) return;
     const couleur = new Color();
-    scene.volumes.forEach((v, i) => {
+    let estompes = 0;
+    filtree.volumes.forEach((v, i) => {
+      if (v.estompe) estompes += 1;
       m.setColorAt(i, couleur.set(v.couleur));
     });
     if (m.instanceColor !== null) m.instanceColor.needsUpdate = true;
-    surCouleurs(scene.semaine);
+    const avant = precedent.current;
+    precedent.current = { scene, filtres };
+    surCouleurs({ semaine: scene.semaine, semaineChangee: avant?.scene !== scene, filtresChanges: avant?.filtres !== filtres, estompes });
     invalider();
-  }, [scene, surCouleurs, invalider]);
+  }, [scene, filtres, filtree, surCouleurs, invalider]);
   return (
-    <instancedMesh ref={maillage} args={[undefined, undefined, geometrie.volumes.length]} frustumCulled={false}>
+    <instancedMesh ref={maillage} args={[undefined, undefined, scene.volumes.length]} frustumCulled={false}>
       <boxGeometry />
       <meshLambertMaterial />
     </instancedMesh>
@@ -272,15 +340,81 @@ class GardeErreur extends Component<{ readonly surErreur: () => void; readonly c
 
 // ── Liste texte (alternative accessible) ─────────────────────────────────────────────────────
 
-const ElementListe = memo(function ElementListe({ id, code, culture, couleur }: { readonly id: string; readonly code: string; readonly culture: string | null; readonly couleur: string }) {
+const ElementListe = memo(function ElementListe({ id, code, culture, couleur, estompe }: { readonly id: string; readonly code: string; readonly culture: string | null; readonly couleur: string; readonly estompe: boolean }) {
+  const classes = [culture === null ? 'plan3d-vide' : '', estompe ? 'plan3d-estompe' : ''].filter((c) => c !== '').join(' ');
   return (
-    <li data-testid="element-liste-3d" data-id={id} data-culture={culture ?? ''} className={culture === null ? 'plan3d-vide' : undefined}>
+    <li data-testid="element-liste-3d" data-id={id} data-culture={culture ?? ''} data-estompe={estompe ? 'oui' : 'non'} className={classes === '' ? undefined : classes}>
       <i aria-hidden="true" style={{ background: couleur }} />
       <span className="plan3d-code">{code}</span>
       <span className="plan3d-culture">{culture ?? 'vide'}</span>
     </li>
   );
 });
+
+/** Une case à cocher de filtre : le nom accessible est le libellé, la valeur est lue par les tests. */
+const CaseFiltre = memo(function CaseFiltre({
+  testid,
+  dimension,
+  valeur,
+  libelle,
+  coche,
+  couleur,
+  surBascule,
+}: {
+  readonly testid: string;
+  readonly dimension: DimensionFiltre;
+  readonly valeur: string;
+  readonly libelle: string;
+  readonly coche: boolean;
+  readonly couleur?: string;
+  readonly surBascule: (dimension: DimensionFiltre, valeur: string) => void;
+}) {
+  return (
+    <li>
+      <label className="plan3d-case">
+        <input
+          type="checkbox"
+          data-testid={testid}
+          data-valeur={valeur}
+          checked={coche}
+          onChange={() => {
+            surBascule(dimension, valeur);
+          }}
+        />
+        {couleur !== undefined && <i aria-hidden="true" style={{ background: couleur }} />}
+        <span>{libelle}</span>
+      </label>
+    </li>
+  );
+});
+
+/** « Tout » et « Rien » d'une dimension de filtre. */
+function BoutonsToutRien({ dimension, surTout, surRien }: { readonly dimension: DimensionFiltre; readonly surTout: (d: DimensionFiltre) => void; readonly surRien: (d: DimensionFiltre) => void }) {
+  return (
+    <span className="plan3d-toutrien">
+      <button
+        type="button"
+        data-testid="filtre-tout-3d"
+        data-dimension={dimension}
+        onClick={() => {
+          surTout(dimension);
+        }}
+      >
+        Tout
+      </button>
+      <button
+        type="button"
+        data-testid="filtre-rien-3d"
+        data-dimension={dimension}
+        onClick={() => {
+          surRien(dimension);
+        }}
+      >
+        Rien
+      </button>
+    </span>
+  );
+}
 
 // ── Vue ──────────────────────────────────────────────────────────────────────────────────────
 
@@ -299,6 +433,9 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
   const [prete, setPrete] = useState(false);
   const idCurseur = useId();
   const idListe = useId();
+  const idLegende = useId();
+  const idZones = useId();
+  const idCultures = useId();
 
   // Géométrie : posée par le plan seul (la semaine ne change que les couleurs).
   const geometrie = useMemo(() => (nbSemaines === 0 ? null : versScene(plan, 0)), [plan, nbSemaines]);
@@ -306,7 +443,29 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
   const scene = useMemo(() => (nbSemaines === 0 ? null : versScene(plan, semaineBornee)), [plan, semaineBornee, nbSemaines]);
   const rayon = useMemo(() => (geometrie === null ? 1 : rayonDe(geometrie)), [geometrie]);
 
-  const suivi = useRef<Suivi>({ rendus: 0, premiere: false, semaineEnAttente: null, glisse: false, dernier: -1, intervalles: [] });
+  // Filtres (T27b) : état local à la vue, jamais écrit ni stocké ; tout est coché à chaque ouverture.
+  const [filtres, setFiltres] = useState<FiltresScene>(FILTRES_TOUT);
+  const options = useMemo(() => (scene === null ? { familles: [], cultures: [], zones: [] } : optionsFiltres(scene)), [scene]);
+  const filtree = useMemo(() => (scene === null ? null : appliquerFiltres(scene, filtres)), [scene, filtres]);
+  const univers = useCallback(
+    (dimension: DimensionFiltre): readonly string[] => (dimension === 'zones' ? options.zones.map((z) => z.id) : options[dimension]),
+    [options],
+  );
+  const basculer = useCallback(
+    (dimension: DimensionFiltre, valeur: string) => {
+      setFiltres((f) => basculerFiltre(f, dimension, valeur, univers(dimension)));
+    },
+    [univers],
+  );
+  const toutCocher = useCallback((dimension: DimensionFiltre) => {
+    setFiltres((f) => cocherTout(f, dimension));
+  }, []);
+  const toutDecocher = useCallback((dimension: DimensionFiltre) => {
+    setFiltres((f) => cocherRien(f, dimension));
+  }, []);
+  const estCoche = (dimension: DimensionFiltre, valeur: string): boolean => filtres[dimension]?.has(valeur) ?? true;
+
+  const suivi = useRef<Suivi>({ rendus: 0, premiere: false, semaineEnAttente: null, filtreEnAttente: null, geometries: 0, glisse: false, dernier: -1, intervalles: [] });
   const surEchecRef = useRef(surEchec);
   useLayoutEffect(() => {
     surEchecRef.current = surEchec;
@@ -325,6 +484,10 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
       performance.mark(MARQUE_SEMAINE, { detail: { semaine: s.semaineEnAttente } });
       s.semaineEnAttente = null;
     }
+    if (s.filtreEnAttente !== null) {
+      performance.mark(MARQUE_FILTRE, { detail: { estompes: s.filtreEnAttente } });
+      s.filtreEnAttente = null;
+    }
     if (s.glisse) {
       const t = performance.now();
       if (s.dernier >= 0) s.intervalles.push(t - s.dernier);
@@ -332,11 +495,23 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
     }
   }, []);
 
-  // Couleurs de la semaine posées : la marque « semaine » suit à l'image suivante (pas la première).
+  const toileRef = useRef<HTMLCanvasElement>(null);
+
+  // Couleurs posées : la marque « semaine » ou « filtre » suit à l'image suivante (pas la première).
   const couleursPosees = useRef(false);
-  const surCouleurs = useCallback((s: number) => {
-    if (couleursPosees.current) suivi.current.semaineEnAttente = s;
+  const surCouleurs = useCallback((r: Recoloration) => {
+    if (toileRef.current !== null) toileRef.current.dataset.estompes = String(r.estompes);
+    if (couleursPosees.current) {
+      if (r.semaineChangee) suivi.current.semaineEnAttente = r.semaine;
+      else if (r.filtresChanges) suivi.current.filtreEnAttente = r.estompes;
+    }
     couleursPosees.current = true;
+  }, []);
+
+  // Matrices des planches posées (plan ou semaine, jamais un filtre) : compteur lu par les tests.
+  const surGeometrie = useCallback(() => {
+    suivi.current.geometries += 1;
+    if (toileRef.current !== null) toileRef.current.dataset.geometries = String(suivi.current.geometries);
   }, []);
 
   // Navigation trop lente (médiane des intervalles d'un glissé) : retour à la 2D.
@@ -368,7 +543,6 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
   }, []);
 
   // La toile et sa racine fiber : créées une fois, à la taille du cadre (suivie au redimensionnement).
-  const toileRef = useRef<HTMLCanvasElement>(null);
   const racine = useRef<ReconcilerRoot<HTMLCanvasElement> | null>(null);
   const [configuree, setConfiguree] = useState(false);
   useLayoutEffect(() => {
@@ -419,13 +593,13 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
 
   // La scène, rendue dans la racine fiber à chaque rendu de la vue (comme le fait <Canvas>).
   useLayoutEffect(() => {
-    if (!configuree || geometrie === null || scene === null) return;
+    if (!configuree || geometrie === null || scene === null || filtree === null) return;
     racine.current?.render(
       <GardeErreur surErreur={surErreur}>
         <ambientLight intensity={1.6} />
         <directionalLight position={[rayon * 0.3, rayon, rayon * 0.5]} intensity={1.8} />
         <Socles scene={geometrie} />
-        <Volumes key={nbVolumes} geometrie={geometrie} scene={scene} surCouleurs={surCouleurs} />
+        <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
         <Camera rayon={rayon} surGlisse={surGlisse} />
         <Rendu surImage={surImage} />
       </GardeErreur>,
@@ -467,26 +641,61 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
       </div>
       <div className="plan3d-corps">
         <div className="plan3d-scene">
-          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-rendus={0} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
-          <ul className="plan-legende plan3d-legende" aria-label="Légende de la vue 3D">
-            {LEGENDE.map(([cle, nom]) => (
-              <li key={cle}>
-                <i style={{ background: FAMILLES[cle].bande }} />
-                {nom}
-              </li>
-            ))}
-            <li>
-              <i style={{ background: COULEUR_NEUTRE }} />
-              Vide ou autre
-            </li>
-          </ul>
+          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-rendus={0} data-geometries={0} data-estompes={0} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
         </div>
-        <aside className="plan3d-cote">
+        <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
+          <div className="plan3d-filtres">
+            <section data-testid="legende-3d" aria-labelledby={idLegende} className="plan3d-groupe">
+              <div className="plan3d-entete-groupe">
+                <h2 id={idLegende} className="plan3d-titre-groupe">
+                  Familles
+                </h2>
+                <BoutonsToutRien dimension="familles" surTout={toutCocher} surRien={toutDecocher} />
+              </div>
+              <ul role="list" className="plan3d-cases">
+                {options.familles.map((cle) => (
+                  <CaseFiltre key={cle} testid="filtre-famille-3d" dimension="familles" valeur={cle} libelle={nomFamille(cle)} coche={estCoche('familles', cle)} couleur={FAMILLES[cle as CleFamille].bande} surBascule={basculer} />
+                ))}
+              </ul>
+              <p className="plan3d-vide-legende">
+                <i aria-hidden="true" style={{ background: COULEUR_NEUTRE }} />
+                Planche vide, à plat
+                <i aria-hidden="true" style={{ background: COULEUR_ESTOMPEE }} />
+                Estompée
+              </p>
+            </section>
+            <section aria-labelledby={idZones} className="plan3d-groupe">
+              <div className="plan3d-entete-groupe">
+                <h2 id={idZones} className="plan3d-titre-groupe">
+                  Zones
+                </h2>
+                <BoutonsToutRien dimension="zones" surTout={toutCocher} surRien={toutDecocher} />
+              </div>
+              <ul role="list" className="plan3d-cases plan3d-cases-defilantes">
+                {options.zones.map((z) => (
+                  <CaseFiltre key={z.id} testid="filtre-zone-3d" dimension="zones" valeur={z.id} libelle={z.nom} coche={estCoche('zones', z.id)} surBascule={basculer} />
+                ))}
+              </ul>
+            </section>
+            <section aria-labelledby={idCultures} className="plan3d-groupe">
+              <div className="plan3d-entete-groupe">
+                <h2 id={idCultures} className="plan3d-titre-groupe">
+                  Cultures
+                </h2>
+                <BoutonsToutRien dimension="cultures" surTout={toutCocher} surRien={toutDecocher} />
+              </div>
+              <ul role="list" className="plan3d-cases plan3d-cases-defilantes">
+                {options.cultures.map((c) => (
+                  <CaseFiltre key={c} testid="filtre-culture-3d" dimension="cultures" valeur={c} libelle={c} coche={estCoche('cultures', c)} surBascule={basculer} />
+                ))}
+              </ul>
+            </section>
+          </div>
           <h2 id={idListe} className="plan3d-titre-liste">
             Planches et cultures, {libelle}
           </h2>
           <ul data-testid="liste-3d" role="list" aria-labelledby={idListe} className="plan3d-liste">
-            {scene?.volumes.map((v) => <ElementListe key={v.id} id={v.id} code={v.code} culture={v.culture} couleur={v.couleur} />)}
+            {filtree?.volumes.map((v) => <ElementListe key={v.id} id={v.id} code={v.code} culture={v.culture} couleur={v.couleur} estompe={v.estompe} />)}
           </ul>
         </aside>
       </div>
