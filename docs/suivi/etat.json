@@ -1,9 +1,7 @@
 {
-  "maj": "7 octobre 2026, 12 h (heure de Paris)",
-  "resume": "Ce matin, quatre tickets fusionnés : **l'export complet de la ferme passe sous 10 s (T15c)**, 7 à 8,5 s au lieu de 11 à 15 s, archive identique au bit près ; **le serveur accepte le parcellaire et le catalogue de la ferme (T10s)**, prérequis de l'import, sans faille d'isolement après deux relectures de sécurité ; **« Fait » unique contrôlé d'après le journal d'envoi (T13o)** ; **une seule règle « chaîne d'une saisie » (T13m)**, vérifiée sur 18 000 journaux tirés au hasard. En cours : **l'écran d'import (T14b)**, écrit par lots de 500 pour tenir dans les limites de la synchro. La 3D est spécifiée et attend tes réponses.",
-  "en_cours": {
-    "T14b": "en cours"
-  },
+  "maj": "7 octobre 2026, 14 h (heure de Paris)",
+  "resume": "Aujourd'hui, cinq tickets fusionnés : **importer ses fichiers en quelques gestes (T14b)** — onglet Ferme → « Importer un tableur » : déposer, faire correspondre, aperçu, importer ; toute valeur devinée est montrée « à vérifier », l'import s'annule d'un geste, une ferme complète en 9 à 11 s ; **le serveur accepte le parcellaire et le catalogue (T10s)**, sans faille d'isolement ; **l'export complet sous 10 s (T15c)** ; **« Fait » unique contrôlé d'après le journal d'envoi (T13o)** ; **une seule règle « chaîne d'une saisie » (T13m)**. La 3D est spécifiée et attend tes réponses.",
+  "en_cours": {},
   "attente": "3D : tes réponses aux quatre questions (que voir, à quoi ça sert, sur quel appareil, que faire si ça rame). Q27 : deux planches avec le même code ? Q28 : changer d'onglet pendant un export ? Q26 : « Fait » avant que la base soit prête ? Q25 : refus d'une ferme quittée. Ta jauge Claude de temps en temps. 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75. Vercel : désactiver « Vercel Authentication ». Connecteur MonCasierFrais à réautoriser. Mise en ligne : Brevo, domaine d'envoi, secrets de production.",
   "visuels": [
     {
