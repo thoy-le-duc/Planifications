@@ -34,9 +34,20 @@ import {
 } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { CHAINES } from '@planif/sync/fait-unique';
-import { cleFamille, type CleFamille } from '../plan/calculs.ts';
+import { cleFamille } from '../plan/calculs.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Bandes de couleur de l'écran Aujourd'hui (T16) : quatre familles seulement. Les autres (T27b : 12
+ * familles de plus et « autre » pour le plan et la vue 3D) restent sans bande ici, comme avant.
+ */
+export type BandeFamille = 'salades' | 'solanacees' | 'cruciferes' | 'racines';
+
+function bandeFamille(nomFamille: string | null): BandeFamille | null {
+  const cle = cleFamille(nomFamille);
+  return cle === 'salades' || cle === 'solanacees' || cle === 'cruciferes' || cle === 'racines' ? cle : null;
+}
 
 /** Série ou campagne, telle que l'écran la montre et l'écrit. */
 export interface Culture {
@@ -50,7 +61,7 @@ export interface Culture {
   readonly variete: string | null;
   /** espece.unite_recolte : l'unité préremplie de la récolte. */
   readonly unite: UniteRecolte;
-  readonly famille: CleFamille | null;
+  readonly famille: BandeFamille | null;
   /** Emplacements des occupations non supprimées, triés (zone, code). */
   readonly emplacements: readonly EmplacementConcerne[];
 }
@@ -914,7 +925,7 @@ function socleDe(lignes: LignesJournee, aujourdhui: string): Socle {
       espece: nomEspece,
       variete,
       unite: unite(espece?.unite_recolte),
-      famille: cleFamille(texteOuNul(espece?.famille)),
+      famille: bandeFamille(texteOuNul(espece?.famille)),
       emplacements,
     });
     const statut = texte(s.statut) as StatutSerie;
@@ -962,7 +973,7 @@ function socleDe(lignes: LignesJournee, aujourdhui: string): Socle {
       espece: texte(c.espece) || 'Culture',
       variete: texteOuNul(c.variete),
       unite: unite(c.unite_recolte),
-      famille: cleFamille(texteOuNul(c.famille)),
+      famille: bandeFamille(texteOuNul(c.famille)),
       emplacements,
     };
     cultures.set(id, culture);

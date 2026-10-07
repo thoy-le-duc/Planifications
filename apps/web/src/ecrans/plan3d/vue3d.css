@@ -1,6 +1,7 @@
 /*
  * Vue 3D (T27) : même habillage que le plan 2D (src/ecrans/plan/plan.css), jetons seulement.
- * Sur ordinateur : la scène à gauche, la liste des planches et cultures de la semaine à droite.
+ * Sur ordinateur : la scène à gauche ; à droite un panneau (jamais sur la scène) avec la légende-filtre
+ * des familles, les filtres par zone et par culture, puis la liste des planches et cultures de la semaine.
  */
 .plan3d {
   flex: 1 1 auto;
@@ -87,18 +88,8 @@
   outline-offset: -3px;
 }
 
-.plan3d-legende {
-  position: absolute;
-  left: var(--espace-s);
-  bottom: var(--espace-s);
-  padding: 4px 8px;
-  border-radius: var(--rayon-etiquette);
-  background: color-mix(in srgb, var(--couleur-surface) 88%, transparent);
-  pointer-events: none;
-}
-
 .plan3d-cote {
-  flex: 0 0 260px;
+  flex: 0 0 300px;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -118,8 +109,8 @@
 }
 
 .plan3d-liste {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 0 0 auto;
+  max-height: 260px;
   margin: 0;
   padding: var(--espace-xs) 0;
   overflow-y: auto;
@@ -161,4 +152,113 @@
 .plan3d-vide .plan3d-culture {
   color: var(--couleur-tertiaire);
   font-style: italic;
+}
+
+/* T27b : légende-filtre et filtres, dans le panneau à côté de la scène. */
+.plan3d-filtres {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--couleur-trait);
+}
+
+/* Tout le panneau défile d'un bloc (barre visible) : rien n'est caché sous un pli sans indice. */
+.plan3d-cote {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+.plan3d-groupe > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-xs);
+  min-height: 36px;
+  cursor: pointer;
+  font-family: var(--police-titre);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--couleur-encre);
+}
+
+.plan3d-nombre {
+  font-weight: 400;
+  color: var(--couleur-secondaire);
+}
+
+.plan3d-groupe {
+  padding: var(--espace-s) var(--espace-m);
+}
+
+.plan3d-toutrien {
+  display: flex;
+  gap: var(--espace-xs);
+}
+
+.plan3d-toutrien button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--couleur-foret);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-family: var(--police-texte);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.plan3d-cases {
+  margin: var(--espace-xs) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+}
+
+.plan3d-cases-defilantes {
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.plan3d-case {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-s);
+  min-height: 32px;
+  color: var(--couleur-encre);
+}
+
+.plan3d-case input {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--couleur-foret);
+}
+
+.plan3d-case i,
+.plan3d-vide-legende i {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--couleur-trait);
+}
+
+.plan3d-case span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.plan3d-vide-legende {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--espace-xs) var(--espace-s);
+  margin: var(--espace-xs) 0 0;
+  font-size: 13px;
+  color: var(--couleur-secondaire);
+}
+
+/* Planche décochée : estompée, jamais retirée de la liste. */
+.plan3d-estompe .plan3d-culture,
+.plan3d-estompe .plan3d-code {
+  color: var(--couleur-tertiaire);
 }

@@ -306,6 +306,71 @@
   --bande-texte: var(--famille-racines-texte);
 }
 
+.famille-alliacees {
+  --bande: var(--famille-alliacees);
+  --bande-texte: var(--famille-alliacees-texte);
+}
+
+.famille-amaranthacees {
+  --bande: var(--famille-amaranthacees);
+  --bande-texte: var(--famille-amaranthacees-texte);
+}
+
+.famille-asparagacees {
+  --bande: var(--famille-asparagacees);
+  --bande-texte: var(--famille-asparagacees-texte);
+}
+
+.famille-convolvulacees {
+  --bande: var(--famille-convolvulacees);
+  --bande-texte: var(--famille-convolvulacees-texte);
+}
+
+.famille-cucurbitacees {
+  --bande: var(--famille-cucurbitacees);
+  --bande-texte: var(--famille-cucurbitacees-texte);
+}
+
+.famille-fabacees {
+  --bande: var(--famille-fabacees);
+  --bande-texte: var(--famille-fabacees-texte);
+}
+
+.famille-lamiacees {
+  --bande: var(--famille-lamiacees);
+  --bande-texte: var(--famille-lamiacees-texte);
+}
+
+.famille-paeoniacees {
+  --bande: var(--famille-paeoniacees);
+  --bande-texte: var(--famille-paeoniacees-texte);
+}
+
+.famille-poacees {
+  --bande: var(--famille-poacees);
+  --bande-texte: var(--famille-poacees-texte);
+}
+
+.famille-polygonacees {
+  --bande: var(--famille-polygonacees);
+  --bande-texte: var(--famille-polygonacees-texte);
+}
+
+.famille-rosacees {
+  --bande: var(--famille-rosacees);
+  --bande-texte: var(--famille-rosacees-texte);
+}
+
+.famille-valerianacees {
+  --bande: var(--famille-valerianacees);
+  --bande-texte: var(--famille-valerianacees-texte);
+}
+
+.famille-autre {
+  --bande: var(--famille-autre);
+  --bande-texte: var(--famille-autre-texte);
+}
+
 .famille-neutre {
   --bande: var(--couleur-secondaire);
   --bande-texte: var(--couleur-sur-foret);

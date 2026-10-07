@@ -101,30 +101,94 @@ export const COULEURS_SOMBRES: Readonly<Record<CleCouleur, string>> = {
   pousseEntete: '#9FE0B4',
 };
 
-export type CleFamille = 'salades' | 'solanacees' | 'cruciferes' | 'racines';
+/**
+ * Clés des familles (T27b) : les 16 familles de la bibliothèque commune plus « autre » (famille
+ * propre à la ferme, inconnue, ou culture sans famille). Les quatre premières gardent leur nom de
+ * T16 (salades = Astéracées, cruciferes = Brassicacées, racines = Apiacées) ; les autres portent
+ * leur nom sans accents.
+ */
+export type CleFamille =
+  | 'salades'
+  | 'solanacees'
+  | 'cruciferes'
+  | 'racines'
+  | 'alliacees'
+  | 'amaranthacees'
+  | 'asparagacees'
+  | 'convolvulacees'
+  | 'cucurbitacees'
+  | 'fabacees'
+  | 'lamiacees'
+  | 'paeoniacees'
+  | 'poacees'
+  | 'polygonacees'
+  | 'rosacees'
+  | 'valerianacees'
+  | 'autre';
+
+interface BandeFamille {
+  readonly bande: string;
+  readonly texte: string;
+}
 
 /**
- * Familles botaniques : bandes des cartes et du plan (maquette Plan), et couleur du texte posé
- * dessus (4,5:1 au moins). Salades foncée à #2670CC (maquette #2A78D6, 4,42:1 sous du blanc).
+ * Familles botaniques : bandes des cartes, du plan (maquette Plan) et des volumes de la vue 3D, et
+ * couleur du texte posé dessus (4,5:1 au moins). Salades foncée à #2670CC (maquette #2A78D6,
+ * 4,42:1 sous du blanc). Les 13 teintes de T27b sont choisies par éloignement maximal dans
+ * CIE L*a*b* (ΔE CIE76 : au moins 33 entre deux familles en clair, 20 avec le neutre de la
+ * planche vide #D6DDD0 ; seuils des tests : 10 et 20), « autre » étant un vert-gris discret.
  */
-export const FAMILLES: Readonly<Record<CleFamille, { readonly bande: string; readonly texte: string }>> = {
+export const FAMILLES: Readonly<Record<CleFamille, BandeFamille>> = {
   salades: { bande: '#2670CC', texte: '#FFFFFF' },
   solanacees: { bande: '#C0392B', texte: '#FFFFFF' },
   cruciferes: { bande: '#1BAF7A', texte: '#15201A' },
   racines: { bande: '#EDA100', texte: '#15201A' },
+  alliacees: { bande: '#7D32A0', texte: '#FFFFFF' },
+  amaranthacees: { bande: '#C8055F', texte: '#FFFFFF' },
+  asparagacees: { bande: '#A0C337', texte: '#15201A' },
+  convolvulacees: { bande: '#A55F05', texte: '#FFFFFF' },
+  cucurbitacees: { bande: '#0F6400', texte: '#FFFFFF' },
+  fabacees: { bande: '#00C8F0', texte: '#15201A' },
+  lamiacees: { bande: '#D2AAE6', texte: '#15201A' },
+  paeoniacees: { bande: '#FF6ECD', texte: '#15201A' },
+  poacees: { bande: '#5F5514', texte: '#FFFFFF' },
+  polygonacees: { bande: '#823C5F', texte: '#FFFFFF' },
+  rosacees: { bande: '#FF91AA', texte: '#15201A' },
+  valerianacees: { bande: '#EBAA82', texte: '#15201A' },
+  autre: { bande: '#A0AF6E', texte: '#15201A' },
 };
 
 /**
  * Bandes des familles en thème sombre (T18) : éclaircies pour se détacher des cartes sombres
  * (3:1 au moins), avec un texte forêt de nuit dessus (4,5:1 au moins). Appliquées par les mêmes
- * variables `--famille-*` (variablesCss).
+ * variables `--famille-*` (variablesCss). T27b : ΔE CIE76 d'au moins 21 entre deux familles.
  */
-export const FAMILLES_SOMBRES: Readonly<Record<CleFamille, { readonly bande: string; readonly texte: string }>> = {
+export const FAMILLES_SOMBRES: Readonly<Record<CleFamille, BandeFamille>> = {
   salades: { bande: '#5E9BE8', texte: '#0D1C14' },
   solanacees: { bande: '#EC7363', texte: '#0D1C14' },
   cruciferes: { bande: '#2DBE86', texte: '#0D1C14' },
   racines: { bande: '#EDA100', texte: '#0D1C14' },
+  alliacees: { bande: '#9B85F2', texte: '#0D1C14' },
+  amaranthacees: { bande: '#EE5F8E', texte: '#0D1C14' },
+  asparagacees: { bande: '#AFD246', texte: '#0D1C14' },
+  convolvulacees: { bande: '#CC7A2A', texte: '#0D1C14' },
+  cucurbitacees: { bande: '#4BAA2E', texte: '#0D1C14' },
+  fabacees: { bande: '#00D7F0', texte: '#0D1C14' },
+  lamiacees: { bande: '#E696FF', texte: '#0D1C14' },
+  paeoniacees: { bande: '#D957BC', texte: '#0D1C14' },
+  poacees: { bande: '#A39A4B', texte: '#0D1C14' },
+  polygonacees: { bande: '#A980BE', texte: '#0D1C14' },
+  rosacees: { bande: '#FAAFDC', texte: '#0D1C14' },
+  valerianacees: { bande: '#F5B97D', texte: '#0D1C14' },
+  autre: { bande: '#8E9A92', texte: '#0D1C14' },
 };
+
+/**
+ * Vue 3D (T27b) : neutre pâle des planches décochées par les filtres, estompées et non retirées.
+ * Plus clair que `trait` (le vide) et à ΔE CIE76 d'au moins 39 de chaque bande de famille claire.
+ * Une seule valeur pour les deux thèmes : la scène 3D ne suit pas le thème (COULEUR_NEUTRE non plus).
+ */
+export const COULEUR_ESTOMPEE = '#E9ECE6';
 
 /** Familles de polices (hébergées sous public/polices/, voir src/ui/base.css). */
 export const POLICES = {
