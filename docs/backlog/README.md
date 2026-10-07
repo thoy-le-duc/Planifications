@@ -111,7 +111,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T27](T27-vue-3d-prototype.md) | Vue 3D : prototype mesurable (planches et cultures, curseur de semaine) | T11 | fait |
 | [T27b](T27b-vue-3d-filtres.md) | Vue 3D : filtres et couleurs lisibles (Q30) | T27 | fait |
 | [T28a](T28a-placement-modele.md) | Placement réel : modèle, calcul et base, zones en formes libres (Q30, Q31) | — | fait |
-| [T29](T29-vol-camera.md) | Vue 3D : la caméra vole vers une serre ou une zone (Q30) | T27b | à faire |
+| [T29](T29-vol-camera.md) | Vue 3D : la caméra vole vers une serre ou une zone (Q30) | T27b | fait |
 | [T28s](T28s-placement-serveur.md) | Placement réel : le serveur accepte, la porte écrit | T28a | à faire |
 | [T28c](T28c-jumeau-3d.md) | Jumeau 3D : la ferme à sa vraie place, serres en tunnels | T27b, T28a | à faire |
 | [T28b](T28b-editeur-placement.md) | Éditeur de placement sur photo aérienne IGN : bâtiments et planches (ordinateur) | T28s | à faire |

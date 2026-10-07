@@ -15,10 +15,10 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests de `cadrage` : boîte carrée, boîte très allongée (tunnel de 50 m × 8 m), écran étroit, boîte tournée ; la boîte projetée tient dans l'écran avec sa marge.
-- [ ] Test de l'interpolation : durée 600 ms, début et fin exacts, reprise en cours de vol.
+- [x] Tests de `cadrage` : boîte carrée, boîte très allongée (tunnel de 50 m × 8 m), écran étroit, boîte tournée ; la boîte projetée tient dans l'écran avec sa marge.
+- [x] Test de l'interpolation : durée 600 ms, début et fin exacts, reprise en cours de vol.
 - [ ] e2e (ordinateur) : cliquer « M3 » dans la liste → au plus 600 ms + 1 image plus tard, la caméra est sur le cadrage attendu ; pas de rafale de plus de 2 images perdues pendant le vol.
-- [ ] e2e avec `reducedMotion: 'reduce'` : saut direct.
-- [ ] Budget `jsVue3dGzKio` tenu.
+- [x] e2e avec `reducedMotion: 'reduce'` : saut direct.
+- [x] Budget `jsVue3dGzKio` tenu.
 
 **Hors périmètre** : sélection d'une planche et détail d'une série, recherche par la voix (« montre-moi M3 »).

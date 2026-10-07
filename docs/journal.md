@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-07 — T29 : la caméra vole vers une zone
+
+- **Fait** : cliquer une zone ou une planche dans la scène, ou « Aller à <zone> » dans le groupe Zones (Entrée au clavier), envoie la caméra se poser sur la zone en 600 ms au plus, vue de biais à 45°, du même côté qu'avant, boîte entière à l'écran avec 10 % de marge ; « Vue d'ensemble » cadre toute la ferme. Un nouveau clic en plein vol repart de la pose atteinte ; `prefers-reduced-motion` donne un saut direct (relu à chaque vol). Calcul pur et testé (`cadrage.ts`, `pointage.ts`) ; la boucle d'images ne tourne que pendant le vol. JS de démarrage inchangé (71,0/71), 3D 184,8 Kio sur 200. Vols mesurés (SwiftShader) : au plus 3 images perdues d'affilée, 2 intervalles fautifs sur 5 vols.
+- **Décidé** : un clic sur une planche cadre sa zone (la sélection d'une planche seule est hors périmètre) ; le clic est trouvé par un rayon contre les boîtes (planches telles que dessinées, socles), sans passer par le raycaster de three ; après un vol, le glissé et la molette tournent autour de la zone atteinte ; un glissé ou une touche en plein vol reprend la main là où la caméra est ; sous 4 px de déplacement, un appui reste un clic.
+- **Bloquant** : le test `vue-3d-camera.e2e.ts`, étape « bouton … activé au clavier (Entrée) », échoue pour toute implémentation : son enregistreur attend un `pointerup` (`aucun pointeur relâché pendant le vol`) que le clavier ne produit jamais. Avec un `pointerup` ajouté dans une copie locale du test, tout le test passe ; le test n'a pas été modifié ici.
+
 ## 2026-10-07 — T27b : vue 3D, filtres et couleurs lisibles
 
 - **Fait** : une couleur par famille de la bibliothèque commune (16) plus « autre », en clair et en sombre, partagée par le plan 2D et la vue 3D ; courgette, asperge et fraise ne sont plus grises comme le vide, la planche vide est à plat. Panneau à côté de la scène (jamais dessus) : légende-filtre des familles de la semaine, filtres par zone et par culture, tout / rien ; ce qui est décoché est estompé, pas retiré, y compris dans la liste texte. Changement de filtre : médiane 12 ms, géométrie intacte ; JS de démarrage inchangé (71,0/71), 3D 182 Kio sur 200.
