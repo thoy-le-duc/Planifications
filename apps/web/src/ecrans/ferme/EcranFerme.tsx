@@ -19,6 +19,10 @@
  * charge l'écran (`import('../itineraires/index.ts')`, jamais un import statique : ni l'entrée
  * ni ce morceau ne le portent ; préchargé au repos) et le montre avec la porte du contexte.
  *
+ * Importer un tableur (T14b) : une ligne de la carte « Mes données », active comme « Mes
+ * itinéraires ». Un tap charge l'écran (`import('../import/index.ts')`, jamais un import statique)
+ * et le montre avec la porte et la ferme du contexte.
+ *
  * Saisies refusées (T10i) : les refus de synchro de l'utilisateur (porte.surveillerRefus), en
  * tête de l'écran quand il y en a (./Refus.tsx). Marque MARQUE_REFUS_AFFICHES une fois par
  * ouverture, quand la liste est lue et dessinée (même vide).
@@ -68,6 +72,10 @@ const chargerExport = () => import('../export/index.ts');
 /** L'écran des itinéraires (T24), chargé à la demande (morceau à part). */
 const chargerItineraires = () => import('../itineraires/index.ts');
 type ModuleItineraires = Awaited<ReturnType<typeof chargerItineraires>>;
+
+/** L'écran d'import d'un tableur (T14b), chargé à la demande (morceau à part). */
+const chargerImport = () => import('../import/index.ts');
+type EcranImportCharge = Awaited<ReturnType<typeof chargerImport>>['EcranImport'];
 
 /** Pourquoi le bouton d'export est désactivé, dit en clair. */
 const EXPLICATION_EXPORT: Readonly<Record<Exclude<EtatBase, 'prete'>, string>> = {
@@ -266,6 +274,21 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     };
   }, [itinerairesPossibles]);
 
+  // Import d'un tableur (T14b) : chargé au tap, montré avec la porte du contexte.
+  const [EcranImport, setEcranImport] = useState<EcranImportCharge | null>(null);
+  function ouvrirImport(): void {
+    if (!itinerairesPossibles) return;
+    // Le composant seul (pas le module entier) : le morceau de l'écran n'a pas d'objet module à construire.
+    chargerImport().then(
+      ({ EcranImport: composant }) => {
+        setEcranImport(() => composant);
+      },
+      (e: unknown) => {
+        console.error('Écran d’import introuvable', e);
+      },
+    );
+  }
+
   function ouvrirItineraires(): void {
     if (!itinerairesPossibles) return;
     setItinerairesOuverts(true);
@@ -456,6 +479,14 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
       )}
       <Carte titre="Mes données">
         <Ligne
+          nom="Importer un tableur"
+          detail="Parcellaire, cultures, séries ou assolement : CSV ou Excel, même hors ligne."
+          signe="↑"
+          couleur="var(--couleur-foret)"
+          desactivee={!itinerairesPossibles}
+          surTap={ouvrirImport}
+        />
+        <Ligne
           nom="Exporter toute ma ferme"
           detail="Archive ZIP : tout en JSON, et un CSV par table. Sans réseau."
           signe="↓"
@@ -483,6 +514,15 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
           {annonce}
         </p>
       </Carte>
+      {EcranImport !== null && ouverte !== null && (
+        <EcranImport
+          porte={ouverte.porte}
+          fermeId={ouverte.fermeId}
+          surFermer={() => {
+            setEcranImport(null);
+          }}
+        />
+      )}
       {etatExport.etape === 'echec' && <AlerteOrange>L’export n’a pas pu se faire. Réessayez ; si cela recommence, signalez-le.</AlerteOrange>}
 
       <Carte titre="Apparence" idTitre={idApparence}>
