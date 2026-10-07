@@ -1,4 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { preparerExport } from '@planif/core';
 import { fermeComplete, VOLUMES } from '../../../packages/core/src/import/test/jeu-ferme.ts';
@@ -88,9 +90,12 @@ async function ouvrirImport(page: Page): Promise<void> {
 
 async function deposer(page: Page, nom: string, octets: Buffer | string): Promise<void> {
   await expect(ecran(page)).toHaveAttribute('data-etape', 'depot');
-  await ecran(page)
-    .getByLabel('Choisir un fichier')
-    .setInputFiles({ name: nom, mimeType: nom.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' : 'text/csv', buffer: typeof octets === 'string' ? Buffer.from(octets, 'utf8') : octets });
+  // Fichier temporaire passé par son CHEMIN : avec un `buffer`, Playwright envoie le contenu en
+  // base64 et le décode dans la page (≈ 0,5 s de fil principal pour 1 Mo à CPU ×4), ce qui
+  // compterait comme une tâche longue de l'appli. Par chemin, le navigateur lit le disque.
+  const chemin = join(mkdtempSync(join(tmpdir(), 'planif-import-')), nom);
+  writeFileSync(chemin, typeof octets === 'string' ? Buffer.from(octets, 'utf8') : octets);
+  await ecran(page).getByLabel('Choisir un fichier').setInputFiles(chemin);
   await expect(ecran(page)).toHaveAttribute('data-etape', 'type', { timeout: 30_000 });
   // Année proposée (décision du chef) : celle du téléphone, la suivante à partir de septembre.
   // Les fichiers du jeu sont en 2027 : si le jour de l'essai propose une autre année, on la
@@ -243,6 +248,21 @@ test('critère 3 : ferme complète (T07 exportée par T15) en moins de 60 s, CPU
   const contenu = (chemin: string): string => fichiers.find((f) => f.chemin === chemin)?.contenu ?? '';
   await amorcerEtConnecter(page);
   await ouvrirImport(page);
+
+  // Témoin : la sonde voit bien une tâche longue de la page dans ces conditions (CPU ×4, hors
+  // ligne). Sans lui, « 0 tâche longue » pourrait venir d'une sonde muette.
+  await poserSondes(page);
+  // Tâche ordinaire de la page (setTimeout), pas un appel de Playwright : c'est ce que l'appli fait.
+  await page.evaluate(() => {
+    setTimeout(() => {
+      const fin = performance.now() + 120;
+      while (performance.now() < fin) {
+        // occupe le fil principal
+      }
+    }, 0);
+  });
+  await page.waitForTimeout(500);
+  expect(Math.max(0, ...(await lireSondes(page))), 'témoin : la sonde voit une tâche de 120 ms').toBeGreaterThanOrEqual(100);
 
   await poserSondes(page);
   const debut = Date.now();
