@@ -172,6 +172,18 @@ Le stock n'est jamais un compteur stocké : c'est la somme des mouvements. Deux 
 - **Unités** : mètres, jours, kilos. L'interface parle en semaines ; le stockage reste en dates.
 - **Export** : chaque table en JSON et en CSV, sans condition.
 
+### Parcellaire et catalogue écrits par le téléphone (T10s)
+
+Le serveur (`apps/api/src/sync/structure.ts`, règles de ligne dans `structure-lignes.ts`) accepte ce qu'un téléphone crée ou modifie, hors ligne compris (import de T14b, écrans de structure) :
+
+- **Tables** : zone, emplacement, saison, assolement (toujours d'une ferme) ; famille, espèce, variété seulement pour les lignes **de la ferme**. Une ligne de la bibliothèque commune (`ferme_id` nul) n'est jamais créée, modifiée ni supprimée par un téléphone : elle se comporte comme une ligne inexistante.
+- **Droits** : les mêmes que pour les séries, tout membre actif de la ferme (gérant ou équipier). Un membre retiré ou un invité qui n'a pas encore accepté n'écrit rien.
+- **Isolement** : `ferme_id` ne change jamais. Zone parente, zone d'un emplacement, emplacements remplacés, saison, zone et emplacement d'un assolement : de la même ferme. Famille d'une espèce, espèce d'une variété, famille et espèce d'un assolement : de la ferme ou de la bibliothèque. Une ligne d'une autre ferme, même une autre ferme du même utilisateur, compte comme introuvable. Une ligne écrite plus haut dans le même envoi se désigne (import).
+- **Validation** : contraintes du schéma rejouées avant l'écriture (noms non vides de 200 caractères au plus comme une cellule d'import, listes fermées, longueurs et surfaces > 0, gouttière ⇔ nombre de places, périodes dans l'ordre, délai de retour minimal ≤ conseillé, germination 0–100 %, assolement à une seule cible, origine d'import réservée au passé importé, dates réelles de 1900 à 2100), plafonds contre les fautes de frappe (10 km de long, 1 000 m de large, 1 000 ha, 1 000 000 de places, 100 ans de délai, 100 kg pour mille graines, 200 emplacements remplacés), pas de boucle dans l'arbre des zones, espèce d'un assolement de la famille de l'assolement.
+- **Tout ou rien** : un envoi qui touche ces tables est accepté ou refusé en entier, avec les séries, itinéraires, événements et le stock qu'il contient.
+- **Suppression** : douce seulement (`supprime_le`), refusée tant que la ligne sert encore. Emplacement : occupation non supprimée d'une série prévue ou en cours non supprimée, ou d'une plantation en place. Espèce, variété : série prévue ou en cours, ou plantation en place. Zone : emplacement ou sous-zone non supprimés. Famille : espèce de la ferme non supprimée. Saison : série prévue ou en cours. Une série terminée, abandonnée ou supprimée ne retient rien.
+- **Historique** : une ligne `modification` par ligne touchée (création, modification, suppression), écrite par le serveur.
+
 ## 8. Ce qui est calculé, pas stocké
 
 | Vue | Calculée à partir de |
