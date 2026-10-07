@@ -15,4 +15,4 @@
 
 - [ ] Les deux tests positifs et le test de bord du fuseau.
 - [ ] Règle écrite et testée pour chaque cas de lignes laissées actives (refus ou suppression en cascade, à trancher).
-- [ ] Q27 tranchée et appliquée (index unique partiel ou avertissement).
+- [ ] Q27 (réponse du 2026-10-07) : code d'emplacement unique par zone ; à l'import, un doublon donne un avertissement, pas un refus ; côté serveur, refus propre d'un doublon dans la même zone (index unique partiel `WHERE supprime_le IS NULL`).
