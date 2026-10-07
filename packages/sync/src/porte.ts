@@ -121,17 +121,67 @@ function verifierTaille(ordres: readonly OrdreEcriture[]): void {
 const NOMME_JOURNAL = /evenement/i;
 
 /**
- * Table SQLite où le journal est rangé : `ps_data__evenement` sous PowerSync (la vue `evenement`
- * n'a pas de rowid), `evenement` elle-même dans le double de test. Introuvable : refus explicite,
- * jamais d'écriture sans contrôle.
+ * Où lire ce qu'une transaction a écrit dans le journal :
+ *   - `table` : table SQLite où il est rangé, `ps_data__evenement` sous PowerSync (la vue
+ *     `evenement` n'a pas de rowid), `evenement` elle-même dans la base mémoire des tests ;
+ *   - `crud` : la file d'envoi `ps_crud` de PowerSync existe (absente de la base mémoire).
+ * Journal introuvable : refus explicite, jamais d'écriture sans contrôle.
  */
-async function rangementJournal(tx: TransactionLocale): Promise<string> {
+interface RangementJournal {
+  readonly table: string;
+  readonly crud: boolean;
+}
+
+async function rangementJournal(tx: TransactionLocale): Promise<RangementJournal> {
   const noms = (await tx.getAll<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('ps_data__evenement', 'evenement')`,
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('ps_data__evenement', 'evenement', 'ps_crud')`,
   )).map((l) => l.name);
-  const nom = ['ps_data__evenement', 'evenement'].find((n) => noms.includes(n));
-  if (nom === undefined) throw new Error('journal local introuvable : la vérification « déjà fait » est impossible, rien n’est écrit');
-  return nom;
+  const table = ['ps_data__evenement', 'evenement'].find((n) => noms.includes(n));
+  if (table === undefined) throw new Error('journal local introuvable : la vérification « déjà fait » est impossible, rien n’est écrit');
+  return { table, crud: noms.includes('ps_crud') };
+}
+
+type LigneEcrite = Readonly<
+  Record<'id' | 'ferme_id' | 'type' | 'serie_id' | 'campagne_id' | 'remplace_sorte' | 'remplace_evenement_id' | 'detail', unknown>
+>;
+
+/**
+ * T13o : lignes du journal écrites par la transaction, relues en entier par leur id (une ligne
+ * supprimée ensuite n'est plus là : rien à contrôler) :
+ *   - d'après `ps_crud` : opérations PUT et PATCH sur `evenement` au-delà du plus grand id d'avant
+ *     les ordres (AUTOINCREMENT : jamais réutilisé, même après un DELETE). Voit l'INSERT, l'UPDATE
+ *     qui transforme une ligne en « Fait », le DELETE suivi d'un INSERT ;
+ *   - d'après le rowid de la table de rangement, au-delà du plus grand d'avant : l'INSERT direct
+ *     dans `ps_data__evenement`, qui ne passe pas par `ps_crud` ; seul repère sans `ps_crud`.
+ */
+const sqlLignesEcrites = (r: RangementJournal): string =>
+  `SELECT id, ferme_id, type, serie_id, campagne_id, remplace_sorte, remplace_evenement_id, detail FROM evenement
+  WHERE id IN (SELECT id FROM "${r.table}" WHERE rowid > ?${
+    r.crud
+      ? `
+    UNION SELECT json_extract(data, '$.id') FROM ps_crud
+    WHERE id > ? AND json_extract(data, '$.type') = 'evenement' AND json_extract(data, '$.op') IN ('PUT', 'PATCH')`
+      : ''
+  })`;
+
+/**
+ * T13o : la ligne `id` et les corrections de sa chaîne écrites par la même transaction (une
+ * correction d'une correction comprise). Elles ne sont pas un second « Fait » : la correction
+ * remplace l'original, elle n'en fait pas un doublon.
+ */
+function chaineEcrite(id: string, lignes: readonly LigneEcrite[]): string[] {
+  const chaine = new Set([id]);
+  for (let ajout = true; ajout; ) {
+    ajout = false;
+    for (const l of lignes) {
+      const lid = String(l.id);
+      if (l.remplace_sorte === 'correction' && !chaine.has(lid) && chaine.has(String(l.remplace_evenement_id))) {
+        chaine.add(lid);
+        ajout = true;
+      }
+    }
+  }
+  return [...chaine];
 }
 
 export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnees {
@@ -179,7 +229,7 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
   }
 
   /** Rangement du journal, cherché une fois par porte (relu après un échec). */
-  let rangement: Promise<string> | undefined;
+  let rangement: Promise<RangementJournal> | undefined;
 
   /**
    * Vérifications rendues par `preparerSaisie` de cette porte : le contrôle d'après les lignes
@@ -190,25 +240,31 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
   const verificationsPreparees = new WeakSet<VerificationEcriture>();
 
   /**
-   * T13j : exécute les ordres d'une transaction, puis contrôle CHAQUE « Fait » (faitDeLigne) que
-   * la transaction vient d'insérer dans le journal, d'après les lignes écrites, quel que soit
-   * l'ordre (préparé, copié, SQL brut) : un autre « Fait » identique en vigueur, déjà là ou écrit
-   * par la même transaction → DejaFait, la transaction est annulée, rien n'est écrit. Deux
-   * « Fait » identiques écrits ensemble sont refusés, même si la transaction annule l'un d'eux.
+   * T13j, T13o : exécute les ordres d'une transaction, puis contrôle CHAQUE « Fait »
+   * (faitDeLigne) que la transaction vient d'écrire dans le journal, d'après les lignes écrites,
+   * quel que soit l'ordre (préparé, copié, SQL brut ; INSERT ou UPDATE) : un autre « Fait »
+   * identique en vigueur, déjà là ou écrit par la même transaction → DejaFait, la transaction est
+   * annulée, rien n'est écrit (ni le journal, ni la file d'envoi). Deux « Fait » identiques écrits
+   * ensemble sont refusés, même si la transaction annule ou corrige l'un d'eux ; un « Fait » et
+   * sa propre correction écrits ensemble sont acceptés (chaineEcrite).
    *
-   * Lignes nouvelles : rowid de la table de rangement au-delà du plus grand d'avant les ordres.
-   * SQLite donne à une ligne insérée un rowid supérieur à tous ceux de la table, et ni la
-   * synchro ni un autre onglet n'écrivent pendant la transaction : sont nouvelles exactement les
-   * lignes insérées par ces ordres, quelle que soit la forme de l'INSERT (paramètres, littéraux,
-   * INSERT … SELECT, OR REPLACE).
+   * Lignes écrites (T13o, sqlLignesEcrites) : les PUT et PATCH sur `evenement` que la transaction
+   * ajoute à `ps_crud` (id jamais réutilisé ; ni la synchro ni un autre onglet n'écrivent pendant
+   * la transaction), plus les lignes de rowid au-delà du plus grand d'avant (INSERT direct dans
+   * `ps_data__evenement`, base sans `ps_crud`), relues en entier par leur id. Une seule règle :
+   * faitDeLigne dit ce qu'est un « Fait », faitUnique s'il est seul en vigueur.
    *
-   * Limites connues (aucun chemin de l'appli ne les emprunte) :
-   *   - un UPDATE qui transforme une ligne existante en « Fait » n'ajoute pas de ligne : il n'est
-   *     pas vu ; un DELETE de la dernière ligne suivi d'un INSERT dans la même transaction ferait
-   *     réutiliser son rowid. Le journal est en ajout seul : le serveur refuse UPDATE et DELETE
-   *     sur `evenement`. Ticket de suite T13o : repérer les lignes par ps_crud ;
-   *   - faux positif : un « Fait » et sa correction écrits dans la même transaction sont refusés
-   *     (la correction en vigueur compte comme un autre « Fait ») ;
+   * Limites connues (aucun chemin de l'appli ne les emprunte ; le journal est en ajout seul, le
+   * serveur refuse UPDATE et DELETE sur `evenement`) :
+   *   - un UPDATE direct de `ps_data__evenement` (sans la vue, donc sans `ps_crud`) qui
+   *     transforme une ligne en « Fait » n'est pas vu ; un DELETE direct de sa dernière ligne
+   *     suivi d'un INSERT direct non plus (rowid réutilisé). Écrire sous la vue contourne aussi
+   *     la file d'envoi : la ligne ne partirait jamais. D'où la règle du brief : l'agent et le
+   *     serveur MCP ne reçoivent jamais d'accès SQL brut à la porte ;
+   *   - sans `ps_crud` (base mémoire des tests), seul le rowid repère les lignes : ni l'UPDATE ni
+   *     le DELETE suivi d'un INSERT ne sont vus ;
+   *   - une correction écrite par la transaction n'est pas contrôlée comme un « Fait » (règle
+   *     d'avant T13o, faitDeLigne : un « Fait » est une ligne originale) ;
    *   - un déclencheur posé sur une autre table, qui écrirait dans le journal, échapperait au
    *     filtre NOMME_JOURNAL (le schéma local n'en a aucun).
    *
@@ -234,15 +290,17 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       rangement = undefined;
       throw e;
     });
-    const table = await rangement;
-    const avant = (await lire<{ m: number | null }>(`SELECT max(rowid) AS m FROM "${table}"`))[0]?.m ?? 0;
+    const r = await rangement;
+    const avant = (
+      await lire<{ ligne: number | null; crud: number | null }>(
+        `SELECT (SELECT max(rowid) FROM "${r.table}") AS ligne, ${r.crud ? '(SELECT max(id) FROM ps_crud)' : 'NULL'} AS crud`,
+      )
+    )[0];
     for (const ordre of ordres) await tx.execute(ordre.sql, ordre.parametres ?? []);
-    const lignes = await lire<Readonly<Record<'id' | 'ferme_id' | 'type' | 'serie_id' | 'campagne_id' | 'remplace_sorte' | 'detail', unknown>>>(
-      `SELECT id, ferme_id, type, serie_id, campagne_id, remplace_sorte, detail FROM evenement WHERE id IN (SELECT id FROM "${table}" WHERE rowid > ?)`,
-      [avant],
-    );
+    const lignes = await lire<LigneEcrite>(sqlLignesEcrites(r), r.crud ? [avant?.ligne ?? 0, avant?.crud ?? 0] : [avant?.ligne ?? 0]);
     // « Fait » écrits, par clé : deux de même clé dans la transaction → DejaFait ; sinon, aucun
-    // autre identique ne doit être en vigueur (faitUnique, qui écarte la ligne écrite).
+    // autre identique ne doit être en vigueur (faitUnique, qui écarte la ligne écrite et les
+    // corrections de sa chaîne écrites avec elle).
     const faits = new Map<string, { readonly fait: FaitVise; readonly id: string }>();
     for (const ligne of lignes) {
       const fait = faitDeLigne(ligne);
@@ -251,7 +309,7 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       if (faits.has(cle)) throw new DejaFait('déjà fait');
       faits.set(cle, { fait, id: String(ligne.id) });
     }
-    for (const { fait, id } of faits.values()) await faitUnique(fait, [id])(lire);
+    for (const { fait, id } of faits.values()) await faitUnique(fait, chaineEcrite(id, lignes))(lire);
     if (exigerVerificateur && verifier === undefined && faits.size > 0) {
       throw new Error('« Fait » écrit sans vérification « déjà fait » : passer la vérification rendue par preparerSaisie');
     }
