@@ -129,6 +129,45 @@ export interface OrdreEcriture {
   readonly parametres?: readonly unknown[];
 }
 
+/** Point du repère local (mètres : x vers l'est, y vers le nord). */
+export interface PointPlacement {
+  readonly x: number;
+  readonly y: number;
+}
+
+/**
+ * T28s : colonnes d'un bâtiment données à `placer` (format local, snake_case). Création : toutes
+ * sauf `zone_id` et `supprime_le` ; modification : celles qui changent.
+ */
+export interface ValeursBatiment {
+  readonly nom?: string;
+  readonly type?: 'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'magasin' | 'autre';
+  readonly longueur_m?: number;
+  readonly largeur_m?: number;
+  readonly hauteur_m?: number;
+  readonly centre_x_m?: number;
+  readonly centre_y_m?: number;
+  readonly orientation_deg?: number;
+  readonly zone_id?: string | null;
+  /** Instant ISO UTC de la suppression douce, ou null pour rétablir. */
+  readonly supprime_le?: string | null;
+}
+
+/**
+ * T28s : un changement du placement réel (Q31), écrit par `placer`. Bâtiment créé ou modifié ;
+ * contour d'une zone (null efface) ; placement d'un emplacement dans le repère de sa zone (null :
+ * rangement automatique) ; origine du plan de la ferme de la porte (null efface).
+ */
+export type ChangementPlacement =
+  | { readonly sorte: 'batiment'; readonly id: string; readonly valeurs: ValeursBatiment }
+  | { readonly sorte: 'zone'; readonly id: string; readonly contour: readonly PointPlacement[] | null }
+  | {
+      readonly sorte: 'emplacement';
+      readonly id: string;
+      readonly placement: { readonly x: number; readonly y: number; readonly orientation_deg: number } | null;
+    }
+  | { readonly sorte: 'origine'; readonly origine: { readonly latitude: number; readonly longitude: number } | null };
+
 export interface PorteDonnees {
   /** Lecture SQL libre (jointures comprises) sur la base locale. */
   lire<T>(sql: string, parametres?: readonly unknown[]): Promise<T[]>;
@@ -174,6 +213,16 @@ export interface PorteDonnees {
    * gardée) : ignoré. Au plus ECRITURES_MAX_PAR_LOT lignes par transaction ; liste vide : aucune.
    */
   archiverRefus(ids: readonly string[]): Promise<void>;
+  /**
+   * T28s : SEULE écriture du placement réel (bâtiments, contours, placement des emplacements,
+   * origine du plan), dans la ferme de la porte. Une transaction locale par appel (un envoi, tout
+   * ou rien) ; liste vide : aucune. Rejette sans rien écrire ce que le serveur refuserait :
+   * utilisateur qui n'est pas gérant actif de la ferme, règles du cœur (validerPlacement,
+   * validerContour), ligne d'une autre ferme ou introuvable, zone abritée et contour, origine
+   * figée. Rend l'annulation : les changements qui remettent les valeurs d'avant, dans l'ordre
+   * inverse (annuler une création = suppression douce) ; `placer(annulation)` annule.
+   */
+  placer(changements: readonly ChangementPlacement[]): Promise<readonly ChangementPlacement[]>;
 }
 
 /** Écriture en attente, telle que la donne PowerSync (`CrudEntry`). */

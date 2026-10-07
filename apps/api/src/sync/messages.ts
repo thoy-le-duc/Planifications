@@ -10,7 +10,7 @@
  *   d'après leur code (et leur champ), leur code et leur champ vont au journal. Le message du cœur
  *   n'y va pas : il peut citer une valeur saisie (date, quantité, libellé).
  */
-import type { CodeErreurSaisie, ErreurSaisie } from '@planif/core';
+import type { CodeErreurPlacement, CodeErreurSaisie, ErreurPlacement, ErreurSaisie } from '@planif/core';
 import type { MotifRefus, Refus } from './motifs.ts';
 
 /** Explication affichée telle quelle sur le téléphone, par motif. */
@@ -33,6 +33,19 @@ export const PRECISION_EXISTE_DEJA = "cette saisie existe déjà avec d'autres v
 export const PRECISION_INTROUVABLE = 'la saisie à modifier est introuvable';
 export const PRECISION_CREEE_SUPPRIMEE = 'une saisie ne se crée pas déjà supprimée';
 export const PRECISION_CHANGE_DE_FERME = 'une saisie ne change pas de ferme';
+
+/** T28s (Q31) : placer les éléments de la ferme (bâtiments, contours, planches, origine) est réservé au gérant. */
+export const PRECISION_SEUL_LE_GERANT = 'seul le gérant peut placer les éléments de la ferme';
+/** T28s : l'origine du plan ne bouge plus dès qu'un élément est placé (Q31). */
+export const PRECISION_ORIGINE_FIGEE =
+  'le point de départ du plan ne se déplace ni ne s’efface tant que des éléments sont placés : retirez-les d’abord du plan';
+/** T28s (décision du chef) : aucun placement tant que l'origine du plan n'est pas posée. */
+export const PRECISION_SANS_ORIGINE = 'posez d’abord le point de départ du plan de la ferme, avant d’y placer des éléments';
+export const PRECISION_ORIGINE_INVALIDE = 'le point de départ du plan doit avoir une latitude et une longitude valables';
+export const PRECISION_FERME_SEULE_ORIGINE = 'de la ferme, seul le point de départ du plan se modifie ici';
+export const PRECISION_ZONE_A_UN_CONTOUR = 'cette zone a ses propres contours : effacez-les avant de l’abriter sous un bâtiment';
+export const PRECISION_ZONE_DEJA_ABRITEE = 'cette zone est déjà abritée par un autre bâtiment';
+export const PRECISION_ZONE_ABRITEE_SUPPRIMEE = 'cette zone est abritée par un bâtiment : supprimez le bâtiment ou détachez-le de la zone d’abord';
 
 /** Message enregistré dans refus_synchro : seul 'ecriture_invalide' porte une précision. */
 export function messageRefus(refus: Refus): string {
@@ -141,6 +154,15 @@ const LIBELLES_DES_CHAMPS: Readonly<Record<string, string>> = {
   fin: 'dates de la saison',
   nature: "nature de l'assolement",
   source_import: "origine de l'import",
+  // T28s : placement réel (structure-lignes.ts).
+  contour: 'contours de la zone',
+  placement_x_m: 'position',
+  placement_y_m: 'position',
+  orientation_deg: 'orientation',
+  hauteur_m: 'hauteur',
+  centre_x_m: 'position',
+  centre_y_m: 'position',
+  origine_plan: 'point de départ du plan',
 };
 
 /** Libellé du champ (le plus précis connu, du dernier segment au premier), ou null. */
@@ -170,6 +192,57 @@ export function detailDuCoeur(erreur: ErreurSaisie): string {
 /** Refus 'ecriture_invalide' d'une erreur du cœur : précision traduite, détail au journal. */
 export function refusDuCoeur(erreur: ErreurSaisie, fermeId: string | null): Refus {
   return { motif: 'ecriture_invalide', precision: precisionDuCoeur(erreur), detail: detailDuCoeur(erreur), fermeId };
+}
+
+/** Ce qui manque à un placement incomplet (champ d'une erreur du placement), en français. */
+const MANQUE_AU_PLACEMENT: Readonly<Record<string, string>> = {
+  placement_x_m: 'la position est-ouest',
+  placement_y_m: 'la position nord-sud',
+  orientation_deg: 'l’orientation',
+  longueur_m: 'la longueur',
+  largeur_m: 'la largeur',
+  hauteur_m: 'la hauteur',
+  centre_x_m: 'la position est-ouest du centre',
+  centre_y_m: 'la position nord-sud du centre',
+};
+
+/** Dimensions d'un bâtiment (champ d'une erreur du placement), en français. */
+const DIMENSIONS: Readonly<Record<string, string>> = { longueur_m: 'la longueur', largeur_m: 'la largeur', hauteur_m: 'la hauteur' };
+
+/**
+ * T28s : précision affichée pour une règle du placement réel (validerPlacement, validerContour du
+ * cœur), d'après son code et son champ. Comme pour les autres erreurs du cœur, son message n'est
+ * pas relayé : il est réécrit ici sans nom de colonne ni seuil technique.
+ */
+export function precisionDuPlacement(erreur: ErreurPlacement): string {
+  const champ = erreur.champ ?? '';
+  const precisions: Readonly<Record<CodeErreurPlacement, string>> = {
+    entree_invalide: 'les contours de la zone sont illisibles : une liste de sommets est attendue',
+    trop_peu_de_sommets: 'les contours d’une zone ont 3 sommets au moins',
+    trop_de_sommets: 'les contours d’une zone ont 200 sommets au plus',
+    coordonnee_invalide:
+      champ === 'contour' ? 'un sommet des contours de la zone n’a pas de coordonnées en mètres' : 'la position doit être un nombre de mètres',
+    trop_loin:
+      champ === 'contour'
+        ? 'un sommet des contours de la zone est à plus de 5 km de l’origine du plan'
+        : champ === 'centre_x_m'
+          ? 'le bâtiment est à plus de 5 km de l’origine du plan'
+          : 'l’emplacement est à plus de 5 km du centre de sa zone',
+    sommets_confondus: 'deux sommets qui se suivent sont confondus : ne répétez pas le premier sommet à la fin des contours',
+    auto_intersection: 'les contours de la zone se recoupent : deux côtés se croisent ou se touchent',
+    aire_nulle: 'la surface de la zone est nulle ou trop petite',
+    incomplet: `placement incomplet : il manque ${MANQUE_AU_PLACEMENT[champ] ?? 'une information'}`,
+    orientation_invalide: 'l’orientation doit être comprise entre 0 et 360 degrés, 360 exclu',
+    dimension_invalide: `${DIMENSIONS[champ] ?? 'chaque dimension'} du bâtiment doit être un nombre de mètres plus grand que zéro`,
+    plafond_depasse: `${DIMENSIONS[champ] ?? 'une dimension'} du bâtiment dépasse le maximum permis`,
+    zone_abritee_avec_contour: 'cette zone est abritée par un bâtiment : elle prend sa forme et n’a pas de contours à elle',
+  };
+  return precisions[erreur.code];
+}
+
+/** Refus 'ecriture_invalide' d'une règle du placement : précision traduite, code et champ au journal. */
+export function refusDuPlacement(erreur: ErreurPlacement, fermeId: string | null): Refus {
+  return { motif: 'ecriture_invalide', precision: precisionDuPlacement(erreur), detail: `placement ${erreur.code} champ ${erreur.champ ?? '-'}`, fermeId };
 }
 
 /** Un `id` glissé dans les données (l'id est celui de l'écriture) : refusé comme une colonne inconnue du cœur. */

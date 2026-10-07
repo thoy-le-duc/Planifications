@@ -49,6 +49,10 @@
  *   les autres tables ni pour un lot trop gros. Contrat : resume-refus.integration.test.ts.
  * - T10l : le téléphone archive ses propres refus (PATCH { archive_le } sur refus_synchro, rien
  *   d'autre) ; archiver-refus.ts. Contrat : archiver-refus.integration.test.ts.
+ * - T28s (Q31) : le placement réel (bâtiments, contours des zones, placement des emplacements ;
+ *   structure.ts) et l'origine du plan (seule colonne de `ferme` écrite, structure-origine.ts),
+ *   réservés au gérant de la ferme, tout ou rien avec le reste du lot, sous le verrou de la ferme.
+ *   Contrat : structure-placement.integration.test.ts.
  */
 import { ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
 import {
@@ -77,6 +81,7 @@ import { ecrireItineraire, estTableItineraire, TABLES_ITINERAIRE } from './itine
 import { ecrireSerie, fermesDesLignesVisees, TABLES_SERIE, verifierFinDeLot, type SeriesTouchees } from './serie.ts';
 import { RESUME_VIDE, resumerSaisies, type ResumeSaisie } from './resume.ts';
 import { ecrireStructure, estTableStructure, TABLES_STRUCTURE } from './structure.ts';
+import { ecrireOrigine, fermesDesOrigines, fermesGerees } from './structure-origine.ts';
 import { completerStock, ecrireArticle, ecrireMouvement, type RemplacementEcrit } from './stock.ts';
 
 export type { MotifRefus } from './motifs.ts';
@@ -123,7 +128,7 @@ const TABLES_STOCK = new Set(['article_stock', 'mouvement_stock']);
  * ferme) : un lot qui en écrit une est accepté ou refusé en entier, sous le verrou de chaque
  * ferme touchée.
  */
-const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE, ...TABLES_ITINERAIRE, ...TABLES_STRUCTURE]);
+const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE, ...TABLES_ITINERAIRE, ...TABLES_STRUCTURE, 'ferme']);
 /**
  * Tables que le téléphone écrit (T10 : le journal ; T10c : le stock ; T10e : les séries ; T23 : les
  * itinéraires ; T10s : le parcellaire et le catalogue ; les autres suivront avec leurs écrans).
@@ -420,13 +425,15 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
 
   /**
    * Une écriture, dans la transaction `tx` : null si acceptée, sinon le refus. `touchees` : séries
-   * touchées par le lot (T10e), vérifiées en fin de lot ; `index` : rang de l'écriture dans le lot.
+   * touchées par le lot (T10e), vérifiées en fin de lot ; `index` : rang de l'écriture dans le lot ;
+   * `gerees` : fermes dont l'auteur est gérant (T28s, placement réel).
    */
   async function traiter(
     tx: TransactionDb,
     e: EcritureRecue,
     utilisateurId: Id<'Utilisateur'>,
     fermes: ReadonlySet<string>,
+    gerees: ReadonlySet<string>,
     touchees: SeriesTouchees,
     index: number,
     remplacements: RemplacementEcrit[],
@@ -441,6 +448,11 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       // Sans précision : « ce n'est pas une saisie que l'appli sait enregistrer » (messages.ts).
       return { motif: 'ecriture_invalide', detail, fermeId: fermeDonnee };
     }
+    if (e.table === 'ferme') {
+      // T28s : seule l'origine du plan s'écrit (PATCH) ; une ferme ne se crée ni ne s'efface par la synchro.
+      if (e.op !== 'PATCH') return { motif: 'table_interdite', fermeId: estUuid(e.id) && fermes.has(e.id.toLowerCase()) ? e.id.toLowerCase() : null };
+      return ecrireOrigine(tx, ctx, { id: e.id, donnees: e.donnees ?? {} }, fermes, gerees, utilisateurId);
+    }
     if (e.op === 'PATCH' && (e.table === 'serie' || e.table === 'occupation')) {
       // T10e : une série et ses occupations se modifient (suppression douce comprise).
       return ecrireSerie(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, utilisateurId, touchees, index);
@@ -451,7 +463,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     }
     if (e.op === 'PATCH' && estTableStructure(e.table)) {
       // T10s : une ligne du parcellaire ou du catalogue de la ferme se modifie (suppression douce comprise).
-      return ecrireStructure(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, utilisateurId);
+      return ecrireStructure(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, gerees, utilisateurId);
     }
     if (e.op !== 'PUT') return modificationRefusee(tx, e, fermes);
 
@@ -468,7 +480,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       return ecrireSerie(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId, touchees, index);
     }
     if (estTableItineraire(e.table)) return ecrireItineraire(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
-    if (estTableStructure(e.table)) return ecrireStructure(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
+    if (estTableStructure(e.table)) return ecrireStructure(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, gerees, utilisateurId);
     // Stock : la ferme, validée par le cœur, est forcément celle de fermeDonnee (UUID de la ferme du jeton).
     const ferme = fermeDonnee ?? '';
     const put = { id: e.id, donnees };
@@ -502,11 +514,15 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
         const declarees = [...tout, ...ecritures.filter(remplacement)]
           .map(fermeDesDonnees)
           .filter((f): f is string => f !== null && fermes.has(f));
-        const verrous = [...new Set([...declarees, ...(await fermesDesLignesVisees(tx, tout, fermes))])].sort();
+        // T28s : un bâtiment modifié est trouvé avec le parcellaire (fermesDesLignesVisees) ; l'origine
+        // du plan, PATCH de la ferme elle-même, prend le verrou de cette ferme.
+        const verrous = [...new Set([...declarees, ...fermesDesOrigines(tout, fermes), ...(await fermesDesLignesVisees(tx, tout, fermes))])].sort();
         for (const ferme of verrous) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`ferme:${ferme}`}, 0))`);
+        // T28s (Q31) : rôle relu dans la transaction du lot, après les verrous ; seulement si le lot touche au parcellaire.
+        const gerees = tout.length > 0 ? await fermesGerees(tx, utilisateurId, fermes) : new Set<string>();
         for (const [i, e] of ecritures.entries()) {
           courante = i;
-          const refus = await traiter(tx, e, utilisateurId, fermes, touchees, i, remplacements);
+          const refus = await traiter(tx, e, utilisateurId, fermes, gerees, touchees, i, remplacements);
           if (refus !== null) throw new RefusDansLot(i, refus);
         }
         // T10g, décision 8 : écart de stock des remplacements de récolte envoyés sans mouvement.

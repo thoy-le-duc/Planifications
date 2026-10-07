@@ -148,6 +148,7 @@ function porteControlee(): {
       return () => undefined;
     },
     archiverRefus: () => Promise.resolve(),
+    placer: () => Promise.resolve([]),
     ecrireEnsemble: interdit('ecrireEnsemble'),
     preparerSaisie: interdit('preparerSaisie'),
   };

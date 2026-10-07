@@ -117,6 +117,7 @@ function porte(): PorteDonnees & { lectures: () => number } {
     preparerSaisie: interdit('preparerSaisie'),
     surveillerRefus: interdit('surveillerRefus'),
     archiverRefus: () => Promise.resolve(),
+    placer: () => Promise.resolve([]),
   };
 }
 
