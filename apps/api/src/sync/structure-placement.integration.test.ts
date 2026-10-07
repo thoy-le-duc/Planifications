@@ -801,6 +801,28 @@ decrireAvecBase('T28s')('T28s : POST /sync/upload accepte le placement réel du 
     });
 
     describe('ce qui reste ouvert à tout membre actif (T10s)', () => {
+      it('un équipier renvoie un PATCH identique sur une ligne placée (même contour, même placement) : accepté, rien d’écrit (décision du chef)', async () => {
+        const z = await zoneEn(ferme, { contour: CARRE });
+        const e = await plancheEn(ferme, z, { x: 2, y: 0, o: 0 });
+        const avantZone = await ligne('zone', z);
+        const avantPlanche = await ligne('emplacement', e);
+        await accepte(
+          [patch('zone', z, { contour: texte(CARRE) }), patch('emplacement', e, { placement_x_m: 2, placement_y_m: 0, orientation_deg: 0 })],
+          equipier.jeton,
+        );
+        expect(await ligne('zone', z)).toEqual(avantZone);
+        expect(await ligne('emplacement', e)).toEqual(avantPlanche);
+        expect(await modifications(z)).toBe(0);
+        expect(await modifications(e)).toBe(0);
+      });
+
+      it('un équipier supprime une zone placée sans bâtiment (vide) : droits ordinaires, acceptée (décision du chef)', async () => {
+        const z = await zoneEn(ferme, { contour: EN_L });
+        await accepte([supprimer('zone', z)], equipier.jeton);
+        expect((await ligne('zone', z))?.supprime_le).not.toBeNull();
+        expect((await historique(z)).at(-1)).toMatchObject({ operation: 'suppression', auteur_id: equipier.id });
+      });
+
       it('un équipier crée une zone sans contour et une planche sans placement : accepté', async () => {
         const z = putZone();
         const p = putEmplacement(z.id);
@@ -1026,6 +1048,18 @@ decrireAvecBase('T28s')('T28s : POST /sync/upload accepte le placement réel du 
       const p = patch('ferme', f, { origine_plan: null });
       await refuseEnEntier([p], p, 'ecriture_invalide');
       expect((await ligne('ferme', f))?.origine_plan).toEqual(ORIGINE);
+    });
+
+    it('tous les placements supprimés (bâtiment, zone placée) : l’origine redevient modifiable', async () => {
+      const f = await nouvelleFerme(ORIGINE);
+      const b = await batimentEn(f);
+      const z = await zoneEn(f, { contour: CARRE });
+      const nouvelle = { latitude: 44.2, longitude: 1.7 };
+      const p = origine(f, nouvelle);
+      await refuseEnEntier([p], p, 'ecriture_invalide');
+      await accepte([supprimer('batiment', b), supprimer('zone', z)]);
+      await accepte([origine(f, nouvelle)]);
+      expect((await ligne('ferme', f))?.origine_plan).toEqual(nouvelle);
     });
 
     it('origine nulle alors que des placements existent (écrits avant T28s) : posée', async () => {
