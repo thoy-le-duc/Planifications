@@ -9,7 +9,7 @@
  * colonnes, et les zones sont rangées en rangées, sans chevauchement.
  */
 import type { CleFamille, LigneEmplacementPlan, LigneZonePlan, Plan, SemainePlan } from '../plan/calculs.ts';
-import { COULEURS, FAMILLES } from '../../ui/jetons.ts';
+import { COULEUR_ESTOMPEE, COULEURS, FAMILLES } from '../../ui/jetons.ts';
 
 export interface SocleScene {
   readonly id: string;
@@ -44,7 +44,7 @@ export interface Scene {
   readonly volumes: readonly VolumeScene[];
 }
 
-/** Planche vide, ou culture d'une famille sans couleur : le trait des maquettes, discret. */
+/** Planche vide (ou barre sans famille, plan écrit à la main) : le trait des maquettes, discret. */
 export const COULEUR_NEUTRE: string = COULEURS.trait;
 
 /** Largeur supposée (m) d'une planche dont la largeur n'est pas renseignée. */
@@ -210,4 +210,102 @@ export function versScene(plan: Plan, semaine: number): Scene {
     if (v !== undefined) volumes.push(v);
   }
   return { semaine, libelleSemaine, socles, volumes };
+}
+
+// ── Filtres (T27b) ───────────────────────────────────────────────────────────────────────────
+
+export { COULEUR_ESTOMPEE };
+
+/** Hauteur (m de scène) d'une planche vide : à ras du sol, une culture ne s'y confond pas. */
+const HAUTEUR_VIDE = 0.05 * ECHELLE;
+
+export type DimensionFiltre = 'familles' | 'cultures' | 'zones';
+
+/**
+ * Trois dimensions. `null` = tout est coché ; un ensemble = seules ces valeurs le sont (vide :
+ * rien). Familles : clés de famille ; cultures : libellé de la barre ; zones : id de la zone.
+ */
+export interface FiltresScene {
+  readonly familles: ReadonlySet<string> | null;
+  readonly cultures: ReadonlySet<string> | null;
+  readonly zones: ReadonlySet<string> | null;
+}
+
+export interface VolumeFiltre extends VolumeScene {
+  readonly estompe: boolean;
+  /** Hauteur à dessiner : `hauteur` pour une culture, plus basse pour une planche vide. */
+  readonly hauteurRendue: number;
+}
+
+export interface SceneFiltree extends Omit<Scene, 'volumes'> {
+  readonly volumes: readonly VolumeFiltre[];
+}
+
+export interface OptionsFiltres {
+  readonly familles: readonly string[];
+  readonly cultures: readonly string[];
+  readonly zones: readonly Pick<SocleScene, 'id' | 'nom'>[];
+}
+
+export const FILTRES_TOUT: FiltresScene = { familles: null, cultures: null, zones: null };
+export const FILTRES_RIEN: FiltresScene = { familles: new Set<string>(), cultures: new Set<string>(), zones: new Set<string>() };
+
+/** Les clés de famille dans l'ordre de la légende (celui de FAMILLES). */
+const ORDRE_FAMILLES: readonly string[] = Object.keys(FAMILLES);
+
+/** Ce que la légende et les cases proposent pour la semaine affichée. */
+export function optionsFiltres(scene: Scene): OptionsFiltres {
+  const familles = new Set<string>();
+  const cultures = new Set<string>();
+  for (const v of scene.volumes) {
+    if (v.culture === null) continue;
+    familles.add(v.cleFamille ?? 'autre');
+    cultures.add(v.culture);
+  }
+  return {
+    familles: ORDRE_FAMILLES.filter((cle) => familles.has(cle)),
+    cultures: [...cultures].sort((a, b) => a.localeCompare(b, 'fr')),
+    zones: scene.socles.map((s) => ({ id: s.id, nom: s.nom })),
+  };
+}
+
+/** Vrai si le volume n'est pas coché sur au moins une dimension. Une planche vide n'a ni famille ni culture. */
+export function estompe(volume: VolumeScene, filtres: FiltresScene): boolean {
+  if (filtres.zones !== null && !filtres.zones.has(volume.zoneId)) return true;
+  if (volume.culture === null) return filtres.familles !== null || filtres.cultures !== null;
+  if (filtres.familles !== null && !filtres.familles.has(volume.cleFamille ?? 'autre')) return true;
+  return filtres.cultures !== null && !filtres.cultures.has(volume.culture);
+}
+
+/** Hauteur à dessiner : la hauteur d'une culture, à ras du sol pour une planche vide (filtre ou pas). */
+export function hauteurRendue(volume: VolumeScene): number {
+  return volume.culture === null ? HAUTEUR_VIDE : volume.hauteur;
+}
+
+/** Mêmes socles et volumes que `scene` ; seules la couleur des volumes décochés et la hauteur des vides changent. */
+export function appliquerFiltres(scene: Scene, filtres: FiltresScene): SceneFiltree {
+  return {
+    ...scene,
+    volumes: scene.volumes.map((v) => {
+      const estompee = estompe(v, filtres);
+      return { ...v, estompe: estompee, couleur: estompee ? COULEUR_ESTOMPEE : v.couleur, hauteurRendue: hauteurRendue(v) };
+    }),
+  };
+}
+
+/** Coche la valeur si elle était décochée, la décoche sinon ; tout l'univers coché = `null`. */
+export function basculerFiltre(filtres: FiltresScene, dimension: DimensionFiltre, valeur: string, valeursPossibles: readonly string[]): FiltresScene {
+  const actuel = filtres[dimension];
+  const suivant = new Set<string>(actuel ?? valeursPossibles);
+  if (!suivant.delete(valeur)) suivant.add(valeur);
+  const complet = valeursPossibles.every((v) => suivant.has(v));
+  return { ...filtres, [dimension]: complet ? null : suivant };
+}
+
+export function cocherTout(filtres: FiltresScene, dimension: DimensionFiltre): FiltresScene {
+  return { ...filtres, [dimension]: null };
+}
+
+export function cocherRien(filtres: FiltresScene, dimension: DimensionFiltre): FiltresScene {
+  return { ...filtres, [dimension]: new Set<string>() };
 }
