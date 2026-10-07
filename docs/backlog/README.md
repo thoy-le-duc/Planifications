@@ -62,7 +62,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T13h](T13h-fait-unique-en-base.md) | « Fait » unique vérifié au moment d'écrire | T13f | fait |
 | [T13i](T13i-fait-unique-partage.md) | « Fait » unique : partagé avec la voix et l'agent | T13h | fait |
 | [T13j](T13j-fait-unique-chemins.md) | « Fait » unique : tous les chemins d'écriture | T13i | fait |
-| [T13o](T13o-fait-unique-ps-crud.md) | « Fait » unique : contrôle d'après le journal d'envoi | T13j | à faire |
+| [T13o](T13o-fait-unique-ps-crud.md) | « Fait » unique : contrôle d'après le journal d'envoi | T13j | fait |
 | [T13d](T13d-aujourdhui-froid.md) | Aujourd'hui : ouverture à froid sous 1 s sur une grande ferme (instantané de la journée) | T13b, T13c | fait |
 | [T13g](T13g-aujourdhui-avant-base.md) | Aujourd'hui : instantané avant la base, « Fait » en file au lancement | T13d | fait |
 | [T13k](T13k-fait-avant-base.md) | Aujourd'hui : « Fait » accepté avant la base | T13g | à préciser |

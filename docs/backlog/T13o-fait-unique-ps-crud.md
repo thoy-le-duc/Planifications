@@ -18,6 +18,6 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : un UPDATE qui transforme une ligne en « Fait » déjà fait est refusé.
-- [ ] Test : DELETE puis INSERT dans la même transaction, rowid réutilisé → contrôlé.
-- [ ] Test : « Fait » + sa correction dans la même transaction → accepté.
+- [x] Test : un UPDATE qui transforme une ligne en « Fait » déjà fait est refusé.
+- [x] Test : DELETE puis INSERT dans la même transaction, rowid réutilisé → contrôlé.
+- [x] Test : « Fait » + sa correction dans la même transaction → accepté.
