@@ -21,6 +21,7 @@ import type {
   ModeItineraire,
   NomEntite,
   ParametresItineraire,
+  PointLocal,
   PositionGeographique,
   Quantite,
   UniteRecolte,
@@ -67,6 +68,7 @@ import {
   TABLES_MODIFIABLES,
   TYPES_ABRI,
   TYPES_ANCRE,
+  TYPES_BATIMENT,
   TYPES_EVENEMENT,
   UNITES_RECOLTE,
 } from './valeurs.ts';
@@ -145,6 +147,11 @@ export const ferme = pgTable('ferme', {
   nom: text('nom').notNull(),
   fuseauHoraire: text('fuseau_horaire').notNull(),
   position: jsonb('position').$type<PositionGeographique>(),
+  /**
+   * Origine du repère local du plan (T28a, Q31), distincte de `position` (météo). Pas de bornes
+   * ici : la règle « figée tant qu'un placement existe » est celle du serveur (T28s).
+   */
+  originePlan: jsonb('origine_plan').$type<PositionGeographique>(),
   unites: jsonb('unites')
     .$type<UnitesFerme>()
     .notNull()
@@ -161,12 +168,21 @@ export const zone = pgTable(
     zoneParenteId: idDe<'Zone'>('zone_parente_id').references((): AnyPgColumn => zone.id),
     typeAbri: text('type_abri', { enum: TYPES_ABRI }).notNull(),
     surfaceM2: decimal('surface_m2'),
+    /**
+     * Polygone libre dans le repère local de la ferme (T28a), `[{x, y}, …]` en mètres ; nul = pas
+     * placée, ou abritée par un bâtiment (déclencheurs de la migration 0027).
+     */
+    contour: jsonb('contour').$type<readonly PointLocal[]>(),
     ...horodatages(),
   },
   (t) => [
     verif('zone', 'type_abri', parmi(t.typeAbri, TYPES_ABRI)),
     verif('zone', 'surface_positive', sql`${t.surfaceM2} IS NULL OR ${t.surfaceM2} > 0`),
     verif('zone', 'pas_sa_propre_parente', sql`${t.zoneParenteId} IS DISTINCT FROM ${t.id}`),
+    /** Bornes simples du contour (fonction de la migration 0025) ; la géométrie reste au serveur. */
+    verif('zone', 'contour_valide', sql`contour_zone_valide(${t.contour})`),
+    /** Cible de la clé étrangère composée de `batiment` : un bâtiment abrite une zone de sa ferme. */
+    unique('zone_ferme_id_id_unique').on(t.fermeId, t.id),
   ],
 );
 
@@ -192,10 +208,25 @@ export const emplacement = pgTable(
       .$type<readonly Id<'Emplacement'>[]>()
       .notNull()
       .default(sql`'{}'::uuid[]`),
+    /** Placement dans le repère de sa zone (T28a) : les trois nuls = rangement automatique. */
+    placementXM: decimal('placement_x_m'),
+    placementYM: decimal('placement_y_m'),
+    orientationDeg: decimal('orientation_deg'),
     ...horodatages(),
   },
   (t) => [
     verif('emplacement', 'sorte', parmi(t.sorte, SORTES_EMPLACEMENT)),
+    verif(
+      'emplacement',
+      'placement_tout_ou_rien',
+      sql`(${t.placementXM} IS NULL) = (${t.placementYM} IS NULL) AND (${t.placementYM} IS NULL) = (${t.orientationDeg} IS NULL)`,
+    ),
+    verif('emplacement', 'orientation', sql`${t.orientationDeg} IS NULL OR (${t.orientationDeg} >= 0 AND ${t.orientationDeg} < 360)`),
+    verif(
+      'emplacement',
+      'placement_distance',
+      sql`${t.placementXM} IS NULL OR ${t.placementYM} IS NULL OR ${t.placementXM} * ${t.placementXM} + ${t.placementYM} * ${t.placementYM} <= 25000000`,
+    ),
     verif('emplacement', 'longueur_positive', sql`${t.longueurM} > 0`),
     verif('emplacement', 'largeur_positive', sql`${t.largeurM} IS NULL OR ${t.largeurM} > 0`),
     verif(
@@ -207,6 +238,49 @@ export const emplacement = pgTable(
     /** Reconnaissance vocale : « planche 3 du tunnel 2 » → code. */
     index('emplacement_ferme_code_idx').on(t.fermeId, t.code),
     index('emplacement_zone_idx').on(t.zoneId),
+  ],
+);
+
+/**
+ * Bâtiment de la ferme (T28a, Q31) : serre, hangar, magasin. Un rectangle toujours placé dans le
+ * repère local de la ferme (centre, orientation = cap de la longueur). Une serre abrite au plus
+ * une zone de sa ferme ; une zone abritée n'a pas de contour (déclencheurs, migration 0027).
+ * Bornes : celles de validerPlacement (@planif/core).
+ */
+export const batiment = pgTable(
+  'batiment',
+  {
+    id: idDe<'Batiment'>('id').primaryKey(),
+    fermeId: fermeId(),
+    nom: text('nom').notNull(),
+    type: text('type', { enum: TYPES_BATIMENT }).notNull(),
+    longueurM: decimal('longueur_m').notNull(),
+    largeurM: decimal('largeur_m').notNull(),
+    hauteurM: decimal('hauteur_m').notNull(),
+    centreXM: decimal('centre_x_m').notNull(),
+    centreYM: decimal('centre_y_m').notNull(),
+    orientationDeg: decimal('orientation_deg').notNull(),
+    /** Zone de culture abritée, de la même ferme (clé étrangère composée). */
+    zoneId: idDe<'Zone'>('zone_id'),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('batiment', 'type', parmi(t.type, TYPES_BATIMENT)),
+    verif('batiment', 'longueur', sql`${t.longueurM} > 0 AND ${t.longueurM} <= 500`),
+    verif('batiment', 'largeur', sql`${t.largeurM} > 0 AND ${t.largeurM} <= 200`),
+    verif('batiment', 'hauteur', sql`${t.hauteurM} > 0 AND ${t.hauteurM} <= 30`),
+    verif('batiment', 'orientation', sql`${t.orientationDeg} >= 0 AND ${t.orientationDeg} < 360`),
+    verif('batiment', 'distance', sql`${t.centreXM} * ${t.centreXM} + ${t.centreYM} * ${t.centreYM} <= 25000000`),
+    foreignKey({
+      name: 'batiment_zone_meme_ferme_fk',
+      columns: [t.fermeId, t.zoneId],
+      foreignColumns: [zone.fermeId, zone.id],
+    }),
+    index('batiment_ferme_idx').on(t.fermeId),
+    /** Au plus un bâtiment non supprimé par zone. */
+    uniqueIndex('batiment_zone_actif_idx')
+      .on(t.zoneId)
+      .where(sql`${t.supprimeLe} IS NULL`),
   ],
 );
 

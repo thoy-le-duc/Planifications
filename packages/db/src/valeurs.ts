@@ -22,6 +22,7 @@ import type {
   StatutSerie,
   TypeAbri,
   TypeAncreSerie,
+  TypeBatiment,
   TypeEvenement,
   UniteRecolte,
 } from '@planif/core';
@@ -36,6 +37,7 @@ function toutes<T extends string>() {
 }
 
 export const TYPES_ABRI = toutes<TypeAbri>()(['plein_champ', 'tunnel', 'serre', 'hors_sol']);
+export const TYPES_BATIMENT = toutes<TypeBatiment>()(['serre_tunnel', 'serre_chapelle', 'hangar', 'magasin', 'autre']);
 export const SORTES_EMPLACEMENT = toutes<SorteEmplacement>()(['planche', 'rang', 'gouttiere']);
 export const CATEGORIES_ESPECE = toutes<CategorieEspece>()([
   'legume',
@@ -96,6 +98,7 @@ export const TABLES_MODIFIABLES = toutes<Modification['table']>()([
   'ProduitPhyto',
   'Proposition',
   'TypeIntervention',
+  'Batiment',
 ]);
 
 /** Rôle d'un membre dans une ferme (T09). Pas d'union dans T01 : la liste fait foi. */
