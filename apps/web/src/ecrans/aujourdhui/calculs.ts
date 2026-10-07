@@ -173,7 +173,13 @@ function detailLu(l: Ligne): DetailLu | null {
   return null;
 }
 
-function evenementLu(l: Ligne): EvenementLu | null {
+/**
+ * Une ligne du journal telle que l'écran la lit : le detail en colonnes (`CHAMPS_DETAIL`). T13m :
+ * les écritures relisent une saisie par la même lecture (`COLONNES_DETAIL`, puis `evenementLu`).
+ */
+export type LigneJournal = Ligne;
+
+export function evenementLu(l: Ligne): EvenementLu | null {
   const detail = detailLu(l);
   if (detail === null) return null;
   const sorte = texteOuNul(l.remplace_sorte);
@@ -202,29 +208,39 @@ export type MaillonChaine = Pick<EvenementLu, 'id' | 'horodatage' | 'remplaceSor
  * son id sert de clé de chaîne, pour que deux corrections d'une même origine absente se
  * départagent quand même. Sur des chaînes complètes, même résultat que `EN_VIGUEUR` (SQL), dont
  * la journée se sert : l'historique ne lit qu'une fenêtre, la base juge sur tout le journal.
+ * T13m : un cycle (données corrompues) n'a rien en vigueur, ni ce qui y remonte, comme `chaines` ;
+ * l'équivalence avec `chaines` et `chaineDe` est vérifiée par comparaison aléatoire
+ * (chaine-unique.test.ts).
  */
 export function enVigueur<E extends MaillonChaine>(evenements: readonly E[]): E[] {
   const parId = new Map(evenements.map((e) => [e.id, e]));
-  const origines = new Map<string, string>();
-  const origineDe = (e: E): string => {
+  /** Origine de chaque événement déjà monté ; null : cycle (données corrompues), rien en vigueur. */
+  const origines = new Map<string, string | null>();
+  const origineDe = (e: E): string | null => {
     const connue = origines.get(e.id);
     if (connue !== undefined) return connue;
-    // Montée jusqu'au plus haut connu ; `vus` protège d'un cycle (données corrompues).
+    // Montée jusqu'au plus haut connu ; `vus` détecte un cycle : comme `chaines` (CHAINES), aucune
+    // origine n'est atteinte, ni pour le cycle ni pour ce qui y remonte.
     const chemin: string[] = [];
     const vus = new Set<string>();
     let courant = e;
+    let origine: string | null | undefined;
     for (;;) {
-      if (origines.has(courant.id)) break;
+      origine = origines.get(courant.id);
+      if (origine !== undefined) break;
       chemin.push(courant.id);
       vus.add(courant.id);
       const parent = courant.remplaceEvenementId === null ? undefined : parId.get(courant.remplaceEvenementId);
-      if (parent === undefined || vus.has(parent.id)) break;
+      if (parent === undefined) {
+        // Parent absent de la liste : son id sert de clé de chaîne.
+        origine = courant.remplaceEvenementId ?? courant.id;
+        break;
+      }
+      if (vus.has(parent.id)) {
+        origine = null;
+        break;
+      }
       courant = parent;
-    }
-    let origine = origines.get(courant.id);
-    if (origine === undefined) {
-      const parent = courant.remplaceEvenementId;
-      origine = parent !== null && !parId.has(parent) ? parent : courant.id;
     }
     for (const id of chemin) origines.set(id, origine);
     return origine;
@@ -235,6 +251,7 @@ export function enVigueur<E extends MaillonChaine>(evenements: readonly E[]): E[
   const retenue = new Map<string, E>();
   for (const e of evenements) {
     const o = origineDe(e);
+    if (o === null) continue;
     if (e.remplaceSorte === 'annulation') {
       annulees.add(o);
       continue;
@@ -248,7 +265,7 @@ export function enVigueur<E extends MaillonChaine>(evenements: readonly E[]): E[
   }
   return evenements.filter((e) => {
     const o = origineDe(e);
-    return !annulees.has(o) && retenue.get(o) === e;
+    return o !== null && !annulees.has(o) && retenue.get(o) === e;
   });
 }
 
@@ -405,6 +422,9 @@ const CHAMPS_DETAIL = [
   ['categorie', 'categorie'],
   ['type', 'type_intervention'],
 ] as const;
+
+/** Les champs du detail en colonnes, un `json_extract` chacun, pour `evenementLu` (une ligne seule). */
+export const COLONNES_DETAIL = CHAMPS_DETAIL.map(([chemin, colonne]) => `json_extract(detail, '$.${chemin}') AS ${colonne}`).join(', ');
 
 /**
  * Valeur d'un champ lu par une extraction à plusieurs chemins (tableau JSON), rendue comme

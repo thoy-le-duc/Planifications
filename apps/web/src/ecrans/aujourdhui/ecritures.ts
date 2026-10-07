@@ -26,9 +26,9 @@ import {
   type UniteRecolte,
 } from '@planif/core';
 import type { EvenementPrepare, OrdreEcriture, PorteDonnees, SaisieEvenement, VerificationEcriture } from '@planif/sync';
-import { DejaFait } from '@planif/sync/fait-unique';
+import { chaineDe, DejaFait, type Lire } from '@planif/sync/fait-unique';
 import { annoncerSaisie } from './cache.ts';
-import { listeTextes, type Culture, type EvenementLu } from './calculs.ts';
+import { COLONNES_DETAIL, evenementLu, listeTextes, type Culture, type EvenementLu, type LigneJournal } from './calculs.ts';
 
 const nouvelId = creerGenerateurId({
   horloge: () => Date.now(),
@@ -315,44 +315,14 @@ async function mouvementDuRemplacement(
  */
 export class SaisiePlusEnVigueur extends Error {}
 
-type Lire = Parameters<VerificationEcriture>[0];
-
 /**
- * T13l : la chaîne d'un événement (même règle que `enVigueur` de ./calculs.ts et la vue
- * evenements_en_vigueur) : origine (montée par remplace_evenement_id jusqu'à une ligne qui porte
- * origine_id, ou jusqu'au plus haut connu), puis tous ses remplacements (par origine_id, et en
- * descendant par remplace_evenement_id : index `remplacement`). Rend le nombre d'annulations et
- * la ligne en vigueur : la correction la plus récente (horodatage, puis id), à défaut l'origine.
- * Paramètres : id, ferme (×5) ; aucune ligne d'une autre ferme n'est lue.
+ * Ligne en vigueur de la chaîne de `id` (`chaineDe`, la règle de la journée) ; lève
+ * SaisiePlusEnVigueur si la chaîne est annulée.
  */
-const SQL_CHAINE_DE = `WITH RECURSIVE
-  haut(id, parent, origine, n) AS (
-    SELECT id, remplace_evenement_id, origine_id, 0 FROM evenement WHERE id = ? AND +ferme_id = ?
-    UNION ALL
-    SELECT p.id, p.remplace_evenement_id, p.origine_id, h.n + 1 FROM haut h JOIN evenement p ON p.id = h.parent
-    WHERE h.origine IS NULL AND +p.ferme_id = ? AND h.n < 1000
-  ),
-  racine(id) AS (
-    SELECT CASE WHEN origine IS NOT NULL THEN origine WHEN parent IS NULL THEN id ELSE parent END FROM haut ORDER BY n DESC LIMIT 1
-  ),
-  membre(id) AS (
-    SELECT id FROM racine
-    UNION SELECT e.id FROM evenement e WHERE e.remplace_evenement_id >= '' AND +e.ferme_id = ? AND e.origine_id = (SELECT id FROM racine)
-    UNION SELECT e.id FROM evenement e JOIN membre m ON e.remplace_evenement_id = m.id WHERE +e.ferme_id = ?
-  ),
-  ligne AS (SELECT e.id, e.remplace_sorte, e.horodatage FROM evenement e WHERE e.id IN (SELECT id FROM membre) AND +e.ferme_id = ?)
-SELECT
-  (SELECT count(*) FROM ligne WHERE remplace_sorte = 'annulation') AS annulations,
-  coalesce(
-    (SELECT id FROM ligne WHERE remplace_sorte = 'correction' ORDER BY horodatage DESC, id DESC LIMIT 1),
-    (SELECT id FROM ligne WHERE remplace_sorte IS NULL AND id = (SELECT id FROM racine))
-  ) AS en_vigueur`;
-
-/** Ligne en vigueur de la chaîne de `id` ; lève SaisiePlusEnVigueur si la chaîne est annulée. */
 async function enVigueurDeLaChaine(lire: Lire, fermeId: string, id: string): Promise<string | null> {
-  const r = (await lire<{ annulations: number; en_vigueur: string | null }>(SQL_CHAINE_DE, [id, fermeId, fermeId, fermeId, fermeId, fermeId]))[0];
-  if (r === undefined || r.annulations > 0) throw new SaisiePlusEnVigueur('cette saisie a déjà été annulée');
-  return r.en_vigueur;
+  const c = await chaineDe(lire, fermeId, id);
+  if (c.annulee) throw new SaisiePlusEnVigueur('cette saisie n’est plus en vigueur');
+  return c.enVigueur;
 }
 
 /** Vérification dans la transaction : `ev` est toujours la ligne en vigueur de sa chaîne (T13l). */
@@ -362,45 +332,19 @@ function encoreEnVigueur(ctx: ContexteEcriture, ev: EvenementLu): VerificationEc
   };
 }
 
-type Intervention = Extract<EvenementLu['detail'], { readonly type: 'intervention' }>;
-
-/** La ligne `id` du journal, telle que l'écran la garde ; null si absente ou illisible. */
+/**
+ * La ligne `id` du journal lue comme l'écran la lit (`evenementLu` de ./calculs.ts) ; null si
+ * absente ou écartée par l'écran (detail illisible, étape ou catégorie inconnue, libellé vide).
+ */
 async function evenementDuJournal(ctx: ContexteEcriture, id: string): Promise<EvenementLu | null> {
   const l = (
-    await ctx.porte.lire<{ id: string; type: string; date: string; horodatage: string; serie_id: string | null; campagne_id: string | null; remplace_sorte: string | null; remplace_evenement_id: string | null; detail: string | null }>(
-      'SELECT id, type, date, horodatage, serie_id, campagne_id, remplace_sorte, remplace_evenement_id, detail FROM evenement WHERE id = ? AND +ferme_id = ?',
+    await ctx.porte.lire<LigneJournal>(
+      `SELECT id, type, date, horodatage, serie_id, campagne_id, remplace_sorte, remplace_evenement_id, ${COLONNES_DETAIL}
+       FROM evenement WHERE id = ? AND +ferme_id = ? AND json_valid(detail)`,
       [id, ctx.fermeId],
     )
   )[0];
-  if (l === undefined) return null;
-  let d: Readonly<Record<string, unknown>>;
-  try {
-    const brut: unknown = JSON.parse(l.detail ?? 'null');
-    if (typeof brut !== 'object' || brut === null) return null;
-    d = brut as Readonly<Record<string, unknown>>;
-  } catch {
-    return null;
-  }
-  const texteOuNul = (v: unknown): string | null => (typeof v === 'string' ? v : null);
-  let detail: EvenementLu['detail'];
-  if (l.type === 'realise' && typeof d.etape === 'string') {
-    detail = { type: 'realise', etape: d.etape as EtapeRealisee, quantiteReelle: typeof d.quantiteReelle === 'number' ? d.quantiteReelle : null };
-  } else if (l.type === 'recolte' && typeof d.quantite === 'number' && typeof d.unite === 'string') {
-    detail = { type: 'recolte', quantite: d.quantite, unite: d.unite as UniteRecolte, categorie: texteOuNul(d.categorie) };
-  } else if (l.type === 'intervention' && typeof d.categorie === 'string' && typeof d.type === 'string') {
-    detail = { type: 'intervention', categorie: d.categorie as Intervention['categorie'], libelle: d.type };
-  } else return null;
-  const sorte = l.remplace_sorte;
-  return {
-    id: l.id,
-    date: l.date,
-    horodatage: l.horodatage,
-    serieId: l.serie_id,
-    campagneId: l.campagne_id,
-    remplaceSorte: sorte === 'correction' || sorte === 'annulation' ? sorte : null,
-    remplaceEvenementId: l.remplace_evenement_id,
-    detail,
-  };
+  return l === undefined ? null : evenementLu(l);
 }
 
 /**
