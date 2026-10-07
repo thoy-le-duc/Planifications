@@ -54,7 +54,7 @@ describe('T13k : « Fait » d’avant la base notés avec l’instantané', () =
   });
 
   it('message : dit « enregistré », sans nom de culture', () => {
-    expect(texteFaitsAbandonnes(1)).toMatch(/1 « Fait » tapé .*n’a pas été enregistré /);
-    expect(texteFaitsAbandonnes(3)).toMatch(/3 « Fait » tapés .*n’ont pas été enregistrés/);
+    expect(texteFaitsAbandonnes(1)).toBe('1 « Fait » tapé avant l’ouverture n’a peut-être pas été enregistré : vérifiez la liste.');
+    expect(texteFaitsAbandonnes(3)).toBe('3 « Fait » tapés avant l’ouverture n’ont peut-être pas été enregistrés : vérifiez la liste.');
   });
 });

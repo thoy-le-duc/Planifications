@@ -112,12 +112,11 @@ const TEXTE_FILE = 'Saisies précédentes en cours d’enregistrement…';
 const AVIS_PLUS_EN_VIGUEUR = 'Saisie déjà annulée ou corrigée ailleurs : rien de plus n’est enregistré.';
 
 /**
- * T13k : « Fait » tapés avant la base et jamais écrits (autre ferme, autre compte, appli fermée
- * avant la base). Sans nom de culture : le message peut s'afficher à un autre compte.
+ * T13k : « Fait » tapés avant la base sans écriture sûre (autre ferme, autre compte, appli fermée
+ * avant la fin de leur tour : « peut-être »). Sans nom de culture : un autre compte peut le lire.
  */
 export function texteFaitsAbandonnes(n: number): string {
-  const un = n === 1;
-  return `${un ? '1 « Fait » tapé' : `${String(n)} « Fait » tapés`} avant l’ouverture des données de ce téléphone ${un ? 'n’a' : 'n’ont'} pas été ${un ? 'enregistré' : 'enregistrés'} (ferme ou compte changé, ou appli fermée entre temps) : rien n’a été écrit. Vérifiez ces tâches et touchez « Fait » de nouveau si besoin.`;
+  return `${n === 1 ? '1 « Fait » tapé' : `${String(n)} « Fait » tapés`} avant l’ouverture ${n === 1 ? 'n’a' : 'n’ont'} peut-être pas été ${n === 1 ? 'enregistré' : 'enregistrés'} : vérifiez la liste.`;
 }
 
 const deux = (n: number) => String(n).padStart(2, '0');
@@ -656,8 +655,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   /**
    * T13k : la porte, pour les écritures en file (un « Fait » tapé avant la base s'écrit après).
    * `attentePorte` : la file attend la porte (créée au premier « Fait » d'avant la base).
-   * `avantBase` : « Fait » d'avant la base qui attendent encore la porte (noté avec l'instantané) ;
-   * la porte venue, chacun quitte le compte (il s'écrit à son tour, sur la bonne ferme).
+   * `avantBase` : « Fait » d'avant la base dont le tour n'est pas fini (noté avec l'instantané) ;
+   * chacun quitte le compte à la fin de son tour, jamais avant : au pire, un message de trop.
    * `demonte` : écran remplacé ou quitté ; plus aucun « Fait » ne reçoit la porte.
    */
   const porteActuelle = useRef(porte);
@@ -914,11 +913,6 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
           abandonne = true;
           return null;
         }
-        if (avantLaBase) {
-          // La porte est là : ce « Fait » n'attend plus, il quitte le compte noté.
-          avantBase.current--;
-          noterEnAttente();
-        }
         const t = await lireTacheCiblee(venue, fermeId, jourCourant(), cle);
         if (t === null) {
           setAvis('Déjà notée depuis un autre téléphone : rien de plus n’est enregistré.');
@@ -971,6 +965,10 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         reste.delete(cle);
         return reste;
       });
+      // Quitte le compte noté une fois son tour fini (écrit, déjà fait, changé ou en erreur dite) :
+      // appli fermée avant, le lancement suivant le signale.
+      avantBase.current--;
+      noterEnAttente();
     });
   }
 
