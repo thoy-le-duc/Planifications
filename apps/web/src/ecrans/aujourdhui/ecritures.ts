@@ -321,7 +321,7 @@ export class SaisiePlusEnVigueur extends Error {}
  */
 async function enVigueurDeLaChaine(lire: Lire, fermeId: string, id: string): Promise<string | null> {
   const c = await chaineDe(lire, fermeId, id);
-  if (c.annulee) throw new SaisiePlusEnVigueur('cette saisie a déjà été annulée');
+  if (c.annulee) throw new SaisiePlusEnVigueur('cette saisie n’est plus en vigueur');
   return c.enVigueur;
 }
 
