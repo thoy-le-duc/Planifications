@@ -21,6 +21,17 @@
  * est refusé (même id, autres valeurs). Une ligne d'une autre ferme : de même (T10d). Une ligne ne
  * change jamais de ferme.
  *
+ * Un PUT qui reprend l'id d'une ligne d'une autre ferme (ou de la bibliothèque) est refusé « cette
+ * saisie existe déjà avec d'autres valeurs », comme pour les séries (serie.ts) : la réponse dit
+ * seulement qu'un tel identifiant existe (UUID v7 tiré au hasard, rien de sa ferme ni de ses valeurs).
+ *
+ * Plafonds (structure-lignes.ts) : les règles sont rejouées sur la ligne complète, si bien qu'une
+ * ligne existante qui en dépasse un (écrite avant eux, ou directement en base) ne peut plus être
+ * modifiée depuis le téléphone tant qu'on ne ramène pas la valeur sous le plafond dans le même envoi.
+ *
+ * Une plantation retient sa place et son espèce tant qu'elle est en place : sans date d'arrachage,
+ * ou arrachage prévu après la date du jour (fuseau de la ferme).
+ *
  * Le serveur ne croit jamais le téléphone : chaque identifiant reçu est relu en base (requêtes
  * paramétrées ; tables et colonnes sont des constantes de ce fichier), la ferme est filtrée dans
  * la requête même du verrou (FOR SHARE, FOR UPDATE), et tout se fait dans la transaction du lot
@@ -169,16 +180,23 @@ const seriesActives = (colonne: 'espece_id' | 'variete_id' | 'saison_id', id: st
   sql`SELECT 1 FROM serie s WHERE s.${sql.identifier(colonne)} = ${id}::uuid AND s.ferme_id = ${fermeId}::uuid
         AND s.supprime_le IS NULL AND s.statut IN ${STATUTS_ACTIFS}`;
 
-/** Plantations en place (sans date d'arrachage), non supprimées, de la ferme, dont `colonne` vaut `id`. */
-const plantationsEnPlace = (colonne: 'espece_id' | 'variete_id', id: string, fermeId: string): SQL =>
+/**
+ * Plantation `p` encore en place : sans date d'arrachage, ou arrachage prévu après la date du jour
+ * (relecture T10s), le jour étant celui du fuseau de la ferme à l'heure du serveur (`maintenant`).
+ */
+const enPlace = (fermeId: string, maintenant: Date): SQL =>
+  sql`(p.date_arrachage IS NULL OR p.date_arrachage > (${maintenant}::timestamptz AT TIME ZONE (SELECT f.fuseau_horaire FROM ferme f WHERE f.id = ${fermeId}::uuid))::date)`;
+
+/** Plantations en place, non supprimées, de la ferme, dont `colonne` vaut `id`. */
+const plantationsEnPlace = (colonne: 'espece_id' | 'variete_id', id: string, fermeId: string, maintenant: Date): SQL =>
   sql`SELECT 1 FROM plantation p WHERE p.${sql.identifier(colonne)} = ${id}::uuid AND p.ferme_id = ${fermeId}::uuid
-        AND p.supprime_le IS NULL AND p.date_arrachage IS NULL`;
+        AND p.supprime_le IS NULL AND ${enPlace(fermeId, maintenant)}`;
 
 /**
  * Suppression douce (décisions du chef) : refusée tant que la ligne sert encore. null si elle est
  * libre, sinon le refus qui dit pourquoi.
  */
-async function verifierLibre(tx: TransactionDb, table: TableStructure, id: string, fermeId: string): Promise<Refus | null> {
+async function verifierLibre(tx: TransactionDb, table: TableStructure, id: string, fermeId: string, maintenant: Date): Promise<Refus | null> {
   switch (table) {
     case 'emplacement': {
       // Occupation non supprimée d'une série active ou d'une plantation en place ; une occupation
@@ -190,7 +208,7 @@ async function verifierLibre(tx: TransactionDb, table: TableStructure, id: strin
             LEFT JOIN plantation p ON p.id = o.plantation_id AND p.ferme_id = o.ferme_id
             WHERE o.emplacement_id = ${id}::uuid AND o.ferme_id = ${fermeId}::uuid AND o.supprime_le IS NULL
               AND ((s.id IS NOT NULL AND s.supprime_le IS NULL AND s.statut IN ${STATUTS_ACTIFS})
-                OR (p.id IS NOT NULL AND p.supprime_le IS NULL AND p.date_arrachage IS NULL))`,
+                OR (p.id IS NOT NULL AND p.supprime_le IS NULL AND ${enPlace(fermeId, maintenant)}))`,
       );
       return occupe ? invalide('cet emplacement est occupé par une culture prévue, en cours ou en place : libérez-le avant de le supprimer', fermeId) : null;
     }
@@ -201,11 +219,11 @@ async function verifierLibre(tx: TransactionDb, table: TableStructure, id: strin
       return pleine ? invalide('cette zone contient encore des emplacements ou des sous-zones : supprimez-les d’abord', fermeId) : null;
     }
     case 'espece': {
-      const utilisee = (await existe(tx, seriesActives('espece_id', id, fermeId))) || (await existe(tx, plantationsEnPlace('espece_id', id, fermeId)));
+      const utilisee = (await existe(tx, seriesActives('espece_id', id, fermeId))) || (await existe(tx, plantationsEnPlace('espece_id', id, fermeId, maintenant)));
       return utilisee ? invalide('cette espèce est cultivée dans une série prévue ou en cours, ou une plantation en place', fermeId) : null;
     }
     case 'variete': {
-      const utilisee = (await existe(tx, seriesActives('variete_id', id, fermeId))) || (await existe(tx, plantationsEnPlace('variete_id', id, fermeId)));
+      const utilisee = (await existe(tx, seriesActives('variete_id', id, fermeId))) || (await existe(tx, plantationsEnPlace('variete_id', id, fermeId, maintenant)));
       return utilisee ? invalide('cette variété est cultivée dans une série prévue ou en cours, ou une plantation en place', fermeId) : null;
     }
     case 'famille': {
@@ -226,7 +244,7 @@ async function verifierLibre(tx: TransactionDb, table: TableStructure, id: strin
  * la colonne change (une référence supprimée depuis ne bloque pas une modification sans rapport).
  * Ensuite, une suppression douce exige une ligne libre. null si tout va bien.
  */
-async function verifierEnBase(tx: TransactionDb, table: TableStructure, l: Ligne, avant: Ligne | null): Promise<Refus | null> {
+async function verifierEnBase(tx: TransactionDb, table: TableStructure, l: Ligne, avant: Ligne | null, maintenant: Date): Promise<Refus | null> {
   const f = String(l.ferme_id);
   const retablie = avant?.supprime_le != null && l.supprime_le === null;
   const change = (c: string): boolean => avant === null || retablie || JSON.stringify(l[c] ?? null) !== JSON.stringify(avant[c] ?? null);
@@ -296,7 +314,7 @@ async function verifierEnBase(tx: TransactionDb, table: TableStructure, l: Ligne
   }
   if (refus !== null) return refus;
   const suppression = avant !== null && avant.supprime_le == null && l.supprime_le !== null;
-  return suppression ? verifierLibre(tx, table, String(l.id), f) : null;
+  return suppression ? verifierLibre(tx, table, String(l.id), f, maintenant) : null;
 }
 
 /** Ligne d'historique de `ligneId` (après écriture) ; `avant` : texte JSON de la ligne d'avant. */
@@ -362,10 +380,10 @@ async function creer(tx: TransactionDb, ctx: Contexte, e: EcritureStructureRecue
     return invalide(PRECISION_EXISTE_DEJA, (await deLaFerme(tx, e.table, id, fermeId)) ? fermeId : null);
   }
 
-  const refus = await verifierEnBase(tx, e.table, ligne, null);
+  const maintenant = ctx.maintenant();
+  const refus = await verifierEnBase(tx, e.table, ligne, null, maintenant);
   if (refus !== null) return refus;
 
-  const maintenant = ctx.maintenant();
   if (!(await inserer(tx, e.table, ligne, maintenant))) {
     // Écrite entre-temps par un envoi concurrent : même règle que le renvoi.
     if ((await identique(tx, e.table, ligne, id)) === true) return null;
@@ -408,10 +426,10 @@ async function modifier(tx: TransactionDb, ctx: Contexte, e: EcritureStructureRe
 
   if ((await identique(tx, e.table, ligne, id)) === true) return null;
 
-  const refus = await verifierEnBase(tx, e.table, ligne, avant);
+  const maintenant = ctx.maintenant();
+  const refus = await verifierEnBase(tx, e.table, ligne, avant, maintenant);
   if (refus !== null) return refus;
 
-  const maintenant = ctx.maintenant();
   await tx.execute(
     sql`UPDATE ${sql.identifier(e.table)} t SET (${sql.join(
       COLONNES_STRUCTURE[e.table].map((c) => sql.identifier(c)),
