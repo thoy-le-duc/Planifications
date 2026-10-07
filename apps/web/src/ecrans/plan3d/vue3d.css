@@ -262,3 +262,28 @@
 .plan3d-estompe .plan3d-code {
   color: var(--couleur-tertiaire);
 }
+
+/* Vol de caméra (T29) : « Aller à <zone> » et « Vue d'ensemble ». */
+.plan3d-bouton {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--couleur-foret);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-family: var(--police-texte);
+  font-weight: 700;
+  font-size: 13px;
+  text-align: left;
+}
+
+.plan3d-cases .plan3d-bouton {
+  width: 100%;
+  margin-bottom: var(--espace-xs);
+}
+
+.plan3d-outils .plan3d-bouton {
+  min-height: 40px;
+  margin-left: auto;
+  white-space: nowrap;
+}
