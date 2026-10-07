@@ -25,7 +25,12 @@
  *     · contour non nul sur une zone abritée par un bâtiment non supprimé ; bâtiment rattaché à
  *       une zone qui a un contour (sauf contour effacé plus haut dans le même appel) ; second
  *       bâtiment non supprimé sur une zone ;
- *     · origine déplacée alors qu'elle est posée et qu'un placement existe dans la ferme.
+ *     · origine déplacée ou effacée alors qu'un placement non supprimé existe dans la ferme ;
+ *     · AUCUN placement sans origine (décision du chef, T28s) : bâtiment, contour non nul ou
+ *       placement d'emplacement non nul refusé tant que `ferme.origine_plan` est nulle ; dans un
+ *       même appel, origine puis placement passe (changements jugés dans l'ordre). Ainsi
+ *       l'annulation en ordre inverse (supprimer le bâtiment, puis effacer l'origine) passe ici
+ *       comme au serveur.
  * - Bâtiment : `id` inconnu localement → création dans la ferme de la porte (tous les champs
  *   requis) ; connu → modification des seules colonnes données. Annuler une création = suppression
  *   douce (`supprime_le` = maintenant de la porte, ISO UTC) : le serveur n'accepte pas de DELETE.
@@ -154,7 +159,7 @@ describe('T28s : la porte écrit le placement, et rend de quoi l’annuler', () 
     const r = (sql: string, p: readonly unknown[]) => {
       base.recevoir(sql, p);
     };
-    r(`INSERT INTO ferme (id, nom, fuseau_horaire, position, origine_plan, unites) VALUES (?, 'Jardins de Garonne', 'Europe/Paris', NULL, NULL, '{"longueur":"m","masse":"kg"}')`, [FERME]);
+    r(`INSERT INTO ferme (id, nom, fuseau_horaire, position, origine_plan, unites) VALUES (?, 'Jardins de Garonne', 'Europe/Paris', NULL, ?, '{"longueur":"m","masse":"kg"}')`, [FERME, JSON.stringify(ORIGINE)]);
     r(`INSERT INTO ferme (id, nom, fuseau_horaire, position, origine_plan, unites) VALUES (?, 'Ferme voisine', 'Europe/Paris', NULL, ?, '{"longueur":"m","masse":"kg"}')`, [VOISINE, JSON.stringify(ORIGINE)]);
     r(`INSERT INTO membre (id, utilisateur_id, ferme_id, role, etat, supprime_le) VALUES ('m1', ?, ?, 'gerant', 'accepte', NULL)`, [GERANT, FERME]);
     r(`INSERT INTO membre (id, utilisateur_id, ferme_id, role, etat, supprime_le) VALUES ('m2', ?, ?, 'equipier', 'accepte', NULL)`, [EQUIPIER, FERME]);
@@ -233,6 +238,14 @@ describe('T28s : la porte écrit le placement, et rend de quoi l’annuler', () 
     const o = base.lireDirect<{ o: string | null }>('SELECT origine_plan AS o FROM ferme WHERE id = ?', [id])[0]?.o;
     return typeof o === 'string' ? JSON.parse(o) : o;
   };
+  /** Ferme sans placement ni origine (nouvelle ferme) : bâtiments supprimés, contours et placements effacés, origine nulle. */
+  const fermeVierge = (): void => {
+    base.recevoir(`UPDATE batiment SET supprime_le = ? WHERE ferme_id = ?`, [INSTANT.toISOString(), FERME]);
+    base.recevoir(`UPDATE zone SET contour = NULL WHERE ferme_id = ?`, [FERME]);
+    base.recevoir(`UPDATE emplacement SET placement_x_m = NULL, placement_y_m = NULL, orientation_deg = NULL WHERE ferme_id = ?`, [FERME]);
+    base.recevoir(`UPDATE ferme SET origine_plan = NULL WHERE id = ?`, [FERME]);
+  };
+
   /** Instantané de toutes les tables touchées par un placement, pour vérifier que rien n'a bougé. */
   const instantane = (): unknown => ({
     batiment: base.lireDirect('SELECT * FROM batiment ORDER BY id'),
@@ -304,7 +317,8 @@ describe('T28s : la porte écrit le placement, et rend de quoi l’annuler', () 
       expect(contourLu(ZONE_PLACEE)).toEqual(JSON.parse(CONTOUR_RANGE));
     });
 
-    it('poser l’origine et le premier bâtiment ensemble, puis annuler : bâtiment supprimé PUIS origine nulle (ordre inverse)', async () => {
+    it('ferme vierge : poser l’origine et le premier bâtiment ensemble, puis annuler : bâtiment supprimé PUIS origine nulle (ordre inverse)', async () => {
+      fermeVierge();
       const annulation = await placer([
         { sorte: 'origine', origine: ORIGINE },
         { sorte: 'batiment', id: NOUVELLE_SERRE, valeurs: SERRE_M3 },
@@ -439,10 +453,34 @@ describe('T28s : la porte écrit le placement, et rend de quoi l’annuler', () 
       );
     });
 
-    it('déplacer l’origine alors qu’un placement existe : rejet ; la poser quand elle est nulle : accepté', async () => {
+    it('déplacer ou effacer l’origine alors qu’un placement existe : rejet', async () => {
+      await rejete([{ sorte: 'origine', origine: { latitude: 45, longitude: 2 } }], /origine|point de départ/iu);
+      await rejete([{ sorte: 'origine', origine: null }], /origine|point de départ/iu);
+    });
+
+    it('ferme vierge : poser l’origine seule est accepté', async () => {
+      fermeVierge();
       await placer([{ sorte: 'origine', origine: ORIGINE }]);
       expect(origine()).toEqual(ORIGINE);
-      await rejete([{ sorte: 'origine', origine: { latitude: 45, longitude: 2 } }], /origine|point de départ/iu);
+    });
+
+    it.each([
+      ['créer un bâtiment', { sorte: 'batiment', id: NOUVELLE_SERRE, valeurs: SERRE_M3 }],
+      ['donner un contour à une zone', { sorte: 'zone', id: ZONE, contour: CARRE }],
+      ['placer une planche', { sorte: 'emplacement', id: PLANCHE, placement: { x: 1, y: 1, orientation_deg: 0 } }],
+    ] as const)('sans origine, %s : rejet qui parle de l’origine, rien d’écrit (décision du chef)', async (_cas, changement) => {
+      fermeVierge();
+      await rejete([changement], /origine|point de départ/iu);
+    });
+
+    it('sans origine, placement PUIS origine dans le même appel : rejet (jugé dans l’ordre)', async () => {
+      fermeVierge();
+      await rejete([{ sorte: 'batiment', id: NOUVELLE_SERRE, valeurs: SERRE_M3 }, { sorte: 'origine', origine: ORIGINE }], /origine|point de départ/iu);
+    });
+
+    it('effacer l’origine alors qu’il reste un placement après celui qu’on supprime : rejet', async () => {
+      // SERRE supprimée, mais ZONE_PLACEE garde son contour et PLANCHE_PLACEE sa position.
+      await rejete([{ sorte: 'batiment', id: SERRE, valeurs: { supprime_le: INSTANT.toISOString() } }, { sorte: 'origine', origine: null }], /origine|point de départ/iu);
     });
 
     it('déplacer l’origine quand aucun placement n’existe encore : accepté', async () => {
@@ -473,6 +511,7 @@ describe('T28s : la porte écrit le placement, et rend de quoi l’annuler', () 
     });
 
     it('l’origine posée est celle de la ferme de la porte, jamais celle de la voisine', async () => {
+      fermeVierge();
       await placer([{ sorte: 'origine', origine: { latitude: 43, longitude: 1 } }]);
       expect(origine(FERME)).toEqual({ latitude: 43, longitude: 1 });
       expect(origine(VOISINE)).toEqual(ORIGINE);

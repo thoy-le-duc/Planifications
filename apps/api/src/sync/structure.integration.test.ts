@@ -1404,6 +1404,12 @@ decrireAvecBase('T10s')('T10s : POST /sync/upload accepte le parcellaire et le c
   // structure-placement.integration.test.ts.
 
   describe('T28a (relecture B2) : lignes placées et colonnes du placement', () => {
+    // Décision du chef (T28s) : aucun placement sans origine. La ferme de ce fichier reçoit donc
+    // son origine avant les placements de ce bloc.
+    beforeAll(async () => {
+      await base.pool.query(`UPDATE ferme SET origine_plan = $2::jsonb WHERE id = $1`, [ferme, JSON.stringify({ latitude: 44, longitude: 1.5 })]);
+    });
+
     const CONTOUR = [
       { x: 0, y: 0 },
       { x: 20, y: 0 },
@@ -1552,10 +1558,9 @@ decrireAvecBase('T10s')('T10s : POST /sync/upload accepte le parcellaire et le c
       expect((await refusSynchro(voisin)).at(-1)?.ferme_id, 'ferme nulle (T10d)').toBeNull();
     });
 
-    it('PATCH de ferme.origine_plan : posée tant qu’elle est nulle (T28s), puis figée puisque la ferme a des placements', async () => {
+    it('PATCH de ferme.origine_plan : renvoi identique accepté, déplacement refusé puisque la ferme a des placements (T28s)', async () => {
       const lire = async () => (await base.pool.query<{ o: unknown }>(`SELECT origine_plan AS o FROM ferme WHERE id = $1`, [ferme])).rows[0]?.o;
       await zonePlacee();
-      expect(await lire(), 'la ferme de ce fichier n’a pas d’origine au départ').toBeNull();
       await accepte([patch('ferme', ferme, { origine_plan: JSON.stringify({ latitude: 44, longitude: 1.5 }) })]);
       expect(await lire()).toEqual({ latitude: 44, longitude: 1.5 });
       const r = await lot([patch('ferme', ferme, { origine_plan: JSON.stringify({ latitude: 45, longitude: 2 }) })]);

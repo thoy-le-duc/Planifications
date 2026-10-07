@@ -35,9 +35,11 @@
  * Créer une zone ou une planche SANS placement, ou modifier une ligne placée sans toucher à son
  * placement, reste ouvert à tout membre actif (T10s).
  *
- * Origine (Q31) : `origine_plan` s'écrit si elle est nulle, ou si la ferme n'a encore AUCUN
- * placement (bâtiment non supprimé, zone non supprimée avec contour, emplacement non supprimé
- * placé). Sinon → 'ecriture_invalide', inchangée. Renvoi de la même valeur : accepté, rien
+ * Origine (Q31, décision du chef en T28s) : AUCUN placement sans origine. Un bâtiment, un
+ * contour non nul ou un placement d'emplacement non nul est refusé ('ecriture_invalide', message
+ * qui parle de l'origine) tant que `ferme.origine_plan` est nulle. `origine_plan` ne se modifie ou
+ * ne s'efface que si la ferme n'a AUCUN placement (bâtiment non supprimé, zone non supprimée avec
+ * contour, emplacement non supprimé placé). Sinon → 'ecriture_invalide', inchangée. Renvoi de la même valeur : accepté, rien
  * d'écrit. Les écritures d'un lot sont jugées dans l'ordre : un bâtiment écrit plus haut dans le
  * lot est un placement qui fige l'origine.
  *
@@ -756,7 +758,7 @@ decrireAvecBase('T28s')('T28s : POST /sync/upload accepte le placement réel du 
     });
 
     it('le même envoi (bâtiment, planche déplacée, contour, origine) par le gérant : accepté', async () => {
-      const f = await nouvelleFerme(null);
+      const f = await nouvelleFerme(ORIGINE);
       const z = await zoneEn(f);
       const e = await plancheEn(f, z, { x: 2, y: 0, o: 0 });
       const zc = await zoneEn(f);
@@ -1062,11 +1064,51 @@ decrireAvecBase('T28s')('T28s : POST /sync/upload accepte le placement réel du 
       expect((await ligne('ferme', f))?.origine_plan).toEqual(nouvelle);
     });
 
-    it('origine nulle alors que des placements existent (écrits avant T28s) : posée', async () => {
-      const f = await nouvelleFerme(null);
-      await batimentEn(f);
-      await accepte([origine(f, ORIGINE)]);
-      expect((await ligne('ferme', f))?.origine_plan).toEqual(ORIGINE);
+    describe('aucun placement sans origine (décision du chef, T28s)', () => {
+      it.each([
+        ['PUT d’un bâtiment', (f: string) => Promise.resolve(putBatiment({}, f))],
+        ['PUT d’une zone avec contour', (f: string) => Promise.resolve(putZone({ contour: texte(CARRE) }, f))],
+        ['PATCH du contour d’une zone', async (f: string) => patch('zone', await zoneEn(f), { contour: texte(CARRE) })],
+        ['PUT d’une planche placée', async (f: string) => putEmplacement(await zoneEn(f), { placement_x_m: 1, placement_y_m: 1, orientation_deg: 0 }, f)],
+        ['PATCH qui place une planche', async (f: string) => patch('emplacement', await plancheEn(f, await zoneEn(f)), { placement_x_m: 1, placement_y_m: 1, orientation_deg: 0 })],
+      ])('ferme sans origine, %s : refusé, message qui parle de l’origine, rien d’écrit', async (_cas, fabrique) => {
+        const f = await nouvelleFerme(null);
+        const e = await fabrique(f);
+        await refuseAvecMessage([e], e, /origine|point de départ/iu);
+      });
+
+      it('ferme sans origine, placement PUIS origine dans le même lot : refusé (jugé dans l’ordre)', async () => {
+        const f = await nouvelleFerme(null);
+        const b = putBatiment({}, f);
+        await refuseEnEntier([b, origine(f, ORIGINE)], b, 'ecriture_invalide');
+        expect((await ligne('ferme', f))?.origine_plan).toBeNull();
+      });
+
+      it('ferme sans origine : créer une zone sans contour et une planche sans placement reste accepté', async () => {
+        const f = await nouvelleFerme(null);
+        const z = putZone({}, f);
+        await accepte([z, putEmplacement(z.id, {}, f)]);
+      });
+
+      it('annulation en ordre inverse (bâtiment supprimé, PUIS origine effacée) : acceptée', async () => {
+        const f = await nouvelleFerme(null);
+        const b = putBatiment({}, f);
+        await accepte([origine(f, ORIGINE), b]);
+        await accepte([supprimer('batiment', b.id), patch('ferme', f, { origine_plan: null })]);
+        expect((await ligne('ferme', f))?.origine_plan).toBeNull();
+        expect((await ligne('batiment', b.id))?.supprime_le).not.toBeNull();
+      });
+
+      it('effacer l’origine alors qu’il reste un placement (zone avec contour) après le bâtiment supprimé : refusé en entier', async () => {
+        const f = await nouvelleFerme(ORIGINE);
+        const b = await batimentEn(f);
+        await zoneEn(f, { contour: CARRE });
+        const s = supprimer('batiment', b);
+        const o = patch('ferme', f, { origine_plan: null });
+        await refuseEnEntier([s, o], o, 'ecriture_invalide');
+        expect((await ligne('batiment', b))?.supprime_le).toBeNull();
+        expect((await ligne('ferme', f))?.origine_plan).toEqual(ORIGINE);
+      });
     });
 
     it('le placement d’une AUTRE ferme ne fige pas celle-ci', async () => {
