@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-07 — T14b : importer ses fichiers en quelques gestes
+
+- **Fait** : écran d'import depuis l'onglet Ferme (« Importer un tableur ») : déposer, dire ce que c'est, faire correspondre colonnes et valeurs, aperçu, importer. Lecteur Excel et préparation dans un Web Worker, chargés à la demande ; parcellaire, cultures, assolements et séries ; écriture par lots de 500 (limites de la synchro), une série toujours avec ses planches ; modèle d'import gardé par ferme ; « Annuler cet import » lot par lot, refusé en clair si une ligne importée sert déjà. Ferme complète (T07) en 9 à 11 s, CPU ×4, aucune tâche longue ; JS de démarrage inchangé.
+- **Décidé** : rien d'inventé en douce : toute valeur par défaut (densité, marge, délais de retour, abri, longueur, pépinière…) est montrée « à vérifier » à l'aperçu ; créer une culture demande sa catégorie, si elle est pérenne et son unité. Séries dans T14b (sinon les critères tombaient) ; saison proposée = année suivante à partir de septembre ; zones reprises par nom. Relecture en deux passages : deux bloquants (valeurs inventées, annulation qui pouvait dire « annulé » à tort) corrigés et testés.
+- **Bloquant** : rien. Suites : T14e (refus du serveur visible dans l'historique de l'import, historique en IndexedDB, dates déduites à montrer). La redescente sur un second téléphone reste à vérifier en e2e:synchro.
+
 ## 2026-10-07 — T13m : une seule règle « chaîne d'une saisie »
 
 - **Fait** : la règle qui dit si une saisie est annulée et quelle version est en vigueur n'existe plus qu'à un endroit : `chaineDe` (dans `@planif/sync/fait-unique`) réutilise `chaines`, que lisent la journée et le « déjà fait » ; l'écran (`enVigueur`) s'y aligne. `ecritures.ts` n'a plus sa copie ; une saisie relue pour être annulée est lue comme à l'écran. Au passage, la montée d'une chaîne ne traverse plus une ligne d'une autre ferme (correctif d'isolement).

@@ -26,8 +26,8 @@ Le parcours du ticket T14 (déposer, dire ce que c'est, faire correspondre colon
 
 ## Critères d'acceptation
 
-- [ ] e2e : chaque fichier du jeu de T14 importé de bout en bout, dont quatre sans correction manuelle.
-- [ ] Import annulé : aucune trace ; modèle réutilisé sur un second fichier.
-- [ ] Ferme complète (jeu de T07 exporté en tableur) importée en moins de 60 s, CPU ralenti ×4, sans geler l'écran.
+- [x] e2e : chaque fichier du jeu de T14 importé de bout en bout, dont quatre sans correction manuelle.
+- [x] Import annulé : aucune trace ; modèle réutilisé sur un second fichier.
+- [x] Ferme complète (jeu de T07 exporté en tableur) importée en moins de 60 s, CPU ralenti ×4, sans geler l'écran.
 
 **Hors périmètre** : correspondance proposée par l'IA (phase 2).

@@ -5,7 +5,8 @@
   "type": "module",
   "description": "Moteur métier déterministe : aucune dépendance réseau ni IA.",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./import-xlsx": "./src/import/xlsx.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

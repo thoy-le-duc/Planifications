@@ -1,0 +1,622 @@
+/*
+ * Écran « Importer un tableur » (T14b), maquette « Import ». Aucune couleur en dur : jetons
+ * seulement (src/ui/jetons.ts). Vert forêt pour ce qui se touche, orange pour ce qui demande une
+ * décision, rouge conflit pour les erreurs. Toute cible fait au moins 48 px, les boutons
+ * principaux 56 px (gants) ; à 360 px de large, rien ne déborde.
+ */
+
+.imp-voile {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  background: var(--couleur-fond);
+}
+
+.imp-feuille {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+}
+
+/* ── En-tête et progression ───────────────────────────────────────────────────────────────── */
+
+.imp-tete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: max(18px, env(safe-area-inset-top)) 16px 10px;
+}
+
+.imp-tete-textes {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.imp-surtitre {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.imp-tete h2 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-stretch: 112%;
+  font-weight: 800;
+  font-size: 26px;
+  line-height: 1.05;
+}
+
+.imp-bouton-rond {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: var(--ombre-carte);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.imp-progression {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 0 16px 10px;
+}
+
+.imp-progression i {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--couleur-trait);
+}
+
+.imp-progression i.imp-fait {
+  background: var(--couleur-foret);
+}
+
+/* ── Corps (défile seul) ──────────────────────────────────────────────────────────────────── */
+
+.imp-corps {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.imp-carte {
+  background: var(--couleur-surface);
+  border-radius: var(--rayon-carte);
+  box-shadow: var(--ombre-carte);
+  padding: 12px 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.imp-fichier {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.imp-format {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--couleur-fond);
+  color: var(--couleur-foret);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.imp-fichier-textes,
+.imp-passe-textes,
+.imp-type-textes,
+.imp-colonne-source {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.imp-fichier-textes span,
+.imp-passe-textes span,
+.imp-type-textes span {
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.imp-alerte {
+  margin: 0;
+  padding: 12px 14px;
+  border-left: 6px solid var(--couleur-conflit);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-conflit);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.imp-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  box-shadow: var(--ombre-carte);
+}
+
+.imp-note-orange {
+  color: var(--couleur-texte-orange);
+  border-left: 6px solid var(--couleur-orange);
+}
+
+.imp-aide {
+  margin: 0;
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+  overflow-wrap: anywhere;
+}
+
+.imp-centre {
+  display: block;
+  text-align: center;
+}
+
+.imp-etiquette {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.imp-invisible {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.imp-liste {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.imp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* ── Étape 1 : dépôt ──────────────────────────────────────────────────────────────────────── */
+
+.imp-depot {
+  position: relative;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px 16px;
+  border: 2px dashed var(--couleur-foret);
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-surface);
+  text-align: center;
+  cursor: pointer;
+}
+
+.imp-depot:focus-within {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: 2px;
+}
+
+.imp-depot strong {
+  font-family: var(--police-titre);
+  font-stretch: 112%;
+  font-weight: 800;
+  font-size: 20px;
+  color: var(--couleur-foret);
+}
+
+.imp-depot span {
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.imp-depot .imp-depot-icone {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.imp-passe {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* ── Étape 2 : type ───────────────────────────────────────────────────────────────────────── */
+
+.imp-types {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.imp-type {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+.imp-type input {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  accent-color: var(--couleur-foret);
+}
+
+.imp-type.imp-choisi {
+  border-color: var(--couleur-foret);
+}
+
+.imp-type strong {
+  font-size: 17px;
+}
+
+/* ── Champs ───────────────────────────────────────────────────────────────────────────────── */
+
+.imp-champ-bloc {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.imp-champ {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 2px solid var(--couleur-tertiaire);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font: inherit;
+  font-size: 17px;
+}
+
+.imp-champ:focus-visible {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: 1px;
+  border-color: var(--couleur-foret);
+}
+
+select.imp-liste-deroulante {
+  appearance: none;
+  padding-right: 40px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--couleur-encre) 50%), linear-gradient(135deg, var(--couleur-encre) 50%, transparent 50%);
+  background-position: calc(100% - 22px) 50%, calc(100% - 16px) 50%;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  font-weight: 700;
+}
+
+/* ── Étapes 3 et 4 : colonnes, valeurs ────────────────────────────────────────────────────── */
+
+/* Hors de l'écran, une ligne n'est ni mise en page ni peinte (téléphone lent, 20 colonnes). */
+.imp-colonne,
+.imp-decision,
+.imp-ligne {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 76px;
+}
+
+.imp-colonne,
+.imp-decision {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1.2fr);
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.imp-decision {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+}
+
+.imp-code {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.imp-exemples {
+  font-size: 13px;
+  color: var(--couleur-secondaire);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.imp-pastille {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--rayon-pastille);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.imp-pastille-reconnue {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.imp-pastille-choisie {
+  background: var(--couleur-orange);
+  color: var(--couleur-sur-orange);
+}
+
+.imp-pastille-ignoree {
+  background: var(--couleur-trait);
+  color: var(--couleur-encre);
+}
+
+/* ── Étape 5 : aperçu ─────────────────────────────────────────────────────────────────────── */
+
+.imp-apercu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.imp-compteurs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px;
+}
+
+.imp-compteur {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  box-shadow: var(--ombre-carte);
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.imp-compteur strong {
+  display: block;
+  font-family: var(--police-titre);
+  font-stretch: 112%;
+  font-weight: 800;
+  font-size: 26px;
+  color: var(--couleur-encre);
+}
+
+.imp-compteur-valides strong {
+  color: var(--couleur-foret);
+}
+
+.imp-compteur-avertis strong {
+  color: var(--couleur-texte-orange);
+}
+
+.imp-compteur-erreurs strong {
+  color: var(--couleur-conflit);
+}
+
+.imp-ligne {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-left: 6px solid var(--couleur-trait);
+}
+
+.imp-ligne-erreur {
+  border-left-color: var(--couleur-conflit);
+}
+
+.imp-ligne-valide {
+  border-left-color: var(--couleur-orange);
+}
+
+.imp-ligne-tete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.imp-etat {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--couleur-secondaire);
+}
+
+.imp-etat-erreur {
+  color: var(--couleur-conflit);
+}
+
+.imp-erreur {
+  font-size: 15px;
+  color: var(--couleur-conflit);
+}
+
+.imp-cellule-cadre {
+  color: var(--couleur-secondaire);
+}
+
+.imp-cellule {
+  font-family: var(--police-code);
+  font-weight: 600;
+  color: var(--couleur-encre);
+}
+
+.imp-avertissement {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--couleur-texte-orange);
+}
+
+.imp-fin {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.imp-statut {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-stretch: 112%;
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--couleur-foret);
+}
+
+/* ── Pied ─────────────────────────────────────────────────────────────────────────────────── */
+
+.imp-pied {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px max(20px, env(safe-area-inset-bottom));
+}
+
+.imp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.imp-bouton-principal,
+.imp-bouton-secondaire {
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--rayon-bouton);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.imp-bouton-principal {
+  flex: 2 1 auto;
+  min-height: 64px;
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-family: var(--police-titre);
+  font-stretch: 112%;
+  font-weight: 800;
+  font-size: 19px;
+  box-shadow: var(--ombre-basse);
+}
+
+.imp-bouton-secondaire {
+  flex: 1 1 auto;
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: var(--ombre-carte);
+}
+
+.imp-bouton-principal:disabled,
+.imp-bouton-secondaire:disabled,
+.imp-bouton-rond:disabled {
+  background: var(--couleur-trait);
+  color: var(--couleur-secondaire);
+  box-shadow: none;
+}
+
+/* ── Relecture : culture créée, valeurs par défaut ────────────────────────────────────────── */
+
+.imp-attributs {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.imp-defauts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 400;
+  color: var(--couleur-encre);
+}
+
+.imp-defauts strong {
+  color: var(--couleur-texte-orange);
+}
+
+.imp-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.imp-resume-lignes {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  font-weight: 700;
+  color: var(--couleur-foret);
+  cursor: pointer;
+}
