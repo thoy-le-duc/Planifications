@@ -9,6 +9,9 @@
  *     DELAI_PRET_MS), chaque entrée est compressée sur le fil principal (compresseur par défaut
  *     de @planif/sync) : l'export va au bout, mêmes octets. Un worker qui tombe APRÈS s'être
  *     chargé fait échouer l'export (les entrées en cours sont perdues avec lui) ;
+ *   - chien de garde : des entrées attendent une réponse et le worker se tait SILENCE_MAX_MS →
+ *     échec propre (ErreurWorkerCompression) plutôt qu'une barre figée ; lancerExport recommence
+ *     alors une fois l'export au fil principal (./lancer.ts) ;
  *   - contre-pression : au plus LIMITE_EN_VOL octets envoyés au worker et pas encore pris par son
  *     flux de compression (accusés `recu`), toutes entrées confondues ; au-delà, le producteur
  *     attend. Sans elle, une lecture plus rapide que le deflate empilait l'entrée côté worker.
@@ -33,8 +36,22 @@ export type ReponseCompression =
 
 /** Octets envoyés au worker et pas encore pris par son flux, au plus (un morceau seul passe toujours). */
 const LIMITE_EN_VOL = 1024 * 1024;
-/** Sans réponse du worker passé ce délai, l'export se fait sans lui. */
+/**
+ * Sans réponse à « bonjour » passé ce délai, l'export se fait sans le worker. Le script est
+ * petit et précaché : il se charge en quelques dizaines de ms, quelques centaines au pire sur un
+ * téléphone lent. 5 s laisse une large marge sans faire attendre longtemps un export dont le
+ * worker ne viendra jamais (le repli ne coûte que du temps : même archive).
+ */
 const DELAI_PRET_MS = 5_000;
+/** Worker silencieux alors que des entrées attendent sa réponse : au-delà, l'export échoue. */
+export const SILENCE_MAX_MS = 15_000;
+/** Fréquence de la vérification du chien de garde. */
+const RONDE_MS = 1_000;
+
+/** Échec venu du worker de compression (et non de la base ou d'une annulation) : l'export peut se refaire sans lui. */
+export class ErreurWorkerCompression extends Error {
+  override readonly name = 'ErreurWorkerCompression';
+}
 
 /** Sortie d'un flux en attente de lecture. */
 interface FileSortie {
@@ -76,14 +93,23 @@ export function compresseurEnWorker(): CompresseurWorker | null {
   const pret = new Promise<boolean>((ok) => {
     annoncer = ok;
   });
-  const passerAuRepli = () => {
+  const passerAuRepli = (cause: string) => {
     if (etat !== 'chargement') return;
     etat = 'repli';
     clearTimeout(delai);
     worker.terminate();
+    console.warn(`Export : worker de compression indisponible (${cause}), compression sur le fil principal.`);
     annoncer(false);
   };
-  const delai = setTimeout(passerAuRepli, DELAI_PRET_MS);
+  const delai = setTimeout(() => {
+    passerAuRepli(`aucune réponse en ${String(DELAI_PRET_MS / 1000)} s`);
+  }, DELAI_PRET_MS);
+
+  // Chien de garde : réponses attendues (accusés, fins de flux) et dernier signe du worker.
+  const finsAttendues = new Set<number>();
+  let dernierSigne = Date.now();
+  let ronde: ReturnType<typeof setInterval> | undefined;
+  const attendReponse = () => enVol > 0 || finsAttendues.size > 0;
 
   // Contre-pression : octets envoyés au worker et pas encore pris par son flux.
   let enVol = 0;
@@ -98,6 +124,7 @@ export function compresseurEnWorker(): CompresseurWorker | null {
     r?.();
   };
   const echouer = (erreur: unknown) => {
+    clearInterval(ronde);
     arret ??= { erreur };
     for (const s of sorties.values()) {
       s.erreur ??= { erreur };
@@ -108,10 +135,16 @@ export function compresseurEnWorker(): CompresseurWorker | null {
 
   worker.onmessage = (e: MessageEvent<ReponseCompression>) => {
     const r = e.data;
+    dernierSigne = Date.now();
     if (r.type === 'pret') {
       if (etat !== 'chargement') return;
       etat = 'pret';
       clearTimeout(delai);
+      ronde = setInterval(() => {
+        if (attendReponse() && Date.now() - dernierSigne > SILENCE_MAX_MS) {
+          echouer(new ErreurWorkerCompression(`le worker de compression ne répond plus depuis ${String(SILENCE_MAX_MS / 1000)} s`));
+        }
+      }, RONDE_MS);
       annoncer(true);
       return;
     }
@@ -122,16 +155,21 @@ export function compresseurEnWorker(): CompresseurWorker | null {
     }
     const s = sorties.get(r.id);
     if (s === undefined) return;
+    if (r.type !== 'morceau') finsAttendues.delete(r.id);
     if (r.type === 'morceau') s.morceaux.push(r.octets);
     else if (r.type === 'fin') s.fini = true;
-    else s.erreur = { erreur: new Error(`compression impossible : ${r.message}`) };
+    else s.erreur = { erreur: new ErreurWorkerCompression(`compression impossible : ${r.message}`) };
     reveiller(s);
   };
   worker.onerror = (e: ErrorEvent) => {
     e.preventDefault();
     // Script introuvable ou refusé avant sa première réponse : repli sur le fil principal.
-    if (etat === 'chargement') passerAuRepli();
-    else echouer(new Error(`worker de compression en échec : ${e.message}`));
+    if (etat === 'chargement') passerAuRepli(`erreur : ${e.message}`);
+    else echouer(new ErreurWorkerCompression(`worker de compression en échec : ${e.message}`));
+  };
+  worker.onmessageerror = () => {
+    if (etat === 'chargement') passerAuRepli('message illisible');
+    else echouer(new ErreurWorkerCompression('worker de compression : message illisible'));
   };
   worker.postMessage({ type: 'bonjour' } satisfies MessageCompression);
 
@@ -150,6 +188,10 @@ export function compresseurEnWorker(): CompresseurWorker | null {
     const s: FileSortie = { morceaux: [], fini: false, erreur: undefined, reveiller: undefined };
     sorties.set(id, s);
     const envoyer = (m: MessageCompression) => {
+      // Une attente commence : le silence du worker se compte à partir d'ici.
+      if (!attendReponse()) dernierSigne = Date.now();
+      if (m.type === 'fin') finsAttendues.add(id);
+      else if (m.type === 'abandon') finsAttendues.delete(id);
       worker.postMessage(m);
     };
     // Source envoyée au worker au fil de sa production (copie : le bloc peut être réutilisé).
@@ -164,8 +206,8 @@ export function compresseurEnWorker(): CompresseurWorker | null {
           if (lecture.abandonnee) return;
           await credit(morceau.byteLength);
           if (coupee()) return;
-          enVol += morceau.byteLength;
           envoyer({ id, type: 'morceau', octets: morceau });
+          enVol += morceau.byteLength;
         }
         envoyer({ id, type: 'fin' });
       } catch (erreur: unknown) {
@@ -211,6 +253,7 @@ export function compresseurEnWorker(): CompresseurWorker | null {
     compresseur,
     fermer: () => {
       clearTimeout(delai);
+      clearInterval(ronde);
       if (etat === 'chargement') {
         etat = 'repli';
         annoncer(false);
