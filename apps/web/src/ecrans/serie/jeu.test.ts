@@ -107,6 +107,9 @@ describe('T12 : la ferme du plan est cohérente avec le cœur', () => {
       actifDu: '2020-01-01' as DateCalendaire,
       actifAu: null,
       remplace: [],
+      placementXM: null,
+      placementYM: null,
+      orientationDeg: null,
     };
     const d = ATTENDU.bataviaPlantationS14;
     const occupation = (id: string, serie: string): Occupation => ({
