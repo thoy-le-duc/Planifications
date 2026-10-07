@@ -420,3 +420,79 @@ describe('mineurs de la relecture', () => {
     expect(photographie(b())).toStrictEqual(avant);
   });
 });
+
+// ── Contre-relecture (B2) ────────────────────────────────────────────────────────────────────
+
+describe('contre-relecture : annulation complète et culture créée', () => {
+  it('lot écrit mais pas noté (l’appli s’arrête juste après l’écriture) : « Annuler » le retire aussi, et ne dit « annulé » qu’une fois tout retiré', { timeout: 120_000 }, async () => {
+    let n = 0;
+    const porte = {
+      ...b().porte,
+      ecrireEnsemble: async (...args: Parameters<Banc['porte']['ecrireEnsemble']>) => {
+        n++;
+        await b().porte.ecrireEnsemble(...args);
+        // 2e lot écrit dans la base, puis l'appli s'arrête : la suite ne vient jamais.
+        if (n === 2) await new Promise<never>(() => undefined);
+      },
+    };
+    await h.ouvrir(FERME, undefined, porte);
+    const avant = photographie(b());
+    await jusquApercu('series.csv', SERIES_NOMBREUSES);
+    const imp = [...ecran().querySelectorAll<HTMLElement>('button')].find((x) => texte(x).startsWith('Importer') && texte(x) !== 'Importer un autre fichier');
+    if (imp === undefined) throw new Error('bouton « Importer » absent');
+    await toucher(imp);
+    await attendreDurant(() => n === 2, 'deuxième lot écrit', 60_000);
+    // L'appli est fermée en pleine écriture, puis rouverte.
+    h.demonter();
+    await h.ouvrir();
+    const passe = importsPasses()[0];
+    if (passe === undefined) throw new Error('import absent de l’historique');
+    await toucher(bouton('Annuler cet import', passe));
+    await attendreDurant(() => importsPasses()[0]?.dataset.etat === 'annule' || alertes().length > 0, 'annulation traitée', 60_000);
+    expect(photographie(b()), 'le lot écrit mais pas noté est retiré aussi').toStrictEqual(avant);
+    expect(importsPasses()[0]?.dataset.etat).toBe('annule');
+  });
+
+  it('culture créée par un import annulé : au fichier suivant, l’étape « Valeurs » redemande catégorie, pérenne et unité', { timeout: 60_000 }, async () => {
+    const nom = 'Asperge verte';
+    const fichier = csv([
+      ['Culture', 'Famille', 'Mode', 'Jours avant récolte', 'Fenêtre de récolte (j)', 'Rangs/planche', 'Ecartement (cm)'],
+      [nom, 'Asparagacées', 'plant acheté', '300', '60', '1', '40'],
+    ]);
+    await h.ouvrir();
+    await deposerEtLire('asperge.csv', fichier);
+    await continuer();
+    await continuer();
+    await decider('espece', nom, 'nouvelle');
+    await choisirNouvelleCulture(nom, 'legume', 'oui', 'botte');
+    await continuer();
+    expect(lignesImportees(await importer())).toBe(1);
+    await toucher(bouton('Annuler cet import', ecran()));
+    await attendreDurant(() => /annulé/i.test(texte(ecran().querySelector('[role="status"]'))), 'import annulé');
+    await autreFichier();
+
+    await deposerEtLire('asperge.csv', fichier);
+    await continuer();
+    await continuer();
+    expect(etape(), 'l’étape « Valeurs » est rouverte pour la culture à créer').toBe('valeurs');
+    expect(alertes()).toEqual([]);
+    for (const champ of [`Catégorie pour « ${nom} »`, `Culture pérenne pour « ${nom} »`, `Unité de récolte pour « ${nom} »`]) {
+      expect(liste(champ, ecran()).value, `${champ} redemandé`).toBe('');
+    }
+    await choisirNouvelleCulture(nom, 'fleur', 'non', 'piece');
+    await continuer();
+    expect(etape()).toBe('apercu');
+    expect(compteur('erreurs')).toBe(0);
+    expect(lignesImportees(await importer())).toBe(1);
+    const e = lire(b(), 'SELECT categorie, perenne, unite_recolte FROM espece WHERE ferme_id = ? AND nom = ? AND supprime_le IS NULL', [FERME, nom]);
+    expect(e.map((x) => [x.categorie, x.perenne, x.unite_recolte])).toEqual([['fleur', 0, 'piece']]);
+  });
+
+  it('le message de fin d’annulation prévient qu’un refus du serveur apparaîtra dans « Saisies refusées »', async () => {
+    await h.ouvrir();
+    expect(lignesImportees(await importerSansCorrection('parcellaire-3-niveaux-cp1252.csv'))).toBe(5);
+    await toucher(bouton('Annuler cet import', ecran()));
+    await attendreDurant(() => /annulé/i.test(texte(ecran().querySelector('[role="status"]'))), 'import annulé');
+    expect(texte(ecran().querySelector('[role="status"]'))).toMatch(/refus/i);
+  });
+});
