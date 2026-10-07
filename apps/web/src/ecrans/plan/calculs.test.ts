@@ -141,10 +141,10 @@ describe('T11 : petite ferme, saison 2026', () => {
   it('libellé culture + variété, famille et couleur', () => {
     expect(barre(plan, O.tomateReelle)).toMatchObject({ libelle: 'Tomate Cœur de bœuf', famille: 'Solanacées', cleFamille: 'solanacees' });
     expect(barre(plan, O.laituePrevue)).toMatchObject({ libelle: 'Laitue Batavia', famille: 'Astéracées', cleFamille: 'salades' });
-    // Sans variété : l'espèce seule ; famille propre à la ferme, sans couleur attitrée.
-    expect(barre(plan, O.courgetteHiver)).toMatchObject({ libelle: 'Courgette', famille: 'Cucurbitacées', cleFamille: null });
+    // Sans variété : l'espèce seule ; famille de la bibliothèque, couleur propre (T27b).
+    expect(barre(plan, O.courgetteHiver)).toMatchObject({ libelle: 'Courgette', famille: 'Cucurbitacées', cleFamille: 'cucurbitacees' });
     expect(barre(plan, O.plantation)).toMatchObject({ libelle: 'Tomate', famille: 'Solanacées', cleFamille: 'solanacees' });
-    expect(barre(plan, O.couverture)).toMatchObject({ libelle: 'Couverture', famille: null, cleFamille: null, serieId: null, plantationId: null });
+    expect(barre(plan, O.couverture)).toMatchObject({ libelle: 'Couverture', famille: null, cleFamille: 'autre', serieId: null, plantationId: null });
   });
 
   it('conflits de T03 : chevauchement et dépassement, nommés ; rien hors saison', () => {
@@ -217,7 +217,7 @@ describe('T11 : saison par défaut', () => {
 });
 
 describe('T11 : couleur par famille (jetons FAMILLES de T16)', () => {
-  it('quatre familles attitrées, les autres neutres', () => {
+  it('quatre clés de T16 conservées ; les autres familles ont leur clé ou « autre » (T27b, voir familles.test.ts)', () => {
     expect(m.cleFamille('Solanacées')).toBe('solanacees');
     expect(m.cleFamille('solanacees')).toBe('solanacees');
     expect(m.cleFamille('Brassicacées')).toBe('cruciferes');
@@ -225,8 +225,9 @@ describe('T11 : couleur par famille (jetons FAMILLES de T16)', () => {
     expect(m.cleFamille('Astéracées')).toBe('salades');
     expect(m.cleFamille('ASTÉRACÉES')).toBe('salades');
     expect(m.cleFamille('Apiacées')).toBe('racines');
-    for (const autre of ['Cucurbitacées', 'Fabacées', 'Alliacées', 'Rosacées', 'Famille locale 1', '']) expect(m.cleFamille(autre), autre).toBeNull();
-    expect(m.cleFamille(null)).toBeNull();
+    for (const [nom, cle] of [['Cucurbitacées', 'cucurbitacees'], ['Fabacées', 'fabacees'], ['Alliacées', 'alliacees'], ['Rosacées', 'rosacees']] as const) expect(m.cleFamille(nom), nom).toBe(cle);
+    for (const autre of ['Famille locale 1', '']) expect(m.cleFamille(autre), autre).toBe('autre');
+    expect(m.cleFamille(null)).toBe('autre');
   });
 });
 
@@ -368,9 +369,10 @@ describe('T11 : ferme de T07 (jeu de T15), lue par la porte', () => {
     const b = emplacements(plan).flatMap((l) => l.barres);
     for (const x of b) expect(x.libelle).toMatch(/^Espèce \d+ Variété \d+-\d$/);
     const cles = new Set(b.map((x) => x.cleFamille));
-    // Solanacées, Brassicacées, Astéracées, Apiacées et des familles sans couleur attitrée.
+    // Solanacées, Brassicacées, Astéracées, Apiacées et des familles qui ont leur couleur depuis T27b.
     expect(cles).toContain('solanacees');
-    expect(cles).toContain(null);
+    expect(cles).toContain('rosacees');
+    expect(cles).not.toContain(null);
   });
 
   it('calcul rapide : construirePlan sur toute la ferme en moins de 80 ms (médiane de 5, Node)', () => {

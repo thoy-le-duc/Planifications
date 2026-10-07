@@ -20,11 +20,11 @@
 
 ## Critères d'acceptation
 
-- [ ] Test (`jetons.test.ts`) : 16 familles + « autre », clair et sombre ; toutes différentes deux à deux et du neutre, écart de couleur (ΔE CIE76) au-dessus d'un seuil fixé dans le test (au moins 10 entre familles, 20 avec le neutre), justifié dans la PR ; texte posé dessus lisible à 4,5:1 comme aujourd'hui.
-- [ ] Test de `cleFamille` : chaque famille de la bibliothèque commune a sa clé, sans accents ni casse ; famille inconnue → « autre » ; pas de famille (couverture) → « autre ».
-- [ ] Test unitaire de l'adaptateur : courgette, asperge, fraise de la ferme de démo ne sont plus à la couleur du vide ; filtre famille, culture, zone, et leur combinaison ; « rien » coché → tout estompé.
-- [ ] e2e (ordinateur, grande ferme) : changer un filtre en moins de 100 ms ; la légende ne recouvre aucun pixel de la scène (boîtes disjointes) ; mesures de T27 inchangées.
-- [ ] Budget `jsVue3dGzKio` (200 Kio) tenu ; JS de démarrage inchangé.
+- [x] Test (`jetons.test.ts`) : 16 familles + « autre », clair et sombre ; toutes différentes deux à deux et du neutre, écart de couleur (ΔE CIE76) au-dessus d'un seuil fixé dans le test (au moins 10 entre familles, 20 avec le neutre), justifié dans la PR ; texte posé dessus lisible à 4,5:1 comme aujourd'hui.
+- [x] Test de `cleFamille` : chaque famille de la bibliothèque commune a sa clé, sans accents ni casse ; famille inconnue → « autre » ; pas de famille (couverture) → « autre ».
+- [x] Test unitaire de l'adaptateur : courgette, asperge, fraise de la ferme de démo ne sont plus à la couleur du vide ; filtre famille, culture, zone, et leur combinaison ; « rien » coché → tout estompé.
+- [x] e2e (ordinateur, grande ferme) : changer un filtre en moins de 100 ms ; la légende ne recouvre aucun pixel de la scène (boîtes disjointes) ; mesures de T27 inchangées.
+- [x] Budget `jsVue3dGzKio` (200 Kio) tenu ; JS de démarrage inchangé.
 
 ## Risques
 

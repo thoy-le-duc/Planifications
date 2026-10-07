@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-07 — T27b : vue 3D, filtres et couleurs lisibles
+
+- **Fait** : une couleur par famille de la bibliothèque commune (16) plus « autre », en clair et en sombre, partagée par le plan 2D et la vue 3D ; courgette, asperge et fraise ne sont plus grises comme le vide, la planche vide est à plat. Panneau à côté de la scène (jamais dessus) : légende-filtre des familles de la semaine, filtres par zone et par culture, tout / rien ; ce qui est décoché est estompé, pas retiré, y compris dans la liste texte. Changement de filtre : médiane 12 ms, géométrie intacte ; JS de démarrage inchangé (71,0/71), 3D 182 Kio sur 200.
+- **Décidé** : palette de 17 familles, ΔE CIE76 minimum 33 en clair et 22 en sombre (seuils des tests : 10 et 20), aucune famille regroupée ; filtre culture sur le libellé de la barre, variété comprise, pour cette version ; l'écran Aujourd'hui garde ses 4 bandes (`bandeFamille`) pour ne pas changer sa référence figée.
+- **Bloquant** : rien. Deux tests de durée ont dépassé d'un cheveu sous charge (export 51 ms pour 50, test de perf du cœur 65 ms pour 60) et passent à la relance : à surveiller.
+
 ## 2026-10-07 — T28a : la ferme peut enregistrer où sont ses zones, planches et bâtiments
 
 - **Fait** : repère local de la ferme (mètres, x à l'est, y au nord, origine `ferme.origine_plan` distincte de la position météo), contour libre des zones, planches placées dans le repère de leur zone, nouvelle table `batiment` (serres, hangar, magasin, rectangles orientés). Calcul pur et testé dans `packages/core/src/placement` (projection locale au centimètre à 5 km, repère de zone, contrôle des contours et des placements, messages en français) ; base (colonnes nulles, contraintes, une serre par zone, zone abritée sans contour même sous écritures concurrentes), synchro de `batiment` par ferme, export `batiment.csv` et nouvelles colonnes. Rien ne change pour une ferme qui ne place rien ; JS de démarrage inchangé (70,9/71 Kio).

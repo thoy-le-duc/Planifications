@@ -109,7 +109,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T11d](T11d-defilement-plan-fiable.md) | Mesure du défilement du plan : fiable sans relever la limite | T11, T20 | fait |
 | [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | à faire |
 | [T27](T27-vue-3d-prototype.md) | Vue 3D : prototype mesurable (planches et cultures, curseur de semaine) | T11 | fait |
-| [T27b](T27b-vue-3d-filtres.md) | Vue 3D : filtres et couleurs lisibles (Q30) | T27 | à faire |
+| [T27b](T27b-vue-3d-filtres.md) | Vue 3D : filtres et couleurs lisibles (Q30) | T27 | fait |
 | [T28a](T28a-placement-modele.md) | Placement réel : modèle, calcul et base, zones en formes libres (Q30, Q31) | — | fait |
 | [T29](T29-vol-camera.md) | Vue 3D : la caméra vole vers une serre ou une zone (Q30) | T27b | à faire |
 | [T28s](T28s-placement-serveur.md) | Placement réel : le serveur accepte, la porte écrit | T28a | à faire |
