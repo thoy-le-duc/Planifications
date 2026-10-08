@@ -15,7 +15,7 @@ import { creerGenerateurId, type GenerateurId } from '@planif/core/identifiants'
 import type { ChangementPlacement, PorteDonnees } from '@planif/sync';
 import './placement.css';
 import { repereZone, TYPES_BATIMENT, versGeographique, versLocal, type TypeBatiment } from './coeur.ts';
-import { changementsDuBrouillon, contourChange } from './brouillon.ts';
+import { changementsDuBrouillon, contourChange, ECRITURES_MAX_PAR_LOT } from './brouillon.ts';
 import { Champ, garderLeFocus, Modale } from './composants.tsx';
 import { deplacerSommet, insererMilieu, poserPoint, replacerPlanches, retirerSommet, toucheSommet, TOLERANCE_FERMETURE_PX, verifierContour } from './contours.ts';
 import {
@@ -23,11 +23,13 @@ import {
   requeteBatiments,
   requeteFerme,
   requetePlanches,
+  requeteEmplacementsPlaces,
   requeteRoles,
   requeteZones,
   sansNull,
   TYPES,
   type Batiment,
+  type EmplacementPlace,
   type FermeLue,
   type Planche,
   type Zone,
@@ -59,6 +61,7 @@ export const MESSAGES_PLACEMENT = {
 export const MESSAGES_CONTOURS = {
   zoneAbritee: 'sa forme est celle de la serre',
   sommetsMin: 'au moins 3 sommets',
+  tropDeChangements: 'Trop de changements à enregistrer en une fois',
 } as const;
 
 /** « Annuler » reste affiché quelques secondes après un enregistrement. */
@@ -278,13 +281,15 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [lusB, setLusB] = useState<readonly Batiment[] | null>(null);
   const [zones, setZones] = useState<readonly Zone[] | null>(null);
   const [lusP, setLusP] = useState<readonly Planche[] | null>(null);
+  const [lusE, setLusE] = useState<readonly EmplacementPlace[] | null>(null);
   useEffect(() => porte.surveiller(requeteFerme(fermeId), (l) => { setFerme({ valeur: l[0] ?? null }); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteRoles(fermeId, utilisateurId), setRoles), [porte, fermeId, utilisateurId]);
   useEffect(() => porte.surveiller(requeteBatiments(fermeId), (l) => { setLusB(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteZones(fermeId), (l) => { setZones(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requetePlanches(fermeId), (l) => { setLusP(sansNull(l)); }), [porte, fermeId]);
+  useEffect(() => porte.surveiller(requeteEmplacementsPlaces(fermeId), (l) => { setLusE(sansNull(l)); }), [porte, fermeId]);
 
-  const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null;
+  const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null;
   const gerant = roles?.includes('gerant') === true;
   const mode = !pret ? undefined : gerant && surOrdinateur ? 'edition' : 'lecture';
   const edition = mode === 'edition';
@@ -299,6 +304,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [sommetSel, setSommetSel] = useState<number | null>(null);
   const [messageContour, setMessageContour] = useState<string | null>(null);
   const focusSommet = useRef<number | null>(null);
+  const focusTracer = useRef(false);
   const conteneurContour = useRef<HTMLDivElement | null>(null);
   const clicDejaTraite = useRef<number | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
@@ -357,6 +363,13 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   // Le focus suit le sommet choisi au clavier (Inser, Suppr), et va au tracé quand il s'ouvre (Entrée le ferme).
   useEffect(() => {
+    if (focusTracer.current) {
+      const b = document.querySelector<HTMLElement>('[data-action="tracer"]');
+      if (b !== null) {
+        focusTracer.current = false;
+        b.focus();
+      }
+    }
     const i = focusSommet.current;
     if (i === null) return;
     focusSommet.current = null;
@@ -461,19 +474,21 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             brouillonBatiments: brouillonB,
             zones,
             planches: lusP,
+            emplacements: lusE,
             brouillonPlanches: brouillonP,
             brouillonZones: brouillonZ,
             zonesAbritees: new Set([...zonesInfo.values()].filter((i) => i.abritee).map((i) => i.zone.id)),
           })
         : [],
-    [pret, lusB, brouillonB, zones, lusP, brouillonP, brouillonZ, zonesInfo],
+    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo],
   );
   const modifie = changements.length > 0;
   const contoursModifies = [...zonesInfo.values()].filter((i) => i.change);
   const contoursInvalides = contoursModifies.filter((i) => i.verdict?.ok === false);
   /** Quelque chose à perdre en fermant : changements à écrire, contour refusé, tracé commencé. */
   const brouillonOuvert = modifie || contoursModifies.length > 0 || (trace?.sommets.length ?? 0) > 0;
-  const peutEnregistrer = modifie && !occupe && contoursInvalides.length === 0 && trace === null;
+  const tropDeChangements = changements.length > ECRITURES_MAX_PAR_LOT;
+  const peutEnregistrer = modifie && !occupe && contoursInvalides.length === 0 && trace === null && !tropDeChangements;
 
   // Les tuiles ne sont demandées qu'une fois les données de la ferme lues (la vue est alors la bonne).
   const tuiles = useMemo(() => (pret && enLigneEffectif ? tuilesVisibles(vue) : []), [pret, enLigneEffectif, vue]);
@@ -539,11 +554,17 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setMessageContour(null);
   }
 
+  function abandonnerTrace(): void {
+    setTrace(null);
+    focusTracer.current = true;
+  }
+
   function fermerTrace(): void {
     if (trace === null || trace.sommets.length < 3) return;
     majContour(trace.zoneId, trace.sommets);
     setTrace(null);
-    setSommetSel(null);
+    setSommetSel(0);
+    focusSommet.current = 0;
   }
 
   function retirer(zoneId: string, index: number): void {
@@ -606,6 +627,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setLusB(l.batiments);
     setZones(l.zones);
     setLusP(l.planches);
+    setLusE(l.emplacements);
   }
 
   /** Relit la base après une écriture réussie ; un échec ne défait rien : il est dit à part d'un refus. */
@@ -809,7 +831,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       // Tracé en cours : Entrée le ferme (3 sommets au moins), Échap l'abandonne.
       if (e.key === 'Escape') {
         e.preventDefault();
-        setTrace(null);
+        abandonnerTrace();
         return;
       }
       if (e.key === 'Enter' && !enSaisie && !(cible instanceof HTMLButtonElement)) {
@@ -1156,6 +1178,11 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 </button>
               </p>
             )}
+            {tropDeChangements && (
+              <p role="status" className="pl-message">
+                {MESSAGES_CONTOURS.tropDeChangements} ({String(changements.length)} sur {String(ECRITURES_MAX_PAR_LOT)} au plus). Abandonnez une partie des changements, puis enregistrez en plusieurs fois.
+              </p>
+            )}
             {erreur !== null && (
               <p role="alert" className="pl-message pl-erreur">
                 {erreur}
@@ -1232,9 +1259,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                   surTracer={() => {
                     demarrerTrace(zoneChoisie.zone.id);
                   }}
-                  surRenoncer={() => {
-                    setTrace(null);
-                  }}
+                  surRenoncer={abandonnerTrace}
                   surSommet={(index, point) => {
                     const contour = zoneChoisie.affiche;
                     if (contour !== null) majContour(zoneChoisie.zone.id, deplacerSommet(contour, index, point));
@@ -1455,7 +1480,7 @@ function PanneauZone({ info, edition, origineSouhaitee, trace, message, conteneu
       )}
       {!info.abritee && edition && trace === null && contour === null && (
         <>
-          <button type="button" className="pl-bouton" disabled={!origineSouhaitee} onClick={surTracer}>
+          <button type="button" className="pl-bouton" data-action="tracer" disabled={!origineSouhaitee} onClick={surTracer}>
             Tracer le contour
           </button>
           <p className="pl-aide">

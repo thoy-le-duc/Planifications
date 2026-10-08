@@ -137,26 +137,49 @@ export const requetePlanches = (fermeId: string): RequeteSurveillee<Planche | nu
   },
 });
 
+/** Un emplacement placé (planche, rang, gouttière…) : de quoi le replacer quand le contour de sa zone change. */
+export interface EmplacementPlace {
+  readonly id: string;
+  readonly zoneId: string;
+  readonly placement: { readonly x: number; readonly y: number; readonly orientation_deg: number };
+}
+
+/** Tous les emplacements placés, sans filtre de sorte ni de dimensions. */
+export const requeteEmplacementsPlaces = (fermeId: string): RequeteSurveillee<EmplacementPlace | null> => ({
+  sql: 'SELECT id, zone_id, placement_x_m, placement_y_m, orientation_deg FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND placement_x_m IS NOT NULL',
+  parametres: [fermeId],
+  tables: ['emplacement'],
+  convertir: (l: Ligne) => {
+    const id = texte(l.id);
+    const zoneId = texte(l.zone_id);
+    const [x, y, o] = [l.placement_x_m, l.placement_y_m, l.orientation_deg].map(nombre);
+    if (id === null || zoneId === null || x == null || y == null || o == null) return null;
+    return { id, zoneId, placement: { x, y, orientation_deg: o } };
+  },
+});
+
 export interface Lectures {
   readonly ferme: FermeLue | null;
   readonly roles: readonly string[];
   readonly batiments: readonly Batiment[];
   readonly zones: readonly Zone[];
   readonly planches: readonly Planche[];
+  readonly emplacements: readonly EmplacementPlace[];
 }
 
 export const sansNull = <T,>(l: readonly (T | null)[]): T[] => l.filter((x): x is T => x !== null);
 
 /** Relit tout d'un coup (après une écriture : l'affichage ne passe pas par un état intermédiaire). */
 export async function lireTout(porte: PorteDonnees, fermeId: string, utilisateurId: string): Promise<Lectures> {
-  const [rf, rr, rb, rz, rp] = await Promise.all([
+  const [rf, rr, rb, rz, rp, re] = await Promise.all([
     lireRequete(porte, requeteFerme(fermeId)),
     lireRequete(porte, requeteRoles(fermeId, utilisateurId)),
     lireRequete(porte, requeteBatiments(fermeId)),
     lireRequete(porte, requeteZones(fermeId)),
     lireRequete(porte, requetePlanches(fermeId)),
+    lireRequete(porte, requeteEmplacementsPlaces(fermeId)),
   ]);
-  return { ferme: rf[0] ?? null, roles: rr, batiments: sansNull(rb), zones: sansNull(rz), planches: sansNull(rp) };
+  return { ferme: rf[0] ?? null, roles: rr, batiments: sansNull(rb), zones: sansNull(rz), planches: sansNull(rp), emplacements: sansNull(re) };
 }
 
 async function lireRequete<T>(porte: PorteDonnees, r: RequeteSurveillee<T>): Promise<T[]> {
