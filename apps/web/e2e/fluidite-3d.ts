@@ -197,6 +197,10 @@ export interface Plancher {
   readonly seuilFautifMs: number;
 }
 
+/** Plafond du seuil d'un intervalle fautif (ms). */
+export const SEUIL_FAUTIF_PLAFOND_MS = 100;
+/** Au-delà de ce plancher médian (ms), la machine est trop chargée pour juger la fluidité : le test échoue. */
+export const PLANCHER_MAX_MS = 40;
 const IMAGES_PLANCHER = 90;
 const IMAGES_PLANCHER_IGNOREES = 5;
 
@@ -205,10 +209,11 @@ const IMAGES_PLANCHER_IGNOREES = 5;
  * est celui de T27 et T29 : plus de `imagesPerduesMax` images perdues d'affilée, soit un
  * intervalle qui s'arrondit à plus de `imagesPerduesMax + 1` images (2 → 58,3 ms et au-delà). Il
  * garde le critère historique sur une machine rapide ; le plancher mesuré le relève quand le
- * rendu logiciel est lent.
+ * rendu logiciel est lent, sans dépasser `SEUIL_FAUTIF_PLAFOND_MS` : sur une machine saturée, le
+ * seuil ne grimpe pas jusqu'à ne plus rien voir (le test échoue plutôt, voir PLANCHER_MAX_MS).
  */
 export function seuilFautif(medianePlancherMs: number, imagesPerduesMax: number): number {
-  return Math.max((imagesPerduesMax + 1.5) * IMAGE_60HZ_MS, 2 * medianePlancherMs);
+  return Math.min(Math.max((imagesPerduesMax + 1.5) * IMAGE_60HZ_MS, 2 * medianePlancherMs), SEUIL_FAUTIF_PLAFOND_MS);
 }
 
 /**
@@ -251,6 +256,7 @@ export async function mesurerPlancher(page: Page, largeur: number, hauteur: numb
     );
     const utiles = intervalles.slice(IMAGES_PLANCHER_IGNOREES);
     const medianeMs = centile(utiles, 0.5);
+    if (!(medianeMs <= PLANCHER_MAX_MS)) throw new Error(`machine trop chargée pour mesurer la fluidité (plancher ${medianeMs.toFixed(1)} ms), relancer`);
     return { medianeMs, seuilFautifMs: seuilFautif(medianeMs, imagesPerduesMax) };
   } finally {
     await onglet.close();
