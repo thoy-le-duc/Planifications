@@ -8,6 +8,12 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Décidé** : correction côté `upload.ts` seulement, `resume.ts` garde son contrat (commentaires précisés, ainsi que l'en-tête de `resume-refus.integration.test.ts`, sans assertion touchée).
 - **Bloquant** : rien.
 
+## 2026-10-08 — T29c : le vol de caméra ne coûte pas plus que la navigation
+
+- **Fait** : mesure seule, aucun code changé. Une navigation continue coûte autant qu'un vol (médiane 38–39 ms sous rendu logiciel) ; l'écart vu en T29b venait du glissé de l'e2e, rythmé par Playwright. Même travail par image (1 rendu, 2 appels de dessin, ~0,6 ms de JS) ; sans dessin, 18–25 ms : le coût est SwiftShader.
+- **Décidé** : pas de baisse de résolution pendant le vol (changerait l'image pour un défaut propre à la machine de test). Les garde-fous stables de T29b font foi ; le critère « 5 lancements sur 5 » n'est pas un arbitre fiable sur cette machine.
+- **Bloquant** : rien. Ticket clos sur constat.
+
 ## 2026-10-08 — T29b : fluidité des vols, le coût était le dessin, pas le code
 
 - **Fait** : mesure par image (sous SwiftShader, 1280 × 800) : JavaScript de la vue < 1 ms (médiane 0,3 à 0,5 ms) ; une toile qui ne fait que « clear » coûte déjà 18 à 24 ms de swap ; ferme T07 : 2 appels de dessin, 5 100 triangles ; jumeau T07 placé : 7 appels, 77 634 triangles, intervalles de 83 à 100 ms. Allègement sans changement visible (captures de la démo comparées) : `geometriePlanche()` (5 faces, 10 triangles, sans le dessous) ; arceau à tube de 3 côtés et 8 segments (140 → 48 triangles, 504 arceaux dans le jumeau T07) ; bâche et bouts à 10 segments. Jumeau T07 placé : 77 634 → 29 506 triangles, 7 appels inchangés, intervalles fautifs 0 à 2 sur 270 en e2e (3 lancements), démo 16 084 triangles avant.
