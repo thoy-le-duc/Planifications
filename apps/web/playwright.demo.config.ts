@@ -12,8 +12,9 @@ process.env.E2E_DEMO = '1';
 
 export default defineConfig({
   testDir: 'e2e',
-  testMatch: ['**/demo.e2e.ts', '**/vue-3d-filtres.e2e.ts'],
-  grepInvert: /grande ferme de T07/,
+  testMatch: ['**/demo.e2e.ts', '**/vue-3d-filtres.e2e.ts', '**/vue-3d-jumeau.e2e.ts'],
+  // T28c : vue-3d-jumeau.e2e.ts a un test pour la démo ; ses autres tests visent la grande ferme de T07.
+  grepInvert: /grande ferme de T07|ferme sans placement/,
   workers: 1,
   forbidOnly: Boolean(process.env.CI),
   reporter: process.env.CI ? 'github' : 'list',

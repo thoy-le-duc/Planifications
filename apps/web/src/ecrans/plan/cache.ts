@@ -32,7 +32,7 @@ import {
 } from './calculs.ts';
 
 /** Tables dont le plan dépend. */
-const TABLES_DU_PLAN = ['saison', 'zone', 'emplacement', 'occupation', 'serie', 'plantation', 'espece', 'variete', 'famille'] as const;
+const TABLES_DU_PLAN = ['saison', 'zone', 'batiment', 'emplacement', 'occupation', 'serie', 'plantation', 'espece', 'variete', 'famille'] as const;
 
 /** Emplacements lus pour le début du plan : de quoi remplir la vue d'un téléphone. */
 export const EMPLACEMENTS_DU_DEBUT = 12;

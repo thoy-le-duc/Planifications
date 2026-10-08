@@ -1,11 +1,16 @@
 /**
  * Vue 3D (T27, Q29) : les zones en socles, les planches en volumes colorés par la culture de la
- * semaine, un curseur pour faire défiler la saison. Pour l'ordinateur (préparer la saison) ; au
+ * semaine, un curseur pour faire défiler la saison. T28c : le jumeau de la ferme, avec ses serres
+ * en tunnels translucides, ses bâtiments et ses zones à leur place et à leur orientation réelles. Pour l'ordinateur (préparer la saison) ; au
  * téléphone, l'écran reste en 2D. Contrat : ./test/contrat.ts (section « Vue 3D (DOM) »).
  *
  * Seul morceau qui importe three et @react-three/fiber, chargé par import dynamique depuis
  * l'écran Planches. Robuste avant spectaculaire :
- *   - deux InstancedMesh (socles, planches) : deux appels de dessin, quelle que soit la ferme ;
+ *   - le sol de toutes les zones en UNE géométrie (polygones triangulés, ./formes.ts), les planches
+ *     en un InstancedMesh, et les serres instanciées (arceaux, bâches, bouts) avec des géométries
+ *     partagées : une dizaine d'appels de dessin, quelle que soit la ferme ;
+ *   - la bâche est peu opaque, sans écriture de profondeur, sur un seul objet par forme : aucun tri
+ *     coûteux, et la couleur d'une planche (filtrée ou non) se voit à travers ;
  *   - rendu à la demande (frameloop « demand ») : aucune image quand rien ne bouge ;
  *   - changer de semaine ne recolore que les instances, la géométrie ne bouge pas ;
  *   - les filtres (T27b : famille, culture, zone) estompent des planches sans les retirer : seules
@@ -17,11 +22,12 @@
  */
 import { createRoot, extend, useFrame, useThree, type ReconcilerRoot, type RootState } from '@react-three/fiber';
 import { Component, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type RefObject, type ReactNode } from 'react';
-import { AmbientLight, BoxGeometry, Color, DirectionalLight, InstancedMesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
+import { AmbientLight, BoxGeometry, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
 import type { Plan } from '../plan/calculs.ts';
 import { COULEURS, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
-import { boiteDe, cadrage, demarrerVol, poseAu, type CibleVol, type Point3, type Pose, type Vol } from './cadrage.ts';
-import { zoneSousRayon, type BoiteZone } from './pointage.ts';
+import { boiteDe, cadrage, demarrerVol, empriseDe, meilleureVueDeFerme, poseAu, pointsDeFerme, type CibleVol, type Point3, type Pose, type Vol } from './cadrage.ts';
+import { empreinteDe, geometrieArceau, geometrieBache, geometrieBout, geometrieMurs, geometrieSol, geometrieToit } from './formes.ts';
+import { boiteSousRayon, type BoiteZone } from './pointage.ts';
 import {
   appliquerFiltres,
   basculerFiltre,
@@ -33,6 +39,7 @@ import {
   hauteurRendue,
   optionsFiltres,
   versScene,
+  type BatimentScene,
   type DimensionFiltre,
   type FiltresScene,
   type Scene,
@@ -80,7 +87,7 @@ const MESSAGE_ERREUR = 'La vue 3D s’est arrêtée (carte graphique indisponibl
  * Seuls objets three déclarés à fiber : pas de `<Canvas>`, qui déclare tout l'espace de noms
  * THREE (morceau plus lourd). La toile est la nôtre, fiber y monte sa racine (`createRoot`).
  */
-extend({ AmbientLight, BoxGeometry, DirectionalLight, InstancedMesh, MeshLambertMaterial });
+extend({ AmbientLight, BoxGeometry, DirectionalLight, InstancedMesh, Mesh, MeshLambertMaterial });
 
 /** Nom affiché de chaque famille (légende et cases), dans l'ordre des clés. */
 const NOMS_FAMILLES: Readonly<Record<CleFamille, string>> = {
@@ -144,28 +151,132 @@ function Rendu({ surImage }: { readonly surImage: (etat: RootState) => void }) {
 
 const temporaire = new Object3D();
 
-/** Les socles : un seul InstancedMesh, posé une fois. */
-function Socles({ scene }: { readonly scene: Scene }) {
-  const maillage = useRef<InstancedMesh>(null);
+/** Le sol de toutes les zones : une seule géométrie, posée une fois (un contour reste un contour, une serre son rectangle tourné). */
+function Sol({ scene }: { readonly scene: Scene }) {
   const invalider = useThree((s) => s.invalidate);
+  const geometrie = useMemo(() => geometrieSol(scene.socles.map(empreinteDe), EPAISSEUR_SOCLE), [scene.socles]);
   useLayoutEffect(() => {
-    const m = maillage.current;
-    if (m === null) return;
-    scene.socles.forEach((s, i) => {
-      temporaire.position.set(s.x, -EPAISSEUR_SOCLE / 2, s.z);
-      temporaire.scale.set(s.largeur, EPAISSEUR_SOCLE, s.profondeur);
+    invalider();
+    return () => {
+      geometrie.dispose();
+    };
+  }, [geometrie, invalider]);
+  return (
+    <mesh geometry={geometrie} frustumCulled={false}>
+      <meshLambertMaterial color={COULEURS.secondaire} side={DoubleSide} />
+    </mesh>
+  );
+}
+
+/** Part de la hauteur d'un volume simple occupée par les murs ; le reste est le toit. */
+const PART_MURS = 0.72;
+/** Pointe de l'arceau : le tube ne s'épaissit pas avec la serre (échelle z de l'instance). */
+const arceauEpais = (largeurNef: number, hauteurArc: number): number => Math.sqrt(largeurNef * hauteurArc);
+
+/**
+ * Les bâtiments. Serres : une bâche par chapelle (demi-cylindre translucide), un bout à chaque
+ * extrémité et un arceau tous les 2 m environ, chacun en UN InstancedMesh ; volumes simples (hangar,
+ * magasin…) : murs et toit, chacun en un InstancedMesh. Les géométries sont uniques ; seule l'échelle
+ * de l'instance change d'un bâtiment à l'autre. Les matrices se posent quand le plan change.
+ */
+function Batiments({ scene }: { readonly scene: Scene }) {
+  const invalider = useThree((s) => s.invalidate);
+  const serres = useMemo(() => scene.batiments.filter((b) => b.forme !== 'volume'), [scene.batiments]);
+  const volumes = useMemo(() => scene.batiments.filter((b) => b.forme === 'volume'), [scene.batiments]);
+  const nefs = serres.reduce((n, b) => n + b.nefs, 0);
+  const arceaux = serres.reduce((n, b) => n + b.arceaux.length * b.nefs, 0);
+  const formes = useMemo(() => ({ arceau: geometrieArceau(), bache: geometrieBache(), bout: geometrieBout(), murs: geometrieMurs(), toit: geometrieToit() }), []);
+  useEffect(
+    () => () => {
+      for (const g of Object.values(formes)) g.dispose();
+    },
+    [formes],
+  );
+  const opacite = serres[0]?.opacite ?? 0.2;
+  const couleurBache = serres[0]?.couleur ?? COULEURS.surface;
+  const mArceaux = useRef<InstancedMesh>(null);
+  const mBaches = useRef<InstancedMesh>(null);
+  const mBouts = useRef<InstancedMesh>(null);
+  const mMurs = useRef<InstancedMesh>(null);
+  const mToits = useRef<InstancedMesh>(null);
+
+  useLayoutEffect(() => {
+    const poser = (m: InstancedMesh | null, i: number, x: number, y: number, z: number, angle: number, ex: number, ey: number, ez: number): void => {
+      if (m === null) return;
+      temporaire.position.set(x, y, z);
+      temporaire.rotation.set(0, angle, 0);
+      temporaire.scale.set(ex, ey, ez);
       temporaire.updateMatrix();
       m.setMatrixAt(i, temporaire.matrix);
+    };
+    let iArceau = 0;
+    let iBache = 0;
+    let iBout = 0;
+    for (const b of serres) {
+      const cos = Math.cos(b.angle);
+      const sin = Math.sin(b.angle);
+      const largeurNef = b.largeur / b.nefs;
+      const hauteurArc = 2 * b.hauteur;
+      // Repère de la serre → scène : x local = largeur, z local = longueur.
+      const lx = (j: number): number => -b.largeur / 2 + (j + 0.5) * largeurNef;
+      for (let j = 0; j < b.nefs; j += 1) {
+        poser(mBaches.current, iBache, b.x + lx(j) * cos, 0, b.z - lx(j) * sin, b.angle, largeurNef, hauteurArc, b.profondeur);
+        iBache += 1;
+        for (const sens of [1, -1]) {
+          const lz = (sens * b.profondeur) / 2;
+          poser(mBouts.current, iBout, b.x + lx(j) * cos + lz * sin, 0, b.z - lx(j) * sin + lz * cos, sens === 1 ? b.angle : b.angle + Math.PI, largeurNef, hauteurArc, 1);
+          iBout += 1;
+        }
+        for (const lz of b.arceaux) {
+          poser(mArceaux.current, iArceau, b.x + lx(j) * cos + lz * sin, 0, b.z - lx(j) * sin + lz * cos, b.angle, largeurNef, hauteurArc, arceauEpais(largeurNef, hauteurArc));
+          iArceau += 1;
+        }
+      }
+    }
+    const couleur = new Color();
+    volumes.forEach((b, i) => {
+      const murs = b.hauteur * PART_MURS;
+      poser(mMurs.current, i, b.x, murs / 2, b.z, b.angle, b.largeur, murs, b.profondeur);
+      mMurs.current?.setColorAt(i, couleur.set(b.couleur));
+      poser(mToits.current, i, b.x, murs, b.z, b.angle, b.largeur * 1.04, b.hauteur - murs, b.profondeur * 1.02);
     });
-    m.instanceMatrix.needsUpdate = true;
-    m.computeBoundingSphere();
+    for (const m of [mArceaux.current, mBaches.current, mBouts.current, mMurs.current, mToits.current]) {
+      if (m === null) continue;
+      m.instanceMatrix.needsUpdate = true;
+      if (m.instanceColor !== null) m.instanceColor.needsUpdate = true;
+      m.computeBoundingSphere();
+    }
     invalider();
-  }, [scene, invalider]);
+  }, [serres, volumes, invalider]);
+
   return (
-    <instancedMesh ref={maillage} args={[undefined, undefined, scene.socles.length]} frustumCulled={false}>
-      <boxGeometry />
-      <meshLambertMaterial color={COULEURS.secondaire} />
-    </instancedMesh>
+    <>
+      {arceaux > 0 && (
+        <instancedMesh key={`a${String(arceaux)}`} ref={mArceaux} args={[formes.arceau, undefined, arceaux]} frustumCulled={false}>
+          <meshLambertMaterial color={COULEURS.trait} />
+        </instancedMesh>
+      )}
+      {nefs > 0 && (
+        <>
+          <instancedMesh key={`b${String(nefs)}`} ref={mBaches} args={[formes.bache, undefined, nefs]} frustumCulled={false} renderOrder={1}>
+            <meshLambertMaterial color={couleurBache} transparent opacity={opacite} depthWrite={false} />
+          </instancedMesh>
+          <instancedMesh key={`e${String(nefs)}`} ref={mBouts} args={[formes.bout, undefined, 2 * nefs]} frustumCulled={false} renderOrder={1}>
+            <meshLambertMaterial color={couleurBache} transparent opacity={opacite} depthWrite={false} />
+          </instancedMesh>
+        </>
+      )}
+      {volumes.length > 0 && (
+        <>
+          <instancedMesh key={`m${String(volumes.length)}`} ref={mMurs} args={[formes.murs, undefined, volumes.length]} frustumCulled={false}>
+            <meshLambertMaterial />
+          </instancedMesh>
+          <instancedMesh key={`t${String(volumes.length)}`} ref={mToits} args={[formes.toit, undefined, volumes.length]} frustumCulled={false}>
+            <meshLambertMaterial color={COULEURS.tertiaire} side={DoubleSide} />
+          </instancedMesh>
+        </>
+      )}
+    </>
   );
 }
 
@@ -202,6 +313,7 @@ function Volumes({
     scene.volumes.forEach((v, i) => {
       const h = hauteurRendue(v);
       temporaire.position.set(v.x, h / 2, v.z);
+      temporaire.rotation.set(0, v.angle, 0);
       temporaire.scale.set(v.longueur, h, v.largeur);
       temporaire.updateMatrix();
       m.setMatrixAt(i, temporaire.matrix);
@@ -266,6 +378,7 @@ function mouvementReduit(): boolean {
  */
 function Camera({
   rayon,
+  centre,
   scene,
   boites,
   suiviRef,
@@ -273,6 +386,8 @@ function Camera({
   surGlisse,
 }: {
   readonly rayon: number;
+  /** Le point regardé au départ : le centre de la ferme (au sol). */
+  readonly centre: Point3;
   readonly scene: Scene;
   readonly boites: readonly BoiteZone[];
   readonly suiviRef: RefObject<Suivi>;
@@ -298,10 +413,18 @@ function Camera({
   }, 0);
 
   useEffect(() => {
-    const champ = (CHAMP_DEGRES * Math.PI) / 180;
-    // Le rayon englobe large (diagonale) : la ferme vue de biais remplit la toile à ce recul.
-    const distanceDepart = (rayon / Math.tan(champ / 2)) * 0.72;
-    const o: Orbite = orbite.current ?? { azimut: AZIMUT_DEPART, elevation: ELEVATION_DEPART, distance: distanceDepart, cible: { x: 0, y: 0, z: 0 } };
+    // Vue de départ : celle de « Vue d'ensemble » (toute la ferme cadrée, marge de 10 %), vue de biais du côté de l'azimut de départ.
+    const cadre = toile.getBoundingClientRect();
+    const rapport = cadre.width > 0 && cadre.height > 0 ? cadre.width / cadre.height : 1;
+    const vueDepart = meilleureVueDeFerme(pointsDeFerme(sceneRef.current), CHAMP_DEGRES, rapport, AZIMUT_DEPART);
+    const poseDepart = vueDepart?.pose ?? null;
+    const distanceDepart = poseDepart === null ? rayon * 3 : Math.hypot(poseDepart.position.x - poseDepart.cible.x, poseDepart.position.y - poseDepart.cible.y, poseDepart.position.z - poseDepart.cible.z);
+    const o: Orbite = orbite.current ?? {
+      azimut: vueDepart?.azimut ?? AZIMUT_DEPART,
+      elevation: poseDepart === null ? ELEVATION_DEPART : Math.asin((poseDepart.position.y - poseDepart.cible.y) / distanceDepart),
+      distance: distanceDepart,
+      cible: poseDepart?.cible ?? centre,
+    };
     orbite.current = o;
 
     const poseDeOrbite = (): Pose => {
@@ -354,19 +477,27 @@ function Camera({
     };
 
     const aller: Pilote = (cible) => {
-      const boite = boiteDe(sceneRef.current, cible);
-      if (boite === null) return;
+      // Toute la ferme : exactement la vue d'ouverture (meilleur azimut, cadrage sur les vrais coins) ; le reste, la boîte de la cible.
+      const boite = cible.sorte === 'ferme' ? null : boiteDe(sceneRef.current, cible);
+      if (cible.sorte !== 'ferme' && boite === null) return;
       const depart = poseCourante();
       const dx = depart.position.x - depart.cible.x;
       const dz = depart.position.z - depart.cible.z;
       const direction = Math.hypot(dx, dz) > 1e-9 ? { x: dx, z: dz } : { x: Math.sin(o.azimut), z: Math.cos(o.azimut) };
       const cadre = toile.getBoundingClientRect();
       const rapport = cadre.width > 0 && cadre.height > 0 ? cadre.width / cadre.height : 1;
-      const vol = demarrerVol(depart, cadrage(boite, CHAMP_DEGRES, rapport, direction), mouvementReduit());
+      const arrivee = boite === null ? (meilleureVueDeFerme(pointsDeFerme(sceneRef.current), CHAMP_DEGRES, rapport, AZIMUT_DEPART)?.pose ?? null) : cadrage(boite, CHAMP_DEGRES, rapport, direction);
+      if (arrivee === null) return;
+      const vol = demarrerVol(depart, arrivee, mouvementReduit());
       enVol.current = { vol, debut: performance.now(), cible: cible.sorte === 'ferme' ? 'ferme' : cible.id };
       suiviRef.current.vol = vol.dureeMs > 0;
       suiviRef.current.vols += 1;
       toile.dataset.vols = String(suiviRef.current.vols);
+      // Le vol est annoncé tout de suite (pas à la prochaine image) : qui lit `data-vol` après le clic ne voit pas « non » par erreur.
+      if (vol.dureeMs > 0) {
+        toile.dataset.vol = 'oui';
+        suiviRef.current.volEcrit = true;
+      }
       invalider();
     };
     piloteRef.current = aller;
@@ -387,15 +518,18 @@ function Camera({
       }
     };
 
-    /** Clic sur la scène : la zone touchée par le rayon du pointeur, socle ou planche. */
+    /** Clic sur la scène : la zone touchée par le rayon du pointeur (socle, planche ou serre), ou le bâtiment. */
     const cliquer = (e: PointerEvent) => {
       const cadre = toile.getBoundingClientRect();
       if (cadre.width <= 0 || cadre.height <= 0) return;
       const { raycaster, camera } = lireEtat();
       camera.updateMatrixWorld();
       raycaster.setFromCamera(new Vector2(((e.clientX - cadre.left) / cadre.width) * 2 - 1, -(((e.clientY - cadre.top) / cadre.height) * 2 - 1)), camera);
-      const zone = zoneSousRayon(raycaster.ray.origin, raycaster.ray.direction, boitesRef.current);
-      if (zone !== null) aller({ sorte: 'zone', id: zone });
+      const touchee = boiteSousRayon(raycaster.ray.origin, raycaster.ray.direction, boitesRef.current);
+      if (touchee === null) return;
+      // Une serre répond par sa zone ; un bâtiment qui n'abrite aucune zone vole vers lui-même.
+      if (touchee.zoneId === '' && touchee.batimentId !== undefined) aller({ sorte: 'batiment', id: touchee.batimentId });
+      else aller({ sorte: 'zone', id: touchee.zoneId });
     };
 
     let pointeur: { id: number; x: number; y: number; x0: number; y0: number; glisse: boolean } | null = null;
@@ -475,7 +609,7 @@ function Camera({
       toile.removeEventListener('wheel', molette);
       toile.removeEventListener('keydown', touche);
     };
-  }, [lireEtat, toile, invalider, rayon, suiviRef, piloteRef, surGlisse]);
+  }, [lireEtat, toile, invalider, rayon, centre, suiviRef, piloteRef, surGlisse]);
   return null;
 }
 
@@ -574,14 +708,36 @@ function BoutonsToutRien({ dimension, surTout, surRien }: { readonly dimension: 
 
 // ── Vue ──────────────────────────────────────────────────────────────────────────────────────
 
-/** Rayon de la ferme (m de scène) : la moitié de la diagonale de l'ensemble des socles. */
-function rayonDe(scene: Scene): number {
-  let r = 1;
-  for (const s of scene.socles) {
-    r = Math.max(r, Math.hypot(Math.abs(s.x) + s.largeur / 2, Math.abs(s.z) + s.profondeur / 2));
-  }
-  return r;
-}
+/** Nom lu du type d'un bâtiment (liste texte). */
+const NOMS_TYPES: Readonly<Record<BatimentScene['type'], string>> = {
+  serre_tunnel: 'serre tunnel',
+  serre_chapelle: 'serre à chapelles',
+  hangar: 'hangar',
+  magasin: 'magasin',
+  autre: 'bâtiment',
+};
+
+const ElementBatiment = memo(function ElementBatiment({ batiment, surAller }: { readonly batiment: BatimentScene; readonly surAller: (cible: CibleVol) => void }) {
+  return (
+    <li data-testid="element-batiment-3d" data-id={batiment.id} data-forme={batiment.forme}>
+      <span className="plan3d-code">{batiment.nom}</span>
+      <span className="plan3d-culture">{NOMS_TYPES[batiment.type]}</span>
+      {batiment.zoneId === null && (
+        <button
+          type="button"
+          data-testid="aller-batiment-3d"
+          data-id={batiment.id}
+          className="plan3d-bouton"
+          onClick={() => {
+            surAller({ sorte: 'batiment', id: batiment.id });
+          }}
+        >
+          Aller à {batiment.nom}
+        </button>
+      )}
+    </li>
+  );
+});
 
 export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
   const nbSemaines = plan.semaines.length;
@@ -589,12 +745,13 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
   const [prete, setPrete] = useState(false);
   const idCurseur = useId();
   const idListe = useId();
+  const idBatiments = useId();
 
   // Géométrie : posée par le plan seul (la semaine ne change que les couleurs).
   const geometrie = useMemo(() => (nbSemaines === 0 ? null : versScene(plan, 0)), [plan, nbSemaines]);
   const semaineBornee = Math.min(semaine, Math.max(0, nbSemaines - 1));
   const scene = useMemo(() => (nbSemaines === 0 ? null : versScene(plan, semaineBornee)), [plan, semaineBornee, nbSemaines]);
-  const rayon = useMemo(() => (geometrie === null ? 1 : rayonDe(geometrie)), [geometrie]);
+  const { centre, rayon } = useMemo(() => (geometrie === null ? { centre: { x: 0, y: 0, z: 0 }, rayon: 1 } : empriseDe(geometrie)), [geometrie]);
 
   // Filtres (T27b) : état local à la vue, jamais écrit ni stocké ; tout est coché à chaque ouverture.
   const [filtres, setFiltres] = useState<FiltresScene>(FILTRES_TOUT);
@@ -764,13 +921,26 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
   // Ce que le pointeur peut toucher : les socles (au ras du sol) et les planches telles que dessinées.
   const boites = useMemo<readonly BoiteZone[]>(() => {
     if (filtree === null) return [];
+    const zones = new Set(filtree.socles.map((s) => s.id));
     return [
-      ...filtree.socles.map((s) => ({ zoneId: s.id, min: { x: s.x - s.largeur / 2, y: -EPAISSEUR_SOCLE, z: s.z - s.profondeur / 2 }, max: { x: s.x + s.largeur / 2, y: 0, z: s.z + s.profondeur / 2 } })),
-      ...filtree.volumes.map((v) => ({ zoneId: v.zoneId, min: { x: v.x - v.longueur / 2, y: 0, z: v.z - v.largeur / 2 }, max: { x: v.x + v.longueur / 2, y: v.hauteurRendue, z: v.z + v.largeur / 2 } })),
+      ...filtree.socles.map((s) => ({ zoneId: s.id, min: { x: s.x - s.largeur / 2, y: -EPAISSEUR_SOCLE, z: s.z - s.profondeur / 2 }, max: { x: s.x + s.largeur / 2, y: 0, z: s.z + s.profondeur / 2 }, angle: s.angle })),
+      ...filtree.volumes.map((v) => ({ zoneId: v.zoneId, min: { x: v.x - v.longueur / 2, y: 0, z: v.z - v.largeur / 2 }, max: { x: v.x + v.longueur / 2, y: v.hauteurRendue, z: v.z + v.largeur / 2 }, angle: v.angle })),
+      // Une serre se touche par sa zone ; un bâtiment qui n'abrite aucune zone de la scène, par lui-même.
+      ...filtree.batiments.map((b) => ({
+        zoneId: b.zoneId !== null && zones.has(b.zoneId) ? b.zoneId : '',
+        batimentId: b.id,
+        min: { x: b.x - b.largeur / 2, y: 0, z: b.z - b.profondeur / 2 },
+        max: { x: b.x + b.largeur / 2, y: b.hauteur, z: b.z + b.profondeur / 2 },
+        angle: b.angle,
+      })),
     ];
   }, [filtree]);
 
   const nbVolumes = geometrie?.volumes.length ?? 0;
+  // Ce que le jumeau dessine, lu par les tests : bâtiments, arceaux (tous bâtiments), planches placées. La géométrie ne dépend pas de la semaine.
+  const nbBatiments = geometrie?.batiments.length ?? 0;
+  const nbArceaux = geometrie?.batiments.reduce((n, b) => n + b.arceaux.length, 0) ?? 0;
+  const nbPlacees = geometrie?.volumes.filter((v) => v.placee).length ?? 0;
   const libelleCourant = plan.semaines[semaineBornee]?.libelle ?? '';
   const description = `Vue 3D des planches, semaine ${libelleCourant}. Glisser pour tourner, molette pour s’approcher ; au clavier, flèches et + ou -.`;
 
@@ -781,9 +951,10 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
       <GardeErreur surErreur={surErreur}>
         <ambientLight intensity={1.6} />
         <directionalLight position={[rayon * 0.3, rayon, rayon * 0.5]} intensity={1.8} />
-        <Socles scene={geometrie} />
+        <Sol scene={geometrie} />
+        <Batiments scene={geometrie} />
         <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
-        <Camera rayon={rayon} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
+        <Camera rayon={rayon} centre={centre} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
         <Rendu surImage={surImage} />
       </GardeErreur>,
     );
@@ -835,7 +1006,7 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
       </div>
       <div className="plan3d-corps">
         <div className="plan3d-scene">
-          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-rendus={0} data-geometries={0} data-estompes={0} data-vols={0} data-vol="non" data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-vols={0} data-vol="non" data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
         </div>
         <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
           <div className="plan3d-filtres">
@@ -896,6 +1067,18 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
               </ul>
             </details>
           </div>
+          {geometrie !== null && geometrie.batiments.length > 0 && (
+            <>
+              <h2 id={idBatiments} className="plan3d-titre-liste">
+                Bâtiments
+              </h2>
+              <ul data-testid="liste-batiments-3d" role="list" aria-labelledby={idBatiments} className="plan3d-liste plan3d-liste-batiments">
+                {geometrie.batiments.map((b) => (
+                  <ElementBatiment key={b.id} batiment={b} surAller={aller} />
+                ))}
+              </ul>
+            </>
+          )}
           <h2 id={idListe} className="plan3d-titre-liste">
             Planches et cultures, {libelle}
           </h2>

@@ -287,3 +287,8 @@
   margin-left: auto;
   white-space: nowrap;
 }
+
+/* T28c : liste des bâtiments, le bouton de vol passe à la ligne si le nom est long. */
+.plan3d-liste-batiments li {
+  flex-wrap: wrap;
+}
