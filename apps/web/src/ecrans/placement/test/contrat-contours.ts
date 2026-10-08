@@ -60,6 +60,13 @@
  *   ni « Tracer le contour », ni `sommet`, ni `cote-contour` ; les touches et clics ne changent
  *   rien ; rien n'est écrit.
  *
+ * Planches de la zone (décision du chef) : un contour modifié (ou tracé) d'une zone sans serre
+ *   laisse ses planches placées à leur place et à leur cap ABSOLUS, à l'affichage (data-x, data-y,
+ *   data-orientation des `planche` inchangés pendant le geste) comme en base : « Enregistrer » écrit
+ *   dans le MÊME porte.placer le contour { sorte: 'zone' } ET, pour chaque planche placée de la
+ *   zone, { sorte: 'emplacement', id, placement } recalculé (replacerPlanches, arrondi au mm et au
+ *   millième de degré). L'annulation remet contour et planches exactement. Zone sans planche
+ *   placée : le contour seul.
  * Écriture : « Enregistrer » = UN appel à porte.placer avec tout le brouillon (bâtiments,
  *   planches, contours) ; un contour s'écrit { sorte: 'zone', id, contour } (sommets arrondis au
  *   millimètre ; la porte le range en sens antihoraire). Puis « Annuler » (`annuler-placement`)
@@ -111,6 +118,20 @@ export interface ModuleContours {
    * Valide : { ok: true, contour } (sens antihoraire, x et y seulement) ; sinon { ok: false, code, message }.
    */
   verifierContour(contour: readonly Point[]): { ok: true; contour: Point[] } | { ok: false; code: string; message: string };
+  /**
+   * Décision du chef (T28d) : quand le contour d'une zone sans serre change, son repère change
+   * (centroïde, cap du plus long côté : repereZone du cœur), mais les planches placées de la zone
+   * NE BOUGENT PAS sur le terrain. Rend, dans le même ordre, le placement de chaque planche dans le
+   * repère du NOUVEAU contour qui garde sa position et son cap ABSOLUS (repère de la ferme) : à
+   * 1 mm et 0,01° près, orientation_deg dans [0, 360[. Contour ancien ou nouveau sans repère
+   * (invalide) : copie inchangée.
+   */
+  replacerPlanches(ancien: readonly Point[], nouveau: readonly Point[], planches: readonly PlancheDansZone[]): PlancheDansZone[];
+}
+
+export interface PlancheDansZone {
+  readonly id: string;
+  readonly placement: { readonly x: number; readonly y: number; readonly orientation_deg: number };
 }
 
 /** Messages exacts (contenus dans le texte affiché). */

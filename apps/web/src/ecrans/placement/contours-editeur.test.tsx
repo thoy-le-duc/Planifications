@@ -16,13 +16,13 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { validerContour, type Id } from '@planif/core';
+import { depuisRepereZone, repereZone, validerContour, type Id } from '@planif/core';
 import { creerPorte, SCHEMA_LOCAL, type ChangementPlacement, type PorteDonnees } from '@planif/sync';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
 import { attendre, bouton, champ, desactive, liste, remplir, texte, toucher, unTour } from '../itineraires/test/outils.ts';
 import { TESTID_PLACEMENT as T, type ModuleEditeur, type Point, type ProprietesEditeurPlacement } from './test/contrat.ts';
 import { BOUTONS_CONTOURS as B, MESSAGES_CONTOURS, TESTID_CONTOURS as TC } from './test/contrat-contours.ts';
-import { CONTOUR_CHAMP, ecrireFermePlacement, FERME, SERRE, UTILISATEUR, ZONE_CHAMP, ZONE_TUNNEL, type OptionsFermePlacement } from './test/ferme-placement.ts';
+import { CONTOUR_CHAMP, ecrireFermePlacement, FERME, PLANCHE, SERRE, UTILISATEUR, ZONE_CHAMP, ZONE_TUNNEL, type OptionsFermePlacement } from './test/ferme-placement.ts';
 
 const CHEMIN = './index.ts';
 const MAINTENANT = new Date('2026-10-08T08:00:00.000Z');
@@ -830,5 +830,89 @@ describe('T28d : la ferme change pendant l’édition d’un contour', () => {
     expect(b.placements).toEqual([]);
     expect(a.placements).toHaveLength(1);
     expect(contourEnBase(ZONE_CHAMP)).toEqual(ecrit);
+  });
+});
+
+// ── Décision du chef : les planches restent en place quand le contour de leur zone change ────
+
+/** PC-01 en base : position et cap absolus, déduits du contour de Plein champ et du placement. */
+function pc01Absolue(): { x: number; y: number; cap: number; placement: { x: number; y: number; o: number } } {
+  if (base === null) throw new Error('base absente');
+  const l = base.lireDirect<Ligne>('SELECT placement_x_m AS x, placement_y_m AS y, orientation_deg AS o FROM emplacement WHERE id = ?', [PLANCHE])[0];
+  const r = repereZone({ contour: contourEnBase(ZONE_CHAMP) });
+  if (l === undefined || r === null) throw new Error('PC-01 ou repère absent');
+  const placement = { x: Number(l.x), y: Number(l.y), o: Number(l.o) };
+  const c = depuisRepereZone(r, { x: placement.x, y: placement.y });
+  return { x: c.x, y: c.y, cap: (((placement.o + r.orientationDeg) % 360) + 360) % 360, placement };
+}
+const ecartCap = (a: number, b: number): number => Math.abs(((a - b + 540) % 360) - 180);
+const planche = (): HTMLElement | null => document.querySelector<HTMLElement>(`[data-testid="${T.planche}"][data-id="${PLANCHE}"]`);
+
+describe('T28d (chef) : retoucher le contour ne déplace pas les planches de la zone', () => {
+  it('le plus long côté change (cap du repère 90° → 0°) : PC-01 immobile à l’écran et en base ; UN porte.placer zone + planche ; annulation exacte', async () => {
+    const p = await ouvrir({ origine: true });
+    await attendre(() => planche() !== null, 'PC-01 affichée');
+    expect(pc01Absolue()).toMatchObject({ x: 120, y: 15, cap: 90 });
+    await choisirZone(ZONE_CHAMP);
+    // Plein champ devient 40 × 60 m : son plus long côté passe nord-sud.
+    await remplir(champ('Sommet 3 y (m)', panneau()), '60');
+    await remplir(champ('Sommet 4 y (m)', panneau()), '60');
+    await attendre(() => edition()?.getAttribute('data-etat') === 'valide', 'contour valide');
+    const pl = planche();
+    expect(pl, 'PC-01 toujours affichée').not.toBeNull();
+    expect(nombre(pl ?? document.body, 'data-x')).toBeCloseTo(120, 2);
+    expect(nombre(pl ?? document.body, 'data-y')).toBeCloseTo(15, 2);
+    expect(ecartCap(nombre(pl ?? document.body, 'data-orientation'), 90)).toBeLessThanOrEqual(0.01);
+    expect(p.placements).toEqual([]);
+
+    await enregistrer();
+    await attendre(() => p.placements.length === 1, 'un seul appel à porte.placer');
+    const appel = p.placements[0] ?? [];
+    expect(appel.flatMap((c) => (c.sorte === 'zone' ? [c.id] : []))).toEqual([ZONE_CHAMP]);
+    expect(appel.flatMap((c) => (c.sorte === 'emplacement' ? [c.id] : []))).toEqual([PLANCHE]);
+    await attendre(() => contourEnBase(ZONE_CHAMP)?.some((s) => s.y === 60) === true, 'contour écrit');
+    const apres = pc01Absolue();
+    expect(Math.abs(apres.x - 120), 'x absolu de PC-01').toBeLessThanOrEqual(0.002);
+    expect(Math.abs(apres.y - 15), 'y absolu de PC-01').toBeLessThanOrEqual(0.002);
+    expect(ecartCap(apres.cap, 90), 'cap absolu de PC-01').toBeLessThanOrEqual(0.01);
+    expect(apres.placement.y).toBeCloseTo(-15, 2);
+
+    await annulerDernier();
+    await attendre(() => JSON.stringify(contourEnBase(ZONE_CHAMP)) === JSON.stringify(CONTOUR_CHAMP), 'contour remis à l’identique');
+    await attendre(() => JSON.stringify(pc01Absolue().placement) === JSON.stringify({ x: 0, y: 0, o: 0 }), 'PC-01 remise exactement en (0, 0, 0°)');
+    expect(p.placements).toHaveLength(2);
+    expect(p.autresEcritures).toEqual([]);
+  });
+
+  it('glisser un sommet à la souris : PC-01 reste à (120, 15) en base, à 2 mm près', async () => {
+    const p = await ouvrir({ origine: true });
+    await choisirZone(ZONE_CHAMP);
+    const s2 = sommet(2);
+    await pointeur(s2, 'pointerdown', 300, 300);
+    await pointeur(s2, 'pointermove', 400, 250);
+    await pointeur(s2, 'pointerup', 400, 250);
+    await enregistrer();
+    await attendre(() => p.placements.length === 1, 'un appel');
+    await attendre(() => JSON.stringify(contourEnBase(ZONE_CHAMP)) !== JSON.stringify(CONTOUR_CHAMP), 'contour écrit');
+    const a = pc01Absolue();
+    expect(Math.abs(a.x - 120)).toBeLessThanOrEqual(0.002);
+    expect(Math.abs(a.y - 15)).toBeLessThanOrEqual(0.002);
+    expect(ecartCap(a.cap, 90)).toBeLessThanOrEqual(0.01);
+  });
+
+  it('zone sans planche placée : le contour seul est écrit', async () => {
+    const p = await ouvrir({ origine: true });
+    await choisirZone(ZONE_TUNNEL);
+    await toucher(bouton(B.tracer));
+    for (const pt of [
+      { x: 500, y: 500 },
+      { x: 600, y: 500 },
+      { x: 500, y: 400 },
+    ]) await cliquerPlan(pt.x, pt.y);
+    await touche(editeurOuEchec(), 'Enter');
+    await attendre(() => edition()?.getAttribute('data-etat') === 'valide', 'fermé');
+    await enregistrer();
+    await attendre(() => p.placements.length === 1, 'un appel');
+    expect(p.placements[0]?.map((c) => c.sorte)).toEqual(['zone']);
   });
 });

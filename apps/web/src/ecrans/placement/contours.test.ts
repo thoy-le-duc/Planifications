@@ -8,8 +8,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { validerContour } from '@planif/core';
-import type { ModuleContours, Point } from './test/contrat-contours.ts';
+import { depuisRepereZone, repereZone, validerContour } from '@planif/core';
+import type { ModuleContours, PlancheDansZone, Point } from './test/contrat-contours.ts';
 
 const CHEMIN = './contours.ts';
 let c: ModuleContours;
@@ -273,5 +273,83 @@ describe('T28d : pureté', () => {
     expect(source).not.toMatch(/\b(document|window|fetch|Date\.now|new Date|localStorage)\b/);
     // Le point d'entrée racine du cœur alourdirait le morceau de l'éditeur (budget jsPlacementGzKio).
     expect(source).not.toMatch(/from\s+['"]@planif\/core['"]/);
+  });
+});
+
+// ── Décision du chef : les planches ne bougent pas quand le contour de leur zone change ───────
+
+/** Position et cap absolus (repère de la ferme) d'une planche placée dans la zone de ce contour. */
+function absolue(contour: readonly Point[], p: PlancheDansZone['placement']): { x: number; y: number; cap: number } {
+  const r = repereZone({ contour });
+  if (r === null) throw new Error('contour sans repère');
+  const c = depuisRepereZone(r, { x: p.x, y: p.y });
+  return { x: c.x, y: c.y, cap: (((p.orientation_deg + r.orientationDeg) % 360) + 360) % 360 };
+}
+const ecartCap = (a: number, b: number): number => Math.abs(((a - b + 540) % 360) - 180);
+
+const PLANCHES: readonly PlancheDansZone[] = [
+  { id: 'pc-01', placement: { x: 0, y: 0, orientation_deg: 0 } },
+  { id: 'pc-02', placement: { x: 5, y: -3, orientation_deg: 30 } },
+  { id: 'pc-03', placement: { x: -12.5, y: 7.25, orientation_deg: 359.5 } },
+];
+
+function verifierImmobiles(ancien: readonly Point[], nouveau: readonly Point[]): void {
+  const r = c.replacerPlanches(ancien, nouveau, PLANCHES);
+  expect(r.map((p) => p.id)).toEqual(PLANCHES.map((p) => p.id));
+  r.forEach((p, i) => {
+    const avant = absolue(ancien, PLANCHES[i]?.placement ?? { x: 0, y: 0, orientation_deg: 0 });
+    const apres = absolue(nouveau, p.placement);
+    expect(Math.abs(apres.x - avant.x), `${p.id} : x absolu`).toBeLessThanOrEqual(MM);
+    expect(Math.abs(apres.y - avant.y), `${p.id} : y absolu`).toBeLessThanOrEqual(MM);
+    expect(ecartCap(apres.cap, avant.cap), `${p.id} : cap absolu`).toBeLessThanOrEqual(0.01);
+    expect(p.placement.orientation_deg).toBeGreaterThanOrEqual(0);
+    expect(p.placement.orientation_deg).toBeLessThan(360);
+  });
+}
+
+describe('T28d (chef) : replacerPlanches garde les planches immobiles sur le terrain', () => {
+  it('sommet déplacé, même plus long côté : centre du repère déplacé, planches immobiles', () => {
+    verifierImmobiles(CHAMP, [CHAMP[0], CHAMP[1], { x: 161.478, y: 30 }, CHAMP[3]] as Point[]);
+  });
+
+  it('le plus long côté change : le cap du repère saute de 90° à 0°, planches immobiles', () => {
+    const haut = [
+      { x: 100, y: 0 },
+      { x: 140, y: 0 },
+      { x: 140, y: 60 },
+      { x: 100, y: 60 },
+    ];
+    expect(repereZone({ contour: CHAMP })?.orientationDeg).toBeCloseTo(90, 6);
+    expect(repereZone({ contour: haut })?.orientationDeg).toBeCloseTo(0, 6);
+    verifierImmobiles(CHAMP, haut);
+    // PC-01, au centre de l'ancien repère (120, 15) cap 90° : dans le nouveau (centre (120, 30), cap 0°), (0, −15) à 90°.
+    const [pc01] = c.replacerPlanches(CHAMP, haut, PLANCHES);
+    expect(pc01?.placement.x).toBeCloseTo(0, 3);
+    expect(pc01?.placement.y).toBeCloseTo(-15, 3);
+    expect(pc01?.placement.orientation_deg).toBeCloseTo(90, 2);
+  });
+
+  it('nouveau contour en L, avec plus de sommets : planches immobiles', () => {
+    verifierImmobiles(CHAMP, [
+      { x: 90, y: -10 },
+      { x: 150, y: -10 },
+      { x: 150, y: 10 },
+      { x: 125, y: 10 },
+      { x: 125, y: 45 },
+      { x: 90, y: 45 },
+    ]);
+  });
+
+  it('contour identique : placements inchangés ; aucune planche : liste vide ; n’altère pas ses arguments', () => {
+    const copie = structuredClone(PLANCHES);
+    const r = c.replacerPlanches(CHAMP, CHAMP, PLANCHES);
+    r.forEach((p, i) => {
+      const a = PLANCHES[i]?.placement;
+      expect(Math.abs(p.placement.x - (a?.x ?? 0))).toBeLessThanOrEqual(MM);
+      expect(Math.abs(p.placement.y - (a?.y ?? 0))).toBeLessThanOrEqual(MM);
+      expect(ecartCap(p.placement.orientation_deg, a?.orientation_deg ?? 0)).toBeLessThanOrEqual(0.01);
+    });
+    expect(c.replacerPlanches(CHAMP, L, [])).toEqual([]);
+    expect(PLANCHES).toEqual(copie);
   });
 });
