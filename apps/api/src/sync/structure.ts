@@ -309,7 +309,7 @@ async function compter(tx: TransactionDb, requete: SQL): Promise<number> {
  * NON TERMINÉE (fin ≥ date du jour dans le fuseau de la ferme) si `nonTerminees`. Les assolements
  * d'une saison terminée sont l'historique : ils restent actifs et n'empêchent rien.
  */
-function assolementsActifs(colonne: 'zone_id' | 'emplacement_id' | 'saison_id' | 'espece_id', id: string, fermeId: string, maintenant: Date, nonTerminees: boolean): SQL {
+function assolementsActifs(colonne: 'zone_id' | 'emplacement_id' | 'saison_id' | 'espece_id' | 'famille_id', id: string, fermeId: string, maintenant: Date, nonTerminees: boolean): SQL {
   const saison = nonTerminees
     ? sql`AND EXISTS (SELECT 1 FROM saison sa WHERE sa.id = a.saison_id AND sa.ferme_id = a.ferme_id AND sa.fin >= ${jourDeLaFerme(fermeId, maintenant)})`
     : sql``;
@@ -414,7 +414,11 @@ async function verifierLibre(tx: TransactionDb, table: TableEcrite, id: string, 
     }
     case 'famille': {
       const utilisee = await existe(tx, sql`SELECT 1 FROM espece e WHERE e.famille_id = ${id}::uuid AND e.ferme_id = ${fermeId}::uuid AND e.supprime_le IS NULL`);
-      return utilisee ? invalide('cette famille contient encore des espèces de la ferme : supprimez-les ou rangez-les ailleurs d’abord', fermeId) : null;
+      if (utilisee) return invalide('cette famille contient encore des espèces de la ferme : supprimez-les ou rangez-les ailleurs d’abord', fermeId);
+      // T10t (contre-relecture, F1) : les assolements actifs d'une saison non terminée qui la
+      // désignent la retiennent aussi, même sans espèce.
+      const n = await compter(tx, assolementsActifs('famille_id', id, fermeId, maintenant, true));
+      return n > 0 ? invalide(`cette famille est encore prévue dans ${assolementsDuPlan(n)} : retirez-la d’abord du plan de la saison`, fermeId) : null;
     }
     case 'saison': {
       const utilisee = await existe(tx, seriesActives('saison_id', id, fermeId));
@@ -537,8 +541,8 @@ async function verifierEnBase(tx: TransactionDb, table: TableEcrite, l: Ligne, a
     case 'saison': {
       // T10t (décision B) : prolonger une saison terminée (sa fin passe d'avant le jour à ce jour ou
       // après, jour du fuseau de la ferme) remet son plan en cours : refusé si des assolements actifs
-      // de ce plan désignent une zone, un emplacement ou une espèce supprimés, ou une espèce dont la
-      // famille n'est plus la leur (l'historique peut l'avoir laissé ainsi).
+      // de ce plan désignent une zone, un emplacement, une espèce ou une famille (F2) supprimés, ou
+      // une espèce dont la famille n'est plus la leur (l'historique peut l'avoir laissé ainsi).
       const finAvant = avant === null ? null : avant.fin;
       if (avant !== null && typeof finAvant === 'string' && typeof l.fin === 'string' && differe('fin')) {
         const jour = jourDeLaFerme(f, maintenant);
@@ -550,8 +554,9 @@ async function verifierEnBase(tx: TransactionDb, table: TableEcrite, l: Ligne, a
                 LEFT JOIN zone z ON z.id = a.zone_id
                 LEFT JOIN emplacement em ON em.id = a.emplacement_id
                 LEFT JOIN espece sp ON sp.id = a.espece_id
+                LEFT JOIN famille fa ON fa.id = a.famille_id
                 WHERE a.saison_id = ${String(l.id)}::uuid AND a.ferme_id = ${f}::uuid AND a.supprime_le IS NULL
-                  AND (z.supprime_le IS NOT NULL OR em.supprime_le IS NOT NULL OR sp.supprime_le IS NOT NULL
+                  AND (z.supprime_le IS NOT NULL OR em.supprime_le IS NOT NULL OR sp.supprime_le IS NOT NULL OR fa.supprime_le IS NOT NULL
                        OR (sp.id IS NOT NULL AND sp.famille_id IS DISTINCT FROM a.famille_id))`,
           );
           if (n > 0) {
