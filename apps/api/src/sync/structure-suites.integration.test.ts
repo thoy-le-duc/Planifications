@@ -89,6 +89,12 @@
  *       refusé.
  *    Échanger deux codes dans un même lot est refusé (la première modification prend un code
  *    encore pris) ; on passe par un code temporaire.
+ *
+ * 7. Contre-relecture : une famille de la ferme est retenue (suppression refusée, message qui
+ *    compte, critère du 3) par les assolements actifs d'une saison non terminée qui la désignent,
+ *    même sans espèce ; ceux d'une saison passée ou d'une autre ferme ne comptent pas. Prolonger
+ *    une saison terminée (6.B) est aussi refusé si un de ses assolements actifs désigne une
+ *    famille supprimée.
  */
 import { creerGenerateurId } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -1291,6 +1297,86 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
       await accepte([patch('emplacement', p3, { code: 'P3-temp' }), patch('emplacement', p4, { code: 'P3' }), patch('emplacement', p3, { code: 'P4' })]);
       expect((await ligne('emplacement', p3))?.code).toBe('P4');
       expect((await ligne('emplacement', p4))?.code).toBe('P3');
+    });
+  });
+
+  // ── 7. Contre-relecture : la famille, désignée par l'assolement même sans espèce ────────────
+
+  describe('F1 : famille de la ferme désignée par des assolements actifs d’une saison non terminée : suppression refusée', () => {
+    /** Famille de la ferme sans espèce, et un assolement (sans espèce) qui la désigne. */
+    const assolementDe = (familleId: string, saisonId: string, supprime = false): Promise<string> =>
+      assolementEn({ fermeId: ferme, saisonId, zoneId: zoneFerme, familleId, supprime });
+
+    it('2 assolements de la saison en cours (un 3e passé, un 4e supprimé ne comptent pas) : refusée, « 2 assolements », rien d’écrit', async () => {
+      const f = await familleEn(ferme);
+      await assolementDe(f, saison);
+      await assolementDe(f, saison);
+      await assolementDe(f, saisonPassee);
+      await assolementDe(f, saison, true);
+      const s = supprimer('famille', f);
+      expect(await refuseEnEntier([s], s)).toMatch(compte(2, 'assolements'));
+      expect((await ligne('famille', f))?.supprime_le).toBeNull();
+    });
+
+    it('1 assolement d’une saison future : refusée, « 1 assolement »', async () => {
+      const f = await familleEn(ferme);
+      await assolementDe(f, saisonFuture);
+      const s = supprimer('famille', f);
+      expect(await refuseEnEntier([s], s)).toMatch(compte(1, 'assolement'));
+    });
+
+    it('au milieu d’un lot valide : rien du lot n’est écrit', async () => {
+      const f = await familleEn(ferme);
+      await assolementDe(f, saison);
+      const s = supprimer('famille', f);
+      await refuseEnEntier(lotAvec(s), s);
+    });
+
+    it('seulement des assolements d’une saison passée : acceptée, l’historique reste actif', async () => {
+      const f = await familleEn(ferme);
+      const a = await assolementDe(f, saisonPassee);
+      await accepte([supprimer('famille', f)]);
+      expect((await ligne('famille', f))?.supprime_le).not.toBeNull();
+      expect((await ligne('assolement', a))?.supprime_le).toBeNull();
+    });
+
+    it('assolements supprimés plus haut dans le même lot : acceptée', async () => {
+      const f = await familleEn(ferme);
+      const a = await assolementDe(f, saison);
+      await accepte([supprimer('assolement', a), supprimer('famille', f)]);
+    });
+
+    it('droits ordinaires : un équipier reçoit le même refus', async () => {
+      const f = await familleEn(ferme);
+      await assolementDe(f, saison);
+      const s = supprimer('famille', f);
+      expect(await refuseEnEntier([s], s, paul.jeton)).toMatch(compte(1, 'assolement'));
+    });
+
+    it('isolement : un assolement d’une autre ferme qui la désignerait ne compte pas', async () => {
+      const f = await familleEn(ferme);
+      await assolementEn({ fermeId: voisine, saisonId: saisonVoisine, zoneId: zoneVoisine, familleId: f });
+      await accepte([supprimer('famille', f)]);
+    });
+  });
+
+  describe('F2 : prolonger une saison terminée dont un assolement actif désigne une famille supprimée', () => {
+    it('refusé, « 1 assolement », saison inchangée', async () => {
+      const s = await saisonEn(ferme, '2024-01-01', '2024-12-31');
+      const f = await familleEn(ferme);
+      await assolementEn({ fermeId: ferme, saisonId: s, zoneId: zoneFerme, familleId: f });
+      await assolementEn({ fermeId: ferme, saisonId: s, zoneId: zoneFerme, familleId: famille });
+      // Seul l'historique la désigne : la suppression de la famille est acceptée.
+      await accepte([supprimer('famille', f)]);
+      const p = patch('saison', s, { fin: '2026-12-31' });
+      expect(await refuseEnEntier([p], p)).toMatch(compte(1, 'assolement'));
+      expect((await ligne('saison', s))?.fin).toBe('2024-12-31');
+    });
+
+    it('témoin : famille toujours active, prolongation acceptée', async () => {
+      const s = await saisonEn(ferme, '2024-01-01', '2024-12-31');
+      await assolementEn({ fermeId: ferme, saisonId: s, zoneId: zoneFerme, familleId: await familleEn(ferme) });
+      await accepte([patch('saison', s, { fin: '2026-12-31' })]);
     });
   });
 });
