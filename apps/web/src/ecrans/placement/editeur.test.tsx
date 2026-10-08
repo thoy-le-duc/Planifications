@@ -545,16 +545,19 @@ describe('T28b : sans réseau, fond neutre et message ; l’éditeur marche', ()
     expect(espionFetch).not.toHaveBeenCalled();
   });
 
-  it('une tuile qui ne se charge pas : fond neutre et message', async () => {
+  it('une tuile qui ne se charge pas, en ligne : elle seule est masquée, la photo reste (relecture du chef)', async () => {
     await ouvrir({ origine: true });
-    const [premiere] = tous(T.tuile);
-    expect(premiere).toBeDefined();
+    const tuiles = tous(T.tuile);
+    expect(tuiles.length).toBeGreaterThan(1);
+    const [premiere] = tuiles;
     await act(async () => {
       premiere?.dispatchEvent(new Event('error'));
       await Promise.resolve();
     });
-    await attendre(() => editeurOuEchec().getAttribute('data-fond') === 'neutre', 'fond neutre après une tuile en erreur');
-    expect(texte(editeurOuEchec())).toContain(MESSAGES_PLACEMENT.horsLigne);
+    await unTour();
+    expect(editeurOuEchec().getAttribute('data-fond')).toBe('photo');
+    expect(un(T.fondNeutre)).toBeNull();
+    expect(texte(editeurOuEchec())).not.toContain(MESSAGES_PLACEMENT.horsLigne);
   });
 });
 
