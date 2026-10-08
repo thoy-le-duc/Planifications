@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T31 : les tests de temps n’échouent plus au hasard
+
+- **Fait** : helper `packages/core/src/test/mesurer.ts` (échauffement, puis médiane de 7 mesures, chacune en min(mural, CPU du processus), version synchrone et asynchrone, avec son test ; si la médiane dépasse la borne, jusqu'à 3 manches, la meilleure gardée). Appliqué aux tests de temps qui mesuraient en mural seul ou une fois : `travaux` (×2), `conflits`, `semainier`, `import/performance`, `plan/calculs`. Les bornes (60, 50, 50, 30 ms, 15 s, 80 ms) sont inchangées.
+- **Décidé** : le minimum de 5 d'avant échouait quand toute la rafale était ralentie. La médiane sur le temps de calcul (CPU) ne comptait plus la préemption, mais échouait encore 2 fois sur 5 sous 4 processus saturants (le CPU gonfle aussi) : d'où les manches refaites. Un code vraiment lent reste lent à chaque manche. Laissés tels quels : délais d'annulation (mural voulu), tests déjà sur le CPU (T19) ou en médiane de 5 avec échauffement sur la base.
+- **Bloquant** : rien.
+
 ## 2026-10-08 — T28d : le gérant trace le vrai contour de ses zones de plein champ
 
 - **Fait** : dans l'éditeur de placement, liste des zones (consultable par tous) ; zone sans serre et sans contour : « Tracer le contour », un clic par sommet, fermeture sur le premier sommet ou Entrée, Échap ou « Renoncer au tracé » pour abandonner. Zone avec contour : sommets à glisser, clic sur un côté = sommet au milieu, clic droit ou Suppr = retrait (jamais sous 3, message), au clavier Tab de sommet en sommet, flèches 0,1 m (Maj 1 m), Inser ; liste des sommets (x, y) éditable dans le panneau. Contour refusé par `validerContour` (côtés croisés, plus de 200 sommets…) : en rouge avec le message exact, « Enregistrer » inactif. Zone abritée : message, pas de contour. Même brouillon, même « Enregistrer » (un seul `porte.placer`), même « Annuler » et Ctrl+Z, même remise à zéro au changement de ferme que T28b ; gérant sur ordinateur seulement. Gestes dans `contours.ts` (pur).

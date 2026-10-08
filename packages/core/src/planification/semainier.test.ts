@@ -123,6 +123,7 @@
  *   - 3 000 séries traitées en moins de 30 ms.
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import { mesurer } from '../test/mesurer.ts';
 import { ajouterJours, analyserDate, dateDepuisJourAbsolu, jourAbsolu, lundiDeSemaine } from '../dates/index.ts';
 import type { DateCalendaire, SemaineIso } from '../dates/index.ts';
 import type {
@@ -146,9 +147,6 @@ import type {
   SerieSemainier,
   TacheSemainier,
 } from './semainier.ts';
-
-// `types: []` dans tsconfig : l'horloge haute résolution de Node est déclarée ici.
-declare const performance: { now(): number };
 
 // ---------------------------------------------------------------------------------------------
 // Outils
@@ -1015,21 +1013,11 @@ describe('performance', () => {
   const semaine = s(2027, 20);
   const aujourdhui = d('2027-05-19');
 
-  it(`${String(NOMBRE)} séries traitées en moins de 30 ms (meilleure de 5 mesures après échauffement)`, () => {
-    // Échauffement : laisse le moteur JavaScript compiler le code chaud.
-    for (let i = 0; i < 3; i++) {
-      semainier(semaine, series, [], entrees, aujourdhui);
-    }
-    let meilleure = Number.POSITIVE_INFINITY;
-    let taches: readonly TacheSemainier[] = [];
-    for (let i = 0; i < 5; i++) {
-      const t0 = performance.now();
-      taches = semainier(semaine, series, [], entrees, aujourdhui);
-      meilleure = Math.min(meilleure, performance.now() - t0);
-    }
+  it(`${String(NOMBRE)} séries traitées en moins de 30 ms (médiane de 7 mesures après échauffement)`, () => {
+    const { mediane, detail, resultat: taches } = mesurer(() => semainier(semaine, series, [], entrees, aujourdhui), { borneMs: 30 });
     // Le jeu produit bien du travail : des tâches de la semaine et des retards.
     expect(taches.some((t) => t.enRetard)).toBe(true);
     expect(taches.some((t) => !t.enRetard)).toBe(true);
-    expect(meilleure).toBeLessThan(30);
+    expect(mediane, detail).toBeLessThan(30);
   });
 });

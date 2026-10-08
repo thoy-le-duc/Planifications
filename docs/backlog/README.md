@@ -118,5 +118,6 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T28b](T28b-editeur-placement.md) | Éditeur de placement sur photo aérienne IGN : bâtiments et planches (ordinateur) | T28s | fait |
 | [T28d](T28d-contours-zones.md) | Éditeur de placement : contours de zones en formes libres (Q31) | T28b | fait |
 | [T28e](T28e-editeur-suites.md) | Éditeur de placement : suites de relecture (clavier, zoom, messages, tuiles) | T28b, T28d | à faire |
+| [T31](T31-tests-temps-fiables.md) | Tests de temps fiables sous charge (helper commun, médiane de ≥ 5, CPU) | — | fait |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
