@@ -145,3 +145,28 @@ export const MARQUES_3D_CAMERA = {
 
 /** Durée maximale d'un vol (ms) : le ticket T29. */
 export const DUREE_VOL_MAX_MS = 600;
+
+/**
+ * ── Vue d'ensemble et vue de départ (T28c) ───────────────────────────────────────────────────
+ * « Vue d'ensemble » revient EXACTEMENT à la vue d'ouverture : la pose de
+ * `meilleureVueDeFerme(pointsDeFerme(scene), champ, rapport, AZIMUT_DEPART)` (cadrage.ts, pur),
+ * pas celle de `cadrage(boiteDe(scene, {sorte:'ferme'}))`, plus large pour une ferme tournée.
+ * `boiteDe` { sorte: 'ferme' } reste la boîte axée (utile aux autres cadrages).
+ *   pointsDeFerme(scene)            coins réels (tournés) des socles (au sol), des planches et des
+ *                                   bâtiments (au sol et en hauteur) ; [] pour une scène vide ;
+ *   cadragePoints(points, champ, rapport, direction)
+ *                                   comme `cadrage` pour un nuage de points : tous dans ±0,9 de
+ *                                   l'écran, au moins un à 0,75 ; null si aucun point ; RangeError
+ *                                   comme `cadrage` (champ, rapport, direction nulle) ;
+ *   meilleureVueDeFerme(points, champ, rapport, azimutPrefere)
+ *                                   parmi 16 azimuts celui du recul le plus court ; celui de
+ *                                   `azimutPrefere` (radians, direction caméra = (sin, cos)) s'il est à
+ *                                   2 % près du meilleur ; { azimut, pose } ou null sans point.
+ */
+export const AZIMUT_DEPART = Math.PI / 4;
+
+export interface ModuleVueFerme {
+  pointsDeFerme(scene: unknown): Point3[];
+  cadragePoints(points: readonly Point3[], champVertical: number, rapportEcran: number, direction: Direction): Pose | null;
+  meilleureVueDeFerme(points: readonly Point3[], champVertical: number, rapportEcran: number, azimutPrefere: number): { readonly azimut: number; readonly pose: Pose } | null;
+}
