@@ -39,7 +39,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10q](T10q-flux-suites.md) | Réponses en flux : HTTP/1.0 et erreur au premier octet | T10p | fait |
 | [T10r](T10r-flux-delai.md) | Réponses en flux : délai jusqu’au premier morceau | T10q | fait |
 | [T10s](T10s-parcellaire-serveur.md) | Serveur : accepter le parcellaire et le catalogue de la ferme | T10r | fait |
-| [T10t](T10t-structure-suites.md) | Parcellaire et catalogue : suites de la relecture | T10s | à faire |
+| [T10t](T10t-structure-suites.md) | Parcellaire et catalogue : suites de la relecture | T10s | fait |
 | [T10u](T10u-refus-ferme-quittee.md) | Refus d'une ferme quittée effacés du téléphone | T10k | fait |
 | [T10v](T10v-resume-refus-hors-ferme.md) | Refus : pas de nom de culture d'une autre ferme dans le résumé | T10u, T10k | fait |
 | [T10g](T10g-recoltes-annulees.md) | Récoltes annulées et plafonds définitifs (Q20, Q13) | T10d | fait |
@@ -121,5 +121,11 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T28d](T28d-contours-zones.md) | Éditeur de placement : contours de zones en formes libres (Q31) | T28b | fait |
 | [T28e](T28e-editeur-suites.md) | Éditeur de placement : suites de relecture (clavier, zoom, messages, tuiles) | T28b, T28d | fait |
 | [T31](T31-tests-temps-fiables.md) | Tests de temps fiables sous charge (helper commun, médiane de ≥ 5, CPU) | — | fait |
+| [T28f](T28f-trouver-editeur.md) | Plan de la ferme : trouver et ouvrir l'éditeur depuis la 3D, démo comprise (Q32) | T28b, T28e | à faire |
+| [T32a](T32a-croissance-profils.md) | Croissance des cultures : profils et calcul (moteur) (Q32) | T02, T03 | à faire |
+| [T32b](T32b-plants-stylises-3d.md) | Jumeau 3D : plants stylisés qui grandissent (Q32) | T32a, T28c, T29b | à faire |
+| [T32c](T32c-reglage-profils.md) | Profils de croissance : réglage par la ferme (écran) (Q32) | T32a, T32b | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
+
+Suite du jumeau (Q32, 2026-10-08) : T28f et T32a en parallèle (fichiers disjoints), puis T32b. T32c ensuite (stockage validé : champ `profil_croissance` sur l'espèce).

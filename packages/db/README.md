@@ -52,6 +52,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0026_*.sql` | Généré par drizzle-kit (T28a) : UNIQUE `zone (ferme_id, id)`, cible de la clé étrangère composée de `batiment`, posé avant elle ; `modification.nom_table` accepte `Batiment` |
 | `migrations/0027_*.sql` | Généré par drizzle-kit (T28a) : table `batiment`, `ferme.origine_plan`, `zone.contour`, placement des emplacements, leurs CHECK et index |
 | `migrations/0028_*.sql` | Migration personnalisée (T28a) : déclencheurs « zone abritée sans contour », `batiment` dans la publication `powersync` |
+| `migrations/0029_*.sql` | Généré par drizzle-kit (T10t, Q27) : index unique partiel `emplacement_zone_code_actif_idx`, code d'emplacement unique par zone parmi les non supprimés et en service (`supprime_le IS NULL AND actif_au IS NULL`), sans casse ni espaces autour (`lower(trim(code))`). Aucune ligne réécrite : sur une base réelle, vérifier d'abord qu'elle ne rend rien : `SELECT ferme_id, zone_id, lower(trim(code)) AS code, count(*) FROM emplacement WHERE supprime_le IS NULL AND actif_au IS NULL GROUP BY 1, 2, 3 HAVING count(*) > 1;` (sinon la migration échoue : renommer ou retirer les doublons avec le maraîcher) |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 

@@ -1345,7 +1345,9 @@ decrireAvecBase('T10s')('T10s : POST /sync/upload accepte le parcellaire et le c
           [it, ferme, espece, JSON.stringify(BATAVIA)],
         );
         const serie = await serieTermineeSur(espece, it);
-        await accepte([supprimer('espece', espece)]);
+        // T10t : une espèce ne se supprime plus tant qu'un itinéraire actif la désigne ; l'itinéraire
+        // part dans le même envoi (supprimé, il ne bloque pas la série réactivée : décision 9, T23).
+        await accepte([supprimer('itineraire', it), supprimer('espece', espece)]);
         const p = patch('serie', serie, { statut });
         await refuseEnEntier([p], p, 'ecriture_invalide');
         expect((await ligne('serie', serie))?.statut).toBe('terminee');
