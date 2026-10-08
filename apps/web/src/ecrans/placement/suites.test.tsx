@@ -402,6 +402,20 @@ describe('T28e : longueur et largeur bornées à 0,5 m dans le panneau', () => {
     expect(nombre(batiment(SERRE) ?? document.body, 'data-largeur')).toBe(0.5);
   });
 
+  it('« Enregistrer » sans quitter le champ : 0,2 saisi n’est jamais écrit, c’est 0,5 (longueur et largeur)', async () => {
+    const b = await ouvrir({ origine: true });
+    await selectionner(batiment(SERRE) ?? document.body);
+    await remplir(champ('Longueur (m)', panneau()), '0.2');
+    await remplir(champ('Largeur (m)', panneau()), '0.2');
+    // Pas de blur : le champ garde le focus, comme un clic programmatique ou Ctrl+Entrée.
+    expect(desactive(bouton('Enregistrer'))).toBe(false);
+    await enregistrer();
+    await attendre(() => b.placements.length === 1, 'un appel à porte.placer');
+    await attendre(() => ligne(b, 'batiment', SERRE)?.longueur_m !== 30, 'serre écrite');
+    expect(ligne(b, 'batiment', SERRE)?.longueur_m).toBe(0.5);
+    expect(ligne(b, 'batiment', SERRE)?.largeur_m).toBe(0.5);
+  });
+
   it('une saisie valable au-dessus du minimum reste telle quelle', async () => {
     await ouvrir({ origine: true });
     await selectionner(batiment(SERRE) ?? document.body);
