@@ -17,15 +17,15 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests : tomate plantée le 1er mai, arrachée le 15 octobre → hauteur 0 avant le 1er mai, croissante jusqu'à 2 m à la date de hauteur maximale, 2 m jusqu'à l'arrachage, rien après ; stades attendus aux dates de bord (jour de mise en place, de début et de fin de récolte, d'arrachage).
-- [ ] Tests : durée en jours et durée en fraction du cycle donnent la même hauteur quand elles désignent le même jour ; fraction hors [0, 1] refusée.
-- [ ] Tests : date du curseur avant, pendant, après ; occupation sans date de fin → pas de fin de cycle inventée (hauteur maximale tenue).
-- [ ] Tests : date réelle présente → elle remplace la date prévue.
-- [ ] Test : toute espèce de la bibliothèque commune a un profil valide (hauteur > 0 et ≤ 6 m, durée > 0, forme connue, source ou mention renseignée).
-- [ ] Tests : pérenne → repousse chaque année sur la campagne ; hors campagne, pas de feuillage.
-- [ ] Propriété : hauteur monotone croissante jusqu'à la hauteur maximale, jamais négative, jamais au-dessus du maximum.
-- [ ] Migration, synchro et export : profil réglé écrit sur un téléphone, retrouvé sur l'autre et dans l'export ; profil hors bornes refusé par le serveur ; ferme sans profil inchangée.
-- [ ] `pnpm verif` passe en entier. Aucun `any`, aucun accès réseau ni IA dans le paquet.
+- [x] Tests : tomate plantée le 1er mai, arrachée le 15 octobre → hauteur 0 avant le 1er mai, croissante jusqu'à 2 m à la date de hauteur maximale, 2 m jusqu'à l'arrachage, rien après ; stades attendus aux dates de bord (jour de mise en place, de début et de fin de récolte, d'arrachage).
+- [x] Tests : durée en jours et durée en fraction du cycle donnent la même hauteur quand elles désignent le même jour ; fraction hors [0, 1] refusée.
+- [x] Tests : date du curseur avant, pendant, après ; occupation sans date de fin → pas de fin de cycle inventée (hauteur maximale tenue).
+- [x] Tests : date réelle présente → elle remplace la date prévue.
+- [x] Test : toute espèce de la bibliothèque commune a un profil valide (hauteur > 0 et ≤ 6 m, durée > 0, forme connue, source ou mention renseignée).
+- [x] Tests : pérenne → repousse chaque année sur la campagne ; hors campagne, pas de feuillage.
+- [x] Propriété : hauteur monotone croissante jusqu'à la hauteur maximale, jamais négative, jamais au-dessus du maximum.
+- [x] Migration, synchro et export : profil réglé écrit sur un téléphone, retrouvé sur l'autre et dans l'export ; profil hors bornes refusé par le serveur ; ferme sans profil inchangée. (Serveur, base, flux et export testés ; l'écriture sur le téléphone par la porte vient avec l'écran de réglage, T32c.)
+- [x] `pnpm verif` passe en entier. Aucun `any`, aucun accès réseau ni IA dans le paquet.
 
 ## Risques
 

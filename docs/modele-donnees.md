@@ -117,6 +117,26 @@ Validée par Théophane le 2026-10-07 (réponses à Q30 et Q31), posée par T28a
 
 La bibliothèque de référence (base INRAE Pépinière-Mesclun) est en lecture seule. Une ferme copie ce qu'elle utilise et l'ajuste chez elle.
 
+## 2 bis. Croissance des cultures — v1.x (validée le 2026-10-08, Q32)
+
+Validée par Théophane le 2026-10-08 (réponses 3 à 5 de Q32, option A), posée par T32a. Elle ajoute une colonne nulle : une ferme qui ne règle rien ne change pas.
+
+| Entité | Champ ajouté | Remarques |
+| --- | --- | --- |
+| Espèce | profil de croissance (`profil_croissance`, jsonb), facultatif | Nul : le profil par défaut de l'espèce, tenu dans le code (`packages/core/src/croissance/defauts.ts`), jamais copié en base. Réglé par la ferme sur **ses** espèces ; la bibliothèque commune n'en porte pas. |
+
+**Profil** (clés camelCase) : `forme` (`erige-tuteure`, `rosette`, `touffe`, `rampant`, `buisson`, `arbre-ou-liane`, `bulbe-ou-racine`), `hauteurMaxM` (plus de 0, 6 m au plus), `duree` jusqu'à la hauteur maximale (`{ en: 'jours', jours }` de 1 à 730, ou `{ en: 'fraction_cycle', fraction }` dans ]0, 1], part du cycle mise en place → fin de récolte), `allure` (`lineaire` ou `en-s`), `finDeCycle` (`conservee` ou `baissee`), `cycleAnnuel` des pérennes (`{ debourrement, repos }` en 'MM-JJ', débourrement avant repos ; nul pour une annuelle). Aucune autre clé ; texte de 2 048 caractères au plus.
+
+**Calcul** (`croissanceA`, `croissancePerenneA`, tests à l'appui) : stade (aucun, levée sous 10 % de la hauteur, croissance, pleine production, fin, puis aucun dès l'arrachage) et hauteur d'une occupation à une date, la date réelle remplaçant la prévue ; sans fin de récolte ni arrachage, la hauteur maximale est tenue (aucune fin inventée). Pérennes : débourrement, pleine végétation, repos, sur la campagne de l'année (hors campagne : pas de feuillage) ; sans cycle annuel, « touffe haute fixe ». La hauteur **illustre** la culture dans le jumeau numérique (T32b) : ce n'est ni une prévision de rendement ni une date de récolte.
+
+**Valeurs par défaut** : une par espèce de la bibliothèque commune (rapprochée par nom ou synonyme, sans casse ni accents), plus un profil générique pour une espèce inconnue. Ce sont des ordres de grandeur marqués « valeur usuelle à vérifier », à corriger par Théophane.
+
+**Ce que la base rejoue** (migration 0030) : CHECK « nul ou objet jsonb ». Les bornes du profil sont celles du cœur (`validerProfilCroissance`), rejouées par le serveur.
+
+**Droits** : régler le profil d'une espèce de sa ferme suit les droits ordinaires d'écriture d'une espèce (tout membre actif, T10s). Profil hors bornes : refusé par le serveur, tout l'envoi avec lui, message en français.
+
+**Synchro et export** : la colonne descend avec `espece` (texte JSON sur le téléphone) ; l'export la porte dans `espece.csv` (texte JSON, vide = défaut) et `ferme.json` (objet ou null), décrite dans LISEZMOI.txt.
+
 ## 3. Planification
 
 | Entité | Champs principaux | Remarques |
