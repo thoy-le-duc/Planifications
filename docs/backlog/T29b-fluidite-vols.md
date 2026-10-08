@@ -16,13 +16,13 @@
 
 ## Critères d'acceptation
 
-- [ ] La cause est nommée dans la PR avec des chiffres mesurés (temps par image, nombre d'objets dessinés pendant un vol), avant et après correction.
-- [ ] Si une réduction de coût est faite, un test unitaire la couvre (par exemple : le nombre d'objets dessinés pendant un vol ne dépend pas des planches hors champ).
-- [ ] e2e `vue-3d-camera.e2e.ts`, cinq lancements consécutifs sur machine libre : au plus 1 vol saccadé sur 5 à chaque lancement.
-- [ ] Les seuils et le fichier e2e sont identiques à `main` (vérifié par `git diff origin/main -- apps/web/e2e/`, vide).
-- [ ] Tests de `cadrage` et d'interpolation (T29) inchangés et verts.
-- [ ] `pnpm verif` passe en entier.
-- [ ] Budget `jsVue3dGzKio` tenu.
+- [x] La cause est nommée dans la PR avec des chiffres mesurés (temps par image, nombre d'objets dessinés pendant un vol), avant et après correction.
+- [x] Si une réduction de coût est faite, un test unitaire la couvre (par exemple : le nombre d'objets dessinés pendant un vol ne dépend pas des planches hors champ).
+- [x] e2e `vue-3d-camera.e2e.ts`, cinq lancements consécutifs sur machine libre : au plus 1 vol saccadé sur 5 à chaque lancement.
+- [x] Les seuils et le fichier e2e sont identiques à `main` (vérifié par `git diff origin/main -- apps/web/e2e/`, vide).
+- [x] Tests de `cadrage` et d'interpolation (T29) inchangés et verts.
+- [x] `pnpm verif` passe en entier.
+- [x] Budget `jsVue3dGzKio` tenu.
 
 ## Risques
 
