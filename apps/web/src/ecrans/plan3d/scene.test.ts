@@ -264,11 +264,17 @@ describe('T27 : entrées invalides, pureté, aucun calcul agronomique', () => {
 
   it('le module n’importe du moteur que des types, ni React ni three, et n’appelle ni Date ni Math.random', () => {
     const source = readFileSync(new URL(CHEMIN_SCENE, import.meta.url), 'utf8');
-    const imports = [...source.matchAll(/^\s*import\s+(type\s+)?[^;]*?from\s+['"]([^'"]+)['"]/gms)];
-    for (const [, type, cible] of imports) {
+    const imports = [...source.matchAll(/^(\s*import\s+(type\s+)?[^;]*?from\s+['"]([^'"]+)['"])/gms)].map((r) => [r[1], r[2], r[3]] as const);
+    for (const [instruction, type, cible] of imports) {
       if (cible === undefined) continue;
       expect(cible, 'dépendance lourde dans l’adaptateur pur').not.toMatch(/^(react|react-dom|three|@react-three)/);
-      if (cible.startsWith('@planif/')) expect(type, `import de valeur depuis ${cible}`).toBeDefined();
+      if (!cible.startsWith('@planif/') || type !== undefined) continue;
+      // T28c : le repère des zones est calculé par le moteur (T28a), pas recopié ici. Seules ces
+      // fonctions pures du placement peuvent être importées comme valeurs, depuis @planif/core.
+      const noms = [...(instruction?.match(/\{([^}]*)\}/s)?.[1] ?? '').split(',')].map((n) => n.trim()).filter((n) => n !== '' && !n.startsWith('type '));
+      const permis = new Set(['depuisRepereZone', 'repereZone', 'coinsEmprise', 'versRepereZone']);
+      expect(cible, `import de valeur depuis ${cible}`).toBe('@planif/core');
+      for (const n of noms) expect(permis.has(n), `import de valeur « ${n} » depuis ${cible}`).toBe(true);
     }
     expect(source).not.toMatch(/\bnew Date\b|\bDate\.now\b|Math\.random/);
   });
