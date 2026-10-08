@@ -56,7 +56,7 @@
  *    emplacements non supprimés de la ferme, comparé SANS CASSE et SANS ESPACES de début et de
  *    fin (« P3 » = « p3 » = « P3 »).
  *    - Base : index unique partiel sur (ferme_id, zone_id, lower(trim(code)))
- *      `WHERE supprime_le IS NULL` ; deux emplacements actifs de même code dans la même zone ne
+ *      `WHERE supprime_le IS NULL AND actif_au IS NULL` (décision D, point 6) ; deux emplacements actifs de même code dans la même zone ne
  *      peuvent pas coexister (23505) ; un emplacement supprimé ne bloque pas ; même code dans une
  *      autre zone : permis ; une ligne d'une autre ferme ne bloque jamais.
  *    - Serveur : refus PROPRE (réponse 200, 'ecriture_invalide', lot refusé en entier, message
@@ -73,6 +73,22 @@
  *      ferme est un doublon, pas écrite ; les autres passent »). L'import compare encore sur
  *      toute la ferme : ticket de suite (décision du chef). Risque connu : un import hors ligne
  *      qui recoupe une planche créée ailleurs et pas encore reçue est refusé en entier, proprement.
+ *
+ * 6. Relecture du chef.
+ *    A. Un assolement actif qui passe d'une saison terminée à une saison non terminée (PATCH de
+ *       saison_id) revérifie toutes ses références comme un rétablissement : zone, emplacement ou
+ *       espèce supprimés → 'ecriture_invalide' ; C. famille différente de celle (actuelle) de son
+ *       espèce → refusé aussi (message qui parle de la famille).
+ *    B. Prolonger une saison terminée (PATCH de `fin` qui la rend non terminée, critère du 3) est
+ *       refusé si des assolements actifs de la ferme, de cette saison, désignent une zone, un
+ *       emplacement ou une espèce supprimés, ou une espèce dont la famille n'est plus la leur ;
+ *       le message compte ces assolements. Sinon accepté.
+ *    D. Une planche retirée (actif_au renseigné, non supprimée) ne réserve plus son code :
+ *       l'unicité (index et serveur) ne porte que sur les emplacements non supprimés ET actifs
+ *       (`actif_au IS NULL`). Remettre en service une planche retirée dont le code est repris :
+ *       refusé.
+ *    Échanger deux codes dans un même lot est refusé (la première modification prend un code
+ *    encore pris) ; on passe par un code temporaire.
  */
 import { creerGenerateurId } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -1040,6 +1056,241 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
       const zone = await zoneEn(ferme);
       await plancheEn(voisine, zone, 'P3');
       await accepte([putEmplacement(zone, 'P3')]);
+    });
+  });
+
+  // ── 6. Relecture du chef : failles de l'historique, prolongation, planche retirée ───────────
+
+  /** Une ligne que l'historique seul désigne, puis supprimée (accepté), et l'assolement passé qui la désigne. */
+  const SUPPRIMEES: readonly (readonly [string, () => Promise<{ assolement: string }>])[] = [
+    [
+      'zone',
+      async () => {
+        const z = await zoneEn(ferme);
+        const a = await assolementEn({ fermeId: ferme, saisonId: saisonPassee, zoneId: z, familleId: famille });
+        await accepte([supprimer('zone', z)]);
+        return { assolement: a };
+      },
+    ],
+    [
+      'emplacement',
+      async () => {
+        const e = await plancheEn(ferme, await zoneEn(ferme));
+        const a = await assolementEn({ fermeId: ferme, saisonId: saisonPassee, emplacementId: e, familleId: famille });
+        await accepte([supprimer('emplacement', e)]);
+        return { assolement: a };
+      },
+    ],
+    [
+      'espece',
+      async () => {
+        const e = await especeEn(ferme, famille);
+        const a = await assolementEn({ fermeId: ferme, saisonId: saisonPassee, zoneId: await zoneEn(ferme), familleId: famille, especeId: e });
+        await accepte([supprimer('espece', e)]);
+        return { assolement: a };
+      },
+    ],
+  ];
+
+  describe.each(SUPPRIMEES)('faille A : un assolement passé dont la ligne « %s » a été supprimée ne revient pas dans le plan', (_cible, preparer) => {
+    it('PATCH qui le range dans la saison en cours : refusé, rien d’écrit', async () => {
+      const { assolement } = await preparer();
+      const p = patch('assolement', assolement, { saison_id: saison });
+      expect(await refuseEnEntier([p], p)).toMatch(/supprim/iu);
+    });
+
+    it('PATCH qui le range dans une saison future : refusé', async () => {
+      const { assolement } = await preparer();
+      const p = patch('assolement', assolement, { saison_id: saisonFuture });
+      await refuseEnEntier([p], p);
+    });
+  });
+
+  it('faille A, témoin : zone toujours active, l’assolement passé se range dans la saison en cours', async () => {
+    const z = await zoneEn(ferme);
+    const a = await assolementEn({ fermeId: ferme, saisonId: saisonPassee, zoneId: z, familleId: famille });
+    await accepte([patch('assolement', a, { saison_id: saison })]);
+    expect((await ligne('assolement', a))?.saison_id).toBe(saison);
+  });
+
+  describe('faille C : un assolement passé dont l’espèce a changé de famille ne revient pas tel quel dans le plan', () => {
+    async function especeQuiAChangeDeFamille(): Promise<{ espece: string; assolement: string; nouvelle: string }> {
+      const espece = await especeEn(ferme, famille);
+      const assolement = await assolementEn({ fermeId: ferme, saisonId: saisonPassee, zoneId: await zoneEn(ferme), familleId: famille, especeId: espece });
+      const nouvelle = await familleEn(ferme);
+      // Seul l'historique la désigne : le changement de famille est accepté (décision du chef).
+      await accepte([patch('espece', espece, { famille_id: nouvelle })]);
+      return { espece, assolement, nouvelle };
+    }
+
+    it('PATCH qui le range dans la saison en cours avec l’ancienne famille : refusé (famille ≠ celle de l’espèce), rien d’écrit', async () => {
+      const { assolement } = await especeQuiAChangeDeFamille();
+      const p = patch('assolement', assolement, { saison_id: saison });
+      expect(await refuseEnEntier([p], p)).toMatch(/famille/iu);
+    });
+
+    it('témoin : rangé dans la saison en cours avec la nouvelle famille de l’espèce : accepté', async () => {
+      const { assolement, nouvelle } = await especeQuiAChangeDeFamille();
+      await accepte([patch('assolement', assolement, { saison_id: saison, famille_id: nouvelle })]);
+      expect((await ligne('assolement', assolement))?.famille_id).toBe(nouvelle);
+    });
+  });
+
+  describe('décision B : prolonger une saison terminée dont le plan désigne des lignes supprimées ou une espèce changée de famille', () => {
+    /** Saison 2024 (terminée), avec un assolement actif sur une ligne ensuite supprimée (ou une espèce changée de famille). */
+    async function saisonAvec(defauts: readonly ('zone' | 'emplacement' | 'espece' | 'famille')[], sains = 0): Promise<string> {
+      const s = await saisonEn(ferme, '2024-01-01', '2024-12-31');
+      for (const d of defauts) {
+        switch (d) {
+          case 'zone': {
+            const z = await zoneEn(ferme);
+            await assolementEn({ fermeId: ferme, saisonId: s, zoneId: z, familleId: famille });
+            await accepte([supprimer('zone', z)]);
+            break;
+          }
+          case 'emplacement': {
+            const e = await plancheEn(ferme, await zoneEn(ferme));
+            await assolementEn({ fermeId: ferme, saisonId: s, emplacementId: e, familleId: famille });
+            await accepte([supprimer('emplacement', e)]);
+            break;
+          }
+          case 'espece': {
+            const e = await especeEn(ferme, famille);
+            await assolementEn({ fermeId: ferme, saisonId: s, zoneId: zoneFerme, familleId: famille, especeId: e });
+            await accepte([supprimer('espece', e)]);
+            break;
+          }
+          case 'famille': {
+            const e = await especeEn(ferme, famille);
+            await assolementEn({ fermeId: ferme, saisonId: s, zoneId: zoneFerme, familleId: famille, especeId: e });
+            await accepte([patch('espece', e, { famille_id: await familleEn(ferme) })]);
+            break;
+          }
+        }
+      }
+      for (let i = 0; i < sains; i++) await assolementEn({ fermeId: ferme, saisonId: s, zoneId: zoneFerme, familleId: famille });
+      return s;
+    }
+
+    it.each(['zone', 'emplacement', 'espece', 'famille'] as const)(
+      'un assolement actif dont le défaut est « %s » : prolongation jusqu’en 2026 refusée, « 1 assolement », saison inchangée',
+      async (defaut) => {
+        const s = await saisonAvec([defaut], 2);
+        const p = patch('saison', s, { fin: '2026-12-31' });
+        expect(await refuseEnEntier([p], p)).toMatch(compte(1, 'assolement'));
+        expect((await ligne('saison', s))?.fin).toBe('2024-12-31');
+      },
+    );
+
+    it('deux assolements en défaut (zone supprimée, espèce changée de famille) et des sains : le message dit « 2 assolements »', async () => {
+      const s = await saisonAvec(['zone', 'famille'], 3);
+      const p = patch('saison', s, { fin: '2027-06-30' });
+      expect(await refuseEnEntier([p], p)).toMatch(compte(2, 'assolements'));
+    });
+
+    it('bord : fin repoussée au jour même (1er octobre 2026, à Paris) : la saison redevient en cours, refusée', async () => {
+      const s = await saisonAvec(['zone']);
+      const p = patch('saison', s, { fin: '2026-10-01' });
+      await refuseEnEntier([p], p);
+    });
+
+    it('fin repoussée mais encore passée (30 septembre 2026) : la saison reste terminée, acceptée', async () => {
+      const s = await saisonAvec(['zone']);
+      await accepte([patch('saison', s, { fin: '2026-09-30' })]);
+      expect((await ligne('saison', s))?.fin).toBe('2026-09-30');
+    });
+
+    it('sans assolement en défaut (ou seulement des assolements supprimés) : prolongation acceptée', async () => {
+      const s = await saisonAvec([], 2);
+      const z = await zoneEn(ferme);
+      await assolementEn({ fermeId: ferme, saisonId: s, zoneId: z, familleId: famille, supprime: true });
+      await accepte([supprimer('zone', z)]);
+      await accepte([patch('saison', s, { fin: '2026-12-31' })]);
+      expect((await ligne('saison', s))?.fin).toBe('2026-12-31');
+    });
+
+    it('assolement en défaut supprimé plus haut dans le même lot : prolongation acceptée', async () => {
+      const s = await saisonEn(ferme, '2024-01-01', '2024-12-31');
+      const z = await zoneEn(ferme);
+      const a = await assolementEn({ fermeId: ferme, saisonId: s, zoneId: z, familleId: famille });
+      await accepte([supprimer('zone', z)]);
+      await accepte([supprimer('assolement', a), patch('saison', s, { fin: '2026-12-31' })]);
+    });
+
+    it('droits ordinaires : un équipier reçoit le même refus', async () => {
+      const s = await saisonAvec(['emplacement']);
+      const p = patch('saison', s, { fin: '2026-12-31' });
+      expect(await refuseEnEntier([p], p, paul.jeton)).toMatch(compte(1, 'assolement'));
+    });
+
+    it('isolement : un assolement d’une autre ferme qui désignerait la saison (zone voisine supprimée) ne compte pas', async () => {
+      const s = await saisonAvec([]);
+      const zv = await zoneEn(voisine);
+      await assolementEn({ fermeId: voisine, saisonId: s, zoneId: zv, familleId: familleVoisine });
+      await base.pool.query(`UPDATE zone SET supprime_le = $2 WHERE id = $1`, [zv, MAINTENANT]);
+      await accepte([patch('saison', s, { fin: '2026-12-31' })]);
+    });
+  });
+
+  describe('décision D : une planche retirée (actif_au renseigné, non supprimée) ne réserve plus son code', () => {
+    async function retireeEn(zoneId: string, code: string): Promise<string> {
+      const id = await plancheEn(ferme, zoneId, code);
+      await base.pool.query(`UPDATE emplacement SET actif_au = '2026-06-30' WHERE id = $1`, [id]);
+      return id;
+    }
+
+    it('base : « P3 » retirée puis « P3 » active dans la même zone : permis ; deux retirées aussi', async () => {
+      const zone = await zoneEn(ferme);
+      await retireeEn(zone, 'P3');
+      await retireeEn(zone, 'p3');
+      await plancheEn(ferme, zone, 'P3');
+      expect(await compter(`SELECT 1 FROM emplacement WHERE zone_id = $1 AND supprime_le IS NULL`, [zone])).toBe(3);
+    });
+
+    it('base : deux planches actives (actif_au nul) restent uniques', async () => {
+      const zone = await zoneEn(ferme);
+      await retireeEn(zone, 'P3');
+      await plancheEn(ferme, zone, 'P3');
+      await expect(plancheEn(ferme, zone, 'P3')).rejects.toMatchObject({ code: '23505' });
+    });
+
+    it('serveur : PUT de « P3 » quand la « P3 » de la zone est retirée (planches redessinées) : accepté', async () => {
+      const zone = await zoneEn(ferme);
+      await retireeEn(zone, 'P3');
+      await accepte([putEmplacement(zone, 'P3')]);
+    });
+
+    it('serveur : retirer l’ancienne « P3 » (actif_au) puis créer la nouvelle dans le même lot : accepté', async () => {
+      const zone = await zoneEn(ferme);
+      const ancienne = await plancheEn(ferme, zone, 'P3');
+      await accepte([patch('emplacement', ancienne, { actif_au: '2026-09-30' }), putEmplacement(zone, 'P3')]);
+    });
+
+    it('serveur : remettre en service (actif_au nul) une « P3 » retirée quand une « P3 » active existe : refusé', async () => {
+      const zone = await zoneEn(ferme);
+      const ancienne = await retireeEn(zone, 'P3');
+      await plancheEn(ferme, zone, 'P3');
+      const p = patch('emplacement', ancienne, { actif_au: null });
+      expect(await refuseEnEntier([p], p)).toMatch(/déjà/iu);
+    });
+  });
+
+  describe('échanger deux codes dans une zone', () => {
+    it('« P3 » ↔ « P4 » dans le même lot : refusé (la première écriture prend un code encore pris), rien d’écrit', async () => {
+      const zone = await zoneEn(ferme);
+      const p3 = await plancheEn(ferme, zone, 'P3');
+      const p4 = await plancheEn(ferme, zone, 'P4');
+      const premier = patch('emplacement', p3, { code: 'P4' });
+      await refuseEnEntier([premier, patch('emplacement', p4, { code: 'P3' })], premier);
+    });
+
+    it('en passant par un code temporaire, dans le même lot : accepté', async () => {
+      const zone = await zoneEn(ferme);
+      const p3 = await plancheEn(ferme, zone, 'P3');
+      const p4 = await plancheEn(ferme, zone, 'P4');
+      await accepte([patch('emplacement', p3, { code: 'P3-temp' }), patch('emplacement', p4, { code: 'P3' }), patch('emplacement', p3, { code: 'P4' })]);
+      expect((await ligne('emplacement', p3))?.code).toBe('P4');
+      expect((await ligne('emplacement', p4))?.code).toBe('P3');
     });
   });
 });
