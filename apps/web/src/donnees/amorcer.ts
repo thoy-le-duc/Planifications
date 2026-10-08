@@ -22,6 +22,9 @@
  * de SON utilisateur de test ; contrat : src/ecrans/itineraires/test/contrat.ts, « Amorçage ».
  *
  * T14b — `?jeu=import` : la ferme de l'import (src/ecrans/import/test/ferme-import.ts, dates fixes).
+ * T28b — `?jeu=placement` : la ferme du placement (src/ecrans/placement/test/ferme-placement.ts :
+ * gérant, sans point de départ, rien de placé), dans la base de SON utilisateur de test
+ * (e2e/placement.e2e.ts).
  * T10i — `?jeu=refus&date=AAAA-MM-JJ` : la ferme du jour (comme `?jeu=aujourdhui`) et 101 refus de
  * synchro (src/ecrans/ferme/test/refus.ts : 100 de l'utilisateur de test, datés d'avant l'heure
  * du navigateur, et 1 d'un autre utilisateur), dans la base de SON utilisateur de test
@@ -39,6 +42,7 @@ import { ecrireFermeItineraires, fermeItineraires } from '../ecrans/itineraires/
 import { ecrireRefus, REFUS_DU_JEU_TOTAL, refusDuJeu } from '../ecrans/ferme/test/refus.ts';
 import { ecrireFermeSerie, fermeSerie } from '../ecrans/serie/test/ferme-serie.ts';
 import { ecrireFermeImport, fermeImport } from '../ecrans/import/test/ferme-import.ts';
+import { ecrireFermePlacement, fermePlacement } from '../ecrans/placement/test/ferme-placement.ts';
 import { ouvrirBaseLocale } from './ouvrir.ts';
 
 interface Amorcage {
@@ -140,6 +144,13 @@ async function amorcerImport(): Promise<Amorcage> {
   return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
 }
 
+/** T28b : la ferme du placement (sans point de départ, gérant). */
+async function amorcerPlacement(): Promise<Amorcage> {
+  const ferme = fermePlacement();
+  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermePlacement(base));
+  return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
+}
+
 function amorcer(): Promise<Amorcage> {
   const parametres = new URLSearchParams(location.search);
   const jeu = parametres.get('jeu');
@@ -151,6 +162,7 @@ function amorcer(): Promise<Amorcage> {
   if (jeu === 'itineraires') return amorcerItineraires(parametres.get('date') ?? '');
   if (jeu === 'refus') return amorcerRefus(parametres.get('date') ?? '');
   if (jeu === 'import') return amorcerImport();
+  if (jeu === 'placement') return amorcerPlacement();
   return Promise.reject(new Error(`jeu inconnu : « ${jeu} »`));
 }
 
