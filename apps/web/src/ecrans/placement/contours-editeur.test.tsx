@@ -17,7 +17,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { depuisRepereZone, repereZone, validerContour, type Id } from '@planif/core';
-import { creerPorte, SCHEMA_LOCAL, type ChangementPlacement, type PorteDonnees } from '@planif/sync';
+import { creerPorte, ECRITURES_MAX_PAR_LOT, SCHEMA_LOCAL, type ChangementPlacement, type PorteDonnees } from '@planif/sync';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
 import { attendre, bouton, champ, desactive, liste, remplir, texte, toucher, unTour } from '../itineraires/test/outils.ts';
 import { TESTID_PLACEMENT as T, type ModuleEditeur, type Point, type ProprietesEditeurPlacement } from './test/contrat.ts';
@@ -79,12 +79,15 @@ interface OptionsBanc extends OptionsFermePlacement {
   readonly abriter?: boolean;
   /** Ajoute la ferme B (gérant, origine posée, une zone sans contour). */
   readonly fermeB?: boolean;
+  /** Lignes ajoutées avant l'ouverture (relecture du chef). */
+  readonly avant?: (b: BaseMemoire) => void;
 }
 
 async function creerBase(o: OptionsBanc): Promise<BaseMemoire> {
   const b = creerBaseMemoire(SCHEMA_LOCAL);
   await ecrireFermePlacement(b, o);
   if (o.abriter === true) b.recevoir('UPDATE batiment SET zone_id = ? WHERE id = ?', [ZONE_TUNNEL, SERRE]);
+  o.avant?.(b);
   if (o.fermeB === true) {
     b.recevoir(`INSERT INTO ferme (id, nom, fuseau_horaire, position, origine_plan, unites) VALUES (?, 'Ferme B', 'Europe/Paris', ?, ?, '{"longueur":"m","masse":"kg"}')`, [
       FERME_B,
@@ -915,4 +918,159 @@ describe('T28d (chef) : retoucher le contour ne déplace pas les planches de la 
     await attendre(() => p.placements.length === 1, 'un appel');
     expect(p.placements[0]?.map((c) => c.sorte)).toEqual(['zone']);
   });
+});
+
+// ── Relecture du chef ────────────────────────────────────────────────────────────────────────
+
+const idTest = (n: number): string => `0192f0c1-28b0-7000-8000-${n.toString(16).padStart(12, '0')}`;
+const RANG = idTest(0x21);
+const PLANCHE_SANS_LARGEUR = idTest(0x22);
+const ZONE_2 = idTest(0x12);
+
+/** Un emplacement placé dans Plein champ. */
+function emplacementPlace(b: BaseMemoire, id: string, code: string, sorte: string, largeur: number | null, placement: [number, number, number]): void {
+  b.recevoir(
+    `INSERT INTO emplacement (id, ferme_id, zone_id, code, sorte, longueur_m, largeur_m, nombre_places, actif_du, actif_au, remplace, placement_x_m, placement_y_m, orientation_deg, supprime_le)
+     VALUES (?, ?, ?, ?, ?, 20, ?, NULL, '2020-01-01', NULL, '[]', ?, ?, ?, NULL)`,
+    [id, FERME, ZONE_CHAMP, code, sorte, largeur, ...placement],
+  );
+}
+
+/** Position et cap absolus d'un emplacement de Plein champ, lus en base. */
+function absolueEnBase(id: string): { x: number; y: number; cap: number; placement: [number, number, number] } {
+  if (base === null) throw new Error('base absente');
+  const l = base.lireDirect<Ligne>('SELECT placement_x_m AS x, placement_y_m AS y, orientation_deg AS o FROM emplacement WHERE id = ?', [id])[0];
+  const r = repereZone({ contour: contourEnBase(ZONE_CHAMP) });
+  if (l === undefined || r === null) throw new Error(`${id} ou repère absent`);
+  const c = depuisRepereZone(r, { x: Number(l.x), y: Number(l.y) });
+  return { x: c.x, y: c.y, cap: (((Number(l.o) + r.orientationDeg) % 360) + 360) % 360, placement: [Number(l.x), Number(l.y), Number(l.o)] };
+}
+
+describe('T28d, relecture B1 : tous les emplacements placés de la zone restent en place', () => {
+  it('rang R-01 et planche P-02 sans largeur : réécrits dans le même porte.placer, position et cap absolus gardés ; annulation exacte', async () => {
+    const p = await ouvrir({
+      origine: true,
+      avant: (b) => {
+        emplacementPlace(b, RANG, 'R-01', 'rang', null, [5, 5, 0]);
+        emplacementPlace(b, PLANCHE_SANS_LARGEUR, 'P-02', 'planche', null, [-5, 0, 45]);
+      },
+    });
+    const avant = { rang: absolueEnBase(RANG), p02: absolueEnBase(PLANCHE_SANS_LARGEUR), pc01: absolueEnBase(PLANCHE) };
+    await choisirZone(ZONE_CHAMP);
+    // Contour agrandi à 40 × 60 m : centre et cap du repère changent.
+    await remplir(champ('Sommet 3 y (m)', panneau()), '60');
+    await remplir(champ('Sommet 4 y (m)', panneau()), '60');
+    await attendre(() => edition()?.getAttribute('data-etat') === 'valide', 'contour valide');
+    await enregistrer();
+    await attendre(() => p.placements.length === 1, 'un seul appel à porte.placer');
+    const appel = p.placements[0] ?? [];
+    expect(appel.flatMap((c) => (c.sorte === 'emplacement' ? [c.id] : [])).sort()).toEqual([PLANCHE, RANG, PLANCHE_SANS_LARGEUR].sort());
+    await attendre(() => contourEnBase(ZONE_CHAMP)?.some((s) => s.y === 60) === true, 'contour écrit');
+    for (const [id, a] of [
+      [RANG, avant.rang],
+      [PLANCHE_SANS_LARGEUR, avant.p02],
+      [PLANCHE, avant.pc01],
+    ] as const) {
+      const n = absolueEnBase(id);
+      expect(Math.abs(n.x - a.x), `${id} : x absolu`).toBeLessThanOrEqual(0.002);
+      expect(Math.abs(n.y - a.y), `${id} : y absolu`).toBeLessThanOrEqual(0.002);
+      expect(ecartCap(n.cap, a.cap), `${id} : cap absolu`).toBeLessThanOrEqual(0.01);
+    }
+
+    await annulerDernier();
+    await attendre(() => JSON.stringify(contourEnBase(ZONE_CHAMP)) === JSON.stringify(CONTOUR_CHAMP), 'contour remis');
+    await attendre(() => JSON.stringify(absolueEnBase(RANG).placement) === JSON.stringify([5, 5, 0]), 'R-01 remis exactement');
+    expect(absolueEnBase(PLANCHE_SANS_LARGEUR).placement).toEqual([-5, 0, 45]);
+    expect(absolueEnBase(PLANCHE).placement).toEqual([0, 0, 0]);
+  });
+});
+
+describe('T28d, relecture B2 : ordre d’écriture (contours effacés, bâtiments, contours posés, emplacements)', () => {
+  async function tracerTriangle(): Promise<void> {
+    await toucher(bouton(B.tracer));
+    for (const pt of [
+      { x: 500, y: 500 },
+      { x: 600, y: 500 },
+      { x: 500, y: 400 },
+    ]) await cliquerPlan(pt.x, pt.y);
+    await touche(editeurOuEchec(), 'Enter');
+    await attendre(() => edition()?.getAttribute('data-etat') === 'valide', 'triangle fermé');
+  }
+  const zoneDeSerre = (): unknown => base?.lireDirect<Ligne>('SELECT zone_id FROM batiment WHERE id = ?', [SERRE])[0]?.zone_id;
+  const serreEl = (): HTMLElement => {
+    const s = document.querySelector<HTMLElement>(`[data-testid="${T.batiment}"][data-id="${SERRE}"]`);
+    if (s === null) throw new Error('serre absente');
+    return s;
+  };
+  function ordreAccepte(appel: readonly ChangementPlacement[]): void {
+    const iBatiment = appel.findIndex((c) => c.sorte === 'batiment' && c.id === SERRE);
+    const iTunnel = appel.findIndex((c) => c.sorte === 'zone' && c.id === ZONE_TUNNEL);
+    expect(iBatiment, 'serre dans l’appel').toBeGreaterThanOrEqual(0);
+    expect(iTunnel, 'contour de Tunnel 1 dans l’appel').toBeGreaterThanOrEqual(0);
+    expect(iBatiment, 'le bâtiment est détaché avant que le contour soit posé').toBeLessThan(iTunnel);
+  }
+
+  it('détacher la serre de Tunnel 1 (« Aucune ») puis tracer Tunnel 1 : un seul placer, accepté ; annulation exacte', async () => {
+    const p = await ouvrir({ origine: true, abriter: true });
+    await selectionner(serreEl());
+    await remplir(liste('Zone abritée', panneau()), '');
+    await choisirZone(ZONE_TUNNEL);
+    expect(un(TC.zoneAbritee), 'Tunnel 1 n’est plus abritée au brouillon').toBeNull();
+    await tracerTriangle();
+    await enregistrer();
+    await attendre(() => p.placements.length === 1, 'un appel');
+    ordreAccepte(p.placements[0] ?? []);
+    await attendre(() => contourEnBase(ZONE_TUNNEL)?.length === 3, 'contour de Tunnel 1 écrit (appel accepté)');
+    expect(zoneDeSerre()).toBeNull();
+
+    await annulerDernier();
+    await attendre(() => contourEnBase(ZONE_TUNNEL) === null, 'contour annulé');
+    await attendre(() => zoneDeSerre() === ZONE_TUNNEL, 'serre de nouveau sur Tunnel 1');
+    expect(p.placements).toHaveLength(2);
+  });
+
+  it('la serre passe de Tunnel 1 à une autre zone, puis on trace Tunnel 1 : un seul placer, accepté ; annulation exacte', async () => {
+    const p = await ouvrir({
+      origine: true,
+      abriter: true,
+      avant: (b) => {
+        b.recevoir(`INSERT INTO zone (id, ferme_id, nom, zone_parente_id, type_abri, surface_m2, contour, supprime_le) VALUES (?, ?, 'Zone 2', NULL, 'tunnel', 200, NULL, NULL)`, [ZONE_2, FERME]);
+      },
+    });
+    await selectionner(serreEl());
+    await remplir(liste('Zone abritée', panneau()), ZONE_2);
+    await choisirZone(ZONE_TUNNEL);
+    expect(un(TC.zoneAbritee)).toBeNull();
+    await tracerTriangle();
+    await enregistrer();
+    await attendre(() => p.placements.length === 1, 'un appel');
+    ordreAccepte(p.placements[0] ?? []);
+    await attendre(() => contourEnBase(ZONE_TUNNEL)?.length === 3, 'contour de Tunnel 1 écrit (appel accepté)');
+    expect(zoneDeSerre()).toBe(ZONE_2);
+
+    await annulerDernier();
+    await attendre(() => contourEnBase(ZONE_TUNNEL) === null, 'contour annulé');
+    await attendre(() => zoneDeSerre() === ZONE_TUNNEL, 'serre de nouveau sur Tunnel 1');
+  });
+});
+
+describe('T28d, relecture : trop de changements en une fois', () => {
+  it(`plus de ${String(ECRITURES_MAX_PAR_LOT)} changements : « Enregistrer » désactivé, message clair en français, rien d’écrit`, async () => {
+    const p = await ouvrir({
+      origine: true,
+      avant: (b) => {
+        // ECRITURES_MAX_PAR_LOT emplacements placés + PC-01 + le contour : au-delà de la limite.
+        for (let k = 0; k < ECRITURES_MAX_PAR_LOT; k++) emplacementPlace(b, idTest(0x1000 + k), `R-${String(k)}`, 'rang', null, [(k % 20) - 10, Math.floor(k / 20) - 12, 0]);
+      },
+    });
+    await choisirZone(ZONE_CHAMP);
+    await selectionner(sommet(0));
+    await touche(sommet(0), 'ArrowLeft', { shiftKey: true });
+    await attendre(() => messages().some((t) => t.includes(MESSAGES_CONTOURS.tropDeChangements)), `message « ${MESSAGES_CONTOURS.tropDeChangements} »`);
+    expect(messages().some((t) => t.includes('changements de placement à la fois')), 'pas le message technique de la porte').toBe(false);
+    expect(desactive(bouton('Enregistrer'))).toBe(true);
+    await toucher(bouton('Enregistrer'));
+    expect(p.placements).toEqual([]);
+    expect(contourEnBase(ZONE_CHAMP)).toEqual(CONTOUR_CHAMP);
+  }, 60_000);
 });

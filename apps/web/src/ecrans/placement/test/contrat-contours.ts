@@ -67,6 +67,12 @@
  *   zone, { sorte: 'emplacement', id, placement } recalculé (replacerPlanches, arrondi au mm et au
  *   millième de degré). L'annulation remet contour et planches exactement. Zone sans planche
  *   placée : le contour seul.
+ * Relecture du chef (B1) : « planches » ci-dessus = TOUS les emplacements placés de la zone
+ *   (planche, rang, gouttière ; largeur nulle comprise), pas seulement les planches avec largeur.
+ * Relecture du chef (B2) : ordre des changements dans l'appel = contours effacés (null), puis
+ *   bâtiments, puis contours posés ou changés, puis emplacements. Détacher une serre de sa zone
+ *   (ou la passer à une autre zone) puis tracer l'ancienne zone dans le même brouillon : UN appel,
+ *   accepté par la porte ; l'annulation remet tout exactement.
  * Écriture : « Enregistrer » = UN appel à porte.placer avec tout le brouillon (bâtiments,
  *   planches, contours) ; un contour s'écrit { sorte: 'zone', id, contour } (sommets arrondis au
  *   millimètre ; la porte le range en sens antihoraire). Puis « Annuler » (`annuler-placement`)
@@ -140,6 +146,12 @@ export const MESSAGES_CONTOURS = {
   zoneAbritee: 'sa forme est celle de la serre',
   /** Retrait refusé à 3 sommets. */
   sommetsMin: 'au moins 3 sommets',
+  /**
+   * Relecture du chef : le brouillon ferait plus de ECRITURES_MAX_PAR_LOT changements (500) en un
+   * porte.placer : « Enregistrer » désactivé AVANT le tap, message role="status" ou "alert" qui
+   * contient ce texte (pas le message technique de la porte).
+   */
+  tropDeChangements: 'Trop de changements à enregistrer en une fois',
 } as const;
 
 export const TESTID_CONTOURS = {
