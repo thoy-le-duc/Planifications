@@ -1,7 +1,10 @@
 {
-  "maj": "8 octobre 2026, après-midi (heure de Paris)",
-  "resume": "Depuis hier soir, six tickets fusionnés le 8 octobre : **le vol de caméra vers une zone a sa fluidité garantie par des garde-fous stables (T29b)**, **le refus d'une ferme quittée disparaît du téléphone, résumé compris (T10u)**, **les tests de temps n'échouent plus au hasard (T31)**, **le gérant trace le vrai contour de ses zones (T28d)**, **le jumeau 3D avec les serres à leur vraie place (T28c)**, et **le gérant place ses serres sur la photo aérienne IGN (T28b)**. Avec les suites de la 3D et de l'éditeur (#115, #118), la vue 3D et le placement réel sont au point pour l'ordinateur. Prochains : T29c (coût propre au vol), T10v (refus : pas de nom de culture d'une autre ferme), T28e, T10t, T14e, T15d, T15e, T13n, T11b. Budget : 25 tickets par semaine depuis le 8 octobre (jauge à 17 % le 8 au matin) ; 20 tickets faits depuis le mercredi 7 octobre à 10 h.",
-  "en_cours": {},
+  "maj": "8 octobre 2026, soir (heure de Paris)",
+  "resume": "Depuis cet après-midi, trois tickets fusionnés le 8 octobre : **l'éditeur de placement se tient au clavier et dit ce qui se passe (T28e)**, **le parcellaire refuse les suppressions qui cassent un assolement et un code de planche est unique par zone (T10t)**, **la croissance des cultures est décrite par des profils testés (tickets Q32)**. En revue : **l'éditeur s'ouvre depuis la 3D (T28f)** et **le calcul de croissance (T32a)**. Prochains : T32b plants stylisés en 3D, T33 verrou e2e, T14f, T28g, T32c, puis T14e, T15d, T15e, T13n, T11b. Budget : 23 tickets sur 25 cette semaine (jusqu'au mercredi 14 octobre 10 h). Retour de Théophane : 3D appréciée, il demande la croissance visible (Q32).",
+  "en_cours": {
+    "T28f": "en revue",
+    "T32a": "en revue"
+  },
   "attente": "Aucune question en attente : les réponses Q25 à Q31 sont dans « Décisions prises ». Hors questions : 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75. Vercel : désactiver « Vercel Authentication ». Connecteur MonCasierFrais à réautoriser. Mise en ligne : Brevo, domaine d'envoi, secrets de production. Ta jauge Claude de temps en temps.",
   "visuels": [
     {
@@ -95,7 +98,7 @@
     {
       "titre": "Placement réel",
       "etat": "en cours",
-      "texte": "T28a, T28s, T28b, T28c et T28d. Le gérant place ses bâtiments, serres, planches et contours de zones sur la photo aérienne IGN (ordinateur), et la vue 3D montre la ferme à sa vraie place. Reste T28e (suites de relecture de l'éditeur)."
+      "texte": "T28a, T28s, T28b, T28c, T28d et T28e. Le gérant place ses bâtiments, serres, planches et contours de zones sur la photo aérienne IGN (ordinateur), et la vue 3D montre la ferme à sa vraie place. T28e (suites de relecture de l'éditeur) est fusionné ; T28f (ouvrir l'éditeur depuis la 3D) est en revue."
     }
   ]
 }
