@@ -381,20 +381,19 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
     setLusP(l.planches);
   }
 
-  async function ecrire(liste: readonly ChangementPlacement[]): Promise<boolean> {
+  /** Écrit par la porte ; rend l'enregistrement (de quoi l'annuler), ou null si la porte a refusé. */
+  async function ecrire(liste: readonly ChangementPlacement[]): Promise<Enregistrement | null> {
     setOccupe(true);
     setErreur(null);
     try {
-      const annulation = await porte.placer(liste);
-      const entree: Enregistrement = { annulation };
+      const entree: Enregistrement = { annulation: await porte.placer(liste) };
       pile.current.push(entree);
-      setDernier(entree);
       await recharger();
-      return true;
+      return entree;
     } catch (e) {
       console.error('Placement refusé', e);
       setErreur(messageDe(e));
-      return false;
+      return null;
     } finally {
       setOccupe(false);
     }
@@ -402,10 +401,18 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
 
   async function enregistrer(): Promise<void> {
     if (occupe || !modifie) return;
-    if (await ecrire(changements)) {
-      setBrouillonB(new Map());
-      setBrouillonP(new Map());
-    }
+    const [ecritsB, ecritsP] = [brouillonB, brouillonP];
+    const entree = await ecrire(changements);
+    if (entree === null) return;
+    // Seul ce qui vient d'être écrit sort du brouillon : un geste fait pendant l'écriture reste.
+    const sans = <T,>(prev: ReadonlyMap<string, T>, ecrits: ReadonlyMap<string, T>): Map<string, T> => {
+      const reste = new Map(prev);
+      for (const [id, v] of ecrits) if (reste.get(id) === v) reste.delete(id);
+      return reste;
+    };
+    setBrouillonB((prev) => sans(prev, ecritsB));
+    setBrouillonP((prev) => sans(prev, ecritsP));
+    setDernier(entree);
   }
 
   async function defaire(entree: Enregistrement | undefined): Promise<void> {
@@ -428,7 +435,8 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
   async function poserOrigine(position: Position): Promise<void> {
     // La photo ne bouge pas quand l'origine change de la position météo au lieu cliqué.
     setCentreGeo(centreEffectif);
-    await ecrire([{ sorte: 'origine', origine: { latitude: position.latitude, longitude: position.longitude } }]);
+    const entree = await ecrire([{ sorte: 'origine', origine: { latitude: position.latitude, longitude: position.longitude } }]);
+    if (entree !== null) setDernier(entree);
   }
 
   // ── Gestes ────────────────────────────────────────────────────────────────────────────────────
