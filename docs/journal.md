@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T28f : l'éditeur de placement se trouve depuis la vue 3D
+
+- **Fait** : bouton « Modifier le plan » dans la vue 3D (gérant, écran de 1024 px ou plus, suivi en direct) ; encart « Placez votre ferme sur la photo aérienne » quand rien n'est placé (`fermeSansPlacement`, pur), ou « Le gérant place la ferme depuis un ordinateur » sans bouton ; l'éditeur s'ouvre par-dessus la 3D, qui montre le placement enregistré au retour ; la démo l'ouvre telle quelle (fond neutre hors ligne), aucun changement dans `demo/`. Page d'amorçage : `saison=1`, `origine=1`, `role=equipier`. La carte de l'onglet Ferme cite la 3D.
+- **Décidé** : un seul chargement paresseux de l'éditeur, exporté d'EcranFerme (`chargerPlacement`) et réutilisé par EcranPlan en import dynamique au tap : un import statique aurait embarqué l'écran Ferme dans le morceau Planches. Le rôle de gérant est lu par EcranPlan (nouvelle prop `utilisateurId`, passée par App). Budgets inchangés.
+- **Bloquant** : rien.
+
 ## 2026-10-08 — T10t : parcellaire et catalogue, suites de la relecture de T10s
 
 - **Fait** : dans `apps/api/src/sync/structure.ts`, suppression douce refusée (`ecriture_invalide`, rien du lot écrit) tant que des lignes actives de la ferme en dépendent, avec le compte dans le message (« 2 assolements », « 1 variété et 2 itinéraires ») : zone et emplacement, par les assolements actifs d'une saison non terminée ; saison, par tout assolement actif de son plan ; espèce, par ses variétés et itinéraires actifs et les assolements actifs d'une saison non terminée. Changer la famille d'une espèce est refusé tant que de tels assolements la désignent. Q27 : index unique partiel `emplacement_zone_code_actif_idx` sur `(ferme_id, zone_id, lower(trim(code))) WHERE supprime_le IS NULL` (migration 0029 générée par drizzle-kit, sans retouche, aucune ligne réécrite) et refus propre d'un doublon dans la même zone (« ce code existe déjà dans cette zone »), jamais un 500. Les 84 tests de `structure-suites.integration.test.ts` passent sans modification ; tests d'intégration de `apps/api` et `packages/db` verts.

@@ -33,6 +33,7 @@ const MEMBRE = id(0x3);
 export const ZONE_TUNNEL = id(0x10);
 export const ZONE_CHAMP = id(0x11);
 export const PLANCHE = id(0x20);
+export const SAISON = id(0x40);
 export const HANGAR = id(0x30);
 export const SERRE = id(0x31);
 
@@ -52,6 +53,11 @@ export interface OptionsFermePlacement {
   readonly role?: 'gerant' | 'equipier';
   /** T28e : la ferme n'a pas de position (ferme.position = null). Incompatible avec `origine`. Défaut : faux. */
   readonly sansPosition?: boolean;
+  /**
+   * T28f : une saison « 2026 » (2026-01-01 → 2026-12-31), pour que l'écran Planches (donc la vue 3D)
+   * ait un plan à montrer. Défaut : faux (aucune saison, comme avant : les tests de T28b/T28e ne changent pas).
+   */
+  readonly saison?: boolean;
 }
 
 export interface FermePlacement {
@@ -82,6 +88,7 @@ export function fermePlacement(options: OptionsFermePlacement = {}): FermePlacem
     ...horo,
   });
   ajouter('membre', { id: MEMBRE, utilisateur_id: UTILISATEUR, ferme_id: FERME, role: options.role ?? 'gerant', etat: 'accepte', invite_par: null, invite_le: null, ...horo });
+  if (options.saison === true) ajouter('saison', { id: SAISON, ferme_id: FERME, nom: '2026', debut: '2026-01-01', fin: '2026-12-31', ...horo });
   ajouter('zone', { id: ZONE_TUNNEL, ferme_id: FERME, nom: 'Tunnel 1', zone_parente_id: null, type_abri: 'tunnel', surface_m2: 240, contour: null, ...horo });
   ajouter('zone', {
     id: ZONE_CHAMP,
