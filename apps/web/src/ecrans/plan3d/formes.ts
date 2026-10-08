@@ -61,7 +61,7 @@ const AXE_Y_VERS_Z = new Matrix4().set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0,
  * fin. L'échelle (largeur, 2 × hauteur, ~) en fait l'arceau d'une chapelle.
  */
 export function geometrieArceau(): BufferGeometry {
-  return new TorusGeometry(0.5, 0.008, 5, 14, Math.PI);
+  return new TorusGeometry(0.5, 0.008, 3, 8, Math.PI);
 }
 
 /**
@@ -69,14 +69,43 @@ export function geometrieArceau(): BufferGeometry {
  * 0,5), face extérieure en avant. Échelle (largeur, 2 × hauteur, profondeur).
  */
 export function geometrieBache(): BufferGeometry {
-  const g = new CylinderGeometry(0.5, 0.5, 1, 20, 1, true, 0, Math.PI);
+  const g = new CylinderGeometry(0.5, 0.5, 1, 10, 1, true, 0, Math.PI);
   g.applyMatrix4(AXE_Y_VERS_Z);
   return g;
 }
 
 /** Le bout d'un tunnel : demi-disque de rayon 0,5 dans le plan x-y, face vers +z. */
 export function geometrieBout(): BufferGeometry {
-  return new CircleGeometry(0.5, 20, 0, Math.PI);
+  return new CircleGeometry(0.5, 10, 0, Math.PI);
+}
+
+/**
+ * Une planche : le cube unité centré de BoxGeometry (mêmes matrices d'instance) sans la face du
+ * dessous, que la caméra ne voit jamais (au-dessus du sol) : 10 triangles au lieu de 12, normales
+ * par face comme le cube.
+ */
+export function geometriePlanche(): BufferGeometry {
+  const h = 0.5;
+  // Chaque face : sa normale, puis quatre coins enroulés dans le sens direct vu de l'extérieur.
+  const faces: readonly (readonly [readonly number[], readonly number[]])[] = [
+    [[0, 1, 0], [-h, h, h, h, h, h, h, h, -h, -h, h, -h]], // dessus
+    [[1, 0, 0], [h, -h, h, h, -h, -h, h, h, -h, h, h, h]], // +x
+    [[-1, 0, 0], [-h, -h, -h, -h, -h, h, -h, h, h, -h, h, -h]], // -x
+    [[0, 0, 1], [-h, -h, h, h, -h, h, h, h, h, -h, h, h]], // +z
+    [[0, 0, -1], [h, -h, -h, -h, -h, -h, -h, h, -h, h, h, -h]], // -z
+  ];
+  const positions: number[] = [];
+  const normales: number[] = [];
+  for (const [n, c] of faces) {
+    for (const k of [0, 1, 2, 0, 2, 3]) {
+      positions.push(c[3 * k] ?? 0, c[3 * k + 1] ?? 0, c[3 * k + 2] ?? 0);
+      normales.push(n[0] ?? 0, n[1] ?? 0, n[2] ?? 0);
+    }
+  }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  g.setAttribute('normal', new Float32BufferAttribute(normales, 3));
+  return g;
 }
 
 /** Les murs d'un volume simple : un cube unité, posé par l'échelle. */
