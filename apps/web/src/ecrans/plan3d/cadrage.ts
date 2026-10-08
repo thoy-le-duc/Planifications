@@ -7,7 +7,7 @@
  * plan ; le sol est y = 0. Distances en mètres de scène, angles en radians, sauf `champVertical`
  * (degrés, comme le `fov` de three).
  */
-import type { Scene } from './scene.ts';
+import type { BatimentScene, Scene } from './scene.ts';
 
 export interface Point3 {
   readonly x: number;
@@ -33,7 +33,22 @@ export interface Direction {
   readonly z: number;
 }
 
-export type CibleVol = { readonly sorte: 'ferme' } | { readonly sorte: 'zone'; readonly id: string } | { readonly sorte: 'planche'; readonly id: string };
+export type CibleVol =
+  | { readonly sorte: 'ferme' }
+  | { readonly sorte: 'zone'; readonly id: string }
+  | { readonly sorte: 'planche'; readonly id: string }
+  /** T28c : un bâtiment (une serre qui abrite une zone vole vers sa zone ; un hangar, un magasin vers lui-même). */
+  | { readonly sorte: 'batiment'; readonly id: string };
+
+/**
+ * Ce que le cadrage lit de la scène. Une scène écrite à la main (T29) n'a ni angle, ni contour, ni
+ * bâtiments : tout ce que T28c y ajoute est facultatif ici.
+ */
+export interface SceneCadrable {
+  readonly socles: readonly (Pick<Scene['socles'][number], 'id' | 'x' | 'z' | 'largeur' | 'profondeur'> & { readonly angle?: number; readonly batimentId?: string | null })[];
+  readonly volumes: readonly (Pick<Scene['volumes'][number], 'id' | 'zoneId' | 'x' | 'z' | 'longueur' | 'largeur' | 'hauteur'> & { readonly angle?: number })[];
+  readonly batiments?: readonly Pick<BatimentScene, 'id' | 'x' | 'z' | 'largeur' | 'profondeur' | 'hauteur' | 'angle'>[];
+}
 
 export interface Vol {
   readonly depart: Pose;
@@ -81,30 +96,84 @@ function ajouter(c: Cumul, x0: number, x1: number, z0: number, z1: number, haute
   c.vide = false;
 }
 
-/** La boîte à cadrer : toute la ferme, une zone (son socle et ses planches) ou une planche. `null` : rien à cadrer. */
-export function boiteDe(scene: Scene, cible: CibleVol): Boite | null {
+/** Ajoute un rectangle tourné de `angle` (convention de three) : l'emprise est celle de ses 4 coins. */
+function ajouterRect(c: Cumul, cx: number, cz: number, ex: number, ez: number, angle: number, hauteur: number): void {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const dx = (Math.abs(ex * cos) + Math.abs(ez * sin)) / 2;
+  const dz = (Math.abs(ex * sin) + Math.abs(ez * cos)) / 2;
+  ajouter(c, cx - dx, cx + dx, cz - dz, cz + dz, hauteur);
+}
+
+/** La boîte d'un rectangle tourné : ses dimensions telles quelles, autour de son centre, avec son angle. */
+function boiteTournee(cx: number, cz: number, ex: number, ez: number, angle: number, hauteur: number): Boite {
+  const boite: Boite = { min: { x: cx - ex / 2, y: 0, z: cz - ez / 2 }, max: { x: cx + ex / 2, y: hauteur, z: cz + ez / 2 } };
+  return angle === 0 ? boite : { ...boite, angle };
+}
+
+/**
+ * La boîte à cadrer : toute la ferme, une zone (son socle et ses planches), une planche ou un
+ * bâtiment. `null` : rien à cadrer. Une zone abritée est le rectangle de sa serre (tourné) ; une
+ * ferme est l'emprise, sur les axes, des coins de chaque socle, bâtiment et planche.
+ */
+export function boiteDe(scene: SceneCadrable, cible: CibleVol): Boite | null {
+  const batiments = scene.batiments ?? [];
   const c: Cumul = { vide: true, x0: 0, x1: 0, z0: 0, z1: 0, hauteur: 0 };
-  const ajouterSocle = (s: Scene['socles'][number]): void => {
-    ajouter(c, s.x - s.largeur / 2, s.x + s.largeur / 2, s.z - s.profondeur / 2, s.z + s.profondeur / 2, 0);
+  const ajouterSocle = (s: SceneCadrable['socles'][number]): void => {
+    ajouterRect(c, s.x, s.z, s.largeur, s.profondeur, s.angle ?? 0, 0);
   };
-  const ajouterVolume = (v: Scene['volumes'][number]): void => {
-    ajouter(c, v.x - v.longueur / 2, v.x + v.longueur / 2, v.z - v.largeur / 2, v.z + v.largeur / 2, v.hauteur);
+  const ajouterVolume = (v: SceneCadrable['volumes'][number]): void => {
+    ajouterRect(c, v.x, v.z, v.longueur, v.largeur, v.angle ?? 0, v.hauteur);
   };
   if (cible.sorte === 'ferme') {
     scene.socles.forEach(ajouterSocle);
     scene.volumes.forEach(ajouterVolume);
+    for (const b of batiments) ajouterRect(c, b.x, b.z, b.largeur, b.profondeur, b.angle, b.hauteur);
   } else if (cible.sorte === 'zone') {
     const socle = scene.socles.find((s) => s.id === cible.id);
     if (socle === undefined) throw new RangeError(`zone inconnue : ${cible.id}`);
+    const serre = socle.batimentId === undefined || socle.batimentId === null ? undefined : batiments.find((b) => b.id === socle.batimentId);
+    if (serre !== undefined) {
+      // Zone abritée : le rectangle de la serre, tourné, de 0 à la plus haute de la serre et des planches.
+      const hauteur = Math.max(serre.hauteur, ...scene.volumes.filter((v) => v.zoneId === cible.id).map((v) => v.hauteur));
+      return boiteTournee(socle.x, socle.z, socle.largeur, socle.profondeur, socle.angle ?? 0, hauteur);
+    }
     ajouterSocle(socle);
     scene.volumes.filter((v) => v.zoneId === cible.id).forEach(ajouterVolume);
+  } else if (cible.sorte === 'batiment') {
+    const b = batiments.find((x) => x.id === cible.id);
+    if (b === undefined) throw new RangeError(`bâtiment inconnu : ${cible.id}`);
+    return boiteTournee(b.x, b.z, b.largeur, b.profondeur, b.angle, b.hauteur);
   } else {
     const volume = scene.volumes.find((v) => v.id === cible.id);
     if (volume === undefined) throw new RangeError(`planche inconnue : ${cible.id}`);
-    ajouterVolume(volume);
+    return boiteTournee(volume.x, volume.z, volume.longueur, volume.largeur, volume.angle ?? 0, volume.hauteur);
   }
   if (c.vide) return null;
   return { min: { x: c.x0, y: 0, z: c.z0 }, max: { x: c.x1, y: c.hauteur, z: c.z1 } };
+}
+
+/**
+ * Le centre de la ferme au sol (milieu de son emprise) et son rayon : la plus grande distance d'un
+ * coin de socle, de bâtiment ou de planche à ce centre (1 m au moins). La caméra s'y règle au départ.
+ */
+export function empriseDe(scene: SceneCadrable): { readonly centre: Point3; readonly rayon: number } {
+  const boite = boiteDe(scene, { sorte: 'ferme' });
+  const centre: Point3 = boite === null ? { x: 0, y: 0, z: 0 } : { x: (boite.min.x + boite.max.x) / 2, y: 0, z: (boite.min.z + boite.max.z) / 2 };
+  let rayon = 1;
+  const coins = (cx: number, cz: number, ex: number, ez: number, angle: number): void => {
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+      const dx = (sx * ex) / 2;
+      const dz = (sz * ez) / 2;
+      rayon = Math.max(rayon, Math.hypot(cx + dx * cos + dz * sin - centre.x, cz - dx * sin + dz * cos - centre.z));
+    }
+  };
+  for (const s of scene.socles) coins(s.x, s.z, s.largeur, s.profondeur, s.angle ?? 0);
+  for (const v of scene.volumes) coins(v.x, v.z, v.longueur, v.largeur, v.angle ?? 0);
+  for (const b of scene.batiments ?? []) coins(b.x, b.z, b.largeur, b.profondeur, b.angle);
+  return { centre, rayon };
 }
 
 // ── Le cadrage ───────────────────────────────────────────────────────────────────────────────
