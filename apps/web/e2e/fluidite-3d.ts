@@ -14,8 +14,8 @@ import { IMAGE_60HZ_MS } from './outils.ts';
  * 1. Garde-fous stables (indépendants de la charge), qui protègent contre une régression du code :
  * temps JavaScript des callbacks `requestAnimationFrame` par image dessinée (médiane et 95e
  * centile), appels de dessin (draw calls) et triangles par image. Bornes mesurées, avec marge :
- * ferme T07 2 appels et 5 100 triangles ; jumeau T07 placé 7 appels et 77 634 triangles ; démo
- * 7 appels et 16 084 triangles ; JavaScript 0,2 à 0,6 ms par image en médiane.
+ * ferme T07 2 appels et ~4 300 triangles ; jumeau T07 placé 7 appels et 29 506 triangles ; démo
+ * 7 appels et ~5 774 triangles (après T29b ; avant : 5 100, 77 634 et 16 084) ; JavaScript 0,2 à 0,6 ms par image en médiane.
  *
  * 2. Critère d'images perdues RELATIF au plancher mesuré dans le même lancement : un intervalle
  * est « fautif » s'il dépasse max(seuil de 60 Hz de T27 : plus de 2 images perdues, soit 58,3 ms ;
@@ -39,15 +39,15 @@ export interface ImageMesuree {
 export const JS_MEDIANE_MAX_MS = 4;
 export const JS_P95_MAX_MS = 8;
 
-/** Bornes de dessin par image selon la scène (ferme T07 : 2 appels et ~5 100 triangles mesurés). */
+/** Bornes de dessin par image selon la scène (ferme T07 : 2 appels et ~4 300 triangles mesurés). */
 export interface BornesDessin {
   readonly appelsMax: number;
   readonly trianglesMax: number;
 }
-export const BORNES_FERME_T07: BornesDessin = { appelsMax: 4, trianglesMax: 8_000 };
+export const BORNES_FERME_T07: BornesDessin = { appelsMax: 3, trianglesMax: 5_500 };
 /** Jumeau de la ferme T07 placée (bâtiments, arceaux, bâches) : plus de géométrie que la ferme seule. */
-export const BORNES_JUMEAU_T07: BornesDessin = { appelsMax: 10, trianglesMax: 100_000 };
-export const BORNES_DEMO: BornesDessin = { appelsMax: 10, trianglesMax: 25_000 };
+export const BORNES_JUMEAU_T07: BornesDessin = { appelsMax: 8, trianglesMax: 35_000 };
+export const BORNES_DEMO: BornesDessin = { appelsMax: 8, trianglesMax: 8_000 };
 
 /** Script injecté dans chaque document, avant son code (page.addInitScript). Sans dépendance. */
 function scriptMesure(): void {
