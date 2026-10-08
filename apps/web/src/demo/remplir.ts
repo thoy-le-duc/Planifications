@@ -20,6 +20,7 @@ import { fermeItineraires } from '../ecrans/itineraires/test/ferme-itineraires.t
 import { fermeSerie } from '../ecrans/serie/test/ferme-serie.ts';
 import { nomBaseLocale, supprimerBaseIndexedDb } from '../donnees/effacer.ts';
 import { decalerJours, fusionnerJeux, type Jeu, type Ligne } from './fusion.ts';
+import { placerLaDemo } from './placement-demo.ts';
 import { FERME_DEMO, NOM_FERME_DEMO, NOM_UTILISATEUR_DEMO, UTILISATEUR_DEMO } from './identite.ts';
 
 /** Jour de référence de la ferme du plan (« aujourd'hui » de ses tests), dont les dates sont fixes. */
@@ -61,7 +62,8 @@ export function lignesDeLaDemo(jour: string, maintenant: Date): Map<string, Lign
     { ...plan, lignes: decalerJours(plan.lignes, joursEntre(JOUR_DU_JEU_PLAN, jour)) },
     { utilisateurId: UTILISATEUR_REFUS, fermeId: FERME_REFUS, lignes: { refus_synchro: refus } },
   ];
-  return fusionnerJeux(jeux, { utilisateurId: UTILISATEUR_DEMO, fermeId: FERME_DEMO, nomUtilisateur: NOM_UTILISATEUR_DEMO, nomFerme: NOM_FERME_DEMO });
+  // T28c : la ferme est placée (origine du plan, serres, contour, planches) pour montrer le jumeau 3D.
+  return placerLaDemo(fusionnerJeux(jeux, { utilisateurId: UTILISATEUR_DEMO, fermeId: FERME_DEMO, nomUtilisateur: NOM_UTILISATEUR_DEMO, nomFerme: NOM_FERME_DEMO }));
 }
 
 /**

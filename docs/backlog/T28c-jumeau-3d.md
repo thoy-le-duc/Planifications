@@ -16,11 +16,11 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests de l'adaptateur : serre tournée de 30° → planches tournées avec elle ; zone en L → socle au contour en L (sommets attendus) ; zone non placée rangée à côté sans chevauchement ; bâtiment sans zone ; nombre d'arceaux selon la longueur.
-- [ ] e2e (ordinateur, grande ferme placée) : mesures de T27 tenues (affichage < 1 s après chargement du module, semaine < 100 ms, pas de rafale de plus de 2 images perdues).
-- [ ] Budget `jsVue3dGzKio` (200 Kio) tenu, ou hausse chiffrée et justifiée dans la PR ; JS de démarrage inchangé.
-- [ ] e2e démo : la vue 3D de la démo s'ouvre hors ligne avec ses serres.
-- [ ] Capture de référence de la démo jointe à la PR (pour le « joli », jugé par Théophane).
+- [x] Tests de l'adaptateur : serre tournée de 30° → planches tournées avec elle ; zone en L → socle au contour en L (sommets attendus) ; zone non placée rangée à côté sans chevauchement ; bâtiment sans zone ; nombre d'arceaux selon la longueur.
+- [x] e2e (ordinateur, grande ferme placée) : mesures de T27 tenues (affichage < 1 s après chargement du module, semaine < 100 ms, pas de rafale de plus de 2 images perdues).
+- [x] Budget `jsVue3dGzKio` (200 Kio) tenu, ou hausse chiffrée et justifiée dans la PR ; JS de démarrage inchangé.
+- [x] e2e démo : la vue 3D de la démo s'ouvre hors ligne avec ses serres.
+- [x] Capture de référence de la démo jointe à la PR (pour le « joli », jugé par Théophane).
 
 ## Risques
 

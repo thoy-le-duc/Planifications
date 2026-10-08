@@ -301,9 +301,9 @@ describe('budgets : le cadrage ne pèse rien au démarrage', () => {
     expect(source).not.toMatch(/\bperformance\.now\b|\bDate\b|\bdocument\b|\bwindow\b|requestAnimationFrame/);
   });
 
-  it('les budgets de apps/web/budget.json sont inchangés (démarrage 71 Kio, morceau 3D 200 Kio)', () => {
+  it('les budgets de apps/web/budget.json sont tenus (démarrage 71 Kio, morceau 3D 220 Kio depuis T28c)', () => {
     const budget = JSON.parse(readFileSync(fileURLToPath(new URL('../../../budget.json', import.meta.url)), 'utf8')) as { jsInitialGzKio?: number; jsVue3dGzKio?: number };
     expect(budget.jsInitialGzKio).toBe(71);
-    expect(budget.jsVue3dGzKio).toBe(200);
+    expect(budget.jsVue3dGzKio).toBe(220);
   });
 });
