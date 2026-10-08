@@ -125,6 +125,9 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T32a](T32a-croissance-profils.md) | Croissance des cultures : profils et calcul (moteur) (Q32) | T02, T03 | fait |
 | [T32b](T32b-plants-stylises-3d.md) | Jumeau 3D : plants stylisés qui grandissent (Q32) | T32a, T28c, T29b | à faire |
 | [T32c](T32c-reglage-profils.md) | Profils de croissance : réglage par la ferme (écran) (Q32) | T32a, T32b | à faire |
+| [T33](T33-verrou-e2e.md) | Un seul jeu e2e à la fois sur la machine (verrou flock) | — | à faire |
+| [T14f](T14f-import-codes-par-zone.md) | Import : codes de planche comparés par zone | T10t | à faire |
+| [T28g](T28g-focus-editeur.md) | Éditeur : rendre le focus à la fermeture (relecture T28f) | T28f | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 
