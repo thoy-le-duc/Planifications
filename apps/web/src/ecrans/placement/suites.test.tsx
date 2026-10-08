@@ -199,6 +199,16 @@ async function glisserFond(de: { x: number; y: number }, vers: { x: number; y: n
   await pointeur(plan, 'pointerup', vers.x, vers.y);
 }
 
+/** Quitte le champ (blur : React écoute focusout). */
+async function sortir(el: HTMLElement): Promise<void> {
+  await act(async () => {
+    el.dispatchEvent(new FocusEvent('blur'));
+    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    await Promise.resolve();
+  });
+  await unTour();
+}
+
 async function enregistrer(): Promise<void> {
   await toucher(bouton('Enregistrer'));
   await unTour();
@@ -336,23 +346,60 @@ describe('T28e : longueur et largeur bornées à 0,5 m dans le panneau', () => {
     expect(gestes.redimensionner(r, 'droite', { x: -50, y: 0 }).largeurM).toBe(0.5);
   });
 
-  it('une saisie de 0,2 m donne 0,5 m (champ, affichage, valeur écrite) ; la largeur de même ; 0 et négatif aussi', async () => {
+  it('une saisie de 0,2 m donne 0,5 m à la sortie du champ (affichage, champ, valeur écrite) ; la largeur de même ; 0 et négatif aussi', async () => {
     const b = await ouvrir({ origine: true });
     await selectionner(batiment(SERRE) ?? document.body);
     await remplir(champ('Longueur (m)', panneau()), '0.2');
+    await sortir(champ('Longueur (m)', panneau()));
     await remplir(champ('Largeur (m)', panneau()), '0.2');
+    await sortir(champ('Largeur (m)', panneau()));
     await attendre(() => nombre(batiment(SERRE) ?? document.body, 'data-longueur') === 0.5, 'longueur ramenée à 0,5');
     expect(nombre(batiment(SERRE) ?? document.body, 'data-largeur')).toBe(0.5);
     expect(Number(champ('Longueur (m)', panneau()).value)).toBe(0.5);
     expect(Number(champ('Largeur (m)', panneau()).value)).toBe(0.5);
     await remplir(champ('Longueur (m)', panneau()), '0');
+    await sortir(champ('Longueur (m)', panneau()));
     expect(nombre(batiment(SERRE) ?? document.body, 'data-longueur')).toBe(0.5);
     await remplir(champ('Largeur (m)', panneau()), '-3');
+    await sortir(champ('Largeur (m)', panneau()));
     expect(nombre(batiment(SERRE) ?? document.body, 'data-largeur')).toBe(0.5);
     await enregistrer();
     await attendre(() => b.placements.length === 1, 'un appel à porte.placer');
     await attendre(() => ligne(b, 'batiment', SERRE)?.longueur_m === 0.5, 'serre écrite');
     expect(ligne(b, 'batiment', SERRE)?.largeur_m).toBe(0.5);
+  });
+
+  it('frappe caractère par caractère : le texte reste libre, « 0.8 » donne 0,8', async () => {
+    await ouvrir({ origine: true });
+    await selectionner(batiment(SERRE) ?? document.body);
+    const c = (): HTMLInputElement => champ('Longueur (m)', panneau());
+    await remplir(c(), '');
+    await remplir(c(), '0');
+    expect(c().value, 'pendant la frappe, « 0 » reste « 0 »').toBe('0');
+    await remplir(c(), '0.8');
+    expect(c().value).toBe('0.8');
+    expect(nombre(batiment(SERRE) ?? document.body, 'data-longueur')).toBeCloseTo(0.8, 3);
+    await sortir(c());
+    expect(Number(c().value)).toBeCloseTo(0.8, 3);
+    expect(nombre(batiment(SERRE) ?? document.body, 'data-longueur')).toBeCloseTo(0.8, 3);
+  });
+
+  it('frappe de 0.2 : texte libre, puis 0,5 à la sortie du champ ou à Entrée', async () => {
+    await ouvrir({ origine: true });
+    await selectionner(batiment(SERRE) ?? document.body);
+    const c = (): HTMLInputElement => champ('Largeur (m)', panneau());
+    await remplir(c(), '0');
+    await remplir(c(), '0.2');
+    expect(c().value, 'pendant la frappe, le texte reste libre').toBe('0.2');
+    await sortir(c());
+    expect(Number(c().value)).toBe(0.5);
+    expect(nombre(batiment(SERRE) ?? document.body, 'data-largeur')).toBe(0.5);
+
+    await remplir(c(), '0.3');
+    expect(c().value).toBe('0.3');
+    await touche(c(), 'Enter');
+    expect(Number(c().value), 'Entrée borne aussi').toBe(0.5);
+    expect(nombre(batiment(SERRE) ?? document.body, 'data-largeur')).toBe(0.5);
   });
 
   it('une saisie valable au-dessus du minimum reste telle quelle', async () => {
@@ -397,6 +444,41 @@ describe('T28e : la ferme active change avec un brouillon ouvert', () => {
     expect(MESSAGES_SUITES.brouillonAbandonne).toBe('Le brouillon en cours a été abandonné : la ferme active a changé.');
     expect(desactive(bouton('Enregistrer')), 'plus de brouillon dans B').toBe(true);
     expect(a.placements).toEqual([]);
+  });
+
+  async function ouvrirDansB(): Promise<{ readonly a: Banc }> {
+    const { a, porteB } = await avecDeuxFermes();
+    a.base.recevoir(
+      `INSERT INTO batiment (id, ferme_id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, zone_id, cree_le, modifie_le, supprime_le) VALUES ('0192f0c1-28b0-7000-8000-0000000000b4', ?, 'Hangar B', 'hangar', 20, 12, 6, 10, 10, 0, NULL, '2026-01-01T08:00:00.000Z', '2026-01-01T08:00:00.000Z', NULL)`,
+      [FERME_B],
+    );
+    await rendre(a.porte, FERME);
+    await attendre(() => batiment(SERRE) !== null, 'serre affichée');
+    const serre = batiment(SERRE);
+    if (serre === null) return { a };
+    await selectionner(serre);
+    await touche(serre, 'ArrowRight', { shiftKey: true });
+    await rendre(porteB, FERME_B);
+    await attendre(() => messages().some((t) => t.includes(MESSAGES_SUITES.brouillonAbandonne)), 'message « brouillon abandonné »');
+    return { a };
+  }
+
+  it('le message disparaît au premier geste dans la nouvelle ferme', async () => {
+    await ouvrirDansB();
+    const hangar = batiment('0192f0c1-28b0-7000-8000-0000000000b4');
+    expect(hangar, 'bâtiment de la ferme B').not.toBeNull();
+    if (hangar === null) return;
+    await selectionner(hangar);
+    await touche(hangar, 'ArrowRight');
+    expect(messages().some((t) => t.includes(MESSAGES_SUITES.brouillonAbandonne))).toBe(false);
+  });
+
+  it('le message disparaît à la pose suivante', async () => {
+    await ouvrirDansB();
+    await commencerPose();
+    await toucher(bouton(BOUTON_POSER_AU_CENTRE));
+    await attendre(() => nouveauxBatiments().length === 2, 'bâtiment posé');
+    expect(messages().some((t) => t.includes(MESSAGES_SUITES.brouillonAbandonne))).toBe(false);
   });
 
   it('sans brouillon ouvert, pas de message', async () => {
@@ -528,6 +610,35 @@ describe('T28e : une tuile en erreur est redemandée sans attendre « en ligne �
     await unTour();
     expect((montages.get(src) ?? 0) - debut, 'relances bornées').toBe(tuilesMod.ESSAIS_TUILE_MAX);
     expect(montages.get(src) ?? 0).toBeLessThanOrEqual(1 + tuilesMod.ESSAIS_TUILE_MAX);
+  });
+
+  it('une tuile qui se charge remet son compteur d’essais à zéro : un échec plus tard est de nouveau relancé', async () => {
+    await ouvrirAvecTuiles();
+    const premiere = imgs()[0];
+    if (premiere === undefined) return;
+    const src = premiere.getAttribute('src') ?? '';
+    const courante = (): HTMLImageElement | undefined => imgs().find((i) => i.getAttribute('src') === src);
+    // Le budget d'essais est épuisé : la tuile échoue à chaque montage.
+    for (let k = 0; k < tuilesMod.ESSAIS_TUILE_MAX; k++) {
+      const c = courante();
+      if (c !== undefined) await echouer(c);
+      await avancer(delai());
+      await unTour();
+    }
+    const derniere = courante();
+    expect(derniere, 'dernière relance montée').toBeDefined();
+    if (derniere === undefined) return;
+    // Elle se charge enfin.
+    await act(async () => {
+      derniere.dispatchEvent(new Event('load'));
+      await Promise.resolve();
+    });
+    await unTour();
+    const avant = montages.get(src) ?? 0;
+    await echouer(derniere);
+    await avancer(delai());
+    await unTour();
+    expect((montages.get(src) ?? 0) - avant, 'nouvel échec après un chargement réussi : relancé').toBe(1);
   });
 
   it('plusieurs tuiles en échec ensemble : une seule relance chacune au délai, pas plus', async () => {
