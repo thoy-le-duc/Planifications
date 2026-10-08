@@ -19,9 +19,9 @@
 - [x] Test : gérant sur ordinateur, vue 3D ouverte → bouton « Modifier le plan » présent ; tap → l'éditeur s'ouvre ; fermeture → retour sur la 3D.
 - [x] Test : non gérant, ou téléphone → pas de bouton.
 - [x] Test : ferme sans placement → encart « Placez votre ferme sur la photo aérienne » avec le bouton (gérant) ; avec un seul bâtiment placé → plus d'encart.
-- [x] e2e démo : depuis la vue 3D de la démo, « Modifier le plan » ouvre l'éditeur, fond neutre hors réseau, un bâtiment peut être posé.
+- [ ] e2e démo : depuis la vue 3D de la démo, « Modifier le plan » ouvre l'éditeur, fond neutre hors réseau, un bâtiment peut être posé.
 - [x] Les tests de l'onglet Ferme (ouverture de l'éditeur) passent sans modification.
-- [x] `pnpm verif` passe en entier. JS de démarrage inchangé.
+- [ ] `pnpm verif` passe en entier. JS de démarrage inchangé.
 
 ## Risques
 
