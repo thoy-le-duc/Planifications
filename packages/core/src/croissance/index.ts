@@ -3,7 +3,9 @@
  * ferme (`espece.profil_croissance`), et hauteur et stade d'une culture à une date, pour le
  * jumeau numérique (T32b). Pur et déterministe : ni base, ni réseau, ni IA, ni horloge.
  *
- * Chargé à la demande par l'appli (vue 3D) : il n'entre pas dans le JavaScript de démarrage.
+ * Code sans effet au chargement (constantes marquées `@__PURE__`, index des noms construit au
+ * premier appel) : le bundler ne l'embarque que dans les écrans qui l'appellent, jamais au
+ * démarrage ni dans le morceau commun de @planif/core.
  */
 export type {
   AllureCroissance,

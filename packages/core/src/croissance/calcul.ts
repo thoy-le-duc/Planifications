@@ -16,8 +16,8 @@ export const FRACTION_HAUTEUR_FIN_BAISSEE = 0.5;
 /** Durée en part du cycle, sans fin de récolte ni arrachage : la hauteur maximale est atteinte en ce nombre de jours (aucune fin inventée). */
 export const JOURS_REPLI_SANS_FIN = 60;
 
-const RIEN: EtatCroissance = Object.freeze({ stade: 'aucun', hauteurM: 0, fraction: 0 });
-const REPOS: EtatCroissance = Object.freeze({ stade: 'repos', hauteurM: 0, fraction: 0 });
+const RIEN: EtatCroissance = /* @__PURE__ */ Object.freeze({ stade: 'aucun', hauteurM: 0, fraction: 0 });
+const REPOS: EtatCroissance = /* @__PURE__ */ Object.freeze({ stade: 'repos', hauteurM: 0, fraction: 0 });
 
 /** Courbe de hauteur : x dans [0, 1] → part de la hauteur maximale, dans [0, 1], monotone. */
 function courbe(allure: AllureCroissance, x: number): number {

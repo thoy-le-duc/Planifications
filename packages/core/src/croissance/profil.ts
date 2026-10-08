@@ -15,7 +15,7 @@ import type {
   ResultatCroissance,
 } from './types.ts';
 
-export const FORMES_PLANT: readonly FormePlant[] = Object.freeze([
+export const FORMES_PLANT: readonly FormePlant[] = /* @__PURE__ */ Object.freeze([
   'erige-tuteure',
   'rosette',
   'touffe',
@@ -24,8 +24,8 @@ export const FORMES_PLANT: readonly FormePlant[] = Object.freeze([
   'arbre-ou-liane',
   'bulbe-ou-racine',
 ] as const);
-export const ALLURES: readonly AllureCroissance[] = Object.freeze(['lineaire', 'en-s'] as const);
-export const FINS_DE_CYCLE: readonly FinDeCycle[] = Object.freeze(['conservee', 'baissee'] as const);
+export const ALLURES: readonly AllureCroissance[] = /* @__PURE__ */ Object.freeze(['lineaire', 'en-s'] as const);
+export const FINS_DE_CYCLE: readonly FinDeCycle[] = /* @__PURE__ */ Object.freeze(['conservee', 'baissee'] as const);
 
 /** Hauteur maximale d'un profil, borne comprise (m) : un kiwi sur pergola reste bien en dessous. */
 export const HAUTEUR_MAX_PROFIL_M = 6;
