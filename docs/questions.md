@@ -290,6 +290,21 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q32 — Jumeau 3D : trouver l'éditeur, voir les cultures grandir (posée le 2026-10-08, après l'essai de la démo)
+
+Retour de Théophane : « La vue 3D est pas mal. Je ne vois pas comment je crée les bâtiments, comment je la place sur la carte et que j'adapte tout ça. Il faudra une version plus précise pour voir l'avancement de la culture dans le temps, visuellement, la hauteur des tomates, etc. On parle d'un jumeau numérique. »
+
+Constat : l'éditeur de placement (T28b) n'est accessible que par l'onglet Ferme, carte « Plan de la ferme », « Placer sur la photo aérienne », sur ordinateur. Rien dans la vue 3D n'y mène, et la démo n'en montre rien.
+
+Réponses (2026-10-08) :
+1. Un bouton « Modifier le plan » dans la vue 3D ouvre l'éditeur ; une ferme sans placement voit un encart qui l'y invite.
+2. Cultures montrées par des **plants stylisés** (tuteurs et feuillage pour la tomate, rosettes pour la salade, etc.) qui grandissent avec le curseur de semaine.
+3. Hauteurs et profils de croissance : **valeurs par défaut pour les espèces de la bibliothèque, réglables par la ferme**.
+4. Stockage du réglage (validé le 2026-10-08) : option A, un champ `profil_croissance` (jsonb, nul = défaut) sur l'espèce de la ferme.
+5. Pérennes (validé le 2026-10-08) : cycle annuel simple, débourrement, pleine végétation, repos, sur les dates de campagne ; tailles et âge de la plantation plus tard.
+
+Tickets : T28f (accès à l'éditeur), T32a (profils et calcul), T32b (plants en 3D), T32c (réglage par la ferme).
+
 ### Q31 — Placement réel : le modèle (posée le 2026-10-07, T28a)
 
 Question : point de départ du plan, forme des zones, planches dans leur zone, lien serre ↔ zone, qui peut placer.
