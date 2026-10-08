@@ -18,7 +18,7 @@
  *      bouge pas : un code vraiment trop lent dépasse la borne à CHAQUE manche et échoue.
  *
  * Le min(mural, CPU) n'est jamais plus sévère que le temps mural seul. Même méthode que
- * ./../import/test/temps-calcul.ts (T19), pour un appel répété plutôt qu'un appel isolé.
+ * src/import/test/temps-calcul.ts (T19), pour un appel répété plutôt qu'un appel isolé.
  * Importable depuis les autres paquets par chemin relatif
  * (`../../core/src/test/mesurer.ts`), comme les autres aides de test du cœur.
  */

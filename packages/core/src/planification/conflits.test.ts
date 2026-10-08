@@ -68,7 +68,7 @@
  *     emplacement_inactif, periode_invalide), puis rang dans la liste d'entrée de la première
  *     occupation en cause. Aucun conflit : tableau vide.
  *   - Performance : 3 000 occupations sur 400 emplacements (un appel par emplacement) en moins
- *     de 50 ms, meilleure de 5 mesures après échauffement.
+ *     de 50 ms, médiane de 7 mesures après échauffement (mesurer(), T31).
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { mesurer } from '../test/mesurer.ts';
