@@ -26,6 +26,7 @@ import type { PorteDonnees } from '@planif/sync';
 import type { DepartSerie, SaisieSerieAnnulable } from '../serie/index.ts';
 import { chargerVue3d, MARQUE_MODULE_3D, webglDisponible } from '../plan3d/entree.ts';
 import type { ProprietesVue3d } from '../plan3d/index.ts';
+import type { EditeurPlacementCharge } from '../ferme/EcranFerme.tsx';
 import './plan.css';
 import { obtenirDebutDePlan, obtenirPlan, obtenirSaisons, planEnCache, saisonsEnCache, surChangement, type PlanLu } from './cache.ts';
 import {
@@ -49,6 +50,8 @@ export interface ProprietesEcranPlan {
   readonly fermeId: string;
   /** Jour affiché comme « aujourd'hui », 'AAAA-MM-JJ' ; par défaut, celui du téléphone. */
   readonly aujourdhui?: () => string;
+  /** T28f : l'utilisateur de la session ; sans lui, la vue 3D ne propose pas « Modifier le plan ». */
+  readonly utilisateurId?: string;
 }
 
 /**
@@ -360,7 +363,7 @@ const Legende = memo(function Legende() {
   );
 });
 
-export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: ProprietesEcranPlan) {
+export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId }: ProprietesEcranPlan) {
   const [jour] = useState(aujourdhui);
   const [version, setVersion] = useState(0);
   const [saisons, setSaisons] = useState<SaisonPlan[] | null>(() => saisonsEnCache(porte, fermeId));
@@ -627,6 +630,37 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
       },
     );
   }, []);
+  // T28f : « Modifier le plan » (gérant) ouvre l'éditeur de placement, par le chargeur d'EcranFerme (une seule façon
+  // de l'ouvrir), importé au tap, jamais au démarrage. Le plan se relit à chaque écriture (surChangement) : la 3D
+  // montre le placement enregistré au retour.
+  const [gerant, setGerant] = useState(false);
+  useEffect(() => {
+    if (utilisateurId === undefined) return undefined;
+    return porte.surveiller<string>(
+      {
+        sql: "SELECT role FROM membre WHERE ferme_id = ? AND utilisateur_id = ? AND etat = 'accepte' AND supprime_le IS NULL",
+        parametres: [fermeId, utilisateurId],
+        tables: ['membre'],
+        convertir: (l) => (typeof l.role === 'string' ? l.role : ''),
+      },
+      (roles) => {
+        setGerant(roles.includes('gerant'));
+      },
+    );
+  }, [porte, fermeId, utilisateurId]);
+  const [EditeurPlacement, setEditeurPlacement] = useState<EditeurPlacementCharge | null>(null);
+  const modifierPlan = useCallback(() => {
+    import('../ferme/EcranFerme.tsx')
+      .then((m) => m.chargerPlacement())
+      .then(
+        ({ EditeurPlacement: composant }) => {
+          setEditeurPlacement(() => composant);
+        },
+        (erreur: unknown) => {
+          console.error('Éditeur de placement introuvable', erreur);
+        },
+      );
+  }, []);
   const fermer3d = useCallback(() => {
     setVue3d({ sorte: 'fermee' });
   }, []);
@@ -714,7 +748,18 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone }: Prop
           {repli3d}
         </p>
       )}
-      {en3d && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} />}
+      {en3d && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} surModifierPlan={modifierPlan} />}
+      {EditeurPlacement !== null && utilisateurId !== undefined && (
+        <EditeurPlacement
+          key={fermeId}
+          porte={porte}
+          fermeId={fermeId}
+          utilisateurId={utilisateurId}
+          surFermer={() => {
+            setEditeurPlacement(null);
+          }}
+        />
+      )}
       <div data-testid="plan-defilement" ref={defilement} className="plan-defilement" hidden={en3d}>
         <div
           className="plan-grille"

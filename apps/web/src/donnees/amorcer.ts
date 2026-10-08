@@ -159,10 +159,16 @@ async function amorcerImport(): Promise<Amorcage> {
   return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
 }
 
-/** T28b : la ferme du placement (sans point de départ, gérant). */
-async function amorcerPlacement(): Promise<Amorcage> {
-  const ferme = fermePlacement();
-  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermePlacement(base));
+/** T28b : la ferme du placement (sans point de départ, gérant) ; T28f : options par l'adresse. */
+async function amorcerPlacement(parametres: URLSearchParams): Promise<Amorcage> {
+  // T28f : `saison=1` (une saison, donc un plan et « Voir en 3D »), `origine=1` (ferme placée), `role=equipier`.
+  const options = {
+    ...(parametres.get('saison') === '1' ? { saison: true } : {}),
+    ...(parametres.get('origine') === '1' ? { origine: true } : {}),
+    ...(parametres.get('role') === 'equipier' ? { role: 'equipier' as const } : {}),
+  };
+  const ferme = fermePlacement(options);
+  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermePlacement(base, options));
   return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
 }
 
@@ -178,7 +184,7 @@ function amorcer(): Promise<Amorcage> {
   if (jeu === 'itineraires') return amorcerItineraires(parametres.get('date') ?? '');
   if (jeu === 'refus') return amorcerRefus(parametres.get('date') ?? '');
   if (jeu === 'import') return amorcerImport();
-  if (jeu === 'placement') return amorcerPlacement();
+  if (jeu === 'placement') return amorcerPlacement(parametres);
   return Promise.reject(new Error(`jeu inconnu : « ${jeu} »`));
 }
 

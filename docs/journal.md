@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T28f : l'éditeur de placement se trouve depuis la vue 3D
+
+- **Fait** : bouton « Modifier le plan » dans la vue 3D (gérant, écran de 1024 px ou plus, suivi en direct) ; encart « Placez votre ferme sur la photo aérienne » quand rien n'est placé (`fermeSansPlacement`, pur), ou « Le gérant place la ferme depuis un ordinateur » sans bouton ; l'éditeur s'ouvre par-dessus la 3D, qui montre le placement enregistré au retour ; la démo l'ouvre telle quelle (fond neutre hors ligne), aucun changement dans `demo/`. Page d'amorçage : `saison=1`, `origine=1`, `role=equipier`. La carte de l'onglet Ferme cite la 3D.
+- **Décidé** : un seul chargement paresseux de l'éditeur, exporté d'EcranFerme (`chargerPlacement`) et réutilisé par EcranPlan en import dynamique au tap : un import statique aurait embarqué l'écran Ferme dans le morceau Planches. Le rôle de gérant est lu par EcranPlan (nouvelle prop `utilisateurId`, passée par App). Budgets inchangés.
+- **Bloquant** : rien.
+
 ## 2026-10-08 — T28e : l'éditeur de placement se tient au clavier et dit ce qui se passe
 
 - **Fait** : en mode pose, Entrée ou le bouton « Poser au centre de la vue » pose le bâtiment au centre de la vue (brouillon, sélectionné) ; longueur et largeur du panneau bornées à 0,5 m ; message « Le brouillon en cours a été abandonné : la ferme active a changé. » ; la confirmation d'abri dit que les planches suivront la serre ; une tuile en erreur est redemandée après 4 s (3 relances au plus, une à la fois), sans attendre « en ligne ». Relecture de T28d : le focus ne saute plus sur « Tracer le contour » après un tracé abandonné, zone absente (le drapeau n'est levé que si la zone du tracé est affichée, et retombe dans `selectionner` / `choisirZoneListe`). Aucun calcul changé ; démarrage JS inchangé.
