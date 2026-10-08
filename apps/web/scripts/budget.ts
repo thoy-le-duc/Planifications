@@ -3,7 +3,10 @@
  *   - jsInitialGzKio : le JavaScript chargé au démarrage (scripts et modulepreload de index.html) ;
  *   - jsVue3dGzKio (T27) : le morceau de la vue 3D, chargé à la demande seulement — les fichiers
  *     hors démarrage qui portent three ou @react-three/fiber, avec leurs imports statiques hors
- *     démarrage (même mesure que scripts/vue3d.test.ts).
+ *     démarrage (même mesure que scripts/vue3d.test.ts) ;
+ *   - jsPlacementGzKio (T28b) : le morceau de l'éditeur de placement sur la photo aérienne, chargé
+ *     à la demande seulement — les fichiers hors démarrage qui portent la couche de l'orthophoto,
+ *     avec leurs imports statiques hors démarrage (même mesure que scripts/placement.test.ts).
  * Relever une limite se justifie dans la PR.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -13,10 +16,14 @@ import { gzipSync } from 'node:zlib';
 interface Budget {
   jsInitialGzKio: number;
   jsVue3dGzKio: number;
+  jsPlacementGzKio: number;
 }
 
 /** Chaînes qui survivent à la minification : messages de three, propriété posée par fiber. */
 const MARQUEURS_3D = ['WebGLRenderer', '__r3f'] as const;
+
+/** Couche de l'orthophoto IGN (tuiles.ts) : elle n'est que dans le morceau de l'éditeur de placement. */
+const MARQUEUR_PLACEMENT = 'ORTHOIMAGERY.ORTHOPHOTOS';
 
 const racine = join(import.meta.dirname, '..');
 const dist = join(racine, 'dist');
@@ -106,5 +113,19 @@ for (const fichier of [...fermeture(porteurs, demarrage)].sort()) {
   console.log(`${kio.toFixed(1).padStart(7)} Kio  ${fichier} (vue 3D, à la demande)`);
 }
 verdict('vue 3D', total3dKio, budget.jsVue3dGzKio);
+
+// ── Éditeur de placement (T28b) ──────────────────────────────────────────────────────────────
+const porteursPlacement = [...presents].filter((f) => f !== 'sw.js' && !f.startsWith('workbox-') && !demarrage.has(f) && lire(f).includes(MARQUEUR_PLACEMENT));
+if (porteursPlacement.length === 0) {
+  console.error('Aucun morceau de l’éditeur de placement (orthophoto IGN) dans dist/ : le budget jsPlacementGzKio ne mesurerait rien.');
+  process.exit(1);
+}
+let totalPlacementKio = 0;
+for (const fichier of [...fermeture(porteursPlacement, demarrage)].sort()) {
+  const kio = gzKio(fichier);
+  totalPlacementKio += kio;
+  console.log(`${kio.toFixed(1).padStart(7)} Kio  ${fichier} (éditeur de placement, à la demande)`);
+}
+verdict('éditeur de placement', totalPlacementKio, budget.jsPlacementGzKio);
 
 if (depasses.length > 0) process.exit(1);

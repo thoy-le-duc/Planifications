@@ -1,8 +1,8 @@
 {
   "maj": "7 octobre 2026, soir (heure de Paris)",
-  "resume": "Aujourd'hui, six tickets fusionnés : **« Fait » accepté dès l'affichage d'Aujourd'hui (T13k)** ; **la vue 3D des planches, en prototype (T27)**, avec **filtres et couleurs lisibles (T27b)** ; **le placement réel : bâtiments, zones en formes libres, planches placées (T28a)** ; **le serveur accepte ce placement, hors ligne compris, et seul le gérant place (T28s)**. Le **vol de caméra vers une serre ou une zone (T29)** est en revue, CI en cours. Prochains : jumeau 3D (T28c), éditeur sur photo aérienne (T28b), contours de zones (T28d), puis T10t, T10u, T14e, T15d, T15e, T13n, T11b. Budget de la semaine atteint avec T29 : pas de nouveau ticket cette semaine, sauf sur ta jauge.",
+  "resume": "Le 7 octobre, sept tickets fusionnés : **« Fait » accepté dès l'affichage d'Aujourd'hui (T13k)** ; **la vue 3D des planches, en prototype (T27)**, avec **filtres et couleurs lisibles (T27b)** ; **le placement réel : bâtiments, zones en formes libres, planches placées (T28a)** ; **le serveur accepte ce placement, hors ligne compris, et seul le gérant place (T28s)**. **Le vol de caméra vers une zone (T29)** : on clique une zone ou « Aller à M3 », la caméra s'y pose. Prochains : jumeau 3D (T28c), éditeur sur photo aérienne (T28b), contours de zones (T28d), puis T10t, T10u, T14e, T15d, T15e, T13n, T11b. Budget de la semaine atteint avec T29 : pas de nouveau ticket cette semaine, sauf sur ta jauge.",
   "en_cours": {
-    "T29": "en revue"
+    "T29": "fait"
   },
   "attente": "Réponses reçues aujourd'hui (Q25 à Q31) : elles sont dans « Décisions prises ». Hors questions : 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75. Vercel : désactiver « Vercel Authentication ». Connecteur MonCasierFrais à réautoriser. Mise en ligne : Brevo, domaine d'envoi, secrets de production. Ta jauge Claude de temps en temps.",
   "visuels": [
@@ -92,7 +92,7 @@
     {
       "titre": "Vue 3D des planches",
       "etat": "fait",
-      "texte": "T27 et T27b. Onglet Planches → « Voir en 3D » (ordinateur, à partir de 1024 px) : planches et cultures en relief, couleur par famille, curseur de semaine, filtres par zone et par culture, liste texte à côté. Repli sur la 2D sans WebGL, en cas d'erreur ou de lenteur. Le vol de caméra (T29) est en revue."
+      "texte": "T27 et T27b. Onglet Planches → « Voir en 3D » (ordinateur, à partir de 1024 px) : planches et cultures en relief, couleur par famille, curseur de semaine, filtres par zone et par culture, liste texte à côté. Repli sur la 2D sans WebGL, en cas d'erreur ou de lenteur. Clic sur une zone ou « Aller à <zone> » : la caméra y vole (T29)."
     },
     {
       "titre": "Placement réel",

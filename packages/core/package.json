@@ -6,7 +6,9 @@
   "description": "Moteur métier déterministe : aucune dépendance réseau ni IA.",
   "exports": {
     ".": "./src/index.ts",
-    "./import-xlsx": "./src/import/xlsx.ts"
+    "./import-xlsx": "./src/import/xlsx.ts",
+    "./placement": "./src/placement/index.ts",
+    "./identifiants": "./src/domaine/identifiants.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

@@ -21,13 +21,13 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests des tuiles : un point connu (lat, lon, zoom 19) → tuile et pixel attendus ; repère local → pixel de l'écran, aller-retour.
-- [ ] Test de la CSP : `img-src` contient exactement `'self'` et `https://data.geopf.fr`.
-- [ ] Tests des gestes en fonctions pures : glisser, pivoter, clavier → nouveau placement attendu (à 1 cm, 0,1° près).
-- [ ] e2e (ordinateur, tuiles servies par une fausse route Playwright) : poser une serre, la tourner de 90°, enregistrer, annuler → retour exact ; recharger → placement conservé.
-- [ ] e2e hors ligne : fond neutre + message, déplacer et enregistrer fonctionnent.
-- [ ] Test : connecté en équipier, aucune poignée ni bouton d'écriture, message affiché.
-- [ ] Budget dédié tenu et dans le précache ; JS de démarrage inchangé.
+- [x] Tests des tuiles : un point connu (lat, lon, zoom 19) → tuile et pixel attendus ; repère local → pixel de l'écran, aller-retour.
+- [x] Test de la CSP : `img-src` contient exactement `'self'` et `https://data.geopf.fr`.
+- [x] Tests des gestes en fonctions pures : glisser, pivoter, clavier → nouveau placement attendu (à 1 cm, 0,1° près).
+- [x] e2e (ordinateur, tuiles servies par une fausse route Playwright) : poser une serre, la tourner de 90°, enregistrer, annuler → retour exact ; recharger → placement conservé.
+- [x] e2e hors ligne : fond neutre + message, déplacer et enregistrer fonctionnent.
+- [x] Test : connecté en équipier, aucune poignée ni bouton d'écriture, message affiché.
+- [x] Budget dédié tenu et dans le précache ; JS de démarrage inchangé.
 
 ## Risques
 

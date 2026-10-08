@@ -58,6 +58,8 @@ export function politiqueCsp(o: OptionsCsp): string {
     ['worker-src', "'self'"],
     ['connect-src', "'self'", ...new Set(origines)],
     ['style-src', "'self'"],
+    // T28b : l'orthophoto de l'éditeur de placement, par des <img> seulement (connect-src inchangé).
+    ['img-src', "'self'", 'https://data.geopf.fr'],
     ['object-src', "'none'"],
     ['base-uri', "'none'"],
     ['form-action', "'self'"],
