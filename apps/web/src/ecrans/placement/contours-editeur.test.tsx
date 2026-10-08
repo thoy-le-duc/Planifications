@@ -386,7 +386,8 @@ describe('T28d : modifier le contour à la souris', () => {
     await enregistrer();
     await attendre(() => p.placements.length === 1, 'un appel à porte.placer');
     const attendu = [CONTOUR_CHAMP[0], CONTOUR_CHAMP[1], deplace, CONTOUR_CHAMP[3]] as Point[];
-    expect(p.placements[0]?.map((c) => c.sorte)).toEqual(['zone']);
+    // Décision du chef : PC-01, placée dans Plein champ, est replacée dans le même appel.
+    expect([...(p.placements[0] ?? [])].map((c) => c.sorte).sort()).toEqual(['emplacement', 'zone']);
     expect(memeCycle(contourEcrit(p.placements[0], ZONE_CHAMP), attendu, 0.05), `contour écrit : ${JSON.stringify(p.placements[0])}`).toBe(true);
     await attendre(() => memeCycle(contourEnBase(ZONE_CHAMP), attendu, 0.05), 'contour en base');
     // Arrondi au millimètre.
