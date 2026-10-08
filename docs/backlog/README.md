@@ -40,7 +40,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10r](T10r-flux-delai.md) | Réponses en flux : délai jusqu’au premier morceau | T10q | fait |
 | [T10s](T10s-parcellaire-serveur.md) | Serveur : accepter le parcellaire et le catalogue de la ferme | T10r | fait |
 | [T10t](T10t-structure-suites.md) | Parcellaire et catalogue : suites de la relecture | T10s | à faire |
-| [T10u](T10u-refus-ferme-quittee.md) | Refus d'une ferme quittée effacés du téléphone | T10k | à faire |
+| [T10u](T10u-refus-ferme-quittee.md) | Refus d'une ferme quittée effacés du téléphone | T10k | fait |
 | [T10g](T10g-recoltes-annulees.md) | Récoltes annulées et plafonds définitifs (Q20, Q13) | T10d | fait |
 | [T10h](T10h-en-vigueur-suites.md) | « En vigueur » : performance de la vue et alignement du téléphone | T10g | fait |
 | [T10e](T10e-series-synchro.md) | Synchro : le serveur accepte les séries des téléphones | T10, T10b, T10c | fait |
@@ -116,7 +116,8 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T28s](T28s-placement-serveur.md) | Placement réel : le serveur accepte, la porte écrit | T28a | fait |
 | [T28c](T28c-jumeau-3d.md) | Jumeau 3D : la ferme à sa vraie place, serres en tunnels | T27b, T28a | fait |
 | [T28b](T28b-editeur-placement.md) | Éditeur de placement sur photo aérienne IGN : bâtiments et planches (ordinateur) | T28s | fait |
-| [T28d](T28d-contours-zones.md) | Éditeur de placement : contours de zones en formes libres (Q31) | T28b | à faire |
+| [T28d](T28d-contours-zones.md) | Éditeur de placement : contours de zones en formes libres (Q31) | T28b | fait |
 | [T28e](T28e-editeur-suites.md) | Éditeur de placement : suites de relecture (clavier, zoom, messages, tuiles) | T28b, T28d | à faire |
+| [T31](T31-tests-temps-fiables.md) | Tests de temps fiables sous charge (helper commun, médiane de ≥ 5, CPU) | — | fait |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.

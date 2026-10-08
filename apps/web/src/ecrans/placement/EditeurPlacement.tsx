@@ -10,23 +10,26 @@
  * pendant la session). Gérant seulement, sur ordinateur : sinon lecture seule, sans poignées. Sans
  * réseau, le fond est un quadrillage de 10 m et tout le reste marche.
  */
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactElement } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactElement, type RefObject } from 'react';
 import { creerGenerateurId, type GenerateurId } from '@planif/core/identifiants';
 import type { ChangementPlacement, PorteDonnees } from '@planif/sync';
 import './placement.css';
 import { repereZone, TYPES_BATIMENT, versGeographique, versLocal, type TypeBatiment } from './coeur.ts';
-import { changementsDuBrouillon } from './brouillon.ts';
+import { changementsDuBrouillon, contourChange, ECRITURES_MAX_PAR_LOT } from './brouillon.ts';
 import { Champ, garderLeFocus, Modale } from './composants.tsx';
+import { deplacerSommet, insererMilieu, poserPoint, replacerPlanches, retirerSommet, toucheSommet, TOLERANCE_FERMETURE_PX, verifierContour } from './contours.ts';
 import {
   lireTout,
   requeteBatiments,
   requeteFerme,
   requetePlanches,
+  requeteEmplacementsPlaces,
   requeteRoles,
   requeteZones,
   sansNull,
   TYPES,
   type Batiment,
+  type EmplacementPlace,
   type FermeLue,
   type Planche,
   type Zone,
@@ -54,6 +57,13 @@ export const MESSAGES_PLACEMENT = {
   contourRemplace: 'Le contour de la zone sera remplacé par la serre',
 } as const;
 
+/** Contours de zones (T28d). */
+export const MESSAGES_CONTOURS = {
+  zoneAbritee: 'sa forme est celle de la serre',
+  sommetsMin: 'au moins 3 sommets',
+  tropDeChangements: 'Trop de changements à enregistrer en une fois',
+} as const;
+
 /** « Annuler » reste affiché quelques secondes après un enregistrement. */
 export const DELAI_ANNULATION_MS = 8_000;
 
@@ -78,6 +88,7 @@ const ZOOM_MAX = 22;
 /** Un clic bouge de moins que ça ; au-delà, c'est un glissement. */
 const SEUIL_GLISSEMENT_PX = 4;
 const DECALAGE_POIGNEE_PX = 28;
+const TAILLE_SOMMET_PX = 24;
 const CARREAU_M = 10;
 /** Position de repli d'une ferme sans position : le centre de la France. */
 const POSITION_DE_REPLI: Position = { latitude: 46.6, longitude: 2.4 };
@@ -91,8 +102,22 @@ interface Objet {
   readonly id: string;
   readonly libelle: string;
   readonly rect: RectanglePlace;
-  /** Planche : repère de sa zone. */
+  /** Planche : repère dans lequel son placement est gardé au brouillon (celui de sa zone, avant tout changement de contour). */
   readonly repere: Repere | null;
+}
+
+/** Une zone, avec son contour tel qu'affiché et ce qu'en dit le cœur. */
+interface ZoneAffichee {
+  readonly zone: Zone;
+  readonly abritee: boolean;
+  /** Contour affiché : celui du brouillon, sinon celui de la base. */
+  readonly affiche: readonly Point[] | null;
+  /** Contour qui donne le repère : celui du brouillon s'il est valide et change, sinon celui de la base (même objet). */
+  readonly effectif: readonly Point[] | null;
+  /** Le brouillon change le contour de la zone. */
+  readonly change: boolean;
+  /** Verdict du cœur sur le contour du brouillon (null : pas de brouillon). */
+  readonly verdict: ReturnType<typeof verifierContour> | null;
 }
 
 type Geste =
@@ -105,7 +130,25 @@ type Geste =
       readonly vue: VueCarte;
       readonly cote: Cote | null;
       demarre: boolean;
-    };
+    }
+  | {
+      /** Sommet d'un contour : glisser le déplace, un simple clic le choisit (ou ferme le tracé). */
+      readonly type: 'sommet';
+      readonly zoneId: string;
+      readonly index: number;
+      readonly contour0: readonly Point[];
+      readonly pixel0: Point;
+      readonly depart: Point;
+      readonly vue: VueCarte;
+      readonly fige: boolean;
+      demarre: boolean;
+    }
+  | { readonly type: 'milieu'; readonly zoneId: string; readonly index: number; readonly pixel0: Point; demarre: boolean };
+
+interface Trace {
+  readonly zoneId: string;
+  readonly sommets: readonly Point[];
+}
 
 type Confirmation =
   | { readonly type: 'origine'; readonly position: Position }
@@ -238,13 +281,15 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [lusB, setLusB] = useState<readonly Batiment[] | null>(null);
   const [zones, setZones] = useState<readonly Zone[] | null>(null);
   const [lusP, setLusP] = useState<readonly Planche[] | null>(null);
+  const [lusE, setLusE] = useState<readonly EmplacementPlace[] | null>(null);
   useEffect(() => porte.surveiller(requeteFerme(fermeId), (l) => { setFerme({ valeur: l[0] ?? null }); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteRoles(fermeId, utilisateurId), setRoles), [porte, fermeId, utilisateurId]);
   useEffect(() => porte.surveiller(requeteBatiments(fermeId), (l) => { setLusB(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteZones(fermeId), (l) => { setZones(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requetePlanches(fermeId), (l) => { setLusP(sansNull(l)); }), [porte, fermeId]);
+  useEffect(() => porte.surveiller(requeteEmplacementsPlaces(fermeId), (l) => { setLusE(sansNull(l)); }), [porte, fermeId]);
 
-  const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null;
+  const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null;
   const gerant = roles?.includes('gerant') === true;
   const mode = !pret ? undefined : gerant && surOrdinateur ? 'edition' : 'lecture';
   const edition = mode === 'edition';
@@ -252,7 +297,16 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   // ── État de l'écran ───────────────────────────────────────────────────────────────────────────
   const [brouillonB, setBrouillonB] = useState<ReadonlyMap<string, Batiment>>(() => new Map());
   const [brouillonP, setBrouillonP] = useState<ReadonlyMap<string, Planche>>(() => new Map());
+  const [brouillonZ, setBrouillonZ] = useState<ReadonlyMap<string, readonly Point[]>>(() => new Map());
   const [selection, setSelection] = useState<string | null>(null);
+  const [zoneSel, setZoneSel] = useState<string | null>(null);
+  const [trace, setTrace] = useState<Trace | null>(null);
+  const [sommetSel, setSommetSel] = useState<number | null>(null);
+  const [messageContour, setMessageContour] = useState<string | null>(null);
+  const focusSommet = useRef<number | null>(null);
+  const focusTracer = useRef(false);
+  const conteneurContour = useRef<HTMLDivElement | null>(null);
+  const clicDejaTraite = useRef<number | null>(null);
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [formulaire, setFormulaire] = useState(false);
   const [pose, setPose] = useState<NouveauBatiment | null>(null);
@@ -307,6 +361,25 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     };
   }, [dernier, delaiAnnulationMs]);
 
+  // Le focus suit le sommet choisi au clavier (Inser, Suppr), et va au tracé quand il s'ouvre (Entrée le ferme).
+  useEffect(() => {
+    if (focusTracer.current) {
+      const b = document.querySelector<HTMLElement>('[data-action="tracer"]');
+      if (b !== null) {
+        focusTracer.current = false;
+        b.focus();
+      }
+    }
+    const i = focusSommet.current;
+    if (i === null) return;
+    focusSommet.current = null;
+    document.querySelector<HTMLElement>(`[data-testid="sommet"][data-index="${String(i)}"]`)?.focus();
+  });
+  const traceOuvert = trace !== null;
+  useEffect(() => {
+    if (traceOuvert) conteneurContour.current?.focus();
+  }, [traceOuvert]);
+
   // ── Ce qui est affiché : la base, recouverte par le brouillon ────────────────────────────────
   const origine = ferme?.valeur?.origine ?? null;
   const origineVue = origine ?? ferme?.valeur?.position ?? POSITION_DE_REPLI;
@@ -322,16 +395,49 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     return [...lus.map((b) => brouillonB.get(b.id) ?? b), ...[...brouillonB.values()].filter((b) => !connus.has(b.id))];
   }, [lusB, brouillonB]);
 
-  const reperes = useMemo(() => {
-    const m = new Map<string, Repere | null>();
+  const zonesInfo = useMemo(() => {
+    const m = new Map<string, ZoneAffichee>();
     for (const z of zones ?? []) {
-      const abri = batimentsAff.find((b) => b.zoneId === z.id);
-      m.set(z.id, repereZone({ contour: abri === undefined ? z.contour : null }, abri === undefined ? null : { centre: abri.centre, orientationDeg: abri.orientationDeg }));
+      const abritee = batimentsAff.some((b) => b.zoneId === z.id);
+      const b = brouillonZ.get(z.id);
+      const verdict = b === undefined ? null : verifierContour(b.map((p) => ({ x: arrondi(p.x), y: arrondi(p.y) })));
+      const change = b !== undefined && !abritee && contourChange(z.contour, b);
+      m.set(z.id, {
+        zone: z,
+        abritee,
+        affiche: abritee ? null : (b ?? z.contour),
+        effectif: change && verdict?.ok === true ? verdict.contour : z.contour,
+        change,
+        verdict,
+      });
     }
     return m;
-  }, [zones, batimentsAff]);
+  }, [zones, batimentsAff, brouillonZ]);
 
-  const planchesAff = useMemo(() => (lusP ?? []).map((p) => brouillonP.get(p.id) ?? p), [lusP, brouillonP]);
+  /** Repère d'affichage de chaque zone (contour du brouillon s'il est valide), et repère où les planches gardent leur placement au brouillon (contour de la base). */
+  const reperes = useMemo(() => {
+    const m = new Map<string, { readonly affichage: Repere | null; readonly base: Repere | null }>();
+    for (const i of zonesInfo.values()) {
+      const abri = batimentsAff.find((b) => b.zoneId === i.zone.id);
+      const abritee = abri === undefined ? null : { centre: abri.centre, orientationDeg: abri.orientationDeg };
+      const affichage = repereZone({ contour: abri === undefined ? i.effectif : null }, abritee);
+      m.set(i.zone.id, { affichage, base: abri === undefined ? repereZone({ contour: i.zone.contour }) : affichage });
+    }
+    return m;
+  }, [zonesInfo, batimentsAff]);
+
+  // Un contour changé ne déplace pas les planches de la zone sur le terrain (décision du chef).
+  const planchesAff = useMemo(
+    () =>
+      (lusP ?? []).map((p) => {
+        const base = brouillonP.get(p.id) ?? p;
+        const info = zonesInfo.get(p.zoneId);
+        if (info === undefined || info.abritee || !info.change || info.zone.contour === null || info.effectif === null) return base;
+        const [replacee] = replacerPlanches(info.zone.contour, info.effectif, [{ id: p.id, placement: base.placement }]);
+        return replacee === undefined ? base : { ...base, placement: replacee.placement };
+      }),
+    [lusP, brouillonP, zonesInfo],
+  );
 
   const elements = useMemo(() => {
     const liste: Objet[] = batimentsAff.map((b) => ({
@@ -343,10 +449,16 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     }));
     const planches: Objet[] = [];
     for (const p of planchesAff) {
-      const repere = reperes.get(p.zoneId) ?? null;
-      if (repere === null) continue;
-      const place = depuisPlacementPlanche(repere, p.placement);
-      planches.push({ sorte: 'planche', id: p.id, libelle: `Planche ${p.code}`, rect: { centre: place.centre, orientationDeg: place.orientationDeg, longueurM: p.longueurM, largeurM: p.largeurM }, repere });
+      const repere = reperes.get(p.zoneId);
+      if (repere?.affichage == null) continue;
+      const place = depuisPlacementPlanche(repere.affichage, p.placement);
+      planches.push({
+        sorte: 'planche',
+        id: p.id,
+        libelle: `Planche ${p.code}`,
+        rect: { centre: place.centre, orientationDeg: place.orientationDeg, longueurM: p.longueurM, largeurM: p.largeurM },
+        repere: repere.base ?? repere.affichage,
+      });
     }
     return { batiments: liste, planches };
   }, [batimentsAff, planchesAff, reperes]);
@@ -357,11 +469,26 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const changements = useMemo(
     () =>
       pret
-        ? changementsDuBrouillon({ batiments: lusB, brouillonBatiments: brouillonB, zones, planches: lusP, brouillonPlanches: brouillonP })
+        ? changementsDuBrouillon({
+            batiments: lusB,
+            brouillonBatiments: brouillonB,
+            zones,
+            planches: lusP,
+            emplacements: lusE,
+            brouillonPlanches: brouillonP,
+            brouillonZones: brouillonZ,
+            zonesAbritees: new Set([...zonesInfo.values()].filter((i) => i.abritee).map((i) => i.zone.id)),
+          })
         : [],
-    [pret, lusB, brouillonB, zones, lusP, brouillonP],
+    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo],
   );
   const modifie = changements.length > 0;
+  const contoursModifies = [...zonesInfo.values()].filter((i) => i.change);
+  const contoursInvalides = contoursModifies.filter((i) => i.verdict?.ok === false);
+  /** Quelque chose à perdre en fermant : changements à écrire, contour refusé, tracé commencé. */
+  const brouillonOuvert = modifie || contoursModifies.length > 0 || (trace?.sommets.length ?? 0) > 0;
+  const tropDeChangements = changements.length > ECRITURES_MAX_PAR_LOT;
+  const peutEnregistrer = modifie && !occupe && contoursInvalides.length === 0 && trace === null && !tropDeChangements;
 
   // Les tuiles ne sont demandées qu'une fois les données de la ferme lues (la vue est alors la bonne).
   const tuiles = useMemo(() => (pret && enLigneEffectif ? tuilesVisibles(vue) : []), [pret, enLigneEffectif, vue]);
@@ -392,7 +519,104 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   function abandonner(): void {
     setBrouillonB(new Map());
     setBrouillonP(new Map());
+    setBrouillonZ(new Map());
+    setTrace(null);
+    setMessageContour(null);
     setErreur(null);
+  }
+
+  /** Choisit un bâtiment ou une planche (ou rien) : la zone choisie est laissée, un tracé en cours est abandonné. */
+  function selectionner(id: string | null): void {
+    setSelection(id);
+    setZoneSel(null);
+    setSommetSel(null);
+    setMessageContour(null);
+    if (id !== null) setTrace(null);
+  }
+
+  function choisirZoneListe(id: string): void {
+    setSelection(null);
+    setZoneSel(id);
+    setSommetSel(null);
+    setMessageContour(null);
+    if (trace?.zoneId !== id) setTrace(null);
+  }
+
+  // ── Contours de zones ─────────────────────────────────────────────────────────────────────────
+  function majContour(zoneId: string, contour: readonly Point[]): void {
+    setBrouillonZ((prev) => new Map(prev).set(zoneId, contour));
+    setMessageContour(null);
+  }
+
+  function demarrerTrace(zoneId: string): void {
+    setTrace({ zoneId, sommets: [] });
+    setSommetSel(null);
+    setMessageContour(null);
+  }
+
+  function abandonnerTrace(): void {
+    setTrace(null);
+    focusTracer.current = true;
+  }
+
+  function fermerTrace(): void {
+    if (trace === null || trace.sommets.length < 3) return;
+    majContour(trace.zoneId, trace.sommets);
+    setTrace(null);
+    setSommetSel(0);
+    focusSommet.current = 0;
+  }
+
+  function retirer(zoneId: string, index: number): void {
+    const contour = zonesInfo.get(zoneId)?.affiche;
+    if (contour == null) return;
+    const reste = retirerSommet(contour, index);
+    if (reste === null) {
+      setMessageContour(`Un contour garde au moins 3 sommets.`);
+      return;
+    }
+    majContour(zoneId, reste);
+    setSommetSel(Math.min(index, reste.length - 1));
+  }
+
+  function insererSurCote(zoneId: string, cote: number): void {
+    const contour = zonesInfo.get(zoneId)?.affiche;
+    if (contour == null) return;
+    majContour(zoneId, insererMilieu(contour, cote));
+    setSommetSel(cote + 1);
+  }
+
+  /** Clavier d'un sommet : flèches 0,1 m (Maj : 1 m), Inser (ajoute après), Suppr (retire). */
+  function surToucheSommet(e: KeyboardEvent<HTMLElement>, zoneId: string, index: number): void {
+    if (!edition || trace !== null || e.metaKey || (e.ctrlKey && !e.altKey)) return;
+    const contour = zonesInfo.get(zoneId)?.affiche;
+    if (contour == null) return;
+    const r = toucheSommet(contour, index, { key: e.key, shiftKey: e.shiftKey });
+    if (r === null) return;
+    e.preventDefault();
+    if (r.refuse) {
+      setMessageContour(`Un contour garde au moins 3 sommets.`);
+      return;
+    }
+    majContour(zoneId, r.contour);
+    setSommetSel(r.index);
+    if (r.index !== index || r.contour.length !== contour.length) focusSommet.current = r.index;
+  }
+
+  function commencerSommet(e: PointerEvent<HTMLElement>, zoneId: string, index: number, contour: readonly Point[]): void {
+    e.stopPropagation();
+    setSommetSel(index);
+    if (!edition || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    const pixel0 = pixelDe(e);
+    geste.current = { type: 'sommet', zoneId, index, contour0: contour, pixel0, depart: depuisEcran(vue, pixel0), vue, fige: trace !== null, demarre: false };
+    capturer(e);
+  }
+
+  function commencerCote(e: PointerEvent<SVGElement>, zoneId: string, index: number): void {
+    e.stopPropagation();
+    clicDejaTraite.current = null;
+    if (!edition || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    geste.current = { type: 'milieu', zoneId, index, pixel0: pixelDe(e), demarre: false };
   }
 
   // ── Écriture : toujours par porte.placer ─────────────────────────────────────────────────────
@@ -403,6 +627,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setLusB(l.batiments);
     setZones(l.zones);
     setLusP(l.planches);
+    setLusE(l.emplacements);
   }
 
   /** Relit la base après une écriture réussie ; un échec ne défait rien : il est dit à part d'un refus. */
@@ -435,8 +660,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   }
 
   async function enregistrer(): Promise<void> {
-    if (occupe || !modifie) return;
-    const [ecritsB, ecritsP] = [brouillonB, brouillonP];
+    if (!peutEnregistrer) return;
+    const [ecritsB, ecritsP, ecritsZ] = [brouillonB, brouillonP, brouillonZ];
     const entree = await ecrire(changements);
     if (entree === null) return;
     // Seul ce qui vient d'être écrit sort du brouillon : un geste fait pendant l'écriture reste.
@@ -447,6 +672,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     };
     setBrouillonB((prev) => sans(prev, ecritsB));
     setBrouillonP((prev) => sans(prev, ecritsP));
+    setBrouillonZ((prev) => sans(prev, ecritsZ));
     setDernier(entree);
   }
 
@@ -484,7 +710,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   function commencer(e: PointerEvent<HTMLElement>, element: Objet, type: 'deplacer' | 'pivoter' | 'cote', cote: Cote | null): void {
     e.stopPropagation();
-    setSelection(element.id);
+    selectionner(element.id);
     if (!edition || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const pixel0 = pixelDe(e);
     geste.current = { type, element, pixel0, depart: depuisEcran(vue, pixel0), vue, cote, demarre: type !== 'deplacer' };
@@ -502,6 +728,17 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       setCentreGeo(versGeographique(g.vue.origine, { x: g.centre0.x - (pixel.x - g.pixel0.x) * m, y: g.centre0.y + (pixel.y - g.pixel0.y) * m }));
       return;
     }
+    if (g.type === 'milieu' || g.type === 'sommet') {
+      if (!g.demarre) {
+        if (Math.hypot(pixel.x - g.pixel0.x, pixel.y - g.pixel0.y) < SEUIL_GLISSEMENT_PX) return;
+        g.demarre = true;
+      }
+      if (g.type === 'milieu' || g.fige) return;
+      const p = depuisEcran(g.vue, pixel);
+      const sommet = g.contour0[g.index];
+      if (sommet !== undefined) majContour(g.zoneId, deplacerSommet(g.contour0, g.index, { x: arrondi(sommet.x + p.x - g.depart.x), y: arrondi(sommet.y + p.y - g.depart.y) }));
+      return;
+    }
     if (!g.demarre) {
       if (Math.hypot(pixel.x - g.pixel0.x, pixel.y - g.pixel0.y) < SEUIL_GLISSEMENT_PX) return;
       g.demarre = true;
@@ -516,15 +753,31 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   function surRelache(): void {
     const g = geste.current;
     geste.current = null;
-    if (g?.type === 'fond' && !g.deplace) surClic(g.pixel0, g.vue);
+    if (g === null) return;
+    if (g.type === 'fond') {
+      if (!g.deplace) surClic(g.pixel0, g.vue);
+    } else if (g.type === 'sommet') {
+      // Un simple clic sur le premier sommet d'un tracé le ferme.
+      if (!g.demarre && g.fige && g.index === 0) fermerTrace();
+    } else if (g.type === 'milieu' && !g.demarre) {
+      clicDejaTraite.current = g.index;
+      insererSurCote(g.zoneId, g.index);
+    }
   }
 
   function surClic(pixel: Point, v: VueCarte): void {
     if (!pret || !edition) {
-      setSelection(null);
+      selectionner(null);
       return;
     }
     const local = depuisEcran(v, pixel);
+    if (trace !== null) {
+      const toleranceM = TOLERANCE_FERMETURE_PX * metresParPixel(v.origine.latitude, v.zoom);
+      const r = poserPoint(trace.sommets, { x: arrondi(local.x), y: arrondi(local.y) }, toleranceM);
+      if (r.ferme) fermerTrace();
+      else setTrace({ zoneId: trace.zoneId, sommets: r.sommets });
+      return;
+    }
     if (pose !== null) {
       const id = nouvelId?.() ?? identifiantNeuf();
       setBrouillonB((prev) =>
@@ -541,7 +794,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           nouveau: true,
         }),
       );
-      setSelection(id);
+      selectionner(id);
       setPose(null);
       return;
     }
@@ -549,7 +802,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       setConfirmation({ type: 'origine', position: versGeographique(v.origine, local) });
       return;
     }
-    setSelection(null);
+    selectionner(null);
   }
 
   function identifiantNeuf(): string {
@@ -574,6 +827,19 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     garderLeFocus(e);
     const cible = e.target;
     const enSaisie = cible instanceof HTMLInputElement || cible instanceof HTMLSelectElement || cible instanceof HTMLTextAreaElement;
+    if (edition && trace !== null && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Tracé en cours : Entrée le ferme (3 sommets au moins), Échap l'abandonne.
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        abandonnerTrace();
+        return;
+      }
+      if (e.key === 'Enter' && !enSaisie && !(cible instanceof HTMLButtonElement)) {
+        e.preventDefault();
+        fermerTrace();
+        return;
+      }
+    }
     if (edition && !enSaisie && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
       e.preventDefault();
       void defaire(pile.current.at(-1));
@@ -581,7 +847,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   }
 
   function demanderFermeture(): void {
-    if (modifie) setConfirmation({ type: 'fermer' });
+    if (brouillonOuvert) setConfirmation({ type: 'fermer' });
     else surFermer();
   }
 
@@ -599,6 +865,18 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const poignees = edition && choisi !== undefined ? positionsPoignees(vue, choisi.rect) : null;
   const carreau = CARREAU_M / mpp;
   const depart = versEcran(vue, { x: 0, y: 0 });
+  const enPoints = (c: readonly Point[]): string =>
+    c
+      .map((p) => {
+        const e = versEcran(vue, p);
+        return `${String(e.x)},${String(e.y)}`;
+      })
+      .join(' ');
+  const zoneChoisie = zoneSel === null ? undefined : zonesInfo.get(zoneSel);
+  const traceZone = trace !== null && trace.zoneId === zoneChoisie?.zone.id ? trace : null;
+  const enTrace = traceZone !== null;
+  /** Sommets dessinés et éditables : le tracé en cours, sinon le contour affiché de la zone choisie (gérant, zone non abritée). */
+  const sommetsAff: readonly Point[] = !edition || zoneChoisie === undefined || zoneChoisie.abritee ? [] : traceZone !== null ? traceZone.sommets : (zoneChoisie.affiche ?? []);
   // Pendant une écriture, l'annulation précédente disparaît : « Annuler » dit toujours le dernier enregistrement, une fois écrit.
   const annulable = occupe ? undefined : (dernier ?? undefined);
 
@@ -625,7 +903,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           commencer(ev, e, 'deplacer', null);
         }}
         onFocus={() => {
-          setSelection(e.id);
+          if (selection !== e.id) selectionner(e.id);
         }}
         onKeyDown={(ev) => {
           surTouche(ev, e);
@@ -664,7 +942,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             <div
               ref={planRef}
               data-testid="plan-placement"
-              className="pl-plan"
+              className={`pl-plan${enTrace ? ' pl-trace' : ''}`}
               onPointerDown={(e) => {
                 if (e.pointerType === 'mouse' && e.button !== 0) return;
                 geste.current = { type: 'fond', pixel0: pixelDe(e), centre0: vue.centre, vue, deplace: false };
@@ -712,19 +990,14 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
               {pret && (
                 <svg className="pl-svg" width={taille.w} height={taille.h} aria-hidden="true">
-                  {zones.map((z) =>
-                    z.contour === null || batimentsAff.some((b) => b.zoneId === z.id) ? null : (
+                  {[...zonesInfo.values()].map((i) =>
+                    i.affiche === null ? null : (
                       <polygon
-                        key={z.id}
+                        key={i.zone.id}
                         data-testid="zone-contour"
-                        data-id={z.id}
-                        className="pl-contour"
-                        points={z.contour
-                          .map((p) => {
-                            const s = versEcran(vue, p);
-                            return `${String(s.x)},${String(s.y)}`;
-                          })
-                          .join(' ')}
+                        data-id={i.zone.id}
+                        className={`pl-contour${zoneSel === i.zone.id ? ' pl-contour-choisi' : ''}${i.change && i.verdict?.ok === false ? ' pl-contour-invalide' : ''}`}
+                        points={enPoints(i.affiche)}
                       />
                     ),
                   )}
@@ -734,6 +1007,71 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
               {pret && elements.planches.map(dessiner)}
               {pret && elements.batiments.map(dessiner)}
+
+              {pret && zoneChoisie !== undefined && sommetsAff.length > 0 && (
+                <>
+                  <svg className="pl-svg pl-svg-edition" width={taille.w} height={taille.h} aria-hidden="true">
+                    {enTrace ? (
+                      <polyline className="pl-trace-ligne" points={enPoints(sommetsAff)} />
+                    ) : (
+                      sommetsAff.map((p, i) => {
+                        const a = versEcran(vue, p);
+                        const b = versEcran(vue, sommetsAff[(i + 1) % sommetsAff.length] ?? p);
+                        return (
+                          <line
+                            key={i}
+                            data-testid="cote-contour"
+                            data-index={i}
+                            className="pl-cote"
+                            x1={a.x}
+                            y1={a.y}
+                            x2={b.x}
+                            y2={b.y}
+                            onPointerDown={(ev) => {
+                              commencerCote(ev, zoneChoisie.zone.id, i);
+                            }}
+                            onClick={() => {
+                              if (clicDejaTraite.current === i) clicDejaTraite.current = null;
+                              else insererSurCote(zoneChoisie.zone.id, i);
+                            }}
+                          />
+                        );
+                      })
+                    )}
+                  </svg>
+                  {sommetsAff.map((p, i) => {
+                    const e = versEcran(vue, p);
+                    return (
+                      <div
+                        key={i}
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={sommetSel === i}
+                        aria-label={`Sommet ${String(i + 1)}`}
+                        data-testid="sommet"
+                        data-index={i}
+                        data-x={arrondi(p.x)}
+                        data-y={arrondi(p.y)}
+                        className={`pl-sommet${sommetSel === i ? ' pl-sommet-choisi' : ''}${enTrace && i === 0 ? ' pl-sommet-premier' : ''}`}
+                        style={{ left: e.x - TAILLE_SOMMET_PX / 2, top: e.y - TAILLE_SOMMET_PX / 2 }}
+                        onPointerDown={(ev) => {
+                          commencerSommet(ev, zoneChoisie.zone.id, i, sommetsAff);
+                        }}
+                        onFocus={() => {
+                          setSommetSel(i);
+                        }}
+                        onKeyDown={(ev) => {
+                          surToucheSommet(ev, zoneChoisie.zone.id, i);
+                        }}
+                        onContextMenu={(ev) => {
+                          ev.preventDefault();
+                          if (!enTrace) retirer(zoneChoisie.zone.id, i);
+                        }}
+                      />
+                    );
+                  })}
+                </>
+              )}
 
               {poignees !== null && choisi !== undefined && (
                 <>
@@ -840,6 +1178,11 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 </button>
               </p>
             )}
+            {tropDeChangements && (
+              <p role="status" className="pl-message">
+                {MESSAGES_CONTOURS.tropDeChangements} ({String(changements.length)} sur {String(ECRITURES_MAX_PAR_LOT)} au plus). Abandonnez une partie des changements, puis enregistrez en plusieurs fois.
+              </p>
+            )}
             {erreur !== null && (
               <p role="alert" className="pl-message pl-erreur">
                 {erreur}
@@ -851,17 +1194,17 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 <button
                   type="button"
                   className="pl-bouton"
-                  disabled={origine === null || pose !== null}
+                  disabled={origine === null || pose !== null || trace !== null}
                   onClick={() => {
                     setFormulaire(true);
                   }}
                 >
                   Nouveau bâtiment
                 </button>
-                <button type="button" className="pl-bouton pl-principal" disabled={!modifie || occupe} onClick={() => void enregistrer()}>
+                <button type="button" className="pl-bouton pl-principal" disabled={!peutEnregistrer} onClick={() => void enregistrer()}>
                   Enregistrer
                 </button>
-                {modifie && (
+                {brouillonOuvert && (
                   <button type="button" className="pl-bouton" disabled={occupe} onClick={abandonner}>
                     Abandonner les changements
                   </button>
@@ -880,9 +1223,52 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               </div>
             )}
 
+            {pret && (
+              <section data-testid="liste-zones" aria-label="Zones" className="pl-zones">
+                <h3>Zones</h3>
+                <ul>
+                  {[...zonesInfo.values()].map((i) => (
+                    <li key={i.zone.id}>
+                      <button
+                        type="button"
+                        data-testid="zone-choix"
+                        data-id={i.zone.id}
+                        aria-pressed={zoneSel === i.zone.id}
+                        className={`pl-bouton pl-zone-choix`}
+                        onClick={() => {
+                          choisirZoneListe(i.zone.id);
+                        }}
+                      >
+                        {i.zone.nom}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
             <section data-testid="panneau-placement" aria-label="Réglages de l’élément" className="pl-panneau">
-              {choisi === undefined ? (
-                <p className="pl-aide">Touchez un bâtiment ou une planche pour le régler. Flèches : 0,1 m (Maj : 1 m) ; [ et ] : 1°.</p>
+              {choisi === undefined && zoneChoisie !== undefined ? (
+                <PanneauZone
+                  info={zoneChoisie}
+                  edition={edition}
+                  origineSouhaitee={origine !== null && pose === null}
+                  trace={traceZone}
+                  message={messageContour}
+                  conteneur={conteneurContour}
+                  surTracer={() => {
+                    demarrerTrace(zoneChoisie.zone.id);
+                  }}
+                  surRenoncer={abandonnerTrace}
+                  surSommet={(index, point) => {
+                    const contour = zoneChoisie.affiche;
+                    if (contour !== null) majContour(zoneChoisie.zone.id, deplacerSommet(contour, index, point));
+                  }}
+                />
+              ) : choisi === undefined ? (
+                <p className="pl-aide">
+                  Touchez un bâtiment, une planche ou une zone pour la régler. Flèches : 0,1 m (Maj : 1 m) ; [ et ] : 1°.
+                </p>
               ) : (
                 <ChampsElement
                   key={choisi.id}
@@ -1058,6 +1444,104 @@ function ChampsElement({ element, batiment, lecture, zones, surRectangle, surBat
             </select>
           </div>
         </>
+      )}
+    </>
+  );
+}
+
+// ── Panneau d'une zone : contour ────────────────────────────────────────────────────────────────
+
+interface ProprietesPanneauZone {
+  readonly info: ZoneAffichee;
+  readonly edition: boolean;
+  /** Le point de départ du plan est posé et aucun bâtiment n'est en cours de pose. */
+  readonly origineSouhaitee: boolean;
+  readonly trace: Trace | null;
+  readonly message: string | null;
+  readonly conteneur: RefObject<HTMLDivElement | null>;
+  readonly surTracer: () => void;
+  readonly surRenoncer: () => void;
+  readonly surSommet: (index: number, point: Point) => void;
+}
+
+function PanneauZone({ info, edition, origineSouhaitee, trace, message, conteneur, surTracer, surRenoncer, surSommet }: ProprietesPanneauZone): ReactElement {
+  const contour = info.affiche;
+  const verdict = info.verdict ?? (contour === null ? null : verifierContour(contour));
+  return (
+    <>
+      <h3>{info.zone.nom}</h3>
+      {info.abritee && (
+        <p role="status" data-testid="zone-abritee" className="pl-aide">
+          Cette zone est abritée par un bâtiment : {MESSAGES_CONTOURS.zoneAbritee}, il n’y a pas de contour à tracer.
+        </p>
+      )}
+      {!info.abritee && !edition && (
+        <p className="pl-aide">{contour === null ? 'Aucun contour tracé pour cette zone.' : `Contour de ${String(contour.length)} sommets.`}</p>
+      )}
+      {!info.abritee && edition && trace === null && contour === null && (
+        <>
+          <button type="button" className="pl-bouton" data-action="tracer" disabled={!origineSouhaitee} onClick={surTracer}>
+            Tracer le contour
+          </button>
+          <p className="pl-aide">
+            {origineSouhaitee ? 'Posez les sommets un à un sur la photo, puis fermez le tracé.' : 'Posez d’abord le point de départ du plan, et finissez de poser le bâtiment en cours.'}
+          </p>
+        </>
+      )}
+      {!info.abritee && edition && trace !== null && (
+        <div ref={conteneur} tabIndex={-1} className="pl-contour-edition" data-testid="contour-edition" data-id={info.zone.id} data-etat="trace" data-sommets={trace.sommets.length}>
+          <p className="pl-aide">
+            Touchez la photo pour poser chaque sommet ({String(trace.sommets.length)} posé{trace.sommets.length > 1 ? 's' : ''}). Pour fermer : touchez le premier sommet, ou Entrée (3 sommets au moins). Échap abandonne.
+          </p>
+          <button type="button" className="pl-bouton" onClick={surRenoncer}>
+            Renoncer au tracé
+          </button>
+        </div>
+      )}
+      {!info.abritee && edition && trace === null && contour !== null && (
+        <div
+          ref={conteneur}
+          tabIndex={-1}
+          className="pl-contour-edition"
+          data-testid="contour-edition"
+          data-id={info.zone.id}
+          data-etat={verdict?.ok === false ? 'invalide' : 'valide'}
+          data-sommets={contour.length}
+        >
+          {verdict?.ok === false && (
+            <p role="alert" data-testid="contour-erreur" className="pl-message pl-erreur">
+              {verdict.message}
+            </p>
+          )}
+          {message !== null && (
+            <p role="status" className="pl-message">
+              {message}
+            </p>
+          )}
+          <p className="pl-aide">
+            Glissez un sommet ; touchez un côté pour ajouter un sommet au milieu ; clic droit ou Suppr retire un sommet. Au clavier : Tab passe d’un sommet à l’autre, flèches 0,1 m (Maj : 1 m), Inser ajoute après.
+          </p>
+          {contour.map((p, k) => (
+            <div key={k} className="pl-sommet-champs">
+              <Champ
+                etiquette={`Sommet ${String(k + 1)} x (m)`}
+                valeur={p.x}
+                desactive={false}
+                surChange={(x) => {
+                  surSommet(k, { x, y: p.y });
+                }}
+              />
+              <Champ
+                etiquette={`Sommet ${String(k + 1)} y (m)`}
+                valeur={p.y}
+                desactive={false}
+                surChange={(y) => {
+                  surSommet(k, { x: p.x, y });
+                }}
+              />
+            </div>
+          ))}
+        </div>
       )}
     </>
   );

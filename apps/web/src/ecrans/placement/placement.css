@@ -115,6 +115,71 @@
   stroke-width: 2;
 }
 
+.pl-contour-choisi {
+  stroke: var(--couleur-orange);
+  stroke-width: 3;
+}
+
+.pl-contour-invalide {
+  fill: color-mix(in srgb, var(--couleur-conflit) 35%, transparent);
+  stroke: var(--couleur-conflit);
+  stroke-width: 3;
+}
+
+.pl-svg-edition {
+  z-index: 1;
+}
+
+.pl-trace-ligne {
+  fill: none;
+  stroke: var(--couleur-orange);
+  stroke-width: 3;
+  stroke-dasharray: 8 6;
+}
+
+/* Côté d'un contour : large zone de toucher invisible, dans le plan le svg reste transparent aux clics. */
+.pl-cote {
+  stroke: transparent;
+  stroke-width: 16;
+  pointer-events: stroke;
+  cursor: copy;
+}
+
+.pl-trace .pl-forme {
+  pointer-events: none;
+}
+
+.pl-trace {
+  cursor: crosshair;
+}
+
+.pl-sommet {
+  position: absolute;
+  z-index: 2;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--couleur-surface);
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-foret);
+  box-shadow: 0 0 0 1px var(--couleur-sur-orange);
+  touch-action: none;
+  cursor: move;
+  outline: none;
+}
+
+.pl-sommet-choisi,
+.pl-sommet:focus-visible {
+  background: var(--couleur-orange);
+  box-shadow: 0 0 0 3px var(--couleur-orange);
+}
+
+.pl-sommet-premier {
+  background: var(--couleur-pousse);
+  box-shadow: 0 0 0 3px var(--couleur-foret);
+  cursor: pointer;
+}
+
 .pl-depart {
   fill: var(--couleur-orange);
   stroke: var(--couleur-surface);
@@ -305,6 +370,44 @@
   margin: 0;
   font-family: var(--police-titre);
   font-size: 18px;
+}
+
+.pl-zones h3 {
+  margin: 0 0 6px;
+  font-family: var(--police-titre);
+  font-size: 18px;
+}
+
+.pl-zones ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pl-zone-choix {
+  width: 100%;
+  text-align: left;
+}
+
+.pl-zone-choix[aria-pressed='true'] {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.pl-contour-edition {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  outline: none;
+}
+
+.pl-sommet-champs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .pl-aide {

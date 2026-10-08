@@ -68,9 +68,10 @@
  *     emplacement_inactif, periode_invalide), puis rang dans la liste d'entrée de la première
  *     occupation en cause. Aucun conflit : tableau vide.
  *   - Performance : 3 000 occupations sur 400 emplacements (un appel par emplacement) en moins
- *     de 50 ms, meilleure de 5 mesures après échauffement.
+ *     de 50 ms, médiane de 7 mesures après échauffement (mesurer(), T31).
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import { mesurer } from '../test/mesurer.ts';
 import { ajouterJours, analyserDate } from '../dates/index.ts';
 import type { DateCalendaire } from '../dates/index.ts';
 import type { Emplacement, Id, NomEntite, Occupation, Serie } from '../domaine/index.ts';
@@ -827,12 +828,6 @@ describe('filtrage', () => {
 // Performance
 // ---------------------------------------------------------------------------------------------
 
-/**
- * Horloge haute résolution, globale dans Node et les navigateurs. Le paquet core est compilé sans
- * types d'environnement (`types: []`) : on déclare ici le seul membre utilisé.
- */
-declare const performance: { now: () => number };
-
 /** Générateur pseudo-aléatoire déterministe (mulberry32) : le même jeu à chaque exécution. */
 function aleatoire(graine: number): () => number {
   let etat = graine >>> 0;
@@ -882,19 +877,8 @@ describe('performance', () => {
     const analyser = (): Conflit[] =>
       emplacements.flatMap((emplacement) => detecterConflits(emplacement, parEmplacement.get(emplacement.id) ?? []));
 
-    // Échauffement : compilation JIT hors mesure.
-    for (let i = 0; i < 5; i += 1) {
-      analyser();
-    }
-
-    // Meilleure de 5 mesures : on juge l'algorithme, pas un ramasse-miettes ou une machine chargée.
-    let duree = Number.POSITIVE_INFINITY;
-    let conflits: Conflit[] = [];
-    for (let i = 0; i < 5; i += 1) {
-      const debut = performance.now();
-      conflits = analyser();
-      duree = Math.min(duree, performance.now() - debut);
-    }
+    // Échauffement puis médiane de mesures min(mural, CPU) : on juge l'algorithme, pas une machine chargée.
+    const { mediane: duree, detail, resultat: conflits } = mesurer(analyser, { echauffement: 5, borneMs: 50 });
 
     // Le jeu est assez dense pour produire des conflits : l'algorithme a vraiment travaillé.
     expect(conflits.length).toBeGreaterThan(0);
@@ -902,6 +886,6 @@ describe('performance', () => {
       expect(c.occupations.length).toBeGreaterThan(0);
       expect(c.au === null || c.du < c.au).toBe(true);
     }
-    expect(duree).toBeLessThan(50);
+    expect(duree, detail).toBeLessThan(50);
   });
 });
