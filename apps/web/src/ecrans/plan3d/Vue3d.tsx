@@ -307,6 +307,12 @@ function Volumes({
 }) {
   const maillage = useRef<InstancedMesh>(null);
   const planche = useMemo(() => geometriePlanche(), []);
+  useEffect(
+    () => () => {
+      planche.dispose();
+    },
+    [planche],
+  );
   const invalider = useThree((s) => s.invalidate);
   useLayoutEffect(() => {
     const m = maillage.current;

@@ -18,10 +18,10 @@
 
 - [x] La cause est nommée dans la PR avec des chiffres mesurés (temps par image, nombre d'objets dessinés pendant un vol), avant et après correction.
 - [x] Si une réduction de coût est faite, un test unitaire la couvre (par exemple : le nombre d'objets dessinés pendant un vol ne dépend pas des planches hors champ).
-- [ ] e2e `vue-3d-camera.e2e.ts`, cinq lancements consécutifs sur machine libre : au plus 1 vol saccadé sur 5 à chaque lancement.
-- [ ] Seuils de nombre inchangés : `IMAGES_PERDUES_MAX`, `PASSAGES_SACCADES_ECHEC`, `RAFALES_TOTAL_MAX` ont les mêmes valeurs qu'à `main` (vérifié par `git diff origin/main -- apps/web/e2e/ | grep -E 'IMAGES_PERDUES_MAX|PASSAGES_SACCADES_ECHEC|RAFALES_TOTAL_MAX'`).
-- [ ] Garde-fous stables dans les e2e 3D (`apps/web/e2e/fluidite-3d.ts`) : JavaScript par image médiane ≤ 4 ms et 95e centile ≤ 8 ms ; appels de dessin et triangles par image bornés (ferme T07 ≤ 3 et 5 500, jumeau T07 ≤ 8 et 35 000, démo ≤ 8 et 8 000).
-- [ ] Critère d'images perdues relatif au plancher mesuré dans le même lancement : intervalle fautif au-delà de max(58,3 ms, 2 × intervalle médian d'une toile de même taille qui ne fait que clear).
+- [ ] e2e `vue-3d-camera.e2e.ts`, cinq lancements consécutifs sur machine libre : au plus 1 vol saccadé sur 5 à chaque lancement. **Non tenu** : cinq lancements à machine libre ont donné 0, 1, 2, 2, 1 vol saccadé sur 5 (tous verts, échec à 4) ; le critère est tenu 3 fois sur 5. Piste : pendant un vol les intervalles sont d'environ 50 ms contre 17 à 33 ms en navigation ; un coût propre au vol reste à trouver (ticket de suite).
+- [x] Seuils de nombre inchangés : `IMAGES_PERDUES_MAX`, `PASSAGES_SACCADES_ECHEC`, `RAFALES_TOTAL_MAX` ont les mêmes valeurs qu'à `main` (vérifié par `git diff origin/main -- apps/web/e2e/ | grep -E 'IMAGES_PERDUES_MAX|PASSAGES_SACCADES_ECHEC|RAFALES_TOTAL_MAX'`).
+- [x] Garde-fous stables dans les e2e 3D (`apps/web/e2e/fluidite-3d.ts`) : JavaScript par image médiane ≤ 4 ms et 95e centile ≤ 8 ms ; appels de dessin et triangles par image bornés (ferme T07 ≤ 3 et 5 500, jumeau T07 ≤ 8 et 35 000, démo ≤ 8 et 8 000).
+- [x] Critère d'images perdues relatif au plancher mesuré dans le même lancement : intervalle fautif au-delà de max(58,3 ms, 2 × intervalle médian d'une toile de même taille qui ne fait que clear).
 - [x] Tests de `cadrage` et d'interpolation (T29) inchangés et verts.
 - [x] `pnpm verif` passe en entier.
 - [x] Budget `jsVue3dGzKio` tenu.
