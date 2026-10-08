@@ -23,6 +23,11 @@
  * itinéraires ». Un tap charge l'écran (`import('../import/index.ts')`, jamais un import statique)
  * et le montre avec la porte et la ferme du contexte.
  *
+ * Placer sur la photo aérienne (T28b) : une ligne de la carte « Plan de la ferme », active comme
+ * « Mes itinéraires ». Un tap charge l'éditeur (`import('../placement/index.ts')`, jamais un
+ * import statique : ni l'entrée ni ce morceau ne le portent) et le montre avec la porte, la ferme
+ * et l'utilisateur de la session. Lecture seule pour un équipier ou sur téléphone.
+ *
  * Saisies refusées (T10i) : les refus de synchro de l'utilisateur (porte.surveillerRefus), en
  * tête de l'écran quand il y en a (./Refus.tsx). Marque MARQUE_REFUS_AFFICHES une fois par
  * ouverture, quand la liste est lue et dessinée (même vide).
@@ -76,6 +81,10 @@ type ModuleItineraires = Awaited<ReturnType<typeof chargerItineraires>>;
 /** L'écran d'import d'un tableur (T14b), chargé à la demande (morceau à part). */
 const chargerImport = () => import('../import/index.ts');
 type EcranImportCharge = Awaited<ReturnType<typeof chargerImport>>['EcranImport'];
+
+/** L'éditeur de placement sur la photo aérienne (T28b), chargé à la demande (morceau à part). */
+const chargerPlacement = () => import('../placement/index.ts');
+type EditeurPlacementCharge = Awaited<ReturnType<typeof chargerPlacement>>['EditeurPlacement'];
 
 /** Pourquoi le bouton d'export est désactivé, dit en clair. */
 const EXPLICATION_EXPORT: Readonly<Record<Exclude<EtatBase, 'prete'>, string>> = {
@@ -289,6 +298,20 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     );
   }
 
+  // Éditeur de placement (T28b) : chargé au tap, montré avec la porte du contexte.
+  const [EditeurPlacement, setEditeurPlacement] = useState<EditeurPlacementCharge | null>(null);
+  function ouvrirPlacement(): void {
+    if (!itinerairesPossibles) return;
+    chargerPlacement().then(
+      ({ EditeurPlacement: composant }) => {
+        setEditeurPlacement(() => composant);
+      },
+      (e: unknown) => {
+        console.error('Éditeur de placement introuvable', e);
+      },
+    );
+  }
+
   function ouvrirItineraires(): void {
     if (!itinerairesPossibles) return;
     setItinerairesOuverts(true);
@@ -474,6 +497,27 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
           fermeId={ouverte.fermeId}
           surFermer={() => {
             setItinerairesOuverts(false);
+          }}
+        />
+      )}
+      <Carte titre="Plan de la ferme">
+        <Ligne
+          nom="Placer sur la photo aérienne"
+          detail="Serres, bâtiments et planches à leur vraie place, sur la photo IGN."
+          signe="›"
+          couleur="var(--couleur-foret)"
+          desactivee={!itinerairesPossibles}
+          surTap={ouvrirPlacement}
+        />
+      </Carte>
+      {EditeurPlacement !== null && ouverte !== null && (
+        <EditeurPlacement
+          key={ouverte.fermeId}
+          porte={ouverte.porte}
+          fermeId={ouverte.fermeId}
+          utilisateurId={session.utilisateurId}
+          surFermer={() => {
+            setEditeurPlacement(null);
           }}
         />
       )}
