@@ -88,7 +88,8 @@ describe('schéma local', () => {
     for (const nom of COLONNES_RESUME_SAISIE) expect(colonnes, `${nom} dans le flux refus_synchro`).toContain(nom);
     expect(colonnes, 'jamais les données reçues').not.toContain('donnees');
     expect(colonnes, 'jamais toutes les colonnes').not.toContain('*');
-    expect(requetes[0], 'toujours au seul auteur').toMatch(/WHERE utilisateur_id = auth\.user_id\(\)$/);
+    // T10u : un filtre sur les fermes actives peut suivre la condition d'auteur (refus-ferme-quittee.test.ts).
+    expect(requetes[0], 'toujours au seul auteur').toMatch(/WHERE utilisateur_id = auth\.user_id\(\)(?: AND |$)/);
   });
 
   it('T10l : archive_le (instant nullable) descend sur le téléphone, archivés compris, toujours au seul auteur', () => {
@@ -113,7 +114,9 @@ describe('schéma local', () => {
     expect(colonnes, 'archive_le dans le flux refus_synchro').toContain('archive_le');
     expect(colonnes, 'jamais les données reçues').not.toContain('donnees');
     // Les archivés descendent aussi (rien n'est perdu sur le téléphone) : aucun filtre sur archive_le.
-    expect(requetes[0], 'toujours au seul auteur, archivés compris').toMatch(/WHERE utilisateur_id = auth\.user_id\(\)$/);
+    // T10u : la condition qui peut suivre l'auteur porte sur ferme_id, jamais sur archive_le.
+    expect(requetes[0], 'toujours au seul auteur, archivés compris').toMatch(/WHERE utilisateur_id = auth\.user_id\(\)(?: AND |$)/);
+    expect(requetes[0], 'aucun filtre sur archive_le').not.toMatch(/WHERE .*archive_le/);
   });
 
   it('T23 : les règles de synchro servent les types de la ferme et la liste de départ (ferme_id nul)', () => {
