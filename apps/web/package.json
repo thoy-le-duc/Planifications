@@ -14,8 +14,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "budget": "node scripts/budget.ts",
-    "e2e": "playwright test",
-    "e2e:demo": "playwright test -c playwright.demo.config.ts",
+    "e2e": "bash ../../scripts/verrou-e2e.sh playwright test",
+    "e2e:demo": "bash ../../scripts/verrou-e2e.sh playwright test -c playwright.demo.config.ts",
     "jetons": "node scripts/jetons-css.ts"
   },
   "dependencies": {
