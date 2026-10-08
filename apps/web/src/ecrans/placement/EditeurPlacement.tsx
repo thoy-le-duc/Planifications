@@ -48,6 +48,8 @@ import { depuisEcran, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZO
 export const MESSAGES_PLACEMENT = {
   seulGerant: 'Seul le gérant peut placer les éléments de la ferme',
   horsLigne: 'Photo aérienne indisponible hors ligne',
+  indisponible: 'Photo aérienne indisponible pour le moment',
+  enregistreSansRelecture: 'Enregistré',
   ordinateur: 'à faire sur ordinateur',
   contourRemplace: 'Le contour de la zone sera remplacé par la serre',
 } as const;
@@ -198,7 +200,26 @@ function capturer(e: PointerEvent<HTMLElement>): void {
   }
 }
 
-export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ordinateur, enLigne, delaiAnnulationMs = DELAI_ANNULATION_MS, nouvelId }: ProprietesEditeurPlacement): ReactElement {
+/** Identité d'une porte, pour repartir de zéro quand la ferme active change sans démontage. */
+const identitesPortes = new WeakMap<object, number>();
+let dernièreIdentité = 0;
+function identiteDe(porte: PorteDonnees): number {
+  const connue = identitesPortes.get(porte);
+  if (connue !== undefined) return connue;
+  dernièreIdentité += 1;
+  identitesPortes.set(porte, dernièreIdentité);
+  return dernièreIdentité;
+}
+
+/**
+ * Une autre porte ou une autre ferme (la ferme active change à la synchro) : l'éditeur repart de
+ * zéro — brouillon, pile Ctrl+Z, « Annuler », vue, lectures. Rien de la ferme A n'est écrit dans B.
+ */
+export function EditeurPlacement(p: ProprietesEditeurPlacement): ReactElement {
+  return <EditeurFerme key={`${p.fermeId}/${String(identiteDe(p.porte))}/${p.utilisateurId}`} {...p} />;
+}
+
+function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, enLigne, delaiAnnulationMs = DELAI_ANNULATION_MS, nouvelId }: ProprietesEditeurPlacement): ReactElement {
   const idTitre = useId();
   const titre = useRef<HTMLHeadingElement>(null);
   const planRef = useRef<HTMLDivElement>(null);
@@ -238,7 +259,7 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
   const [erreur, setErreur] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
   const [dernier, setDernier] = useState<Enregistrement | null>(null);
-  const [tuilesEnErreur, setTuilesEnErreur] = useState(false);
+  const [tuilesEnErreur, setTuilesEnErreur] = useState<ReadonlySet<string>>(() => new Set());
   const [taille, setTaille] = useState<{ readonly w: number; readonly h: number }>(TAILLE_PAR_DEFAUT);
   const [centreGeo, setCentreGeo] = useState<Position | null>(null);
   const [zoom, setZoom] = useState(ZOOM_INITIAL);
@@ -267,7 +288,7 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
   // Une tuile en échec ne condamne pas la session : le réseau qui revient redonne la photo.
   useEffect(() => {
     const retour = () => {
-      setTuilesEnErreur(false);
+      setTuilesEnErreur(new Set());
     };
     addEventListener('online', retour);
     return () => {
@@ -342,8 +363,11 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
   );
   const modifie = changements.length > 0;
 
-  const fondPhoto = enLigneEffectif && !tuilesEnErreur;
-  const tuiles = useMemo(() => (fondPhoto ? tuilesVisibles(vue) : []), [fondPhoto, vue]);
+  // Les tuiles ne sont demandées qu'une fois les données de la ferme lues (la vue est alors la bonne).
+  const tuiles = useMemo(() => (pret && enLigneEffectif ? tuilesVisibles(vue) : []), [pret, enLigneEffectif, vue]);
+  const cleTuile = (t: { zoom: number; colonne: number; ligne: number }): string => `${String(t.zoom)}/${String(t.colonne)}/${String(t.ligne)}`;
+  const toutesEnErreur = tuiles.length > 0 && tuiles.every((t) => tuilesEnErreur.has(cleTuile(t)));
+  const fondPhoto = enLigneEffectif && !toutesEnErreur;
   const mpp = metresParPixel(vue.origine.latitude, vue.zoom);
 
   // ── Brouillon ─────────────────────────────────────────────────────────────────────────────────
@@ -381,22 +405,33 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
     setLusP(l.planches);
   }
 
+  /** Relit la base après une écriture réussie ; un échec ne défait rien : il est dit à part d'un refus. */
+  async function relireApresEcriture(): Promise<void> {
+    try {
+      await recharger();
+    } catch (e) {
+      console.error('Relecture après écriture impossible', e);
+      setErreur(`${MESSAGES_PLACEMENT.enregistreSansRelecture} : l’affichage n’a pas pu être mis à jour. Fermez puis rouvrez le placement.`);
+    }
+  }
+
   /** Écrit par la porte ; rend l'enregistrement (de quoi l'annuler), ou null si la porte a refusé. */
   async function ecrire(liste: readonly ChangementPlacement[]): Promise<Enregistrement | null> {
     setOccupe(true);
     setErreur(null);
+    let entree: Enregistrement;
     try {
-      const entree: Enregistrement = { annulation: await porte.placer(liste) };
-      pile.current.push(entree);
-      await recharger();
-      return entree;
+      entree = { annulation: await porte.placer(liste) };
     } catch (e) {
       console.error('Placement refusé', e);
       setErreur(messageDe(e));
-      return null;
-    } finally {
       setOccupe(false);
+      return null;
     }
+    pile.current.push(entree);
+    await relireApresEcriture();
+    setOccupe(false);
+    return entree;
   }
 
   async function enregistrer(): Promise<void> {
@@ -417,19 +452,21 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
 
   async function defaire(entree: Enregistrement | undefined): Promise<void> {
     if (entree === undefined || occupe) return;
-    pile.current = pile.current.filter((x) => x !== entree);
-    setDernier((n) => (n === entree ? null : n));
     setOccupe(true);
     setErreur(null);
     try {
       await porte.placer(entree.annulation);
-      await recharger();
     } catch (e) {
+      // Refusée : l'enregistrement reste dans la pile, « Annuler » et Ctrl+Z réessaient.
       console.error('Annulation impossible', e);
       setErreur(`Rien n’a été annulé : ${messageDe(e)}`);
-    } finally {
       setOccupe(false);
+      return;
     }
+    pile.current = pile.current.filter((x) => x !== entree);
+    setDernier((n) => (n === entree ? null : n));
+    await relireApresEcriture();
+    setOccupe(false);
   }
 
   async function poserOrigine(position: Position): Promise<void> {
@@ -617,7 +654,7 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
           <h2 id={idTitre} ref={titre} tabIndex={-1}>
             Placement sur la photo aérienne
           </h2>
-          <button type="button" className="pl-bouton pl-fermer" onClick={demanderFermeture}>
+          <button type="button" className="pl-bouton pl-fermer" disabled={occupe} onClick={demanderFermeture}>
             Fermer
           </button>
         </header>
@@ -644,9 +681,9 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
             >
               {fondPhoto ? (
                 <div data-testid="fond-photo" className="pl-fond">
-                  {tuiles.map((t) => (
+                  {tuiles.filter((t) => !tuilesEnErreur.has(cleTuile(t))).map((t) => (
                     <img
-                      key={`${String(t.zoom)}/${String(t.colonne)}/${String(t.ligne)}`}
+                      key={cleTuile(t)}
                       data-testid="tuile"
                       src={t.url}
                       alt=""
@@ -655,7 +692,7 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
                       className="pl-tuile"
                       style={{ left: t.x, top: t.y, width: t.largeur + 0.5, height: t.hauteur + 0.5 }}
                       onError={() => {
-                        setTuilesEnErreur(true);
+                        setTuilesEnErreur((prev) => new Set(prev).add(cleTuile(t)));
                       }}
                     />
                   ))}
@@ -667,7 +704,7 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
                   style={carreau >= 6 ? { backgroundSize: `${String(carreau)}px ${String(carreau)}px`, backgroundPosition: `${String(depart.x)}px ${String(depart.y)}px` } : undefined}
                 >
                   <p className="pl-hors-ligne">
-                    {MESSAGES_PLACEMENT.horsLigne}
+                    {enLigneEffectif ? MESSAGES_PLACEMENT.indisponible : MESSAGES_PLACEMENT.horsLigne}
                     <span> · carreaux de {String(CARREAU_M)} m</span>
                   </p>
                 </div>

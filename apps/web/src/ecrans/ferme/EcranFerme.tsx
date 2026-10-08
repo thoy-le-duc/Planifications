@@ -512,6 +512,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
       </Carte>
       {EditeurPlacement !== null && ouverte !== null && (
         <EditeurPlacement
+          key={ouverte.fermeId}
           porte={ouverte.porte}
           fermeId={ouverte.fermeId}
           utilisateurId={session.utilisateurId}
