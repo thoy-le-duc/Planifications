@@ -4,7 +4,7 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 
 ## 2026-10-08 — T28g : l'éditeur rend le focus à la fermeture
 
-- **Fait** : à la fermeture de l'éditeur, le focus revient sur « Modifier le plan » de la 3D (celui du moment : encart ou barre d'outils), à défaut sur la toile `toile-3d` ; dans l'onglet Ferme, sur « Placer sur la photo aérienne ». L'encart `encart-placement` est en `role="status"` (sans focus) et cite la zone après « Aller à <zone> ». Tests `placement` verts (198) ; `pnpm verif` : voir la PR.
+- **Fait** : à la fermeture de l'éditeur, le focus revient sur « Modifier le plan » de la 3D (celui du moment : encart ou barre d'outils), à défaut sur la toile `toile-3d` ; dans l'onglet Ferme, sur « Placer sur la photo aérienne ». L'encart `encart-placement` est en `role="status"` (sans focus) et cite la zone après « Aller à <zone> ». Tests `placement` verts (198) ; `pnpm verif` complet vert (4 133 tests unitaires ; e2e 83 + 10 passés, sans relance) ; budgets inchangés (démarrage 71,0 / 71 Kio, 3D 218,7 / 220, placement 18,5 / 18,5).
 - **Décidé** : écarts de libellés tranchés : le bouton d'origine de la 3D est « Modifier le plan » (`modifier-plan`), pas « Ouvrir l'éditeur » (qui n'existe pas) ; repli résolu à la fermeture (pas de ref périmée). Mécanisme comme T28e : drapeau posé à la fermeture, focus dans un effet après le rendu, pas de setTimeout. Pas d'annonce sur ferme déjà placée (hors périmètre).
 - **Bloquant** : rien.
 
