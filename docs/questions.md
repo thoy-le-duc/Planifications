@@ -300,8 +300,10 @@ Réponses (2026-10-08) :
 1. Un bouton « Modifier le plan » dans la vue 3D ouvre l'éditeur ; une ferme sans placement voit un encart qui l'y invite.
 2. Cultures montrées par des **plants stylisés** (tuteurs et feuillage pour la tomate, rosettes pour la salade, etc.) qui grandissent avec le curseur de semaine.
 3. Hauteurs et profils de croissance : **valeurs par défaut pour les espèces de la bibliothèque, réglables par la ferme**.
+4. Stockage du réglage (validé le 2026-10-08) : option A, un champ `profil_croissance` (jsonb, nul = défaut) sur l'espèce de la ferme.
+5. Pérennes (validé le 2026-10-08) : cycle annuel simple, débourrement, pleine végétation, repos, sur les dates de campagne ; tailles et âge de la plantation plus tard.
 
-Tickets : T28f (accès à l'éditeur), T32a (profils et calcul), T32b (plants en 3D), T32c (réglage par la ferme, à valider).
+Tickets : T28f (accès à l'éditeur), T32a (profils et calcul), T32b (plants en 3D), T32c (réglage par la ferme).
 
 ### Q31 — Placement réel : le modèle (posée le 2026-10-07, T28a)
 

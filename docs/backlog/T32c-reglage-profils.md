@@ -1,18 +1,16 @@
 # T32c — Profils de croissance : réglage par la ferme (écran)
 
-**Statut proposé : à préciser** : ce ticket n'a de sens que si la ferme peut stocker ses profils (A ou B de T32a). Théophane valide le stockage d'abord.
-
 **Objectif** : que la ferme corrige hauteur, durée et forme d'une espèce depuis la fiche de l'espèce, et voie l'effet dans la 3D (Q32). Les défauts de la bibliothèque restent lisibles et rétablissables.
 
-**Dépend de** : T32a (stockage validé et migré), T32b
-**Périmètre** : `apps/web/src/ecrans/bibliotheque/**` (ou l'écran des espèces existant), migration et synchro **seulement selon le stockage validé**, `packages/core` (validation du profil), `docs/modele-donnees.md`
+**Dépend de** : T32a (stockage et migration faits), T32b
+**Périmètre** : `apps/web/src/ecrans/bibliotheque/**` (ou l'écran des espèces existant), aucune migration (faite en T32a), `packages/core` (validation du profil), `docs/modele-donnees.md`
 
 ## Règles
 
 - Dans la fiche de l'espèce : forme (liste), hauteur maximale (m), durée jusqu'à la hauteur maximale (jours), avec la valeur par défaut affichée à côté ; « Rétablir la valeur par défaut » en un tap.
 - Validation par le cœur (hauteur > 0 et ≤ 6 m, durée > 0, forme connue) ; messages en français ; écriture par la porte comme les autres champs de l'espèce, gérant seulement pour la bibliothèque de la ferme.
 - Saisie rapide au pouce : champs numériques larges, pas de formulaire long.
-- Le profil suit la synchro et l'export (JSON et CSV, décrits dans LISEZMOI.txt).
+- Le profil suit la synchro et l'export déjà posés par T32a.
 - Rien d'IA ici : valeurs saisies à la main.
 
 ## Critères d'acceptation
@@ -24,7 +22,7 @@
 
 ## Risques
 
-- Dépend d'une migration : ne pas commencer sans la réponse de Théophane sur le stockage.
+- Dépend de la colonne et de la synchro de T32a : ne pas commencer avant.
 - Un profil trop libre produit une 3D absurde : bornes strictes, valeur par défaut toujours visible.
 
 **Hors périmètre** : courbes de croissance saisies point par point, import de profils, profils par variété ou par série.
