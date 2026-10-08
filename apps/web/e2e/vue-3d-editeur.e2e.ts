@@ -108,11 +108,39 @@ async function poserUnBatiment(page: Page): Promise<void> {
   await f.getByLabel('Largeur (m)', { exact: true }).fill('10');
   await f.getByLabel('Hauteur (m)', { exact: true }).fill('5');
   await f.getByRole('button', { name: 'Poser', exact: true }).click();
-  const milieu = await centreDe(page.getByTestId(P.plan));
-  await page.mouse.click(milieu.x + 60, milieu.y + 60);
+  const libre = await pointLibre(page);
+  await page.mouse.click(libre.x, libre.y);
   await expect(page.getByTestId(P.batiment).filter({ hasText: 'Hangar T28f' })).toHaveCount(1);
   await page.getByRole('button', { name: 'Enregistrer', exact: true }).click();
   await expect(page.getByTestId(P.annuler), 'Annuler proposé après l’enregistrement').toBeVisible();
+}
+
+/**
+ * Un point libre du plan : on balaie une grille sur la surface et on garde le premier où
+ * `elementFromPoint` ne tombe ni sur une zone, un bâtiment, une planche, une poignée, ni sur un contrôle.
+ * (Dans la démo, déjà placée, le milieu du plan est sur une zone : un clic y sélectionnerait au lieu de poser.)
+ */
+async function pointLibre(page: Page): Promise<{ x: number; y: number }> {
+  const point = await page.evaluate(() => {
+    const plan = document.querySelector('[data-testid="plan-placement"]');
+    if (plan === null) return null;
+    const b = plan.getBoundingClientRect();
+    const interdits = '[data-testid="zone-contour"],[data-testid="cote-contour"],[data-testid="sommet"],[data-testid="batiment"],[data-testid="planche"],[data-testid^="poignee"],[data-testid="origine-absente"],button,a,input,select,[role="dialog"],[role="alertdialog"],[role="status"]';
+    for (let j = 1; j < 16; j++) {
+      for (let i = 1; i < 24; i++) {
+        const x = b.left + (b.width * i) / 24;
+        const y = b.top + (b.height * j) / 16;
+        const el = document.elementFromPoint(x, y);
+        if (el === null || !plan.contains(el)) continue;
+        // Un ancêtre hors du plan (la feuille de l'éditeur est un role=dialog) ne compte pas.
+        const obstacle = el.closest(interdits);
+        if (obstacle === null || !plan.contains(obstacle)) return { x, y };
+      }
+    }
+    return null;
+  });
+  if (point === null) throw new Error('aucun point libre sur le plan');
+  return point;
 }
 
 const nbBatiments3d = async (page: Page): Promise<number> => Number(await toile(page).getAttribute('data-batiments'));
