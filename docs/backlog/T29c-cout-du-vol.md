@@ -30,3 +30,14 @@
 - Mesures bruitées : on compare des médianes sur plusieurs lancements, pas un lancement isolé (méthode de T31).
 
 **Hors périmètre** : relever les seuils ou désactiver le test ; changer la durée ou la courbe du vol ; sélection d'une planche ; rendu sur carte graphique réelle.
+
+## Résultat (2026-10-08) : constat, aucune correction de code
+
+Mesuré sans rien modifier (scripts jetables) : **ce n'est pas le code.**
+
+- Le « 17–33 ms en navigation » venait du glissé de l'e2e, rythmé par des allers-retours Playwright : entre deux mouvements, le rendu logiciel rattrape son retard. Une navigation **continue** (un mouvement à chaque image) coûte autant qu'un vol : médiane 38–39 ms, p90 ~58 ms, contre 28–45 ms pour le vol selon la charge.
+- Vol et navigation font exactement le même travail par image : un rendu par rAF, 2 appels de dessin, ~0,6 ms de JS, aucun layout, projection recalculée en quelques microsecondes.
+- Sans les appels de dessin, les intervalles retombent à 18–25 ms : le coût est le dessin de SwiftShader (rendu logiciel de la machine de test), pas la vue.
+- Le critère « au plus 1 vol saccadé sur 5 » dépend surtout de la charge de la machine (28 ms contre 45 ms pour le même code à quelques minutes d'écart).
+
+**Décision du chef** : pas de baisse de résolution pendant le vol (elle changerait ce que voit le maraîcher pour un défaut qui n'existe que sur une machine sans carte graphique ; la 3D est réservée à l'ordinateur). Les garde-fous stables de T29b (JS, appels de dessin, triangles) protègent le code ; le critère des 5 lancements n'est pas retenu comme arbitre. Ticket clos sur ce constat.
