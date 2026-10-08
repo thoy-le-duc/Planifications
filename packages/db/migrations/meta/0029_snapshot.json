@@ -1,0 +1,4450 @@
+{
+  "id": "65867c94-e78c-4028-9ed6-4d42796d4329",
+  "prevId": "a622a1a0-c798-4512-b2b1-f49ef064938d",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.article_stock": {
+      "name": "article_stock",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "espece_id": {
+          "name": "espece_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "variete_id": {
+          "name": "variete_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unite": {
+          "name": "unite",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "categorie": {
+          "name": "categorie",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "article_stock_ferme_id_ferme_id_fk": {
+          "name": "article_stock_ferme_id_ferme_id_fk",
+          "tableFrom": "article_stock",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "article_stock_espece_id_espece_id_fk": {
+          "name": "article_stock_espece_id_espece_id_fk",
+          "tableFrom": "article_stock",
+          "tableTo": "espece",
+          "columnsFrom": [
+            "espece_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "article_stock_variete_id_variete_id_fk": {
+          "name": "article_stock_variete_id_variete_id_fk",
+          "tableFrom": "article_stock",
+          "tableTo": "variete",
+          "columnsFrom": [
+            "variete_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "article_stock_unite": {
+          "name": "article_stock_unite",
+          "value": "\"article_stock\".\"unite\" IN ('kg', 'botte', 'piece', 'barquette')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.assolement": {
+      "name": "assolement",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saison_id": {
+          "name": "saison_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "zone_id": {
+          "name": "zone_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "emplacement_id": {
+          "name": "emplacement_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "famille_id": {
+          "name": "famille_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "espece_id": {
+          "name": "espece_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nature": {
+          "name": "nature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_import": {
+          "name": "source_import",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "assolement_zone_idx": {
+          "name": "assolement_zone_idx",
+          "columns": [
+            {
+              "expression": "zone_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "assolement_emplacement_idx": {
+          "name": "assolement_emplacement_idx",
+          "columns": [
+            {
+              "expression": "emplacement_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "assolement_ferme_id_ferme_id_fk": {
+          "name": "assolement_ferme_id_ferme_id_fk",
+          "tableFrom": "assolement",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "assolement_saison_id_saison_id_fk": {
+          "name": "assolement_saison_id_saison_id_fk",
+          "tableFrom": "assolement",
+          "tableTo": "saison",
+          "columnsFrom": [
+            "saison_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "assolement_zone_id_zone_id_fk": {
+          "name": "assolement_zone_id_zone_id_fk",
+          "tableFrom": "assolement",
+          "tableTo": "zone",
+          "columnsFrom": [
+            "zone_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "assolement_emplacement_id_emplacement_id_fk": {
+          "name": "assolement_emplacement_id_emplacement_id_fk",
+          "tableFrom": "assolement",
+          "tableTo": "emplacement",
+          "columnsFrom": [
+            "emplacement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "assolement_famille_id_famille_id_fk": {
+          "name": "assolement_famille_id_famille_id_fk",
+          "tableFrom": "assolement",
+          "tableTo": "famille",
+          "columnsFrom": [
+            "famille_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "assolement_espece_id_espece_id_fk": {
+          "name": "assolement_espece_id_espece_id_fk",
+          "tableFrom": "assolement",
+          "tableTo": "espece",
+          "columnsFrom": [
+            "espece_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "assolement_nature": {
+          "name": "assolement_nature",
+          "value": "\"assolement\".\"nature\" IN ('prevu', 'passe_saisi', 'passe_importe')"
+        },
+        "assolement_une_cible": {
+          "name": "assolement_une_cible",
+          "value": "num_nonnulls(\"assolement\".\"zone_id\", \"assolement\".\"emplacement_id\") = 1"
+        },
+        "assolement_source_import": {
+          "name": "assolement_source_import",
+          "value": "\"assolement\".\"source_import\" IS NULL OR \"assolement\".\"nature\" = 'passe_importe'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.batiment": {
+      "name": "batiment",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "longueur_m": {
+          "name": "longueur_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "largeur_m": {
+          "name": "largeur_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "hauteur_m": {
+          "name": "hauteur_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "centre_x_m": {
+          "name": "centre_x_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "centre_y_m": {
+          "name": "centre_y_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "orientation_deg": {
+          "name": "orientation_deg",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "zone_id": {
+          "name": "zone_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "batiment_ferme_idx": {
+          "name": "batiment_ferme_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "batiment_zone_actif_idx": {
+          "name": "batiment_zone_actif_idx",
+          "columns": [
+            {
+              "expression": "zone_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"batiment\".\"supprime_le\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "batiment_ferme_id_ferme_id_fk": {
+          "name": "batiment_ferme_id_ferme_id_fk",
+          "tableFrom": "batiment",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "batiment_zone_meme_ferme_fk": {
+          "name": "batiment_zone_meme_ferme_fk",
+          "tableFrom": "batiment",
+          "tableTo": "zone",
+          "columnsFrom": [
+            "ferme_id",
+            "zone_id"
+          ],
+          "columnsTo": [
+            "ferme_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "batiment_type": {
+          "name": "batiment_type",
+          "value": "\"batiment\".\"type\" IN ('serre_tunnel', 'serre_chapelle', 'hangar', 'magasin', 'autre')"
+        },
+        "batiment_longueur": {
+          "name": "batiment_longueur",
+          "value": "\"batiment\".\"longueur_m\" > 0 AND \"batiment\".\"longueur_m\" <= 500"
+        },
+        "batiment_largeur": {
+          "name": "batiment_largeur",
+          "value": "\"batiment\".\"largeur_m\" > 0 AND \"batiment\".\"largeur_m\" <= 200"
+        },
+        "batiment_hauteur": {
+          "name": "batiment_hauteur",
+          "value": "\"batiment\".\"hauteur_m\" > 0 AND \"batiment\".\"hauteur_m\" <= 30"
+        },
+        "batiment_orientation": {
+          "name": "batiment_orientation",
+          "value": "\"batiment\".\"orientation_deg\" >= 0 AND \"batiment\".\"orientation_deg\" < 360"
+        },
+        "batiment_distance": {
+          "name": "batiment_distance",
+          "value": "\"batiment\".\"centre_x_m\" * \"batiment\".\"centre_x_m\" + \"batiment\".\"centre_y_m\" * \"batiment\".\"centre_y_m\" <= 25000000"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.campagne": {
+      "name": "campagne",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "plantation_id": {
+          "name": "plantation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "annee": {
+          "name": "annee",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "debut_recolte_prevu": {
+          "name": "debut_recolte_prevu",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "fin_recolte_prevue": {
+          "name": "fin_recolte_prevue",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rendement_prevu": {
+          "name": "rendement_prevu",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "campagne_plantation_annee_idx": {
+          "name": "campagne_plantation_annee_idx",
+          "columns": [
+            {
+              "expression": "plantation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "annee",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"campagne\".\"supprime_le\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "campagne_ferme_id_ferme_id_fk": {
+          "name": "campagne_ferme_id_ferme_id_fk",
+          "tableFrom": "campagne",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "campagne_plantation_id_plantation_id_fk": {
+          "name": "campagne_plantation_id_plantation_id_fk",
+          "tableFrom": "campagne",
+          "tableTo": "plantation",
+          "columnsFrom": [
+            "plantation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "campagne_recolte_prevue": {
+          "name": "campagne_recolte_prevue",
+          "value": "\"campagne\".\"fin_recolte_prevue\" IS NULL OR \"campagne\".\"debut_recolte_prevu\" IS NULL OR \"campagne\".\"fin_recolte_prevue\" >= \"campagne\".\"debut_recolte_prevu\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.code_connexion": {
+      "name": "code_connexion",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code_hache": {
+          "name": "code_hache",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expire_le": {
+          "name": "expire_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tentatives": {
+          "name": "tentatives",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "utilise_le": {
+          "name": "utilise_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "code_connexion_email_cree_idx": {
+          "name": "code_connexion_email_cree_idx",
+          "columns": [
+            {
+              "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "cree_le",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "code_connexion_tentatives": {
+          "name": "code_connexion_tentatives",
+          "value": "\"code_connexion\".\"tentatives\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.emplacement": {
+      "name": "emplacement",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "zone_id": {
+          "name": "zone_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sorte": {
+          "name": "sorte",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "longueur_m": {
+          "name": "longueur_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "largeur_m": {
+          "name": "largeur_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nombre_places": {
+          "name": "nombre_places",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actif_du": {
+          "name": "actif_du",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "actif_au": {
+          "name": "actif_au",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "remplace": {
+          "name": "remplace",
+          "type": "uuid[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::uuid[]"
+        },
+        "placement_x_m": {
+          "name": "placement_x_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "placement_y_m": {
+          "name": "placement_y_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "orientation_deg": {
+          "name": "orientation_deg",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "emplacement_ferme_code_idx": {
+          "name": "emplacement_ferme_code_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "emplacement_zone_idx": {
+          "name": "emplacement_zone_idx",
+          "columns": [
+            {
+              "expression": "zone_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "emplacement_zone_code_actif_idx": {
+          "name": "emplacement_zone_code_actif_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "zone_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(trim(\"code\"))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"emplacement\".\"supprime_le\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "emplacement_ferme_id_ferme_id_fk": {
+          "name": "emplacement_ferme_id_ferme_id_fk",
+          "tableFrom": "emplacement",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "emplacement_zone_id_zone_id_fk": {
+          "name": "emplacement_zone_id_zone_id_fk",
+          "tableFrom": "emplacement",
+          "tableTo": "zone",
+          "columnsFrom": [
+            "zone_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "emplacement_sorte": {
+          "name": "emplacement_sorte",
+          "value": "\"emplacement\".\"sorte\" IN ('planche', 'rang', 'gouttiere')"
+        },
+        "emplacement_placement_tout_ou_rien": {
+          "name": "emplacement_placement_tout_ou_rien",
+          "value": "(\"emplacement\".\"placement_x_m\" IS NULL) = (\"emplacement\".\"placement_y_m\" IS NULL) AND (\"emplacement\".\"placement_y_m\" IS NULL) = (\"emplacement\".\"orientation_deg\" IS NULL)"
+        },
+        "emplacement_orientation": {
+          "name": "emplacement_orientation",
+          "value": "\"emplacement\".\"orientation_deg\" IS NULL OR (\"emplacement\".\"orientation_deg\" >= 0 AND \"emplacement\".\"orientation_deg\" < 360)"
+        },
+        "emplacement_placement_distance": {
+          "name": "emplacement_placement_distance",
+          "value": "\"emplacement\".\"placement_x_m\" IS NULL OR \"emplacement\".\"placement_y_m\" IS NULL OR \"emplacement\".\"placement_x_m\" * \"emplacement\".\"placement_x_m\" + \"emplacement\".\"placement_y_m\" * \"emplacement\".\"placement_y_m\" <= 25000000"
+        },
+        "emplacement_longueur_positive": {
+          "name": "emplacement_longueur_positive",
+          "value": "\"emplacement\".\"longueur_m\" > 0"
+        },
+        "emplacement_largeur_positive": {
+          "name": "emplacement_largeur_positive",
+          "value": "\"emplacement\".\"largeur_m\" IS NULL OR \"emplacement\".\"largeur_m\" > 0"
+        },
+        "emplacement_places_de_gouttiere": {
+          "name": "emplacement_places_de_gouttiere",
+          "value": "(\"emplacement\".\"sorte\" = 'gouttiere') = (\"emplacement\".\"nombre_places\" IS NOT NULL) AND (\"emplacement\".\"nombre_places\" IS NULL OR \"emplacement\".\"nombre_places\" > 0)"
+        },
+        "emplacement_periode_active": {
+          "name": "emplacement_periode_active",
+          "value": "\"emplacement\".\"actif_au\" IS NULL OR \"emplacement\".\"actif_au\" >= \"emplacement\".\"actif_du\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.espece": {
+      "name": "espece",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "famille_id": {
+          "name": "famille_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "categorie": {
+          "name": "categorie",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "perenne": {
+          "name": "perenne",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unite_recolte": {
+          "name": "unite_recolte",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "delai_retour_minimal_ans": {
+          "name": "delai_retour_minimal_ans",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "delai_retour_conseille_ans": {
+          "name": "delai_retour_conseille_ans",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "espece_famille_idx": {
+          "name": "espece_famille_idx",
+          "columns": [
+            {
+              "expression": "famille_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "espece_ferme_id_ferme_id_fk": {
+          "name": "espece_ferme_id_ferme_id_fk",
+          "tableFrom": "espece",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "espece_famille_id_famille_id_fk": {
+          "name": "espece_famille_id_famille_id_fk",
+          "tableFrom": "espece",
+          "tableTo": "famille",
+          "columnsFrom": [
+            "famille_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "espece_categorie": {
+          "name": "espece_categorie",
+          "value": "\"espece\".\"categorie\" IN ('legume', 'petit_fruit', 'fruit', 'fleur', 'aromatique', 'engrais_vert')"
+        },
+        "espece_unite_recolte": {
+          "name": "espece_unite_recolte",
+          "value": "\"espece\".\"unite_recolte\" IN ('kg', 'botte', 'piece', 'barquette')"
+        },
+        "espece_delais_retour": {
+          "name": "espece_delais_retour",
+          "value": "(\"espece\".\"delai_retour_minimal_ans\" IS NULL AND \"espece\".\"delai_retour_conseille_ans\" IS NULL)\n        OR (\"espece\".\"delai_retour_minimal_ans\" >= 0 AND \"espece\".\"delai_retour_conseille_ans\" >= \"espece\".\"delai_retour_minimal_ans\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.evenement": {
+      "name": "evenement",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "horodatage": {
+          "name": "horodatage",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "auteur_id": {
+          "name": "auteur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "serie_id": {
+          "name": "serie_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "campagne_id": {
+          "name": "campagne_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "emplacement_ids": {
+          "name": "emplacement_ids",
+          "type": "uuid[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::uuid[]"
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "photos": {
+          "name": "photos",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::text[]"
+        },
+        "remplace_sorte": {
+          "name": "remplace_sorte",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "remplace_evenement_id": {
+          "name": "remplace_evenement_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "detail": {
+          "name": "detail",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "origine_id": {
+          "name": "origine_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "evenement_ferme_date_idx": {
+          "name": "evenement_ferme_date_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "evenement_serie_idx": {
+          "name": "evenement_serie_idx",
+          "columns": [
+            {
+              "expression": "serie_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "evenement_campagne_idx": {
+          "name": "evenement_campagne_idx",
+          "columns": [
+            {
+              "expression": "campagne_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "evenement_remplace_idx": {
+          "name": "evenement_remplace_idx",
+          "columns": [
+            {
+              "expression": "remplace_evenement_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "evenement_ferme_id_ferme_id_fk": {
+          "name": "evenement_ferme_id_ferme_id_fk",
+          "tableFrom": "evenement",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "evenement_auteur_id_utilisateur_id_fk": {
+          "name": "evenement_auteur_id_utilisateur_id_fk",
+          "tableFrom": "evenement",
+          "tableTo": "utilisateur",
+          "columnsFrom": [
+            "auteur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "evenement_serie_id_serie_id_fk": {
+          "name": "evenement_serie_id_serie_id_fk",
+          "tableFrom": "evenement",
+          "tableTo": "serie",
+          "columnsFrom": [
+            "serie_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "evenement_campagne_id_campagne_id_fk": {
+          "name": "evenement_campagne_id_campagne_id_fk",
+          "tableFrom": "evenement",
+          "tableTo": "campagne",
+          "columnsFrom": [
+            "campagne_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "evenement_remplace_meme_ferme_fk": {
+          "name": "evenement_remplace_meme_ferme_fk",
+          "tableFrom": "evenement",
+          "tableTo": "evenement",
+          "columnsFrom": [
+            "ferme_id",
+            "remplace_evenement_id"
+          ],
+          "columnsTo": [
+            "ferme_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "evenement_ferme_id_id_unique": {
+          "name": "evenement_ferme_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "ferme_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "evenement_type": {
+          "name": "evenement_type",
+          "value": "\"evenement\".\"type\" IN ('realise', 'recolte', 'intervention', 'irrigation', 'traitement', 'observation')"
+        },
+        "evenement_source": {
+          "name": "evenement_source",
+          "value": "\"evenement\".\"source\" IN ('tap', 'voix', 'agent', 'photo', 'import')"
+        },
+        "evenement_remplace_sorte": {
+          "name": "evenement_remplace_sorte",
+          "value": "\"evenement\".\"remplace_sorte\" IS NULL OR \"evenement\".\"remplace_sorte\" IN ('correction', 'annulation')"
+        },
+        "evenement_au_plus_une_culture": {
+          "name": "evenement_au_plus_une_culture",
+          "value": "num_nonnulls(\"evenement\".\"serie_id\", \"evenement\".\"campagne_id\") <= 1"
+        },
+        "evenement_remplacement_complet": {
+          "name": "evenement_remplacement_complet",
+          "value": "(\"evenement\".\"remplace_sorte\" IS NULL) = (\"evenement\".\"remplace_evenement_id\" IS NULL)"
+        },
+        "evenement_ne_se_remplace_pas": {
+          "name": "evenement_ne_se_remplace_pas",
+          "value": "\"evenement\".\"remplace_evenement_id\" IS DISTINCT FROM \"evenement\".\"id\""
+        },
+        "evenement_detail_objet": {
+          "name": "evenement_detail_objet",
+          "value": "jsonb_typeof(\"evenement\".\"detail\") = 'object'"
+        },
+        "evenement_origine_remplie": {
+          "name": "evenement_origine_remplie",
+          "value": "\"evenement\".\"origine_id\" IS NOT NULL"
+        },
+        "evenement_detail_recolte": {
+          "name": "evenement_detail_recolte",
+          "value": "\"evenement\".\"type\" <> 'recolte' OR ((CASE WHEN jsonb_typeof(\"evenement\".\"detail\" -> 'quantite') = 'number' THEN (\"evenement\".\"detail\" -> 'quantite')::numeric > 0 ELSE false END)\n        AND \"evenement\".\"detail\" ->> 'unite' IN ('kg', 'botte', 'piece', 'barquette')\n        AND coalesce(jsonb_typeof(\"evenement\".\"detail\" -> 'categorie'), 'null') IN ('null', 'string')) IS TRUE"
+        },
+        "evenement_detail_realise": {
+          "name": "evenement_detail_realise",
+          "value": "\"evenement\".\"type\" <> 'realise' OR (\"evenement\".\"detail\" ->> 'etape' IN ('semis_pepiniere', 'semis_direct', 'plantation', 'arrachage')\n        AND coalesce(jsonb_typeof(\"evenement\".\"detail\" -> 'quantiteReelle'), 'null') IN ('null', 'number')) IS TRUE"
+        },
+        "evenement_detail_intervention": {
+          "name": "evenement_detail_intervention",
+          "value": "\"evenement\".\"type\" <> 'intervention' OR (\"evenement\".\"detail\" ->> 'categorie' IN ('travail_sol', 'couverture', 'fertilisation', 'amendement', 'entretien')\n        AND jsonb_typeof(\"evenement\".\"detail\" -> 'type') = 'string'\n        AND coalesce(jsonb_typeof(\"evenement\".\"detail\" -> 'outil'), 'null') IN ('null', 'string')\n        AND coalesce(jsonb_typeof(\"evenement\".\"detail\" -> 'dureeOccupationJours'), 'null') IN ('null', 'number')\n        AND coalesce(jsonb_typeof(\"evenement\".\"detail\" -> 'quantite' -> 'valeur'), 'null') IN ('null', 'number')\n        AND (\"evenement\".\"detail\" ->> 'categorie' NOT IN ('fertilisation', 'amendement')\n          OR (jsonb_typeof(\"evenement\".\"detail\" -> 'quantite' -> 'valeur') = 'number'\n            AND jsonb_typeof(\"evenement\".\"detail\" -> 'produit') = 'string'))) IS TRUE"
+        },
+        "evenement_detail_irrigation": {
+          "name": "evenement_detail_irrigation",
+          "value": "\"evenement\".\"type\" <> 'irrigation' OR ((\"evenement\".\"detail\" ->> 'secteurIrrigationId') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'\n        AND (CASE WHEN jsonb_typeof(\"evenement\".\"detail\" -> 'dureeMinutes') = 'number' THEN (\"evenement\".\"detail\" -> 'dureeMinutes')::numeric >= 0 ELSE false END)) IS TRUE"
+        },
+        "evenement_detail_traitement": {
+          "name": "evenement_detail_traitement",
+          "value": "\"evenement\".\"type\" <> 'traitement' OR ((\"evenement\".\"detail\" ->> 'produitPhytoId') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'\n        AND est_date_calendaire(\"evenement\".\"detail\" ->> 'recolteAutoriseeLe')\n        AND (CASE WHEN jsonb_typeof(\"evenement\".\"detail\" -> 'dose' -> 'valeur') = 'number' THEN (\"evenement\".\"detail\" -> 'dose' -> 'valeur')::numeric >= 0 ELSE false END)\n        AND jsonb_typeof(\"evenement\".\"detail\" -> 'dose' -> 'unite') = 'string'\n        AND (CASE WHEN jsonb_typeof(\"evenement\".\"detail\" -> 'surfaceTraiteeM2') = 'number' THEN (\"evenement\".\"detail\" -> 'surfaceTraiteeM2')::numeric >= 0 ELSE false END)) IS TRUE"
+        },
+        "evenement_detail_observation": {
+          "name": "evenement_detail_observation",
+          "value": "\"evenement\".\"type\" <> 'observation' OR (\"evenement\".\"detail\" ->> 'nature' IN ('ravageur', 'maladie', 'stade', 'autre')) IS TRUE"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.famille": {
+      "name": "famille",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "delai_retour_minimal_ans": {
+          "name": "delai_retour_minimal_ans",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "delai_retour_conseille_ans": {
+          "name": "delai_retour_conseille_ans",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "famille_ferme_id_ferme_id_fk": {
+          "name": "famille_ferme_id_ferme_id_fk",
+          "tableFrom": "famille",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "famille_delais_retour": {
+          "name": "famille_delais_retour",
+          "value": "\"famille\".\"delai_retour_minimal_ans\" >= 0 AND \"famille\".\"delai_retour_conseille_ans\" >= \"famille\".\"delai_retour_minimal_ans\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.ferme": {
+      "name": "ferme",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fuseau_horaire": {
+          "name": "fuseau_horaire",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "position": {
+          "name": "position",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "origine_plan": {
+          "name": "origine_plan",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "unites": {
+          "name": "unites",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{\"longueur\": \"m\", \"masse\": \"kg\"}'::jsonb"
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.itineraire": {
+      "name": "itineraire",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "espece_id": {
+          "name": "espece_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "variete_id": {
+          "name": "variete_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parametres": {
+          "name": "parametres",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "itineraire_espece_idx": {
+          "name": "itineraire_espece_idx",
+          "columns": [
+            {
+              "expression": "espece_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "itineraire_ferme_id_ferme_id_fk": {
+          "name": "itineraire_ferme_id_ferme_id_fk",
+          "tableFrom": "itineraire",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "itineraire_espece_id_espece_id_fk": {
+          "name": "itineraire_espece_id_espece_id_fk",
+          "tableFrom": "itineraire",
+          "tableTo": "espece",
+          "columnsFrom": [
+            "espece_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "itineraire_variete_id_variete_id_fk": {
+          "name": "itineraire_variete_id_variete_id_fk",
+          "tableFrom": "itineraire",
+          "tableTo": "variete",
+          "columnsFrom": [
+            "variete_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "itineraire_mode": {
+          "name": "itineraire_mode",
+          "value": "\"itineraire\".\"mode\" IN ('semis_direct', 'plant_maison', 'plant_achete')"
+        },
+        "itineraire_parametres_du_mode": {
+          "name": "itineraire_parametres_du_mode",
+          "value": "\"itineraire\".\"parametres\" ->> 'mode' = \"itineraire\".\"mode\""
+        },
+        "itineraire_travaux_prevus": {
+          "name": "itineraire_travaux_prevus",
+          "value": "NOT (\"itineraire\".\"parametres\" ? 'travauxPrevus') OR jsonb_typeof(\"itineraire\".\"parametres\" -> 'travauxPrevus') = 'array'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.jeton_renouvellement": {
+      "name": "jeton_renouvellement",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "utilisateur_id": {
+          "name": "utilisateur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "jeton_hache": {
+          "name": "jeton_hache",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expire_le": {
+          "name": "expire_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "revoque_le": {
+          "name": "revoque_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "famille_id": {
+          "name": "famille_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "connexion_le": {
+          "name": "connexion_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "utilise_le": {
+          "name": "utilise_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parent_id": {
+          "name": "parent_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "remplace_le": {
+          "name": "remplace_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "jeton_renouvellement_utilisateur_idx": {
+          "name": "jeton_renouvellement_utilisateur_idx",
+          "columns": [
+            {
+              "expression": "utilisateur_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jeton_renouvellement_famille_idx": {
+          "name": "jeton_renouvellement_famille_idx",
+          "columns": [
+            {
+              "expression": "famille_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jeton_renouvellement_parent_idx": {
+          "name": "jeton_renouvellement_parent_idx",
+          "columns": [
+            {
+              "expression": "parent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jeton_renouvellement_expire_idx": {
+          "name": "jeton_renouvellement_expire_idx",
+          "columns": [
+            {
+              "expression": "expire_le",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "jeton_renouvellement_revoque_idx": {
+          "name": "jeton_renouvellement_revoque_idx",
+          "columns": [
+            {
+              "expression": "revoque_le",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "jeton_renouvellement_utilisateur_id_utilisateur_id_fk": {
+          "name": "jeton_renouvellement_utilisateur_id_utilisateur_id_fk",
+          "tableFrom": "jeton_renouvellement",
+          "tableTo": "utilisateur",
+          "columnsFrom": [
+            "utilisateur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "jeton_renouvellement_jeton_hache_unique": {
+          "name": "jeton_renouvellement_jeton_hache_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "jeton_hache"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.membre": {
+      "name": "membre",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "utilisateur_id": {
+          "name": "utilisateur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "etat": {
+          "name": "etat",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'accepte'"
+        },
+        "invite_par": {
+          "name": "invite_par",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "invite_le": {
+          "name": "invite_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "membre_ferme_idx": {
+          "name": "membre_ferme_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "membre_invite_par_idx": {
+          "name": "membre_invite_par_idx",
+          "columns": [
+            {
+              "expression": "invite_par",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "invite_le",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "membre_utilisateur_id_utilisateur_id_fk": {
+          "name": "membre_utilisateur_id_utilisateur_id_fk",
+          "tableFrom": "membre",
+          "tableTo": "utilisateur",
+          "columnsFrom": [
+            "utilisateur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "membre_ferme_id_ferme_id_fk": {
+          "name": "membre_ferme_id_ferme_id_fk",
+          "tableFrom": "membre",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "membre_invite_par_utilisateur_id_fk": {
+          "name": "membre_invite_par_utilisateur_id_fk",
+          "tableFrom": "membre",
+          "tableTo": "utilisateur",
+          "columnsFrom": [
+            "invite_par"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "membre_utilisateur_ferme_unique": {
+          "name": "membre_utilisateur_ferme_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "utilisateur_id",
+            "ferme_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "membre_role": {
+          "name": "membre_role",
+          "value": "\"membre\".\"role\" IN ('gerant', 'equipier')"
+        },
+        "membre_etat": {
+          "name": "membre_etat",
+          "value": "\"membre\".\"etat\" IN ('invite', 'accepte')"
+        },
+        "membre_invitation": {
+          "name": "membre_invitation",
+          "value": "(\"membre\".\"invite_par\" IS NULL) = (\"membre\".\"invite_le\" IS NULL)"
+        },
+        "membre_invite_date": {
+          "name": "membre_invite_date",
+          "value": "\"membre\".\"etat\" <> 'invite' OR \"membre\".\"invite_le\" IS NOT NULL"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.modification": {
+      "name": "modification",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom_table": {
+          "name": "nom_table",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ligne_id": {
+          "name": "ligne_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "auteur_id": {
+          "name": "auteur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "horodatage": {
+          "name": "horodatage",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation": {
+          "name": "operation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "avant": {
+          "name": "avant",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "apres": {
+          "name": "apres",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proposition_id": {
+          "name": "proposition_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "modification_ligne_idx": {
+          "name": "modification_ligne_idx",
+          "columns": [
+            {
+              "expression": "nom_table",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ligne_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "modification_proposition_idx": {
+          "name": "modification_proposition_idx",
+          "columns": [
+            {
+              "expression": "proposition_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "modification_ferme_id_ferme_id_fk": {
+          "name": "modification_ferme_id_ferme_id_fk",
+          "tableFrom": "modification",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "modification_auteur_id_utilisateur_id_fk": {
+          "name": "modification_auteur_id_utilisateur_id_fk",
+          "tableFrom": "modification",
+          "tableTo": "utilisateur",
+          "columnsFrom": [
+            "auteur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "modification_proposition_id_proposition_id_fk": {
+          "name": "modification_proposition_id_proposition_id_fk",
+          "tableFrom": "modification",
+          "tableTo": "proposition",
+          "columnsFrom": [
+            "proposition_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "modification_nom_table": {
+          "name": "modification_nom_table",
+          "value": "\"modification\".\"nom_table\" IN ('Ferme', 'Zone', 'Emplacement', 'SecteurIrrigation', 'SecteurEmplacement', 'Famille', 'Espece', 'Variete', 'Itineraire', 'Saison', 'Serie', 'Plantation', 'Campagne', 'Occupation', 'Assolement', 'Evenement', 'ArticleStock', 'MouvementStock', 'ProduitPhyto', 'Proposition', 'TypeIntervention', 'Batiment')"
+        },
+        "modification_operation": {
+          "name": "modification_operation",
+          "value": "\"modification\".\"operation\" IN ('creation', 'modification', 'suppression')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.mouvement_stock": {
+      "name": "mouvement_stock",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "article_stock_id": {
+          "name": "article_stock_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantite": {
+          "name": "quantite",
+          "type": "numeric(12, 6)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motif": {
+          "name": "motif",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recolte_id": {
+          "name": "recolte_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "mouvement_stock_article_idx": {
+          "name": "mouvement_stock_article_idx",
+          "columns": [
+            {
+              "expression": "article_stock_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "mouvement_stock_recolte_idx": {
+          "name": "mouvement_stock_recolte_idx",
+          "columns": [
+            {
+              "expression": "recolte_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "mouvement_stock_ferme_id_ferme_id_fk": {
+          "name": "mouvement_stock_ferme_id_ferme_id_fk",
+          "tableFrom": "mouvement_stock",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "mouvement_stock_article_stock_id_article_stock_id_fk": {
+          "name": "mouvement_stock_article_stock_id_article_stock_id_fk",
+          "tableFrom": "mouvement_stock",
+          "tableTo": "article_stock",
+          "columnsFrom": [
+            "article_stock_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "mouvement_stock_recolte_id_evenement_id_fk": {
+          "name": "mouvement_stock_recolte_id_evenement_id_fk",
+          "tableFrom": "mouvement_stock",
+          "tableTo": "evenement",
+          "columnsFrom": [
+            "recolte_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "mouvement_stock_motif": {
+          "name": "mouvement_stock_motif",
+          "value": "\"mouvement_stock\".\"motif\" IN ('recolte', 'vente', 'perte', 'ajustement')"
+        },
+        "mouvement_stock_quantite_non_nulle": {
+          "name": "mouvement_stock_quantite_non_nulle",
+          "value": "\"mouvement_stock\".\"quantite\" <> 0"
+        },
+        "mouvement_stock_recolte_liee": {
+          "name": "mouvement_stock_recolte_liee",
+          "value": "(\"mouvement_stock\".\"motif\" = 'recolte') = (\"mouvement_stock\".\"recolte_id\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.occupation": {
+      "name": "occupation",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "emplacement_id": {
+          "name": "emplacement_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "serie_id": {
+          "name": "serie_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "plantation_id": {
+          "name": "plantation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "evenement_id": {
+          "name": "evenement_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "longueur_m": {
+          "name": "longueur_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nombre_places": {
+          "name": "nombre_places",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "position_m": {
+          "name": "position_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prevu_du": {
+          "name": "prevu_du",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prevu_au": {
+          "name": "prevu_au",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reel_du": {
+          "name": "reel_du",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reel_au": {
+          "name": "reel_au",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "occupation_vue_2d_idx": {
+          "name": "occupation_vue_2d_idx",
+          "columns": [
+            {
+              "expression": "emplacement_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "prevu_du",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "prevu_au",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "occupation_serie_idx": {
+          "name": "occupation_serie_idx",
+          "columns": [
+            {
+              "expression": "serie_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "occupation_plantation_idx": {
+          "name": "occupation_plantation_idx",
+          "columns": [
+            {
+              "expression": "plantation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "occupation_ferme_id_ferme_id_fk": {
+          "name": "occupation_ferme_id_ferme_id_fk",
+          "tableFrom": "occupation",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "occupation_emplacement_id_emplacement_id_fk": {
+          "name": "occupation_emplacement_id_emplacement_id_fk",
+          "tableFrom": "occupation",
+          "tableTo": "emplacement",
+          "columnsFrom": [
+            "emplacement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "occupation_serie_id_serie_id_fk": {
+          "name": "occupation_serie_id_serie_id_fk",
+          "tableFrom": "occupation",
+          "tableTo": "serie",
+          "columnsFrom": [
+            "serie_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "occupation_plantation_id_plantation_id_fk": {
+          "name": "occupation_plantation_id_plantation_id_fk",
+          "tableFrom": "occupation",
+          "tableTo": "plantation",
+          "columnsFrom": [
+            "plantation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "occupation_evenement_id_evenement_id_fk": {
+          "name": "occupation_evenement_id_evenement_id_fk",
+          "tableFrom": "occupation",
+          "tableTo": "evenement",
+          "columnsFrom": [
+            "evenement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "occupation_un_occupant": {
+          "name": "occupation_un_occupant",
+          "value": "num_nonnulls(\"occupation\".\"serie_id\", \"occupation\".\"plantation_id\", \"occupation\".\"evenement_id\") = 1"
+        },
+        "occupation_une_place": {
+          "name": "occupation_une_place",
+          "value": "num_nonnulls(\"occupation\".\"longueur_m\", \"occupation\".\"nombre_places\") = 1"
+        },
+        "occupation_place_positive": {
+          "name": "occupation_place_positive",
+          "value": "(\"occupation\".\"longueur_m\" IS NULL OR \"occupation\".\"longueur_m\" > 0) AND (\"occupation\".\"nombre_places\" IS NULL OR \"occupation\".\"nombre_places\" > 0)"
+        },
+        "occupation_position_positive": {
+          "name": "occupation_position_positive",
+          "value": "\"occupation\".\"position_m\" IS NULL OR \"occupation\".\"position_m\" >= 0"
+        },
+        "occupation_periode_prevue": {
+          "name": "occupation_periode_prevue",
+          "value": "\"occupation\".\"prevu_au\" >= \"occupation\".\"prevu_du\""
+        },
+        "occupation_periode_reelle": {
+          "name": "occupation_periode_reelle",
+          "value": "(\"occupation\".\"reel_du\" IS NOT NULL OR \"occupation\".\"reel_au\" IS NULL) AND (\"occupation\".\"reel_au\" IS NULL OR \"occupation\".\"reel_au\" >= \"occupation\".\"reel_du\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.plantation": {
+      "name": "plantation",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "espece_id": {
+          "name": "espece_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "variete_id": {
+          "name": "variete_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "date_plantation": {
+          "name": "date_plantation",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nombre_plants": {
+          "name": "nombre_plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "date_arrachage": {
+          "name": "date_arrachage",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "plantation_ferme_id_ferme_id_fk": {
+          "name": "plantation_ferme_id_ferme_id_fk",
+          "tableFrom": "plantation",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "plantation_espece_id_espece_id_fk": {
+          "name": "plantation_espece_id_espece_id_fk",
+          "tableFrom": "plantation",
+          "tableTo": "espece",
+          "columnsFrom": [
+            "espece_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "plantation_variete_id_variete_id_fk": {
+          "name": "plantation_variete_id_variete_id_fk",
+          "tableFrom": "plantation",
+          "tableTo": "variete",
+          "columnsFrom": [
+            "variete_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "plantation_nombre_plants_positif": {
+          "name": "plantation_nombre_plants_positif",
+          "value": "\"plantation\".\"nombre_plants\" > 0"
+        },
+        "plantation_arrachage_apres_plantation": {
+          "name": "plantation_arrachage_apres_plantation",
+          "value": "\"plantation\".\"date_arrachage\" IS NULL OR \"plantation\".\"date_arrachage\" >= \"plantation\".\"date_plantation\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.produit_phyto": {
+      "name": "produit_phyto",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nom_commercial": {
+          "name": "nom_commercial",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "numero_amm": {
+          "name": "numero_amm",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "substance_active": {
+          "name": "substance_active",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "delai_avant_recolte_jours": {
+          "name": "delai_avant_recolte_jours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "utilisable_en_bio": {
+          "name": "utilisable_en_bio",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dose_maximale": {
+          "name": "dose_maximale",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "produit_phyto_ferme_id_ferme_id_fk": {
+          "name": "produit_phyto_ferme_id_ferme_id_fk",
+          "tableFrom": "produit_phyto",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "produit_phyto_delai_avant_recolte": {
+          "name": "produit_phyto_delai_avant_recolte",
+          "value": "\"produit_phyto\".\"delai_avant_recolte_jours\" >= 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.proposition": {
+      "name": "proposition",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "auteur_id": {
+          "name": "auteur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "statut": {
+          "name": "statut",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "decide_le": {
+          "name": "decide_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "changements": {
+          "name": "changements",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "proposition_ferme_id_ferme_id_fk": {
+          "name": "proposition_ferme_id_ferme_id_fk",
+          "tableFrom": "proposition",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "proposition_auteur_id_utilisateur_id_fk": {
+          "name": "proposition_auteur_id_utilisateur_id_fk",
+          "tableFrom": "proposition",
+          "tableTo": "utilisateur",
+          "columnsFrom": [
+            "auteur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "proposition_source": {
+          "name": "proposition_source",
+          "value": "\"proposition\".\"source\" IN ('voix', 'agent', 'photo')"
+        },
+        "proposition_statut": {
+          "name": "proposition_statut",
+          "value": "\"proposition\".\"statut\" IN ('en_attente', 'validee', 'rejetee')"
+        },
+        "proposition_decision": {
+          "name": "proposition_decision",
+          "value": "(\"proposition\".\"statut\" = 'en_attente') = (\"proposition\".\"decide_le\" IS NULL)"
+        },
+        "proposition_changements": {
+          "name": "proposition_changements",
+          "value": "jsonb_typeof(\"proposition\".\"changements\") = 'array'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.refus_synchro": {
+      "name": "refus_synchro",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "utilisateur_id": {
+          "name": "utilisateur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nom_table": {
+          "name": "nom_table",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ligne_id": {
+          "name": "ligne_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation": {
+          "name": "operation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "motif": {
+          "name": "motif",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "donnees": {
+          "name": "donnees",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saisie_type": {
+          "name": "saisie_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saisie_culture": {
+          "name": "saisie_culture",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saisie_date": {
+          "name": "saisie_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saisie_quantite": {
+          "name": "saisie_quantite",
+          "type": "double precision",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "saisie_unite": {
+          "name": "saisie_unite",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "archive_le": {
+          "name": "archive_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "refus_synchro_utilisateur_idx": {
+          "name": "refus_synchro_utilisateur_idx",
+          "columns": [
+            {
+              "expression": "utilisateur_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "cree_le",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "refus_synchro_utilisateur_id_utilisateur_id_fk": {
+          "name": "refus_synchro_utilisateur_id_utilisateur_id_fk",
+          "tableFrom": "refus_synchro",
+          "tableTo": "utilisateur",
+          "columnsFrom": [
+            "utilisateur_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "refus_synchro_sans_doublon": {
+          "name": "refus_synchro_sans_doublon",
+          "nullsNotDistinct": false,
+          "columns": [
+            "utilisateur_id",
+            "ligne_id",
+            "operation",
+            "motif"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "refus_synchro_operation": {
+          "name": "refus_synchro_operation",
+          "value": "\"refus_synchro\".\"operation\" IN ('PUT', 'PATCH', 'DELETE')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.saison": {
+      "name": "saison",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "debut": {
+          "name": "debut",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fin": {
+          "name": "fin",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "saison_ferme_id_ferme_id_fk": {
+          "name": "saison_ferme_id_ferme_id_fk",
+          "tableFrom": "saison",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "saison_periode": {
+          "name": "saison_periode",
+          "value": "\"saison\".\"fin\" >= \"saison\".\"debut\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.secteur_emplacement": {
+      "name": "secteur_emplacement",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "secteur_irrigation_id": {
+          "name": "secteur_irrigation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "emplacement_id": {
+          "name": "emplacement_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "du": {
+          "name": "du",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "au": {
+          "name": "au",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "secteur_emplacement_secteur_idx": {
+          "name": "secteur_emplacement_secteur_idx",
+          "columns": [
+            {
+              "expression": "secteur_irrigation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "secteur_emplacement_emplacement_idx": {
+          "name": "secteur_emplacement_emplacement_idx",
+          "columns": [
+            {
+              "expression": "emplacement_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "secteur_emplacement_ferme_id_ferme_id_fk": {
+          "name": "secteur_emplacement_ferme_id_ferme_id_fk",
+          "tableFrom": "secteur_emplacement",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "secteur_emplacement_secteur_irrigation_id_secteur_irrigation_id_fk": {
+          "name": "secteur_emplacement_secteur_irrigation_id_secteur_irrigation_id_fk",
+          "tableFrom": "secteur_emplacement",
+          "tableTo": "secteur_irrigation",
+          "columnsFrom": [
+            "secteur_irrigation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "secteur_emplacement_emplacement_id_emplacement_id_fk": {
+          "name": "secteur_emplacement_emplacement_id_emplacement_id_fk",
+          "tableFrom": "secteur_emplacement",
+          "tableTo": "emplacement",
+          "columnsFrom": [
+            "emplacement_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "secteur_emplacement_periode": {
+          "name": "secteur_emplacement_periode",
+          "value": "\"secteur_emplacement\".\"au\" IS NULL OR \"secteur_emplacement\".\"au\" >= \"secteur_emplacement\".\"du\""
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.secteur_irrigation": {
+      "name": "secteur_irrigation",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "numero_vanne": {
+          "name": "numero_vanne",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "debit_litres_heure": {
+          "name": "debit_litres_heure",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "adresse_modbus": {
+          "name": "adresse_modbus",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "secteur_irrigation_ferme_id_ferme_id_fk": {
+          "name": "secteur_irrigation_ferme_id_ferme_id_fk",
+          "tableFrom": "secteur_irrigation",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "secteur_irrigation_debit_positif": {
+          "name": "secteur_irrigation_debit_positif",
+          "value": "\"secteur_irrigation\".\"debit_litres_heure\" IS NULL OR \"secteur_irrigation\".\"debit_litres_heure\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.serie": {
+      "name": "serie",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "saison_id": {
+          "name": "saison_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "espece_id": {
+          "name": "espece_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "variete_id": {
+          "name": "variete_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "itineraire_id": {
+          "name": "itineraire_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "parametres": {
+          "name": "parametres",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ancre_type": {
+          "name": "ancre_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "ancre_date": {
+          "name": "ancre_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prevu_semis_pepiniere": {
+          "name": "prevu_semis_pepiniere",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "prevu_mise_en_place": {
+          "name": "prevu_mise_en_place",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prevu_debut_recolte": {
+          "name": "prevu_debut_recolte",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prevu_fin_recolte": {
+          "name": "prevu_fin_recolte",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "longueur_m": {
+          "name": "longueur_m",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nombre_plants": {
+          "name": "nombre_plants",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "statut": {
+          "name": "statut",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rotation_acceptee": {
+          "name": "rotation_acceptee",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "serie_semainier_semis_idx": {
+          "name": "serie_semainier_semis_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "prevu_semis_pepiniere",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "serie_semainier_mise_en_place_idx": {
+          "name": "serie_semainier_mise_en_place_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "prevu_mise_en_place",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "serie_semainier_recolte_idx": {
+          "name": "serie_semainier_recolte_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "prevu_debut_recolte",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "prevu_fin_recolte",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "serie_saison_idx": {
+          "name": "serie_saison_idx",
+          "columns": [
+            {
+              "expression": "saison_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "serie_ferme_id_ferme_id_fk": {
+          "name": "serie_ferme_id_ferme_id_fk",
+          "tableFrom": "serie",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "serie_saison_id_saison_id_fk": {
+          "name": "serie_saison_id_saison_id_fk",
+          "tableFrom": "serie",
+          "tableTo": "saison",
+          "columnsFrom": [
+            "saison_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "serie_espece_id_espece_id_fk": {
+          "name": "serie_espece_id_espece_id_fk",
+          "tableFrom": "serie",
+          "tableTo": "espece",
+          "columnsFrom": [
+            "espece_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "serie_variete_id_variete_id_fk": {
+          "name": "serie_variete_id_variete_id_fk",
+          "tableFrom": "serie",
+          "tableTo": "variete",
+          "columnsFrom": [
+            "variete_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "serie_itineraire_id_itineraire_id_fk": {
+          "name": "serie_itineraire_id_itineraire_id_fk",
+          "tableFrom": "serie",
+          "tableTo": "itineraire",
+          "columnsFrom": [
+            "itineraire_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "serie_ancre_type": {
+          "name": "serie_ancre_type",
+          "value": "\"serie\".\"ancre_type\" IN ('semis', 'plantation', 'debut_recolte')"
+        },
+        "serie_statut": {
+          "name": "serie_statut",
+          "value": "\"serie\".\"statut\" IN ('prevue', 'en_cours', 'terminee', 'abandonnee')"
+        },
+        "serie_parametres": {
+          "name": "serie_parametres",
+          "value": "jsonb_typeof(\"serie\".\"parametres\") = 'object'"
+        },
+        "serie_travaux_prevus": {
+          "name": "serie_travaux_prevus",
+          "value": "NOT (\"serie\".\"parametres\" ? 'travauxPrevus') OR jsonb_typeof(\"serie\".\"parametres\" -> 'travauxPrevus') = 'array'"
+        },
+        "serie_rotation_acceptee": {
+          "name": "serie_rotation_acceptee",
+          "value": "\"serie\".\"rotation_acceptee\" IS NULL OR jsonb_typeof(\"serie\".\"rotation_acceptee\") = 'object'"
+        },
+        "serie_une_taille": {
+          "name": "serie_une_taille",
+          "value": "num_nonnulls(\"serie\".\"longueur_m\", \"serie\".\"nombre_plants\") = 1"
+        },
+        "serie_taille_positive": {
+          "name": "serie_taille_positive",
+          "value": "(\"serie\".\"longueur_m\" IS NULL OR \"serie\".\"longueur_m\" > 0) AND (\"serie\".\"nombre_plants\" IS NULL OR \"serie\".\"nombre_plants\" > 0)"
+        },
+        "serie_ordre_des_dates": {
+          "name": "serie_ordre_des_dates",
+          "value": "\"serie\".\"prevu_fin_recolte\" >= \"serie\".\"prevu_debut_recolte\" AND \"serie\".\"prevu_debut_recolte\" >= \"serie\".\"prevu_mise_en_place\"\n        AND (\"serie\".\"prevu_semis_pepiniere\" IS NULL OR \"serie\".\"prevu_mise_en_place\" >= \"serie\".\"prevu_semis_pepiniere\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.type_intervention": {
+      "name": "type_intervention",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "categorie": {
+          "name": "categorie",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "libelle": {
+          "name": "libelle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "masque": {
+          "name": "masque",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "type_intervention_libelle_actif_idx": {
+          "name": "type_intervention_libelle_actif_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "categorie",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lower(\"libelle\")",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"type_intervention\".\"supprime_le\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "type_intervention_ferme_id_ferme_id_fk": {
+          "name": "type_intervention_ferme_id_ferme_id_fk",
+          "tableFrom": "type_intervention",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "type_intervention_categorie": {
+          "name": "type_intervention_categorie",
+          "value": "\"type_intervention\".\"categorie\" IN ('travail_sol', 'couverture', 'fertilisation', 'amendement', 'entretien')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.utilisateur": {
+      "name": "utilisateur",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "utilisateur_email_unique": {
+          "name": "utilisateur_email_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "email"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "utilisateur_email_minuscules": {
+          "name": "utilisateur_email_minuscules",
+          "value": "\"utilisateur\".\"email\" = lower(\"utilisateur\".\"email\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.variete": {
+      "name": "variete",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "espece_id": {
+          "name": "espece_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "fournisseur": {
+          "name": "fournisseur",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "poids_mille_graines_g": {
+          "name": "poids_mille_graines_g",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "taux_germination": {
+          "name": "taux_germination",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "variete_espece_idx": {
+          "name": "variete_espece_idx",
+          "columns": [
+            {
+              "expression": "espece_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "variete_ferme_id_ferme_id_fk": {
+          "name": "variete_ferme_id_ferme_id_fk",
+          "tableFrom": "variete",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "variete_espece_id_espece_id_fk": {
+          "name": "variete_espece_id_espece_id_fk",
+          "tableFrom": "variete",
+          "tableTo": "espece",
+          "columnsFrom": [
+            "espece_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "variete_pmg_positif": {
+          "name": "variete_pmg_positif",
+          "value": "\"variete\".\"poids_mille_graines_g\" IS NULL OR \"variete\".\"poids_mille_graines_g\" > 0"
+        },
+        "variete_taux_germination": {
+          "name": "variete_taux_germination",
+          "value": "\"variete\".\"taux_germination\" IS NULL OR \"variete\".\"taux_germination\" BETWEEN 0 AND 100"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.zone": {
+      "name": "zone",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "nom": {
+          "name": "nom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "zone_parente_id": {
+          "name": "zone_parente_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type_abri": {
+          "name": "type_abri",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "surface_m2": {
+          "name": "surface_m2",
+          "type": "numeric",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contour": {
+          "name": "contour",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "zone_ferme_id_ferme_id_fk": {
+          "name": "zone_ferme_id_ferme_id_fk",
+          "tableFrom": "zone",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "zone_zone_parente_id_zone_id_fk": {
+          "name": "zone_zone_parente_id_zone_id_fk",
+          "tableFrom": "zone",
+          "tableTo": "zone",
+          "columnsFrom": [
+            "zone_parente_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "zone_ferme_id_id_unique": {
+          "name": "zone_ferme_id_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "ferme_id",
+            "id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "zone_type_abri": {
+          "name": "zone_type_abri",
+          "value": "\"zone\".\"type_abri\" IN ('plein_champ', 'tunnel', 'serre', 'hors_sol')"
+        },
+        "zone_surface_positive": {
+          "name": "zone_surface_positive",
+          "value": "\"zone\".\"surface_m2\" IS NULL OR \"zone\".\"surface_m2\" > 0"
+        },
+        "zone_pas_sa_propre_parente": {
+          "name": "zone_pas_sa_propre_parente",
+          "value": "\"zone\".\"zone_parente_id\" IS DISTINCT FROM \"zone\".\"id\""
+        },
+        "zone_contour_valide": {
+          "name": "zone_contour_valide",
+          "value": "contour_zone_valide(\"zone\".\"contour\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "securite.demande_ip": {
+      "name": "demande_ip",
+      "schema": "securite",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ip": {
+          "name": "ip",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "demande_ip_action_ip_cree_idx": {
+          "name": "demande_ip_action_ip_cree_idx",
+          "columns": [
+            {
+              "expression": "action",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "ip",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "cree_le",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "demande_ip_cree_idx": {
+          "name": "demande_ip_cree_idx",
+          "columns": [
+            {
+              "expression": "cree_le",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "demande_ip_action": {
+          "name": "demande_ip_action",
+          "value": "\"securite\".\"demande_ip\".\"action\" IN ('code', 'verifier')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "interne.chaine_evenement": {
+      "name": "chaine_evenement",
+      "schema": "interne",
+      "columns": {
+        "origine_id": {
+          "name": "origine_id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "en_vigueur_id": {
+          "name": "en_vigueur_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "en_vigueur_horodatage": {
+          "name": "en_vigueur_horodatage",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "annulee": {
+          "name": "annulee",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        }
+      },
+      "indexes": {
+        "chaine_evenement_ferme_idx": {
+          "name": "chaine_evenement_ferme_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "chaine_evenement_en_vigueur_idx": {
+          "name": "chaine_evenement_en_vigueur_idx",
+          "columns": [
+            {
+              "expression": "en_vigueur_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "chaine_evenement_origine_fk": {
+          "name": "chaine_evenement_origine_fk",
+          "tableFrom": "chaine_evenement",
+          "tableTo": "evenement",
+          "columnsFrom": [
+            "ferme_id",
+            "origine_id"
+          ],
+          "columnsTo": [
+            "ferme_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "chaine_evenement_en_vigueur_fk": {
+          "name": "chaine_evenement_en_vigueur_fk",
+          "tableFrom": "chaine_evenement",
+          "tableTo": "evenement",
+          "columnsFrom": [
+            "ferme_id",
+            "en_vigueur_id"
+          ],
+          "columnsTo": [
+            "ferme_id",
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {
+    "securite": "securite",
+    "interne": "interne"
+  },
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

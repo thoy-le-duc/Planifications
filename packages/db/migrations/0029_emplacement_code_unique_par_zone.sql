@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "emplacement_zone_code_actif_idx" ON "emplacement" USING btree ("ferme_id","zone_id",lower(trim("code"))) WHERE "emplacement"."supprime_le" IS NULL;
