@@ -111,7 +111,8 @@ export interface EcritureAResumer {
 /**
  * Résumés des écritures `ecritures` (même ordre) : un événement seulement (les autres tables, et
  * des données absentes, donnent RESUME_VIDE). `fermes` : fermes dont l'utilisateur est membre
- * accepté au moment du lot. Une seule lecture en base pour tout le paquet.
+ * accepté au moment du lot. T10v : l'appelant (upload.ts) ne laisse `ferme_id` dans les données que si
+ * la ferme du refus est celle qu'elles déclarent ; sans lui, pas de culture. Une seule lecture en base pour tout le paquet.
  */
 export async function resumerSaisies(
   db: Pick<NodePgDatabase, 'execute'>,

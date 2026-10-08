@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T10v : un refus ne porte plus le nom d'une culture d'une autre ferme
+
+- **Fait** : dans `apps/api/src/sync/upload.ts` (`enregistrerRefus`), le résumé ne reçoit `ferme_id` que si la ferme du refus (après le filtre M1) est non nulle, égale à `fermeDesDonnees(e)` (insensible à la casse) et dont l'utilisateur est membre accepté ; sinon le `ferme_id` forgé est retiré et `saisie_culture` est NULL (type, date, quantité, unité inchangés). Les 26 tests de `resume-refus-hors-ferme.integration.test.ts` passent sans modification ; témoin T10k inchangé.
+- **Décidé** : correction côté `upload.ts` seulement, `resume.ts` garde son contrat (commentaires précisés, ainsi que l'en-tête de `resume-refus.integration.test.ts`, sans assertion touchée).
+- **Bloquant** : rien.
+
 ## 2026-10-08 — T29b : fluidité des vols, le coût était le dessin, pas le code
 
 - **Fait** : mesure par image (sous SwiftShader, 1280 × 800) : JavaScript de la vue < 1 ms (médiane 0,3 à 0,5 ms) ; une toile qui ne fait que « clear » coûte déjà 18 à 24 ms de swap ; ferme T07 : 2 appels de dessin, 5 100 triangles ; jumeau T07 placé : 7 appels, 77 634 triangles, intervalles de 83 à 100 ms. Allègement sans changement visible (captures de la démo comparées) : `geometriePlanche()` (5 faces, 10 triangles, sans le dessous) ; arceau à tube de 3 côtés et 8 segments (140 → 48 triangles, 504 arceaux dans le jumeau T07) ; bâche et bouts à 10 segments. Jumeau T07 placé : 77 634 → 29 506 triangles, 7 appels inchangés, intervalles fautifs 0 à 2 sur 270 en e2e (3 lancements), démo 16 084 triangles avant.

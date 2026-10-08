@@ -599,7 +599,18 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     for (let debut = 0; debut < refus.length; debut += REFUS_PAR_REQUETE) {
       const paquet = refus.slice(debut, debut + REFUS_PAR_REQUETE);
       // T10k : pas de résumé pour un lot trop gros (refusé avant toute lecture, rien de plus à lire).
-      const aResumer = paquet.map(([e, r]) => (r.motif === 'lot_trop_gros' ? { table: e.table, donnees: null } : e));
+      const aResumer = paquet.map(([e, r]) => {
+        if (r.motif === 'lot_trop_gros') return { table: e.table, donnees: null };
+        // T10v : la culture n'est demandée que si la ferme du refus (après le filtre M1) est celle
+        // que déclarent les données ; sinon le ferme_id forgé est retiré, donc saisie_culture NULL.
+        const fermeRefus = r.fermeId?.toLowerCase() ?? null;
+        const fermeDonnees = fermeDesDonnees(e);
+        if (fermeRefus !== null && fermeRefus === fermeDonnees && fermes.has(fermeRefus)) return e;
+        if (e.donnees === null) return e;
+        const sansFerme = { ...e.donnees };
+        delete sansFerme.ferme_id;
+        return { table: e.table, donnees: sansFerme };
+      });
       const resumes = await resumerSaisies(db, aResumer, fermes);
       const lignes = paquet.map(([e, r], i) => ligneRefus(e, utilisateurId, fermes, r, resumes[i] ?? RESUME_VIDE));
       try {
