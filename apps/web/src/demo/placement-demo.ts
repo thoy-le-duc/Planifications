@@ -46,17 +46,17 @@ interface DescriptionBatiment {
 }
 
 const BATIMENTS: readonly DescriptionBatiment[] = [
-  { id: 0xb1, nom: 'Serre à chapelles', type: 'serre_chapelle', longueurM: 36, largeurM: 16, hauteurM: 4.5, u: -17, v: 0, cap: CAP, zone: 'Serre' },
+  { id: 0xb1, nom: 'Serre à chapelles', type: 'serre_chapelle', longueurM: 36, largeurM: 16, hauteurM: 4.5, u: -17, v: 0, cap: CAP, zone: 'Serre M1' },
   { id: 0xb2, nom: 'Tunnel 1', type: 'serre_tunnel', longueurM: 32, largeurM: 9.2, hauteurM: 3.5, u: 0, v: 0, cap: CAP, zone: 'Tunnel 1' },
   { id: 0xb3, nom: 'Tunnel 2', type: 'serre_tunnel', longueurM: 32, largeurM: 6.4, hauteurM: 3.2, u: 14, v: -2, cap: CAP, zone: 'Tunnel 2' },
-  { id: 0xb4, nom: 'Serre des fraises', type: 'serre_tunnel', longueurM: 34, largeurM: 4.5, hauteurM: 3, u: 24, v: 0, cap: CAP, zone: 'Serre 1' },
+  { id: 0xb4, nom: 'Serre des fraises', type: 'serre_tunnel', longueurM: 34, largeurM: 4.5, hauteurM: 3, u: 24, v: 0, cap: CAP, zone: 'Serre fraises' },
   { id: 0xb5, nom: 'Magasin', type: 'magasin', longueurM: 16, largeurM: 8, hauteurM: 4.2, u: -6, v: -36, cap: CAP_PERPENDICULAIRE, zone: null },
   { id: 0xb6, nom: 'Hangar à matériel', type: 'hangar', longueurM: 20, largeurM: 9, hauteurM: 5.5, u: 18, v: -38, cap: CAP_PERPENDICULAIRE, zone: null },
 ];
 
 /** Planches des zones abritées : position (x', y') dans le repère de la serre, cap relatif 0 (le long de la serre). */
 const PLANCHES_ABRITEES: Readonly<Record<string, readonly (readonly [string, number, number])[]>> = {
-  Serre: [
+  'Serre M1': [
     ['C2-P01', -5, 0],
     ['C3-P01', 2, 0],
     ['C3-P02', 5, 0],
@@ -69,7 +69,7 @@ const PLANCHES_ABRITEES: Readonly<Record<string, readonly (readonly [string, num
     ['T2-P03', 0, 0],
     ['T2-P05', 1.1, 0],
   ],
-  'Serre 1': [['S1-G01', 0, 0]],
+  'Serre fraises': [['S1-G01', 0, 0]],
 };
 
 /** Le champ : un L de 26 m sur 36 m dans le repère des serres, centré 52 m au nord, et ses rangs (u, de gauche à droite). */
@@ -87,6 +87,9 @@ export function placerLaDemo(tables: Tables): Map<string, Ligne[]> {
   for (const [nom, lignes] of tables) sortie.set(nom, [...lignes]);
   const ferme = sortie.get('ferme')?.[0];
   if (ferme === undefined) return sortie;
+  // Noms parlants et uniques pour la démo (les jeux de test partagés les appellent « Serre » et « Serre 1 »).
+  const RENOMMAGES: Readonly<Record<string, string>> = { Serre: 'Serre M1', 'Serre 1': 'Serre fraises' };
+  sortie.set('zone', modifier(sortie.get('zone'), (l) => (typeof l.nom === 'string' && Object.hasOwn(RENOMMAGES, l.nom) && !l.zone_parente_id ? { ...l, nom: RENOMMAGES[l.nom] ?? l.nom } : l)));
   const zones = sortie.get('zone') ?? [];
   const zoneParNom = new Map(zones.filter((z) => z.zone_parente_id === null || z.zone_parente_id === undefined).map((z) => [texte(z.nom), texte(z.id)]));
   const horodatage = texte(ferme.cree_le);

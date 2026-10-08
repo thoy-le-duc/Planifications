@@ -128,7 +128,7 @@ const ECART_PARTIE_PLACEE = 10;
 const COULEUR_BATIMENT: Readonly<Record<BatimentPlan['type'], string>> = {
   serre_tunnel: COULEURS.surface,
   serre_chapelle: COULEURS.surface,
-  hangar: COULEURS.tertiaire,
+  hangar: COULEURS.foretClair,
   magasin: COULEURS.orange,
   autre: COULEURS.trait,
 };

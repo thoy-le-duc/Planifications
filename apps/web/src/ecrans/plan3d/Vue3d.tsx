@@ -186,6 +186,12 @@ function Batiments({ scene }: { readonly scene: Scene }) {
   const nefs = serres.reduce((n, b) => n + b.nefs, 0);
   const arceaux = serres.reduce((n, b) => n + b.arceaux.length * b.nefs, 0);
   const formes = useMemo(() => ({ arceau: geometrieArceau(), bache: geometrieBache(), bout: geometrieBout(), murs: geometrieMurs(), toit: geometrieToit() }), []);
+  useEffect(
+    () => () => {
+      for (const g of Object.values(formes)) g.dispose();
+    },
+    [formes],
+  );
   const opacite = serres[0]?.opacite ?? 0.2;
   const couleurBache = serres[0]?.couleur ?? COULEURS.surface;
   const mArceaux = useRef<InstancedMesh>(null);
@@ -247,7 +253,7 @@ function Batiments({ scene }: { readonly scene: Scene }) {
     <>
       {arceaux > 0 && (
         <instancedMesh key={`a${String(arceaux)}`} ref={mArceaux} args={[formes.arceau, undefined, arceaux]} frustumCulled={false}>
-          <meshLambertMaterial color={COULEURS.tertiaire} />
+          <meshLambertMaterial color={COULEURS.trait} />
         </instancedMesh>
       )}
       {nefs > 0 && (
@@ -266,7 +272,7 @@ function Batiments({ scene }: { readonly scene: Scene }) {
             <meshLambertMaterial />
           </instancedMesh>
           <instancedMesh key={`t${String(volumes.length)}`} ref={mToits} args={[formes.toit, undefined, volumes.length]} frustumCulled={false}>
-            <meshLambertMaterial color={COULEURS.secondaire} side={DoubleSide} />
+            <meshLambertMaterial color={COULEURS.tertiaire} side={DoubleSide} />
           </instancedMesh>
         </>
       )}
@@ -407,10 +413,19 @@ function Camera({
   }, 0);
 
   useEffect(() => {
-    const champ = (CHAMP_DEGRES * Math.PI) / 180;
-    // Le rayon englobe large (diagonale) : la ferme vue de biais remplit la toile à ce recul.
-    const distanceDepart = (rayon / Math.tan(champ / 2)) * 0.72;
-    const o: Orbite = orbite.current ?? { azimut: AZIMUT_DEPART, elevation: ELEVATION_DEPART, distance: distanceDepart, cible: centre };
+    // Vue de départ : celle de « Vue d'ensemble » (toute la ferme cadrée, marge de 10 %), vue de biais du côté de l'azimut de départ.
+    const cadre = toile.getBoundingClientRect();
+    const rapport = cadre.width > 0 && cadre.height > 0 ? cadre.width / cadre.height : 1;
+    const boiteFerme = boiteDe(sceneRef.current, { sorte: 'ferme' });
+    const poseDepart =
+      boiteFerme === null ? null : cadrage(boiteFerme, CHAMP_DEGRES, rapport, { x: Math.sin(AZIMUT_DEPART), z: Math.cos(AZIMUT_DEPART) });
+    const distanceDepart = poseDepart === null ? rayon * 3 : Math.hypot(poseDepart.position.x - poseDepart.cible.x, poseDepart.position.y - poseDepart.cible.y, poseDepart.position.z - poseDepart.cible.z);
+    const o: Orbite = orbite.current ?? {
+      azimut: AZIMUT_DEPART,
+      elevation: poseDepart === null ? ELEVATION_DEPART : Math.asin((poseDepart.position.y - poseDepart.cible.y) / distanceDepart),
+      distance: distanceDepart,
+      cible: poseDepart?.cible ?? centre,
+    };
     orbite.current = o;
 
     const poseDeOrbite = (): Pose => {
