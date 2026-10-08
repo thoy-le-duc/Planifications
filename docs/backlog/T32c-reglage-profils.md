@@ -8,7 +8,7 @@
 ## Règles
 
 - Dans la fiche de l'espèce : forme (liste), hauteur maximale (m), durée jusqu'à la hauteur maximale (jours), avec la valeur par défaut affichée à côté ; « Rétablir la valeur par défaut » en un tap.
-- Validation par le cœur (hauteur > 0 et ≤ 6 m, durée > 0, forme connue) ; messages en français ; écriture par la porte comme les autres champs de l'espèce, gérant seulement pour la bibliothèque de la ferme.
+- Validation par le cœur (hauteur > 0 et ≤ 6 m, durée > 0, forme connue) ; messages en français ; écriture par la porte comme les autres champs de l'espèce, tout membre de la ferme (droits ordinaires d'une espèce, décision du chef du 2026-10-08) pour la bibliothèque de la ferme.
 - Saisie rapide au pouce : champs numériques larges, pas de formulaire long.
 - Le profil suit la synchro et l'export déjà posés par T32a.
 - Rien d'IA ici : valeurs saisies à la main.

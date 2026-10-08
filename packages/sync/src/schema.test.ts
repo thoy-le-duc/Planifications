@@ -181,4 +181,26 @@ describe('schéma local', () => {
     ]);
     expect(regles).toMatch(/^ {2}batiment:\n {4}auto_subscribe: true\n/m);
   });
+
+  // ── T32a : profil de croissance (docs/backlog/T32a-croissance-profils.md, Q32 option A) ────
+
+  it('T32a : espece.profil_croissance, jsonb nullable dans Postgres, descend sur le téléphone en texte JSON', () => {
+    const colonne = tablesPostgres.find((t) => t.name === 'espece')?.columns.find((c) => c.name === 'profil_croissance');
+    expect(colonne?.getSQLType()).toBe('jsonb');
+    expect(colonne?.notNull, 'nul = profil par défaut : les fermes existantes ne changent pas').toBe(false);
+    expect(colonne?.hasDefault, 'aucun défaut en base : le défaut vit dans le cœur').toBe(false);
+    const especeLocale: Readonly<Record<string, string>> = TABLES_LOCALES.espece;
+    expect(especeLocale.profil_croissance).toBe('texte');
+  });
+
+  it('T32a : les flux espece envoient toutes les colonnes (profil compris), ceux de la ferme et ceux de la bibliothèque', () => {
+    const regles = readFileSync(new URL('../../../powersync/sync-config.yaml', import.meta.url), 'utf8');
+    const requetes = [...regles.matchAll(/query:[ \t]*(?:>-?[ \t]*\n((?:[ \t]{6,}[^\n]*\n?)+)|(SELECT[^\n]*))/g)]
+      .map((r) => (r[1] ?? r[2] ?? '').replace(/\s+/g, ' ').trim())
+      .filter((q) => /\bFROM espece\b/.test(q));
+    expect([...requetes].sort()).toEqual([
+      'SELECT * FROM espece WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)',
+      'SELECT * FROM espece WHERE ferme_id IS NULL',
+    ]);
+  });
 });

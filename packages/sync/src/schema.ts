@@ -23,7 +23,7 @@ export const TABLES_LOCALES = {
   batiment: { ferme_id: T, nom: T, type: T, longueur_m: 'reel', largeur_m: 'reel', hauteur_m: 'reel', centre_x_m: 'reel', centre_y_m: 'reel', orientation_deg: 'reel', zone_id: T, cree_le: T, modifie_le: T, supprime_le: T },
   campagne: { ferme_id: T, plantation_id: T, annee: 'entier', debut_recolte_prevu: T, fin_recolte_prevue: T, rendement_prevu: T, cree_le: T, modifie_le: T, supprime_le: T },
   emplacement: { ferme_id: T, zone_id: T, code: T, sorte: T, longueur_m: 'reel', largeur_m: 'reel', nombre_places: 'entier', actif_du: T, actif_au: T, remplace: T, placement_x_m: 'reel', placement_y_m: 'reel', orientation_deg: 'reel', cree_le: T, modifie_le: T, supprime_le: T },
-  espece: { ferme_id: T, famille_id: T, nom: T, categorie: T, perenne: 'entier', unite_recolte: T, delai_retour_minimal_ans: 'entier', delai_retour_conseille_ans: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
+  espece: { ferme_id: T, famille_id: T, nom: T, categorie: T, perenne: 'entier', unite_recolte: T, delai_retour_minimal_ans: 'entier', delai_retour_conseille_ans: 'entier', profil_croissance: T, cree_le: T, modifie_le: T, supprime_le: T },
   evenement: { ferme_id: T, type: T, date: T, horodatage: T, auteur_id: T, source: T, serie_id: T, campagne_id: T, emplacement_ids: T, note: T, photos: T, remplace_sorte: T, remplace_evenement_id: T, detail: T, cree_le: T, origine_id: T },
   famille: { ferme_id: T, nom: T, delai_retour_minimal_ans: 'entier', delai_retour_conseille_ans: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
   ferme: { nom: T, fuseau_horaire: T, position: T, origine_plan: T, unites: T, cree_le: T, modifie_le: T, supprime_le: T },

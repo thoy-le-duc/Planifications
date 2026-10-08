@@ -117,6 +117,9 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
         unite_recolte: texte('unité de récolte par défaut : kg, botte, pièce, barquette'),
         delai_retour_minimal_ans: entier('délai minimal avant de revenir sur la même parcelle, en années (remplace celui de la famille)'),
         delai_retour_conseille_ans: entier('délai conseillé avant de revenir sur la même parcelle, en années (remplace celui de la famille)'),
+        profil_croissance: json(
+          'profil de croissance réglé par la ferme, en JSON : forme de la plante, hauteur maximale (m), durée de croissance, allure, fin de cycle, cycle annuel des pérennes ; vide : profil par défaut de l’espèce',
+        ),
         ...HORODATAGE,
       },
       true,
