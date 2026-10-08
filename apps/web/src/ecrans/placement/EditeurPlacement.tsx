@@ -264,15 +264,15 @@ function identiteDe(porte: PorteDonnees): number {
 export function EditeurPlacement(p: ProprietesEditeurPlacement): ReactElement {
   const cle = `${p.fermeId}/${String(identiteDe(p.porte))}/${p.utilisateurId}`;
   // Le brouillon de l'éditeur sortant, lu au moment où la clé change : le nouveau le dit à l'écran.
-  const [brouillonOuvert, setBrouillonOuvert] = useState(false);
+  const [brouillonEnCours, setBrouillonEnCours] = useState(false);
   const [suivi, setSuivi] = useState({ cle, abandonne: false });
-  if (suivi.cle !== cle) setSuivi({ cle, abandonne: brouillonOuvert });
+  if (suivi.cle !== cle) setSuivi({ cle, abandonne: brouillonEnCours });
   return (
     <EditeurFerme
       key={cle}
       {...p}
       brouillonAbandonne={suivi.cle === cle && suivi.abandonne}
-      surBrouillon={setBrouillonOuvert}
+      surBrouillon={setBrouillonEnCours}
     />
   );
 }
@@ -539,6 +539,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   useEffect(() => {
     surBrouillon(brouillonOuvert);
   }, [surBrouillon, brouillonOuvert]);
+  // Le message d'abandon disparaît au premier geste (ou à la pose suivante) dans la nouvelle ferme.
+  const [abandonAffiche, setAbandonAffiche] = useState(brouillonAbandonne);
+  if (brouillonOuvert && abandonAffiche) setAbandonAffiche(false);
   const peutEnregistrer = modifie && !occupe && contoursInvalides.length === 0 && trace === null && !tropDeChangements;
 
   // Les tuiles ne sont demandées qu'une fois les données de la ferme lues (la vue est alors la bonne).
@@ -1037,6 +1040,10 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                       onError={() => {
                         tuileEnErreur(cleTuile(t));
                       }}
+                      onLoad={() => {
+                        const suivie = relances.current.get(cleTuile(t));
+                        if (suivie !== undefined) suivie.essais = 0;
+                      }}
                     />
                   ))}
                 </div>
@@ -1229,7 +1236,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 )}
               </>
             )}
-            {brouillonAbandonne && (
+            {abandonAffiche && (
               <p role="status" className="pl-message">
                 {MESSAGES_CONTOURS.brouillonAbandonne}
               </p>
@@ -1501,8 +1508,8 @@ function ChampsElement({ element, batiment, lecture, zones, surRectangle, surBat
       <Champ etiquette="x (m)" valeur={r.centre.x} desactive={lecture} surChange={(x) => { surRectangle({ ...r, centre: { x, y: r.centre.y } }); }} />
       <Champ etiquette="y (m)" valeur={r.centre.y} desactive={lecture} surChange={(y) => { surRectangle({ ...r, centre: { x: r.centre.x, y } }); }} />
       <Champ etiquette="Orientation (°)" valeur={r.orientationDeg} desactive={lecture} surChange={(o) => { surRectangle({ ...r, orientationDeg: normaliserCap(o) }); }} />
-      <Champ etiquette="Longueur (m)" valeur={r.longueurM} desactive={lecture || planche} surChange={(longueurM) => { surRectangle({ ...r, longueurM: Math.max(DIMENSION_MIN_M, longueurM) }); }} />
-      <Champ etiquette="Largeur (m)" valeur={r.largeurM} desactive={lecture || planche} surChange={(largeurM) => { surRectangle({ ...r, largeurM: Math.max(DIMENSION_MIN_M, largeurM) }); }} />
+      <Champ etiquette="Longueur (m)" valeur={r.longueurM} desactive={lecture || planche} minimum={DIMENSION_MIN_M} surChange={(longueurM) => { surRectangle({ ...r, longueurM }); }} />
+      <Champ etiquette="Largeur (m)" valeur={r.largeurM} desactive={lecture || planche} minimum={DIMENSION_MIN_M} surChange={(largeurM) => { surRectangle({ ...r, largeurM }); }} />
       {batiment !== undefined && (
         <>
           <Champ etiquette="Hauteur (m)" valeur={batiment.hauteurM} desactive={lecture} surChange={(hauteurM) => { surBatiment({ hauteurM }); }} />
