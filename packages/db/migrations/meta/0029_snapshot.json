@@ -1,5 +1,5 @@
 {
-  "id": "65867c94-e78c-4028-9ed6-4d42796d4329",
+  "id": "5aae4dfe-f3e6-433f-9c8d-8965228ee52c",
   "prevId": "a622a1a0-c798-4512-b2b1-f49ef064938d",
   "version": "7",
   "dialect": "postgresql",
@@ -897,7 +897,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"emplacement\".\"supprime_le\" IS NULL",
+          "where": "\"emplacement\".\"supprime_le\" IS NULL AND \"emplacement\".\"actif_au\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}

@@ -406,7 +406,7 @@ async function verifierLibre(tx: TransactionDb, table: TableEcrite, id: string, 
         ...(itineraires > 0 ? [quantite(itineraires, 'itinéraire', 'itinéraires')] : []),
         ...(assolements > 0 ? [assolementsDuPlan(assolements)] : []),
       ];
-      return parties.length > 0 ? invalide(`cette espèce est encore utilisée par ${enumerer(parties)} : supprimez d’abord ce qui l’utilise`, fermeId) : null;
+      return parties.length > 0 ? invalide(`cette espèce sert encore à ${enumerer(parties)}`, fermeId) : null;
     }
     case 'variete': {
       const utilisee = (await existe(tx, seriesActives('variete_id', id, fermeId))) || (await existe(tx, plantationsEnPlace('variete_id', id, fermeId, maintenant)));
@@ -438,7 +438,11 @@ async function verifierLibre(tx: TransactionDb, table: TableEcrite, id: string, 
 async function verifierEnBase(tx: TransactionDb, table: TableEcrite, l: Ligne, avant: Ligne | null, maintenant: Date): Promise<Refus | null> {
   const f = String(l.ferme_id);
   const retablie = avant?.supprime_le != null && l.supprime_le === null;
-  const change = (c: string): boolean => avant === null || retablie || JSON.stringify(l[c] ?? null) !== JSON.stringify(avant[c] ?? null);
+  const differe = (c: string): boolean => avant !== null && JSON.stringify(l[c] ?? null) !== JSON.stringify(avant[c] ?? null);
+  // T10t (relecture du chef, failles A et C) : un assolement qui change de saison (un assolement
+  // passé rangé dans le plan en cours) revérifie toutes ses références, comme un rétablissement.
+  const revue = table === 'assolement' && differe('saison_id');
+  const change = (c: string): boolean => avant === null || retablie || revue || differe(c);
   const valeur = (c: string): string | null => {
     const x = l[c];
     return typeof x === 'string' ? x : null;
@@ -477,15 +481,17 @@ async function verifierEnBase(tx: TransactionDb, table: TableEcrite, l: Ligne, a
     case 'emplacement': {
       refus = await verifier('zone_id', 'zone', false, 'zone', 'zone supprimée');
       const remplace = Array.isArray(l.remplace) ? (l.remplace as string[]) : [];
-      // Q27 (T10t) : code unique par zone parmi les emplacements actifs de la ferme, sans casse ni
+      // Q27 (T10t) : code unique par zone parmi les emplacements en service de la ferme, sans casse ni
       // espaces autour (comme l'index emplacement_zone_code_actif_idx, qui reste le dernier rempart) ;
       // vérifié à la création, au rétablissement, ou quand le code ou la zone change. Un emplacement
       // supprimé plus haut dans le même lot ne retient plus son code.
-      if (refus === null && l.supprime_le === null && (change('code') || change('zone_id'))) {
+      // T10t (décision D) : une planche retirée (actif_au renseigné) ne réserve plus son code ; la
+      // remettre en service (actif_au vidé) revérifie le code.
+      if (refus === null && l.supprime_le === null && l.actif_au === null && (change('code') || change('zone_id') || change('actif_au'))) {
         const pris = await existe(
           tx,
           sql`SELECT 1 FROM emplacement e WHERE e.ferme_id = ${f}::uuid AND e.zone_id = ${String(l.zone_id)}::uuid
-                AND lower(trim(e.code)) = lower(trim(${String(l.code)})) AND e.supprime_le IS NULL AND e.id <> ${String(l.id)}::uuid`,
+                AND lower(trim(e.code)) = lower(trim(${String(l.code)})) AND e.supprime_le IS NULL AND e.actif_au IS NULL AND e.id <> ${String(l.id)}::uuid`,
         );
         if (pris) refus = invalide('ce code existe déjà dans cette zone : choisissez-en un autre', f);
       }
@@ -528,8 +534,34 @@ async function verifierEnBase(tx: TransactionDb, table: TableEcrite, l: Ligne, a
       }
       break;
     }
+    case 'saison': {
+      // T10t (décision B) : prolonger une saison terminée (sa fin passe d'avant le jour à ce jour ou
+      // après, jour du fuseau de la ferme) remet son plan en cours : refusé si des assolements actifs
+      // de ce plan désignent une zone, un emplacement ou une espèce supprimés, ou une espèce dont la
+      // famille n'est plus la leur (l'historique peut l'avoir laissé ainsi).
+      const finAvant = avant === null ? null : avant.fin;
+      if (avant !== null && typeof finAvant === 'string' && typeof l.fin === 'string' && differe('fin')) {
+        const jour = jourDeLaFerme(f, maintenant);
+        const prolongee = await existe(tx, sql`SELECT 1 WHERE ${finAvant}::date < ${jour} AND ${jour} <= ${l.fin}::date`);
+        if (prolongee) {
+          const n = await compter(
+            tx,
+            sql`SELECT 1 FROM assolement a
+                LEFT JOIN zone z ON z.id = a.zone_id
+                LEFT JOIN emplacement em ON em.id = a.emplacement_id
+                LEFT JOIN espece sp ON sp.id = a.espece_id
+                WHERE a.saison_id = ${String(l.id)}::uuid AND a.ferme_id = ${f}::uuid AND a.supprime_le IS NULL
+                  AND (z.supprime_le IS NOT NULL OR em.supprime_le IS NOT NULL OR sp.supprime_le IS NOT NULL
+                       OR (sp.id IS NOT NULL AND sp.famille_id IS DISTINCT FROM a.famille_id))`,
+          );
+          if (n > 0) {
+            refus = invalide(`prolonger cette saison remettrait en cours ${quantite(n, 'assolement', 'assolements')} sur un élément supprimé ou une espèce changée de famille`, f);
+          }
+        }
+      }
+      break;
+    }
     case 'famille':
-    case 'saison':
       break;
   }
   if (refus !== null) return refus;
