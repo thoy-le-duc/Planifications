@@ -6,7 +6,7 @@
  * Repère : mètres, x est, y nord. Orientation : cap en degrés, sens horaire depuis le nord ; l'axe
  * de la longueur est au cap θ, la largeur à sa droite (θ + 90°), comme `coinsEmprise` du cœur.
  */
-import { depuisRepereZone, versRepereZone } from '@planif/core';
+import { depuisRepereZone, versRepereZone } from './coeur.ts';
 import type { Point } from './tuiles.ts';
 
 export interface RectanglePlace {

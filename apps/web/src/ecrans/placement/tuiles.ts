@@ -7,7 +7,7 @@
  * local → écran) et sa taille est la distance à la tuile voisine : la photo reste collée au repère
  * de la ferme (à 1 px près, même à plusieurs kilomètres de l'origine), sans trou entre tuiles.
  */
-import { RAYON_TERRESTRE_M, versGeographique, versLocal } from '@planif/core';
+import { RAYON_TERRESTRE_M, versGeographique, versLocal } from './coeur.ts';
 
 export interface Position {
   readonly latitude: number;

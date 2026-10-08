@@ -2,7 +2,7 @@
  * Lectures de l'éditeur de placement (T28b) : requêtes surveillées de la porte et conversion des
  * lignes locales (snake_case, JSON en texte) en objets typés. Une ligne illisible est écartée.
  */
-import { TYPES_BATIMENT, type TypeBatiment } from '@planif/core';
+import { TYPES_BATIMENT, type TypeBatiment } from './coeur.ts';
 import type { PorteDonnees, RequeteSurveillee } from '@planif/sync';
 import type { Position, Point } from './tuiles.ts';
 

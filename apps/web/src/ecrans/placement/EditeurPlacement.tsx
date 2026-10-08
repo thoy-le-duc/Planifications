@@ -11,9 +11,10 @@
  * réseau, le fond est un quadrillage de 10 m et tout le reste marche.
  */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactElement } from 'react';
-import { creerGenerateurId, repereZone, TYPES_BATIMENT, versGeographique, versLocal, type GenerateurId, type TypeBatiment } from '@planif/core';
+import { creerGenerateurId, type GenerateurId } from '@planif/core/identifiants';
 import type { ChangementPlacement, PorteDonnees } from '@planif/sync';
 import './placement.css';
+import { repereZone, TYPES_BATIMENT, versGeographique, versLocal, type TypeBatiment } from './coeur.ts';
 import { changementsDuBrouillon } from './brouillon.ts';
 import { Champ, garderLeFocus, Modale } from './composants.tsx';
 import {
