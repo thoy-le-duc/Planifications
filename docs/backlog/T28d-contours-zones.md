@@ -17,9 +17,9 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests des gestes en fonctions pures : ajouter, déplacer, retirer un sommet ; retirer sous 3 refusé ; fermeture du tracé.
-- [ ] e2e : tracer une zone en L de 6 sommets, enregistrer, annuler → retour exact ; recharger → contour conservé.
-- [ ] e2e : croiser deux côtés → message et « Enregistrer » inactif.
-- [ ] e2e clavier seul : déplacer un sommet de 1 m et enregistrer.
+- [x] Tests des gestes en fonctions pures : ajouter, déplacer, retirer un sommet ; retirer sous 3 refusé ; fermeture du tracé.
+- [x] e2e : tracer une zone en L de 6 sommets, enregistrer, annuler → retour exact ; recharger → contour conservé.
+- [x] e2e : croiser deux côtés → message et « Enregistrer » inactif.
+- [x] e2e clavier seul : déplacer un sommet de 1 m et enregistrer.
 
 **Hors périmètre** : trous dans une zone, aimantation sur les bords de la photo, import d'un contour cadastral.
