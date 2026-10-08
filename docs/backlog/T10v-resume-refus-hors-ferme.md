@@ -15,11 +15,11 @@
 
 ## Critères d'acceptation
 
-- [ ] Test d'intégration : un PATCH forgé sur un id inexistant, avec `ferme_id` de la ferme B (dont l'utilisateur est membre) et `serie_id` d'une série de B, produit un refus sans ferme (`ferme_id` NULL) dont `saisie_culture` est NULL.
-- [ ] Test d'intégration : un PATCH forgé sur une ligne de la ferme A (dont l'utilisateur est membre, comme B) avec `ferme_id` B et `serie_id` d'une série de B produit un refus rangé sous A dont `saisie_culture` est NULL.
-- [ ] Test témoin inchangé : un refus d'un événement de la ferme B, pour un membre de B, garde la culture de B (`resume-refus.integration.test.ts`).
-- [ ] Test : après retrait de l'adhésion à B, le refus de la ferme A ne contient plus rien de B (vérifié par la synchro de T10u).
-- [ ] Aucun test existant modifié pour passer ; `pnpm verif` passe en entier.
+- [x] Test d'intégration : un PATCH forgé sur un id inexistant, avec `ferme_id` de la ferme B (dont l'utilisateur est membre) et `serie_id` d'une série de B, produit un refus sans ferme (`ferme_id` NULL) dont `saisie_culture` est NULL.
+- [x] Test d'intégration : un PATCH forgé sur une ligne de la ferme A (dont l'utilisateur est membre, comme B) avec `ferme_id` B et `serie_id` d'une série de B produit un refus rangé sous A dont `saisie_culture` est NULL.
+- [x] Test témoin inchangé : un refus d'un événement de la ferme B, pour un membre de B, garde la culture de B (`resume-refus.integration.test.ts`).
+- [x] Test : après retrait de l'adhésion à B, le refus de la ferme A ne contient plus rien de B (vérifié par la synchro de T10u).
+- [x] Aucun test existant modifié pour passer ; `pnpm verif` passe en entier.
 - [ ] Relecture jusqu'à zéro faille d'isolement entre fermes (modèle Opus, voir `docs/boucle.md`).
 
 ## Hors périmètre

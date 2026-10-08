@@ -22,7 +22,9 @@
  *                                      en est membre accepté au moment du lot (décision du chef :
  *                                      une série de B désignée par un événement déclaré en A, même
  *                                      si l'utilisateur est membre des deux, donne NULL ; un invité
- *                                      pas encore accepté aussi) ; sinon NULL. Nettoyée :
+ *                                      pas encore accepté aussi) ; sinon NULL. T10v : la ferme du
+ *                                      refus (ligne écrite) doit aussi être celle de l'événement,
+ *                                      sinon NULL (resume-refus-hors-ferme.integration.test.ts). Nettoyée :
  *                                      aucun caractère de contrôle ni séparateur de ligne
  *                                      (\p{Cc}, \p{Zl}, \p{Zp}), espaces de bord retirés,
  *                                      LONGUEUR_MAX_CULTURE (80) caractères au plus ; vide → NULL.
