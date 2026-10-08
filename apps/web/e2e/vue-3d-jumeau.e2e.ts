@@ -9,8 +9,8 @@ import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { MARQUES_3D, TESTID_3D, type ModuleScene } from '../src/ecrans/plan3d/test/contrat.ts';
 import { type CibleVol, type ModuleCadrage, TESTID_3D_CAMERA } from '../src/ecrans/plan3d/test/contrat-camera.ts';
 import { TESTID_3D_JUMEAU, type PlanJumeau, type SceneJumeau, type ModuleJumeau } from '../src/ecrans/plan3d/test/contrat-jumeau.ts';
-import { decrireDefilement, decrireSerie, jugerDefilement, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement } from './outils.ts';
-import { arreterImages, BORNES_DEMO, BORNES_JUMEAU_T07, demarrerImages, instrumenter3d, verifierGardeFous } from './fluidite-3d.ts';
+import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement } from './outils.ts';
+import { arreterImages, BORNES_DEMO, BORNES_JUMEAU_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous } from './fluidite-3d.ts';
 
 /**
  * T28c — jumeau 3D, de bout en bout, sur ordinateur (Chromium 1280 × 800, WebGL logiciel).
@@ -278,16 +278,22 @@ test('jumeau 3D : grande ferme de T07 placée, ordinateur, WebGL', async ({ page
     expect(Number(await toile(page).getAttribute('data-rendus')), 'images dessinées pendant 1 s de repos').toBe(avant);
   });
 
-  await test.step('navigation au pointeur : 5 passages, au plus 2 images perdues d’affilée', async () => {
+  await test.step('navigation au pointeur : 5 passages, aucun intervalle au-delà du seuil relatif au plancher', async () => {
+    // Plancher du rendu logiciel dans ce lancement : l'intervalle fautif en dépend (fluidite-3d.ts).
+    const b = await toile(page).boundingBox();
+    if (b === null) throw new Error('toile 3D sans boîte');
+    const plancher = await mesurerPlancher(page, b.width, b.height, IMAGES_PERDUES_MAX);
+    console.log(`plancher du rendu logiciel : intervalle médian ${plancher.medianeMs.toFixed(1)} ms, intervalle fautif au-delà de ${plancher.seuilFautifMs.toFixed(1)} ms`);
+    expect(plancher.medianeMs, 'plancher mesuré').toBeGreaterThan(0);
     const passages: (PassageDefilement & { rendus: number })[] = [];
     await demarrerImages(page);
     for (let i = 0; i < REPETITIONS_MESURE; i += 1) passages.push(await glisserUneFois(page, i % 2 === 0 ? 1 : -1));
     verifierGardeFous('navigation du jumeau 3D', await arreterImages(page), BORNES_JUMEAU_T07, IMAGES_PAR_PASSAGE);
-    const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
-    console.log(decrireDefilement('navigation du jumeau 3D', verdict));
+    const verdict = jugerDefilementRelatif(passages, plancher.seuilFautifMs, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
+    console.log(decrireRelatif('navigation du jumeau 3D', plancher, verdict));
     for (const [i, p] of passages.entries()) expect(p.rendus, `passage ${String(i + 1)} : la caméra a bougé`).toBeGreaterThan(IMAGES_PAR_PASSAGE / 4);
-    expect(verdict.passagesSaccades, 'passages qui perdent plus de 2 images d’affilée').toBeLessThan(PASSAGES_SACCADES_ECHEC);
-    expect(verdict.rafalesTotal, 'intervalles au-delà de 2 images perdues').toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
+    expect(verdict.passagesSaccades, 'passages dont un intervalle dépasse le seuil relatif au plancher').toBeLessThan(PASSAGES_SACCADES_ECHEC);
+    expect(verdict.fautifsTotal, 'intervalles au-delà du seuil').toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
     expect(verdict.fluide).toBe(true);
   });
 
