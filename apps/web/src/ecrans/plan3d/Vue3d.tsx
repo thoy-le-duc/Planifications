@@ -25,7 +25,7 @@ import { Component, memo, useCallback, useEffect, useId, useLayoutEffect, useMem
 import { AmbientLight, BoxGeometry, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
 import type { Plan } from '../plan/calculs.ts';
 import { COULEURS, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
-import { boiteDe, cadrage, demarrerVol, empriseDe, poseAu, type CibleVol, type Point3, type Pose, type Vol } from './cadrage.ts';
+import { boiteDe, cadrage, demarrerVol, empriseDe, meilleureVueDeFerme, poseAu, pointsDeFerme, type CibleVol, type Point3, type Pose, type Vol } from './cadrage.ts';
 import { empreinteDe, geometrieArceau, geometrieBache, geometrieBout, geometrieMurs, geometrieSol, geometrieToit } from './formes.ts';
 import { boiteSousRayon, type BoiteZone } from './pointage.ts';
 import {
@@ -416,12 +416,11 @@ function Camera({
     // Vue de départ : celle de « Vue d'ensemble » (toute la ferme cadrée, marge de 10 %), vue de biais du côté de l'azimut de départ.
     const cadre = toile.getBoundingClientRect();
     const rapport = cadre.width > 0 && cadre.height > 0 ? cadre.width / cadre.height : 1;
-    const boiteFerme = boiteDe(sceneRef.current, { sorte: 'ferme' });
-    const poseDepart =
-      boiteFerme === null ? null : cadrage(boiteFerme, CHAMP_DEGRES, rapport, { x: Math.sin(AZIMUT_DEPART), z: Math.cos(AZIMUT_DEPART) });
+    const vueDepart = meilleureVueDeFerme(pointsDeFerme(sceneRef.current), CHAMP_DEGRES, rapport, AZIMUT_DEPART);
+    const poseDepart = vueDepart?.pose ?? null;
     const distanceDepart = poseDepart === null ? rayon * 3 : Math.hypot(poseDepart.position.x - poseDepart.cible.x, poseDepart.position.y - poseDepart.cible.y, poseDepart.position.z - poseDepart.cible.z);
     const o: Orbite = orbite.current ?? {
-      azimut: AZIMUT_DEPART,
+      azimut: vueDepart?.azimut ?? AZIMUT_DEPART,
       elevation: poseDepart === null ? ELEVATION_DEPART : Math.asin((poseDepart.position.y - poseDepart.cible.y) / distanceDepart),
       distance: distanceDepart,
       cible: poseDepart?.cible ?? centre,
