@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T28g : l'éditeur rend le focus à la fermeture
+
+- **Fait** : à la fermeture de l'éditeur, le focus revient sur « Modifier le plan » de la 3D (celui du moment : encart ou barre d'outils), à défaut sur la toile `toile-3d` ; dans l'onglet Ferme, sur « Placer sur la photo aérienne ». L'encart `encart-placement` est en `role="status"` (sans focus) et cite la zone après « Aller à <zone> ». Tests `placement` verts (198) ; `pnpm verif` : voir la PR.
+- **Décidé** : écarts de libellés tranchés : le bouton d'origine de la 3D est « Modifier le plan » (`modifier-plan`), pas « Ouvrir l'éditeur » (qui n'existe pas) ; repli résolu à la fermeture (pas de ref périmée). Mécanisme comme T28e : drapeau posé à la fermeture, focus dans un effet après le rendu, pas de setTimeout. Pas d'annonce sur ferme déjà placée (hors périmètre).
+- **Bloquant** : rien.
+
 ## 2026-10-08 — T33 : un seul jeu e2e à la fois
 
 - **Fait** : `scripts/verrou-e2e.sh` (flock sur `${TMPDIR:-/tmp}/planifications-e2e.lock`, message « en attente d'un autre jeu e2e » tout de suite, délai maximal 1 800 s, code de sortie de la commande renvoyé tel quel) branché sur `e2e` et `e2e:demo` (`apps/web`) et sur `e2e:synchro` (racine). `pnpm verif` complet vert (3 924 tests unitaires ; e2e 83 + 10 passés, sans relance). Test manuel : le second jeu affiche l'attente, puis démarre après la fin du premier.
