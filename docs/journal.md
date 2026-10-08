@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T33 : un seul jeu e2e à la fois
+
+- **Fait** : `scripts/verrou-e2e.sh` (flock sur `${TMPDIR:-/tmp}/planifications-e2e.lock`, message « en attente d'un autre jeu e2e » tout de suite, délai maximal 1 800 s, code de sortie de la commande renvoyé tel quel) branché sur `e2e` et `e2e:demo` (`apps/web`) et sur `e2e:synchro` (racine). `pnpm verif` complet vert (3 924 tests unitaires ; e2e 83 + 10 passés, sans relance). Test manuel : le second jeu affiche l'attente, puis démarre après la fin du premier.
+- **Décidé** : une seule prise de verrou, dans `apps/web` ; les `e2e` racine passent par le filtre, donc pas de double prise. Le descripteur du verrou est fermé pour la commande (`9>&-`) : aucun processus enfant ne le garde. Aucun seuil, `budget.json` ni `*.e2e.ts` modifiés.
+- **Bloquant** : flock n'existe pas tel quel sur macOS : le script s'y arrête avec un message clair, sans lancer le jeu. La boucle tourne sous Linux, mais un poste macOS aurait besoin d'un autre verrou (`lockf` ou `mkdir`).
+
 ## 2026-10-08 — T32a : croissance des cultures, profils et calcul (moteur)
 
 - **Fait** : moteur pur `packages/core/src/croissance` (aucun import hors du cœur, ni réseau, ni IA, ni horloge) : `validerProfilCroissance` (règles et ordre du contrat, ne lève jamais), `croissanceA` (annuelles : levée, croissance, pleine production, fin, la date réelle remplace la prévue, aucune fin inventée sans date de fin), `croissancePerenneA` (débourrement, pleine végétation, repos sur la campagne de l'année ; sans cycle annuel, touffe haute fixe), 44 profils par défaut (synonymes « Salade », « Fraise », « Chou »…) et un profil générique, `profilEffectif` (réglage de la ferme, sinon défaut). Colonne `espece.profil_croissance` (jsonb nul = défaut, CHECK « nul ou objet », migration 0030 générée par drizzle-kit après la 0029 de T10t, aucune ligne réécrite), schéma du téléphone (texte JSON), flux `espece` inchangés (`SELECT *`), export JSON + CSV décrit dans LISEZMOI.txt, validation par le cœur côté serveur (hors bornes : tout l'envoi refusé, précision en français). Modèle de données v1.x (section « 2 bis. Croissance des cultures ») et `packages/db/README.md` à jour. Le moteur n'entre pas au démarrage (71 Kio inchangés).
