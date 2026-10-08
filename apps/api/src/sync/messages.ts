@@ -10,7 +10,7 @@
  *   d'après leur code (et leur champ), leur code et leur champ vont au journal. Le message du cœur
  *   n'y va pas : il peut citer une valeur saisie (date, quantité, libellé).
  */
-import type { CodeErreurPlacement, CodeErreurSaisie, ErreurPlacement, ErreurSaisie } from '@planif/core';
+import type { CodeErreurCroissance, CodeErreurPlacement, CodeErreurSaisie, ErreurCroissance, ErreurPlacement, ErreurSaisie } from '@planif/core';
 import type { MotifRefus, Refus } from './motifs.ts';
 
 /** Explication affichée telle quelle sur le téléphone, par motif. */
@@ -163,6 +163,8 @@ const LIBELLES_DES_CHAMPS: Readonly<Record<string, string>> = {
   centre_x_m: 'position',
   centre_y_m: 'position',
   origine_plan: 'point de départ du plan',
+  // T32a : profil de croissance d'une espèce (structure-lignes.ts).
+  profil_croissance: 'profil de croissance',
 };
 
 /** Libellé du champ (le plus précis connu, du dernier segment au premier), ou null. */
@@ -243,6 +245,32 @@ export function precisionDuPlacement(erreur: ErreurPlacement): string {
 /** Refus 'ecriture_invalide' d'une règle du placement : précision traduite, code et champ au journal. */
 export function refusDuPlacement(erreur: ErreurPlacement, fermeId: string | null): Refus {
   return { motif: 'ecriture_invalide', precision: precisionDuPlacement(erreur), detail: `placement ${erreur.code} champ ${erreur.champ ?? '-'}`, fermeId };
+}
+
+/**
+ * T32a : précision affichée pour une règle du profil de croissance (validerProfilCroissance du
+ * cœur), d'après son code. Comme pour le placement, le message du cœur n'est pas relayé.
+ */
+const PRECISIONS_DU_PROFIL: Readonly<Record<CodeErreurCroissance, string>> = {
+  trop_long: 'le profil de croissance de cette culture est trop long',
+  entree_invalide: 'le profil de croissance de cette culture est illisible',
+  champ_inconnu: "le profil de croissance contient une information que l'appli ne connaît pas",
+  champ_manquant: 'il manque une information au profil de croissance (forme, hauteur, durée, allure ou fin de cycle)',
+  forme_inconnue: 'la forme de la plante du profil de croissance est inconnue',
+  hauteur_invalide: 'la hauteur maximale de la culture doit être plus grande que zéro et ne pas dépasser 6 mètres',
+  duree_invalide: 'la durée de croissance se donne en jours, de 1 à 730, ou en part du cycle, plus de 0 et 1 au plus',
+  allure_inconnue: 'l’allure de la croissance est inconnue : droite ou en S',
+  fin_de_cycle_inconnue: 'la hauteur en fin de cycle est inconnue : conservée ou baissée',
+  cycle_annuel_invalide: 'le cycle annuel demande un jour de débourrement avant le jour de repos, dans la même année',
+};
+
+export function precisionDuProfil(erreur: ErreurCroissance): string {
+  return PRECISIONS_DU_PROFIL[erreur.code];
+}
+
+/** Refus 'ecriture_invalide' d'une règle du profil de croissance : précision traduite, code et champ au journal. */
+export function refusDuProfil(erreur: ErreurCroissance, fermeId: string | null): Refus {
+  return { motif: 'ecriture_invalide', precision: precisionDuProfil(erreur), detail: `croissance ${erreur.code} champ ${erreur.champ ?? '-'}`, fermeId };
 }
 
 /** Un `id` glissé dans les données (l'id est celui de l'écriture) : refusé comme une colonne inconnue du cœur. */
