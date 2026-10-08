@@ -6,7 +6,7 @@ import { remplirJeuT07 } from '../../../packages/sync/src/test/jeu-t07.ts';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { TESTID_3D, type ModuleScene, type Plan3d, type Scene, type SocleScene } from '../src/ecrans/plan3d/test/contrat.ts';
-import { DUREE_VOL_MAX_MS, MARQUES_3D_CAMERA, TESTID_3D_CAMERA as T, type CibleVol, type Direction, type ModuleCadrage, type Pose } from '../src/ecrans/plan3d/test/contrat-camera.ts';
+import { DUREE_VOL_MAX_MS, MARQUES_3D_CAMERA, TESTID_3D_CAMERA as T, AZIMUT_DEPART, type CibleVol, type Direction, type ModuleCadrage, type ModuleVueFerme, type Pose } from '../src/ecrans/plan3d/test/contrat-camera.ts';
 import { distance, projeter, versPixel } from '../src/ecrans/plan3d/test/projection.ts';
 import { decrireDefilement, jugerDefilement, surveillerCsp, type PassageDefilement } from './outils.ts';
 
@@ -156,6 +156,16 @@ async function cadrageAttendu(page: Page, attendu: Attendu, cible: CibleVol, dep
   const champ = await lireNombre(page, 'data-champ');
   const { width, height } = await boiteToile(page);
   return attendu.cadrage.cadrage(boite, champ, width / height, directionDe(depart));
+}
+
+/** T28c : « Vue d'ensemble » = la vue d'ouverture, `meilleureVueDeFerme` sur les vrais coins de la ferme. */
+async function vueDEnsembleAttendue(page: Page, attendu: Attendu): Promise<Pose> {
+  const m = (await import(/* @vite-ignore */ CHEMIN_CADRAGE)) as ModuleCadrage & ModuleVueFerme;
+  const champ = await lireNombre(page, 'data-champ');
+  const { width, height } = await boiteToile(page);
+  const vue = m.meilleureVueDeFerme(m.pointsDeFerme(attendu.scene), champ, width / height, AZIMUT_DEPART);
+  if (vue === null) throw new Error('rien à cadrer');
+  return vue.pose;
 }
 
 function verifierPose(reelle: Pose, voulue: Pose, nom: string): void {
@@ -422,9 +432,8 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
     expect(v.fin - v.clic.t).toBeLessThanOrEqual(DUREE_VOL_MAX_MS + MARGE_IMAGE_MS);
   });
 
-  await test.step('« Vue d’ensemble » revient au cadrage de toute la ferme', async () => {
-    const depart = await lirePose(page);
-    const voulue = await cadrageAttendu(page, attendu, { sorte: 'ferme' }, depart);
+  await test.step('« Vue d’ensemble » revient exactement à la vue d’ouverture (T28c)', async () => {
+    const voulue = await vueDEnsembleAttendue(page, attendu);
     const v = await voler(page, 'ferme', () => boutonEnsemble(page).click());
     verifierPose(v.arrivee, voulue, 'cadrage de la ferme');
     expect(v.fin - v.clic.t).toBeLessThanOrEqual(DUREE_VOL_MAX_MS + MARGE_IMAGE_MS);
