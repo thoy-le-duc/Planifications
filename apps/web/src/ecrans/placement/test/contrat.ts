@@ -212,6 +212,10 @@ export interface ModuleEditeur {
 export const MESSAGES_PLACEMENT = {
   seulGerant: 'Seul le gérant peut placer les éléments de la ferme',
   horsLigne: 'Photo aérienne indisponible hors ligne',
+  /** Relecture : en ligne, mais toutes les tuiles affichées ont échoué. */
+  indisponible: 'Photo aérienne indisponible pour le moment',
+  /** Relecture : écriture faite, mais la relecture de la base a échoué (pas un refus). */
+  enregistreSansRelecture: 'Enregistré',
   ordinateur: 'à faire sur ordinateur',
   contourRemplace: 'Le contour de la zone sera remplacé par la serre',
 } as const;
@@ -229,8 +233,11 @@ export const ENTREE_PLACEMENT = 'Placer sur la photo aérienne';
  *   data-origine = 'latitude,longitude' de l'origine du plan enregistrée, '' sans origine.
  *   Contient un bouton « Fermer » (ou « Retour ») qui appelle surFermer.
  * `fond-photo` : les tuiles, des <img data-testid="tuile"> dont src = urlTuile(...) ; présent
- *   seulement en ligne. Une tuile qui ne se charge pas (événement error) fait passer en
- *   fond neutre. `mention-ign` : texte « © IGN », visible avec la photo.
+ *   seulement en ligne. Relecture du chef : une tuile qui ne se charge pas (événement error) est
+ *   masquée seule (retirée du DOM, ou attribut hidden, ou visibility:hidden / display:none), la
+ *   photo reste (data-fond 'photo', pas de message). Si TOUTES les tuiles affichées échouent en
+ *   ligne : fond neutre et message MESSAGES_PLACEMENT.indisponible (pas « hors ligne »).
+ *   `mention-ign` : texte « © IGN », visible avec la photo.
  * `fond-neutre` : quadrillage (1 carreau = 10 m) et message MESSAGES_PLACEMENT.horsLigne ; aucune
  *   tuile demandée. L'édition marche pareil.
  * `plan-placement` : la surface de dessin (SVG ou div) ; un clic (pointerdown + pointerup au même
@@ -265,6 +272,15 @@ export const ENTREE_PLACEMENT = 'Placer sur la photo aérienne';
  *   dernier enregistrement de la session non encore annulé, puis le précédent (pile).
  * Pendant un geste (glisser, pivoter, flèches, champs), RIEN n'est écrit.
  * Rejet de la porte : message role="alert" qui contient le message de la porte ; brouillon gardé.
+ * Relecture du chef (B1 et suivants, tests : ../robustesse.test.tsx) :
+ *   - changer de porte ou de fermeId sans démonter l'éditeur (ferme active changée par la
+ *     synchro) remet à zéro brouillon, sélection, « Annuler » et pile Ctrl+Z : rien de la ferme A
+ *     n'est jamais écrit par la porte de la ferme B ;
+ *   - « Fermer » est désactivé pendant une écriture ;
+ *   - écriture réussie mais relecture en échec : message qui contient
+ *     MESSAGES_PLACEMENT.enregistreSansRelecture, sans « refus » ni « Rien n’a été » ; « Annuler »
+ *     reste proposé et annule bien cette écriture ;
+ *   - annulation refusée par la porte : l'enregistrement reste dans la pile, Ctrl+Z réessaie.
  * Zone abritée qui a un contour : confirmation (texte MESSAGES_PLACEMENT.contourRemplace) ;
  *   « Confirmer » met au brouillon [{ sorte: 'zone', id, contour: null }, puis le bâtiment avec
  *   zone_id], écrits dans cet ordre en un seul appel.
