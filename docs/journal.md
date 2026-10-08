@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T10u : les refus d'une ferme quittée disparaissent du téléphone
+
+- **Fait** : dans `powersync/sync-config.yaml`, le flux `refus_synchro` ne sert plus à son auteur que les refus sans ferme (`ferme_id` nul) ou d'une ferme dont il est membre actif (`fermes_actives`). À la perte de l'adhésion, la synchro retire du téléphone les refus de cette ferme, résumé compris (noms de cultures…), même si le téléphone était hors ligne au retrait ; les refus d'une autre ferme dont il reste membre ne bougent pas. Prouvé contre le vrai PowerSync 1.26.1 (`refus-ferme-quittee.integration.test.ts`, `regles-synchro.integration.test.ts`). Les refus restent hors de l'export (T15).
+- **Décidé** (chef) : périmètre élargi à `powersync/` : c'est la synchro qui efface, pas le téléphone (un DELETE local partirait au serveur, qui le refuserait en `table_interdite`, et PowerSync remettrait la ligne). Un membre réintégré retrouve ses refus (légitime). Aucun test modifié ; aucun code du téléphone ni du schéma local à changer.
+- **Bloquant** : rien.
+
 ## 2026-10-08 — T31 : les tests de temps n’échouent plus au hasard
 
 - **Fait** : helper `packages/core/src/test/mesurer.ts` (échauffement, puis médiane de 7 mesures, chacune en min(mural, CPU du processus), version synchrone et asynchrone, avec son test ; si la médiane dépasse la borne, jusqu'à 3 manches, la meilleure gardée). Appliqué aux tests de temps qui mesuraient en mural seul ou une fois : `travaux` (×2), `conflits`, `semainier`, `import/performance`, `plan/calculs`. Les bornes (60, 50, 50, 30 ms, 15 s, 80 ms) sont inchangées.

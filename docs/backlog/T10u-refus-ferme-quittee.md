@@ -12,5 +12,5 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : un membre retiré d'une ferme ne voit plus aucun refus de cette ferme, même hors ligne au moment du retrait (effacé à la prochaine synchro).
-- [ ] Test : les refus d'une autre ferme dont il reste membre ne bougent pas.
+- [x] Test : un membre retiré d'une ferme ne voit plus aucun refus de cette ferme, même hors ligne au moment du retrait (effacé à la prochaine synchro).
+- [x] Test : les refus d'une autre ferme dont il reste membre ne bougent pas.
