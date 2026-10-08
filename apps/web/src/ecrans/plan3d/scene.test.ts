@@ -258,7 +258,7 @@ describe('T27 : entrées invalides, pureté, aucun calcul agronomique', () => {
     expect(vu).not.toMatch(/\d{4}-\d{2}-\d{2}/);
     expect(vu).not.toMatch(/conflit|debutJour|finJour|"du"|"au"|longueurM|largeurM/i);
     for (const v of m.versScene(PLAN, 1).volumes) {
-      expect(Object.keys(v).sort()).toEqual(['cleFamille', 'code', 'couleur', 'culture', 'hauteur', 'id', 'largeur', 'longueur', 'occupationId', 'x', 'z', 'zoneId']);
+      expect(Object.keys(v).sort()).toEqual(['angle', 'cleFamille', 'code', 'couleur', 'culture', 'hauteur', 'id', 'largeur', 'longueur', 'occupationId', 'placee', 'x', 'z', 'zoneId']);
     }
   });
 
