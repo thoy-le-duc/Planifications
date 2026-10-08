@@ -2,6 +2,11 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T28e : l'éditeur de placement se tient au clavier et dit ce qui se passe
+
+- **Fait** : en mode pose, Entrée ou le bouton « Poser au centre de la vue » pose le bâtiment au centre de la vue (brouillon, sélectionné) ; longueur et largeur du panneau bornées à 0,5 m ; message « Le brouillon en cours a été abandonné : la ferme active a changé. » ; la confirmation d'abri dit que les planches suivront la serre ; une tuile en erreur est redemandée après 4 s (3 relances au plus, une à la fois), sans attendre « en ligne ». Relecture de T28d : le focus ne saute plus sur « Tracer le contour » après un tracé abandonné, zone absente (le drapeau n'est levé que si la zone du tracé est affichée, et retombe dans `selectionner` / `choisirZoneListe`). Aucun calcul changé ; démarrage JS inchangé.
+- **Décidé** : `ZOOM_DEPART_SANS_POSITION` = 16 (proposition : trois niveaux sous le zoom 19, environ 2 m par pixel, de quoi retrouver sa commune ; dès que le point de départ est posé, la vue passe au zoom 19 autour du point cliqué). `DELAI_RELANCE_TUILE_MS` = 4 000, `ESSAIS_TUILE_MAX` = 3 (le retour « en ligne » remet les essais à zéro).
+
 ## 2026-10-08 — T10v : un refus ne porte plus le nom d'une culture d'une autre ferme
 
 - **Fait** : dans `apps/api/src/sync/upload.ts` (`enregistrerRefus`), le résumé ne reçoit `ferme_id` que si la ferme du refus (après le filtre M1) est non nulle, égale à `fermeDesDonnees(e)` (insensible à la casse) et dont l'utilisateur est membre accepté ; sinon le `ferme_id` forgé est retiré et `saisie_culture` est NULL (type, date, quantité, unité inchangés). Les 26 tests de `resume-refus-hors-ferme.integration.test.ts` passent sans modification ; témoin T10k inchangé.
