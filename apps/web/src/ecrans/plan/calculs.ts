@@ -21,6 +21,7 @@ import {
   type OccupantEmplacement,
   type PlaceOccupee,
   type SorteConflit,
+  type TypeBatiment,
 } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import type { CleFamille } from '../../ui/jetons.ts';
@@ -43,6 +44,8 @@ export interface DonneesPlan {
   readonly espece: readonly LigneLocale[];
   readonly variete: readonly LigneLocale[];
   readonly famille: readonly LigneLocale[];
+  /** Bâtiments de la ferme (T28c) : facultatif, une ferme qui ne place rien n'en a pas. */
+  readonly batiment?: readonly LigneLocale[];
 }
 
 export interface SaisonPlan {
@@ -84,10 +87,40 @@ export interface BarrePlan {
   readonly enConflit: boolean;
 }
 
+/** Point du repère de la ferme (T28a) : mètres, x vers l'est, y vers le nord. */
+export interface PointPlan {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** Placement d'une planche dans le repère de sa zone racine (T28a) ; l'orientation est relative à l'axe de la zone. */
+export interface PlacementPlan {
+  readonly x: number;
+  readonly y: number;
+  readonly orientationDeg: number;
+}
+
 export interface LigneZonePlan {
   readonly sorte: 'zone' | 'chapelle';
   readonly id: string;
   readonly nom: string;
+  /** T28c : contour de la zone (repère de la ferme), recopié de la base ; absent = zone sans contour. */
+  readonly contour?: readonly PointPlan[] | null;
+}
+
+/** Bâtiment non supprimé de la ferme (T28a), recopié de la base sans calcul (T28c). */
+export interface BatimentPlan {
+  readonly id: string;
+  readonly nom: string;
+  readonly type: TypeBatiment;
+  readonly longueurM: number;
+  readonly largeurM: number;
+  readonly hauteurM: number;
+  readonly centre: PointPlan;
+  /** Cap de la longueur, degrés, sens horaire depuis le nord. */
+  readonly orientationDeg: number;
+  /** Zone racine abritée, ou nul. */
+  readonly zoneId: string | null;
 }
 
 export interface LigneEmplacementPlan {
@@ -102,6 +135,8 @@ export interface LigneEmplacementPlan {
   readonly longueurM: number;
   /** Largeur de l'emplacement (m), nulle si non renseignée (T27). */
   readonly largeurM: number | null;
+  /** T28c : placement dans le repère de la zone racine, recopié de la base ; absent = rangement automatique. */
+  readonly placement?: PlacementPlan | null;
   readonly barres: readonly BarrePlan[];
   readonly conflits: readonly ConflitPlan[];
 }
@@ -113,6 +148,8 @@ export interface Plan {
   readonly semaines: readonly SemainePlan[];
   readonly semaineCourante: number | null;
   readonly lignes: readonly LignePlan[];
+  /** T28c : bâtiments non supprimés de la ferme (ordre : nom puis id) ; absent = aucun. */
+  readonly batiments?: readonly BatimentPlan[];
 }
 
 export interface OptionsPlan {
@@ -167,6 +204,50 @@ const texte = (v: Valeur): string => (typeof v === 'string' ? v : v === null || 
 const texteOuNul = (v: Valeur): string | null => (v === null || v === undefined ? null : texte(v));
 const nombre = (v: Valeur): number => (typeof v === 'number' ? v : Number(v));
 const nombreOuNul = (v: Valeur): number | null => (v === null || v === undefined ? null : nombre(v));
+
+/** Contour d'une zone : texte JSON `[{"x":…,"y":…},…]` de la base ; nul s'il est absent ou illisible (le moteur le valide à l'écriture). */
+function lireContour(v: Valeur): readonly PointPlan[] | null {
+  if (typeof v !== 'string' || v === '') return null;
+  try {
+    const brut: unknown = JSON.parse(v);
+    if (!Array.isArray(brut) || brut.length < 3) return null;
+    const points: PointPlan[] = [];
+    for (const p of brut as unknown[]) {
+      const x = (p as { x?: unknown } | null)?.x;
+      const y = (p as { y?: unknown } | null)?.y;
+      if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+      points.push({ x, y });
+    }
+    return points;
+  } catch {
+    return null;
+  }
+}
+
+/** Placement d'une planche : les trois colonnes ensemble, sinon nul (un placement partiel n'est pas un placement). */
+function lirePlacement(l: LigneLocale): PlacementPlan | null {
+  const x = nombreOuNul(l.placement_x_m);
+  const y = nombreOuNul(l.placement_y_m);
+  const orientationDeg = nombreOuNul(l.orientation_deg);
+  return x === null || y === null || orientationDeg === null || !Number.isFinite(x + y + orientationDeg) ? null : { x, y, orientationDeg };
+}
+
+const TYPES_BATIMENT_PLAN: ReadonlySet<string> = new Set<TypeBatiment>(['serre_tunnel', 'serre_chapelle', 'hangar', 'magasin', 'autre']);
+
+function versBatiment(l: LigneLocale): BatimentPlan {
+  const type = texte(l.type);
+  return {
+    id: texte(l.id),
+    nom: texte(l.nom),
+    type: TYPES_BATIMENT_PLAN.has(type) ? (type as TypeBatiment) : 'autre',
+    longueurM: nombre(l.longueur_m),
+    largeurM: nombre(l.largeur_m),
+    hauteurM: nombre(l.hauteur_m),
+    centre: { x: nombre(l.centre_x_m), y: nombre(l.centre_y_m) },
+    orientationDeg: nombre(l.orientation_deg),
+    zoneId: texteOuNul(l.zone_id),
+  };
+}
 
 /** Ligne `emplacement` locale → Emplacement de T01 (partagé avec le formulaire d'une série, T12). */
 export function versEmplacement(l: LigneLocale): Emplacement {
@@ -437,6 +518,7 @@ export function construirePlan(donnees: DonneesPlan, options: OptionsPlan): Plan
 
   function ligneEmplacement(e: LigneLocale, zoneId: string, chapelleId: string | null): LigneEmplacementPlan {
     const emplacement = versEmplacement(e);
+    const placement = lirePlacement(e);
     const siennes = occupationsPar.get(emplacement.id) ?? [];
     const occupations = siennes.map((o) => versOccupation(o, emplacement));
 
@@ -491,6 +573,7 @@ export function construirePlan(donnees: DonneesPlan, options: OptionsPlan): Plan
       chapelleId,
       longueurM: emplacement.longueurM,
       largeurM: emplacement.largeurM,
+      ...(placement === null ? {} : { placement }),
       barres,
       conflits,
     };
@@ -501,14 +584,20 @@ export function construirePlan(donnees: DonneesPlan, options: OptionsPlan): Plan
   for (const g of grouper(donnees, actifs)) {
     if (g.zoneId !== zoneCourante) {
       zoneCourante = g.zoneId;
-      lignes.push({ sorte: 'zone', id: g.zoneId, nom: texte(zones.get(g.zoneId)?.nom) });
+      const contour = lireContour(zones.get(g.zoneId)?.contour);
+      lignes.push({ sorte: 'zone', id: g.zoneId, nom: texte(zones.get(g.zoneId)?.nom), ...(contour === null ? {} : { contour }) });
     }
     if (g.chapelleId !== null) lignes.push({ sorte: 'chapelle', id: g.chapelleId, nom: texte(zones.get(g.chapelleId)?.nom) });
     const tries = [...g.lignes].sort((a, b) => comparerTexte(texte(a.code), texte(a.id), texte(b.code), texte(b.id)));
     for (const e of tries) lignes.push(ligneEmplacement(e, g.zoneId, g.chapelleId));
   }
 
-  return { saison, semaines, semaineCourante, lignes };
+  // Bâtiments (T28c) : recopiés, sans calcul ; le champ n'existe que si la ferme en a.
+  const batiments = (donnees.batiment ?? [])
+    .filter((b) => b.supprime_le === null || b.supprime_le === undefined)
+    .map(versBatiment)
+    .sort((a, b) => comparerTexte(a.nom, a.id, b.nom, b.id));
+  return { saison, semaines, semaineCourante, lignes, ...(batiments.length === 0 ? {} : { batiments }) };
 }
 
 // ── Lecture par la porte ─────────────────────────────────────────────────────────────────────
@@ -523,14 +612,16 @@ export async function chargerSaisons(porte: PorteDonnees, fermeId: string): Prom
 }
 
 /** Lignes qui décrivent la ferme : zones, emplacements, bibliothèque (espèces, variétés, familles). */
-type StructurePlan = Pick<DonneesPlan, 'zone' | 'emplacement' | 'espece' | 'variete' | 'famille'>;
+type StructurePlan = Pick<DonneesPlan, 'zone' | 'emplacement' | 'espece' | 'variete' | 'famille'> & { readonly batiment: readonly LigneLocale[] };
 /** Ce qui occupe les emplacements : occupations, et les séries et plantations qu'elles portent. */
 type OccupationsPlan = Pick<DonneesPlan, 'occupation' | 'serie' | 'plantation'>;
 
 /** Colonnes lues : seules celles dont le plan se sert (moins de données à faire passer du worker). */
 const COLONNES = {
-  zone: 'id, nom, zone_parente_id',
-  emplacement: 'id, ferme_id, zone_id, code, sorte, longueur_m, largeur_m, nombre_places, actif_du, actif_au, supprime_le',
+  zone: 'id, nom, zone_parente_id, contour',
+  emplacement:
+    'id, ferme_id, zone_id, code, sorte, longueur_m, largeur_m, nombre_places, actif_du, actif_au, supprime_le, placement_x_m, placement_y_m, orientation_deg',
+  batiment: 'id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, zone_id, supprime_le',
   occupation:
     'id, ferme_id, emplacement_id, serie_id, plantation_id, evenement_id, longueur_m, nombre_places, position_m, prevu_du, prevu_au, reel_du, reel_au, supprime_le',
   occupant: 'id, espece_id, variete_id',
@@ -539,14 +630,15 @@ const COLONNES = {
 
 /** Zones, emplacements et bibliothèque de la ferme (référence commune comprise : ferme_id nul). */
 async function lireStructure(porte: PorteDonnees, fermeId: string): Promise<StructurePlan> {
-  const [zone, emplacement, espece, variete, famille] = await Promise.all([
+  const [zone, emplacement, espece, variete, famille, batiment] = await Promise.all([
     porte.lire<LigneLocale>(`SELECT ${COLONNES.zone} FROM zone WHERE ferme_id = ?`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.emplacement} FROM emplacement WHERE ferme_id = ?`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.reference}, famille_id FROM espece WHERE ferme_id = ? OR ferme_id IS NULL`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.reference} FROM variete WHERE ferme_id = ? OR ferme_id IS NULL`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.reference} FROM famille WHERE ferme_id = ? OR ferme_id IS NULL`, [fermeId]),
+    porte.lire<LigneLocale>(`SELECT ${COLONNES.batiment} FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL`, [fermeId]),
   ]);
-  return { zone, emplacement, espece, variete, famille };
+  return { zone, emplacement, espece, variete, famille, batiment };
 }
 
 const marques = (n: number) => Array.from({ length: n }, () => '?').join(', ');
@@ -624,18 +716,19 @@ export interface DonneesDebutDePlan extends DonneesPlan {
  */
 export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, emplacements: number): Promise<DonneesDebutDePlan> {
   // Peu de requêtes : chacune coûte un aller-retour vers le worker de la base.
-  const [petites, tous] = await Promise.all([
+  const [petites, tous, batiment] = await Promise.all([
     porte.lire<LigneLocale>(
-      `SELECT 'zone' AS t, id, nom, zone_parente_id AS lien FROM zone WHERE ferme_id = ?1
-       UNION ALL SELECT 'espece', id, nom, famille_id FROM espece WHERE ferme_id = ?1 OR ferme_id IS NULL
-       UNION ALL SELECT 'variete', id, nom, NULL FROM variete WHERE ferme_id = ?1 OR ferme_id IS NULL
-       UNION ALL SELECT 'famille', id, nom, NULL FROM famille WHERE ferme_id = ?1 OR ferme_id IS NULL`,
+      `SELECT 'zone' AS t, id, nom, zone_parente_id AS lien, contour FROM zone WHERE ferme_id = ?1
+       UNION ALL SELECT 'espece', id, nom, famille_id, NULL FROM espece WHERE ferme_id = ?1 OR ferme_id IS NULL
+       UNION ALL SELECT 'variete', id, nom, NULL, NULL FROM variete WHERE ferme_id = ?1 OR ferme_id IS NULL
+       UNION ALL SELECT 'famille', id, nom, NULL, NULL FROM famille WHERE ferme_id = ?1 OR ferme_id IS NULL`,
       [fermeId],
     ),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.emplacement} FROM emplacement WHERE ferme_id = ?`, [fermeId]),
+    porte.lire<LigneLocale>(`SELECT ${COLONNES.batiment} FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL`, [fermeId]),
   ]);
   const de = (t: string) => petites.filter((l) => l.t === t);
-  const zones = de('zone').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null, zone_parente_id: l.lien ?? null }));
+  const zones = de('zone').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null, zone_parente_id: l.lien ?? null, contour: l.contour ?? null }));
   const espece = de('espece').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null, famille_id: l.lien ?? null }));
   const variete = de('variete').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null }));
   const famille = de('famille').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null }));
@@ -672,7 +765,7 @@ export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, empl
     fermeId,
     emplacement.map((e) => texte(e.id)),
   );
-  const bibliotheque = { zone: zones, espece, variete, famille };
+  const bibliotheque = { zone: zones, espece, variete, famille, batiment };
   return {
     ...bibliotheque,
     emplacement,
