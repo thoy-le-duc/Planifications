@@ -21,6 +21,9 @@
  * (src/ecrans/itineraires/test/ferme-itineraires.ts, datée relativement à `date`), dans la base
  * de SON utilisateur de test ; contrat : src/ecrans/itineraires/test/contrat.ts, « Amorçage ».
  *
+ * T28c — `?jeu=t07-place` : la même ferme, placée (origine du plan, serres, contours, bâtiments, planches ;
+ * packages/sync/src/test/placement-t07.ts), pour e2e/vue-3d-jumeau.e2e.ts.
+ *
  * T14b — `?jeu=import` : la ferme de l'import (src/ecrans/import/test/ferme-import.ts, dates fixes).
  * T10i — `?jeu=refus&date=AAAA-MM-JJ` : la ferme du jour (comme `?jeu=aujourdhui`) et 101 refus de
  * synchro (src/ecrans/ferme/test/refus.ts : 100 de l'utilisateur de test, datés d'avant l'heure
@@ -33,6 +36,7 @@
  */
 import type { BaseLocale } from '@planif/sync';
 import { remplirJeuT07, type JeuT07 } from '../../../../packages/sync/src/test/jeu-t07.ts';
+import { placerJeuT07 } from '../../../../packages/sync/src/test/placement-t07.ts';
 import { ecrireFermeDuJour, fermeDuJour } from '../ecrans/aujourdhui/test/ferme-du-jour.ts';
 import { ecrireGrandeFerme, grandeFerme } from '../ecrans/aujourdhui/test/grande-ferme.ts';
 import { ecrireFermeItineraires, fermeItineraires } from '../ecrans/itineraires/test/ferme-itineraires.ts';
@@ -82,6 +86,17 @@ async function remplirBase(utilisateurId: string, fermeId: string, remplir: (bas
 async function amorcerT07(): Promise<Amorcage> {
   const jeu = await jeuSansEcrire();
   await remplirBase(jeu.utilisateurId, jeu.principale.fermeId, (base) => remplirJeuT07(base));
+  const lignes = Object.values(jeu.lignes).reduce((total, n) => total + n, 0);
+  return { utilisateurId: jeu.utilisateurId, fermeId: jeu.principale.fermeId, lignes };
+}
+
+/** T28c : la grande ferme de T07, placée (packages/sync/src/test/placement-t07.ts). */
+async function amorcerT07Place(): Promise<Amorcage> {
+  const jeu = await jeuSansEcrire();
+  await remplirBase(jeu.utilisateurId, jeu.principale.fermeId, async (base) => {
+    await remplirJeuT07(base);
+    await placerJeuT07(base, jeu.principale.fermeId);
+  });
   const lignes = Object.values(jeu.lignes).reduce((total, n) => total + n, 0);
   return { utilisateurId: jeu.utilisateurId, fermeId: jeu.principale.fermeId, lignes };
 }
@@ -144,6 +159,7 @@ function amorcer(): Promise<Amorcage> {
   const parametres = new URLSearchParams(location.search);
   const jeu = parametres.get('jeu');
   if (jeu === null) return amorcerT07();
+  if (jeu === 't07-place') return amorcerT07Place();
   if (jeu === 'aujourdhui') return amorcerAujourdhui(parametres.get('date') ?? '', false);
   if (jeu === 'aujourdhui-travaux') return amorcerAujourdhui(parametres.get('date') ?? '', true);
   if (jeu === 'aujourdhui-grande-ferme') return amorcerGrandeFerme(parametres.get('date') ?? '');
