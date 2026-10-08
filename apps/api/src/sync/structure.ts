@@ -75,6 +75,7 @@ import {
   PRECISION_ZONE_DEJA_ABRITEE,
   refusDuCoeur,
   refusDuPlacement,
+  refusDuProfil,
 } from './messages.ts';
 import type { Refus } from './motifs.ts';
 import { visibleParLaFerme, type TransactionDb } from './references.ts';
@@ -115,10 +116,15 @@ export interface EcritureStructureRecue {
 
 const invalide = (precision: string, fermeId: string | null): Refus => ({ motif: 'ecriture_invalide', precision, fermeId });
 
-/** Refus d'une ligne que les règles de la ligne n'acceptent pas : règle du placement (T28s) ou du cœur. */
+/** Refus d'une ligne que les règles de la ligne n'acceptent pas : règle du placement (T28s), du profil de croissance (T32a) ou du cœur. */
 function refusDeLigne(v: Extract<ResultatStructure, { ok: false }>, fermeId: string | null): Refus {
-  return v.placement === undefined ? refusDuCoeur(v.erreur, fermeId) : refusDuPlacement(v.placement, fermeId);
+  if (v.placement !== undefined) return refusDuPlacement(v.placement, fermeId);
+  if (v.croissance !== undefined) return refusDuProfil(v.croissance, fermeId);
+  return refusDuCoeur(v.erreur, fermeId);
 }
+
+/** Colonnes jsonb écrites par le téléphone en texte JSON : la valeur existante y est remise sous cette forme. */
+const COLONNES_TEXTE_JSON: ReadonlySet<string> = new Set(['contour', 'profil_croissance']);
 
 /** Deux valeurs de placement (nombres, contours) égales, quelle que soit leur provenance (reçue, ou to_jsonb de Postgres). */
 const memeValeur = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -692,13 +698,14 @@ async function modifier(
 
   // Seules les colonnes écrites par le téléphone sont reprises de la ligne existante (les autres
   // restent en base, intactes), et une colonne inconnue REÇUE est toujours refusée. Le contour
-  // existant (jsonb, rendu en tableau) est remis en texte JSON, la seule forme qu'un contour reçu
-  // peut avoir (structure-lignes.ts) : un tableau forgé dans les données reste refusé.
+  // et le profil de croissance existants (jsonb, rendus en tableau ou en objet) sont remis en
+  // texte JSON, la seule forme qu'une valeur reçue peut avoir (structure-lignes.ts) : un tableau
+  // ou un objet forgé dans les données reste refusé.
   const colonnesEcrites = new Set(COLONNES_STRUCTURE[e.table]);
   const base = Object.fromEntries(
     Object.entries(avant)
       .filter(([c]) => colonnesEcrites.has(c))
-      .map(([c, x]) => [c, c === 'contour' && x !== null ? JSON.stringify(x) : x]),
+      .map(([c, x]) => [c, COLONNES_TEXTE_JSON.has(c) && x !== null ? JSON.stringify(x) : x]),
   );
   const v = validerStructure(e.table, { ...base, ...e.donnees, id: avant.id });
   if (!v.ok) return refusDeLigne(v, fermeId);

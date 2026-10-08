@@ -23,6 +23,7 @@ import type {
   ParametresItineraire,
   PointLocal,
   PositionGeographique,
+  ProfilCroissance,
   Quantite,
   UniteRecolte,
   UnitesFerme,
@@ -367,10 +368,16 @@ export const espece = pgTable(
     /** Délais propres à l'espèce : remplis ensemble ou pas du tout. */
     delaiRetourMinimalAns: integer('delai_retour_minimal_ans'),
     delaiRetourConseilleAns: integer('delai_retour_conseille_ans'),
+    /**
+     * Profil de croissance réglé par la ferme (T32a, Q32 option A) : nul = profil par défaut de
+     * l'espèce (les défauts vivent dans @planif/core). Bornes du cœur rejouées par le serveur.
+     */
+    profilCroissance: jsonb('profil_croissance').$type<ProfilCroissance>(),
     ...horodatages(),
   },
   (t) => [
     verif('espece', 'categorie', parmi(t.categorie, CATEGORIES_ESPECE)),
+    verif('espece', 'profil_croissance', sql`${t.profilCroissance} IS NULL OR jsonb_typeof(${t.profilCroissance}) = 'object'`),
     verif('espece', 'unite_recolte', parmi(t.uniteRecolte, UNITES_RECOLTE)),
     verif(
       'espece',

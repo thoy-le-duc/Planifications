@@ -10,6 +10,7 @@
  */
 import type { DateCalendaire } from '../dates/index.ts';
 import type { Id, NomEntite } from './identifiants.ts';
+import type { ProfilCroissance } from '../croissance/types.ts';
 
 // ---------------------------------------------------------------------------------------------
 // Grandeurs (alias documentaires : l'unité est dans le nom du champ et ici)
@@ -217,6 +218,11 @@ export interface Espece extends LigneDeFerme<'Espece'> {
   readonly uniteRecolte: UniteRecolte;
   /** Remplacent ceux de la famille quand ils sont remplis (choux : 4 ans minimum, 6 conseillés) ; `null` : ceux de la famille s'appliquent. */
   readonly delaisRetour: DelaisRetour | null;
+  /**
+   * Profil de croissance réglé par la ferme (T32a, Q32 option A ; `espece.profil_croissance`).
+   * Clé absente : le profil par défaut de l'espèce (`profilEffectif` de croissance/).
+   */
+  readonly profilCroissance?: ProfilCroissance;
 }
 
 export interface Variete extends LigneDeFerme<'Variete'> {
