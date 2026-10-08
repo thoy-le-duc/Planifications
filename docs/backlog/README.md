@@ -39,7 +39,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T10q](T10q-flux-suites.md) | Réponses en flux : HTTP/1.0 et erreur au premier octet | T10p | fait |
 | [T10r](T10r-flux-delai.md) | Réponses en flux : délai jusqu’au premier morceau | T10q | fait |
 | [T10s](T10s-parcellaire-serveur.md) | Serveur : accepter le parcellaire et le catalogue de la ferme | T10r | fait |
-| [T10t](T10t-structure-suites.md) | Parcellaire et catalogue : suites de la relecture | T10s | à faire |
+| [T10t](T10t-structure-suites.md) | Parcellaire et catalogue : suites de la relecture | T10s | fait |
 | [T10u](T10u-refus-ferme-quittee.md) | Refus d'une ferme quittée effacés du téléphone | T10k | fait |
 | [T10v](T10v-resume-refus-hors-ferme.md) | Refus : pas de nom de culture d'une autre ferme dans le résumé | T10u, T10k | fait |
 | [T10g](T10g-recoltes-annulees.md) | Récoltes annulées et plafonds définitifs (Q20, Q13) | T10d | fait |
