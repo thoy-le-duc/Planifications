@@ -43,6 +43,13 @@
  * Une plantation retient sa place et son espèce tant qu'elle est en place : sans date d'arrachage,
  * ou arrachage prévu après la date du jour (fuseau de la ferme).
  *
+ * T10t (contrat : en-tête de structure-suites.integration.test.ts) : refus, pas de cascade. Les
+ * assolements actifs d'une saison non terminée (fin ≥ date du jour dans le fuseau de la ferme)
+ * retiennent leur zone, leur emplacement et leur espèce, et figent la famille de l'espèce ; une
+ * saison est retenue par tout son plan ; une espèce aussi par ses variétés et itinéraires actifs.
+ * Le message compte ce qui bloque. Code d'emplacement unique par zone (Q27), comme l'index
+ * emplacement_zone_code_actif_idx (migration 0029).
+ *
  * Le serveur ne croit jamais le téléphone : chaque identifiant reçu est relu en base (requêtes
  * paramétrées ; tables et colonnes sont des constantes de ce fichier), la ferme est filtrée dans
  * la requête même du verrou (FOR SHARE, FOR UPDATE), et tout se fait dans la transaction du lot
@@ -275,17 +282,52 @@ const seriesActives = (colonne: 'espece_id' | 'variete_id' | 'saison_id', id: st
   sql`SELECT 1 FROM serie s WHERE s.${sql.identifier(colonne)} = ${id}::uuid AND s.ferme_id = ${fermeId}::uuid
         AND s.supprime_le IS NULL AND s.statut IN ${STATUTS_ACTIFS}`;
 
+/** Date du jour dans le fuseau de la ferme, à l'heure du serveur (`maintenant`). */
+const jourDeLaFerme = (fermeId: string, maintenant: Date): SQL =>
+  sql`(${maintenant}::timestamptz AT TIME ZONE (SELECT f.fuseau_horaire FROM ferme f WHERE f.id = ${fermeId}::uuid))::date`;
+
 /**
  * Plantation `p` encore en place : sans date d'arrachage, ou arrachage prévu après la date du jour
  * (relecture T10s), le jour étant celui du fuseau de la ferme à l'heure du serveur (`maintenant`).
  */
 const enPlace = (fermeId: string, maintenant: Date): SQL =>
-  sql`(p.date_arrachage IS NULL OR p.date_arrachage > (${maintenant}::timestamptz AT TIME ZONE (SELECT f.fuseau_horaire FROM ferme f WHERE f.id = ${fermeId}::uuid))::date)`;
+  sql`(p.date_arrachage IS NULL OR p.date_arrachage > ${jourDeLaFerme(fermeId, maintenant)})`;
 
 /** Plantations en place, non supprimées, de la ferme, dont `colonne` vaut `id`. */
 const plantationsEnPlace = (colonne: 'espece_id' | 'variete_id', id: string, fermeId: string, maintenant: Date): SQL =>
   sql`SELECT 1 FROM plantation p WHERE p.${sql.identifier(colonne)} = ${id}::uuid AND p.ferme_id = ${fermeId}::uuid
         AND p.supprime_le IS NULL AND ${enPlace(fermeId, maintenant)}`;
+
+/** Nombre de lignes que trouve la requête paramétrée `requete` (constantes de ce fichier et paramètres). */
+async function compter(tx: TransactionDb, requete: SQL): Promise<number> {
+  const r = await tx.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM (${requete}) t`);
+  return r.rows[0]?.n ?? 0;
+}
+
+/**
+ * T10t : assolements actifs de la ferme dont `colonne` vaut `id` ; seulement ceux d'une saison
+ * NON TERMINÉE (fin ≥ date du jour dans le fuseau de la ferme) si `nonTerminees`. Les assolements
+ * d'une saison terminée sont l'historique : ils restent actifs et n'empêchent rien.
+ */
+function assolementsActifs(colonne: 'zone_id' | 'emplacement_id' | 'saison_id' | 'espece_id', id: string, fermeId: string, maintenant: Date, nonTerminees: boolean): SQL {
+  const saison = nonTerminees
+    ? sql`AND EXISTS (SELECT 1 FROM saison sa WHERE sa.id = a.saison_id AND sa.ferme_id = a.ferme_id AND sa.fin >= ${jourDeLaFerme(fermeId, maintenant)})`
+    : sql``;
+  return sql`SELECT 1 FROM assolement a WHERE a.${sql.identifier(colonne)} = ${id}::uuid AND a.ferme_id = ${fermeId}::uuid
+               AND a.supprime_le IS NULL ${saison}`;
+}
+
+/** « 1 assolement », « 2 assolements » : le nombre en chiffres, le nom accordé. */
+const quantite = (n: number, singulier: string, pluriel: string): string => `${String(n)} ${n > 1 ? pluriel : singulier}`;
+
+/** « a », « a et b », « a, b et c ». */
+function enumerer(parties: readonly string[]): string {
+  if (parties.length <= 1) return parties.join('');
+  return `${parties.slice(0, -1).join(', ')} et ${parties.at(-1) ?? ''}`;
+}
+
+/** Assolements d'une saison en cours ou à venir, comptés pour un message (« 2 assolements d’une saison en cours ou à venir »). */
+const assolementsDuPlan = (n: number): string => `${quantite(n, 'assolement', 'assolements')} d’une saison en cours ou à venir`;
 
 /** Un bâtiment non supprimé de la ferme abrite-t-il la zone `zoneId` ? */
 function abritee(tx: TransactionDb, zoneId: string, fermeId: string): Promise<boolean> {
@@ -331,7 +373,10 @@ async function verifierLibre(tx: TransactionDb, table: TableEcrite, id: string, 
               AND ((s.id IS NOT NULL AND s.supprime_le IS NULL AND s.statut IN ${STATUTS_ACTIFS})
                 OR (p.id IS NOT NULL AND p.supprime_le IS NULL AND ${enPlace(fermeId, maintenant)}))`,
       );
-      return occupe ? invalide('cet emplacement est occupé par une culture prévue, en cours ou en place : libérez-le avant de le supprimer', fermeId) : null;
+      if (occupe) return invalide('cet emplacement est occupé par une culture prévue, en cours ou en place : libérez-le avant de le supprimer', fermeId);
+      // T10t : un assolement actif d'une saison non terminée le retient aussi.
+      const n = await compter(tx, assolementsActifs('emplacement_id', id, fermeId, maintenant, true));
+      return n > 0 ? invalide(`cet emplacement est encore prévu dans ${assolementsDuPlan(n)} : retirez-le d’abord du plan de la saison`, fermeId) : null;
     }
     case 'zone': {
       // T28s (relecture T28a n°2) : une zone abritée par un bâtiment non supprimé ne se supprime pas ;
@@ -340,11 +385,28 @@ async function verifierLibre(tx: TransactionDb, table: TableEcrite, id: string, 
       const pleine =
         (await existe(tx, sql`SELECT 1 FROM emplacement e WHERE e.zone_id = ${id}::uuid AND e.ferme_id = ${fermeId}::uuid AND e.supprime_le IS NULL`)) ||
         (await existe(tx, sql`SELECT 1 FROM zone z WHERE z.zone_parente_id = ${id}::uuid AND z.ferme_id = ${fermeId}::uuid AND z.supprime_le IS NULL`));
-      return pleine ? invalide('cette zone contient encore des emplacements ou des sous-zones : supprimez-les d’abord', fermeId) : null;
+      if (pleine) return invalide('cette zone contient encore des emplacements ou des sous-zones : supprimez-les d’abord', fermeId);
+      // T10t : un assolement actif d'une saison non terminée la retient aussi.
+      const n = await compter(tx, assolementsActifs('zone_id', id, fermeId, maintenant, true));
+      return n > 0 ? invalide(`cette zone est encore prévue dans ${assolementsDuPlan(n)} : retirez-la d’abord du plan de la saison`, fermeId) : null;
     }
     case 'espece': {
       const utilisee = (await existe(tx, seriesActives('espece_id', id, fermeId))) || (await existe(tx, plantationsEnPlace('espece_id', id, fermeId, maintenant)));
-      return utilisee ? invalide('cette espèce est cultivée dans une série prévue ou en cours, ou une plantation en place', fermeId) : null;
+      if (utilisee) return invalide('cette espèce est cultivée dans une série prévue ou en cours, ou une plantation en place', fermeId);
+      // T10t : ses variétés et ses itinéraires actifs, et les assolements actifs d'une saison non
+      // terminée, la retiennent ; le message compte ce qui bloque.
+      const varietes = await compter(tx, sql`SELECT 1 FROM variete v WHERE v.espece_id = ${id}::uuid AND v.ferme_id = ${fermeId}::uuid AND v.supprime_le IS NULL`);
+      const itineraires = await compter(
+        tx,
+        sql`SELECT 1 FROM itineraire i WHERE i.espece_id = ${id}::uuid AND i.ferme_id = ${fermeId}::uuid AND i.supprime_le IS NULL`,
+      );
+      const assolements = await compter(tx, assolementsActifs('espece_id', id, fermeId, maintenant, true));
+      const parties = [
+        ...(varietes > 0 ? [quantite(varietes, 'variété', 'variétés')] : []),
+        ...(itineraires > 0 ? [quantite(itineraires, 'itinéraire', 'itinéraires')] : []),
+        ...(assolements > 0 ? [assolementsDuPlan(assolements)] : []),
+      ];
+      return parties.length > 0 ? invalide(`cette espèce est encore utilisée par ${enumerer(parties)} : supprimez d’abord ce qui l’utilise`, fermeId) : null;
     }
     case 'variete': {
       const utilisee = (await existe(tx, seriesActives('variete_id', id, fermeId))) || (await existe(tx, plantationsEnPlace('variete_id', id, fermeId, maintenant)));
@@ -356,7 +418,10 @@ async function verifierLibre(tx: TransactionDb, table: TableEcrite, id: string, 
     }
     case 'saison': {
       const utilisee = await existe(tx, seriesActives('saison_id', id, fermeId));
-      return utilisee ? invalide('cette saison contient encore des séries prévues ou en cours', fermeId) : null;
+      if (utilisee) return invalide('cette saison contient encore des séries prévues ou en cours', fermeId);
+      // T10t : son plan la retient, qu'elle soit terminée ou non.
+      const n = await compter(tx, assolementsActifs('saison_id', id, fermeId, maintenant, false));
+      return n > 0 ? invalide(`le plan de cette saison contient encore ${quantite(n, 'assolement', 'assolements')} : videz-le d’abord`, fermeId) : null;
     }
     case 'assolement':
     case 'batiment':
@@ -412,6 +477,18 @@ async function verifierEnBase(tx: TransactionDb, table: TableEcrite, l: Ligne, a
     case 'emplacement': {
       refus = await verifier('zone_id', 'zone', false, 'zone', 'zone supprimée');
       const remplace = Array.isArray(l.remplace) ? (l.remplace as string[]) : [];
+      // Q27 (T10t) : code unique par zone parmi les emplacements actifs de la ferme, sans casse ni
+      // espaces autour (comme l'index emplacement_zone_code_actif_idx, qui reste le dernier rempart) ;
+      // vérifié à la création, au rétablissement, ou quand le code ou la zone change. Un emplacement
+      // supprimé plus haut dans le même lot ne retient plus son code.
+      if (refus === null && l.supprime_le === null && (change('code') || change('zone_id'))) {
+        const pris = await existe(
+          tx,
+          sql`SELECT 1 FROM emplacement e WHERE e.ferme_id = ${f}::uuid AND e.zone_id = ${String(l.zone_id)}::uuid
+                AND lower(trim(e.code)) = lower(trim(${String(l.code)})) AND e.supprime_le IS NULL AND e.id <> ${String(l.id)}::uuid`,
+        );
+        if (pris) refus = invalide('ce code existe déjà dans cette zone : choisissez-en un autre', f);
+      }
       if (refus === null && remplace.length > 0 && change('remplace')) {
         // Un emplacement remplacé est souvent supprimé (planches redessinées) : seule son appartenance à la ferme compte.
         const r = await tx.execute<{ n: number }>(
@@ -423,9 +500,16 @@ async function verifierEnBase(tx: TransactionDb, table: TableEcrite, l: Ligne, a
       }
       break;
     }
-    case 'espece':
+    case 'espece': {
       refus = await verifier('famille_id', 'famille', true, 'famille', 'famille supprimée');
+      // T10t : la famille est copiée dans l'assolement ; elle ne change pas tant que des assolements
+      // actifs d'une saison non terminée désignent l'espèce (l'historique garde la famille de l'époque).
+      if (refus === null && avant !== null && l.famille_id !== avant.famille_id) {
+        const n = await compter(tx, assolementsActifs('espece_id', String(l.id), f, maintenant, true));
+        if (n > 0) refus = invalide(`cette espèce figure dans ${assolementsDuPlan(n)} : sa famille ne change pas tant qu’elle y figure`, f);
+      }
       break;
+    }
     case 'variete':
       refus = await verifier('espece_id', 'espece', true, 'espèce', 'espèce supprimée');
       break;
