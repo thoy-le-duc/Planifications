@@ -238,6 +238,12 @@ export const emplacement = pgTable(
     /** Reconnaissance vocale : « planche 3 du tunnel 2 » → code. */
     index('emplacement_ferme_code_idx').on(t.fermeId, t.code),
     index('emplacement_zone_idx').on(t.zoneId),
+    // Q27 (T10t) : code unique PAR ZONE parmi les emplacements non supprimés et en service (actif_au
+    // nul : une planche retirée ne réserve plus son code, décision D), sans casse ni espaces de début
+    // et de fin (« P3 » = « p3 » = « P3 ») ; deux « P3 » dans deux tunnels restent permis.
+    uniqueIndex('emplacement_zone_code_actif_idx')
+      .on(t.fermeId, t.zoneId, sql`lower(trim(${t.code}))`)
+      .where(sql`${t.supprimeLe} IS NULL AND ${t.actifAu} IS NULL`),
   ],
 );
 
