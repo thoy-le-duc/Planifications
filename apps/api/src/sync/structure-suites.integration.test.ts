@@ -24,28 +24,41 @@
  *    pas de cascade) → 'ecriture_invalide', rien d'écrit (lot refusé en entier), message en
  *    français sans jargon (test/jargon.ts) qui dit COMBIEN de lignes actives empêchent la
  *    suppression, nombre en chiffres suivi du nom accordé (« 1 assolement », « 2 assolements »,
- *    « 1 variété », « 2 variétés », « 1 itinéraire », « 2 itinéraires ») :
- *      zone          assolements actifs (supprime_le nul) dont zone_id est la zone ;
- *      saison        assolements actifs dont saison_id est la saison ;
- *      emplacement   assolements actifs dont emplacement_id est l'emplacement ;
- *      espèce        variétés actives ET itinéraires actifs de l'espèce (le message compte
- *                    les deux quand les deux existent).
+ *    « 1 variété », « 2 variétés », « 1 itinéraire », « 2 itinéraires »).
+ *
+ *    Saison non terminée (décision du chef, révisée : l'historique ne bloque rien) : une saison
+ *    est TERMINÉE quand sa date de fin (`saison.fin`, date sans heure) est strictement avant la
+ *    date du jour dans le fuseau de la ferme (Europe/Paris), à l'heure du serveur ; sinon (en
+ *    cours, y compris le jour de sa fin, ou future) elle est NON TERMINÉE.
+ *
+ *      zone          assolements actifs (supprime_le nul) dont zone_id est la zone ET dont la
+ *                    saison n'est pas terminée ;
+ *      emplacement   idem avec emplacement_id ;
+ *      saison        assolements actifs dont saison_id est la saison, qu'elle soit terminée ou
+ *                    non (c'est son plan) ;
+ *      espèce        variétés actives, itinéraires actifs, et assolements actifs d'une saison
+ *                    non terminée dont espece_id est l'espèce (le message compte ce qui bloque).
+ *    Les assolements d'une saison terminée restent actifs et rattachés à la zone, à
+ *    l'emplacement ou à l'espèce supprimés (suppression douce) : ils n'empêchent rien.
  *    Ne comptent que les lignes actives DE LA MÊME FERME : une ligne supprimée ne compte pas, une
  *    ligne d'une autre ferme qui désignerait la ligne (écrite directement en base) non plus.
  *    Une ligne supprimée plus haut dans le même lot ne compte plus. Droits ordinaires (T10s) :
  *    même règle pour un équipier que pour le gérant.
  *
  * 4. Changer la famille d'une espèce (PATCH de famille_id vers une autre valeur) est refusé tant
- *    que des assolements actifs de la même ferme désignent cette espèce → 'ecriture_invalide',
- *    espèce inchangée, message qui parle des assolements. Sinon accepté. Un PATCH qui ne change
- *    pas la famille (nom, renvoi identique) reste accepté. Mêmes règles de comptage qu'en 3.
+ *    que des assolements actifs de la même ferme, d'une saison NON TERMINÉE (critère du 3),
+ *    désignent cette espèce → 'ecriture_invalide', espèce inchangée, message qui parle des
+ *    assolements. Sinon accepté. La famille est COPIÉE dans l'assolement (assolement.famille_id,
+ *    obligatoire) : l'historique garde la famille de l'époque, il n'est pas réécrit. Un PATCH qui
+ *    ne change pas la famille (nom, renvoi identique) reste accepté. Mêmes règles de comptage.
  *
  * 5. Q27 (réponse du 2026-10-07) : le code d'un emplacement est unique PAR ZONE parmi les
- *    emplacements non supprimés de la ferme.
- *    - Base : index unique partiel (`WHERE supprime_le IS NULL`) ; deux emplacements actifs de
- *      même code dans la même zone ne peuvent pas coexister (23505) ; un emplacement supprimé ne
- *      bloque pas ; même code dans une autre zone : permis. L'index ne mêle pas les fermes (il
- *      porte aussi ferme_id) : une ligne d'une autre ferme ne bloque jamais.
+ *    emplacements non supprimés de la ferme, comparé SANS CASSE et SANS ESPACES de début et de
+ *    fin (« P3 » = « p3 » = « P3 »).
+ *    - Base : index unique partiel sur (ferme_id, zone_id, lower(trim(code)))
+ *      `WHERE supprime_le IS NULL` ; deux emplacements actifs de même code dans la même zone ne
+ *      peuvent pas coexister (23505) ; un emplacement supprimé ne bloque pas ; même code dans une
+ *      autre zone : permis ; une ligne d'une autre ferme ne bloque jamais.
  *    - Serveur : refus PROPRE (réponse 200, 'ecriture_invalide', lot refusé en entier, message
  *      en français sans jargon qui dit que ce code existe déjà dans cette zone), jamais une
  *      erreur 500 : PUT d'un code déjà pris dans la zone ; deux PUT du même code dans la même
@@ -57,7 +70,9 @@
  *      code donne une ligne « doublon » dans l'aperçu (non écrite), l'import n'est pas refusé.
  *      Déjà couvert par packages/core/src/import/plan.test.ts (« même zone et même planche →
  *      doublon ») et apps/web/src/ecrans/import/regles.test.tsx (« une planche déjà dans la
- *      ferme est un doublon, pas écrite ; les autres passent »).
+ *      ferme est un doublon, pas écrite ; les autres passent »). L'import compare encore sur
+ *      toute la ferme : ticket de suite (décision du chef). Risque connu : un import hors ligne
+ *      qui recoupe une planche créée ailleurs et pas encore reçue est refusé en entier, proprement.
  */
 import { creerGenerateurId } from '@planif/core';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -145,7 +160,10 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
   let voisine: string;
 
   let famille: string;
+  /** Saison en cours (2026), passée (2024, terminée) et future (2027). */
   let saison: string;
+  let saisonPassee: string;
+  let saisonFuture: string;
   let laitue: string;
   let itineraire: string;
   let zoneFerme: string;
@@ -202,9 +220,10 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
     return id;
   }
 
-  async function saisonEn(fermeId: string): Promise<string> {
+  /** Saison de la ferme ; par défaut l'année en cours (2026 : non terminée au 1er octobre). */
+  async function saisonEn(fermeId: string, debut = '2026-01-01', fin = '2026-12-31'): Promise<string> {
     const id = randomUUID();
-    await inserer(`INSERT INTO saison (id, ferme_id, nom, debut, fin) VALUES ($1, $2, $3, '2024-01-01', '2024-12-31')`, [id, fermeId, unique('Saison')]);
+    await inserer(`INSERT INTO saison (id, ferme_id, nom, debut, fin) VALUES ($1, $2, $3, $4, $5)`, [id, fermeId, unique('Saison'), debut, fin]);
     return id;
   }
 
@@ -292,6 +311,8 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
 
     famille = await familleEn(ferme);
     saison = await saisonEn(ferme);
+    saisonPassee = await saisonEn(ferme, '2024-01-01', '2024-12-31');
+    saisonFuture = await saisonEn(ferme, '2027-01-01', '2027-12-31');
     laitue = await especeEn(ferme, famille);
     itineraire = await itineraireEn(ferme, laitue);
     zoneFerme = await zoneEn(ferme);
@@ -429,7 +450,7 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
 
   describe('série réactivée : tests positifs', () => {
     it.each(['prevue', 'en_cours'])('série terminée dont toutes les lignes sont actives, repassée « %s » : acceptée, historique « modification »', async (statut) => {
-      const planche = await plancheEn(ferme, zoneFerme);
+      const planche = await plancheEn(ferme, await zoneEn(ferme));
       const { serie } = await serieTermineeSur(planche);
       await accepte([patch('serie', serie, { statut })]);
       expect((await ligne('serie', serie))?.statut).toBe(statut);
@@ -437,7 +458,7 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
     });
 
     it('un lot qui rétablit l’emplacement puis réactive la série : accepté en entier', async () => {
-      const planche = await plancheEn(ferme, zoneFerme);
+      const planche = await plancheEn(ferme, await zoneEn(ferme));
       const { serie } = await serieTermineeSur(planche);
       // La série terminée ne retient plus sa planche : la supprimer est accepté.
       await accepte([supprimer('emplacement', planche)]);
@@ -499,7 +520,7 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
     /** La ligne à supprimer. */
     readonly id: string;
     /** Un assolement qui la désigne, de la ferme (par défaut) ou de la voisine, actif ou supprimé. */
-    assolement(o?: { readonly voisine?: boolean; readonly supprime?: boolean }): Promise<string>;
+    assolement(o?: { readonly voisine?: boolean; readonly supprime?: boolean; readonly saisonId?: string }): Promise<string>;
   }
 
   const CIBLES: readonly (readonly [string, () => Promise<Cible>])[] = [
@@ -512,7 +533,7 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
           assolement: (o = {}) =>
             assolementEn({
               fermeId: o.voisine === true ? voisine : ferme,
-              saisonId: o.voisine === true ? saisonVoisine : saison,
+              saisonId: o.voisine === true ? saisonVoisine : (o.saisonId ?? saison),
               zoneId: id,
               familleId: o.voisine === true ? familleVoisine : famille,
               supprime: o.supprime === true,
@@ -546,7 +567,7 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
           assolement: (o = {}) =>
             assolementEn({
               fermeId: o.voisine === true ? voisine : ferme,
-              saisonId: o.voisine === true ? saisonVoisine : saison,
+              saisonId: o.voisine === true ? saisonVoisine : (o.saisonId ?? saison),
               emplacementId: id,
               familleId: o.voisine === true ? familleVoisine : famille,
               supprime: o.supprime === true,
@@ -620,6 +641,56 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
     });
   });
 
+  describe.each(CIBLES.filter(([t]) => t !== 'saison'))('%s : seuls les assolements des saisons non terminées retiennent la ligne', (table, preparer) => {
+    it('seulement des assolements actifs d’une saison passée : acceptée, les assolements restent actifs et rattachés à la ligne supprimée', async () => {
+      const c = await preparer();
+      const a1 = await c.assolement({ saisonId: saisonPassee });
+      const a2 = await c.assolement({ saisonId: saisonPassee });
+      await accepte([supprimer(table, c.id)]);
+      expect((await ligne(table as TableLue, c.id))?.supprime_le).not.toBeNull();
+      for (const a of [a1, a2]) {
+        const l = await ligne('assolement', a);
+        expect(l?.supprime_le, 'assolement de l’historique toujours actif').toBeNull();
+        expect(l?.[table === 'zone' ? 'zone_id' : 'emplacement_id'], 'toujours rattaché à la ligne supprimée').toBe(c.id);
+      }
+    });
+
+    it('assolement d’une saison future : refusée, « 1 assolement »', async () => {
+      const c = await preparer();
+      await c.assolement({ saisonId: saisonFuture });
+      const s = supprimer(table, c.id);
+      expect(await refuseEnEntier([s], s)).toMatch(compte(1, 'assolement'));
+    });
+
+    it('2 assolements de la saison en cours et 3 d’une saison passée : refusée, le message dit « 2 assolements »', async () => {
+      const c = await preparer();
+      await c.assolement();
+      await c.assolement();
+      for (let i = 0; i < 3; i++) await c.assolement({ saisonId: saisonPassee });
+      const s = supprimer(table, c.id);
+      expect(await refuseEnEntier([s], s)).toMatch(compte(2, 'assolements'));
+    });
+
+    it('bord du fuseau : saison finie le 1er octobre ; à 23:55 à Paris le 1er elle est en cours (refusée), à 00:05 le 2 elle est terminée (acceptée ; le jour UTC dirait encore le 1er)', async () => {
+      const finie = await saisonEn(ferme, '2026-01-01', '2026-10-01');
+      const c = await preparer();
+      await c.assolement({ saisonId: finie });
+      const s = supprimer(table, c.id);
+      await a('2026-10-01T21:55:00.000Z', (j) => refuseEnEntier([s], s, j));
+      await a('2026-10-01T22:05:00.000Z', (j) => accepte([s], j));
+      expect((await ligne(table as TableLue, c.id))?.supprime_le).not.toBeNull();
+    });
+  });
+
+  describe('saison : son plan la retient, passée ou non', () => {
+    it('saison passée qui a encore des assolements actifs : suppression refusée, « 1 assolement »', async () => {
+      const passee = await saisonEn(ferme, '2023-01-01', '2023-12-31');
+      await assolementEn({ fermeId: ferme, saisonId: passee, zoneId: zoneFerme, familleId: famille });
+      const s = supprimer('saison', passee);
+      expect(await refuseEnEntier([s], s)).toMatch(compte(1, 'assolement'));
+    });
+  });
+
   describe('espèce qui a encore des variétés ou des itinéraires actifs : suppression refusée', () => {
     it('2 variétés et 1 itinéraire actifs (une variété et un itinéraire supprimés ne comptent pas) : refusée, le message compte les deux', async () => {
       const espece = await especeEn(ferme, famille);
@@ -682,6 +753,34 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
       await accepte([supprimer('espece', libre)], paul.jeton);
     });
 
+    it('assolement actif de la saison en cours qui la désigne : refusée, « 1 assolement »', async () => {
+      const espece = await especeEn(ferme, famille);
+      await assolementEn({ fermeId: ferme, saisonId: saison, zoneId: zoneFerme, familleId: famille, especeId: espece });
+      const s = supprimer('espece', espece);
+      expect(await refuseEnEntier([s], s)).toMatch(compte(1, 'assolement'));
+    });
+
+    it('assolement actif d’une saison future : refusée', async () => {
+      const espece = await especeEn(ferme, famille);
+      await assolementEn({ fermeId: ferme, saisonId: saisonFuture, zoneId: zoneFerme, familleId: famille, especeId: espece });
+      const s = supprimer('espece', espece);
+      await refuseEnEntier([s], s);
+    });
+
+    it('seulement des assolements actifs d’une saison passée (ou supprimés) : acceptée, l’historique reste actif', async () => {
+      const espece = await especeEn(ferme, famille);
+      const historique = await assolementEn({ fermeId: ferme, saisonId: saisonPassee, zoneId: zoneFerme, familleId: famille, especeId: espece });
+      await assolementEn({ fermeId: ferme, saisonId: saison, zoneId: zoneFerme, familleId: famille, especeId: espece, supprime: true });
+      await accepte([supprimer('espece', espece)]);
+      expect((await ligne('assolement', historique))?.supprime_le).toBeNull();
+    });
+
+    it('isolement : un assolement d’une autre ferme qui la désignerait ne compte pas', async () => {
+      const espece = await especeEn(ferme, famille);
+      await assolementEn({ fermeId: voisine, saisonId: saisonVoisine, zoneId: zoneVoisine, familleId: familleVoisine, especeId: espece });
+      await accepte([supprimer('espece', espece)]);
+    });
+
     it('isolement : variétés et itinéraires d’une autre ferme qui la désigneraient ne comptent pas', async () => {
       const seule = await especeEn(ferme, famille);
       await varieteEn(voisine, seule);
@@ -700,10 +799,17 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
   // ── 4. Changer la famille d'une espèce utilisée par des assolements ─────────────────────────
 
   describe('changer la famille d’une espèce tant que des assolements actifs l’utilisent : refusé', () => {
-    async function especeAvecAssolements(o: { readonly actifs: number; readonly supprimes?: number; readonly voisins?: number }): Promise<{ espece: string; assolements: string[] }> {
+    async function especeAvecAssolements(o: {
+      readonly actifs: number;
+      readonly supprimes?: number;
+      readonly voisins?: number;
+      readonly saisonId?: string;
+    }): Promise<{ espece: string; assolements: string[] }> {
       const espece = await especeEn(ferme, famille);
       const assolements: string[] = [];
-      for (let i = 0; i < o.actifs; i++) assolements.push(await assolementEn({ fermeId: ferme, saisonId: saison, zoneId: zoneFerme, familleId: famille, especeId: espece }));
+      for (let i = 0; i < o.actifs; i++) {
+        assolements.push(await assolementEn({ fermeId: ferme, saisonId: o.saisonId ?? saison, zoneId: zoneFerme, familleId: famille, especeId: espece }));
+      }
       for (let i = 0; i < (o.supprimes ?? 0); i++) {
         await assolementEn({ fermeId: ferme, saisonId: saison, zoneId: zoneFerme, familleId: famille, especeId: espece, supprime: true });
       }
@@ -726,6 +832,25 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
       const { espece } = await especeAvecAssolements({ actifs: 1 });
       const p = patch('espece', espece, { famille_id: autre });
       await refuseEnEntier(lotAvec(p), p);
+    });
+
+    it('assolement actif d’une saison future : refusé', async () => {
+      const autre = await familleEn(ferme);
+      const { espece } = await especeAvecAssolements({ actifs: 1, saisonId: saisonFuture });
+      const p = patch('espece', espece, { famille_id: autre });
+      expect(await refuseEnEntier([p], p)).toMatch(/assolement/iu);
+    });
+
+    it('seulement des assolements actifs d’une saison passée : accepté ; l’historique garde la famille de l’époque (copiée dans l’assolement)', async () => {
+      const autre = await familleEn(ferme);
+      const { espece, assolements } = await especeAvecAssolements({ actifs: 2, saisonId: saisonPassee });
+      await accepte([patch('espece', espece, { famille_id: autre })]);
+      expect((await ligne('espece', espece))?.famille_id).toBe(autre);
+      for (const a of assolements) {
+        const l = await ligne('assolement', a);
+        expect(l?.famille_id, 'famille de l’époque').toBe(famille);
+        expect(l?.supprime_le).toBeNull();
+      }
     });
 
     it('seulement des assolements supprimés : accepté, nouvelle famille écrite', async () => {
@@ -782,6 +907,12 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
       await expect(insertion(zone, 'P3')).rejects.toMatchObject({ code: '23505' });
     });
 
+    it.each(['p3', ' P3', 'P3 ', ' p3 '])('« P3 » puis « %s » dans la même zone : refusé par la base (sans casse ni espaces autour)', async (variante) => {
+      const zone = await zoneEn(ferme);
+      await insertion(zone, 'P3');
+      await expect(insertion(zone, variante)).rejects.toMatchObject({ code: '23505' });
+    });
+
     it('même code dans une autre zone : permis (deux « P3 » dans deux tunnels)', async () => {
       const z1 = await zoneEn(ferme);
       const z2 = await zoneEn(ferme);
@@ -814,6 +945,28 @@ decrireAvecBase('T10t')('T10t : parcellaire et catalogue, suites de la relecture
       expect(message).toMatch(/déjà/iu);
       expect(message).toMatch(/zone/iu);
       expect(await compter(`SELECT 1 FROM emplacement WHERE zone_id = $1 AND code = 'P3'`, [zone])).toBe(1);
+    });
+
+    it.each(['p3', ' P3 ', ' p3'])('PUT de « %s » quand « P3 » est pris dans la zone : refusé proprement (sans casse ni espaces autour)', async (variante) => {
+      const zone = await zoneEn(ferme);
+      await plancheEn(ferme, zone, 'P3');
+      const p = putEmplacement(zone, variante);
+      expect(await refuseEnEntier([p], p)).toMatch(/déjà/iu);
+    });
+
+    it('PATCH du code vers « p3 » quand « P3 » est pris dans la zone : refusé, inchangé', async () => {
+      const zone = await zoneEn(ferme);
+      await plancheEn(ferme, zone, 'P3');
+      const p4 = await plancheEn(ferme, zone, 'P4');
+      const p = patch('emplacement', p4, { code: 'p3' });
+      await refuseEnEntier([p], p);
+    });
+
+    it('import : « P3 » et « p3 » dans la même zone neuve, dans le même lot : refusé en entier', async () => {
+      const zone = putZone();
+      const p1 = putEmplacement(zone.id, 'P3');
+      const p2 = putEmplacement(zone.id, 'p3');
+      await refuseEnEntier([zone, p1, p2], p2);
     });
 
     it('import : deux PUT du même code dans la même zone neuve, dans le même lot : refusé en entier, la seconde est la fautive', async () => {
