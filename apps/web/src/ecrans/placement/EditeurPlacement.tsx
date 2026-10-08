@@ -562,7 +562,8 @@ export function EditeurPlacement({ porte, fermeId, utilisateurId, surFermer, ord
   const poignees = edition && choisi !== undefined ? positionsPoignees(vue, choisi.rect) : null;
   const carreau = CARREAU_M / mpp;
   const depart = versEcran(vue, { x: 0, y: 0 });
-  const annulable = dernier ?? undefined;
+  // Pendant une écriture, l'annulation précédente disparaît : « Annuler » dit toujours le dernier enregistrement, une fois écrit.
+  const annulable = occupe ? undefined : (dernier ?? undefined);
 
   function dessiner(e: Objet): ReactElement {
     const selectionne = selection === e.id;
