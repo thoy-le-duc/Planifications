@@ -264,17 +264,15 @@ function identiteDe(porte: PorteDonnees): number {
 export function EditeurPlacement(p: ProprietesEditeurPlacement): ReactElement {
   const cle = `${p.fermeId}/${String(identiteDe(p.porte))}/${p.utilisateurId}`;
   // Le brouillon de l'éditeur sortant, lu au moment où la clé change : le nouveau le dit à l'écran.
-  const brouillonOuvert = useRef(false);
+  const [brouillonOuvert, setBrouillonOuvert] = useState(false);
   const [suivi, setSuivi] = useState({ cle, abandonne: false });
-  if (suivi.cle !== cle) setSuivi({ cle, abandonne: brouillonOuvert.current });
+  if (suivi.cle !== cle) setSuivi({ cle, abandonne: brouillonOuvert });
   return (
     <EditeurFerme
       key={cle}
       {...p}
       brouillonAbandonne={suivi.cle === cle && suivi.abandonne}
-      surBrouillon={(ouvert) => {
-        brouillonOuvert.current = ouvert;
-      }}
+      surBrouillon={setBrouillonOuvert}
     />
   );
 }
