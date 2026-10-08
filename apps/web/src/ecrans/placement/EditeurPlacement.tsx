@@ -519,7 +519,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       pret
         ? changementsDuBrouillon({
             batiments: lusB,
-            brouillonBatiments: brouillonB,
+            // Ce qui est écrit respecte la borne même si le champ n'a pas été quitté.
+            brouillonBatiments: new Map([...brouillonB].map(([id, b]) => [id, { ...b, longueurM: Math.max(DIMENSION_MIN_M, b.longueurM), largeurM: Math.max(DIMENSION_MIN_M, b.largeurM) }])),
             zones,
             planches: lusP,
             emplacements: lusE,
