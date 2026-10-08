@@ -9,6 +9,7 @@ import { TESTID_3D, type ModuleScene, type Plan3d, type Scene, type SocleScene }
 import { DUREE_VOL_MAX_MS, MARQUES_3D_CAMERA, TESTID_3D_CAMERA as T, AZIMUT_DEPART, type CibleVol, type Direction, type ModuleCadrage, type ModuleVueFerme, type Pose } from '../src/ecrans/plan3d/test/contrat-camera.ts';
 import { distance, projeter, versPixel } from '../src/ecrans/plan3d/test/projection.ts';
 import { decrireDefilement, jugerDefilement, surveillerCsp, type PassageDefilement } from './outils.ts';
+import { arreterImages, BORNES_FERME_T07, demarrerImages, instrumenter3d, verifierGardeFous } from './fluidite-3d.ts';
 
 /**
  * T29 — vue 3D : la caméra vole vers une zone, de bout en bout, sur ordinateur (Chromium
@@ -370,6 +371,7 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
   expect(zones.length, 'la ferme de T07 a au moins deux zones avec des planches').toBeGreaterThanOrEqual(2);
   // La caméra de départ regarde le centre de la scène : la zone à cliquer est la première dont une planche est à l'écran.
   const violations = await surveillerCsp(page);
+  await instrumenter3d(page);
 
   await ouvrirPlanches(page, attendu);
   await ouvrirEn3d(page, attendu.plan.lignes.filter((l) => l.sorte === 'emplacement').length);
@@ -473,6 +475,7 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
   await test.step(`${String(VOLS_MESURES)} vols : 600 ms au plus, au plus 2 images perdues d’affilée pendant le vol`, async () => {
     const passages: PassageDefilement[] = [];
     let attendus = 0;
+    await demarrerImages(page);
     for (let i = 0; i < VOLS_MESURES; i += 1) {
       const versEnsemble = i % 2 === 0;
       const cible = versEnsemble ? 'ferme' : zoneA.id;
@@ -487,6 +490,7 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
       passages.push({ intervalles: intervallesDuVol(v) });
       attendus += intervallesDuVol(v).length;
     }
+    verifierGardeFous('vol de caméra 3D', await arreterImages(page), BORNES_FERME_T07, VOLS_MESURES * 3);
     expect(attendus, 'intervalles mesurés').toBeGreaterThan(VOLS_MESURES * 5);
     const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
     console.log(decrireDefilement('vol de caméra 3D', verdict));
@@ -499,7 +503,9 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
     const vols = await toile(page).getAttribute('data-vols');
     const avant = await lirePose(page);
     const passages: (PassageDefilement & { rendus: number })[] = [];
+    await demarrerImages(page);
     for (let i = 0; i < 5; i += 1) passages.push(await glisserUneFois(page, i % 2 === 0 ? 1 : -1));
+    verifierGardeFous('navigation 3D après les vols', await arreterImages(page), BORNES_FERME_T07, IMAGES_PAR_PASSAGE);
     expect(await toile(page).getAttribute('data-vols'), 'un glissé lance un vol').toBe(vols);
     await expect(toile(page)).toHaveAttribute('data-vol', 'non');
     expect(distance((await lirePose(page)).position, avant.position), 'la caméra a bougé').toBeGreaterThan(tolerance(avant));
