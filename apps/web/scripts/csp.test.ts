@@ -122,3 +122,27 @@ describe('politiqueCsp (T09b)', () => {
     expect(() => politiqueCsp({ urlPowerSync: url })).toThrow();
   });
 });
+
+/**
+ * T28b — fond de l'éditeur de placement : l'orthophoto IGN de la Géoplateforme, chargée par des
+ * <img> (docs/backlog/T28b-editeur-placement.md). `img-src` contient exactement 'self' et
+ * https://data.geopf.fr ; rien d'autre n'est ouvert : `connect-src` inchangé, aucune autre
+ * directive ne cite la Géoplateforme, et ni `data:` ni `blob:` ni `*` dans `img-src`.
+ */
+describe('politiqueCsp : images de la Géoplateforme (T28b)', () => {
+  it('img-src contient exactement \'self\' et https://data.geopf.fr', async () => {
+    for (const o of [{}, { urlApi: 'https://api.planif.fr', urlPowerSync: 'https://sync.planif.fr' }]) {
+      const d = directives(await politique(o));
+      expect(d.get('img-src')).toEqual(["'self'", 'https://data.geopf.fr']);
+    }
+  });
+
+  it('rien d’autre n’est ouvert : connect-src inchangé, aucune autre directive ne cite la Géoplateforme', async () => {
+    const d = directives(await politique());
+    expect(d.get('connect-src')).toEqual(["'self'"]);
+    expect(d.get('default-src')).toEqual(["'self'"]);
+    for (const [nom, valeurs] of d) if (nom !== 'img-src') expect(valeurs.join(' '), nom).not.toContain('geopf');
+    const avecServices = directives(await politique({ urlApi: 'https://api.planif.fr', urlPowerSync: 'https://sync.planif.fr:8443' }));
+    expect([...(avecServices.get('connect-src') ?? [])].sort()).toEqual(["'self'", 'https://api.planif.fr', 'https://sync.planif.fr:8443'].sort());
+  });
+});
