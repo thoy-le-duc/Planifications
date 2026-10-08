@@ -15,6 +15,10 @@
  * règles du cœur, `validerContour` et `validerPlacement`, rejouées ici sur la ligne complète ; le
  * contour reçu est borné en taille avant d'être lu.
  *
+ * T32a : le profil de croissance d'une espèce de la ferme (`profil_croissance`, texte JSON ou nul)
+ * suit `validerProfilCroissance` du cœur, les mêmes bornes que la base du téléphone ; il est
+ * écrit sous la forme rendue par le cœur. Le régler suit les droits d'écriture d'une espèce.
+ *
  * Format reçu : celui de PowerSync (packages/sync/src/schema.ts : booléen en entier 0/1, numeric
  * en nombre, dates 'AAAA-MM-JJ', tableau d'identifiants `remplace` en texte JSON) ou celui de
  * Postgres (`to_jsonb`, pour la ligne existante d'une modification) : les deux sont lus.
@@ -27,7 +31,9 @@ import {
   TYPES_BATIMENT,
   validerContour,
   validerPlacement,
+  validerProfilCroissance,
   type CodeErreurSaisie,
+  type ErreurCroissance,
   type ErreurPlacement,
   type ErreurSaisie,
 } from '@planif/core';
@@ -71,7 +77,19 @@ export const COLONNES_STRUCTURE: Readonly<Record<TableEcrite, readonly string[]>
     'supprime_le',
   ],
   famille: ['id', 'ferme_id', 'nom', 'delai_retour_minimal_ans', 'delai_retour_conseille_ans', 'supprime_le'],
-  espece: ['id', 'ferme_id', 'famille_id', 'nom', 'categorie', 'perenne', 'unite_recolte', 'delai_retour_minimal_ans', 'delai_retour_conseille_ans', 'supprime_le'],
+  espece: [
+    'id',
+    'ferme_id',
+    'famille_id',
+    'nom',
+    'categorie',
+    'perenne',
+    'unite_recolte',
+    'delai_retour_minimal_ans',
+    'delai_retour_conseille_ans',
+    'profil_croissance',
+    'supprime_le',
+  ],
   variete: ['id', 'ferme_id', 'espece_id', 'nom', 'fournisseur', 'poids_mille_graines_g', 'taux_germination', 'supprime_le'],
   saison: ['id', 'ferme_id', 'nom', 'debut', 'fin', 'supprime_le'],
   assolement: ['id', 'ferme_id', 'saison_id', 'zone_id', 'emplacement_id', 'famille_id', 'espece_id', 'nature', 'source_import', 'supprime_le'],
@@ -111,21 +129,24 @@ export type Ligne = Readonly<Record<string, unknown>>;
 
 /**
  * Ligne relue, ou la première erreur. `placement` : l'erreur d'une règle du placement réel
- * (validerPlacement, validerContour de @planif/core), dont le message affiché est plus précis
+ * (validerPlacement, validerContour de @planif/core), `croissance` : celle d'une règle du profil
+ * de croissance (validerProfilCroissance, T32a) ; leur message affiché est plus précis
  * (messages.ts) ; `erreur` en garde alors le code et le champ pour le journal.
  */
 export type ResultatStructure =
   | { readonly ok: true; readonly ligne: Ligne }
-  | { readonly ok: false; readonly erreur: ErreurSaisie; readonly placement?: ErreurPlacement };
+  | { readonly ok: false; readonly erreur: ErreurSaisie; readonly placement?: ErreurPlacement; readonly croissance?: ErreurCroissance };
 
 /** Levée par un lecteur pour arrêter la lecture : l'erreur de la ligne. */
 class Refusee extends Error {
   readonly erreur: ErreurSaisie;
   readonly placement: ErreurPlacement | undefined;
-  constructor(erreur: ErreurSaisie, placement?: ErreurPlacement) {
+  readonly croissance: ErreurCroissance | undefined;
+  constructor(erreur: ErreurSaisie, precise?: { readonly placement?: ErreurPlacement; readonly croissance?: ErreurCroissance }) {
     super(erreur.message);
     this.erreur = erreur;
-    this.placement = placement;
+    this.placement = precise?.placement;
+    this.croissance = precise?.croissance;
   }
 }
 
@@ -135,7 +156,12 @@ function arreter(code: CodeErreurSaisie, champ: string | null, message: string):
 
 /** Arrête la lecture sur une règle du placement réel (code du cœur gardé pour le journal). */
 function arreterPlacement(erreur: ErreurPlacement): never {
-  throw new Refusee({ code: 'champ_invalide', champ: erreur.champ ?? 'placement', message: erreur.message }, erreur);
+  throw new Refusee({ code: 'champ_invalide', champ: erreur.champ ?? 'placement', message: erreur.message }, { placement: erreur });
+}
+
+/** Arrête la lecture sur une règle du profil de croissance (T32a ; code du cœur gardé pour le journal). */
+function arreterCroissance(c: string, erreur: ErreurCroissance): never {
+  throw new Refusee({ code: 'champ_invalide', champ: erreur.champ === null ? c : `${c}.${erreur.champ}`, message: erreur.message }, { croissance: erreur });
 }
 
 const absent = (v: unknown): v is null | undefined => v === undefined || v === null;
@@ -250,7 +276,21 @@ function lecteurs(l: Ligne) {
     return r.valeur;
   }
 
-  return { id, texte, choix, positif, entier, booleen, date, instant, identifiants, contour };
+  /**
+   * Profil de croissance d'une espèce (T32a) : texte JSON (PowerSync ; la ligne existante d'une
+   * modification y est remise par structure.ts), ou nul (profil par défaut). Tout le reste, la
+   * longueur (mesurée avant de le lire) et les bornes, est la règle du cœur.
+   */
+  function profilCroissance(c: string): unknown {
+    const v = brut(c);
+    if (absent(v)) return null;
+    if (typeof v !== 'string') return arreter('champ_invalide', c, `${c} : texte attendu`);
+    const r = validerProfilCroissance(v);
+    if (!r.ok) return arreterCroissance(c, r.erreur);
+    return r.valeur;
+  }
+
+  return { id, texte, choix, positif, entier, booleen, date, instant, identifiants, contour, profilCroissance };
 }
 
 type Lecteurs = ReturnType<typeof lecteurs>;
@@ -318,6 +358,7 @@ const LIRE: Readonly<Record<TableEcrite, (lire: Lecteurs, id: string, entree: Li
       unite_recolte: lire.choix('unite_recolte', UNITES_RECOLTE),
       delai_retour_minimal_ans: d.minimal,
       delai_retour_conseille_ans: d.conseille,
+      profil_croissance: lire.profilCroissance('profil_croissance'),
     };
   },
   variete: (lire) => ({
@@ -380,7 +421,11 @@ export function validerStructure(table: TableEcrite, entree: Ligne): ResultatStr
     const supprimeLe = lire.instant('supprime_le');
     return { ok: true, ligne: { id, ferme_id: fermeId, ...propres, supprime_le: supprimeLe } };
   } catch (e) {
-    if (e instanceof Refusee) return e.placement === undefined ? { ok: false, erreur: e.erreur } : { ok: false, erreur: e.erreur, placement: e.placement };
+    if (e instanceof Refusee) {
+      if (e.placement !== undefined) return { ok: false, erreur: e.erreur, placement: e.placement };
+      if (e.croissance !== undefined) return { ok: false, erreur: e.erreur, croissance: e.croissance };
+      return { ok: false, erreur: e.erreur };
+    }
     return { ok: false, erreur: { code: 'entree_invalide', champ: null, message: 'ligne illisible' } };
   }
 }

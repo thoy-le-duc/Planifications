@@ -346,7 +346,7 @@ export function App() {
             donnees.ferme === null ? (
               <Attente base={donnees.base} montrera="le plan s’affichera" />
             ) : (
-              <planches.Composant key={donnees.ferme.fermeId} porte={donnees.ferme.porte} fermeId={donnees.ferme.fermeId} />
+              <planches.Composant key={donnees.ferme.fermeId} porte={donnees.ferme.porte} fermeId={donnees.ferme.fermeId} utilisateurId={session.utilisateurId} />
             )
           ) : onglet === 'aujourdhui' ? (
             // T13g : dessiné dès l'ouverture de la base, sans attendre la ferme : l'écran montre en

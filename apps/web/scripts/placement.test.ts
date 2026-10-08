@@ -200,3 +200,54 @@ describe('T28b : hors ligne et sécurité', () => {
     for (const [nom, valeurs] of directives) if (nom !== 'img-src') expect(valeurs.join(' '), nom).not.toContain('geopf');
   });
 });
+
+describe('T28f : l’éditeur s’ouvre aussi depuis la vue 3D, sans bouger les morceaux', () => {
+  const MARQUEURS_3D = ['WebGLRenderer', '__r3f'] as const;
+  const sources = (dossier: string): string[] => {
+    const racine = join(WEB, 'src');
+    return fichiers(racine)
+      .filter((f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f) && !f.includes('/test/') && f.startsWith(dossier))
+      .map((f) => join(racine, ...f.split('/')));
+  };
+
+  it('une seule façon d’ouvrir l’éditeur dans le code : un seul import dynamique de placement/index.ts, hors du dossier placement', () => {
+    const dynamiques = sources('').filter((f) => !f.includes(`${sep}placement${sep}`) && /import\(\s*['"][^'"]*placement\/index\.ts['"]\s*\)/.test(readFileSync(f, 'utf8')));
+    expect(dynamiques.map((f) => relative(join(WEB, 'src'), f).split(sep).join('/')), 'fichiers qui chargent l’éditeur').toHaveLength(1);
+  });
+
+  it('ni la vue 3D ni l’écran Planches n’importent l’éditeur statiquement', () => {
+    for (const f of [...sources('ecrans/plan3d/'), ...sources('ecrans/plan/')]) {
+      const source = readFileSync(f, 'utf8');
+      expect(source, `${f} : import statique de l’éditeur`).not.toMatch(/\bfrom\s+['"][^'"]*\/placement\//);
+      expect(source, `${f} : import statique de l’éditeur`).not.toMatch(/^\s*import\s+['"][^'"]*\/placement\//m);
+    }
+  });
+
+  it('la vue 3D porte le bouton et l’encart de T28f (textes du contrat)', () => {
+    const source = sources('ecrans/plan3d/')
+      .map((f) => readFileSync(f, 'utf8'))
+      .join('\n');
+    for (const texte of ['Modifier le plan', 'Placez votre ferme sur la photo aérienne', 'Le gérant place la ferme depuis un ordinateur', 'modifier-plan', 'encart-placement']) {
+      expect(source, `« ${texte} » absent de ecrans/plan3d/`).toContain(texte);
+    }
+  });
+
+  it('le morceau de l’éditeur ne contient rien de three, le morceau 3D rien de l’orthophoto', () => {
+    expect(morceau.size).toBeGreaterThan(0);
+    for (const f of morceau) for (const m of MARQUEURS_3D) expect(lire(f).includes(m), `${f} (éditeur) contient « ${m} »`).toBe(false);
+    const morceau3d = [...presents].filter((f) => f !== 'sw.js' && !f.startsWith('workbox-') && !demarrage.has(f) && MARQUEURS_3D.some((m) => lire(f).includes(m)));
+    expect(morceau3d.length, 'témoin : un morceau 3D existe').toBeGreaterThan(0);
+    for (const f of morceau3d) {
+      expect(lire(f).includes(MARQUEUR_PLACEMENT), `${f} (3D) contient l’orthophoto`).toBe(false);
+      // Un morceau partagé (repère de zone de @planif/core) peut servir aux deux : seul un porteur de l'éditeur est interdit.
+      expect(importsStatiques(f, presents).filter((c) => porteurs.includes(c)), `${f} (3D) importe l’éditeur statiquement`).toEqual([]);
+    }
+  });
+
+  it('budgets intacts : démarrage 71 Kio, morceau 3D et morceau de l’éditeur présents dans budget.json', () => {
+    const b = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson & { readonly jsVue3dGzKio?: number };
+    expect(b.jsInitialGzKio).toBe(BUDGET_DEMARRAGE_KIO);
+    expect(b.jsVue3dGzKio).toBe(220);
+    expect(b.jsPlacementGzKio).toBe(18.5);
+  });
+});

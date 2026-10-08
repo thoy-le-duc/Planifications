@@ -292,3 +292,28 @@
 .plan3d-liste-batiments li {
   flex-wrap: wrap;
 }
+
+/* T28f : invitation à placer la ferme, posée sur la scène. */
+.plan3d-encart {
+  position: absolute;
+  inset: auto var(--espace-m) var(--espace-m) var(--espace-m);
+  z-index: 1;
+  padding: var(--espace-m);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espace-s);
+  background: var(--couleur-surface);
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-carte);
+  font-weight: 700;
+}
+
+.plan3d-encart p {
+  margin: 0;
+}
+
+.plan3d-encart .plan3d-bouton {
+  min-height: 48px;
+}

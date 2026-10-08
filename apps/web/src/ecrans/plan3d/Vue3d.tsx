@@ -46,6 +46,7 @@ import {
   type SceneFiltree,
 
 } from './scene.ts';
+import { fermeSansPlacement } from './invitation.ts';
 import './vue3d.css';
 
 export interface ProprietesVue3d {
@@ -54,6 +55,32 @@ export interface ProprietesVue3d {
   readonly surRetour: () => void;
   /** La 3D ne peut pas tourner ici (erreur, contexte perdu, trop lente) : message pour la 2D. */
   readonly surEchec: (message: string) => void;
+  /**
+   * T28f : ouvre l'éditeur de placement (« Modifier le plan »). Absent ou `gerant` faux : pas de
+   * bouton. L'écran Planches le charge ; la vue n'importe pas l'éditeur.
+   */
+  readonly surModifierPlan?: () => void;
+  /** T28f : l'utilisateur est gérant de la ferme (seul à pouvoir placer). */
+  readonly gerant?: boolean;
+}
+
+/** T28f : écran assez grand pour éditer (même condition que l'éditeur, T28b), suivi en direct. */
+const REQUETE_ORDINATEUR = '(min-width: 1024px)';
+function useGrandEcran(): boolean {
+  const [grand, setGrand] = useState(() => typeof window.matchMedia !== 'function' || window.matchMedia(REQUETE_ORDINATEUR).matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
+    const m = window.matchMedia(REQUETE_ORDINATEUR);
+    const maj = () => {
+      setGrand(m.matches);
+    };
+    maj();
+    m.addEventListener('change', maj);
+    return () => {
+      m.removeEventListener('change', maj);
+    };
+  }, []);
+  return grand;
 }
 
 /** Marques de performance (e2e/vue-3d.e2e.ts) ; celle du module est posée par l'écran Planches (./entree.ts). */
@@ -745,7 +772,10 @@ const ElementBatiment = memo(function ElementBatiment({ batiment, surAller }: { 
   );
 });
 
-export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
+export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false }: ProprietesVue3d) {
+  const grandEcran = useGrandEcran();
+  const peutModifier = gerant && grandEcran && surModifierPlan !== undefined;
+  const sansPlacement = useMemo(() => fermeSansPlacement(plan), [plan]);
   const nbSemaines = plan.semaines.length;
   const [semaine, setSemaine] = useState(() => Math.min(Math.max(0, nbSemaines - 1), plan.semaineCourante ?? 0));
   const [prete, setPrete] = useState(false);
@@ -1009,9 +1039,28 @@ export function Vue3d({ plan, surRetour, surEchec }: ProprietesVue3d) {
         >
           Vue d’ensemble
         </button>
+        {peutModifier && !sansPlacement && (
+          <button type="button" data-testid="modifier-plan" className="plan3d-bouton" onClick={surModifierPlan}>
+            Modifier le plan
+          </button>
+        )}
       </div>
       <div className="plan3d-corps">
         <div className="plan3d-scene">
+          {sansPlacement && (
+            <div data-testid="encart-placement" className="plan3d-encart">
+              {peutModifier ? (
+                <>
+                  <p>Placez votre ferme sur la photo aérienne</p>
+                  <button type="button" data-testid="modifier-plan" className="plan3d-bouton" onClick={surModifierPlan}>
+                    Modifier le plan
+                  </button>
+                </>
+              ) : (
+                <p>Le gérant place la ferme depuis un ordinateur</p>
+              )}
+            </div>
+          )}
           <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-vols={0} data-vol="non" data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
         </div>
         <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
