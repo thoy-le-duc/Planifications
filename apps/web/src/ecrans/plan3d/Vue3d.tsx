@@ -477,15 +477,18 @@ function Camera({
     };
 
     const aller: Pilote = (cible) => {
-      const boite = boiteDe(sceneRef.current, cible);
-      if (boite === null) return;
+      // Toute la ferme : exactement la vue d'ouverture (meilleur azimut, cadrage sur les vrais coins) ; le reste, la boîte de la cible.
+      const boite = cible.sorte === 'ferme' ? null : boiteDe(sceneRef.current, cible);
+      if (cible.sorte !== 'ferme' && boite === null) return;
       const depart = poseCourante();
       const dx = depart.position.x - depart.cible.x;
       const dz = depart.position.z - depart.cible.z;
       const direction = Math.hypot(dx, dz) > 1e-9 ? { x: dx, z: dz } : { x: Math.sin(o.azimut), z: Math.cos(o.azimut) };
       const cadre = toile.getBoundingClientRect();
       const rapport = cadre.width > 0 && cadre.height > 0 ? cadre.width / cadre.height : 1;
-      const vol = demarrerVol(depart, cadrage(boite, CHAMP_DEGRES, rapport, direction), mouvementReduit());
+      const arrivee = boite === null ? (meilleureVueDeFerme(pointsDeFerme(sceneRef.current), CHAMP_DEGRES, rapport, AZIMUT_DEPART)?.pose ?? null) : cadrage(boite, CHAMP_DEGRES, rapport, direction);
+      if (arrivee === null) return;
+      const vol = demarrerVol(depart, arrivee, mouvementReduit());
       enVol.current = { vol, debut: performance.now(), cible: cible.sorte === 'ferme' ? 'ferme' : cible.id };
       suiviRef.current.vol = vol.dureeMs > 0;
       suiviRef.current.vols += 1;
