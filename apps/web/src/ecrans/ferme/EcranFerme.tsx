@@ -82,9 +82,13 @@ type ModuleItineraires = Awaited<ReturnType<typeof chargerItineraires>>;
 const chargerImport = () => import('../import/index.ts');
 type EcranImportCharge = Awaited<ReturnType<typeof chargerImport>>['EcranImport'];
 
-/** L'éditeur de placement sur la photo aérienne (T28b), chargé à la demande (morceau à part). */
-const chargerPlacement = () => import('../placement/index.ts');
-type EditeurPlacementCharge = Awaited<ReturnType<typeof chargerPlacement>>['EditeurPlacement'];
+/**
+ * L'éditeur de placement sur la photo aérienne (T28b), chargé à la demande (morceau à part).
+ * T28f : la seule façon de l'ouvrir dans le code. La vue 3D (EcranPlan) réutilise ce chargeur
+ * par un import dynamique d'EcranFerme au tap : ni l'éditeur ni l'écran Ferme ne sont chargés avant.
+ */
+export const chargerPlacement = () => import('../placement/index.ts');
+export type EditeurPlacementCharge = Awaited<ReturnType<typeof chargerPlacement>>['EditeurPlacement'];
 
 /** Pourquoi le bouton d'export est désactivé, dit en clair. */
 const EXPLICATION_EXPORT: Readonly<Record<Exclude<EtatBase, 'prete'>, string>> = {
@@ -503,7 +507,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
       <Carte titre="Plan de la ferme">
         <Ligne
           nom="Placer sur la photo aérienne"
-          detail="Serres, bâtiments et planches à leur vraie place, sur la photo IGN."
+          detail="Serres, bâtiments et planches à leur vraie place, sur la photo IGN. Aussi depuis la vue 3D, « Modifier le plan »."
           signe="›"
           couleur="var(--couleur-foret)"
           desactivee={!itinerairesPossibles}

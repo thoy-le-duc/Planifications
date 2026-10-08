@@ -121,7 +121,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T28d](T28d-contours-zones.md) | Éditeur de placement : contours de zones en formes libres (Q31) | T28b | fait |
 | [T28e](T28e-editeur-suites.md) | Éditeur de placement : suites de relecture (clavier, zoom, messages, tuiles) | T28b, T28d | fait |
 | [T31](T31-tests-temps-fiables.md) | Tests de temps fiables sous charge (helper commun, médiane de ≥ 5, CPU) | — | fait |
-| [T28f](T28f-trouver-editeur.md) | Plan de la ferme : trouver et ouvrir l'éditeur depuis la 3D, démo comprise (Q32) | T28b, T28e | à faire |
+| [T28f](T28f-trouver-editeur.md) | Plan de la ferme : trouver et ouvrir l'éditeur depuis la 3D, démo comprise (Q32) | T28b, T28e | fait |
 | [T32a](T32a-croissance-profils.md) | Croissance des cultures : profils et calcul (moteur) (Q32) | T02, T03 | fait |
 | [T32b](T32b-plants-stylises-3d.md) | Jumeau 3D : plants stylisés qui grandissent (Q32) | T32a, T28c, T29b | à faire |
 | [T32c](T32c-reglage-profils.md) | Profils de croissance : réglage par la ferme (écran) (Q32) | T32a, T32b | à faire |
