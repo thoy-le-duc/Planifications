@@ -41,12 +41,13 @@ import {
   normaliserCap,
   pivoter,
   redimensionner,
+  DIMENSION_MIN_M,
   versPlacementPlanche,
   type Cote,
   type Repere,
   type RectanglePlace,
 } from './gestes.ts';
-import { depuisEcran, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_INITIAL, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
+import { DELAI_RELANCE_TUILE_MS, depuisEcran, ESSAIS_TUILE_MAX, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_DEPART_SANS_POSITION, ZOOM_INITIAL, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
 
 export const MESSAGES_PLACEMENT = {
   seulGerant: 'Seul le gérant peut placer les éléments de la ferme',
@@ -62,6 +63,8 @@ export const MESSAGES_CONTOURS = {
   zoneAbritee: 'sa forme est celle de la serre',
   sommetsMin: 'au moins 3 sommets',
   tropDeChangements: 'Trop de changements à enregistrer en une fois',
+  planchesSuivent: 'Les planches de la zone suivront la serre.',
+  brouillonAbandonne: 'Le brouillon en cours a été abandonné : la ferme active a changé.',
 } as const;
 
 /** « Annuler » reste affiché quelques secondes après un enregistrement. */
@@ -259,10 +262,31 @@ function identiteDe(porte: PorteDonnees): number {
  * zéro — brouillon, pile Ctrl+Z, « Annuler », vue, lectures. Rien de la ferme A n'est écrit dans B.
  */
 export function EditeurPlacement(p: ProprietesEditeurPlacement): ReactElement {
-  return <EditeurFerme key={`${p.fermeId}/${String(identiteDe(p.porte))}/${p.utilisateurId}`} {...p} />;
+  const cle = `${p.fermeId}/${String(identiteDe(p.porte))}/${p.utilisateurId}`;
+  // Le brouillon de l'éditeur sortant, lu au moment où la clé change : le nouveau le dit à l'écran.
+  const brouillonOuvert = useRef(false);
+  const [suivi, setSuivi] = useState({ cle, abandonne: false });
+  if (suivi.cle !== cle) setSuivi({ cle, abandonne: brouillonOuvert.current });
+  return (
+    <EditeurFerme
+      key={cle}
+      {...p}
+      brouillonAbandonne={suivi.cle === cle && suivi.abandonne}
+      surBrouillon={(ouvert) => {
+        brouillonOuvert.current = ouvert;
+      }}
+    />
+  );
 }
 
-function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, enLigne, delaiAnnulationMs = DELAI_ANNULATION_MS, nouvelId }: ProprietesEditeurPlacement): ReactElement {
+interface ProprietesEditeurFerme extends ProprietesEditeurPlacement {
+  /** Un brouillon était ouvert dans l'éditeur de la ferme précédente. */
+  readonly brouillonAbandonne: boolean;
+  /** Dit à l'enveloppe si un brouillon est ouvert (lu au changement de ferme). */
+  readonly surBrouillon: (ouvert: boolean) => void;
+}
+
+function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, enLigne, delaiAnnulationMs = DELAI_ANNULATION_MS, nouvelId, brouillonAbandonne, surBrouillon }: ProprietesEditeurFerme): ReactElement {
   const idTitre = useId();
   const titre = useRef<HTMLHeadingElement>(null);
   const planRef = useRef<HTMLDivElement>(null);
@@ -316,7 +340,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [tuilesEnErreur, setTuilesEnErreur] = useState<ReadonlySet<string>>(() => new Set());
   const [taille, setTaille] = useState<{ readonly w: number; readonly h: number }>(TAILLE_PAR_DEFAUT);
   const [centreGeo, setCentreGeo] = useState<Position | null>(null);
-  const [zoom, setZoom] = useState(ZOOM_INITIAL);
+  /** Zoom choisi par le geste ou les boutons ; null tant qu'on garde le zoom de départ. */
+  const [zoomChoisi, setZoomChoisi] = useState<number | null>(null);
+  const relances = useRef(new Map<string, { essais: number; minuterie: ReturnType<typeof setTimeout> | null }>());
 
   useEffect(() => {
     titre.current?.focus();
@@ -342,13 +368,35 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   // Une tuile en échec ne condamne pas la session : le réseau qui revient redonne la photo.
   useEffect(() => {
     const retour = () => {
+      for (const r of relances.current.values()) if (r.minuterie !== null) clearTimeout(r.minuterie);
+      relances.current.clear();
       setTuilesEnErreur(new Set());
     };
     addEventListener('online', retour);
+    const suivies = relances.current;
     return () => {
       removeEventListener('online', retour);
+      for (const r of suivies.values()) if (r.minuterie !== null) clearTimeout(r.minuterie);
+      suivies.clear();
     };
   }, []);
+
+  // Une tuile en erreur est redemandée après DELAI_RELANCE_TUILE_MS, sans attendre le réseau : une relance à la fois, ESSAIS_TUILE_MAX au plus.
+  function tuileEnErreur(cle: string): void {
+    setTuilesEnErreur((prev) => (prev.has(cle) ? prev : new Set(prev).add(cle)));
+    const suivie = relances.current.get(cle) ?? { essais: 0, minuterie: null };
+    relances.current.set(cle, suivie);
+    if (suivie.minuterie !== null || suivie.essais >= ESSAIS_TUILE_MAX) return;
+    suivie.essais += 1;
+    suivie.minuterie = setTimeout(() => {
+      suivie.minuterie = null;
+      setTuilesEnErreur((prev) => {
+        const reste = new Set(prev);
+        reste.delete(cle);
+        return reste;
+      });
+    }, DELAI_RELANCE_TUILE_MS);
+  }
 
   // « Annuler » ne reste que delaiAnnulationMs.
   useEffect(() => {
@@ -384,6 +432,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const origine = ferme?.valeur?.origine ?? null;
   const origineVue = origine ?? ferme?.valeur?.position ?? POSITION_DE_REPLI;
   const centreEffectif = centreGeo ?? origineVue;
+  // Sans point de départ ni position de ferme, la vue s'ouvre large pour retrouver la ferme.
+  const zoom = zoomChoisi ?? (origine === null && ferme?.valeur?.position == null ? ZOOM_DEPART_SANS_POSITION : ZOOM_INITIAL);
   const vue: VueCarte = useMemo(
     () => ({ origine: origineVue, centre: versLocal(origineVue, centreEffectif), zoom, largeurPx: taille.w, hauteurPx: taille.h }),
     [origineVue, centreEffectif, zoom, taille],
@@ -488,6 +538,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   /** Quelque chose à perdre en fermant : changements à écrire, contour refusé, tracé commencé. */
   const brouillonOuvert = modifie || contoursModifies.length > 0 || (trace?.sommets.length ?? 0) > 0;
   const tropDeChangements = changements.length > ECRITURES_MAX_PAR_LOT;
+  useEffect(() => {
+    surBrouillon(brouillonOuvert);
+  }, [surBrouillon, brouillonOuvert]);
   const peutEnregistrer = modifie && !occupe && contoursInvalides.length === 0 && trace === null && !tropDeChangements;
 
   // Les tuiles ne sont demandées qu'une fois les données de la ferme lues (la vue est alors la bonne).
@@ -531,6 +584,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setZoneSel(null);
     setSommetSel(null);
     setMessageContour(null);
+    focusTracer.current = false;
     if (id !== null) setTrace(null);
   }
 
@@ -539,6 +593,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setZoneSel(id);
     setSommetSel(null);
     setMessageContour(null);
+    focusTracer.current = false;
     if (trace?.zoneId !== id) setTrace(null);
   }
 
@@ -555,8 +610,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   }
 
   function abandonnerTrace(): void {
+    // Le focus ne revient sur « Tracer le contour » que si la zone du tracé est affichée.
+    focusTracer.current = trace !== null && trace.zoneId === zoneSel && zonesInfo.has(trace.zoneId);
     setTrace(null);
-    focusTracer.current = true;
   }
 
   function fermerTrace(): void {
@@ -779,23 +835,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       return;
     }
     if (pose !== null) {
-      const id = nouvelId?.() ?? identifiantNeuf();
-      setBrouillonB((prev) =>
-        new Map(prev).set(id, {
-          id,
-          nom: pose.nom,
-          type: pose.type,
-          centre: { x: arrondi(local.x), y: arrondi(local.y) },
-          orientationDeg: 0,
-          longueurM: pose.longueurM,
-          largeurM: pose.largeurM,
-          hauteurM: pose.hauteurM,
-          zoneId: null,
-          nouveau: true,
-        }),
-      );
-      selectionner(id);
-      setPose(null);
+      poserEn(local);
       return;
     }
     if (origine === null) {
@@ -805,13 +845,35 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     selectionner(null);
   }
 
+  /** Pose le nouveau bâtiment au point donné (repère de la ferme) : au brouillon, sélectionné. */
+  function poserEn(local: Point): void {
+    if (pose === null) return;
+    const id = nouvelId?.() ?? identifiantNeuf();
+    setBrouillonB((prev) =>
+      new Map(prev).set(id, {
+        id,
+        nom: pose.nom,
+        type: pose.type,
+        centre: { x: arrondi(local.x), y: arrondi(local.y) },
+        orientationDeg: 0,
+        longueurM: pose.longueurM,
+        largeurM: pose.largeurM,
+        hauteurM: pose.hauteurM,
+        zoneId: null,
+        nouveau: true,
+      }),
+    );
+    selectionner(id);
+    setPose(null);
+  }
+
   function identifiantNeuf(): string {
     generateur.current ??= creerGenerateurId({ horloge: () => Date.now(), aleatoire: (n) => crypto.getRandomValues(new Uint8Array(n)) });
     return generateur.current<'Batiment'>();
   }
 
   function changerZoom(delta: number): void {
-    setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z + delta)));
+    setZoomChoisi(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom + delta)));
   }
 
   // Clavier d'un élément : flèches 0,1 m (Maj : 1 m), [ ] 1°. AltGr (Ctrl+Alt sous Windows) donne [ et ] au clavier français.
@@ -839,6 +901,11 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
         fermerTrace();
         return;
       }
+    }
+    if (edition && trace === null && pose !== null && e.key === 'Enter' && !enSaisie && !(cible instanceof HTMLButtonElement) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      poserEn(vue.centre);
+      return;
     }
     if (edition && !enSaisie && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z') {
       e.preventDefault();
@@ -970,7 +1037,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                       className="pl-tuile"
                       style={{ left: t.x, top: t.y, width: t.largeur + 0.5, height: t.hauteur + 0.5 }}
                       onError={() => {
-                        setTuilesEnErreur((prev) => new Set(prev).add(cleTuile(t)));
+                        tuileEnErreur(cleTuile(t));
                       }}
                     />
                   ))}
@@ -1164,9 +1231,23 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 )}
               </>
             )}
+            {brouillonAbandonne && (
+              <p role="status" className="pl-message">
+                {MESSAGES_CONTOURS.brouillonAbandonne}
+              </p>
+            )}
             {pose !== null && (
               <p role="status" className="pl-message">
                 Touchez la photo pour poser « {pose.nom} ».{' '}
+                <button
+                  type="button"
+                  className="pl-bouton"
+                  onClick={() => {
+                    poserEn(vue.centre);
+                  }}
+                >
+                  Poser au centre de la vue
+                </button>{' '}
                 <button
                   type="button"
                   className="pl-lien"
@@ -1344,7 +1425,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               setConfirmation(null);
             }}
           >
-            <p>{MESSAGES_PLACEMENT.contourRemplace}.</p>
+            <p>
+              {MESSAGES_PLACEMENT.contourRemplace}. {MESSAGES_CONTOURS.planchesSuivent}
+            </p>
             <div className="pl-modale-actions">
               <button
                 type="button"
@@ -1420,8 +1503,8 @@ function ChampsElement({ element, batiment, lecture, zones, surRectangle, surBat
       <Champ etiquette="x (m)" valeur={r.centre.x} desactive={lecture} surChange={(x) => { surRectangle({ ...r, centre: { x, y: r.centre.y } }); }} />
       <Champ etiquette="y (m)" valeur={r.centre.y} desactive={lecture} surChange={(y) => { surRectangle({ ...r, centre: { x: r.centre.x, y } }); }} />
       <Champ etiquette="Orientation (°)" valeur={r.orientationDeg} desactive={lecture} surChange={(o) => { surRectangle({ ...r, orientationDeg: normaliserCap(o) }); }} />
-      <Champ etiquette="Longueur (m)" valeur={r.longueurM} desactive={lecture || planche} surChange={(longueurM) => { surRectangle({ ...r, longueurM }); }} />
-      <Champ etiquette="Largeur (m)" valeur={r.largeurM} desactive={lecture || planche} surChange={(largeurM) => { surRectangle({ ...r, largeurM }); }} />
+      <Champ etiquette="Longueur (m)" valeur={r.longueurM} desactive={lecture || planche} surChange={(longueurM) => { surRectangle({ ...r, longueurM: Math.max(DIMENSION_MIN_M, longueurM) }); }} />
+      <Champ etiquette="Largeur (m)" valeur={r.largeurM} desactive={lecture || planche} surChange={(largeurM) => { surRectangle({ ...r, largeurM: Math.max(DIMENSION_MIN_M, largeurM) }); }} />
       {batiment !== undefined && (
         <>
           <Champ etiquette="Hauteur (m)" valeur={batiment.hauteurM} desactive={lecture} surChange={(hauteurM) => { surBatiment({ hauteurM }); }} />

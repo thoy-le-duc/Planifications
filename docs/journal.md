@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T28e : l'éditeur de placement se tient au clavier et dit ce qui se passe
+
+- **Fait** : en mode pose, Entrée ou le bouton « Poser au centre de la vue » pose le bâtiment au centre de la vue (brouillon, sélectionné) ; longueur et largeur du panneau bornées à 0,5 m ; message « Le brouillon en cours a été abandonné : la ferme active a changé. » ; la confirmation d'abri dit que les planches suivront la serre ; une tuile en erreur est redemandée après 4 s (3 relances au plus, une à la fois), sans attendre « en ligne ». Relecture de T28d : le focus ne saute plus sur « Tracer le contour » après un tracé abandonné, zone absente (le drapeau n'est levé que si la zone du tracé est affichée, et retombe dans `selectionner` / `choisirZoneListe`). Aucun calcul changé ; démarrage JS inchangé.
+- **Décidé** : `ZOOM_DEPART_SANS_POSITION` = 16 (proposition, un niveau sous le plafond du test : à 2 m/px on retrouve sa commune ; dès que le point de départ est posé, la vue passe au zoom 19 autour du point cliqué). `DELAI_RELANCE_TUILE_MS` = 4 000, `ESSAIS_TUILE_MAX` = 3 (le retour « en ligne » remet les essais à zéro).
+- **Bloquant** : rien.
+
 ## 2026-10-08 — T29c : le vol de caméra ne coûte pas plus que la navigation
 
 - **Fait** : mesure seule, aucun code changé. Une navigation continue coûte autant qu'un vol (médiane 38–39 ms sous rendu logiciel) ; l'écart vu en T29b venait du glissé de l'e2e, rythmé par Playwright. Même travail par image (1 rendu, 2 appels de dessin, ~0,6 ms de JS) ; sans dessin, 18–25 ms : le coût est SwiftShader.
