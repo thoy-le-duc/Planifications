@@ -50,6 +50,8 @@ export interface OptionsFermePlacement {
   readonly origine?: boolean;
   /** Rôle de UTILISATEUR. Défaut : 'gerant'. */
   readonly role?: 'gerant' | 'equipier';
+  /** T28e : la ferme n'a pas de position (ferme.position = null). Incompatible avec `origine`. Défaut : faux. */
+  readonly sansPosition?: boolean;
 }
 
 export interface FermePlacement {
@@ -66,6 +68,7 @@ export function fermePlacement(options: OptionsFermePlacement = {}): FermePlacem
   const ajouter = (table: NomTableLocale, l: LigneLocale) => {
     (lignes[table] ??= []).push(l);
   };
+  if (origine && options.sansPosition === true) throw new Error('origine et sansPosition sont incompatibles');
   const position = JSON.stringify(POSITION);
 
   ajouter('utilisateur', { id: UTILISATEUR, nom: 'Théophane (test placement)', ...horo });
@@ -73,7 +76,7 @@ export function fermePlacement(options: OptionsFermePlacement = {}): FermePlacem
     id: FERME,
     nom: 'Ferme du placement (tests)',
     fuseau_horaire: 'Europe/Paris',
-    position,
+    position: options.sansPosition === true ? null : position,
     origine_plan: origine ? position : null,
     unites: '{"longueur":"m","masse":"kg"}',
     ...horo,

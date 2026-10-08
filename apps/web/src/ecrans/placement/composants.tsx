@@ -30,6 +30,8 @@ export interface ProprietesChamp {
   readonly valeur: number;
   readonly surChange: (valeur: number) => void;
   readonly desactive: boolean;
+  /** Borne basse, appliquée à la sortie du champ ou à Entrée (pas à chaque frappe). */
+  readonly minimum?: number;
 }
 
 /**
@@ -37,11 +39,15 @@ export interface ProprietesChamp {
  * « 4. »), la valeur n'est donnée qu'à un nombre complet, et un champ laissé invalide revient à
  * la valeur courante en le quittant.
  */
-export function Champ({ etiquette, valeur, surChange, desactive }: ProprietesChamp): ReactElement {
+export function Champ({ etiquette, valeur, surChange, desactive, minimum }: ProprietesChamp): ReactElement {
   const id = useId();
   // Texte tapé, et la valeur qu'il donne : tant que le champ vaut cette valeur, le texte reste tel quel.
   const [saisie, setSaisie] = useState<{ readonly texte: string; readonly valeur: number } | null>(null);
   const affiche = saisie !== null && Math.abs(saisie.valeur - valeur) < 5e-4 ? saisie.texte : formater(valeur);
+  const borner = (): void => {
+    setSaisie(null);
+    if (minimum !== undefined && valeur < minimum) surChange(minimum);
+  };
   return (
     <div className="pl-champ">
       <label htmlFor={id}>{etiquette}</label>
@@ -59,8 +65,9 @@ export function Champ({ etiquette, valeur, surChange, desactive }: ProprietesCha
           setSaisie({ texte, valeur: complet ? n : valeur });
           if (complet) surChange(n);
         }}
-        onBlur={() => {
-          setSaisie(null);
+        onBlur={borner}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') borner();
         }}
       />
     </div>

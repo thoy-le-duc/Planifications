@@ -16,14 +16,14 @@
 
 ## Critères d'acceptation
 
-- [ ] Test clavier : en mode pose, Entrée ajoute un bâtiment au centre de la vue ; le bouton fait la même chose ; le bâtiment est sélectionné après la pose.
-- [ ] Test : sans point de départ ni position de ferme, le zoom initial est la constante nommée, et elle est plus petite que le zoom actuel d'au moins deux niveaux.
-- [ ] Test : longueur 0,2 m saisie dans le panneau → 0,5 m ; largeur de même ; les gestes donnent le même minimum.
-- [ ] Test : changement de ferme active avec brouillon ouvert → brouillon fermé et message affiché, texte exact.
-- [ ] Test : confirmation d'abri contient « Les planches de la zone suivront la serre. ».
-- [ ] Test : une tuile dont la première requête échoue est redemandée en moins de 5 secondes, sans événement « en ligne » ; le même échec répété ne déclenche pas de rafale.
-- [ ] Aucun changement de calcul : les tests de `gestes`, `tuiles` et du placement existants restent verts sans modification.
-- [ ] `pnpm verif` passe en entier. JS de démarrage inchangé.
+- [x] Test clavier : en mode pose, Entrée ajoute un bâtiment au centre de la vue ; le bouton fait la même chose ; le bâtiment est sélectionné après la pose.
+- [x] Test : sans point de départ ni position de ferme, le zoom initial est la constante nommée, et elle est plus petite que le zoom actuel d'au moins deux niveaux.
+- [x] Test : longueur 0,2 m saisie dans le panneau → 0,5 m ; largeur de même ; les gestes donnent le même minimum.
+- [x] Test : changement de ferme active avec brouillon ouvert → brouillon fermé et message affiché, texte exact.
+- [x] Test : confirmation d'abri contient « Les planches de la zone suivront la serre. ».
+- [x] Test : une tuile dont la première requête échoue est redemandée en moins de 5 secondes, sans événement « en ligne » ; le même échec répété ne déclenche pas de rafale.
+- [x] Aucun changement de calcul : les tests de `gestes`, `tuiles` et du placement existants restent verts sans modification.
+- [x] `pnpm verif` passe en entier. JS de démarrage inchangé.
 
 ## Risques
 
