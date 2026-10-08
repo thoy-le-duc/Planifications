@@ -32,7 +32,7 @@
  * tête de l'écran quand il y en a (./Refus.tsx). Marque MARQUE_REFUS_AFFICHES une fois par
  * ouverture, quand la liste est lue et dessinée (même vide).
  */
-import { useContext, useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useContext, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { urlApi } from '../../connexion/client.ts';
 import { deconnecterAvecConfirmation, effacementsEnAttente } from '../../connexion/deconnexion.ts';
 import { stockageNavigateur, type SessionConnexion } from '../../connexion/session.ts';
@@ -304,6 +304,14 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
 
   // Éditeur de placement (T28b) : chargé au tap, montré avec la porte du contexte.
   const [EditeurPlacement, setEditeurPlacement] = useState<EditeurPlacementCharge | null>(null);
+  // Focus rendu au bouton d'ouverture une fois l'éditeur retiré (T28g).
+  const boutonPlacement = useRef<HTMLDivElement>(null);
+  const rendreFocus = useRef(false);
+  useLayoutEffect(() => {
+    if (EditeurPlacement !== null || !rendreFocus.current) return;
+    rendreFocus.current = false;
+    boutonPlacement.current?.querySelector('button')?.focus();
+  }, [EditeurPlacement]);
   function ouvrirPlacement(): void {
     if (!itinerairesPossibles) return;
     chargerPlacement().then(
@@ -505,14 +513,16 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
         />
       )}
       <Carte titre="Plan de la ferme">
-        <Ligne
-          nom="Placer sur la photo aérienne"
-          detail="Serres, bâtiments et planches à leur vraie place, sur la photo IGN. Aussi depuis la vue 3D, « Modifier le plan »."
-          signe="›"
-          couleur="var(--couleur-foret)"
-          desactivee={!itinerairesPossibles}
-          surTap={ouvrirPlacement}
-        />
+        <div ref={boutonPlacement}>
+          <Ligne
+            nom="Placer sur la photo aérienne"
+            detail="Serres, bâtiments et planches à leur vraie place, sur la photo IGN. Aussi depuis la vue 3D, « Modifier le plan »."
+            signe="›"
+            couleur="var(--couleur-foret)"
+            desactivee={!itinerairesPossibles}
+            surTap={ouvrirPlacement}
+          />
+        </div>
       </Carte>
       {EditeurPlacement !== null && ouverte !== null && (
         <EditeurPlacement
@@ -521,6 +531,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
           fermeId={ouverte.fermeId}
           utilisateurId={session.utilisateurId}
           surFermer={() => {
+            rendreFocus.current = true;
             setEditeurPlacement(null);
           }}
         />

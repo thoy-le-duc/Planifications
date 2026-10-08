@@ -661,6 +661,13 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
         },
       );
   }, []);
+  // Focus rendu à la fermeture de l'éditeur (T28g) : posé après le rendu, sur le « Modifier le plan » du moment, sinon la toile.
+  const rendreFocus = useRef(false);
+  useLayoutEffect(() => {
+    if (EditeurPlacement !== null || !rendreFocus.current) return;
+    rendreFocus.current = false;
+    (document.querySelector<HTMLElement>('[data-testid="modifier-plan"]') ?? document.querySelector<HTMLElement>('[data-testid="toile-3d"]'))?.focus();
+  }, [EditeurPlacement]);
   const fermer3d = useCallback(() => {
     setVue3d({ sorte: 'fermee' });
   }, []);
@@ -756,6 +763,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
           fermeId={fermeId}
           utilisateurId={utilisateurId}
           surFermer={() => {
+            rendreFocus.current = true;
             setEditeurPlacement(null);
           }}
         />

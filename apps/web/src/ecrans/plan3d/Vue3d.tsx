@@ -779,6 +779,8 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const nbSemaines = plan.semaines.length;
   const [semaine, setSemaine] = useState(() => Math.min(Math.max(0, nbSemaines - 1), plan.semaineCourante ?? 0));
   const [prete, setPrete] = useState(false);
+  /** Dernière zone choisie par « Aller à » : citée dans l'encart, que les lecteurs d'écran annoncent (T28g). */
+  const [zoneChoisie, setZoneChoisie] = useState<string | null>(null);
   const idCurseur = useId();
   const idListe = useId();
   const idBatiments = useId();
@@ -1048,7 +1050,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
       <div className="plan3d-corps">
         <div className="plan3d-scene">
           {sansPlacement && (
-            <div data-testid="encart-placement" className="plan3d-encart">
+            <div data-testid="encart-placement" role="status" className="plan3d-encart">
               {peutModifier ? (
                 <>
                   <p>Placez votre ferme sur la photo aérienne</p>
@@ -1059,6 +1061,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               ) : (
                 <p>Le gérant place la ferme depuis un ordinateur</p>
               )}
+              {zoneChoisie !== null && <p>Vue sur la zone {zoneChoisie}</p>}
             </div>
           )}
           <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-vols={0} data-vol="non" data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
@@ -1095,6 +1098,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
                       data-id={z.id}
                       className="plan3d-bouton"
                       onClick={() => {
+                        setZoneChoisie(z.nom);
                         aller({ sorte: 'zone', id: z.id });
                       }}
                     >
