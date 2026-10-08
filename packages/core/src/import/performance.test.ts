@@ -14,6 +14,7 @@ import { chargerImport, type Bibliotheque, type ModuleImport, type PlanImport, t
 import { cp1252, ESPECES, FAMILLES, lireFixture, utf8 } from './test/fixtures.ts';
 import { fermeComplete, VOLUMES } from './test/jeu-ferme.ts';
 import { preparerExport } from '../export/index.ts';
+import { mesurer } from '../test/mesurer.ts';
 
 let m: ModuleImport;
 
@@ -98,11 +99,16 @@ describe('performance : ferme complète en moins de 15 s', () => {
       const autres = Array.from({ length: 200 }, (_, i) => ({ id: `esp-autre-${String(i)}`, nom: `Plante ${String(i)}` }));
       const biblioTableur: Bibliotheque = { especes: [...ESPECES, ...autres], familles: FAMILLES };
 
-      const debut = Date.now();
-      const p1 = preparer(emplacements, biblioFerme, null);
-      const p2 = preparer(series, biblioFerme, null);
-      const p3 = preparer(tableur, biblioTableur, 2027);
-      const duree = Date.now() - debut;
+      // Médiane de 5 préparations complètes après une d'échauffement, chacune en min(mural, CPU) (T31).
+      const { mediane: duree, detail, resultat } = mesurer(
+        () => ({
+          p1: preparer(emplacements, biblioFerme, null),
+          p2: preparer(series, biblioFerme, null),
+          p3: preparer(tableur, biblioTableur, 2027),
+        }),
+        { echauffement: 1, mesures: 5, borneMs: BUDGET_MS },
+      );
+      const { p1, p2, p3 } = resultat;
 
       expect(p1.type).toBe('parcellaire');
       expect(p1.plan?.resume).toStrictEqual({ valides: VOLUMES.emplacements, erreurs: 0, aDecider: 0, doublons: 0, ignorees: 0 });
@@ -123,8 +129,8 @@ describe('performance : ferme complète en moins de 15 s', () => {
         ['Chou pommé', 3_000],
       ]);
 
-      expect(duree, `préparation en ${String(duree)} ms`).toBeLessThan(BUDGET_MS);
+      expect(duree, `préparation : ${detail}`).toBeLessThan(BUDGET_MS);
     },
-    60_000,
+    120_000,
   );
 });

@@ -24,6 +24,7 @@
  *     repère devient caduque dès que l'étape repère est réalisée (ou rendue faite par Q11).
  */
 import { beforeAll, describe, expect, it } from 'vitest';
+import { mesurer } from '../test/mesurer.ts';
 import {
   chargerTravaux,
   type DatesSerieLues,
@@ -35,9 +36,6 @@ import {
   type TacheLue,
   type TravailPrevuLu,
 } from './test/contrat-travaux.ts';
-
-// `types: []` dans tsconfig : l'horloge haute résolution de Node est déclarée ici.
-declare const performance: { now(): number };
 
 let m: ModuleTravaux;
 
@@ -574,17 +572,10 @@ describe('performance', () => {
       if (i % 3 === 0) interventions.push([id, [intervention(dates.miseEnPlace, 'désherbage'), intervention(dates.miseEnPlace, 'grelinette')]]);
     }
     const r = realises(interventions);
-    for (let i = 0; i < 3; i++) m.semainier(s(2027, 20), series, [], r, '2027-05-19');
-    let meilleure = Number.POSITIVE_INFINITY;
-    let taches: readonly TacheLue[] = [];
-    for (let i = 0; i < 5; i++) {
-      const t0 = performance.now();
-      taches = m.semainier(s(2027, 20), series, [], r, '2027-05-19');
-      meilleure = Math.min(meilleure, performance.now() - t0);
-    }
+    const { mediane, detail, resultat: taches } = mesurer(() => m.semainier(s(2027, 20), series, [], r, '2027-05-19'), { borneMs: 60 });
     expect(taches.some((t) => t.etape === 'travail' && t.enRetard)).toBe(true);
     expect(taches.some((t) => t.etape === 'travail' && !t.enRetard)).toBe(true);
-    expect(meilleure).toBeLessThan(60);
+    expect(mediane, detail).toBeLessThan(60);
   });
 });
 
@@ -643,16 +634,9 @@ describe('datesTravailPrevu : nombre d’occurrences plafonné (relecture)', () 
     const bornee = serie({ id: 'forgee', statut: 'en_cours', datesPrevues: DATES_BORNEES, travauxPrevus: DOUZE });
     const r = realises([['forgee', [intervention('2027-05-10', 'arrosage 0', 'entretien')]]]);
     const semaine = s(2027, 20);
-    for (let i = 0; i < 3; i++) m.semainier(semaine, [forgee], [], r, '2027-05-19');
-    let meilleure = Number.POSITIVE_INFINITY;
-    let taches: readonly TacheLue[] = [];
-    for (let i = 0; i < 5; i++) {
-      const t0 = performance.now();
-      taches = m.semainier(semaine, [forgee], [], r, '2027-05-19');
-      meilleure = Math.min(meilleure, performance.now() - t0);
-    }
+    const { mediane, detail, resultat: taches } = mesurer(() => m.semainier(semaine, [forgee], [], r, '2027-05-19'), { borneMs: 50 });
     expect(travaux(taches)).toStrictEqual(travaux(m.semainier(semaine, [bornee], [], r, '2027-05-19')));
     expect(travaux(taches).length).toBeGreaterThan(0);
-    expect(meilleure).toBeLessThan(50);
+    expect(mediane, detail).toBeLessThan(50);
   });
 });

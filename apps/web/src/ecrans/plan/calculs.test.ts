@@ -17,6 +17,7 @@ import { remplirJeuT07, type JeuT07 } from '../../../../../packages/sync/src/tes
 import type { BarrePlan, DonneesPlan, LigneEmplacementPlan, LigneLocale, ModuleCalculsPlan, Plan, SaisonPlan } from './test/contrat.ts';
 import { E, FERME, LIGNES_SAISON, O, PETITE_FERME, PLANTATION, S, SAISON_2025, SAISON_2026, SAISONS, Z } from './test/petite-ferme.ts';
 import { comparable, conflitsAttendus, recoupeSaison } from './test/t03.ts';
+import { mesurer } from '../../../../../packages/core/src/test/mesurer.ts';
 
 /** Chemin tenu dans une variable : le typage ne dépend pas du module pas encore écrit. */
 const CHEMIN_MODULE = './calculs.ts';
@@ -375,7 +376,7 @@ describe('T11 : ferme de T07 (jeu de T15), lue par la porte', () => {
     expect(cles).not.toContain(null);
   });
 
-  it('calcul rapide : construirePlan sur toute la ferme en moins de 80 ms (médiane de 5, Node)', () => {
+  it('calcul rapide : construirePlan sur toute la ferme en moins de 80 ms (médiane de 7 après échauffement, Node)', () => {
     const f = jeu.principale.fermeId;
     const donnees: DonneesPlan = {
       zone: base.lireDirect('SELECT * FROM zone WHERE ferme_id = ?', [f]),
@@ -389,16 +390,9 @@ describe('T11 : ferme de T07 (jeu de T15), lue par la porte', () => {
     };
     const direct = m.construirePlan(donnees, { saison, aujourdhui: '2026-09-30' });
     expect(direct).toEqual(plan);
-    const durees: number[] = [];
-    for (let i = 0; i < 5; i++) {
-      const t = performance.now();
-      m.construirePlan(donnees, { saison, aujourdhui: '2026-09-30' });
-      durees.push(performance.now() - t);
-    }
-    durees.sort((a, b) => a - b);
-    const mediane = durees[2] ?? Number.POSITIVE_INFINITY;
-    console.log(`construirePlan, ferme de T07 : ${mediane.toFixed(1)} ms (médiane)`);
-    expect(mediane).toBeLessThan(80);
+    const { mediane, detail } = mesurer(() => m.construirePlan(donnees, { saison, aujourdhui: '2026-09-30' }), { borneMs: 80 });
+    console.log(`construirePlan, ferme de T07 : ${mediane.toFixed(1)} ms (médiane ; ${detail})`);
+    expect(mediane, detail).toBeLessThan(80);
   });
 });
 
