@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T10v : un refus ne porte plus le nom d'une culture d'une autre ferme
+
+- **Fait** : dans `apps/api/src/sync/upload.ts` (`enregistrerRefus`), le résumé ne reçoit `ferme_id` que si la ferme du refus (après le filtre M1) est non nulle, égale à `fermeDesDonnees(e)` (insensible à la casse) et dont l'utilisateur est membre accepté ; sinon le `ferme_id` forgé est retiré et `saisie_culture` est NULL (type, date, quantité, unité inchangés). Les 26 tests de `resume-refus-hors-ferme.integration.test.ts` passent sans modification ; témoin T10k inchangé.
+- **Décidé** : correction côté `upload.ts` seulement, `resume.ts` garde son contrat (commentaires précisés, ainsi que l'en-tête de `resume-refus.integration.test.ts`, sans assertion touchée).
+- **Bloquant** : rien.
+
 ## 2026-10-08 — T29c : le vol de caméra ne coûte pas plus que la navigation
 
 - **Fait** : mesure seule, aucun code changé. Une navigation continue coûte autant qu'un vol (médiane 38–39 ms sous rendu logiciel) ; l'écart vu en T29b venait du glissé de l'e2e, rythmé par Playwright. Même travail par image (1 rendu, 2 appels de dessin, ~0,6 ms de JS) ; sans dessin, 18–25 ms : le coût est SwiftShader.
