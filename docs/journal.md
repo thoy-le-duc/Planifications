@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T33 : un seul jeu e2e à la fois
+
+- **Fait** : `scripts/verrou-e2e.sh` (flock sur `${TMPDIR:-/tmp}/planifications-e2e.lock`, message « en attente d'un autre jeu e2e » tout de suite, délai maximal 1 800 s, code de sortie de la commande renvoyé tel quel) branché sur `e2e` et `e2e:demo` (`apps/web`) et sur `e2e:synchro` (racine). `pnpm verif` complet vert (3 924 tests unitaires ; e2e 83 + 10 passés, sans relance). Test manuel : le second jeu affiche l'attente, puis démarre après la fin du premier.
+- **Décidé** : une seule prise de verrou, dans `apps/web` ; les `e2e` racine passent par le filtre, donc pas de double prise. Le descripteur du verrou est fermé pour la commande (`9>&-`) : aucun processus enfant ne le garde. Aucun seuil, `budget.json` ni `*.e2e.ts` modifiés.
+- **Bloquant** : flock n'existe pas tel quel sur macOS : le script s'y arrête avec un message clair, sans lancer le jeu. La boucle tourne sous Linux, mais un poste macOS aurait besoin d'un autre verrou (`lockf` ou `mkdir`).
+
 ## 2026-10-08 — T28f : l'éditeur de placement se trouve depuis la vue 3D
 
 - **Fait** : bouton « Modifier le plan » dans la vue 3D (gérant, écran de 1024 px ou plus, suivi en direct) ; encart « Placez votre ferme sur la photo aérienne » quand rien n'est placé (`fermeSansPlacement`, pur), ou « Le gérant place la ferme depuis un ordinateur » sans bouton ; l'éditeur s'ouvre par-dessus la 3D, qui montre le placement enregistré au retour ; la démo l'ouvre telle quelle (fond neutre hors ligne), aucun changement dans `demo/`. Page d'amorçage : `saison=1`, `origine=1`, `role=equipier`. La carte de l'onglet Ferme cite la 3D.
