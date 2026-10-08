@@ -136,10 +136,13 @@ streams:
   # Écritures refusées par le serveur : à leur seul auteur, sans les données reçues (`donnees`) ;
   # seul en descend le court résumé de la saisie calculé par le serveur (saisie_*, T10k : type,
   # culture de la ferme de l'événement, jour, quantité et unité ; jamais la note). T10l : avec
-  # archive_le, archivés compris (le téléphone les masque, rien n'est perdu).
+  # archive_le, archivés compris (le téléphone les masque, rien n'est perdu). T10u : seulement les refus sans
+  # ferme ou d'une ferme active ; quand l'adhésion se perd, la synchro retire du téléphone les
+  # refus de cette ferme (résumé compris), téléphone hors ligne compris, à sa prochaine synchro.
   refus_synchro:
     auto_subscribe: true
     query: >-
       SELECT id, utilisateur_id, ferme_id, nom_table, ligne_id, operation, motif, message, cree_le,
       saisie_type, saisie_culture, saisie_date, saisie_quantite, saisie_unite, archive_le
       FROM refus_synchro WHERE utilisateur_id = auth.user_id()
+      AND (ferme_id IS NULL OR ferme_id IN (SELECT ferme_id FROM fermes_actives))
