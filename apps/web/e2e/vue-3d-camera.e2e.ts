@@ -151,6 +151,8 @@ function tolerance(p: Pose): number {
 
 /** Le cadrage que `cadrage.ts` calcule, sous Node, pour la caméra et la toile telles qu’elles sont affichées. */
 async function cadrageAttendu(page: Page, attendu: Attendu, cible: CibleVol, depart: Pose): Promise<Pose> {
+  // T28c : la ferme entière se cadre comme à l'ouverture (« Vue d'ensemble »), pas par sa boîte axée.
+  if (cible.sorte === 'ferme') return vueDEnsembleAttendue(page, attendu);
   const boite = attendu.cadrage.boiteDe(attendu.scene, cible);
   if (boite === null) throw new Error('rien à cadrer');
   const champ = await lireNombre(page, 'data-champ');
