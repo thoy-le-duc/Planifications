@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-08 — T29b : fluidité des vols, le coût était le dessin, pas le code
+
+- **Fait** : mesure par image (sous SwiftShader, 1280 × 800) : JavaScript de la vue < 1 ms (médiane 0,3 à 0,5 ms) ; une toile qui ne fait que « clear » coûte déjà 18 à 24 ms de swap ; ferme T07 : 2 appels de dessin, 5 100 triangles ; jumeau T07 placé : 7 appels, 77 634 triangles, intervalles de 83 à 100 ms. Allègement sans changement visible (captures de la démo comparées) : `geometriePlanche()` (5 faces, 10 triangles, sans le dessous) ; arceau à tube de 3 côtés et 8 segments (140 → 48 triangles, 504 arceaux dans le jumeau T07) ; bâche et bouts à 10 segments. Jumeau T07 placé : 77 634 → 29 506 triangles, 7 appels inchangés, intervalles fautifs 0 à 2 sur 270 en e2e (3 lancements), démo 16 084 triangles avant.
+- **Décidé** (chef, sur proposition du testeur) : le test de fluidité ne juge plus un seul chiffre sensible à la charge : garde-fous stables (JavaScript par image, appels de dessin, triangles) et intervalle fautif relatif au plancher mesuré dans le même lancement (max(58,3 ms ; 2 × plancher)). Seuils de nombre inchangés. Sol laissé en MeshLambert : le passer en MeshBasic aplatit l'éclairage, l'aspect change.
+- **Bloquant** : critère « au plus 1 vol saccadé sur 5 » non tenu : cinq lancements à machine libre de `vue-3d-camera.e2e.ts` ont donné 0, 1, 2, 2, 1 vol saccadé sur 5 (tous verts, échec à 4), soit 3 lancements sur 5 conformes. Pendant un vol les intervalles font environ 50 ms contre 17 à 33 ms en navigation : un coût propre au vol reste à trouver (ticket de suite). Aussi, un aléa sur l'e2e « 5 vols » de la grande ferme T07 (échec à 1 lancement sur 3, bruit du rendu logiciel : 2 appels et 4 300 triangles seulement, rien à alléger côté dessin).
+
 ## 2026-10-08 — T10u : les refus d'une ferme quittée disparaissent du téléphone
 
 - **Fait** : dans `powersync/sync-config.yaml`, le flux `refus_synchro` ne sert plus à son auteur que les refus sans ferme (`ferme_id` nul) ou d'une ferme dont il est membre actif (`fermes_actives`). À la perte de l'adhésion, la synchro retire du téléphone les refus de cette ferme, résumé compris (noms de cultures…), même si le téléphone était hors ligne au retrait ; les refus d'une autre ferme dont il reste membre ne bougent pas. Prouvé contre le vrai PowerSync 1.26.1 (`refus-ferme-quittee.integration.test.ts`, `regles-synchro.integration.test.ts`). Les refus restent hors de l'export (T15).

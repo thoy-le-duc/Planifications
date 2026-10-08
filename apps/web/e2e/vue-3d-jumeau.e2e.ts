@@ -9,7 +9,8 @@ import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { MARQUES_3D, TESTID_3D, type ModuleScene } from '../src/ecrans/plan3d/test/contrat.ts';
 import { type CibleVol, type ModuleCadrage, TESTID_3D_CAMERA } from '../src/ecrans/plan3d/test/contrat-camera.ts';
 import { TESTID_3D_JUMEAU, type PlanJumeau, type SceneJumeau, type ModuleJumeau } from '../src/ecrans/plan3d/test/contrat-jumeau.ts';
-import { decrireDefilement, decrireSerie, jugerDefilement, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement } from './outils.ts';
+import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement } from './outils.ts';
+import { arreterImages, BORNES_DEMO, BORNES_JUMEAU_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous } from './fluidite-3d.ts';
 
 /**
  * T28c — jumeau 3D, de bout en bout, sur ordinateur (Chromium 1280 × 800, WebGL logiciel).
@@ -220,6 +221,7 @@ test('jumeau 3D : grande ferme de T07 placée, ordinateur, WebGL', async ({ page
   expect(scene.batiments.length, 'la ferme de l’essai est placée').toBe(14);
   expect(attenduJumeau(scene).arceaux, 'serres en tunnels').toBeGreaterThan(200);
   const violations = await surveillerCsp(page);
+  await instrumenter3d(page);
 
   await ouvrirPlanches(page, attendu, '?jeu=t07-place');
 
@@ -276,14 +278,22 @@ test('jumeau 3D : grande ferme de T07 placée, ordinateur, WebGL', async ({ page
     expect(Number(await toile(page).getAttribute('data-rendus')), 'images dessinées pendant 1 s de repos').toBe(avant);
   });
 
-  await test.step('navigation au pointeur : 5 passages, au plus 2 images perdues d’affilée', async () => {
+  await test.step('navigation au pointeur : 5 passages, aucun intervalle au-delà du seuil relatif au plancher', async () => {
+    // Plancher du rendu logiciel dans ce lancement : l'intervalle fautif en dépend (fluidite-3d.ts).
+    const b = await toile(page).boundingBox();
+    if (b === null) throw new Error('toile 3D sans boîte');
+    const plancher = await mesurerPlancher(page, b.width, b.height, IMAGES_PERDUES_MAX);
+    console.log(`plancher du rendu logiciel : intervalle médian ${plancher.medianeMs.toFixed(1)} ms, intervalle fautif au-delà de ${plancher.seuilFautifMs.toFixed(1)} ms`);
+    expect(plancher.medianeMs, 'plancher mesuré').toBeGreaterThan(0);
     const passages: (PassageDefilement & { rendus: number })[] = [];
+    await demarrerImages(page);
     for (let i = 0; i < REPETITIONS_MESURE; i += 1) passages.push(await glisserUneFois(page, i % 2 === 0 ? 1 : -1));
-    const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
-    console.log(decrireDefilement('navigation du jumeau 3D', verdict));
+    verifierGardeFous('navigation du jumeau 3D', await arreterImages(page), BORNES_JUMEAU_T07, IMAGES_PAR_PASSAGE);
+    const verdict = jugerDefilementRelatif(passages, plancher.seuilFautifMs, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
+    console.log(decrireRelatif('navigation du jumeau 3D', plancher, verdict));
     for (const [i, p] of passages.entries()) expect(p.rendus, `passage ${String(i + 1)} : la caméra a bougé`).toBeGreaterThan(IMAGES_PAR_PASSAGE / 4);
-    expect(verdict.passagesSaccades, 'passages qui perdent plus de 2 images d’affilée').toBeLessThan(PASSAGES_SACCADES_ECHEC);
-    expect(verdict.rafalesTotal, 'intervalles au-delà de 2 images perdues').toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
+    expect(verdict.passagesSaccades, 'passages dont un intervalle dépasse le seuil relatif au plancher').toBeLessThan(PASSAGES_SACCADES_ECHEC);
+    expect(verdict.fautifsTotal, 'intervalles au-delà du seuil').toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
     expect(verdict.fluide).toBe(true);
   });
 
@@ -324,6 +334,7 @@ test('jumeau 3D : une ferme sans placement garde la disposition de T27 (aucun b�
 test('jumeau 3D sur la démo : la vue 3D s’ouvre hors ligne avec ses serres', async ({ page, context }) => {
   test.skip(process.env.E2E_DEMO !== '1', 'ne tourne que sur la démo (pnpm e2e:demo)');
   const DELAI_MS = 30_000;
+  await instrumenter3d(page);
   await page.goto('/');
   await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: DELAI_MS });
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: DELAI_MS });
@@ -344,4 +355,19 @@ test('jumeau 3D sur la démo : la vue 3D s’ouvre hors ligne avec ses serres', 
   expect(noms.length).toBe(lu.batiments);
   expect(noms.some((n) => n.includes('magasin')), 'le magasin est dans la liste').toBe(true);
   expect(noms.filter((n) => /serre|tunnel|chapelle/.test(n)).length, 'au moins deux serres nommées').toBeGreaterThanOrEqual(2);
+
+  // Garde-fous de dessin sur la démo : un glissé de 40 images (JavaScript par image, appels de dessin, triangles).
+  const boite = await toile(page).boundingBox();
+  if (boite === null) throw new Error('toile 3D sans boîte');
+  const x0 = boite.x + boite.width / 2;
+  const y0 = boite.y + boite.height / 2;
+  await demarrerImages(page);
+  await page.mouse.move(x0, y0);
+  await page.mouse.down();
+  for (let i = 1; i <= 40; i += 1) {
+    await page.mouse.move(x0 + i * 3, y0 + ((i % 20) - 10) * 2);
+    await page.evaluate(() => new Promise<void>((fini) => { requestAnimationFrame(() => { fini(); }); }));
+  }
+  await page.mouse.up();
+  verifierGardeFous('navigation de la démo 3D', await arreterImages(page), BORNES_DEMO, 10);
 });

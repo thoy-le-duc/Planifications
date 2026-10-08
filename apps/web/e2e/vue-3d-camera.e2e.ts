@@ -8,7 +8,8 @@ import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { TESTID_3D, type ModuleScene, type Plan3d, type Scene, type SocleScene } from '../src/ecrans/plan3d/test/contrat.ts';
 import { DUREE_VOL_MAX_MS, MARQUES_3D_CAMERA, TESTID_3D_CAMERA as T, AZIMUT_DEPART, type CibleVol, type Direction, type ModuleCadrage, type ModuleVueFerme, type Pose } from '../src/ecrans/plan3d/test/contrat-camera.ts';
 import { distance, projeter, versPixel } from '../src/ecrans/plan3d/test/projection.ts';
-import { decrireDefilement, jugerDefilement, surveillerCsp, type PassageDefilement } from './outils.ts';
+import { surveillerCsp, type PassageDefilement } from './outils.ts';
+import { arreterImages, BORNES_FERME_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous, type Plancher } from './fluidite-3d.ts';
 
 /**
  * T29 — vue 3D : la caméra vole vers une zone, de bout en bout, sur ordinateur (Chromium
@@ -22,7 +23,7 @@ import { decrireDefilement, jugerDefilement, surveillerCsp, type PassageDefileme
  *   2. bouton « Aller à <zone> » de la liste, au clavier (Entrée) ; « Vue d’ensemble » ;
  *   3. durée : au plus 600 ms + une image après le clic (5 vols), et un vrai vol (au moins
  *      3 poses intermédiaires, au moins 3 images dessinées), pas un saut ;
- *   4. fluidité du vol : au plus 2 images perdues d’affilée (même statistique que T27) ;
+ *   4. fluidité du vol : aucun intervalle au-delà de max(2 images perdues à 60 Hz, 2 × plancher mesuré) ; garde-fous de JavaScript, d’appels de dessin et de triangles (fluidite-3d.ts) ;
  *   5. un nouveau clic pendant le vol repart de là où on est ;
  *   6. un glissé ne lance aucun vol, et la navigation reste fluide après les vols ;
  *   7. rendu à la demande : plus d’image une fois arrivé ;
@@ -370,6 +371,7 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
   expect(zones.length, 'la ferme de T07 a au moins deux zones avec des planches').toBeGreaterThanOrEqual(2);
   // La caméra de départ regarde le centre de la scène : la zone à cliquer est la première dont une planche est à l'écran.
   const violations = await surveillerCsp(page);
+  await instrumenter3d(page);
 
   await ouvrirPlanches(page, attendu);
   await ouvrirEn3d(page, attendu.plan.lignes.filter((l) => l.sorte === 'emplacement').length);
@@ -470,9 +472,20 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
     expect(marques, 'marques de fin de vol depuis le dernier effacement').not.toContain(zoneA.id);
   });
 
-  await test.step(`${String(VOLS_MESURES)} vols : 600 ms au plus, au plus 2 images perdues d’affilée pendant le vol`, async () => {
+  // Plancher du rendu logiciel dans ce lancement : l'intervalle fautif en dépend (fluidite-3d.ts).
+  const plancher: Plancher = await test.step('plancher : intervalle médian d’une toile de même taille qui ne fait que « clear »', async () => {
+    const b = await boiteToile(page);
+    const mesure = await mesurerPlancher(page, b.width, b.height, IMAGES_PERDUES_MAX);
+    console.log(`plancher du rendu logiciel : intervalle médian ${mesure.medianeMs.toFixed(1)} ms, intervalle fautif au-delà de ${mesure.seuilFautifMs.toFixed(1)} ms`);
+    expect(mesure.medianeMs, 'plancher mesuré').toBeGreaterThan(0);
+    return mesure;
+  });
+  const seuilMs = plancher.seuilFautifMs;
+
+  await test.step(`${String(VOLS_MESURES)} vols : 600 ms au plus, aucun intervalle au-delà du seuil relatif au plancher (4 vols saccadés ou plus de 6 intervalles : échec)`, async () => {
     const passages: PassageDefilement[] = [];
     let attendus = 0;
+    await demarrerImages(page);
     for (let i = 0; i < VOLS_MESURES; i += 1) {
       const versEnsemble = i % 2 === 0;
       const cible = versEnsemble ? 'ferme' : zoneA.id;
@@ -487,11 +500,12 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
       passages.push({ intervalles: intervallesDuVol(v) });
       attendus += intervallesDuVol(v).length;
     }
+    verifierGardeFous('vol de caméra 3D', await arreterImages(page), BORNES_FERME_T07, VOLS_MESURES * 3);
     expect(attendus, 'intervalles mesurés').toBeGreaterThan(VOLS_MESURES * 5);
-    const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
-    console.log(decrireDefilement('vol de caméra 3D', verdict));
-    expect(verdict.passagesSaccades, 'vols qui perdent plus de 2 images d’affilée').toBeLessThan(PASSAGES_SACCADES_ECHEC);
-    expect(verdict.rafalesTotal).toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
+    const verdict = jugerDefilementRelatif(passages, seuilMs, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
+    console.log(decrireRelatif('vol de caméra 3D', plancher, verdict));
+    expect(verdict.passagesSaccades, 'vols dont un intervalle dépasse le seuil relatif au plancher').toBeLessThan(PASSAGES_SACCADES_ECHEC);
+    expect(verdict.fautifsTotal).toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
     expect(verdict.fluide).toBe(true);
   });
 
@@ -499,12 +513,14 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
     const vols = await toile(page).getAttribute('data-vols');
     const avant = await lirePose(page);
     const passages: (PassageDefilement & { rendus: number })[] = [];
+    await demarrerImages(page);
     for (let i = 0; i < 5; i += 1) passages.push(await glisserUneFois(page, i % 2 === 0 ? 1 : -1));
+    verifierGardeFous('navigation 3D après les vols', await arreterImages(page), BORNES_FERME_T07, IMAGES_PAR_PASSAGE);
     expect(await toile(page).getAttribute('data-vols'), 'un glissé lance un vol').toBe(vols);
     await expect(toile(page)).toHaveAttribute('data-vol', 'non');
     expect(distance((await lirePose(page)).position, avant.position), 'la caméra a bougé').toBeGreaterThan(tolerance(avant));
-    const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
-    console.log(decrireDefilement('navigation 3D après les vols', verdict));
+    const verdict = jugerDefilementRelatif(passages, seuilMs, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
+    console.log(decrireRelatif('navigation 3D après les vols', plancher, verdict));
     for (const [i, p] of passages.entries()) expect(p.rendus, `passage ${String(i + 1)} : images dessinées`).toBeGreaterThan(IMAGES_PAR_PASSAGE / 4);
     expect(verdict.fluide).toBe(true);
   });

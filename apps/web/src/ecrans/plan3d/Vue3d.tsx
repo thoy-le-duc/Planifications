@@ -22,11 +22,11 @@
  */
 import { createRoot, extend, useFrame, useThree, type ReconcilerRoot, type RootState } from '@react-three/fiber';
 import { Component, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type RefObject, type ReactNode } from 'react';
-import { AmbientLight, BoxGeometry, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
+import { AmbientLight, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
 import type { Plan } from '../plan/calculs.ts';
 import { COULEURS, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
 import { boiteDe, cadrage, demarrerVol, empriseDe, meilleureVueDeFerme, poseAu, pointsDeFerme, type CibleVol, type Point3, type Pose, type Vol } from './cadrage.ts';
-import { empreinteDe, geometrieArceau, geometrieBache, geometrieBout, geometrieMurs, geometrieSol, geometrieToit } from './formes.ts';
+import { empreinteDe, geometrieArceau, geometrieBache, geometrieBout, geometrieMurs, geometriePlanche, geometrieSol, geometrieToit } from './formes.ts';
 import { boiteSousRayon, type BoiteZone } from './pointage.ts';
 import {
   appliquerFiltres,
@@ -87,7 +87,7 @@ const MESSAGE_ERREUR = 'La vue 3D s’est arrêtée (carte graphique indisponibl
  * Seuls objets three déclarés à fiber : pas de `<Canvas>`, qui déclare tout l'espace de noms
  * THREE (morceau plus lourd). La toile est la nôtre, fiber y monte sa racine (`createRoot`).
  */
-extend({ AmbientLight, BoxGeometry, DirectionalLight, InstancedMesh, Mesh, MeshLambertMaterial });
+extend({ AmbientLight, DirectionalLight, InstancedMesh, Mesh, MeshLambertMaterial });
 
 /** Nom affiché de chaque famille (légende et cases), dans l'ordre des clés. */
 const NOMS_FAMILLES: Readonly<Record<CleFamille, string>> = {
@@ -306,6 +306,13 @@ function Volumes({
   readonly surCouleurs: (r: Recoloration) => void;
 }) {
   const maillage = useRef<InstancedMesh>(null);
+  const planche = useMemo(() => geometriePlanche(), []);
+  useEffect(
+    () => () => {
+      planche.dispose();
+    },
+    [planche],
+  );
   const invalider = useThree((s) => s.invalidate);
   useLayoutEffect(() => {
     const m = maillage.current;
@@ -340,8 +347,7 @@ function Volumes({
     invalider();
   }, [scene, filtres, filtree, surCouleurs, invalider]);
   return (
-    <instancedMesh ref={maillage} args={[undefined, undefined, scene.volumes.length]} frustumCulled={false}>
-      <boxGeometry />
+    <instancedMesh ref={maillage} args={[planche, undefined, scene.volumes.length]} frustumCulled={false}>
       <meshLambertMaterial />
     </instancedMesh>
   );

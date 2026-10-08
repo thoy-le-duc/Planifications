@@ -6,7 +6,8 @@ import { remplirJeuT07 } from '../../../packages/sync/src/test/jeu-t07.ts';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { MARQUES_3D, TESTID_3D, type ModuleScene, type Plan3d, type Scene } from '../src/ecrans/plan3d/test/contrat.ts';
-import { decrireDefilement, decrireSerie, jugerDefilement, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement } from './outils.ts';
+import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement } from './outils.ts';
+import { arreterImages, BORNES_FERME_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous, type Plancher } from './fluidite-3d.ts';
 
 /**
  * T27 — vue 3D, de bout en bout, sur ordinateur (Chromium 1280 × 800, sans ralentissement du CPU :
@@ -241,6 +242,7 @@ test('vue 3D : grande ferme de T07, ordinateur, WebGL', async ({ page }) => {
   expect(nbPlanches, 'grande ferme').toBeGreaterThanOrEqual(400);
   const semaineInitiale = plan.semaineCourante ?? 0;
   const violations = await surveillerCsp(page);
+  await instrumenter3d(page);
 
   await ouvrirPlanches(page, attendu);
 
@@ -341,16 +343,29 @@ test('vue 3D : grande ferme de T07, ordinateur, WebGL', async ({ page }) => {
     expect(Number(await toile(page).getAttribute('data-rendus')), 'images dessinées pendant 1 s de repos').toBe(avant);
   });
 
-  await test.step('navigation au pointeur : 5 passages, au plus 2 images perdues d’affilée (4 passages saccadés ou plus de 6 intervalles : échec)', async () => {
+  // Plancher du rendu logiciel dans ce lancement : l'intervalle fautif en dépend (fluidite-3d.ts).
+  const plancher: Plancher = await test.step('plancher : intervalle médian d’une toile de même taille qui ne fait que « clear »', async () => {
+    const b = await toile(page).boundingBox();
+    if (b === null) throw new Error('toile 3D sans boîte');
+    const mesure = await mesurerPlancher(page, b.width, b.height, IMAGES_PERDUES_MAX);
+    console.log(`plancher du rendu logiciel : intervalle médian ${mesure.medianeMs.toFixed(1)} ms, intervalle fautif au-delà de ${mesure.seuilFautifMs.toFixed(1)} ms`);
+    expect(mesure.medianeMs, 'plancher mesuré').toBeGreaterThan(0);
+    return mesure;
+  });
+  const seuilMs = plancher.seuilFautifMs;
+
+  await test.step('navigation au pointeur : 5 passages, aucun intervalle au-delà du seuil relatif au plancher (4 passages saccadés ou plus de 6 intervalles : échec)', async () => {
+    await demarrerImages(page);
     const passages = await glisserCinqFois(page);
-    const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
-    console.log(decrireDefilement('navigation 3D', verdict));
+    verifierGardeFous('navigation 3D', await arreterImages(page), BORNES_FERME_T07, IMAGES_PAR_PASSAGE);
+    const verdict = jugerDefilementRelatif(passages, seuilMs, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
+    console.log(decrireRelatif('navigation 3D', plancher, verdict));
     for (const [i, p] of passages.entries()) {
       expect(p.rendus, `passage ${String(i + 1)} : la caméra a bien bougé (images dessinées)`).toBeGreaterThan(IMAGES_PAR_PASSAGE / 4);
       expect(p.intervalles.length, `passage ${String(i + 1)} : images mesurées`).toBeGreaterThan(IMAGES_PAR_PASSAGE / 2);
     }
-    expect(verdict.passagesSaccades, 'passages qui perdent plus de 2 images d’affilée').toBeLessThan(PASSAGES_SACCADES_ECHEC);
-    expect(verdict.rafalesTotal, 'intervalles au-delà de 2 images perdues, sur les 5 passages').toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
+    expect(verdict.passagesSaccades, 'passages dont un intervalle dépasse le seuil relatif au plancher').toBeLessThan(PASSAGES_SACCADES_ECHEC);
+    expect(verdict.fautifsTotal, 'intervalles au-delà du seuil, sur les 5 passages').toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
     expect(verdict.fluide).toBe(true);
   });
 
@@ -369,8 +384,8 @@ test('vue 3D : grande ferme de T07, ordinateur, WebGL', async ({ page }) => {
     );
     try {
       const passages = await glisserCinqFois(page);
-      const verdict = jugerDefilement(passages, IMAGES_PERDUES_MAX, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
-      console.log(decrireDefilement('témoin saccadé (3D)', verdict));
+      const verdict = jugerDefilementRelatif(passages, seuilMs, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
+      console.log(decrireRelatif('témoin saccadé (3D)', plancher, verdict));
       expect(verdict.fluide, 'la navigation saccadée doit échouer à la mesure').toBe(false);
     } finally {
       await page.evaluate(() => {
