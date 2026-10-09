@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T32d : jeunes plants visibles, plants découpés
+
+- **Fait** : de près, une planche qui porte des plants devient une dalle de 3,1 cm (`hauteurDalle`, `EPAISSEUR_DALLE_PLANTS_M`) et les plants sont posés dessus : un plant de 5 cm se voit. De loin, la masse garde la hauteur du feuillage (T32b inchangé). La tomate (forme `erige-tuteure`) se dessine plant par plant, chacun avec son tuteur (un `InstancedMesh` de tuteurs partagé, 12 triangles, `BilanPlants.tuteurs`), au lieu d'un mur continu ; les autres formes gardent l'étirement de T32b. Budget 3D 226,1 → 226,3 Kio (plafond 226,5 inchangé, pas besoin des 228 de Q33) ; démarrage 71,0 et placement 18,5 inchangés.
+- **Décidé** : l'épaisseur est 1/32 m (exactement représentable en flottant 32 bits, sinon le test de pose à 1e-9 près échoue de 7e-10) ; la couleur du filtre T27b reste sur la dalle fine, jamais sur un volume qui cache les plants ; `scene.ts` et `data-hauteurs-plants` inchangés.
+- **Bloquant** : rien. Le vol de caméra T07 (≤ 700 ms) reste aléatoire (ticket T34).
+
 ## 2026-10-09 — T32b : plants stylisés qui grandissent en 3D
 
 - **Fait** : la vue 3D dessine des plants stylisés par planche (7 formes, un `InstancedMesh` chacune, 40 à 60 triangles par plant, plafonds 20 par planche et 200 au total), à la hauteur du jour de T32a ; de loin (plant de moins de 4 px) les instances sont retirées et la planche devient un volume à la hauteur du feuillage. Pergola du kiwi et gouttière surélevée du fraisier hors-sol (poteaux instanciés), mention « Hauteurs indicatives, réglables dans la fiche de l'espèce », attributs `data-plants`, `data-formes-plants`, `data-hauteurs-plants`, `data-semaine-plants`. Lecture seule des cultures à l'ouverture de la vue (`donnees-plants.ts`), rien dans le plan 2D ni le démarrage. Valeurs par défaut de Q33 dans le cœur : tomate 3 m, asperge sans fougère jusqu'à la fin de récolte (15 juin par défaut) puis 1,5 m, structure du kiwi au repos, surélévation du fraisier hors-sol. Budget 3D 218,7 → 225,8 Kio (plafond 226,5, Q33 : 228 au plus) ; démarrage 71,0 et placement 18,5 inchangés.
