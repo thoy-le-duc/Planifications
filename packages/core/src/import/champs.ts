@@ -39,6 +39,7 @@ export const CHAMPS_IMPORT: Readonly<Record<TypeContenu, readonly DefinitionCham
   series: [
     champ('espece', 'Culture', true),
     champ('variete', 'Variété'),
+    champ('zone', 'Zone'),
     champ('emplacement', 'Emplacement'),
     champ('date_semis', 'Date de semis'),
     champ('date_plantation', 'Date de plantation'),

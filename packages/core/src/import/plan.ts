@@ -457,6 +457,9 @@ function entierBorne(n: number, defaut: number): number {
 export function preparerImport(entree: EntreeImport): PlanImport {
   const { correspondance, bibliotheque, anneeSaison } = entree;
   const cleDe = cleMemorisee();
+  // Code d'emplacement comparé comme le serveur depuis T10t (Q27) : `lower(trim(code))`, rien de
+  // plus. « P-3 » et « P.3 » sont deux planches ; « p3 » et « P3 » une seule (T14f).
+  const codeDe = (t: string): string => t.trim().toLowerCase();
   const nettoyer = nettoyageMemorise();
   const erreur = erreursPartagees(correspondance.type);
   const systemeDates: SystemeDates = entree.systemeDates === 1904 ? 1904 : 1900;
@@ -659,7 +662,7 @@ export function preparerImport(entree: EntreeImport): PlanImport {
     else {
       const aDecider = Object.values(valeurs).some((v) => typeof v === 'object' && v !== null && v.sorte === 'a_decider');
       const champsCle = cleDoublon ?? colonnes.map((c) => c.champ);
-      const k = champsCle.map((c) => cleValeur(valeurs[c], cleDe)).join('\u0001');
+      const k = champsCle.map((c) => cleValeur(valeurs[c], c === 'emplacement' ? codeDe : cleDe)).join('\u0001');
       const premiere = vues.get(k);
       if (premiere === undefined) vues.set(k, numero);
       if (aDecider) statut = 'a_decider';
