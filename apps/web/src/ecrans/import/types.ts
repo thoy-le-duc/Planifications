@@ -15,6 +15,8 @@ export interface ZoneConnue {
 
 export interface EmplacementConnu {
   readonly id: string;
+  /** Zone où la planche est rangée, la plus basse (sous-zone s'il y en a une) : T14f. */
+  readonly zoneId: string;
   readonly code: string;
   readonly sorte: string;
   readonly longueurM: number | null;
