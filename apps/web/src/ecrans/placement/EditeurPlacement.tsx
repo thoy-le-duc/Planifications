@@ -19,6 +19,7 @@ import { changementsDuBrouillon, contourChange, ECRITURES_MAX_PAR_LOT } from './
 import type { PropositionAdresse } from './adresse.ts';
 import { Champ, garderLeFocus, Modale } from './composants.tsx';
 import { RechercheAdresse } from './RechercheAdresse.tsx';
+import { BandeauEtapes, etapeCourante, MESSAGES_ETAPES, type NumeroEtape } from './etapes.tsx';
 import { empriseDeContours, vueSurEmprise, type Emprise } from './sites.ts';
 import { deplacerSommet, insererMilieu, poserPoint, replacerPlanches, retirerSommet, toucheSommet, TOLERANCE_FERMETURE_PX, verifierContour } from './contours.ts';
 import {
@@ -288,6 +289,9 @@ interface ProprietesEditeurFerme extends ProprietesEditeurPlacement {
 
 function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, enLigne, delaiAnnulationMs = DELAI_ANNULATION_MS, nouvelId, brouillonAbandonne, surBrouillon }: ProprietesEditeurFerme): ReactElement {
   const idTitre = useId();
+  const idRaisonZoom = useId();
+  const idRaisonNouveau = useId();
+  const idRaisonEnregistrer = useId();
   const titre = useRef<HTMLHeadingElement>(null);
   const planRef = useRef<HTMLDivElement>(null);
   const geste = useRef<Geste | null>(null);
@@ -334,6 +338,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [formulaire, setFormulaire] = useState(false);
   const [pose, setPose] = useState<NouveauBatiment | null>(null);
+  const [retour, setRetour] = useState<NumeroEtape | null>(null);
+  const champAdresse = useRef<HTMLInputElement>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
   const [dernier, setDernier] = useState<Enregistrement | null>(null);
@@ -551,6 +557,18 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   // Le message d'abandon disparaît au premier geste (ou à la pose suivante) dans la nouvelle ferme.
   const [abandonAffiche, setAbandonAffiche] = useState(brouillonAbandonne);
   if (brouillonOuvert && abandonAffiche) setAbandonAffiche(false);
+  const courante = etapeCourante(origine !== null, pose !== null, batimentsAff.length);
+  const etapeVue = retour !== null && retour < courante ? retour : courante;
+  const raisonEnregistrer = occupe
+    ? MESSAGES_ETAPES.occupe
+    : trace !== null
+      ? MESSAGES_ETAPES.traceEnCours
+      : contoursInvalides.length > 0
+        ? MESSAGES_ETAPES.contourInvalide
+        : tropDeChangements
+          ? MESSAGES_ETAPES.tropDeChangements
+          : MESSAGES_ETAPES.rienAEnregistrer;
+  const raisonNouveau = origine === null ? MESSAGES_ETAPES.sansOrigine : pose !== null ? MESSAGES_ETAPES.poseEnCours : MESSAGES_ETAPES.traceEnCours;
   const peutEnregistrer = modifie && !occupe && contoursInvalides.length === 0 && trace === null && !tropDeChangements;
 
   // Les tuiles ne sont demandées qu'une fois les données de la ferme lues (la vue est alors la bonne).
@@ -1028,8 +1046,20 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           </button>
         </header>
 
+        {edition && (
+          <BandeauEtapes
+            courante={courante}
+            vue={etapeVue}
+            surChoix={(n) => {
+              if (n > courante) return;
+              setRetour(n === courante ? null : n);
+              if (n === 1) champAdresse.current?.focus();
+            }}
+          />
+        )}
+
         <div className="pl-recherches">
-          <RechercheAdresse enLigne={enLigneEffectif} misEnAvant={pret && origine === null && ferme.valeur?.position == null} surChoix={allerAuLieu} />
+          <RechercheAdresse champ={champAdresse} enLigne={enLigneEffectif} misEnAvant={pret && origine === null && ferme.valeur?.position == null} surChoix={allerAuLieu} />
           {pret && zonesPlacees.length > 0 && (
             <div className="pl-sites">
               <select
@@ -1240,6 +1270,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 className="pl-bouton"
                 aria-label="Zoom avant"
                 disabled={zoom >= ZOOM_MAX}
+                aria-describedby={zoom >= ZOOM_MAX ? idRaisonZoom : undefined}
                 onClick={() => {
                   changerZoom(1);
                 }}
@@ -1251,6 +1282,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 className="pl-bouton"
                 aria-label="Zoom arrière"
                 disabled={zoom <= ZOOM_MIN_VUE}
+                aria-describedby={zoom <= ZOOM_MIN_VUE ? idRaisonZoom : undefined}
                 onClick={() => {
                   changerZoom(-1);
                 }}
@@ -1258,6 +1290,11 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 −
               </button>
             </div>
+            {(zoom >= ZOOM_MAX || zoom <= ZOOM_MIN_VUE) && (
+              <p id={idRaisonZoom} className="pl-aide pl-raison-zoom">
+                {zoom >= ZOOM_MAX ? MESSAGES_ETAPES.zoomMax : MESSAGES_ETAPES.zoomMin}
+              </p>
+            )}
             {fondPhoto && (
               <p data-testid="mention-ign" className="pl-mention">
                 {MENTION_IGN}
@@ -1302,8 +1339,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               </p>
             )}
             {pose !== null && (
-              <p role="status" className="pl-message">
-                Touchez la photo pour poser « {pose.nom} ».{' '}
+              <p role="status" data-testid="message-pose" className="pl-message">
+                Touchez la photo où se trouve {pose.type.startsWith('serre') ? 'la serre' : 'le bâtiment'} « {pose.nom} ».{' '}
                 <button
                   type="button"
                   className="pl-bouton"
@@ -1341,17 +1378,34 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                   type="button"
                   className="pl-bouton"
                   disabled={origine === null || pose !== null || trace !== null}
+                  aria-describedby={origine === null || pose !== null || trace !== null ? idRaisonNouveau : undefined}
                   onClick={() => {
                     setFormulaire(true);
                   }}
                 >
                   Nouveau bâtiment
                 </button>
-                <button type="button" className="pl-bouton pl-principal" disabled={!peutEnregistrer} onClick={() => void enregistrer()}>
+                {(origine === null || pose !== null || trace !== null) && (
+                  <p id={idRaisonNouveau} className="pl-aide">
+                    {raisonNouveau}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="pl-bouton pl-principal"
+                  disabled={!peutEnregistrer}
+                  aria-describedby={peutEnregistrer ? undefined : idRaisonEnregistrer}
+                  onClick={() => void enregistrer()}
+                >
                   Enregistrer
                 </button>
+                {!peutEnregistrer && (
+                  <p id={idRaisonEnregistrer} className="pl-aide">
+                    {raisonEnregistrer}
+                  </p>
+                )}
                 {brouillonOuvert && (
-                  <button type="button" className="pl-bouton" disabled={occupe} onClick={abandonner}>
+                  <button type="button" className="pl-bouton" disabled={occupe} aria-describedby={occupe ? idRaisonEnregistrer : undefined} onClick={abandonner}>
                     Abandonner les changements
                   </button>
                 )}
@@ -1361,6 +1415,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                     data-testid="annuler-placement"
                     className="pl-bouton"
                     disabled={occupe}
+                    aria-describedby={occupe ? idRaisonEnregistrer : undefined}
                     onClick={() => void defaire(annulable)}
                   >
                     Annuler l’enregistrement
@@ -1613,6 +1668,7 @@ interface ProprietesPanneauZone {
 }
 
 function PanneauZone({ info, edition, origineSouhaitee, trace, message, conteneur, surTracer, surRenoncer, surSommet }: ProprietesPanneauZone): ReactElement {
+  const idRaison = useId();
   const contour = info.affiche;
   const verdict = info.verdict ?? (contour === null ? null : verifierContour(contour));
   return (
@@ -1628,10 +1684,10 @@ function PanneauZone({ info, edition, origineSouhaitee, trace, message, conteneu
       )}
       {!info.abritee && edition && trace === null && contour === null && (
         <>
-          <button type="button" className="pl-bouton" data-action="tracer" disabled={!origineSouhaitee} onClick={surTracer}>
+          <button type="button" className="pl-bouton" data-action="tracer" disabled={!origineSouhaitee} aria-describedby={origineSouhaitee ? undefined : idRaison} onClick={surTracer}>
             Tracer le contour
           </button>
-          <p className="pl-aide">
+          <p id={idRaison} className="pl-aide">
             {origineSouhaitee ? 'Posez les sommets un à un sur la photo, puis fermez le tracé.' : 'Posez d’abord le point de départ du plan, et finissez de poser le bâtiment en cours.'}
           </p>
         </>
@@ -1700,6 +1756,7 @@ function PanneauZone({ info, edition, origineSouhaitee, trace, message, conteneu
 function FormulaireBatiment({ surPoser, surFermer }: { readonly surPoser: (n: NouveauBatiment) => void; readonly surFermer: () => void }): ReactElement {
   const idType = useId();
   const idNom = useId();
+  const idRaison = useId();
   const [type, setType] = useState<TypeBatiment>('serre_tunnel');
   const [nom, setNom] = useState('');
   const [longueur, setLongueur] = useState('30');
@@ -1745,11 +1802,17 @@ function FormulaireBatiment({ surPoser, surFermer }: { readonly surPoser: (n: No
       {champ('Longueur (m)', longueur, setLongueur)}
       {champ('Largeur (m)', largeur, setLargeur)}
       {champ('Hauteur (m)', hauteur, setHauteur)}
+      {!valide && (
+        <p id={idRaison} className="pl-aide">
+          {MESSAGES_ETAPES.fiche}
+        </p>
+      )}
       <div className="pl-modale-actions">
         <button
           type="button"
           className="pl-bouton pl-principal"
           disabled={!valide}
+          aria-describedby={valide ? undefined : idRaison}
           onClick={() => {
             surPoser({ nom: nom.trim(), type, longueurM: nombre(longueur), largeurM: nombre(largeur), hauteurM: nombre(hauteur) });
           }}

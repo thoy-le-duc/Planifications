@@ -586,3 +586,94 @@
   flex: 0 0 auto;
   font-size: 18px;
 }
+
+/* T28j : bandeau d'étapes. Quatre colonnes au téléphone, étape en cours en avant, jetons seulement. */
+.pl-etapes-zone {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+
+.pl-etapes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pl-etape {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 64px;
+  padding: 6px 4px;
+  border: 2px solid var(--couleur-trait);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-secondaire);
+  font-family: var(--police-texte);
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.pl-etape-num {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-trait);
+  color: var(--couleur-encre);
+  font-weight: 700;
+}
+
+.pl-etape[data-etat='faite'] {
+  border-color: var(--couleur-foret);
+  color: var(--couleur-foret);
+}
+
+.pl-etape[data-etat='faite'] .pl-etape-num {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.pl-etape[data-etat='en-cours'] {
+  border-color: var(--couleur-orange);
+  background: var(--couleur-orange);
+  color: var(--couleur-sur-orange);
+  font-weight: 700;
+}
+
+.pl-etape[data-etat='en-cours'] .pl-etape-num {
+  background: var(--couleur-sur-orange);
+  color: var(--couleur-orange);
+}
+
+.pl-etape[aria-current='step'] {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: 1px;
+}
+
+.pl-etape:focus-visible {
+  outline: 3px solid var(--couleur-orange);
+  outline-offset: 2px;
+}
+
+.pl-raison-zoom {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+}

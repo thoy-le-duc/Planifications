@@ -4,7 +4,7 @@
  * propose au plus 5 lieux ; un tap déplace la vue, rien d'autre : ni origine du plan, ni écriture.
  * Données du maraîcher : seul le texte tapé part dans la requête, rien n'est gardé.
  */
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactElement, type RefObject } from 'react';
 import { analyserReponseAdresse, DELAI_SAISIE_MS, urlRechercheAdresse, type PropositionAdresse } from './adresse.ts';
 
 export const MESSAGES_ADRESSE = {
@@ -17,9 +17,11 @@ export interface ProprietesRechercheAdresse {
   /** Ferme sans origine ni position : le champ est la porte d'entrée. */
   readonly misEnAvant: boolean;
   readonly surChoix: (proposition: PropositionAdresse) => void;
+  /** Pour y mettre le focus depuis le bandeau d'étapes (T28j). */
+  readonly champ?: RefObject<HTMLInputElement | null>;
 }
 
-export function RechercheAdresse({ enLigne, misEnAvant, surChoix }: ProprietesRechercheAdresse): ReactElement {
+export function RechercheAdresse({ enLigne, misEnAvant, surChoix, champ }: ProprietesRechercheAdresse): ReactElement {
   const [texte, setTexte] = useState('');
   const [propositions, setPropositions] = useState<readonly PropositionAdresse[]>([]);
   const [message, setMessage] = useState<string | null>(null);
@@ -96,6 +98,7 @@ export function RechercheAdresse({ enLigne, misEnAvant, surChoix }: ProprietesRe
   return (
     <div className="pl-recherche">
       <input
+        ref={champ}
         type="search"
         data-testid="recherche-adresse"
         data-mis-en-avant={misEnAvant ? 'true' : 'false'}
