@@ -9,7 +9,7 @@ import { TESTID_3D, type ModuleScene, type Plan3d, type Scene, type SocleScene }
 import { DUREE_VOL_MAX_MS, MARQUES_3D_CAMERA, TESTID_3D_CAMERA as T, AZIMUT_DEPART, type CibleVol, type Direction, type ModuleCadrage, type ModuleVueFerme, type Pose } from '../src/ecrans/plan3d/test/contrat-camera.ts';
 import { distance, projeter, versPixel } from '../src/ecrans/plan3d/test/projection.ts';
 import { surveillerCsp, type PassageDefilement } from './outils.ts';
-import { arreterImages, BORNES_FERME_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous, type Plancher } from './fluidite-3d.ts';
+import { arreterImages, BORNES_FERME_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, margeVolMs, mesurerPlancher, messageDureeVol, verifierGardeFous, type Plancher } from './fluidite-3d.ts';
 
 /**
  * T29 — vue 3D : la caméra vole vers une zone, de bout en bout, sur ordinateur (Chromium
@@ -399,12 +399,29 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
     expect(await lireNombre(page, 'data-champ')).toBeGreaterThan(0);
   });
 
+  // Plancher du rendu logiciel dans ce lancement : l'intervalle fautif en dépend (fluidite-3d.ts).
+  const plancher: Plancher = await test.step('plancher : intervalle médian d’une toile de même taille qui ne fait que « clear »', async () => {
+    const b = await boiteToile(page);
+    const mesure = await mesurerPlancher(page, b.width, b.height, IMAGES_PERDUES_MAX);
+    console.log(`plancher du rendu logiciel : intervalle médian ${mesure.medianeMs.toFixed(1)} ms, intervalle fautif au-delà de ${mesure.seuilFautifMs.toFixed(1)} ms`);
+    expect(mesure.medianeMs, 'plancher mesuré').toBeGreaterThan(0);
+    return mesure;
+  });
+  const seuilMs = plancher.seuilFautifMs;
+  const margeVol = margeVolMs(plancher.medianeMs);
+  let dureeMax = 0;
+  const verifierDuree = (dureeMs: number, nom: string): void => {
+    dureeMax = Math.max(dureeMax, dureeMs);
+    expect(dureeMs, `${nom} : ${messageDureeVol(dureeMs, plancher.medianeMs, margeVol, DUREE_VOL_MAX_MS)}`).toBeLessThanOrEqual(DUREE_VOL_MAX_MS + margeVol);
+  };
+  console.log(`marge de vol : ${margeVol.toFixed(1)} ms (plancher ${plancher.medianeMs.toFixed(1)} ms)`);
+
   await test.step('clic sur une planche de la scène : la caméra se pose sur le cadrage de sa zone en 600 ms au plus', async () => {
     const depart = await lirePose(page);
     const voulue = await cadrageAttendu(page, attendu, { sorte: 'zone', id: zoneA.id }, depart);
     const v = await voler(page, zoneA.id, () => cliquerDansLaScene(page, scene, zoneA.id));
     verifierPose(v.arrivee, voulue, `cadrage de ${zoneA.nom}`);
-    expect(v.fin - v.clic.t, 'durée du vol (clic → image d’arrivée)').toBeLessThanOrEqual(DUREE_VOL_MAX_MS + MARGE_IMAGE_MS);
+    verifierDuree(v.fin - v.clic.t, 'durée du vol (clic → image d’arrivée)');
     expect(v.fin - v.clic.t, 'un vol, pas un saut').toBeGreaterThanOrEqual(DUREE_MIN_VISIBLE_MS);
     expect(posesIntermediaires(v, depart).length, 'poses intermédiaires relevées pendant le vol').toBeGreaterThanOrEqual(3);
     expect(v.echantillons.some((e) => e.vol === 'oui'), 'data-vol = oui pendant le vol').toBe(true);
@@ -433,14 +450,14 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
       await page.keyboard.press('Enter');
     });
     verifierPose(v.arrivee, voulue, `cadrage de ${zoneB.nom}`);
-    expect(v.fin - v.clic.t).toBeLessThanOrEqual(DUREE_VOL_MAX_MS + MARGE_IMAGE_MS);
+    verifierDuree(v.fin - v.clic.t, 'durée du vol');
   });
 
   await test.step('« Vue d’ensemble » revient exactement à la vue d’ouverture (T28c)', async () => {
     const voulue = await vueDEnsembleAttendue(page, attendu);
     const v = await voler(page, 'ferme', () => boutonEnsemble(page).click());
     verifierPose(v.arrivee, voulue, 'cadrage de la ferme');
-    expect(v.fin - v.clic.t).toBeLessThanOrEqual(DUREE_VOL_MAX_MS + MARGE_IMAGE_MS);
+    verifierDuree(v.fin - v.clic.t, 'durée du vol');
   });
 
   await test.step('un nouveau clic pendant le vol repart de là où on est', async () => {
@@ -466,21 +483,12 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
     const { width, height } = await boiteToile(page);
     const voulue = attendu.cadrage.cadrage(boite, await lireNombre(page, 'data-champ'), width / height, directionDe(v.arrivee));
     verifierPose(v.arrivee, voulue, 'arrivée du vol repris');
-    expect(v.fin - v.clic.t, 'durée du vol repris').toBeLessThanOrEqual(DUREE_VOL_MAX_MS + MARGE_IMAGE_MS);
+    verifierDuree(v.fin - v.clic.t, 'durée du vol repris');
     // Un seul vol est allé au bout : la marque du vol remplacé (zone A) n’a pas été posée.
     const marques = await page.evaluate((m) => performance.getEntriesByName(m, 'mark').map((e) => (e as unknown as { detail?: { cible?: string } | null }).detail?.cible ?? ''), MARQUES_3D_CAMERA.volFin);
     expect(marques, 'marques de fin de vol depuis le dernier effacement').not.toContain(zoneA.id);
   });
 
-  // Plancher du rendu logiciel dans ce lancement : l'intervalle fautif en dépend (fluidite-3d.ts).
-  const plancher: Plancher = await test.step('plancher : intervalle médian d’une toile de même taille qui ne fait que « clear »', async () => {
-    const b = await boiteToile(page);
-    const mesure = await mesurerPlancher(page, b.width, b.height, IMAGES_PERDUES_MAX);
-    console.log(`plancher du rendu logiciel : intervalle médian ${mesure.medianeMs.toFixed(1)} ms, intervalle fautif au-delà de ${mesure.seuilFautifMs.toFixed(1)} ms`);
-    expect(mesure.medianeMs, 'plancher mesuré').toBeGreaterThan(0);
-    return mesure;
-  });
-  const seuilMs = plancher.seuilFautifMs;
 
   await test.step(`${String(VOLS_MESURES)} vols : 600 ms au plus, aucun intervalle au-delà du seuil relatif au plancher (4 vols saccadés ou plus de 6 intervalles : échec)`, async () => {
     const passages: PassageDefilement[] = [];
@@ -494,7 +502,7 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
       const voulue = await cadrageAttendu(page, attendu, versEnsemble ? { sorte: 'ferme' } : { sorte: 'zone', id: zoneA.id }, depart);
       const v = await voler(page, cible, () => (versEnsemble ? boutonEnsemble(page).click() : boutonZone(page, zoneA.id).click()));
       verifierPose(v.arrivee, voulue, `vol ${String(i + 1)}`);
-      expect(v.fin - v.clic.t, `vol ${String(i + 1)} : durée`).toBeLessThanOrEqual(DUREE_VOL_MAX_MS + MARGE_IMAGE_MS);
+      verifierDuree(v.fin - v.clic.t, `vol ${String(i + 1)} : durée`);
       expect((await lireNombre(page, 'data-rendus')) - rendusAvant, `vol ${String(i + 1)} : images dessinées`).toBeGreaterThanOrEqual(3);
       expect(posesIntermediaires(v, depart).length, `vol ${String(i + 1)} : poses intermédiaires`).toBeGreaterThanOrEqual(3);
       passages.push({ intervalles: intervallesDuVol(v) });
@@ -504,6 +512,7 @@ test('vue 3D : la caméra vole vers une zone, grande ferme de T07, ordinateur', 
     expect(attendus, 'intervalles mesurés').toBeGreaterThan(VOLS_MESURES * 5);
     const verdict = jugerDefilementRelatif(passages, seuilMs, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
     console.log(decrireRelatif('vol de caméra 3D', plancher, verdict));
+    console.log(`T34 durée max des vols ${dureeMax.toFixed(0)} ms, plancher ${plancher.medianeMs.toFixed(1)} ms, marge ${margeVol.toFixed(1)} ms, borne ${(DUREE_VOL_MAX_MS + margeVol).toFixed(0)} ms`);
     expect(verdict.passagesSaccades, 'vols dont un intervalle dépasse le seuil relatif au plancher').toBeLessThan(PASSAGES_SACCADES_ECHEC);
     expect(verdict.fautifsTotal).toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
     expect(verdict.fluide).toBe(true);
