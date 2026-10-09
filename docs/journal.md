@@ -9,6 +9,12 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Bloquant** : rien.
 
 
+## 2026-10-09 — T38b : guide de mise en ligne pas à pas
+
+- **Fait** : `docs/mise-en-ligne.md` (Neon Francfort et adresse pooled, migrations, PowerSync Cloud UE, Brevo, Vercel « appli », premier compte, « Ce qui reste gratuit », « Que faire si… », rappels de sécurité). Le tableau des 18 variables est vérifié par `apps/api/src/guide-mise-en-ligne.test.ts` (relevé dans `config.ts`, `vercel.ts`, `vite.config.ts` et `import.meta.env.VITE_*`). Lien ajouté dans `CLAUDE.md`.
+- **Décidé** : migrations depuis GitHub Codespaces avec l'adresse collée en saisie cachée (`read -rs`), codespace supprimé ensuite : rien à installer, aucun secret dans une conversation ni un fichier. Deux adresses Neon : pooled pour Vercel, directe pour les migrations et PowerSync (la réplication ne passe pas par le pooler). Utilisateur `powersync_role` en lecture avec REPLICATION, créé dans l'éditeur SQL de Neon. Audience `powersync-planif` (celle de `powersync/powersync.yaml`). Chiffres des offres gratuites donnés de mémoire et marqués « à vérifier sur le site ».
+- **Bloquant** : le guide n'a pas été suivi sur de vrais comptes (libellés des écrans Neon, PowerSync, Brevo, Vercel à confirmer) ; la relecture à la lettre sur comptes fictifs reste à faire. Le chemin `/api/...` après la réécriture Vercel se vérifie au premier déploiement (étape 5, points 27 à 32).
+
 ## 2026-10-09 — T38a : l'API tourne aussi sur Vercel
 
 - **Fait** : `apps/api/src/vercel.ts` sert la même application Hono sous `/api` (configuration lue au premier appel, 500 `configuration_invalide` sans secret, pool à connexions courtes : 3 au plus, fermées après 1 s) ; le débit de la synchro (120 envois par utilisateur et par minute glissante) passe de la mémoire à la base (`securite.debit_synchro`, migration 0031, une écriture atomique `INSERT … ON CONFLICT … DO UPDATE … WHERE … RETURNING`, lignes passées effacées au passage). Projet Vercel « appli » : `vercel.json` racine (cdg1, `pnpm build`, `apps/web/dist`, réécriture `/api/(.*)` avant la SPA, en-têtes de la démo) et fonction `api/[...route].js`. `vercel build` (CLI 63.1.0) réussi sans secret, la fonction construite répond à `/api/sante`.

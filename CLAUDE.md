@@ -92,3 +92,4 @@ Relever un budget (poids ou temps) se justifie dans la PR, jamais en silence.
 | `docs/questions.md` | Questions en attente de Théophane |
 | `docs/backlog/` | Tickets spécifiés, un fichier par ticket |
 | `docs/modele-donnees.md` | Modèle de données v1, validé |
+| `docs/mise-en-ligne.md` | Guide pas à pas pour mettre l'appli en ligne (Neon, PowerSync, Brevo, Vercel) et créer son compte |
