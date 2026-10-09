@@ -41,6 +41,7 @@ export function Plants({
   }, [plants]);
   // Poteaux : un par plant de kiwi, des pieds tous les 3 m environ par planche hors-sol.
   const nbPoteaux = useMemo(() => plants.reduce((n, p, i) => n + (p === null ? 0 : (p.structureM > 0 ? Math.min(p.nombre, PLANTS_MAX_TOTAL) : 0) + (p.surelevationM > 0 ? piedsDeGouttiere(scene.volumes[i]?.longueur ?? 0) : 0)), 0), [plants, scene]);
+  const nbTuteurs = useMemo(() => plants.reduce((n, p) => n + (p !== null && p.forme === 'erige-tuteure' && p.echelleVerticale > 0 ? p.nombre : 0), 0), [plants]);
   useEffect(
     () => () => {
       rendu.liberer();
@@ -54,7 +55,7 @@ export function Plants({
     rendu.choisirDetail(scene, plants, camera.position.x, camera.position.y, camera.position.z, size.height);
     surBilan(rendu.poser(scene, filtree, plants));
     invalider();
-  }, [rendu, scene, filtree, plants, besoin, nbPoteaux, lireEtat, invalider, surBilan]);
+  }, [rendu, scene, filtree, plants, besoin, nbPoteaux, nbTuteurs, lireEtat, invalider, surBilan]);
 
   // Avant chaque image (après le vol de la caméra, avant le dessin) : le détail change-t-il ?
   useFrame(({ camera, size }) => {
@@ -87,6 +88,19 @@ export function Plants({
             rendu.lierPoteaux(m);
           }}
           args={[rendu.geometriePoteau(), undefined, capacite(nbPoteaux)]}
+          frustumCulled={false}
+          count={0}
+        >
+          <meshLambertMaterial vertexColors />
+        </instancedMesh>
+      )}
+      {nbTuteurs > 0 && (
+        <instancedMesh
+          key={`tuteurs${String(capacite(Math.min(nbTuteurs, PLANTS_MAX_TOTAL)))}`}
+          ref={(m: InstancedMesh | null) => {
+            rendu.lierTuteurs(m);
+          }}
+          args={[rendu.geometrieTuteur(), undefined, capacite(Math.min(nbTuteurs, PLANTS_MAX_TOTAL))]}
           frustumCulled={false}
           count={0}
         >
