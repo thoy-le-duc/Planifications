@@ -138,8 +138,10 @@ export class RenduPlants {
       const y = hauteurRendue(v) + p.surelevationM;
       const feuillage = f.estompe ? f.couleur : VERT_FEUILLAGE;
       const bois = f.estompe ? f.couleur : BOIS_POTEAU;
-      // Étirés le long du rang : une planche se lit comme un rang continu.
-      const long = Math.max(p.echelleHorizontale, p.pasM * 1.08);
+      // Étirés le long du rang : une planche se lit comme un rang continu. Les plants sont centrés
+      // à un pas l'un de l'autre et à un demi-pas des bouts : une longueur d'un pas joint les voisins
+      // sans déborder de la planche (relecture T32b).
+      const long = p.pasM;
       for (const pos of p.positions) {
         if (p.echelleVerticale > 0) {
           const n = comptes.get(p.forme) ?? 0;
