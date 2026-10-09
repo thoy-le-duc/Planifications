@@ -459,7 +459,8 @@ export function preparerImport(entree: EntreeImport): PlanImport {
   const cleDe = cleMemorisee();
   // Code d'emplacement comparé comme le serveur depuis T10t (Q27) : `lower(trim(code))`, rien de
   // plus. « P-3 » et « P.3 » sont deux planches ; « p3 » et « P3 » une seule (T14f).
-  const codeDe = (t: string): string => t.trim().toLowerCase();
+  // `trim` de Postgres : espaces (U+0020) seulement, ni tabulation ni espace insécable.
+  const codeDe = (t: string): string => t.replace(/^ +| +$/g, '').toLowerCase();
   const nettoyer = nettoyageMemorise();
   const erreur = erreursPartagees(correspondance.type);
   const systemeDates: SystemeDates = entree.systemeDates === 1904 ? 1904 : 1900;
