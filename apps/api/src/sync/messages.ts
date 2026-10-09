@@ -47,6 +47,9 @@ export const PRECISION_ZONE_A_UN_CONTOUR = 'cette zone a ses propres contours : 
 export const PRECISION_ZONE_DEJA_ABRITEE = 'cette zone est déjà abritée par un autre bâtiment';
 export const PRECISION_ZONE_ABRITEE_SUPPRIMEE = 'cette zone est abritée par un bâtiment : supprimez le bâtiment ou détachez-le de la zone d’abord';
 
+/** T35a : disposition des rangs inconnue dans la densité d'un itinéraire ou d'une série. */
+export const PRECISION_DISPOSITION_RANGS = 'la disposition des rangs se choisit entre alignés et en quinconce';
+
 /** Message enregistré dans refus_synchro : seul 'ecriture_invalide' porte une précision. */
 export function messageRefus(refus: Refus): string {
   if (refus.motif !== 'ecriture_invalide') return MESSAGES[refus.motif];
@@ -182,6 +185,7 @@ export function precisionDuCoeur(erreur: ErreurSaisie): string {
   const texte = PRECISIONS_DU_COEUR[erreur.code];
   // Le champ d'une colonne ou d'une clé inconnue est le nom reçu : jamais affiché.
   if (erreur.code === 'colonne_inconnue' || erreur.code === 'cle_inconnue') return texte;
+  if (erreur.champ === 'parametres.densite.disposition') return PRECISION_DISPOSITION_RANGS;
   const libelle = libelleDuChamp(erreur.champ);
   return libelle === null ? texte : `${texte} (${libelle})`;
 }
