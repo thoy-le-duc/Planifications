@@ -270,10 +270,12 @@ describe('T27 : entrées invalides, pureté, aucun calcul agronomique', () => {
       expect(cible, 'dépendance lourde dans l’adaptateur pur').not.toMatch(/^(react|react-dom|three|@react-three)/);
       if (!cible.startsWith('@planif/') || type !== undefined) continue;
       // T28c : le repère des zones est calculé par le moteur (T28a), pas recopié ici. Seules ces
-      // fonctions pures du placement peuvent être importées comme valeurs, depuis @planif/core.
+      // fonctions pures du placement peuvent être importées comme valeurs, depuis le cœur par son
+      // sous-chemin `@planif/core/placement` (T36 : la racine tire tout le morceau commun du cœur
+      // dans la vue 3D). Jamais une copie locale du calcul.
       const noms = [...(instruction?.match(/\{([^}]*)\}/s)?.[1] ?? '').split(',')].map((n) => n.trim()).filter((n) => n !== '' && !n.startsWith('type '));
       const permis = new Set(['depuisRepereZone', 'repereZone', 'coinsEmprise', 'versRepereZone']);
-      expect(cible, `import de valeur depuis ${cible}`).toBe('@planif/core');
+      expect(cible, `import de valeur depuis ${cible}`).toBe('@planif/core/placement');
       for (const n of noms) expect(permis.has(n), `import de valeur « ${n} » depuis ${cible}`).toBe(true);
     }
     expect(source).not.toMatch(/\bnew Date\b|\bDate\.now\b|Math\.random/);
