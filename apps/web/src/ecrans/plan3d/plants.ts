@@ -49,6 +49,10 @@ export const LARGEUR_VISIBLE_PX = 4;
 /** Rang de plants tous les tant de mètres de largeur de planche. */
 const LARGEUR_PAR_RANG_M = 0.5;
 const RANGS_MAX = 3;
+/** Un plant étiré le long du rang ne couvre pas plus de tant d'écartements. */
+const PAS_MAX_ECARTEMENTS = 12;
+/** Pieds d'une gouttière surélevée : un tous les 3 m environ, aux deux bouts au moins, 6 au plus. */
+export const piedsDeGouttiere = (longueurM: number): number => Math.min(6, Math.max(2, Math.round(longueurM / 3) + 1));
 
 export interface VolumePlant {
   readonly id: string;
@@ -94,6 +98,8 @@ export interface PlantsPlanche {
   /** Gouttière surélevée du fraisier hors-sol. */
   readonly surelevationM: number;
   readonly couleur: string;
+  /** Longueur (m) du tronçon de rang que chaque plant couvre : une planche se lit comme un rang continu (bornée à 12 écartements). */
+  readonly pasM: number;
   readonly nombre: number;
   /** Coordonnées de scène, toutes dans le rectangle de la planche. */
   readonly positions: readonly { readonly x: number; readonly z: number }[];
@@ -150,6 +156,7 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
     structureM,
     surelevationM: surelevationHorsSolM(culture.espece, horsSol),
     couleur: volume.couleur,
+    pasM: Math.min(volume.longueur / parRang, PAS_MAX_ECARTEMENTS * ecart),
     nombre: positions.length,
     positions,
   };

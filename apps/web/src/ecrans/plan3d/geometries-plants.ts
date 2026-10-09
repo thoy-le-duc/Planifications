@@ -12,7 +12,7 @@ class Facettes {
   readonly positions: number[] = [];
   readonly teintes: number[] = [];
 
-  private triangle(teinte: number, ...p: readonly number[]): void {
+  triangle(teinte: number, ...p: readonly number[]): void {
     this.positions.push(...p);
     this.teintes.push(teinte, teinte, teinte, teinte, teinte, teinte, teinte, teinte, teinte);
   }
@@ -35,6 +35,35 @@ class Facettes {
         this.triangle(teinte, ...a0, ...a1, ...b1);
       }
       if (fermer && r1 > 0) this.triangle(teinte, cx + dx, y1, cz + dz, ...b1, ...a1);
+    }
+    return this;
+  }
+
+  /**
+   * Haie : un profil (y, demi-largeur) extrudé sur `baies` tronçons le long de x (de −0,5 à 0,5),
+   * des deux côtés de z ; les bouts restent ouverts (les haies se touchent bout à bout).
+   */
+  haie(baies: number, profil: readonly (readonly [number, number])[], teinte: number): this {
+    for (let b = 0; b < baies; b += 1) {
+      const x0 = -0.5 + b / baies;
+      const x1 = x0 + 1 / baies;
+      for (let k = 0; k + 1 < profil.length; k += 1) {
+        const [yl = 0, wl = 0] = profil[k] ?? [];
+        const [yu = 0, wu = 0] = profil[k + 1] ?? [];
+        for (const cote of [1, -1]) {
+          const a: [number, number, number] = [x0, yl, cote * wl];
+          const c: [number, number, number] = [x1, yl, cote * wl];
+          const d: [number, number, number] = [x1, yu, cote * wu];
+          const e: [number, number, number] = [x0, yu, cote * wu];
+          if (cote === 1) {
+            this.triangle(teinte, ...a, ...c, ...d);
+            this.triangle(teinte, ...a, ...d, ...e);
+          } else {
+            this.triangle(teinte, ...a, ...d, ...c);
+            this.triangle(teinte, ...a, ...e, ...d);
+          }
+        }
+      }
     }
     return this;
   }
@@ -64,8 +93,9 @@ function lames(n: number, anneau: number, largeur: number, penche: number, haute
 
 /** Les sept silhouettes, sur un pas de 1 m de haut (l'échelle verticale de l'instance est la hauteur du jour). */
 const CONSTRUCTEURS: Readonly<Record<FormePlant, () => Facettes>> = {
-  // Tuteur de bois et feuillage étagé qui se resserre vers le haut.
-  'erige-tuteure': () => new Facettes().tronc(4, 0, 0.04, 1, 0.04, BOIS).tronc(8, 0.06, 0.5, 0.4, 0.45, FEUILLE).tronc(8, 0.4, 0.45, 0.75, 0.3, FEUILLE).tronc(8, 0.75, 0.3, 1, 0, FEUILLE),
+  // Haie palissée sur sa ficelle : un tronçon de rang (de 1 m de long à l'échelle 1), qui se resserre vers le haut.
+  'erige-tuteure': () =>
+    new Facettes().haie(4, [[0.04, 0.5], [0.4, 0.47], [0.75, 0.3], [1, 0.08]], FEUILLE),
   // Rosette basse et large : le cœur monte en pointe.
   rosette: () => new Facettes().tronc(14, 0, 0.5, 0.4, 0.42, FEUILLE).tronc(14, 0.4, 0.42, 1, 0, FEUILLE),
   touffe: () => lames(12, 0.12, 0.09, 0.35, [1, 0.8, 0.9]),

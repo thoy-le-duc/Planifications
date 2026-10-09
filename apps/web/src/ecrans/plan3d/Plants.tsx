@@ -15,7 +15,7 @@ import { useEffect, useLayoutEffect, useMemo } from 'react';
 import type { InstancedMesh } from 'three';
 import type { FormePlant } from '@planif/core/croissance';
 import { capacite, type BilanPlants, type RenduPlants } from './plants-rendu.ts';
-import { FORMES, instancesParForme, PLANTS_MAX_TOTAL, type PlantsPlanche } from './plants.ts';
+import { FORMES, instancesParForme, piedsDeGouttiere, PLANTS_MAX_TOTAL, type PlantsPlanche } from './plants.ts';
 import type { Scene, SceneFiltree } from './scene.ts';
 
 export function Plants({
@@ -39,8 +39,8 @@ export function Plants({
     for (const g of instancesParForme(plants)) parForme.set(g.forme, Math.min(PLANTS_MAX_TOTAL, g.nombreDePlants));
     return parForme;
   }, [plants]);
-  // Poteaux : un par plant de kiwi, deux pieds par planche hors-sol.
-  const nbPoteaux = useMemo(() => plants.reduce((n, p) => n + (p === null ? 0 : (p.structureM > 0 ? Math.min(p.nombre, PLANTS_MAX_TOTAL) : 0) + (p.surelevationM > 0 ? 2 : 0)), 0), [plants]);
+  // Poteaux : un par plant de kiwi, des pieds tous les 3 m environ par planche hors-sol.
+  const nbPoteaux = useMemo(() => plants.reduce((n, p, i) => n + (p === null ? 0 : (p.structureM > 0 ? Math.min(p.nombre, PLANTS_MAX_TOTAL) : 0) + (p.surelevationM > 0 ? piedsDeGouttiere(scene.volumes[i]?.longueur ?? 0) : 0)), 0), [plants, scene]);
   useEffect(
     () => () => {
       rendu.liberer();

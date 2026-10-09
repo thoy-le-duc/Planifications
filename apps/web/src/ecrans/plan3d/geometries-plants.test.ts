@@ -9,14 +9,15 @@ import { geometriePlant, geometrieStructure, trianglesDe } from './geometries-pl
 import { TRIANGLES_PAR_FORME } from './plants.ts';
 
 describe('T32b : géométries des plants', () => {
-  it.each(FORMES_PLANT)('forme %s : triangles annoncés = triangles dessinés, dans 1 m × 1 m', (forme) => {
+  it.each(FORMES_PLANT)('forme %s : triangles annoncés = triangles dessinés, dans 1 m × 1 m (carré de 1 m de côté)', (forme) => {
     const g = geometriePlant(forme);
     expect(trianglesDe(g)).toBe(TRIANGLES_PAR_FORME[forme]);
     const p = g.getAttribute('position');
     for (let i = 0; i < p.count; i += 1) {
       expect(p.getY(i)).toBeGreaterThanOrEqual(-1e-9);
       expect(p.getY(i)).toBeLessThanOrEqual(1 + 1e-6);
-      expect(Math.hypot(p.getX(i), p.getZ(i))).toBeLessThanOrEqual(0.5 + 1e-6);
+      expect(Math.abs(p.getX(i))).toBeLessThanOrEqual(0.5 + 1e-6);
+      expect(Math.abs(p.getZ(i))).toBeLessThanOrEqual(0.5 + 1e-6);
     }
     expect(g.getAttribute('color').count).toBe(p.count);
   });

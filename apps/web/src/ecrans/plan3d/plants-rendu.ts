@@ -6,15 +6,19 @@
 import { Color, Object3D, type BufferGeometry, type InstancedMesh } from 'three';
 import type { FormePlant } from '@planif/core/croissance';
 import { geometriePlant, geometrieStructure } from './geometries-plants.ts';
-import { FORMES, plantsVisibles, PLANTS_MAX_TOTAL, type PlantsPlanche } from './plants.ts';
+import { FORMES, piedsDeGouttiere, plantsVisibles, PLANTS_MAX_TOTAL, type PlantsPlanche } from './plants.ts';
 import { hauteurRendue, type Scene, type SceneFiltree } from './scene.ts';
 
 /** Champ vertical de la caméra (degrés), le même que celui de la vue. */
 const CHAMP_DEGRES = 40;
 /** Un plant très haut (tomate sur sa ficelle) se voit de plus loin qu'il n'est large : sa hauteur compte pour ce quart. */
 const HAUTEUR_POUR_LARGEUR = 4;
-/** Largeur des pieds de gouttière (échelle horizontale du poteau, m). */
-const PIED_GOUTTIERE_M = 0.6;
+/** Largeur des pieds de gouttière (échelle horizontale du poteau, m) : de vrais pieds, bien visibles. */
+const PIED_GOUTTIERE_M = 1.2;
+/** Le feuillage est vert ; la couleur du filtre reste sur la planche (de loin, sur la masse). Décochée, la planche garde sa couleur estompée. */
+const VERT_FEUILLAGE = '#4FA55B';
+/** Bois des poteaux (pergola, pieds de gouttière). */
+const BOIS_POTEAU = '#8A6A48';
 
 /** Ce que la vue écrit sur la toile (attributs `data-*` de T32b). */
 export interface BilanPlants {
@@ -109,12 +113,12 @@ export class RenduPlants {
     return !pareil;
   }
 
-  private mettre(m: InstancedMesh | null | undefined, i: number, x: number, y: number, z: number, angle: number, ex: number, ey: number, c: string): boolean {
+  private mettre(m: InstancedMesh | null | undefined, i: number, x: number, y: number, z: number, angle: number, ex: number, ey: number, ez: number, c: string): boolean {
     if (m === null || m === undefined || i >= m.instanceMatrix.count) return false;
     const t = this.temporaire;
     t.position.set(x, y, z);
     t.rotation.set(0, angle, 0);
-    t.scale.set(ex, ey, ex);
+    t.scale.set(ex, ey, ez);
     t.updateMatrix();
     m.setMatrixAt(i, t.matrix);
     m.setColorAt(i, this.couleur.set(c));
@@ -132,23 +136,29 @@ export class RenduPlants {
       const f = filtree.volumes[i];
       if (v === undefined || f === undefined) return;
       const y = hauteurRendue(v) + p.surelevationM;
+      const feuillage = f.estompe ? f.couleur : VERT_FEUILLAGE;
+      const bois = f.estompe ? f.couleur : BOIS_POTEAU;
+      // Étirés le long du rang : une planche se lit comme un rang continu.
+      const long = Math.max(p.echelleHorizontale, p.pasM * 1.08);
       for (const pos of p.positions) {
         if (p.echelleVerticale > 0) {
           const n = comptes.get(p.forme) ?? 0;
-          if (this.mettre(this.maillages.get(p.forme), n, pos.x, y, pos.z, v.angle, p.echelleHorizontale, p.echelleVerticale, f.couleur)) {
+          if (this.mettre(this.maillages.get(p.forme), n, pos.x, y, pos.z, v.angle, long, p.echelleVerticale, p.echelleHorizontale, feuillage)) {
             comptes.set(p.forme, n + 1);
             total += 1;
           }
         }
-        if (p.structureM > 0 && this.mettre(this.poteaux, nbPoteaux, pos.x, y, pos.z, v.angle, p.echelleHorizontale, p.structureM, f.couleur)) nbPoteaux += 1;
+        if (p.structureM > 0 && this.mettre(this.poteaux, nbPoteaux, pos.x, y, pos.z, v.angle, p.echelleHorizontale, p.structureM, p.echelleHorizontale, bois)) nbPoteaux += 1;
       }
       if (p.surelevationM > 0) {
-        // Les deux pieds de la gouttière, aux deux bouts de la planche.
+        // Les pieds de la gouttière, du premier au dernier bout de la planche.
         const cos = Math.cos(v.angle);
         const sin = Math.sin(v.angle);
-        for (const sens of [-1, 1]) {
-          const dx = sens * (v.longueur / 2 - PIED_GOUTTIERE_M / 2);
-          if (this.mettre(this.poteaux, nbPoteaux, v.x + dx * cos, 0, v.z - dx * sin, v.angle, PIED_GOUTTIERE_M, p.surelevationM, f.couleur)) nbPoteaux += 1;
+        const pieds = piedsDeGouttiere(v.longueur);
+        const reste = Math.max(0, v.longueur - PIED_GOUTTIERE_M);
+        for (let k = 0; k < pieds; k += 1) {
+          const dx = (k / (pieds - 1) - 0.5) * reste;
+          if (this.mettre(this.poteaux, nbPoteaux, v.x + dx * cos, 0, v.z - dx * sin, v.angle, PIED_GOUTTIERE_M, p.surelevationM, Math.min(PIED_GOUTTIERE_M, Math.max(v.largeur, 0.3)), bois)) nbPoteaux += 1;
         }
       }
     });
