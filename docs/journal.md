@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T28k : placer au doigt sur le téléphone
+
+- **Fait** : le gérant édite le placement sur téléphone et tablette (`data-ecran`, `data-geste`) : un doigt sur l'élément choisi le déplace, ailleurs il déplace la carte, un tap choisit sans déplacer, deux doigts zooment et tournent l'élément choisi ; barre du bas (« Tourner −5° / +5° », « Nouveau bâtiment », « Enregistrer », « Annuler ») ; appui long sur un côté pour ajouter un sommet ; sommets et poignées à 44 px ; `touch-action: none`. « Modifier le plan » de la vue 3D est aussi au téléphone pour le gérant. Bandeau d'étapes visible en lecture seule, étapes à venir en `aria-disabled` avec leur raison ; doublons de messages retirés. Budget de l'éditeur 21,2 → 22,1 Kio (mesuré 20,9 → 21,8).
+- **Décidé** : l'équipier reste en lecture seule. Trois tests existants (editeur, contours-editeur, suites) et le test 3D étroit (contrat-editeur, e2e vue-3d-editeur) figeaient « sur ordinateur » : adaptés en commits séparés cités à Q36. Le zoom à deux doigts suit l'écart en direct (un niveau par doublement), autour du centre de la vue.
+- **Bloquant** : le test « deux doigts qui s'écartent… zooment d'un niveau » (doigt-editeur.test.tsx) attend `data-zoom` 20 depuis 19, or `data-zoom` est plafonné à `ZOOM_TUILES_MAX` = 19 (adresse-editeur.test.tsx : « data-zoom plafonné à 19 »). Les deux tests se contredisent ; décision du chef. Le texte de l'encart 3D pour l'équipier dit encore « depuis un ordinateur ».
+
 ## 2026-10-09 — T38b : guide de mise en ligne pas à pas
 
 - **Fait** : `docs/mise-en-ligne.md` (Neon Francfort et adresse pooled, migrations, PowerSync Cloud UE, Brevo, Vercel « appli », premier compte, « Ce qui reste gratuit », « Que faire si… », rappels de sécurité). Le tableau des 18 variables est vérifié par `apps/api/src/guide-mise-en-ligne.test.ts` (relevé dans `config.ts`, `vercel.ts`, `vite.config.ts` et `import.meta.env.VITE_*`). Lien ajouté dans `CLAUDE.md`.
