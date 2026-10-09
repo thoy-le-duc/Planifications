@@ -326,6 +326,21 @@ describe('T28k : deux doigts', () => {
     expect(placements).toEqual([]);
   });
 
+  it('relecture : un pincement qui dérive de 3° zoome sans tourner l’élément choisi', async () => {
+    await ouvrir({ origine: true });
+    await selectionnerAuDoigt();
+    await toucher(bouton('Zoom arrière'));
+    await toucher(bouton('Zoom arrière'));
+    const z0 = zoom();
+    const debut: Doigts = { a: [250, 300], b: [350, 300] };
+    const fin: Doigts = { a: [200, 305], b: [400, 295] };
+    await deuxDoigts(planOuEchec(), debut, fin);
+    await leverDeuxDoigts(planOuEchec(), fin);
+    expect(zoom()).toBe(z0 + 1);
+    expect(nombre(serreOuEchec(), 'data-orientation')).toBe(0);
+    expect(placements).toEqual([]);
+  });
+
   it('deux doigts qui se rapprochent de moitié dézooment d’un niveau', async () => {
     await ouvrir({ origine: true });
     const z0 = zoom();
