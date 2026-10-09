@@ -1,8 +1,10 @@
 {
-  "maj": "9 octobre 2026, matin (heure de Paris)",
-  "resume": "**Les cultures poussent dans la vue 3D (T32b)** : des plants stylisés sur chaque planche, dont la hauteur suit la semaine du curseur (tomate en haie palissée jusqu'à 3 m, fraisiers sur gouttières surélevées, pergola du kiwi visible l'hiver, fougère d'asperge seulement après la récolte, selon tes réponses Q33). Vue 3D à 226,1 Kio (plafond relevé à 226,5, sous les 228 décidés), démarrage inchangé à 71 Kio. Hier : T28e, T10t, T28f, T32a, T33 (un seul jeu e2e à la fois), T28g (focus de l'éditeur). **Budget atteint : 25 tickets sur 25 cette semaine**, aucun nouveau ticket avant mercredi 14 octobre 10 h. Ensuite : T14f, T32c (réglage des profils, avec la règle de l'asperge à porter dans un vrai champ), T14e, T15d, T15e, T13n, T11b ; rendu plus fin des plants si tu le demandes.",
-  "en_cours": {},
-  "attente": "À regarder : les plants en 3D (captures envoyées), dire si le rendu plus fin (feuillage, tuteurs) mérite un ticket la semaine prochaine. Hors questions : 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75. Vercel : désactiver « Vercel Authentication ». Connecteur MonCasierFrais à réautoriser. Mise en ligne : Brevo, domaine d'envoi, secrets de production. Ta jauge Claude de temps en temps.",
+  "maj": "9 octobre 2026, soir (heure de Paris)",
+  "resume": "Grosse journée, 14 tickets fusionnés le 9 octobre. **Jumeau 3D** : les cultures poussent (T32b), jeunes plants visibles et tomates plant par plant avec tuteur (T32d), vue 3D allégée de 226 à 203 Kio (T36). **Placement** : recherche d'adresse IGN, recul jusqu'à la région, plusieurs sites (T28h), parcours guidé en 4 étapes (T28j). **Itinéraire** : rangs alignés ou en quinconce avec schéma (T35a). **Import** : planche reconnue par sa zone et son code (T14f). **Fiabilité** : test du vol de caméra stabilisé (T34). **Mise en ligne gratuite** : l'API tourne sur Vercel (T38a) et le guide pas à pas est prêt : docs/mise-en-ligne.md (T38b). À toi : suivre le guide (une heure, ordinateur) pour ouvrir ta vraie ferme avec fermedebenoit@gmail.com. Prochains : T28k (placement au doigt), T28i (démo), T37 (travaux du jour en 3D), T35b, T32c (profils, gérant seulement), T32e (récolte visible), T14g, T33b. Budget : plus de plafond en nombre de tickets, seuil 70 % de la jauge (34 % vendredi 12 h 40).",
+  "en_cours": {
+    "T34": "en revue"
+  },
+  "attente": "Mise en ligne : suivre docs/mise-en-ligne.md et me dire ce qui coince (sans jamais coller de clé). Ta jauge Claude (dernière : 34 % vendredi 12 h 40). 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75. Vercel : l'offre gratuite est réservée à un usage non commercial (bien pour la phase de test).",
   "visuels": [
     {
       "titre": "Mode sombre",

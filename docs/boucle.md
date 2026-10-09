@@ -47,6 +47,7 @@ Déroulé d'un ticket : testeur → développeur → relecteur → corrections d
 - **Modèle léger pour les tickets sans risque** : testeur, développeur et relecteur peuvent tourner sur un modèle plus léger (Sonnet) pour un ticket qui ne touche ni la synchro, ni le stock, ni l'annulation, ni les données d'une autre ferme. Le chef le note dans la PR. En cas de doute, modèle complet.
 - **Suivi des PR léger** : le chef vérifie la CI par un point de contrôle programmé plutôt qu'en s'abonnant à chaque événement de la PR.
 - **Tickets petits et bornés** : un ticket = une règle ou un écran ; les cas limites qu'on découvre deviennent des tickets de suite plutôt que d'agrandir le ticket en cours.
+- **Jeux e2e** : lancer `pnpm e2e` ou `pnpm e2e:demo` tels quels ; ne jamais les envelopper dans `scripts/verrou-e2e.sh` (ils prennent déjà le verrou).
 - **On ne coupe jamais** : les tests écrits d'abord, la relecture, `pnpm verif` avant la PR.
 - **Choix des modèles** (décision de Théophane, 2026-10-07) : Haiku pour le mécanique (captures, suivi de CI, journal, `etat.json`, page de suivi, première relecture des tickets sans risque) ; Sonnet pour le développeur des tickets d'interface et le testeur des tickets sans données ; Opus pour tout ce qui touche la base, la synchro, l'isolement entre fermes, le stock, la sécurité, et leurs tests et relectures. Les tests restent l'arbitre, quel que soit le modèle.
 

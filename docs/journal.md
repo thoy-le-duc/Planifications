@@ -8,6 +8,19 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Décidé** : l'équipier reste en lecture seule. Trois tests existants (editeur, contours-editeur, suites) et le test 3D étroit (contrat-editeur, e2e vue-3d-editeur) figeaient « sur ordinateur » : adaptés en commits séparés cités à Q36. Le zoom à deux doigts suit l'écart en direct (un niveau par doublement), autour du centre de la vue.
 - **Bloquant** : le test « deux doigts qui s'écartent… zooment d'un niveau » (doigt-editeur.test.tsx) attend `data-zoom` 20 depuis 19, or `data-zoom` est plafonné à `ZOOM_TUILES_MAX` = 19 (adresse-editeur.test.tsx : « data-zoom plafonné à 19 »). Les deux tests se contredisent ; décision du chef. Le texte de l'encart 3D pour l'équipier dit encore « depuis un ordinateur ». `pnpm e2e` : 84 sur 86 ; « plan des planches » (389 ms contre 300) passe seul, le vol de caméra T07 échoue au hasard (722 contre 700, voir T36), sans lien avec le placement ; `pnpm e2e:demo` 11 sur 11. Budget éditeur mesuré 21,9 Kio (22,1 gardé, marge 0,2).
 
+## 2026-10-09 — T33b : verrou e2e réentrant
+
+- **Fait** : `scripts/verrou-e2e.sh` lance la commande directement quand `VERROU_E2E_TENU` vaut 1 (appel imbriqué, sans prendre ni attendre le verrou) ; sinon il prend le verrou et exporte `VERROU_E2E_TENU=1` à la commande. Trois tests ajoutés dans `apps/web/scripts/verrou-e2e.test.ts` (les tests de T33 sont inchangés), consigne ajoutée dans `docs/boucle.md` (« Jeux e2e »).
+- **Décidé** : la variable d'environnement sert de marque de réentrance plutôt qu'un test du descripteur 9 ; `pnpm e2e` et `pnpm e2e:demo` se lancent tels quels.
+- **Bloquant** : rien. Le blocage du 9 octobre venait d'un enveloppement, pas du script : les appels existants à `pnpm e2e` sous `verrou-e2e.sh` profitent du correctif sans changement.
+
+## 2026-10-09 — T34 : durée des vols de caméra mesurée de façon fiable
+
+- **Fait** : la marge au-delà de 600 ms n'est plus fixe (100 ms) : `margeVolMs(plancher)` = min(200, 100 + 3 × plancher) dans `e2e/fluidite-3d.ts`, plancher T29b mesuré au début du test T07 ; échec explicite si plancher absent ou > 40 ms ; message avec durée, plancher, marge, borne. 10 passages en série (verrou e2e) : 0 échec, plancher 16,7 ms, marge 150,1 ms (borne 750 ms), durées max 650 à 702 ms (668, 658, 654, 702, 650, 668, 689, 657, 659, 678). Vol doublé en copie locale : échec à 1207 ms pour une borne de 750 ms.
+- **Décidé** : 3 × plancher plutôt que 2 (le ticket proposait 2) : avec 2, la borne aurait été 733 ms, trop près des 702 ms observés ; plafond 200 ms. Le saut direct (mouvement réduit) garde sa marge fixe de 100 ms.
+- **Bloquant** : rien.
+
+
 ## 2026-10-09 — T38b : guide de mise en ligne pas à pas
 
 - **Fait** : `docs/mise-en-ligne.md` (Neon Francfort et adresse pooled, migrations, PowerSync Cloud UE, Brevo, Vercel « appli », premier compte, « Ce qui reste gratuit », « Que faire si… », rappels de sécurité). Le tableau des 18 variables est vérifié par `apps/api/src/guide-mise-en-ligne.test.ts` (relevé dans `config.ts`, `vercel.ts`, `vite.config.ts` et `import.meta.env.VITE_*`). Lien ajouté dans `CLAUDE.md`.
