@@ -26,6 +26,8 @@ export interface Zone {
   readonly id: string;
   readonly nom: string;
   readonly contour: readonly Point[] | null;
+  /** Zone qui contient celle-ci ; null (ou absent) : zone de premier niveau, éventuellement un site à part. */
+  readonly parenteId?: string | null;
 }
 
 export interface Planche {
@@ -115,12 +117,12 @@ export const requeteBatiments = (fermeId: string): RequeteSurveillee<Batiment | 
 });
 
 export const requeteZones = (fermeId: string): RequeteSurveillee<Zone | null> => ({
-  sql: 'SELECT id, nom, contour FROM zone WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY nom, id',
+  sql: 'SELECT id, nom, contour, zone_parente_id FROM zone WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY nom, id',
   parametres: [fermeId],
   tables: ['zone'],
   convertir: (l: Ligne) => {
     const id = texte(l.id);
-    return id === null ? null : { id, nom: texte(l.nom) ?? '', contour: contour(l.contour) };
+    return id === null ? null : { id, nom: texte(l.nom) ?? '', contour: contour(l.contour), parenteId: texte(l.zone_parente_id) };
   },
 });
 
