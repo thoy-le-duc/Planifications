@@ -106,7 +106,8 @@ describe('politiqueCsp (T09b)', () => {
 
   it('URL relative (/api) : même origine, rien d’ajouté', async () => {
     const d = directives(await politique({ urlApi: '/api' }));
-    expect(d.get('connect-src')).toEqual(["'self'"]);
+    // T28h : seule la recherche d'adresse de la Géoplateforme s'ajoute (csp-adresse.test.ts).
+    expect(d.get('connect-src')).toEqual(["'self'", 'https://data.geopf.fr']);
   });
 
   it.each([
@@ -126,7 +127,8 @@ describe('politiqueCsp (T09b)', () => {
 /**
  * T28b — fond de l'éditeur de placement : l'orthophoto IGN de la Géoplateforme, chargée par des
  * <img> (docs/backlog/T28b-editeur-placement.md). `img-src` contient exactement 'self' et
- * https://data.geopf.fr ; rien d'autre n'est ouvert : `connect-src` inchangé, aucune autre
+ * https://data.geopf.fr ; rien d'autre n'est ouvert : `connect-src` ne gagne que l'origine de la Géoplateforme pour la
+ * recherche d'adresse (T28h), aucune autre
  * directive ne cite la Géoplateforme, et ni `data:` ni `blob:` ni `*` dans `img-src`.
  */
 describe('politiqueCsp : images de la Géoplateforme (T28b)', () => {
@@ -137,12 +139,12 @@ describe('politiqueCsp : images de la Géoplateforme (T28b)', () => {
     }
   });
 
-  it('rien d’autre n’est ouvert : connect-src inchangé, aucune autre directive ne cite la Géoplateforme', async () => {
+  it('rien d’autre n’est ouvert : connect-src ne gagne que la recherche d’adresse (T28h), aucune autre directive ne cite la Géoplateforme', async () => {
     const d = directives(await politique());
-    expect(d.get('connect-src')).toEqual(["'self'"]);
+    expect(d.get('connect-src')).toEqual(["'self'", 'https://data.geopf.fr']);
     expect(d.get('default-src')).toEqual(["'self'"]);
-    for (const [nom, valeurs] of d) if (nom !== 'img-src') expect(valeurs.join(' '), nom).not.toContain('geopf');
+    for (const [nom, valeurs] of d) if (nom !== 'img-src' && nom !== 'connect-src') expect(valeurs.join(' '), nom).not.toContain('geopf');
     const avecServices = directives(await politique({ urlApi: 'https://api.planif.fr', urlPowerSync: 'https://sync.planif.fr:8443' }));
-    expect([...(avecServices.get('connect-src') ?? [])].sort()).toEqual(["'self'", 'https://api.planif.fr', 'https://sync.planif.fr:8443'].sort());
+    expect([...(avecServices.get('connect-src') ?? [])].sort()).toEqual(["'self'", 'https://api.planif.fr', 'https://data.geopf.fr', 'https://sync.planif.fr:8443'].sort());
   });
 });
