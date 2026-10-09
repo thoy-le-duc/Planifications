@@ -1,13 +1,15 @@
 /**
  * Éditeur de placement sur la photo aérienne IGN (T28b, Q30, Q31) : poser, déplacer, faire pivoter
  * et redimensionner les bâtiments (serres, hangar, magasin) et déplacer les planches, à la souris
- * ou au clavier, sur l'orthophoto de la Géoplateforme. Chargé à la demande depuis l'onglet Ferme ;
+ * à la souris, au doigt ou au clavier, sur l'orthophoto de la Géoplateforme. Chargé à la demande depuis l'onglet Ferme ;
  * il reçoit la porte (ni PowerSync, ni src/donnees) et n'écrit QUE par `porte.placer`. Contrat du
  * DOM : ./test/contrat.ts.
  *
  * Rien n'est écrit pendant un geste : le brouillon vit dans l'écran, « Enregistrer » le donne à la
  * porte en un seul appel, qui rend l'annulation (bouton « Annuler » quelques secondes, Ctrl+Z
- * pendant la session). Gérant seulement, sur ordinateur : sinon lecture seule, sans poignées. Sans
+ * pendant la session). Gérant seulement, sur ordinateur comme sur téléphone (T28k, Q36) : sinon lecture
+ * seule, sans poignées. Au doigt : un doigt sur l'élément choisi le déplace, ailleurs il déplace la
+ * carte ; deux doigts zooment, et tournent l'élément choisi ; barre du bas « Tourner ±5° ». Sans
  * réseau, le fond est un quadrillage de 10 m et tout le reste marche.
  */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactElement, type RefObject } from 'react';
@@ -45,6 +47,7 @@ import {
   normaliserCap,
   pivoter,
   redimensionner,
+  tournerDe,
   DIMENSION_MIN_M,
   versPlacementPlanche,
   type Cote,
@@ -58,7 +61,6 @@ export const MESSAGES_PLACEMENT = {
   horsLigne: 'Photo aérienne indisponible hors ligne',
   indisponible: 'Photo aérienne indisponible pour le moment',
   enregistreSansRelecture: 'Enregistré',
-  ordinateur: 'à faire sur ordinateur',
   contourRemplace: 'Le contour de la zone sera remplacé par la serre',
 } as const;
 
@@ -71,6 +73,8 @@ export const MESSAGES_CONTOURS = {
   brouillonAbandonne: 'Le brouillon en cours a été abandonné : la ferme active a changé.',
 } as const;
 
+const MESSAGE_SOMMETS_MIN = `Un contour garde ${MESSAGES_CONTOURS.sommetsMin}.`;
+
 /** « Annuler » reste affiché quelques secondes après un enregistrement. */
 export const DELAI_ANNULATION_MS = 8_000;
 
@@ -80,7 +84,7 @@ export interface ProprietesEditeurPlacement {
   /** Utilisateur de la session : son rôle se lit dans la table locale `membre`. */
   readonly utilisateurId: string;
   readonly surFermer: () => void;
-  /** Écran assez grand pour éditer. Défaut : matchMedia('(min-width: 1024px)'). */
+  /** Taille de l'écran (T28k : le gérant édite sur téléphone aussi). Défaut : matchMedia('(min-width: 1024px)'). */
   readonly ordinateur?: boolean;
   /** Réseau. Défaut : navigator.onLine, suivi par les événements online / offline. */
   readonly enLigne?: boolean;
@@ -94,7 +98,13 @@ const ZOOM_MAX = 22;
 /** Un clic bouge de moins que ça ; au-delà, c'est un glissement. */
 const SEUIL_GLISSEMENT_PX = 4;
 const DECALAGE_POIGNEE_PX = 28;
-const TAILLE_SOMMET_PX = 24;
+/** Zone tactile d'un sommet au doigt ; le point dessiné reste de 24 px à l'intérieur. */
+const TAILLE_SOMMET_SOURIS_PX = 24;
+const TAILLE_SOMMET_DOIGT_PX = 44;
+/** Appui long du doigt sur un côté de contour : ajoute un sommet. */
+const DELAI_APPUI_LONG_MS = 500;
+/** Pas des boutons « Tourner −5° / +5° » (degrés). */
+const PAS_ROTATION_DEG = 5;
 const CARREAU_M = 10;
 /** Position de repli d'une ferme sans position : le centre de la France. */
 const POSITION_DE_REPLI: Position = { latitude: 46.6, longitude: 2.4 };
@@ -127,7 +137,15 @@ interface ZoneAffichee {
 }
 
 type Geste =
-  | { readonly type: 'fond'; readonly pixel0: Point; readonly centre0: Point; readonly vue: VueCarte; deplace: boolean }
+  | {
+      readonly type: 'fond';
+      readonly pixel0: Point;
+      readonly centre0: Point;
+      readonly vue: VueCarte;
+      /** Au doigt, un élément non choisi : un tap le choisit, un glissement déplace la carte. */
+      readonly cible: string | null;
+      deplace: boolean;
+    }
   | {
       readonly type: 'deplacer' | 'pivoter' | 'cote';
       readonly element: Objet;
@@ -149,7 +167,21 @@ type Geste =
       readonly fige: boolean;
       demarre: boolean;
     }
-  | { readonly type: 'milieu'; readonly zoneId: string; readonly index: number; readonly pixel0: Point; demarre: boolean };
+  | { readonly type: 'milieu'; readonly zoneId: string; readonly index: number; readonly pixel0: Point; readonly tactile: boolean; demarre: boolean };
+
+/** Le geste au doigt en cours (attribut data-geste). */
+type GesteDoigt = 'aucun' | 'carte' | 'element' | 'sommet' | 'deux-doigts';
+
+/** Deux doigts posés : zoom (écart) et rotation de l'élément choisi (angle de la droite qui les joint). */
+interface DeuxDoigts {
+  readonly ids: readonly [number, number];
+  readonly distance0: number;
+  readonly zoom0: number;
+  readonly element: Objet | null;
+  angle: number;
+  /** Angle total parcouru, en degrés (sens horaire à l'écran = positif). */
+  tourne: number;
+}
 
 interface Trace {
   readonly zoneId: string;
@@ -212,12 +244,12 @@ function useEnLigne(): boolean {
 }
 
 /** Position et taille à l'écran d'un rectangle placé (le haut de l'écran est le nord). */
-function styleRectangle(vue: VueCarte, r: RectanglePlace): { left: number; top: number; width: number; height: number; transform: string } {
+function styleRectangle(vue: VueCarte, r: RectanglePlace): { left: number; top: number; width: number; height: number; transform: string; touchAction: 'none' } {
   const mpp = metresParPixel(vue.origine.latitude, vue.zoom);
   const c = versEcran(vue, r.centre);
   const w = r.largeurM / mpp;
   const h = r.longueurM / mpp;
-  return { left: c.x - w / 2, top: c.y - h / 2, width: w, height: h, transform: `rotate(${String(r.orientationDeg)}deg)` };
+  return { left: c.x - w / 2, top: c.y - h / 2, width: w, height: h, transform: `rotate(${String(r.orientationDeg)}deg)`, touchAction: 'none' };
 }
 
 /** Poignées d'un rectangle, en pixels de l'écran : rotation (au-delà du bout avant) et quatre côtés. */
@@ -239,6 +271,17 @@ function positionsPoignees(vue: VueCarte, r: RectanglePlace): { rotation: Point;
       { cote: 'gauche', p: sur(droite, -demiW) },
     ],
   };
+}
+
+/** Angle de la droite qui joint deux doigts, en degrés (le sens horaire à l'écran compte positivement). */
+function angleEntre(a: Point, b: Point): number {
+  return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+}
+
+/** Ramène un écart d'angle dans ]−180, 180] : un doigt qui passe de 179° à −179° a tourné de 2°, pas de −358°. */
+function ecartAngle(degres: number): number {
+  const e = ((((degres + 180) % 360) + 360) % 360) - 180;
+  return e === -180 ? 180 : e;
 }
 
 function capturer(e: PointerEvent<HTMLElement>): void {
@@ -297,10 +340,18 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const geste = useRef<Geste | null>(null);
   const generateur = useRef<GenerateurId | null>(null);
   const pile = useRef<Enregistrement[]>([]);
+  /** Doigts posés sur la carte (position dans la carte, par identifiant de pointeur). */
+  const doigts = useRef(new Map<number, Point>());
+  const deuxDoigts = useRef<DeuxDoigts | null>(null);
+  /** Après un geste à deux doigts, le doigt resté ne déplace plus rien avant d'être levé. */
+  const doigtResteIgnore = useRef(false);
+  const appuiLong = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const insererRef = useRef<(zoneId: string, cote: number) => void>(() => undefined);
 
   const grandEcran = usePreference(ordinateur === undefined ? '(min-width: 1024px)' : null, ordinateur ?? true);
   const reseau = useEnLigne();
   const surOrdinateur = ordinateur ?? grandEcran;
+  const ecranTactile = usePreference('(pointer: coarse)', false);
   const enLigneEffectif = enLigne ?? reseau;
 
   // ── Lectures (surveillées : l'écran suit ses écritures et celles de la synchro) ──────────────
@@ -319,7 +370,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null;
   const gerant = roles?.includes('gerant') === true;
-  const mode = !pret ? undefined : gerant && surOrdinateur ? 'edition' : 'lecture';
+  const mode = !pret ? undefined : gerant ? 'edition' : 'lecture';
   const edition = mode === 'edition';
 
   // ── État de l'écran ───────────────────────────────────────────────────────────────────────────
@@ -335,6 +386,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const focusTracer = useRef(false);
   const conteneurContour = useRef<HTMLDivElement | null>(null);
   const clicDejaTraite = useRef<number | null>(null);
+  const [gesteDoigt, setGesteDoigt] = useState<GesteDoigt>('aucun');
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [formulaire, setFormulaire] = useState(false);
   const [pose, setPose] = useState<NouveauBatiment | null>(null);
@@ -352,6 +404,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   useEffect(() => {
     titre.current?.focus();
+    return () => {
+      if (appuiLong.current !== null) clearTimeout(appuiLong.current);
+    };
   }, []);
 
   // La vue suit la taille de la surface de dessin.
@@ -559,6 +614,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   if (brouillonOuvert && abandonAffiche) setAbandonAffiche(false);
   const courante = etapeCourante(origine !== null, pose !== null, batimentsAff.length);
   const etapeVue = retour !== null && retour < courante ? retour : courante;
+  // Un seul calcul : « Enregistrer » est possible quand rien ne l'empêche, sinon la raison s'affiche.
   const raisonEnregistrer = occupe
     ? MESSAGES_ETAPES.occupe
     : trace !== null
@@ -566,10 +622,12 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       : contoursInvalides.length > 0
         ? MESSAGES_ETAPES.contourInvalide
         : tropDeChangements
-          ? MESSAGES_ETAPES.tropDeChangements
-          : MESSAGES_ETAPES.rienAEnregistrer;
+          ? MESSAGES_CONTOURS.tropDeChangements
+          : modifie
+            ? null
+            : MESSAGES_ETAPES.rienAEnregistrer;
   const raisonNouveau = origine === null ? MESSAGES_ETAPES.sansOrigine : pose !== null ? MESSAGES_ETAPES.poseEnCours : MESSAGES_ETAPES.traceEnCours;
-  const peutEnregistrer = modifie && !occupe && contoursInvalides.length === 0 && trace === null && !tropDeChangements;
+  const peutEnregistrer = raisonEnregistrer === null;
 
   // Les tuiles ne sont demandées qu'une fois les données de la ferme lues (la vue est alors la bonne).
   const tuiles = useMemo(() => (pret && enLigneEffectif ? tuilesVisibles(vue) : []), [pret, enLigneEffectif, vue]);
@@ -656,7 +714,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     if (contour == null) return;
     const reste = retirerSommet(contour, index);
     if (reste === null) {
-      setMessageContour(`Un contour garde au moins 3 sommets.`);
+      setMessageContour(MESSAGE_SOMMETS_MIN);
       return;
     }
     majContour(zoneId, reste);
@@ -669,6 +727,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     majContour(zoneId, insererMilieu(contour, cote));
     setSommetSel(cote + 1);
   }
+  useEffect(() => {
+    insererRef.current = insererSurCote;
+  });
 
   /** Clavier d'un sommet : flèches 0,1 m (Maj : 1 m), Inser (ajoute après), Suppr (retire). */
   function surToucheSommet(e: KeyboardEvent<HTMLElement>, zoneId: string, index: number): void {
@@ -679,7 +740,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     if (r === null) return;
     e.preventDefault();
     if (r.refuse) {
-      setMessageContour(`Un contour garde au moins 3 sommets.`);
+      setMessageContour(MESSAGE_SOMMETS_MIN);
       return;
     }
     majContour(zoneId, r.contour);
@@ -696,11 +757,30 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     capturer(e);
   }
 
+
   function commencerCote(e: PointerEvent<SVGElement>, zoneId: string, index: number): void {
     e.stopPropagation();
     clicDejaTraite.current = null;
     if (!edition || (e.pointerType === 'mouse' && e.button !== 0)) return;
-    geste.current = { type: 'milieu', zoneId, index, pixel0: pixelDe(e), demarre: false };
+    const tactile = e.pointerType === 'touch';
+    geste.current = { type: 'milieu', zoneId, index, pixel0: pixelDe(e), tactile, demarre: false };
+    if (!tactile) return;
+    // Au doigt, seul l'appui long ajoute un sommet : le clic qui suit un tap est ignoré.
+    clicDejaTraite.current = index;
+    arreterAppuiLong();
+    appuiLong.current = setTimeout(() => {
+      appuiLong.current = null;
+      const g = geste.current;
+      if (g?.type !== 'milieu' || g.demarre) return;
+      geste.current = null;
+      insererRef.current(zoneId, index);
+    }, DELAI_APPUI_LONG_MS);
+  }
+
+  function arreterAppuiLong(): void {
+    if (appuiLong.current === null) return;
+    clearTimeout(appuiLong.current);
+    appuiLong.current = null;
   }
 
   // ── Écriture : toujours par porte.placer ─────────────────────────────────────────────────────
@@ -792,8 +872,19 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     return { x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) };
   };
 
+  /** Un doigt (ou la souris) pose sur la carte : le geste du fond, qui déplace la vue ; `cible` : l'élément qu'un simple tap choisira. */
+  function commencerFond(e: PointerEvent<HTMLElement>, cible: string | null): void {
+    geste.current = { type: 'fond', pixel0: pixelDe(e), centre0: vue.centre, vue, cible, deplace: false };
+    capturer(e);
+  }
+
   function commencer(e: PointerEvent<HTMLElement>, element: Objet, type: 'deplacer' | 'pivoter' | 'cote', cote: Cote | null): void {
     e.stopPropagation();
+    // Au doigt, seul l'élément déjà choisi se déplace ; sur un autre, le doigt déplace la carte et un tap le choisit.
+    if (e.pointerType === 'touch' && type === 'deplacer' && (!edition || selection !== element.id)) {
+      commencerFond(e, element.id);
+      return;
+    }
     selectionner(element.id);
     if (!edition || (e.pointerType === 'mouse' && e.button !== 0)) return;
     const pixel0 = pixelDe(e);
@@ -801,12 +892,98 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     capturer(e);
   }
 
+  // ── Doigts ────────────────────────────────────────────────────────────────────────────────────
+  /** Un doigt se pose (phase de capture : même quand l'élément touché arrête l'événement). Le deuxième lance le geste à deux doigts. */
+  function doigtPose(e: PointerEvent<HTMLElement>): void {
+    if (e.pointerType !== 'touch') return;
+    if (e.isPrimary) {
+      // Premier doigt d'un nouveau contact : on repart de zéro (un doigt perdu ne reste pas posé).
+      doigts.current.clear();
+      deuxDoigts.current = null;
+      doigtResteIgnore.current = false;
+    }
+    doigts.current.set(e.pointerId, pixelDe(e));
+    if (doigts.current.size < 2) return;
+    // Deuxième doigt et suivants : jamais pour l'élément touché.
+    e.stopPropagation();
+    if (deuxDoigts.current !== null || doigts.current.size > 2) return;
+    const [a, b] = [...doigts.current.keys()];
+    const pa = doigts.current.get(a ?? -1);
+    const pb = doigts.current.get(b ?? -1);
+    if (a === undefined || b === undefined || pa === undefined || pb === undefined) return;
+    geste.current = null;
+    arreterAppuiLong();
+    doigtResteIgnore.current = false;
+    deuxDoigts.current = {
+      ids: [a, b],
+      distance0: Math.hypot(pb.x - pa.x, pb.y - pa.y),
+      zoom0: zoom,
+      element: edition ? (choisi ?? null) : null,
+      angle: angleEntre(pa, pb),
+      tourne: 0,
+    };
+    setGesteDoigt('deux-doigts');
+  }
+
+  /** Les deux doigts bougent : le zoom suit l'écart (un niveau par doublement), l'élément choisi suit l'angle. */
+  function bougerDeuxDoigts(d: DeuxDoigts): void {
+    const pa = doigts.current.get(d.ids[0]);
+    const pb = doigts.current.get(d.ids[1]);
+    if (pa === undefined || pb === undefined) return;
+    const distance = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+    if (d.distance0 >= 1 && distance >= 1) {
+      const niveau = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN_VUE, d.zoom0 + Math.round(Math.log2(distance / d.distance0))));
+      if (niveau !== zoom) setZoomChoisi(niveau);
+    }
+    const angle = angleEntre(pa, pb);
+    d.tourne += ecartAngle(angle - d.angle);
+    d.angle = angle;
+    if (d.element !== null) majRectangle(d.element, tournerDe(d.element.rect, Math.round(d.tourne)));
+  }
+
+  /** Un doigt se lève ou est interrompu : fin du geste à deux doigts, ou fin du geste à un doigt. */
+  function doigtLeve(e: PointerEvent<HTMLElement>, annule: boolean): void {
+    if (e.pointerType !== 'touch') {
+      if (annule) geste.current = null;
+      else surRelache();
+      return;
+    }
+    doigts.current.delete(e.pointerId);
+    const d = deuxDoigts.current;
+    if (d !== null) {
+      if (d.ids.includes(e.pointerId)) {
+        deuxDoigts.current = null;
+        doigtResteIgnore.current = doigts.current.size > 0;
+        setGesteDoigt('aucun');
+      }
+      return;
+    }
+    if (doigtResteIgnore.current) {
+      if (doigts.current.size === 0) doigtResteIgnore.current = false;
+      return;
+    }
+    setGesteDoigt('aucun');
+    arreterAppuiLong();
+    if (annule) geste.current = null;
+    else surRelache();
+  }
+
   function surBouge(e: PointerEvent<HTMLElement>): void {
+    if (e.pointerType === 'touch') {
+      if (doigts.current.has(e.pointerId)) doigts.current.set(e.pointerId, pixelDe(e));
+      if (deuxDoigts.current !== null) {
+        if (deuxDoigts.current.ids.includes(e.pointerId)) bougerDeuxDoigts(deuxDoigts.current);
+        return;
+      }
+      if (doigtResteIgnore.current) return;
+    }
     const g = geste.current;
     if (g === null) return;
     const pixel = pixelDe(e);
+    const tactile = e.pointerType === 'touch';
     if (g.type === 'fond') {
       if (!g.deplace && Math.hypot(pixel.x - g.pixel0.x, pixel.y - g.pixel0.y) < SEUIL_GLISSEMENT_PX) return;
+      if (tactile && !g.deplace) setGesteDoigt('carte');
       g.deplace = true;
       const m = metresParPixel(g.vue.origine.latitude, g.vue.zoom);
       setCentreGeo(versGeographique(g.vue.origine, { x: g.centre0.x - (pixel.x - g.pixel0.x) * m, y: g.centre0.y + (pixel.y - g.pixel0.y) * m }));
@@ -816,6 +993,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       if (!g.demarre) {
         if (Math.hypot(pixel.x - g.pixel0.x, pixel.y - g.pixel0.y) < SEUIL_GLISSEMENT_PX) return;
         g.demarre = true;
+        arreterAppuiLong();
+        if (tactile && g.type === 'sommet') setGesteDoigt('sommet');
       }
       if (g.type === 'milieu' || g.fige) return;
       const p = depuisEcran(g.vue, pixel);
@@ -827,6 +1006,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       if (Math.hypot(pixel.x - g.pixel0.x, pixel.y - g.pixel0.y) < SEUIL_GLISSEMENT_PX) return;
       g.demarre = true;
     }
+    if (tactile && g.type === 'deplacer') setGesteDoigt('element');
     const p = depuisEcran(g.vue, pixel);
     const r = g.element.rect;
     if (g.type === 'deplacer') majRectangle(g.element, glisser(r, g.depart, p));
@@ -839,11 +1019,13 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     geste.current = null;
     if (g === null) return;
     if (g.type === 'fond') {
-      if (!g.deplace) surClic(g.pixel0, g.vue);
+      if (g.deplace) return;
+      if (g.cible !== null) selectionner(g.cible);
+      else surClic(g.pixel0, g.vue);
     } else if (g.type === 'sommet') {
       // Un simple clic sur le premier sommet d'un tracé le ferme.
       if (!g.demarre && g.fige && g.index === 0) fermerTrace();
-    } else if (g.type === 'milieu' && !g.demarre) {
+    } else if (g.type === 'milieu' && !g.demarre && !g.tactile) {
       clicDejaTraite.current = g.index;
       insererSurCote(g.zoneId, g.index);
     }
@@ -917,6 +1099,12 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setZoomChoisi(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN_VUE, zoom + delta)));
   }
 
+  /** Boutons « Tourner −5° / +5° » : l'élément choisi tourne au brouillon (cap ramené dans [0, 360[). */
+  function tournerSelection(delta: number): void {
+    if (!edition || choisi === undefined) return;
+    majRectangle(choisi, tournerDe(choisi.rect, delta));
+  }
+
   // Clavier d'un élément : flèches 0,1 m (Maj : 1 m), [ ] 1°. AltGr (Ctrl+Alt sous Windows) donne [ et ] au clavier français.
   function surTouche(e: KeyboardEvent<HTMLElement>, element: Objet): void {
     if (!edition || e.metaKey || (e.ctrlKey && !e.altKey)) return;
@@ -971,6 +1159,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   // ── Rendu ─────────────────────────────────────────────────────────────────────────────────────
   const poignees = edition && choisi !== undefined ? positionsPoignees(vue, choisi.rect) : null;
+  // Au doigt (écran de téléphone ou de tablette, ou écran tactile), la zone à toucher d'un sommet fait 44 px au moins.
+  const tailleSommet = surOrdinateur && !ecranTactile ? TAILLE_SOMMET_SOURIS_PX : TAILLE_SOMMET_DOIGT_PX;
   const carreau = CARREAU_M / mpp;
   const depart = versEcran(vue, { x: 0, y: 0 });
   const enPoints = (c: readonly Point[]): string =>
@@ -1030,6 +1220,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
         aria-labelledby={idTitre}
         data-testid="editeur-placement"
         data-mode={mode}
+        data-ecran={surOrdinateur ? 'ordinateur' : 'telephone'}
+        data-geste={gesteDoigt}
         data-fond={fondPhoto ? 'photo' : 'neutre'}
         data-zoom={Math.min(zoom, ZOOM_TUILES_MAX)}
         data-centre={pret ? `${centreEffectif.latitude.toFixed(5)},${centreEffectif.longitude.toFixed(5)}` : undefined}
@@ -1046,7 +1238,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           </button>
         </header>
 
-        {edition && (
+        {pret && (
           <BandeauEtapes
             courante={courante}
             vue={etapeVue}
@@ -1101,15 +1293,18 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               ref={planRef}
               data-testid="plan-placement"
               className={`pl-plan${enTrace ? ' pl-trace' : ''}`}
+              style={{ touchAction: 'none' }}
+              onPointerDownCapture={doigtPose}
               onPointerDown={(e) => {
                 if (e.pointerType === 'mouse' && e.button !== 0) return;
-                geste.current = { type: 'fond', pixel0: pixelDe(e), centre0: vue.centre, vue, deplace: false };
-                capturer(e);
+                commencerFond(e, null);
               }}
               onPointerMove={surBouge}
-              onPointerUp={surRelache}
-              onPointerCancel={() => {
-                geste.current = null;
+              onPointerUp={(e) => {
+                doigtLeve(e, false);
+              }}
+              onPointerCancel={(e) => {
+                doigtLeve(e, true);
               }}
               onWheel={(e) => {
                 changerZoom(e.deltaY < 0 ? 1 : -1);
@@ -1215,7 +1410,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                         data-x={arrondi(p.x)}
                         data-y={arrondi(p.y)}
                         className={`pl-sommet${sommetSel === i ? ' pl-sommet-choisi' : ''}${enTrace && i === 0 ? ' pl-sommet-premier' : ''}`}
-                        style={{ left: e.x - TAILLE_SOMMET_PX / 2, top: e.y - TAILLE_SOMMET_PX / 2 }}
+                        style={{ left: e.x - tailleSommet / 2, top: e.y - tailleSommet / 2, width: tailleSommet, height: tailleSommet, touchAction: 'none' }}
                         onPointerDown={(ev) => {
                           commencerSommet(ev, zoneChoisie.zone.id, i, sommetsAff);
                         }}
@@ -1308,11 +1503,6 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 {MESSAGES_PLACEMENT.seulGerant}. Vous pouvez consulter le plan.
               </p>
             )}
-            {pret && gerant && !surOrdinateur && (
-              <p role="status" className="pl-message pl-message-info">
-                Placement : {MESSAGES_PLACEMENT.ordinateur}. Ici, vous pouvez seulement consulter le plan.
-              </p>
-            )}
             {pret && origine === null && (
               <>
                 <p role="status" data-testid="origine-absente" className="pl-message">
@@ -1370,58 +1560,6 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               <p role="alert" className="pl-message pl-erreur">
                 {erreur}
               </p>
-            )}
-
-            {edition && (
-              <div className="pl-actions">
-                <button
-                  type="button"
-                  className="pl-bouton"
-                  disabled={origine === null || pose !== null || trace !== null}
-                  aria-describedby={origine === null || pose !== null || trace !== null ? idRaisonNouveau : undefined}
-                  onClick={() => {
-                    setFormulaire(true);
-                  }}
-                >
-                  Nouveau bâtiment
-                </button>
-                {(origine === null || pose !== null || trace !== null) && (
-                  <p id={idRaisonNouveau} className="pl-aide">
-                    {raisonNouveau}
-                  </p>
-                )}
-                <button
-                  type="button"
-                  className="pl-bouton pl-principal"
-                  disabled={!peutEnregistrer}
-                  aria-describedby={peutEnregistrer ? undefined : idRaisonEnregistrer}
-                  onClick={() => void enregistrer()}
-                >
-                  Enregistrer
-                </button>
-                {!peutEnregistrer && (
-                  <p id={idRaisonEnregistrer} className="pl-aide">
-                    {raisonEnregistrer}
-                  </p>
-                )}
-                {brouillonOuvert && (
-                  <button type="button" className="pl-bouton" disabled={occupe} aria-describedby={occupe ? idRaisonEnregistrer : undefined} onClick={abandonner}>
-                    Abandonner les changements
-                  </button>
-                )}
-                {annulable !== undefined && (
-                  <button
-                    type="button"
-                    data-testid="annuler-placement"
-                    className="pl-bouton"
-                    disabled={occupe}
-                    aria-describedby={occupe ? idRaisonEnregistrer : undefined}
-                    onClick={() => void defaire(annulable)}
-                  >
-                    Annuler l’enregistrement
-                  </button>
-                )}
-              </div>
             )}
 
             {pret && (
@@ -1491,6 +1629,82 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             </section>
           </aside>
         </div>
+
+        {edition && (
+          <div data-testid="barre-doigt" className="pl-barre">
+            {choisi !== undefined && (
+              <>
+                <button
+                  type="button"
+                  data-testid="tourner-moins"
+                  className="pl-bouton pl-tourner"
+                  onClick={() => {
+                    tournerSelection(-PAS_ROTATION_DEG);
+                  }}
+                >
+                  Tourner −5°
+                </button>
+                <button
+                  type="button"
+                  data-testid="tourner-plus"
+                  className="pl-bouton pl-tourner"
+                  onClick={() => {
+                    tournerSelection(PAS_ROTATION_DEG);
+                  }}
+                >
+                  Tourner +5°
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              className="pl-bouton"
+              disabled={origine === null || pose !== null || trace !== null}
+              aria-describedby={origine === null || pose !== null || trace !== null ? idRaisonNouveau : undefined}
+              onClick={() => {
+                setFormulaire(true);
+              }}
+            >
+              Nouveau bâtiment
+            </button>
+            {(origine === null || pose !== null || trace !== null) && (
+              <p id={idRaisonNouveau} className="pl-aide">
+                {raisonNouveau}
+              </p>
+            )}
+            <button
+              type="button"
+              className="pl-bouton pl-principal"
+              disabled={raisonEnregistrer !== null}
+              aria-describedby={raisonEnregistrer === null ? undefined : idRaisonEnregistrer}
+              onClick={() => void enregistrer()}
+            >
+              Enregistrer
+            </button>
+            {raisonEnregistrer !== null && (
+              <p id={idRaisonEnregistrer} className="pl-aide">
+                {raisonEnregistrer}
+              </p>
+            )}
+            {brouillonOuvert && (
+              <button type="button" className="pl-bouton" disabled={occupe} aria-describedby={occupe ? idRaisonEnregistrer : undefined} onClick={abandonner}>
+                Abandonner les changements
+              </button>
+            )}
+            {annulable !== undefined && (
+              <button
+                type="button"
+                data-testid="annuler-placement"
+                className="pl-bouton"
+                disabled={occupe}
+                aria-describedby={occupe ? idRaisonEnregistrer : undefined}
+                onClick={() => void defaire(annulable)}
+              >
+                Annuler l’enregistrement
+              </button>
+            )}
+          </div>
+        )}
 
         {formulaire && (
           <FormulaireBatiment

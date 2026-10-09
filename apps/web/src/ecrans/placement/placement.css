@@ -1,7 +1,8 @@
 /*
  * Éditeur de placement sur la photo aérienne (T28b). Aucune couleur en dur : jetons seulement
  * (src/ui/jetons.ts, variables CSS). Écran d'ordinateur : surface de dessin à gauche, réglages à
- * droite ; sur téléphone (lecture seule), l'un sous l'autre. Commandes d'au moins 48 px.
+ * droite ; sur téléphone, l'un sous l'autre, la barre de boutons larges en bas (T28k, au doigt).
+ * Commandes d'au moins 48 px.
  */
 
 .pl-voile {
@@ -153,30 +154,43 @@
   cursor: crosshair;
 }
 
+/* La boîte (taille en ligne : 24 px à la souris, 44 px au doigt) est la zone à toucher ; le point dessiné fait 24 px au centre. */
 .pl-sommet {
   position: absolute;
   z-index: 2;
   box-sizing: border-box;
-  width: 24px;
-  height: 24px;
-  border: 3px solid var(--couleur-surface);
-  border-radius: var(--rayon-pastille);
-  background: var(--couleur-foret);
-  box-shadow: 0 0 0 1px var(--couleur-sur-orange);
   touch-action: none;
   cursor: move;
   outline: none;
 }
 
-.pl-sommet-choisi,
-.pl-sommet:focus-visible {
+.pl-sommet::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  border: 3px solid var(--couleur-surface);
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-foret);
+  box-shadow: 0 0 0 1px var(--couleur-sur-orange);
+}
+
+.pl-sommet-choisi::before,
+.pl-sommet:focus-visible::before {
   background: var(--couleur-orange);
   box-shadow: 0 0 0 3px var(--couleur-orange);
 }
 
-.pl-sommet-premier {
+.pl-sommet-premier::before {
   background: var(--couleur-pousse);
   box-shadow: 0 0 0 3px var(--couleur-foret);
+}
+
+.pl-sommet-premier {
   cursor: pointer;
 }
 
@@ -238,6 +252,13 @@
   background: var(--couleur-orange);
   box-shadow: 0 0 0 1px var(--couleur-sur-orange);
   touch-action: none;
+}
+
+/* Zone à toucher de 44 px au moins autour de chaque poignée (le dessin reste petit). */
+.pl-poignee::after {
+  content: '';
+  position: absolute;
+  inset: -12px;
 }
 
 .pl-poignee-rotation {
@@ -492,8 +513,36 @@
 
   .pl-lateral {
     flex: 0 0 auto;
-    max-height: 45%;
+    max-height: 30%;
   }
+}
+
+/* T28k : barre du bas, boutons larges (gants). Les raisons des boutons grisés passent sous les boutons. */
+.pl-barre {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px 12px max(12px, env(safe-area-inset-bottom));
+  background: var(--couleur-surface);
+  box-shadow: var(--ombre-carte);
+}
+
+.pl-barre .pl-bouton {
+  flex: 1 1 120px;
+  min-width: 44px;
+  min-height: 52px;
+}
+
+.pl-barre .pl-tourner {
+  flex-basis: 44%;
+}
+
+.pl-barre .pl-aide {
+  order: 2;
+  flex: 1 1 100%;
+  font-size: 13px;
 }
 
 /* T28h : recherche d'adresse et sites, au-dessus de la carte. Gros caractères et grandes cibles (gants). */

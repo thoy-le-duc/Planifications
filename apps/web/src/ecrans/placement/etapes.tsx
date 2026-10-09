@@ -3,7 +3,7 @@
  * l'éditeur (origine, bâtiments, pose), rien de stocké. Un tap sur une étape faite ne change que
  * la consigne affichée, jamais la ferme.
  */
-import type { ReactElement } from 'react';
+import { useId, type ReactElement } from 'react';
 
 export type NumeroEtape = 1 | 2 | 3 | 4;
 
@@ -20,7 +20,6 @@ export const MESSAGES_ETAPES = {
   traceEnCours: 'Finissez d’abord le tracé du contour',
   rienAEnregistrer: 'Rien à enregistrer : aucun changement',
   contourInvalide: 'Corrigez d’abord le contour refusé',
-  tropDeChangements: 'Trop de changements : abandonnez-en une partie',
   occupe: 'Enregistrement en cours',
   fiche: 'Donnez un nom et des dimensions positives',
   zoomMax: 'Zoom maximal atteint',
@@ -40,7 +39,13 @@ export interface ProprietesBandeau {
   readonly surChoix: (n: NumeroEtape) => void;
 }
 
+/** Pourquoi une étape à venir n'est pas encore ouverte : le point de départ d'abord, puis l'étape en cours. */
+function raisonAVenir(courante: NumeroEtape): string {
+  return courante === 1 ? MESSAGES_ETAPES.sansOrigine : `Finissez d’abord l’étape ${String(courante)} : ${ETAPES[courante - 1]?.titre.toLowerCase() ?? ''}`;
+}
+
 export function BandeauEtapes({ courante, vue, surChoix }: ProprietesBandeau): ReactElement {
+  const idRaison = useId();
   const montree = ETAPES[vue - 1];
   const suivante = ETAPES[vue];
   return (
@@ -56,6 +61,8 @@ export function BandeauEtapes({ courante, vue, surChoix }: ProprietesBandeau): R
                 data-etape={n}
                 data-etat={etat}
                 aria-current={n === vue ? 'step' : undefined}
+                aria-disabled={etat === 'a-venir' ? true : undefined}
+                aria-describedby={etat === 'a-venir' ? idRaison : undefined}
                 className="pl-etape"
                 onClick={() => {
                   surChoix(n);
@@ -70,6 +77,9 @@ export function BandeauEtapes({ courante, vue, surChoix }: ProprietesBandeau): R
           );
         })}
       </ol>
+      <p id={idRaison} hidden>
+        {raisonAVenir(courante)}
+      </p>
       <p data-testid="aide-etape" role="status" className="pl-aide">
         <strong>
           Étape {vue} : {montree?.titre}.
