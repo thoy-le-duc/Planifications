@@ -121,3 +121,68 @@ describe('scripts/verrou-e2e.sh — verrou tenu par un autre processus', () => {
     30_000,
   );
 });
+
+/**
+ * Tests d'acceptation T33b — verrou réentrant : un jeu e2e lancé sous un autre verrou ne s'attend pas lui-même.
+ *
+ * Contrat : si `VERROU_E2E_TENU` vaut 1 dans l'environnement, le script lance CMD directement (sans prendre
+ * ni attendre le verrou) et renvoie son code. Sinon, il prend le verrou et lance CMD avec `VERROU_E2E_TENU=1`.
+ */
+describe('scripts/verrou-e2e.sh — verrou réentrant (T33b)', () => {
+  /** Environnement sans `VERROU_E2E_TENU` hérité du processus de test (il vaut 1 quand on est déjà sous verrou). */
+  function sansVariableTenu(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+    const env = environnement(extra);
+    delete env.VERROU_E2E_TENU;
+    return env;
+  }
+
+  it(
+    'avec VERROU_E2E_TENU=1, lance la commande sans attendre un verrou tenu, code 0, sans message d\'attente',
+    async () => {
+      await tenirVerrou();
+
+      const debut = Date.now();
+      const r = spawnSync('bash', [SCRIPT, 'bash', '-c', 'echo $VERROU_E2E_TENU'], {
+        env: environnement({ VERROU_E2E_TENU: '1', VERROU_E2E_DELAI_S: '30' }),
+        encoding: 'utf8',
+        timeout: 60_000,
+      });
+      const duree = Date.now() - debut;
+
+      expect(r.status).toBe(0);
+      expect(duree).toBeLessThan(2000);
+      expect(r.stdout.trim()).toBe('1');
+      expect(`${r.stdout}${r.stderr}`).not.toContain(MESSAGE_ATTENTE);
+    },
+    30_000,
+  );
+
+  it('sans VERROU_E2E_TENU, la commande lancée voit VERROU_E2E_TENU=1', () => {
+    const r = spawnSync('bash', [SCRIPT, 'bash', '-c', 'echo $VERROU_E2E_TENU'], {
+      env: sansVariableTenu(),
+      encoding: 'utf8',
+      timeout: 60_000,
+    });
+
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('1');
+  });
+
+  it(
+    'un appel imbriqué (verrou-e2e.sh bash -c \'verrou-e2e.sh true\') se termine sous 2 s avec le code 0',
+    () => {
+      const debut = Date.now();
+      const r = spawnSync('bash', [SCRIPT, 'bash', '-c', `bash ${SCRIPT} true`], {
+        env: sansVariableTenu({ VERROU_E2E_DELAI_S: '30' }),
+        encoding: 'utf8',
+        timeout: 60_000,
+      });
+      const duree = Date.now() - debut;
+
+      expect(r.status).toBe(0);
+      expect(duree).toBeLessThan(2000);
+      expect(`${r.stdout}${r.stderr}`).not.toContain(MESSAGE_ATTENTE);
+    },
+    60_000,
+  );
+});
