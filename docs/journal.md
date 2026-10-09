@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T14f : l'import reconnaît une planche par sa zone et son code
+
+- **Fait** : l'import compare un code de planche dans sa zone, comme le serveur depuis T10t (`lower(trim(code))`). Le contexte de l'import lit la zone de chaque planche dans la requête existante (`EmplacementConnu.zoneId`, planches retirées écartées). Le parcellaire repère les doublons par zone + code, contre la base et dans le fichier ; les séries gagnent une colonne « Zone » facultative ; séries et assolements désignent la planche de la zone + code, ou refusent la ligne avec « Code ambigu : « P3 » existe dans plusieurs zones. Ajoutez la zone. ». Vérifié : typage, lint, 4 292 tests unitaires, build, budgets (démarrage 71,0 / 71 Kio inchangé, 3D 226,4 / 226,5 Kio), e2e 83 passés + vol de caméra T07 passé à la relance (704 ms > 700 au 1er passage, T34), démo 11.
+- **Décidé** (chef) : « P-3 », « P 3 », « P.3 » sont trois codes distincts ; toute planche dont `actif_au` est renseigné est écartée ; une zone désigne aussi ses sous-zones (code présent dans plusieurs → « Code ambigu », préciser la sous-zone). `correspondance.test.ts` mis à jour par le chef (champ `zone` des séries, commit ccaa501).
+- **Bloquant** : rien. À faire si possible : relire l'import sur un vrai fichier de Théophane avec des codes repris dans plusieurs zones.
+
 ## 2026-10-09 — T35a : rangs alignés ou en quinconce, et leur schéma
 
 - **Fait** : densité « écartement » avec `disposition` facultative (`alignee` par défaut, `quinconce`), dans le jsonb `parametres` : aucune migration. `domaine/densite.ts` (`DispositionRangs`, `DISPOSITIONS_RANGS`, `dispositionDe`), validation dans `lireParametres` (itinéraire, série, serveur ; refus de synchro en français). Formulaire : deux gros boutons « Alignés » / « En quinconce » dès 2 rangs, schéma SVG vue de dessus mis à jour à chaque frappe (`SchemaRangs.tsx`, `schema-rangs.ts`). Import : colonne « Disposition des rangs » jusqu'à l'itinéraire créé. Vérifié : typage, lint, 4 266 tests unitaires, intégration Postgres (1 215), e2e 84 passés sans relance, démo 11 ; démarrage 71,0 / 71 Kio inchangé, 3D 226,3 / 226,5 Kio.
