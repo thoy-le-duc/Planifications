@@ -578,6 +578,47 @@ select.itin-liste {
   outline-offset: 2px;
 }
 
+/* ── Disposition des rangs et leur schéma (T35a) ─────────────────────────────────────────── */
+
+.itin-dispositions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 6px;
+}
+
+.itin-schema {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 180px;
+  margin-top: 12px;
+  border-radius: 12px;
+}
+
+.itin-schema-planche {
+  fill: var(--couleur-fond);
+  stroke: var(--couleur-trait);
+}
+
+.itin-schema-rang {
+  stroke: var(--couleur-trait);
+  stroke-dasharray: 2 2;
+}
+
+.itin-schema-plant {
+  fill: var(--couleur-pousse);
+  stroke: var(--couleur-foret);
+}
+
+.itin-schema-cote {
+  stroke: var(--couleur-encre);
+}
+
+.itin-schema-cote text {
+  fill: var(--couleur-encre);
+  stroke: none;
+  font-weight: 700;
+}
+
 /* ── Travaux prévus ──────────────────────────────────────────────────────────────────────── */
 
 .itin-travail {

@@ -7,7 +7,7 @@
  * itinéraire qui a des séries à venir demande d'abord « Appliquer aux N séries à venir ? ».
  */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
-import { CATEGORIES_AVEC_PRODUIT, ECRITURES_MAX_PAR_LOT, type FaconDensite, type ModeItineraire, type RepereTravail } from '@planif/core';
+import { CATEGORIES_AVEC_PRODUIT, ECRITURES_MAX_PAR_LOT, type DispositionRangs, type FaconDensite, type ModeItineraire, type RepereTravail } from '@planif/core';
 import {
   apercu,
   CATEGORIES,
@@ -17,6 +17,8 @@ import {
   dateLisible,
   egauxJson,
   LIBELLES_MODES,
+  lireDecimal,
+  lireEntier,
   ligneValidee,
   nomAdapte,
   nouveauTravail,
@@ -35,6 +37,7 @@ import {
   type TypeLu,
 } from './calculs.ts';
 import { lireSeriesAVenir, type SerieAVenir } from './donnees.ts';
+import { SchemaRangs } from './SchemaRangs.tsx';
 import { creerItineraire, EcritureRefusee, modifierItineraire, nouvelId, ramener, supprimerItineraire, type ContexteEcriture } from './ecritures.ts';
 
 /** Marque de performance posée quand le formulaire est utilisable (champs et aperçu dessinés). */
@@ -96,6 +99,13 @@ const FACONS: readonly { readonly valeur: FaconDensite; readonly libelle: string
   { valeur: 'metre_lineaire', libelle: 'Au mètre linéaire' },
   { valeur: 'volee', libelle: 'À la volée' },
 ];
+/** T35a : choix de la disposition, à partir de 2 rangs. */
+const DISPOSITIONS: readonly { readonly valeur: DispositionRangs; readonly libelle: string }[] = [
+  { valeur: 'alignee', libelle: 'Alignés' },
+  { valeur: 'quinconce', libelle: 'En quinconce' },
+];
+/** Au-delà, le schéma n'est plus dessiné (des milliers de points pour rien). */
+const RANGS_SCHEMA_MAX = 24;
 const ETAPES: readonly { readonly cle: 'semisPepiniere' | 'miseEnPlace' | 'debutRecolte' | 'finRecolte'; readonly libelle: string }[] = [
   { cle: 'semisPepiniere', libelle: 'Semis' },
   { cle: 'miseEnPlace', libelle: 'Mise en place' },
@@ -520,6 +530,7 @@ export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, 
   const idCulture = useId();
   const idMode = useId();
   const idTravaux = useId();
+  const idDisposition = useId();
   const titre = useRef<HTMLHeadingElement>(null);
   const marquee = useRef(false);
 
@@ -530,6 +541,11 @@ export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, 
     titre.current?.focus();
     performance.mark(MARQUE_ITINERAIRE_AFFICHE);
   }, []);
+
+  // T35a : le schéma des rangs, dessiné dès que rangs et écartement sont lisibles. La largeur de
+  // planche n'est pas connue de l'itinéraire : 1,2 m par défaut (LARGEUR_PLANCHE_DEFAUT_CM).
+  const rangsLus = lireEntier(saisie.rangs);
+  const ecartementLu = lireDecimal(saisie.ecartement);
 
   const calcul = useMemo(() => apercu(saisie, base.periodeUsage, aujourdhui), [saisie, base, aujourdhui]);
 
@@ -841,6 +857,33 @@ export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, 
                 </>
               )}
             </div>
+            {(saisie.mode !== 'semis_direct' || saisie.facon === 'ecartement') && (rangsLus ?? 0) > 1 && (
+              <>
+                <span id={idDisposition} className="itin-etiquette">
+                  Disposition des rangs
+                </span>
+                <div role="radiogroup" aria-labelledby={idDisposition} className="itin-modes itin-dispositions">
+                  {DISPOSITIONS.map((d) => (
+                    <label key={d.valeur} className={`itin-mode${saisie.disposition === d.valeur ? ' itin-mode-choisi' : ''}${lectureSeule ? ' itin-mode-inactif' : ''}`}>
+                      <input
+                        type="radio"
+                        name={idDisposition}
+                        value={d.valeur}
+                        checked={saisie.disposition === d.valeur}
+                        disabled={lectureSeule}
+                        onChange={() => {
+                          changer((s) => ({ ...s, disposition: d.valeur }));
+                        }}
+                      />
+                      <span>{d.libelle}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+            {(saisie.mode !== 'semis_direct' || saisie.facon === 'ecartement') && rangsLus !== null && rangsLus <= RANGS_SCHEMA_MAX && ecartementLu !== null && (
+              <SchemaRangs rangs={rangsLus} ecartementCm={ecartementLu} disposition={saisie.disposition} largeurPlancheCm={null} />
+            )}
           </section>
 
           <section aria-labelledby={idTravaux} className="itin-carte">
