@@ -22,29 +22,36 @@ jobs:
       # Version figée : une nouvelle version du service se teste et s'adopte par une PR, pas en silence.
       # Lue par les tests des règles de synchro et par docker compose (pnpm e2e:synchro).
       POWERSYNC_IMAGE: journeyapps/powersync-service:1.26.1
-      # Même image officielle que Docker Hub, par le miroir public d'AWS (pas de limite anonyme) ;
-      # lue par docker-compose.yml pour pnpm e2e:synchro.
-      POSTGRES_IMAGE: public.ecr.aws/docker/library/postgres:17
+      # Nom local de l'image officielle Postgres, tirée d'avance ci-dessous depuis l'un des miroirs ;
+      # lue par docker-compose.yml pour pnpm e2e:synchro (qui la trouve alors sur la machine).
+      POSTGRES_IMAGE: postgres:17
     steps:
+      - name: Images Docker (Postgres 17, PowerSync), tirées d'avance avec replis
+        # Docker Hub et le miroir d'AWS limitent les téléchargements anonymes (CI rouge les 9 et
+        # 10 octobre 2026 : « toomanyrequests ») : on essaie trois sources, trois fois, et l'image
+        # trouvée est retiquetée sous le nom attendu par la suite.
+        run: |
+          tirer() {
+            for essai in 1 2 3; do
+              for source in "$1" "public.ecr.aws/docker/library/$1" "mirror.gcr.io/library/$1" "mirror.gcr.io/$1"; do
+                if docker pull -q "$source"; then
+                  [ "$source" = "$1" ] || docker tag "$source" "$1"
+                  return 0
+                fi
+              done
+              sleep $((essai * 20))
+            done
+            return 1
+          }
+          tirer "$POSTGRES_IMAGE"
+          tirer "$POWERSYNC_IMAGE"
       - name: Postgres 17 en wal_level=logical
-        # Image officielle servie par le miroir public d'AWS : pas de limite de téléchargement anonyme
-        # comme sur Docker Hub (CI rouge le 9 octobre 2026 : « toomanyrequests »).
         run: |
           docker run -d --name postgres -p 5432:5432 \
             -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres \
             --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 5s --health-retries 30 \
             "$POSTGRES_IMAGE" -c wal_level=logical
           timeout 90 sh -c 'until [ "$(docker inspect -f "{{.State.Health.Status}}" postgres)" = healthy ]; do sleep 1; done'
-      - name: Image du service PowerSync
-        # Tirée d'avance : les tests des règles de synchro (T10) démarrent le service eux-mêmes.
-        # Docker Hub d'abord ; s'il refuse (limite anonyme), le miroir de Google, retiqueté sous le même nom.
-        run: |
-          for essai in 1 2 3; do
-            docker pull "$POWERSYNC_IMAGE" && exit 0
-            docker pull "mirror.gcr.io/$POWERSYNC_IMAGE" && docker tag "mirror.gcr.io/$POWERSYNC_IMAGE" "$POWERSYNC_IMAGE" && exit 0
-            sleep $((essai * 20))
-          done
-          exit 1
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
