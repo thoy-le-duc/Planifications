@@ -371,3 +371,25 @@ test('jumeau 3D sur la démo : la vue 3D s’ouvre hors ligne avec ses serres', 
   await page.mouse.up();
   verifierGardeFous('navigation de la démo 3D', await arreterImages(page), BORNES_DEMO, 10);
 });
+
+test('plants 3D sur la démo : la vue 3D montre des plants hors ligne', async ({ page, context }) => {
+  test.skip(process.env.E2E_DEMO !== '1', 'ne tourne que sur la démo (pnpm e2e:demo)');
+  const DELAI_MS = 30_000;
+  await page.goto('/');
+  await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: DELAI_MS });
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: DELAI_MS });
+  // Le morceau 3D est précaché dès la première visite (principe 4) : on coupe le réseau avant de l'ouvrir.
+  await context.setOffline(true);
+  await page.reload();
+  await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: DELAI_MS });
+  await onglet(page, 'Planches').click();
+  await expect(page.getByTestId('barre').first()).toBeVisible({ timeout: DELAI_MS });
+  await page.getByTestId(TESTID_3D.bouton).click();
+  await expect(vue(page)).toHaveAttribute('data-etat', 'pret', { timeout: DELAI_MS });
+  await expect(page.getByTestId(TESTID_3D.repli), 'pas de repli 2D').toHaveCount(0);
+  // Attributs data- de la toile décrits en tête de vue-3d-plants.e2e.ts (T32b, Q33).
+  await expect.poll(async () => Number(await toile(page).getAttribute('data-plants')), { timeout: DELAI_MS, message: 'plants dessinés dans la démo, hors ligne' }).toBeGreaterThan(0);
+  expect(Number(await toile(page).getAttribute('data-formes-plants')), 'au moins un groupe d’instances').toBeGreaterThanOrEqual(1);
+  const hauteurs = JSON.parse((await toile(page).getAttribute('data-hauteurs-plants')) ?? '{}') as Record<string, number>;
+  expect(Object.keys(hauteurs).length, 'au moins une planche avec des plants').toBeGreaterThan(0);
+});
