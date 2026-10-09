@@ -133,6 +133,10 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T32d](T32d-plants-plus-fins.md) | Jumeau 3D : jeunes plants visibles, plants découpés (Q34) | T32b | fait |
 | [T36](T36-allegement-vue-3d.md) | Alléger la vue 3D : ne plus charger tout le cœur (relecture T35a) | T32d, T35a | à faire |
 | [T28h](T28h-adresse-recul-sites.md) | Éditeur de placement : chercher une adresse, voir large, plusieurs sites (Q35) | T28b, T28e, T28g | à faire |
+| [T28i](T28i-demo-placement.md) | Démo : essayer le placement d'une serre sur une vraie photo (Q36) | T28h | à faire |
+| [T28j](T28j-parcours-guide-placement.md) | Placement : un parcours guidé en étapes (Q36) | T28h | à faire |
+| [T28k](T28k-placement-au-doigt.md) | Placement au doigt sur le téléphone (Q36) | T28j | à faire |
+| [T37](T37-travaux-du-jour-3d.md) | 3D au téléphone : les travaux du jour, pour les ouvriers (Q36) | T29, T22, T13 | à faire |
 | [T32e](T32e-recolte-visible.md) | Jumeau 3D : la récolte se voit (fruits, à récolter, fin de récolte) (Q34) | T32d, T36 | à faire |
 | [T35a](T35a-schema-rangs.md) | Itinéraire : rangs alignés ou en quinconce, et leur schéma (Q34) | — | fait |
 | [T35b](T35b-quinconce-3d.md) | Jumeau 3D : plants posés selon la disposition des rangs (Q34) | T35a, T32d | à faire |

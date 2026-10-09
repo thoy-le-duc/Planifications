@@ -290,6 +290,18 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q36 — Placer sa serre, au doigt et dans la démo ; consignes aux ouvriers dans la 3D (posée le 2026-10-09)
+
+Retour de Théophane : « Passer au doigt sur le téléphone, c'est possible. Même le plan 3D sur le téléphone, c'est pas mal : je veux pouvoir dire aux ouvriers vous allez faire ça, ça, ça, pour qu'ils se repèrent facilement. Je ne vois toujours pas comment placer ma serre aux bons endroits, sur fixe comme sur téléphone. »
+
+Constat du chef : l'essai s'est fait **sur la démo en ligne**. La démo n'a pas de photo aérienne (fond neutre) et le placement y est peu engageant ; sur une vraie ferme, il faut aujourd'hui un ordinateur, poser le point de départ, puis « Nouveau bâtiment » (type, nom, dimensions) et toucher la photo : aucune étape n'est annoncée.
+
+Réponses (2026-10-09) :
+1. **Placement au doigt** sur le téléphone : oui. Ticket T28k.
+2. **Parcours guidé** : les étapes (trouver la ferme, poser le point de départ, ajouter une serre, tracer une zone) annoncées et enchaînées. Ticket T28j.
+3. **Démo** : on doit pouvoir y essayer le placement d'une serre sur une vraie photo. Ticket T28i.
+4. **Consignes aux ouvriers** : les **travaux du jour, pour tous**, numérotés sur les planches de la 3D au téléphone ; un tap fait voler la caméra jusqu'à la planche. Ticket T37. L'attribution par ouvrier viendra plus tard si besoin.
+
 ### Q35 — Droits des profils, recul de la photo aérienne, signal de récolte, fichier réel (posée le 2026-10-09)
 
 Réponses (2026-10-09) :
