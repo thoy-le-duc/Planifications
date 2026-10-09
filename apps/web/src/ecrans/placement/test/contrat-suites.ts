@@ -5,8 +5,8 @@
  * ── Constantes (modules purs) ────────────────────────────────────────────────────────────────
  *
  * tuiles.ts exporte :
- *   ZOOM_DEPART_SANS_POSITION : entier, ZOOM_INITIAL − 2 au plus (donc 17 au plus) et 14 au moins
- *     (le plus petit zoom de l'éditeur). Zoom de la vue à l'ouverture quand la ferme n'a NI origine
+ *   ZOOM_DEPART_SANS_POSITION : entier, ZOOM_INITIAL − 2 au plus (donc 17 au plus) et 6 au moins
+ *     (le plus petit zoom de l'éditeur depuis T28h, Q35). Zoom de la vue à l'ouverture quand la ferme n'a NI origine
  *     du plan NI position. ZOOM_INITIAL (19) reste le zoom de départ dans tous les autres cas.
  *   DELAI_RELANCE_TUILE_MS : entier, 5 000 au plus (et 500 au moins) : délai entre l'échec d'une
  *     tuile et sa nouvelle demande.

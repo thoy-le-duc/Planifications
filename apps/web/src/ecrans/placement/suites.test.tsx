@@ -311,7 +311,8 @@ describe('T28e : zoom de départ', () => {
     const z = tuilesMod.ZOOM_DEPART_SANS_POSITION;
     expect(Number.isInteger(z)).toBe(true);
     expect(z).toBeLessThanOrEqual(tuilesMod.ZOOM_INITIAL - 2);
-    expect(z).toBeGreaterThanOrEqual(14);
+    // T28h (Q35) : le plus petit zoom de l'éditeur descend à 6 ; la vue de départ sans position y est.
+    expect(z).toBeGreaterThanOrEqual(6);
   });
 
   it('sans origine ni position : data-zoom vaut la constante', async () => {

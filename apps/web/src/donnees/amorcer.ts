@@ -25,6 +25,7 @@
  * packages/sync/src/test/placement-t07.ts), pour e2e/vue-3d-jumeau.e2e.ts.
  *
  * T14b — `?jeu=import` : la ferme de l'import (src/ecrans/import/test/ferme-import.ts, dates fixes).
+ * T28h — `?jeu=placement&origine=1&sites=2` : en plus, un second site « Verger nord » à 20 km (e2e/placement-adresse.e2e.ts).
  * T28b — `?jeu=placement` : la ferme du placement (src/ecrans/placement/test/ferme-placement.ts :
  * gérant, sans point de départ, rien de placé), dans la base de SON utilisateur de test
  * (e2e/placement.e2e.ts).
@@ -166,6 +167,8 @@ async function amorcerPlacement(parametres: URLSearchParams): Promise<Amorcage> 
     ...(parametres.get('saison') === '1' ? { saison: true } : {}),
     ...(parametres.get('origine') === '1' ? { origine: true } : {}),
     ...(parametres.get('role') === 'equipier' ? { role: 'equipier' as const } : {}),
+    // T28h : `sites=2` (avec `origine=1`) ajoute un second site « Verger nord » à 20 km à l'est.
+    ...(parametres.get('sites') === '2' ? { deuxSites: true } : {}),
   };
   const ferme = fermePlacement(options);
   await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermePlacement(base, options));

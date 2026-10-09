@@ -36,6 +36,9 @@ export const PLANCHE = id(0x20);
 export const SAISON = id(0x40);
 export const HANGAR = id(0x30);
 export const SERRE = id(0x31);
+/** T28h : second site (option `deuxSites`) et sa sous-zone. */
+export const ZONE_SITE2 = id(0x12);
+export const ZONE_ENFANT = id(0x13);
 
 export const POSITION = { latitude: 44, longitude: 1.5 } as const;
 export const CONTOUR_CHAMP = [
@@ -58,6 +61,13 @@ export interface OptionsFermePlacement {
    * ait un plan à montrer. Défaut : faux (aucune saison, comme avant : les tests de T28b/T28e ne changent pas).
    */
   readonly saison?: boolean;
+  /**
+   * T28h : avec `origine`, ajoute un second site à 20 km à l'est : zone de premier niveau « Verger nord »
+   * (ZONE_SITE2), contour (20100, 0) (20140, 0) (20140, 30) (20100, 30), et une sous-zone « Rang 3 »
+   * (ZONE_ENFANT, parente ZONE_CHAMP, contour (5000, 0) (5040, 0) (5040, 30) (5000, 30)) qui n'est PAS de premier niveau.
+   * Défaut : faux.
+   */
+  readonly deuxSites?: boolean;
 }
 
 export interface FermePlacement {
@@ -100,6 +110,11 @@ export function fermePlacement(options: OptionsFermePlacement = {}): FermePlacem
     contour: origine ? JSON.stringify(CONTOUR_CHAMP) : null,
     ...horo,
   });
+  if (origine && options.deuxSites === true) {
+    const rect = (x0: number) => JSON.stringify([{ x: x0, y: 0 }, { x: x0 + 40, y: 0 }, { x: x0 + 40, y: 30 }, { x: x0, y: 30 }]);
+    ajouter('zone', { id: ZONE_SITE2, ferme_id: FERME, nom: 'Verger nord', zone_parente_id: null, type_abri: 'plein_champ', surface_m2: 1200, contour: rect(20100), ...horo });
+    ajouter('zone', { id: ZONE_ENFANT, ferme_id: FERME, nom: 'Rang 3', zone_parente_id: ZONE_CHAMP, type_abri: 'plein_champ', surface_m2: 1200, contour: rect(5000), ...horo });
+  }
   ajouter('emplacement', {
     id: PLANCHE,
     ferme_id: FERME,
