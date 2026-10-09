@@ -410,10 +410,10 @@ describe('T32a : profilEffectif, le profil réglé par la ferme remplace le déf
     const a = m.profilEffectif(fermeA);
     const b = m.profilEffectif(fermeB);
     expect(a.hauteurMaxM).toBe(1.2);
-    expect(b.hauteurMaxM).toBe(2);
-    expect(m.profilParDefaut('Tomate').profil.hauteurMaxM).toBe(2);
+    expect(b.hauteurMaxM).toBe(3);
+    expect(m.profilParDefaut('Tomate').profil.hauteurMaxM).toBe(3);
     // Ordre inverse : rien n'est retenu d'un appel à l'autre.
-    expect(m.profilEffectif(fermeB).hauteurMaxM).toBe(2);
+    expect(m.profilEffectif(fermeB).hauteurMaxM).toBe(3);
     expect(m.profilEffectif(fermeA).hauteurMaxM).toBe(1.2);
   });
 });

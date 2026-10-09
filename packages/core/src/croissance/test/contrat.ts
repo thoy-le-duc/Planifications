@@ -65,7 +65,7 @@
  * nom (tel que la bibliothèque le porte : « Tomate », « Laitue »…), `synonymes` (autres noms
  * courants, « Salade » pour la laitue), `profil` valide, `source` non vide : une référence, ou
  * exactement MENTION_A_VERIFIER = 'valeur usuelle à vérifier'. Ordres de grandeur de départ
- * (ticket) : tomate 2 m érigée tuteurée, laitue (salade) 0,25 m en rosette, carotte 0,3 m,
+ * (ticket) : tomate 3 m érigée tuteurée (Q33), laitue (salade) 0,25 m en rosette, carotte 0,3 m,
  * courgette 0,6 m en buisson, fraisier 0,25 m, asperge 1,5 m (fougère). Les pérennes de la
  * ferme (asperge, kiwi, pivoine, fraisier) ont un `cycleAnnuel`.
  *

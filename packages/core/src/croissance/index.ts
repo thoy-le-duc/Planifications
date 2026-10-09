@@ -34,5 +34,13 @@ export {
   PROFIL_CARACTERES_MAX,
   validerProfilCroissance,
 } from './profil.ts';
-export { PROFIL_GENERIQUE, PROFILS_PAR_DEFAUT, profilEffectif, profilParDefaut } from './defauts.ts';
+export {
+  HAUTEUR_TRAVAIL_HORS_SOL_M,
+  hauteurStructureM,
+  PROFIL_GENERIQUE,
+  PROFILS_PAR_DEFAUT,
+  profilEffectif,
+  profilParDefaut,
+  surelevationHorsSolM,
+} from './defauts.ts';
 export { croissanceA, croissancePerenneA, FRACTION_FIN_LEVEE, FRACTION_HAUTEUR_FIN_BAISSEE, JOURS_REPLI_SANS_FIN } from './calcul.ts';
