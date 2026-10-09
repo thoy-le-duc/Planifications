@@ -498,6 +498,8 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
         const fenetre = nombreDe(v.fenetre_recolte_jours);
         const rangs = nombreDe(v.rangs_par_planche);
         const ecartement = nombreDe(v.ecartement_cm);
+        // T35a : seul le quinconce est écrit ; alignés ou vide → densité sans disposition.
+        const quinconce = texte(v.disposition) === 'quinconce';
         const porteItineraire = modeLu !== null || pepiniere !== null || avantRecolte !== null || fenetre !== null;
         if (porteItineraire) {
           const mode: Mode | null = modeLu ?? (pepiniere !== null ? 'plant_maison' : null);
@@ -505,7 +507,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
           if (mode === 'plant_maison' && pepiniere === null) throw new Refus('Durée en pépinière : obligatoire pour un plant maison.', e.colonneDe.has('duree_pepiniere_jours') ? 'duree_pepiniere_jours' : 'mode');
           if (avantRecolte === null) throw new Refus('Jours avant récolte : obligatoire pour un itinéraire.', e.colonneDe.has('duree_avant_recolte_jours') ? 'duree_avant_recolte_jours' : 'espece');
           if (fenetre === null) throw new Refus('Fenêtre de récolte : obligatoire pour un itinéraire.', e.colonneDe.has('fenetre_recolte_jours') ? 'fenetre_recolte_jours' : 'espece');
-          const parametres = parametresNeufs(mode, avantRecolte, fenetre, pepiniere, rangs, ecartement);
+          const parametres = parametresNeufs(mode, avantRecolte, fenetre, pepiniere, rangs, ecartement, quinconce);
           const pourDefauts = nomEspece(especeId);
           const cle = `${especeId}\u0001${varieteId ?? ''}\u0001${JSON.stringify(parametres)}`;
           const memeEnBase = ctx.itineraires.some(
@@ -899,13 +901,15 @@ function retirerDepuis(
 }
 
 /** Paramètres d'un itinéraire créé depuis une ligne de cultures. */
-function parametresNeufs(mode: Mode, avantRecolte: number, fenetre: number, pepiniere: number | null, rangs: number | null, ecartement: number | null): Objet {
+function parametresNeufs(mode: Mode, avantRecolte: number, fenetre: number, pepiniere: number | null, rangs: number | null, ecartement: number | null, quinconce: boolean): Objet {
+  const densite: Objet = { facon: 'ecartement', rangsParPlanche: rangs ?? DENSITE_PAR_DEFAUT.rangsParPlanche, ecartementSurRangCm: ecartement ?? DENSITE_PAR_DEFAUT.ecartementSurRangCm };
+  if (quinconce) densite.disposition = 'quinconce';
   const p: Objet = {
     mode,
     ...PARAMETRES_COMMUNS,
     dureeAvantRecolteJours: avantRecolte,
     fenetreRecolteJours: fenetre,
-    densite: { facon: 'ecartement', rangsParPlanche: rangs ?? DENSITE_PAR_DEFAUT.rangsParPlanche, ecartementSurRangCm: ecartement ?? DENSITE_PAR_DEFAUT.ecartementSurRangCm },
+    densite,
     travauxPrevus: [],
   };
   completerMode(p, mode, pepiniere);
