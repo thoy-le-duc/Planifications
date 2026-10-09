@@ -7,6 +7,7 @@ import { Color, Object3D, type BufferGeometry, type InstancedMesh } from 'three'
 import type { FormePlant } from '@planif/core/croissance';
 import { geometriePlant, geometrieStructure } from './geometries-plants.ts';
 import { FORMES, piedsDeGouttiere, plantsVisibles, PLANTS_MAX_TOTAL, type PlantsPlanche } from './plants.ts';
+import { COULEUR_BOIS_3D, COULEUR_FEUILLAGE_3D } from '../../ui/jetons.ts';
 import { hauteurRendue, type Scene, type SceneFiltree } from './scene.ts';
 
 /** Champ vertical de la caméra (degrés), le même que celui de la vue. */
@@ -16,9 +17,9 @@ const HAUTEUR_POUR_LARGEUR = 4;
 /** Largeur des pieds de gouttière (échelle horizontale du poteau, m) : de vrais pieds, bien visibles. */
 const PIED_GOUTTIERE_M = 1.2;
 /** Le feuillage est vert ; la couleur du filtre reste sur la planche (de loin, sur la masse). Décochée, la planche garde sa couleur estompée. */
-const VERT_FEUILLAGE = '#4FA55B';
+const VERT_FEUILLAGE = COULEUR_FEUILLAGE_3D;
 /** Bois des poteaux (pergola, pieds de gouttière). */
-const BOIS_POTEAU = '#8A6A48';
+const BOIS_POTEAU = COULEUR_BOIS_3D;
 
 /** Ce que la vue écrit sur la toile (attributs `data-*` de T32b). */
 export interface BilanPlants {
