@@ -290,6 +290,14 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q35 — Droits des profils, recul de la photo aérienne, signal de récolte, fichier réel (posée le 2026-10-09)
+
+Réponses (2026-10-09) :
+1. **Profils de croissance** : réglables par le **gérant seulement** (pas tout membre, contrairement à la décision du chef du 8 octobre). Le serveur doit refuser une modification de `profil_croissance` par un équipier. Ticket T32c ajusté.
+2. **Photo aérienne** : le zoom de départ ne convient pas : « on n'arrive pas à avoir plus de recul, il peut y avoir des fermes beaucoup plus grandes que la mienne, avec parfois des sites différents ; pour positionner le lieu, ce serait pas mal de pouvoir taper l'adresse, là on est complètement paumé. » Ticket T28h : recherche d'adresse, recul bien plus large, plusieurs sites.
+3. **Signal « à récolter »** : une **balise au-dessus de la planche** (panier ou pastille vive), visible même en vue d'ensemble. Ticket T32e précisé.
+4. **Fichier réel pour l'import** : aucun ; « je vais construire ma ferme dans notre éditeur ; un nouveau client passera aussi par l'éditeur ». Conséquence : l'éditeur et la prise en main passent avant l'import.
+
 ### Q34 — Récolte visible, schéma des rangs, budget (posée le 2026-10-09, après les captures de T32b)
 
 Retour de Théophane : « C'est un peu mieux. Il faudrait voir les choses quand ça a besoin de récolter : les courgettes, il y a un truc qui grossit, les fraises pareil. Il faut que visuellement ce soit impactant. Et dans la fiche culturelle, quand on fait les écartements entre plants, double rang, triple rang, quadruple rang, un petit schéma qui se met en place : en double rang, en quinconce ou non, il faut pouvoir le voir. »
