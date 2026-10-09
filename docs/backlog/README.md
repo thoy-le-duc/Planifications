@@ -134,6 +134,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T32e](T32e-recolte-visible.md) | Jumeau 3D : la récolte se voit (fruits, à récolter, fin de récolte) (Q34) | T32d, T36 | à faire |
 | [T35a](T35a-schema-rangs.md) | Itinéraire : rangs alignés ou en quinconce, et leur schéma (Q34) | — | fait |
 | [T35b](T35b-quinconce-3d.md) | Jumeau 3D : plants posés selon la disposition des rangs (Q34) | T35a, T32d | à faire |
+| [T38a](T38a-api-sur-vercel.md) | Mise en ligne gratuite : l'API sur Vercel (Q37) | T09c, T10 | fait |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 

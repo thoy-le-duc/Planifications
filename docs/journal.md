@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T38a : l'API tourne aussi sur Vercel
+
+- **Fait** : `apps/api/src/vercel.ts` sert la même application Hono sous `/api` (configuration lue au premier appel, 500 `configuration_invalide` sans secret, pool à connexions courtes : 3 au plus, fermées après 1 s) ; le débit de la synchro (120 envois par utilisateur et par minute glissante) passe de la mémoire à la base (`securite.debit_synchro`, migration 0031, une écriture atomique `INSERT … ON CONFLICT … DO UPDATE … WHERE … RETURNING`, lignes passées effacées au passage). Projet Vercel « appli » : `vercel.json` racine (cdg1, `pnpm build`, `apps/web/dist`, réécriture `/api/(.*)` avant la SPA, en-têtes de la démo) et fonction `api/[...route].js`. `vercel build` (CLI 63.1.0) réussi sans secret, la fonction construite répond à `/api/sante`.
+- **Décidé** : la fonction réexporte un fichier unique rassemblé par esbuild (`pnpm build` → `apps/api/dist-vercel/fonction.mjs`) : le constructeur Node de Vercel compile chaque `.ts` sans réécrire nos imports `./x.ts` ni les `exports` en `.ts` des paquets du dépôt, la fonction ne se chargeait pas (essayé). `PROXY_DE_CONFIANCE=1` obligatoire sur Vercel, avertissement au journal si absente avec `VERCEL=1`. Migrations lancées à la main (`pnpm --filter @planif/db migrer`), pas pendant la construction. Démo intacte : son projet Vercel a pour racine `apps/web` et lit `apps/web/vercel.json`.
+- **Bloquant** : rien dans le code. Pour T38b (guide) : créer le projet Vercel « appli » (racine du dépôt), Neon, PowerSync Cloud et Brevo, poser les variables listées dans la PR. Vercel prend Node 24 (`engines` `>=22.18`).
+
 ## 2026-10-09 — T36 : la vue 3D ne charge plus tout le cœur
 
 - **Fait** : `scene.ts` importe `@planif/core/placement` (et non la racine) et `morceauManuel` range `packages/core/src/croissance/` dans le morceau `croissance` (3,9 Kio). Vue 3D 226,3 → 202,8 Kio (la relecture T35a annonçait 202,6) ; démarrage 71,0 et éditeur de placement 18,5 inchangés. Plafond `jsVue3dGzKio` 227 → 203,3.
