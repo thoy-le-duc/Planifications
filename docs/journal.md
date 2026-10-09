@@ -8,6 +8,13 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Décidé** : la variable d'environnement sert de marque de réentrance plutôt qu'un test du descripteur 9 ; `pnpm e2e` et `pnpm e2e:demo` se lancent tels quels.
 - **Bloquant** : rien. Le blocage du 9 octobre venait d'un enveloppement, pas du script : les appels existants à `pnpm e2e` sous `verrou-e2e.sh` profitent du correctif sans changement.
 
+## 2026-10-09 — T34 : durée des vols de caméra mesurée de façon fiable
+
+- **Fait** : la marge au-delà de 600 ms n'est plus fixe (100 ms) : `margeVolMs(plancher)` = min(200, 100 + 3 × plancher) dans `e2e/fluidite-3d.ts`, plancher T29b mesuré au début du test T07 ; échec explicite si plancher absent ou > 40 ms ; message avec durée, plancher, marge, borne. 10 passages en série (verrou e2e) : 0 échec, plancher 16,7 ms, marge 150,1 ms (borne 750 ms), durées max 650 à 702 ms (668, 658, 654, 702, 650, 668, 689, 657, 659, 678). Vol doublé en copie locale : échec à 1207 ms pour une borne de 750 ms.
+- **Décidé** : 3 × plancher plutôt que 2 (le ticket proposait 2) : avec 2, la borne aurait été 733 ms, trop près des 702 ms observés ; plafond 200 ms. Le saut direct (mouvement réduit) garde sa marge fixe de 100 ms.
+- **Bloquant** : rien.
+
+
 ## 2026-10-09 — T38b : guide de mise en ligne pas à pas
 
 - **Fait** : `docs/mise-en-ligne.md` (Neon Francfort et adresse pooled, migrations, PowerSync Cloud UE, Brevo, Vercel « appli », premier compte, « Ce qui reste gratuit », « Que faire si… », rappels de sécurité). Le tableau des 18 variables est vérifié par `apps/api/src/guide-mise-en-ligne.test.ts` (relevé dans `config.ts`, `vercel.ts`, `vite.config.ts` et `import.meta.env.VITE_*`). Lien ajouté dans `CLAUDE.md`.
