@@ -53,7 +53,8 @@ export interface BornesDessin {
 export const BORNES_FERME_T07: BornesDessin = { appelsMax: 3, trianglesMax: 14_000 };
 /** Jumeau de la ferme T07 placée (bâtiments, arceaux, bâches) : plus de géométrie que la ferme seule. */
 export const BORNES_JUMEAU_T07: BornesDessin = { appelsMax: 8, trianglesMax: 35_000 };
-export const BORNES_DEMO: BornesDessin = { appelsMax: 8, trianglesMax: 8_000 };
+/** Démo : 8 appels avant T32d ; 9 depuis (mesuré : 9 au plus en glissé, 6 974 triangles sur 8 000) : l'InstancedMesh des tuteurs de la tomate ajoute un appel. */
+export const BORNES_DEMO: BornesDessin = { appelsMax: 9, trianglesMax: 8_000 };
 
 /** Script injecté dans chaque document, avant son code (page.addInitScript). Sans dépendance. */
 function scriptMesure(): void {

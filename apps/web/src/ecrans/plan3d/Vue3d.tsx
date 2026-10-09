@@ -50,7 +50,7 @@ import {
 import { fermeSansPlacement } from './invitation.ts';
 import { cultureAu, lireCultures, type CulturesLues } from './donnees-plants.ts';
 import { Plants } from './Plants.tsx';
-import { hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
+import { hauteurDalle, hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
 import { plantsDePlanche, type PlantsPlanche } from './plants.ts';
 import type { PorteDonnees } from '@planif/sync';
 import './vue3d.css';
@@ -368,7 +368,7 @@ function Volumes({
       const p = plants?.[i] ?? null;
       const base = hauteurRendue(v);
       const masse = p !== null && !rendu.enDetail(i);
-      const h = masse ? hauteurDeMasse(base, p) : base;
+      const h = masse ? hauteurDeMasse(base, p) : hauteurDalle(base, p);
       const y0 = !masse && p !== null ? p.surelevationM : 0;
       temporaire.position.set(v.x, y0 + h / 2, v.z);
       temporaire.rotation.set(0, v.angle, 0);

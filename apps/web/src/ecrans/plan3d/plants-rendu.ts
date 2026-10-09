@@ -5,7 +5,7 @@
  */
 import { Color, Object3D, type BufferGeometry, type InstancedMesh } from 'three';
 import type { FormePlant } from '@planif/core/croissance';
-import { geometriePlant, geometrieStructure } from './geometries-plants.ts';
+import { geometriePlant, geometrieStructure, geometrieTuteur } from './geometries-plants.ts';
 import { FORMES, piedsDeGouttiere, plantsVisibles, PLANTS_MAX_TOTAL, type PlantsPlanche } from './plants.ts';
 import { COULEUR_BOIS_3D, COULEUR_FEUILLAGE_3D } from '../../ui/jetons.ts';
 import { hauteurRendue, type Scene, type SceneFiltree } from './scene.ts';
@@ -25,6 +25,8 @@ const BOIS_POTEAU = COULEUR_BOIS_3D;
 export interface BilanPlants {
   readonly plants: number;
   readonly formes: number;
+  /** Tuteurs posés (un par plant de tomate et des autres formes `erige-tuteure`). */
+  readonly tuteurs: number;
   readonly hauteurs: string;
   readonly semaine: number;
 }
@@ -32,6 +34,21 @@ export interface BilanPlants {
 /** Hauteur de la planche vue de loin : la dalle, plus la gouttière, plus le feuillage ou la structure. */
 export function hauteurDeMasse(base: number, p: PlantsPlanche | null): number {
   return p === null ? base : base + p.surelevationM + Math.max(p.echelleVerticale, p.structureM);
+}
+
+/**
+ * Épaisseur de la dalle d'une planche qui porte des plants, vue de près (m de scène) : les jeunes plants
+ * ne s'enfouissent plus. 1/32 m (3,1 cm), exactement représentable en flottant 32 bits : la pose des instances ne l'arrondit pas.
+ */
+export const EPAISSEUR_DALLE_PLANTS_M = 0.03125;
+/** Les tuteurs dépassent le plant de cette hauteur (m) : ficelle et tige se lisent même sur un plant de 5 cm. */
+const DEPASSEMENT_TUTEUR_M = 0.1;
+/** Largeur du tuteur (échelle horizontale, m). */
+const LARGEUR_TUTEUR_M = 0.04;
+
+/** Hauteur rendue de la dalle EN DÉTAIL : fine quand elle porte des plants, inchangée sinon. */
+export function hauteurDalle(base: number, p: PlantsPlanche | null): number {
+  return p === null ? base : Math.min(base, EPAISSEUR_DALLE_PLANTS_M);
 }
 
 /** Capacité d'un InstancedMesh : la puissance de deux au-dessus du besoin, pour ne pas le recréer à chaque semaine. */
@@ -42,6 +59,8 @@ export class RenduPlants {
   private dalles: (() => void) | null = null;
   private readonly maillages = new Map<FormePlant, InstancedMesh>();
   private poteaux: InstancedMesh | null = null;
+  private tuteursMaillage: InstancedMesh | null = null;
+  private tuteur: BufferGeometry | null = null;
   private readonly geometries = new Map<FormePlant, BufferGeometry>();
   private poteau: BufferGeometry | null = null;
   private readonly temporaire = new Object3D();
@@ -66,6 +85,15 @@ export class RenduPlants {
     this.poteaux = m;
   }
 
+  lierTuteurs(m: InstancedMesh | null): void {
+    this.tuteursMaillage = m;
+  }
+
+  geometrieTuteur(): BufferGeometry {
+    this.tuteur ??= geometrieTuteur();
+    return this.tuteur;
+  }
+
   geometrie(forme: FormePlant): BufferGeometry {
     let g = this.geometries.get(forme);
     if (g === undefined) {
@@ -85,6 +113,8 @@ export class RenduPlants {
     this.geometries.clear();
     this.poteau?.dispose();
     this.poteau = null;
+    this.tuteur?.dispose();
+    this.tuteur = null;
   }
 
   /**
@@ -130,25 +160,27 @@ export class RenduPlants {
   poser(scene: Scene, filtree: SceneFiltree, plants: readonly (PlantsPlanche | null)[]): BilanPlants {
     const comptes = new Map<FormePlant, number>();
     let nbPoteaux = 0;
+    let nbTuteurs = 0;
     let total = 0;
     plants.forEach((p, i) => {
       if (p === null || !this.enDetail(i)) return;
       const v = scene.volumes[i];
       const f = filtree.volumes[i];
       if (v === undefined || f === undefined) return;
-      const y = hauteurRendue(v) + p.surelevationM;
+      const y = hauteurDalle(hauteurRendue(v), p) + p.surelevationM;
       const feuillage = f.estompe ? f.couleur : VERT_FEUILLAGE;
       const bois = f.estompe ? f.couleur : BOIS_POTEAU;
-      // Étirés le long du rang : une planche se lit comme un rang continu. Les plants sont centrés
-      // à un pas l'un de l'autre et à un demi-pas des bouts : une longueur d'un pas joint les voisins
-      // sans déborder de la planche (relecture T32b).
-      const long = p.pasM;
+      // Tomate et autres formes tuteurées : un plant par instance, avec son tuteur. Les autres formes
+      // restent étirées le long du rang (une longueur d'un pas joint les voisins sans déborder de la planche, relecture T32b).
+      const tuteure = p.forme === 'erige-tuteure';
+      const long = tuteure ? p.echelleHorizontale : p.pasM;
       for (const pos of p.positions) {
         if (p.echelleVerticale > 0) {
           const n = comptes.get(p.forme) ?? 0;
           if (this.mettre(this.maillages.get(p.forme), n, pos.x, y, pos.z, v.angle, long, p.echelleVerticale, p.echelleHorizontale, feuillage)) {
             comptes.set(p.forme, n + 1);
             total += 1;
+            if (tuteure && this.mettre(this.tuteursMaillage, nbTuteurs, pos.x, y, pos.z, v.angle, LARGEUR_TUTEUR_M, p.echelleVerticale + DEPASSEMENT_TUTEUR_M, LARGEUR_TUTEUR_M, bois)) nbTuteurs += 1;
           }
         }
         if (p.structureM > 0 && this.mettre(this.poteaux, nbPoteaux, pos.x, y, pos.z, v.angle, p.echelleHorizontale, p.structureM, p.echelleHorizontale, bois)) nbPoteaux += 1;
@@ -179,9 +211,10 @@ export class RenduPlants {
       if (n > 0) formes += 1;
     }
     if (this.poteaux !== null) regler(this.poteaux, nbPoteaux);
+    if (this.tuteursMaillage !== null) regler(this.tuteursMaillage, nbTuteurs);
     // Hauteur du feuillage de chaque planche qui a des plants, quel que soit le détail (m, au centimètre).
     const hauteurs: Record<string, number> = {};
     for (const p of plants) if (p !== null) hauteurs[p.id] = Math.round(p.hauteurM * 100) / 100;
-    return { plants: total, formes, hauteurs: JSON.stringify(hauteurs), semaine: scene.semaine };
+    return { plants: total, formes, tuteurs: nbTuteurs, hauteurs: JSON.stringify(hauteurs), semaine: scene.semaine };
   }
 }
