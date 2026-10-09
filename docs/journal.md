@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T35a : rangs alignés ou en quinconce, et leur schéma
+
+- **Fait** : densité « écartement » avec `disposition` facultative (`alignee` par défaut, `quinconce`), dans le jsonb `parametres` : aucune migration. `domaine/densite.ts` (`DispositionRangs`, `DISPOSITIONS_RANGS`, `dispositionDe`), validation dans `lireParametres` (itinéraire, série, serveur ; refus de synchro en français). Formulaire : deux gros boutons « Alignés » / « En quinconce » dès 2 rangs, schéma SVG vue de dessus mis à jour à chaque frappe (`SchemaRangs.tsx`, `schema-rangs.ts`). Import : colonne « Disposition des rangs » jusqu'à l'itinéraire créé. Vérifié : typage, lint, 4 266 tests unitaires, intégration Postgres (1 215), e2e 84 passés sans relance, démo 11 ; démarrage 71,0 / 71 Kio inchangé, 3D 226,3 / 226,5 Kio.
+- **Décidé** : « Alignés » s'enregistre sans clé (une ligne d'avant T35a reste identique) ; un seul rang n'écrit pas de disposition ; largeur du schéma 1,2 m (l'itinéraire ne connaît pas la planche) ; schéma non dessiné au-delà de 24 rangs. Périmètre élargi à `apps/web/src/ecrans/import/construction.ts` (décision du chef), avec un test de construction.
+- **Bloquant** : rien. À surveiller : le morceau commun du cœur (+0,5 Kio, validation et import) laisse 0,2 Kio de marge au budget 3D.
+
 ## 2026-10-09 — T32b : plants stylisés qui grandissent en 3D
 
 - **Fait** : la vue 3D dessine des plants stylisés par planche (7 formes, un `InstancedMesh` chacune, 40 à 60 triangles par plant, plafonds 20 par planche et 200 au total), à la hauteur du jour de T32a ; de loin (plant de moins de 4 px) les instances sont retirées et la planche devient un volume à la hauteur du feuillage. Pergola du kiwi et gouttière surélevée du fraisier hors-sol (poteaux instanciés), mention « Hauteurs indicatives, réglables dans la fiche de l'espèce », attributs `data-plants`, `data-formes-plants`, `data-hauteurs-plants`, `data-semaine-plants`. Lecture seule des cultures à l'ouverture de la vue (`donnees-plants.ts`), rien dans le plan 2D ni le démarrage. Valeurs par défaut de Q33 dans le cœur : tomate 3 m, asperge sans fougère jusqu'à la fin de récolte (15 juin par défaut) puis 1,5 m, structure du kiwi au repos, surélévation du fraisier hors-sol. Budget 3D 218,7 → 225,8 Kio (plafond 226,5, Q33 : 228 au plus) ; démarrage 71,0 et placement 18,5 inchangés.

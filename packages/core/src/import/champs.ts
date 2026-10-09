@@ -33,6 +33,7 @@ export const CHAMPS_IMPORT: Readonly<Record<TypeContenu, readonly DefinitionCham
     champ('fenetre_recolte_jours', 'Fenêtre de récolte (jours)'),
     champ('rangs_par_planche', 'Rangs par planche'),
     champ('ecartement_cm', 'Écartement'),
+    champ('disposition', 'Disposition des rangs'),
     champ('poids_mille_graines_g', 'Poids de mille graines'),
   ],
   series: [
@@ -73,6 +74,7 @@ const SYNONYMES: Readonly<Record<CleChamp, readonly string[]>> = {
   fenetre_recolte_jours: ['fenêtre de récolte', 'durée de récolte', 'harvest window', 'fenetre_recolte_jours'],
   rangs_par_planche: ['rangs', 'rangs/planche', 'rangs par planche', 'nombre de rangs', 'nb rangs', 'rangs_par_planche'],
   ecartement_cm: ['écartement', 'espacement', 'spacing'],
+  disposition: ['disposition', 'disposition des rangs'],
   poids_mille_graines_g: ['pmg', 'poids de mille graines', 'poids_mille_graines'],
   date_semis: ['semis', 'date de semis', 'date semis', 'prevu_semis_pepiniere', 'sowing', 'sowing date'],
   date_plantation: ['plantation', 'date de plantation', 'date plantation', 'prevu_mise_en_place', 'planting', 'planting date', 'transplanting'],

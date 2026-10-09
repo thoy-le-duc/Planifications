@@ -43,7 +43,7 @@ describe('CHAMPS_IMPORT : les champs de l’appli par type de contenu', () => {
       obligatoires: ['zone'],
     },
     cultures: {
-      champs: ['espece', 'variete', 'famille', 'mode', 'duree_pepiniere_jours', 'duree_avant_recolte_jours', 'fenetre_recolte_jours', 'rangs_par_planche', 'ecartement_cm', 'poids_mille_graines_g'],
+      champs: ['espece', 'variete', 'famille', 'mode', 'duree_pepiniere_jours', 'duree_avant_recolte_jours', 'fenetre_recolte_jours', 'rangs_par_planche', 'ecartement_cm', 'disposition', 'poids_mille_graines_g'],
       obligatoires: ['espece'],
     },
     series: {

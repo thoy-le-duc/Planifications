@@ -5,7 +5,7 @@
  * Internes au cœur : non exportés par @planif/core (sauf les constantes reprises par serie.ts).
  */
 import { estDateValide, type DateCalendaire } from '../dates/index.ts';
-import type { Instant, ModeItineraire, ParametresItineraire } from '../domaine/index.ts';
+import { DISPOSITIONS_RANGS, type Instant, type ModeItineraire, type ParametresItineraire } from '../domaine/index.ts';
 import type { CodeErreurSaisie, ErreurSaisie } from './index.ts';
 import { octetsUtf8, texteJson } from './outils.ts';
 import { validerTravauxPrevus, type OptionsTravaux } from './travaux.ts';
@@ -125,6 +125,16 @@ function dureeJours(p: Objet, cle: string, libelle: string): ErreurSaisie | null
 }
 
 /**
+ * T35a : la disposition des rangs de la densité, si elle est donnée, vaut 'alignee' ou
+ * 'quinconce'. Absente, rien n'est ajouté (alignée par défaut, aucune ligne réécrite).
+ */
+function disposition(densite: unknown): ErreurSaisie | null {
+  if (!estObjet(densite) || densite.disposition === undefined) return null;
+  if (parmi(DISPOSITIONS_RANGS, densite.disposition)) return null;
+  return erreur('champ_invalide', 'parametres.densite.disposition', 'disposition des rangs inconnue : « alignee » (rangs alignés) ou « quinconce » attendue');
+}
+
+/**
  * L'instantané de l'itinéraire, lisible : un objet JSON de 8 192 octets au plus, avec ce que le
  * calcul des dates lit. Les autres clés (densité, marge…) sont gardées telles quelles : elles
  * appartiennent à l'itinéraire copié, pas aux dates.
@@ -150,6 +160,8 @@ export function lireParametres(v: unknown, options: OptionsParametres = {}): Lu<
     dureeJours(p, 'dureeAvantRecolteJours', 'durée avant récolte') ??
     dureeJours(p, 'fenetreRecolteJours', 'fenêtre de récolte');
   if (e !== null) return echec(e);
+  const d = disposition(p.densite);
+  if (d !== null) return echec(d);
   // Relu depuis le texte : une copie JSON pure, sans valeur non sérialisable (undefined…).
   const relus = JSON.parse(ecrit.texte) as Record<string, unknown>;
   // T22 : les travaux prévus, validés avec le mode des paramètres. Sans liste de types pour
