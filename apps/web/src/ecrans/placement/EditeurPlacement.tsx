@@ -182,7 +182,12 @@ interface DeuxDoigts {
   angle: number;
   /** Angle total parcouru, en degrés (sens horaire à l'écran = positif). */
   tourne: number;
+  /** La rotation ne s'engage qu'au-delà de SEUIL_ROTATION_DOIGTS_DEG : un pincement qui dérive un peu ne tourne rien. */
+  tournant: boolean;
 }
+
+/** Angle cumulé à deux doigts au-delà duquel l'élément choisi se met à tourner (relecture T28k). */
+const SEUIL_ROTATION_DOIGTS_DEG = 8;
 
 interface Trace {
   readonly zoneId: string;
@@ -924,6 +929,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       element: edition ? (choisi ?? null) : null,
       angle: angleEntre(pa, pb),
       tourne: 0,
+      tournant: false,
     };
     setGesteDoigt('deux-doigts');
   }
@@ -941,7 +947,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     const angle = angleEntre(pa, pb);
     d.tourne += ecartAngle(angle - d.angle);
     d.angle = angle;
-    if (d.element !== null) majRectangle(d.element, tournerDe(d.element.rect, Math.round(d.tourne)));
+    if (!d.tournant && Math.abs(d.tourne) >= SEUIL_ROTATION_DOIGTS_DEG) d.tournant = true;
+    if (d.element !== null && d.tournant) majRectangle(d.element, tournerDe(d.element.rect, Math.round(d.tourne)));
   }
 
   /** Un doigt se lève ou est interrompu : fin du geste à deux doigts, ou fin du geste à un doigt. */
