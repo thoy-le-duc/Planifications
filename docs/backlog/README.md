@@ -128,7 +128,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T33](T33-verrou-e2e.md) | Un seul jeu e2e à la fois sur la machine (verrou flock) | — | fait |
 | [T14f](T14f-import-codes-par-zone.md) | Import : codes de planche comparés par zone | T10t | à faire |
 | [T28g](T28g-focus-editeur.md) | Éditeur : rendre le focus à la fermeture (relecture T28f) | T28f | fait |
-| [T34](T34-duree-vol-fiable.md) | Durée des vols de caméra mesurée de façon fiable (marge déduite du plancher) | T29b, T33 | à faire |
+| [T34](T34-duree-vol-fiable.md) | Durée des vols de caméra mesurée de façon fiable (marge déduite du plancher) | T29b, T33 | fait |
 | [T32d](T32d-plants-plus-fins.md) | Jumeau 3D : jeunes plants visibles, plants découpés (Q34) | T32b | fait |
 | [T36](T36-allegement-vue-3d.md) | Alléger la vue 3D : ne plus charger tout le cœur (relecture T35a) | T32d, T35a | à faire |
 | [T32e](T32e-recolte-visible.md) | Jumeau 3D : la récolte se voit (fruits, à récolter, fin de récolte) (Q34) | T32d, T36 | à faire |

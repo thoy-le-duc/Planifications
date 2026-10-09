@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T34 : durée des vols de caméra mesurée de façon fiable
+
+- **Fait** : la marge au-delà de 600 ms n'est plus fixe (100 ms) : `margeVolMs(plancher)` = min(200, 100 + 3 × plancher) dans `e2e/fluidite-3d.ts`, plancher T29b mesuré au début du test T07 ; échec explicite si plancher absent ou > 40 ms ; message avec durée, plancher, marge, borne. 10 passages en série (verrou e2e) : 0 échec, plancher 16,7 ms, marge 150,1 ms (borne 750 ms), durées max 650 à 702 ms (668, 658, 654, 702, 650, 668, 689, 657, 659, 678). Vol doublé en copie locale : échec à 1207 ms pour une borne de 750 ms.
+- **Décidé** : 3 × plancher plutôt que 2 (le ticket proposait 2) : avec 2, la borne aurait été 733 ms, trop près des 702 ms observés ; plafond 200 ms. Le saut direct (mouvement réduit) garde sa marge fixe de 100 ms.
+- **Bloquant** : rien.
+
 ## 2026-10-09 — T32d : jeunes plants visibles, plants découpés
 
 - **Fait** : de près, une planche qui porte des plants devient une dalle de 3,1 cm (`hauteurDalle`, `EPAISSEUR_DALLE_PLANTS_M`) et les plants sont posés dessus : un plant de 5 cm se voit. De loin, la masse garde la hauteur du feuillage (T32b inchangé). La tomate (forme `erige-tuteure`) se dessine plant par plant, chacun avec son tuteur (un `InstancedMesh` de tuteurs partagé, 12 triangles, `BilanPlants.tuteurs`), au lieu d'un mur continu ; les autres formes gardent l'étirement de T32b. Budget 3D 226,1 → 226,3 Kio (plafond 226,5 inchangé, pas besoin des 228 de Q33) ; démarrage 71,0 et placement 18,5 inchangés.
