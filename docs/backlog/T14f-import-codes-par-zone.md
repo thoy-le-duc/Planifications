@@ -14,6 +14,9 @@
 - **Doublon** : seulement deux lignes du fichier qui désignent la même planche (même zone, même code, sans casse ni espaces).
 - **Séries et assolements** : la planche désignée est celle de la zone + code, jamais « le premier code trouvé ».
 - Messages en français, sans jargon.
+- **Normalisation des codes (décision du chef, 2026-10-09)** : celle du serveur T10t, `lower(trim(code))`, rien de plus. « P-3 », « P 3 » et « P.3 » sont trois codes distincts (le serveur les accepte) ; la clé de doublon du champ `emplacement` côté cœur passe de `cle()` à `trim().toLowerCase()`. Les zones restent comparées par leur nom normalisé (casse, accents, ponctuation ignorés).
+- **Planche retirée (décision du chef, 2026-10-09)** : toute planche dont `actif_au` est renseigné est écartée, comme le serveur (`actif_au IS NULL`), sans regarder la date.
+- **Zone et sous-zones (décision du chef, 2026-10-09)** : une zone donnée dans le fichier pour une planche rangée dans une sous-zone (chapelles, fichier `parcellaire-3-niveaux`) désigne elle-même et ses descendantes. Un code présent dans une seule d'entre elles est désigné ; dans plusieurs → « Code ambigu » qui nomme le code et propose de préciser la sous-zone.
 
 ## Critères d'acceptation
 

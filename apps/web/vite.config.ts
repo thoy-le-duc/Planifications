@@ -143,8 +143,17 @@ const MODULES_IDENTIFIANTS = [
   fileURLToPath(new URL('src/donnees/ferme-memorisee.ts', import.meta.url)),
 ];
 
+/**
+ * T36 : le moteur de croissance du cœur (`packages/core/src/croissance/`) a son propre morceau.
+ * Sans lui, il restait dans le morceau commun de `@planif/core` (24,5 Kio compressés) que la vue 3D
+ * chargeait en entier pour deux fonctions.
+ */
+const MORCEAU_CROISSANCE = 'croissance';
+const DOSSIER_CROISSANCE = fileURLToPath(new URL('../../packages/core/src/croissance/', import.meta.url));
+
 function morceauManuel(id: string): string | undefined {
-  return MODULES_IDENTIFIANTS.includes(id) ? MORCEAU_IDENTIFIANTS : undefined;
+  if (MODULES_IDENTIFIANTS.includes(id)) return MORCEAU_IDENTIFIANTS;
+  return id.startsWith(DOSSIER_CROISSANCE) && !id.endsWith('.test.ts') ? MORCEAU_CROISSANCE : undefined;
 }
 
 /** Module qui enregistre le service worker, au repos, après le premier affichage (T20). */

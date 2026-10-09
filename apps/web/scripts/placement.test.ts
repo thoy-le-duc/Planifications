@@ -197,7 +197,9 @@ describe('T28b : hors ligne et sécurité', () => {
         .map(([nom, ...valeurs]) => [nom, valeurs]),
     );
     expect(directives.get('img-src')).toEqual(["'self'", 'https://data.geopf.fr']);
-    for (const [nom, valeurs] of directives) if (nom !== 'img-src') expect(valeurs.join(' '), nom).not.toContain('geopf');
+    // T28h (Q35) : la recherche d'adresse ajoute l'origine de la Géoplateforme à connect-src, rien d'autre.
+    expect(directives.get('connect-src')).toContain('https://data.geopf.fr');
+    for (const [nom, valeurs] of directives) if (nom !== 'img-src' && nom !== 'connect-src') expect(valeurs.join(' '), nom).not.toContain('geopf');
   });
 });
 
@@ -247,7 +249,7 @@ describe('T28f : l’éditeur s’ouvre aussi depuis la vue 3D, sans bouger les 
   it('budgets intacts : démarrage 71 Kio, morceau 3D et morceau de l’éditeur présents dans budget.json', () => {
     const b = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson & { readonly jsVue3dGzKio?: number };
     expect(b.jsInitialGzKio).toBe(BUDGET_DEMARRAGE_KIO);
-    expect(b.jsVue3dGzKio).toBe(227);
-    expect(b.jsPlacementGzKio).toBe(18.5);
+    expect(b.jsVue3dGzKio).toBe(203.3);
+    expect(b.jsPlacementGzKio).toBe(21.2); // T28j : parcours guidé en étapes (+1,0 Kio mesuré : 19,9 → 20,9 ; marge 0,3), chiffré dans la PR
   });
 });

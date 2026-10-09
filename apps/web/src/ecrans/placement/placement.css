@@ -495,3 +495,185 @@
     max-height: 45%;
   }
 }
+
+/* T28h : recherche d'adresse et sites, au-dessus de la carte. Gros caractères et grandes cibles (gants). */
+.pl-recherches {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px 8px;
+}
+
+.pl-recherche {
+  position: relative;
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.pl-recherche-champ,
+.pl-aller-a {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 14px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font-family: var(--police-texte);
+  font-size: 18px;
+}
+
+.pl-recherche-champ[data-mis-en-avant='true'] {
+  border-color: var(--couleur-orange);
+  box-shadow: 0 0 0 4px var(--couleur-orange);
+}
+
+.pl-recherche-champ:focus-visible,
+.pl-aller-a:focus-visible,
+.pl-proposition:focus-visible {
+  outline: 3px solid var(--couleur-orange);
+  outline-offset: 2px;
+}
+
+.pl-propositions {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  box-shadow: var(--ombre-carte);
+  overflow: hidden;
+}
+
+.pl-proposition {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--couleur-trait);
+  background: none;
+  color: var(--couleur-encre);
+  font-family: var(--police-texte);
+  font-size: 18px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.pl-recherche .pl-message {
+  margin-top: 8px;
+}
+
+.pl-sites {
+  flex: 1 1 280px;
+  display: flex;
+  gap: 8px;
+}
+
+.pl-sites .pl-aller-a {
+  flex: 1 1 auto;
+}
+
+.pl-sites .pl-bouton {
+  flex: 0 0 auto;
+  font-size: 18px;
+}
+
+/* T28j : bandeau d'étapes. Quatre colonnes au téléphone, étape en cours en avant, jetons seulement. */
+.pl-etapes-zone {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px 8px;
+}
+
+.pl-etapes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pl-etape {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 64px;
+  padding: 6px 4px;
+  border: 2px solid var(--couleur-trait);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-secondaire);
+  font-family: var(--police-texte);
+  font-size: 13px;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.pl-etape-num {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-trait);
+  color: var(--couleur-encre);
+  font-weight: 700;
+}
+
+.pl-etape[data-etat='faite'] {
+  border-color: var(--couleur-foret);
+  color: var(--couleur-foret);
+}
+
+.pl-etape[data-etat='faite'] .pl-etape-num {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.pl-etape[data-etat='en-cours'] {
+  border-color: var(--couleur-orange);
+  background: var(--couleur-orange);
+  color: var(--couleur-sur-orange);
+  font-weight: 700;
+}
+
+.pl-etape[data-etat='en-cours'] .pl-etape-num {
+  background: var(--couleur-sur-orange);
+  color: var(--couleur-orange);
+}
+
+.pl-etape[aria-current='step'] {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: 1px;
+}
+
+.pl-etape:focus-visible {
+  outline: 3px solid var(--couleur-orange);
+  outline-offset: 2px;
+}
+
+.pl-raison-zoom {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 2px 6px;
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+}

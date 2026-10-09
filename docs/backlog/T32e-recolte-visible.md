@@ -9,7 +9,7 @@
 
 - **Le code calcule** (principe 2) : le cœur rend, pour une occupation et une semaine, un état de récolte : `aucune`, `fruits en formation` (avec une maturité de 0 à 1), `à récolter`, `fin de récolte`. Il se déduit des dates de l'occupation (début et fin de récolte prévues, réelles si saisies) et du profil de croissance ; rien n'est inventé sans date. Les récoltes saisies (T10) peuvent l'affiner si c'est simple ; sinon, le dire dans la PR.
 - **Fruits** : une petite forme instanciée par type (allongée verte pour la courgette, ronde rouge pour la tomate et la fraise, autre forme générique), qui grossit avec la maturité et prend sa couleur mûre à « à récolter ». Couleurs dans `src/ui/jetons.ts`. Plafond de fruits par plant et au total (constantes nommées).
-- **Planche « à récolter »** : signal net et lisible de loin (par exemple un liseré ou un halo de couleur vive, ou une petite balise au-dessus de la planche), visible en vue d'ensemble ; la liste des zones et l'alternative texte le mentionnent (« 3 planches à récolter »).
+- **Planche « à récolter »** (Q35) : une **balise au-dessus de la planche** (panier ou pastille de couleur vive, instanciée, toujours tournée vers la caméra ou lisible sous tous les angles), visible en vue d'ensemble ; la liste des zones et l'alternative texte le mentionnent (« 3 planches à récolter »).
 - **Fin de récolte** : feuillage qui jaunit ou s'éclaircit sur les dernières semaines de la fenêtre.
 - Pérennes : la fraise (et toute pérenne à récolte annuelle) suit sa période de récolte annuelle.
 - Garde-fous T29b tenus ; rendu à la demande ; aucun seuil de fluidité touché.
