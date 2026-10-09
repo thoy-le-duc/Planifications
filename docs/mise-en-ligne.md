@@ -8,6 +8,7 @@ Le résultat : l'appli sur une adresse du type `https://appli-ferme.vercel.app`,
 
 - Ne donne **jamais** un mot de passe, une clé ou une adresse de base de données à Claude, dans un ticket, un message ou un fichier du dépôt. Tu les copies d'un site à un autre, et c'est tout.
 - Le dépôt GitHub est **public jusqu'au 1er novembre** : tout ce qui y est écrit est lisible par n'importe qui. Raison de plus pour ne rien y mettre.
+- Ne commence que lorsque Claude t'a dit que ce guide et la mise en place de Vercel (tickets T38a et T38b) sont **fusionnés dans `main`** : avant, le dépôt n'a pas encore le fichier `vercel.json` et l'étape 5 échouera.
 - Garde un **gestionnaire de mots de passe** (ou, à défaut, un carnet papier) ouvert : plusieurs valeurs seront à recopier plus tard.
 - Ordre à suivre : Neon, migrations, PowerSync, Brevo, Vercel, retour sur PowerSync, premier compte.
 
@@ -70,8 +71,8 @@ Chaque variable est détaillée à l'étape où tu la poses. Ce tableau est la l
 
 13. Clique sur **Connect** en haut du tableau de bord.
 14. Dans la fenêtre : rôle `neondb_owner`, base `neondb`. Ne change rien.
-15. Active l'interrupteur **Connection pooling** : l'adresse affichée contient maintenant `-pooler` dans son nom d'hôte. C'est l'adresse **pooled**.
-16. Clique sur **Copy snippet** ou sur l'œil puis la copie, et colle-la dans ton gestionnaire de mots de passe sous le nom `Neon pooled`. Elle ressemble à `postgresql://neondb_owner:…@ep-xxxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require`.
+15. Vérifie que l'interrupteur **Connection pooling** est activé (il l'est en général par défaut) : l'adresse affichée contient maintenant `-pooler` dans son nom d'hôte. C'est l'adresse **pooled**.
+16. Affiche la valeur (icône œil) puis copie-la avec le bouton de copie, et colle-la dans ton gestionnaire de mots de passe sous le nom `Neon pooled`. Elle ressemble à `postgresql://neondb_owner:…@ep-xxxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require`.
 17. Désactive l'interrupteur **Connection pooling** : l'adresse perd le `-pooler`. C'est l'adresse **directe**.
 18. Copie-la et enregistre-la sous le nom `Neon directe`.
 19. Pourquoi deux adresses : l'appli en ligne utilise la **pooled** (elle supporte beaucoup de petites connexions). Les migrations et la synchro ont besoin de la **directe**.
@@ -90,11 +91,11 @@ Les « migrations » créent les tables vides de ta ferme dans Neon. On les lanc
 
 ### Ouvrir le terminal
 
-1. Ouvre le dépôt sur GitHub : https://github.com/thoy-le-duc/planifications
+1. Ouvre le dépôt sur GitHub : https://github.com/thoy-le-duc/Planifications
 2. Clique sur le bouton vert **Code**, onglet **Codespaces**, puis **Create codespace on main**.
 3. Ce que tu dois voir : au bout d'une à deux minutes, un éditeur de code dans le navigateur, avec une zone **Terminal** en bas. Si elle est cachée : menu **Terminal**, puis **New Terminal**.
 4. Dans le terminal, écris `pnpm install` puis Entrée. Si le message est « pnpm : commande introuvable », écris d'abord `corepack enable` puis Entrée, et recommence `pnpm install`.
-5. Ce que tu dois voir : une série de lignes, puis `Done in …`.
+5. Ce que tu dois voir : une série de lignes, puis `Done in …`. Avant de continuer, écris `node -v` puis Entrée. Il doit afficher `v22.18` ou plus (v22.20, v24…). Si c'est plus ancien (v20…) : écris `nvm install 22 && nvm use 22`, puis refais `pnpm install`.
 
 ### Coller l'adresse sans la laisser traîner
 
@@ -142,10 +143,13 @@ PowerSync lit la base avec un compte à part, qui ne peut rien écrire. Cette pa
     CREATE ROLE powersync_role WITH REPLICATION LOGIN PASSWORD 'MOT_DE_PASSE_ICI';
     GRANT SELECT ON ALL TABLES IN SCHEMA public TO powersync_role;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO powersync_role;
+    REVOKE SELECT ON code_connexion, jeton_renouvellement FROM powersync_role;
     ```
 
+    Les deux premières lignes sont celles de la documentation PowerSync (lecture seule). La dernière retire l'accès aux codes de connexion et aux jetons, que la synchro n'utilise jamais. Les droits de réplication suffisent pour le reste : la publication `powersync` a déjà été créée par les migrations.
+
 19. Clique sur **Run**.
-20. Ce que tu dois voir : un message de réussite, sans ligne rouge. Si `role "powersync_role" already exists` : le rôle existe déjà, passe à la suite.
+20. Ce que tu dois voir : un message de réussite, sans ligne rouge. Si `role "powersync_role" already exists` : le rôle existe déjà ; exécute seulement les trois dernières lignes.
 
 ### Fermer Codespaces
 
@@ -158,13 +162,13 @@ PowerSync lit la base avec un compte à part, qui ne peut rien écrire. Cette pa
 1. Ouvre https://www.powersync.com et clique sur **Sign up** (ou **Dashboard**).
 2. Crée ton compte.
 3. Ce que tu dois voir : le tableau de bord PowerSync, avec un bouton pour créer un projet.
-4. Clique sur **Create project**, nom : `planifications`. Environnement : **Development** est suffisant pour tester.
-5. Crée une **instance** dans ce projet. Région : **Europe** (Irlande ou Francfort si le choix existe).
-6. Ce que tu dois voir : un écran de configuration de l'instance, avec l'onglet de la **connexion à la base** (Database connections).
+4. Clique sur **Create project**, nom : `planifications`.
+5. PowerSync crée tout seul deux instances, **Development** et **Production**. Prends **Development** pour l'instant (l'offre gratuite en autorise deux). Si PowerSync te propose une région, choisis **Europe** (Irlande ou Francfort) : tes données doivent rester en UE. Si aucune région n'est proposée, note-le et préviens Claude avant d'aller plus loin.
+6. Ce que tu dois voir : l'écran de l'instance, avec une vue **Database Connection** dans le menu.
 
 ### Connexion à Neon
 
-7. Ajoute une connexion **PostgreSQL**.
+7. Ouvre **Database Connection** et choisis l'onglet **Postgres**.
 8. Remplis les champs à partir de l'adresse **directe** de Neon (`Neon directe`). Elle se lit ainsi : `postgresql://UTILISATEUR:MOT_DE_PASSE@HÔTE/BASE?sslmode=require`.
    - Host : l'hôte (par exemple `ep-xxxx.eu-central-1.aws.neon.tech`), **sans** `-pooler`.
    - Port : `5432`.
@@ -172,28 +176,26 @@ PowerSync lit la base avec un compte à part, qui ne peut rien écrire. Cette pa
    - Username : `powersync_role`.
    - Password : celui de `Mot de passe powersync_role`.
    - SSL Mode : `verify-full`.
-9. Clique sur **Test connection**.
-10. Ce que tu dois voir : « Connection successful » (ou une coche verte). Si ça échoue : l'adresse utilisée contient encore `-pooler`, ou la réplication n'est pas activée (étape 1, points 10 à 12).
-11. Clique sur **Save** (ou **Deploy**).
+9. Clique sur **Test Connection**.
+10. Ce que tu dois voir : un message de réussite (ou une coche verte). Si ça échoue : l'adresse utilisée contient encore `-pooler`, ou la réplication n'est pas activée (étape 1, points 10 à 12).
+11. Clique sur **Save Connection**. La mise en place peut prendre quelques minutes.
 
 ### Règles de synchro
 
 12. Dans le dépôt GitHub, ouvre le fichier `powersync/sync-config.yaml` et clique sur **Raw** ou sur le bouton de copie. Copie **tout** le contenu.
-13. Dans PowerSync, ouvre l'éditeur de règles (**Sync Streams** ou **Sync Rules**).
+13. Dans PowerSync, ouvre la vue **Sync Streams** (l'éditeur de règles).
 14. Efface ce qui s'y trouve et colle le contenu copié.
-15. Clique sur **Validate**, puis **Deploy**.
+15. Clique sur **Deploy** (PowerSync vérifie les règles avant de les mettre en service).
 16. Ce que tu dois voir : « Valid » ou « Deployed » sans erreur. Si une erreur parle d'une table introuvable : les migrations (étape 2) n'ont pas été lancées sur cette base.
 
 ### Noter l'adresse de l'instance
 
-17. En haut de l'instance, copie son **adresse** (Instance URL). Elle ressemble à `https://xxxxxxxx.powersync.journeyapps.com`.
+17. Clique sur **Connect** dans la barre du haut : la fenêtre affiche l'**adresse** de l'instance (Instance URL). Copie-la. Elle ressemble à `https://xxxxxxxx.powersync.journeyapps.com`.
 18. Enregistre-la sous `VITE_POWERSYNC_URL`.
 
-### Authentification (à finir après l'étape 5)
+### Authentification (à finir à l'étape 6)
 
-19. Ouvre l'onglet **Client Auth** de l'instance.
-20. Audience : écris `powersync-planif` (en toutes lettres, avec le tiret) et enregistre.
-21. L'adresse des clés publiques (JWKS URI) ne peut être remplie qu'une fois l'appli en ligne : on y revient à l'étape 6.
+19. La vue **Client Auth** (adresse des clés publiques et audience) se remplit une fois l'appli en ligne : on y revient à l'étape 6. Rien à faire ici.
 
 ---
 
@@ -274,10 +276,10 @@ Pour chaque ligne : écris le nom **exactement** comme ci-dessous (majuscules, t
 
 ## Étape 6 — Retour sur PowerSync : donner l'adresse des clés
 
-1. Retourne dans PowerSync, instance `planifications`, onglet **Client Auth**.
-2. **JWKS URI** : `https://<appli>/api/.well-known/jwks.json` (la même adresse que celle ouverte au point 31).
-3. **Audience** : `powersync-planif` (déjà saisie à l'étape 3).
-4. Enregistre, puis **Deploy** si le bouton est proposé.
+1. Retourne dans PowerSync, instance **Development** du projet `planifications`, vue **Client Auth**.
+2. **JWKS URI** : `https://<appli>/api/.well-known/jwks.json` (la même adresse que celle ouverte au point 31). Ne colle pas les clés elles-mêmes, seulement l'adresse.
+3. **Audience** : `powersync-planif` (en toutes lettres, avec le tiret). La documentation de PowerSync ne donne pas le nom exact du champ : cherche « Audience » ou « custom audience » dans cette vue. Sans audience personnalisée, PowerSync refuserait les jetons de l'API.
+4. Clique sur **Save and Deploy**.
 5. Ce que tu dois voir : la configuration enregistrée, sans erreur.
 
 ---
@@ -303,15 +305,15 @@ Tes données t'appartiennent : l'export complet (JSON et CSV) se fait en un clic
 
 ## Ce qui reste gratuit et ses limites
 
-**Les chiffres ci-dessous sont indicatifs, de mémoire : à vérifier sur le site de chaque service avant de compter dessus.** Les offres gratuites changent régulièrement.
+**Chiffres relevés sur les sites officiels en octobre 2026.** Les offres gratuites changent : revérifie la page indiquée avant de compter dessus.
 
 | Service | Ce qui est gratuit | Limite à surveiller | Où vérifier |
 | --- | --- | --- | --- |
-| Neon (Free) | un petit projet, quelques centaines de Mo de stockage, de quoi tourner quelques dizaines d'heures de calcul par mois (à vérifier sur le site) | la base s'endort après quelques minutes sans usage : la première requête après une pause prend une à deux secondes de plus | https://neon.com/pricing |
-| PowerSync Cloud (Free) | une instance de développement, quelques Go synchronisés par mois et quelques dizaines de connexions simultanées (à vérifier sur le site) | l'instance peut être mise en pause après une période sans activité : la réactiver depuis le tableau de bord | https://www.powersync.com/pricing |
-| Brevo (Free) | environ 300 courriels par jour (à vérifier sur le site) | un code de connexion = un courriel : très largement suffisant pour une ferme | https://www.brevo.com/pricing/ |
-| Vercel (Hobby) | hébergement de l'appli et des fonctions, quota mensuel de trafic et de temps de calcul (à vérifier sur le site) | l'offre Hobby est réservée à un usage **non commercial** : parfait pour tester, à revoir pour vendre le service | https://vercel.com/pricing |
-| GitHub Codespaces | quelques dizaines d'heures par mois pour un compte personnel (à vérifier sur le site) | supprime le codespace après usage (étape 2, point 21) | https://github.com/features/codespaces |
+| Neon (Free) | 1 Go de stockage par projet, 100 heures de calcul (CU-heures) par projet, 5 Go de transfert sortant | le calcul s'endort après 5 minutes sans usage (la première requête après une pause prend une à deux secondes de plus). Si le plafond d'heures est atteint, la base s'arrête jusqu'au mois suivant | https://neon.com/pricing |
+| PowerSync Cloud (Free) | 2 instances, 2 Go synchronisés par mois, 500 Mo hébergés, 50 clients connectés en même temps au maximum | une instance sans activité est désactivée après une à deux semaines (la page est contradictoire) : la réactiver depuis le tableau de bord. Assistance par la communauté seulement | https://www.powersync.com/pricing |
+| Brevo (Free) | 300 courriels par jour | un code de connexion = un courriel : très largement suffisant pour une ferme | https://www.brevo.com/free-smtp-server |
+| Vercel (Hobby) | 1 million d'appels de fonction, 100 Go de transfert, 4 heures de calcul actif par mois, 100 déploiements par jour | usage **non commercial** uniquement (confirmé par Vercel) : parfait pour tester, à revoir pour vendre le service. Les journaux (Logs) ne sont gardés qu'**une heure** : regarde-les tout de suite après une erreur | https://vercel.com/docs/plans/hobby |
+| GitHub Codespaces | 120 heures-cœur par mois (soit 60 heures sur la petite machine à 2 cœurs) et 15 Go-mois de stockage, compte GitHub gratuit | supprime le codespace après usage (étape 2, point 21) | https://docs.github.com/en/billing/concepts/product-billing/github-codespaces |
 
 Tant que tu es seul à tester avec ta ferme, tu n'approcheras aucune de ces limites. Si un service t'écrit qu'un quota est presque atteint, note-le et préviens Claude : on verra alors pour une offre payante (« on verra pour du sérieux plus tard »).
 
@@ -322,7 +324,7 @@ Tant que tu es seul à tester avec ta ferme, tu n'approcheras aucune de ces limi
 **Je ne reçois pas le code à 6 chiffres.**
 1. Regarde les indésirables, puis attends deux minutes.
 2. Dans Brevo, menu **Transactional**, puis **Logs** : le message y est-il ? S'il est « Blocked » ou « Rejected », l'adresse d'envoi n'est pas vérifiée (étape 4, points 4 à 8).
-3. S'il n'y a aucune ligne dans Brevo : dans Vercel, onglet **Logs**, cherche un message d'envoi en échec. Vérifie `SMTP_UTILISATEUR`, `SMTP_MOT_DE_PASSE` (la clé SMTP, pas le mot de passe de ton compte Brevo) et `SMTP_EXPEDITEUR`.
+3. S'il n'y a aucune ligne dans Brevo : dans Vercel, onglet **Logs** (journaux gardés une heure seulement : refais une demande de code juste avant), cherche un message d'envoi en échec. Vérifie `SMTP_UTILISATEUR`, `SMTP_MOT_DE_PASSE` (la clé SMTP, pas le mot de passe de ton compte Brevo) et `SMTP_EXPEDITEUR`.
 4. Après toute correction d'une variable : **Deployments**, trois points, **Redeploy**.
 
 **La synchro ne part pas (rien n'apparaît sur l'autre appareil).**
