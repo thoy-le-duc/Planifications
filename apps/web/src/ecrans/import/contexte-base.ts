@@ -1,7 +1,9 @@
 /**
  * Ce que la base locale sait déjà de la ferme (T14b), lu par la porte avant la préparation :
  * parcellaire, catalogue (ferme et bibliothèque commune), saisons, séries et assolements actifs
- * (pour les doublons contre la base). Lignes supprimées écartées ; jamais d'autre ferme.
+ * (pour les doublons contre la base). Lignes supprimées écartées ; jamais d'autre ferme. Chaque
+ * planche porte sa zone et seules les planches en service comptent (`actif_au` nul), comme le
+ * serveur depuis T10t : l'import la reconnaît par zone + code (T14f).
  */
 import type { PorteDonnees } from '@planif/sync';
 import type { ContexteBase } from './types.ts';
@@ -15,7 +17,7 @@ const n = (v: unknown): number | null => (typeof v === 'number' && Number.isFini
 export async function lireContexte(porte: PorteDonnees, fermeId: string): Promise<ContexteBase> {
   const [zones, emplacements, especes, familles, varietes, itineraires, saisons, series, occupations, assolements] = await Promise.all([
     porte.lire<L>('SELECT id, nom, zone_parente_id FROM zone WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY id', [fermeId]),
-    porte.lire<L>('SELECT id, code, sorte, longueur_m, nombre_places FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND actif_au IS NULL ORDER BY id', [fermeId]),
+    porte.lire<L>('SELECT id, zone_id, code, sorte, longueur_m, nombre_places FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND actif_au IS NULL ORDER BY id', [fermeId]),
     porte.lire<L>('SELECT id, nom, famille_id FROM espece WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL ORDER BY ferme_id IS NULL, nom, id', [fermeId]),
     porte.lire<L>('SELECT id, nom FROM famille WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL ORDER BY ferme_id IS NULL, nom, id', [fermeId]),
     porte.lire<L>('SELECT id, espece_id, nom FROM variete WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL ORDER BY ferme_id IS NULL, id', [fermeId]),
@@ -35,7 +37,7 @@ export async function lireContexte(porte: PorteDonnees, fermeId: string): Promis
   return {
     fermeId,
     zones: zones.map((z) => ({ id: t(z.id), nom: t(z.nom), parenteId: tn(z.zone_parente_id) })),
-    emplacements: emplacements.map((e) => ({ id: t(e.id), code: t(e.code), sorte: t(e.sorte), longueurM: n(e.longueur_m), nombrePlaces: n(e.nombre_places) })),
+    emplacements: emplacements.map((e) => ({ id: t(e.id), zoneId: t(e.zone_id), code: t(e.code), sorte: t(e.sorte), longueurM: n(e.longueur_m), nombrePlaces: n(e.nombre_places) })),
     especes: especes.map((e) => ({ id: t(e.id), nom: t(e.nom), familleId: tn(e.famille_id) })),
     familles: familles.map((f) => ({ id: t(f.id), nom: t(f.nom) })),
     varietes: varietes.map((v) => ({ id: t(v.id), especeId: t(v.espece_id), nom: t(v.nom) })),

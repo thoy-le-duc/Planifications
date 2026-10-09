@@ -32,7 +32,7 @@ import {
 } from '@planif/core';
 import { decouperEnLots, ordreInsertion, type LigneAEcrire } from '@planif/sync/import';
 import type { OrdreEcriture } from '@planif/sync';
-import { normaliser } from './normaliser.ts';
+import { codeDe, normaliser } from './normaliser.ts';
 import type { Apercu, DemandePreparation, EmplacementConnu, ErreurAffichee, ItineraireConnu, LigneApercu, StatutApercu } from './types.ts';
 
 /** Colonnes écrites par table (schéma local, packages/sync/src/schema.ts). */
@@ -351,14 +351,84 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
   const caches = { saisonsCreees, especesCreees, nouvellesEspeces, famillesCreees, varietesCreees };
 
   // ── Emplacements et zones de la ferme ───────────────────────────────────────────────────────
-  const emplacementsParCode = new Map<string, EmplacementConnu>();
-  for (const x of ctx.emplacements) if (!emplacementsParCode.has(normaliser(x.code))) emplacementsParCode.set(normaliser(x.code), x);
+  // Une planche se reconnaît par sa zone et son code, comme le serveur depuis T10t (Q27, T14f) :
+  // code comparé `lower(trim(code))`, rien de plus (« P-3 » et « P.3 » sont deux planches), zone
+  // comparée par son nom (`normaliser`). Le contexte ne porte que les planches en service.
+  // Listes et non planche unique : la base locale peut tenir deux « P3 » en service dans la même
+  // zone (écrites hors ligne, avant le refus du serveur) ; l'import ne choisit jamais entre elles.
+  const planchesParZoneCode = new Map<string, EmplacementConnu[]>();
+  const planchesParCode = new Map<string, EmplacementConnu[]>();
+  const ajouter = (m: Map<string, EmplacementConnu[]>, k: string, x: EmplacementConnu): void => {
+    const liste = m.get(k);
+    if (liste === undefined) m.set(k, [x]);
+    else liste.push(x);
+  };
+  for (const x of ctx.emplacements) {
+    const k = codeDe(x.code);
+    ajouter(planchesParZoneCode, `${x.zoneId}\u0001${k}`, x);
+    ajouter(planchesParCode, k, x);
+  }
+  const nomDeZone = new Map(ctx.zones.map((z) => [z.id, z.nom.trim()]));
   const zonesParCle = new Map<string, string>();
   const zonesParNom = new Map<string, string>();
+  /** Toutes les zones d'un nom (le même nom peut servir sous deux zones parentes). */
+  const toutesZonesParNom = new Map<string, string[]>();
+  const enfantsDe = new Map<string, string[]>();
   const profondeurDe = new Map<string, number>();
   for (const z of ctx.zones) {
-    zonesParCle.set(`${z.parenteId ?? ''}\u0001${normaliser(z.nom)}`, z.id);
-    if (!zonesParNom.has(normaliser(z.nom)) || z.parenteId === null) zonesParNom.set(normaliser(z.nom), z.id);
+    const n = normaliser(z.nom);
+    zonesParCle.set(`${z.parenteId ?? ''}\u0001${n}`, z.id);
+    if (!zonesParNom.has(n) || z.parenteId === null) zonesParNom.set(n, z.id);
+    toutesZonesParNom.set(n, [...(toutesZonesParNom.get(n) ?? []), z.id]);
+    if (z.parenteId !== null) enfantsDe.set(z.parenteId, [...(enfantsDe.get(z.parenteId) ?? []), z.id]);
+  }
+  /** La zone et ses descendantes (une planche peut être rangée dans une sous-zone). */
+  const zoneEtDescendantes = (racine: string): Set<string> => {
+    const vues = new Set<string>();
+    const pile = [racine];
+    for (let z = pile.pop(); z !== undefined; z = pile.pop()) {
+      if (vues.has(z)) continue;
+      vues.add(z);
+      pile.push(...(enfantsDe.get(z) ?? []));
+    }
+    return vues;
+  };
+  /**
+   * Planche désignée par son code et, si le fichier la donne, sa zone (séries, assolement). Sans
+   * zone : le code doit n'exister que dans une zone de la ferme. Avec zone : la zone désigne
+   * elle-même et ses sous-zones. Jamais de choix silencieux entre deux planches.
+   */
+  const plancheDe = (code: string, nomZone: string | null): EmplacementConnu => {
+    const k = codeDe(code);
+    const affiche = code.trim();
+    if (nomZone === null) {
+      const candidates = planchesParCode.get(k) ?? [];
+      const premiere = candidates[0];
+      if (premiere === undefined) throw new Refus(`Emplacement inconnu : « ${affiche} » n’est pas un emplacement de la ferme (importez d’abord le parcellaire).`, 'emplacement');
+      if (candidates.length > 1) ambigu(affiche, candidates, null);
+      return premiere;
+    }
+    const zones = toutesZonesParNom.get(normaliser(nomZone)) ?? [];
+    if (zones.length === 0) throw new Refus(`Zone inconnue : « ${nomZone.trim()} » n’est pas une zone de la ferme (importez d’abord le parcellaire).`, 'zone');
+    const candidates: EmplacementConnu[] = [];
+    for (const z of new Set(zones.flatMap((r) => [...zoneEtDescendantes(r)]))) candidates.push(...(planchesParZoneCode.get(`${z}\u0001${k}`) ?? []));
+    const premiere = candidates[0];
+    if (premiere === undefined) throw new Refus(`Emplacement inconnu : « ${affiche} » n’est pas un emplacement de la zone « ${nomZone.trim()} » (importez d’abord le parcellaire).`, 'emplacement');
+    if (candidates.length > 1) ambigu(affiche, candidates, nomZone.trim());
+    return premiere;
+  };
+  /**
+   * Refus d'un code qui désigne plusieurs planches en service, avec le bon remède : ajouter la
+   * zone, préciser la sous-zone, ou (même zone) retirer ou renommer l'une des planches.
+   */
+  function ambigu(affiche: string, candidates: readonly EmplacementConnu[], nomZone: string | null): never {
+    const zonesVues = new Set(candidates.map((c) => c.zoneId));
+    if (zonesVues.size === 1) {
+      const nom = nomDeZone.get(candidates[0]?.zoneId ?? '') ?? nomZone ?? '';
+      throw new Refus(`Code ambigu : « ${affiche} » désigne plusieurs planches en service de la zone « ${nom} ». Retirez ou renommez l’une d’elles dans le parcellaire.`, 'emplacement');
+    }
+    if (nomZone === null) throw new Refus(`Code ambigu : « ${affiche} » existe dans plusieurs zones. Ajoutez la zone.`, 'emplacement');
+    throw new Refus(`Code ambigu : « ${affiche} » existe dans plusieurs sous-zones de « ${nomZone} ». Précisez la sous-zone dans la colonne Zone.`, 'emplacement');
   }
 
   const issues = new Map<number, Issue>();
@@ -432,17 +502,24 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
           if (places !== null && places > PLAFONDS.nombrePlaces) throw new Refus(`Nombre de places : au plus ${String(PLAFONDS.nombrePlaces)}.`, 'nombre_places');
           if (sorte === 'gouttiere' && places === null) throw new Refus('Nombre de places : obligatoire pour une gouttière.', e.colonneDe.has('nombre_places') ? 'nombre_places' : 'sorte');
           if (sorte !== 'gouttiere' && places !== null) throw new Refus('Nombre de places : seulement pour une gouttière.', 'nombre_places');
-          const k = normaliser(code);
-          if (emplacementsParCode.has(k)) {
-            doublonBase(l);
-            continue;
+          // Doublon : la même planche (id de la zone résolue + code) déjà dans la ferme ou plus haut
+          // dans le fichier. La zone résolue, pas ses noms : « Chapelle A » seule peut désigner la
+          // sous-zone de « Tunnel 1 / Chapelle A » (repli par nom). Zone encore inconnue : aucune
+          // ligne précédente n'y a créé de planche, donc pas de doublon possible.
+          const haut0 = zoneExiste(nomZone, null);
+          const bas0 = sousZone === null || haut0 === undefined ? haut0 : zoneExiste(sousZone, haut0);
+          if (bas0 !== undefined) {
+            const k = `${bas0}\u0001${codeDe(code)}`;
+            if (planchesParZoneCode.has(k)) {
+              doublonBase(l);
+              continue;
+            }
+            const premiere = codesDuFichier.get(k);
+            if (premiere !== undefined) {
+              doublonBase(l, premiere);
+              continue;
+            }
           }
-          const premiere = codesDuFichier.get(k);
-          if (premiere !== undefined) {
-            doublonBase(l, premiere);
-            continue;
-          }
-          codesDuFichier.set(k, l.ligne);
         } else {
           const parente = zoneExiste(nomZone, null);
           if (parente !== undefined && (sousZone === null || zoneExiste(sousZone, parente) !== undefined)) {
@@ -453,6 +530,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
         const haut = zone(nomZone, null, abri, sousZone === null ? surface : null, 0);
         const bas = sousZone === null ? haut : zone(sousZone, haut, abri, surface, 1);
         if (code !== null) {
+          codesDuFichier.set(`${bas}\u0001${codeDe(code)}`, l.ligne);
           const id = nouvelId<'Emplacement'>();
           ecr.emplacements.push([
             inserer('emplacement', {
@@ -562,8 +640,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
         const code = texte(v.emplacement);
         let emplacement: EmplacementConnu | null = null;
         if (code !== null) {
-          emplacement = emplacementsParCode.get(normaliser(code)) ?? null;
-          if (emplacement === null) throw new Refus(`Emplacement inconnu : « ${code.trim()} » n’est pas un emplacement de la ferme (importez d’abord le parcellaire).`, 'emplacement');
+          emplacement = plancheDe(code, texte(v.zone));
         }
         const semis = date(v.date_semis);
         const plantation = date(v.date_plantation);
@@ -756,9 +833,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
         let emplacementId: string | null = null;
         let zoneId: string | null = null;
         if (code !== null) {
-          const x = emplacementsParCode.get(normaliser(code));
-          if (x === undefined) throw new Refus(`Emplacement inconnu : « ${code.trim()} » n’est pas un emplacement de la ferme (importez d’abord le parcellaire).`, 'emplacement');
-          emplacementId = x.id;
+          emplacementId = plancheDe(code, nomZone).id;
         } else if (nomZone !== null) {
           const z = zonesParNom.get(normaliser(nomZone));
           if (z === undefined) throw new Refus(`Zone inconnue : « ${nomZone.trim()} » n’est pas une zone de la ferme (importez d’abord le parcellaire).`, 'zone');

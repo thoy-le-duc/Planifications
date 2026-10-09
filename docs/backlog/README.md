@@ -126,12 +126,13 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T32b](T32b-plants-stylises-3d.md) | Jumeau 3D : plants stylisés qui grandissent (Q32) | T32a, T28c, T29b | fait |
 | [T32c](T32c-reglage-profils.md) | Profils de croissance : réglage par la ferme (écran) (Q32) | T32a, T32b | à faire |
 | [T33](T33-verrou-e2e.md) | Un seul jeu e2e à la fois sur la machine (verrou flock) | — | fait |
-| [T14f](T14f-import-codes-par-zone.md) | Import : codes de planche comparés par zone | T10t | à faire |
+| [T14f](T14f-import-codes-par-zone.md) | Import : codes de planche comparés par zone | T10t | fait |
 | [T28g](T28g-focus-editeur.md) | Éditeur : rendre le focus à la fermeture (relecture T28f) | T28f | fait |
 | [T28h](T28h-adresse-recul-sites.md) | Éditeur de placement : chercher une adresse, voir large, plusieurs sites (Q35) | T28b, T28e, T28g | fait |
 | [T34](T34-duree-vol-fiable.md) | Durée des vols de caméra mesurée de façon fiable (marge déduite du plancher) | T29b, T33 | à faire |
 | [T32d](T32d-plants-plus-fins.md) | Jumeau 3D : jeunes plants visibles, plants découpés (Q34) | T32b | fait |
-| [T32e](T32e-recolte-visible.md) | Jumeau 3D : la récolte se voit (fruits, à récolter, fin de récolte) (Q34) | T32d | à faire |
+| [T36](T36-allegement-vue-3d.md) | Alléger la vue 3D : ne plus charger tout le cœur (relecture T35a) | T32d, T35a | fait |
+| [T32e](T32e-recolte-visible.md) | Jumeau 3D : la récolte se voit (fruits, à récolter, fin de récolte) (Q34) | T32d, T36 | à faire |
 | [T35a](T35a-schema-rangs.md) | Itinéraire : rangs alignés ou en quinconce, et leur schéma (Q34) | — | fait |
 | [T35b](T35b-quinconce-3d.md) | Jumeau 3D : plants posés selon la disposition des rangs (Q34) | T35a, T32d | à faire |
 
