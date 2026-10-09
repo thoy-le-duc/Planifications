@@ -903,7 +903,8 @@ function retirerDepuis(
 /** Paramètres d'un itinéraire créé depuis une ligne de cultures. */
 function parametresNeufs(mode: Mode, avantRecolte: number, fenetre: number, pepiniere: number | null, rangs: number | null, ecartement: number | null, quinconce: boolean): Objet {
   const densite: Objet = { facon: 'ecartement', rangsParPlanche: rangs ?? DENSITE_PAR_DEFAUT.rangsParPlanche, ecartementSurRangCm: ecartement ?? DENSITE_PAR_DEFAUT.ecartementSurRangCm };
-  if (quinconce) densite.disposition = 'quinconce';
+  // Comme le formulaire (T35a) : la disposition n'a de sens qu'à partir de 2 rangs.
+  if (quinconce && (densite.rangsParPlanche as number) > 1) densite.disposition = 'quinconce';
   const p: Objet = {
     mode,
     ...PARAMETRES_COMMUNS,
