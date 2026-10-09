@@ -6,7 +6,7 @@
  *   export const MARGE_VOL_MIN_MS = 100;   // marge historique : jamais plus stricte qu'avant
  *   export const MARGE_VOL_MAX_MS = ...;   // plafond nommé, au plus 200
  *   export function margeVolMs(plancherMs: number): number;
- *     // = min(MARGE_VOL_MAX_MS, max(MARGE_VOL_MIN_MS, 2 × plancherMs)).
+ *     // = min(MARGE_VOL_MAX_MS, MARGE_VOL_MIN_MS + 3 × plancherMs).
  *     // Erreur explicite si plancherMs n'est pas un nombre fini positif (mesure absente)
  *     // ou si plancherMs > PLANCHER_MAX_MS (machine trop lente, pas de tolérance cachée).
  *   export function messageDureeVol(dureeMs: number, plancherMs: number, margeMs: number, dureeVolMaxMs: number): string;
@@ -22,23 +22,29 @@ describe('T34 : margeVolMs', () => {
     expect(MARGE_VOL_MAX_MS).toBeLessThanOrEqual(200);
   });
 
-  it('machine rapide : jamais en dessous de la marge actuelle (100 ms)', () => {
-    expect(margeVolMs(5)).toBe(100);
-    expect(margeVolMs(16.7)).toBe(100);
-    expect(margeVolMs(33.3)).toBe(100);
+  it('machine rapide : proche de la marge actuelle (100 ms)', () => {
+    expect(margeVolMs(0.001)).toBeCloseTo(100, 1);
+    expect(margeVolMs(1)).toBe(103);
   });
 
-  it('2 × plancher quand il dépasse 100 ms (borne basse du plancher mesuré incluse)', () => {
-    expect(margeVolMs(50)).toBe(100);
-    expect(margeVolMs(PLANCHER_MAX_MS)).toBe(Math.min(MARGE_VOL_MAX_MS, Math.max(MARGE_VOL_MIN_MS, 2 * PLANCHER_MAX_MS)));
+  it('100 ms + 3 × plancher : plancher 10 ms → 130 ms, 16,7 ms → 150,1 ms, 30 ms → 190 ms', () => {
+    expect(margeVolMs(10)).toBe(130);
+    expect(margeVolMs(16.7)).toBeCloseTo(150.1, 5);
+    expect(margeVolMs(30)).toBe(190);
+  });
+
+  it('plafonnée : plancher 40 ms → 200 ms', () => {
+    expect(margeVolMs(PLANCHER_MAX_MS)).toBe(200);
+    expect(margeVolMs(34)).toBe(200);
+    expect(MARGE_VOL_MAX_MS).toBe(200);
   });
 
   it('toujours bornée entre le minimum et le plafond, sur tout plancher admis', () => {
-    for (let p = 1; p <= PLANCHER_MAX_MS; p += 0.5) {
+    for (let p = 0.5; p <= PLANCHER_MAX_MS; p += 0.5) {
       const m = margeVolMs(p);
-      expect(m).toBeGreaterThanOrEqual(MARGE_VOL_MIN_MS);
+      expect(m).toBeGreaterThan(MARGE_VOL_MIN_MS);
       expect(m).toBeLessThanOrEqual(MARGE_VOL_MAX_MS);
-      expect(m).toBeGreaterThanOrEqual(Math.min(2 * p, MARGE_VOL_MAX_MS));
+      expect(m).toBeCloseTo(Math.min(MARGE_VOL_MAX_MS, MARGE_VOL_MIN_MS + 3 * p), 9);
     }
   });
 
