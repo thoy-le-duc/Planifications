@@ -1,7 +1,9 @@
 /**
  * Limites de fréquence en fenêtre glissante, calculées sur des instants relus en base (codes
- * envoyés, invitations) : plusieurs processus d'API, redémarrage sans perte. Pour un débit
- * (envois de synchro), `creerLimiteMemoire` compte en mémoire, par processus.
+ * envoyés, invitations, débit de la synchro depuis T38a) : plusieurs processus d'API ou fonctions
+ * Vercel, redémarrage sans perte. `creerLimiteMemoire` compte en mémoire, par processus : elle ne
+ * sert plus en production (le débit de la synchro est en base, sync/debit.ts) ; gardée et testée
+ * pour un usage local à un processus.
  */
 
 /**

@@ -24,7 +24,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | Fichier | Contenu |
 | --- | --- |
 | `src/schema.ts` | Les 21 tables du modèle v1, les 4 tables de comptes (T09) et `refus_synchro` (T10), clés étrangères, CHECK, index |
-| `src/securite.ts` | Schéma `securite` (T09b), données du serveur seul : `demande_ip`. Hors du point d’entrée (`@planif/db/securite`), pour que `@planif/sync` n’en dérive rien |
+| `src/securite.ts` | Schéma `securite` (T09b), données du serveur seul : `demande_ip`, `debit_synchro` (T38a). Hors du point d’entrée (`@planif/db/securite`), pour que `@planif/sync` n’en dérive rien |
 | `src/interne.ts` | Schéma `interne` (T10h), état dérivé tenu par la base seule : `chaine_evenement` (une ligne par chaîne d'événements, la règle « en vigueur » déjà appliquée). Hors du point d’entrée, jamais publié |
 | `src/comptes.ts` | `fermesDeLUtilisateur`, `roleDansLaFerme`, `ROLES_MEMBRE`, `ETATS_MEMBRE` (T09) |
 | `src/valeurs.ts` | Valeurs des unions de T01, vérifiées à la compilation contre `@planif/core` |
@@ -54,6 +54,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0028_*.sql` | Migration personnalisée (T28a) : déclencheurs « zone abritée sans contour », `batiment` dans la publication `powersync` |
 | `migrations/0029_*.sql` | Généré par drizzle-kit (T10t, Q27) : index unique partiel `emplacement_zone_code_actif_idx`, code d'emplacement unique par zone parmi les non supprimés et en service (`supprime_le IS NULL AND actif_au IS NULL`), sans casse ni espaces autour (`lower(trim(code))`). Aucune ligne réécrite : sur une base réelle, vérifier d'abord qu'elle ne rend rien : `SELECT ferme_id, zone_id, lower(trim(code)) AS code, count(*) FROM emplacement WHERE supprime_le IS NULL AND actif_au IS NULL GROUP BY 1, 2, 3 HAVING count(*) > 1;` (sinon la migration échoue : renommer ou retirer les doublons avec le maraîcher) |
 | `migrations/0030_*.sql` | Généré par drizzle-kit (T32a, Q32 option A) : `espece.profil_croissance` (jsonb nullable, sans défaut ; nul = profil par défaut du cœur) et son CHECK « nul ou objet ». Aucune ligne réécrite |
+| `migrations/0031_*.sql` | Généré par drizzle-kit (T38a) : table `securite.debit_synchro` (débit de la synchro compté en base, plus en mémoire) et son index sur `maj_le`. Aucune ligne réécrite |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 
@@ -70,7 +71,7 @@ Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
 - **Remplacement** : une correction ou une annulation vise un événement de la même ferme (clé étrangère composée `(ferme_id, remplace_evenement_id)` → `evenement (ferme_id, id)`, erreur `23503`) et du même type (déclencheur à l'insertion, erreur `23514`).
 - **Index** : `occupation (emplacement_id, prevu_du, prevu_au)` pour la vue 2D ; `serie (ferme_id, prevu_…)` pour le semainier ; plus les clés étrangères les plus lues.
 - **PowerSync** : publication `powersync` (insert, update, delete, truncate depuis T10) sur les 21 tables du modèle, plus `utilisateur` et `membre` (T09) et `refus_synchro` (T10), en liste explicite : pas besoin d'être superutilisateur chez un hébergeur géré, et la table de suivi des migrations n'est pas publiée. Une nouvelle table synchronisée s'ajoute dans sa migration par `ALTER PUBLICATION powersync ADD TABLE …`. Le service PowerSync exige `wal_level=logical` sur le serveur (réglé dans `docker-compose.yml`, et en CI par `docker run … -c wal_level=logical`) ; la création de la publication, elle, n'en a pas besoin. Ce que chaque téléphone reçoit est décidé par `powersync/sync-config.yaml`, pas par la publication.
-- **Schéma `securite`** (T09b) : données du serveur seul, hors de `public` donc hors de la publication. `demande_ip` (adresse IP, action `code` ou `verifier`, instant) sert à la limite par IP de l'API, qui efface les lignes de plus de 24 heures.
+- **Schéma `securite`** (T09b) : données du serveur seul, hors de `public` donc hors de la publication. `demande_ip` (adresse IP, action `code` ou `verifier`, instant) sert à la limite par IP de l'API, qui efface les lignes de plus de 24 heures. `debit_synchro` (T38a) : une ligne par utilisateur (`utilisateur_id` en clé primaire, sans clé étrangère), `instants` (envois `POST /sync/upload` acceptés dans la minute glissante, 120 au plus) et `maj_le` (dernier envoi accepté). L'API la tient par une seule écriture atomique (`INSERT … ON CONFLICT … DO UPDATE … WHERE … RETURNING`) : la limite de débit tient d'un processus d'API ou d'une fonction Vercel à l'autre. Les lignes dont la minute est passée sont effacées au passage (`FOR UPDATE SKIP LOCKED`), sans tâche planifiée.
 
 ## Synchro (T10)
 
