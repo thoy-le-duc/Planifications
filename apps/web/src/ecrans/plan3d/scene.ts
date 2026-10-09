@@ -12,7 +12,7 @@
  *     colonnes, zones en rangées), à côté de la partie placée ; une planche non placée d'une zone
  *     placée est rangée dans cette zone (./disposition.ts).
  */
-import { coinsEmprise, depuisRepereZone, repereZone, versRepereZone, type RepereZone } from '@planif/core';
+import { coinsEmprise, depuisRepereZone, repereZone, versRepereZone, type RepereZone } from '@planif/core/placement';
 import type { BatimentPlan, CleFamille, LigneEmplacementPlan, LigneZonePlan, Plan, PointPlan, SemainePlan } from '../plan/calculs.ts';
 import { COULEUR_ESTOMPEE, COULEURS, FAMILLES } from '../../ui/jetons.ts';
 import { rangerDansZone, type Conteneur, type RectZone, type Taille } from './disposition.ts';
