@@ -87,6 +87,8 @@ export function RechercheAdresse({ enLigne, misEnAvant, surChoix }: ProprietesRe
     if (e.key !== 'Enter') return;
     e.preventDefault();
     e.stopPropagation();
+    // Saisie encore en attente : les propositions affichées sont celles du texte précédent.
+    if (minuterie.current !== null || requete.current !== null) return;
     const [premiere] = propositions;
     if (premiere !== undefined) choisir(premiere);
   }

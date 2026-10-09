@@ -38,6 +38,9 @@ export function zoomPourType(type: string): number {
 const estObjet = (v: unknown): v is Readonly<Record<string, unknown>> => typeof v === 'object' && v !== null;
 const finiDans = (v: unknown, borne: number): v is number => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= borne;
 
+/** Longueur maximale d'un libellé affiché (la réponse du service n'est pas bornée). */
+const LIBELLE_MAX = 200;
+
 function proposition(feature: unknown): PropositionAdresse | null {
   if (!estObjet(feature) || !estObjet(feature.geometry) || !estObjet(feature.properties)) return null;
   const { coordinates } = feature.geometry;
@@ -46,7 +49,7 @@ function proposition(feature: unknown): PropositionAdresse | null {
   const [longitude, latitude] = coordinates as unknown[];
   if (!finiDans(longitude, 180) || !finiDans(latitude, 90)) return null;
   const sorte = typeof type === 'string' ? type : '';
-  return { libelle: label, latitude, longitude, type: sorte, zoom: zoomPourType(sorte) };
+  return { libelle: label.slice(0, LIBELLE_MAX), latitude, longitude, type: sorte, zoom: zoomPourType(sorte) };
 }
 
 /** Au plus PROPOSITIONS_MAX propositions, dans l'ordre reçu ; toute autre forme de réponse donne []. */
