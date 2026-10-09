@@ -98,6 +98,7 @@ const ZOOM_MAX = 22;
 /** Un clic bouge de moins que ça ; au-delà, c'est un glissement. */
 const SEUIL_GLISSEMENT_PX = 4;
 const DECALAGE_POIGNEE_PX = 28;
+const DECALAGE_POIGNEE_COTE_DOIGT_PX = 11;
 /** Zone tactile d'un sommet au doigt ; le point dessiné reste de 24 px à l'intérieur. */
 const TAILLE_SOMMET_SOURIS_PX = 24;
 const TAILLE_SOMMET_DOIGT_PX = 44;
@@ -253,7 +254,7 @@ function styleRectangle(vue: VueCarte, r: RectanglePlace): { left: number; top: 
 }
 
 /** Poignées d'un rectangle, en pixels de l'écran : rotation (au-delà du bout avant) et quatre côtés. */
-function positionsPoignees(vue: VueCarte, r: RectanglePlace): { rotation: Point; cotes: readonly { cote: Cote; p: Point }[] } {
+function positionsPoignees(vue: VueCarte, r: RectanglePlace, decalageCote: number): { rotation: Point; cotes: readonly { cote: Cote; p: Point }[] } {
   const mpp = metresParPixel(vue.origine.latitude, vue.zoom);
   const c = versEcran(vue, r.centre);
   const t = (r.orientationDeg * Math.PI) / 180;
@@ -262,13 +263,15 @@ function positionsPoignees(vue: VueCarte, r: RectanglePlace): { rotation: Point;
   const demiL = r.longueurM / mpp / 2;
   const demiW = r.largeurM / mpp / 2;
   const sur = (axe: Point, d: number): Point => ({ x: c.x + axe.x * d, y: c.y + axe.y * d });
+  // Au doigt, les poignées de côté sont décalées vers l'extérieur : leur zone à toucher (44 px) ne couvre pas le milieu d'un bâtiment étroit.
+  const dehors = (axe: Point, signe: 1 | -1, demi: number): Point => sur(axe, signe * (demi + decalageCote));
   return {
     rotation: sur(avant, demiL + DECALAGE_POIGNEE_PX),
     cotes: [
-      { cote: 'avant', p: sur(avant, demiL) },
-      { cote: 'arriere', p: sur(avant, -demiL) },
-      { cote: 'droite', p: sur(droite, demiW) },
-      { cote: 'gauche', p: sur(droite, -demiW) },
+      { cote: 'avant', p: dehors(avant, 1, demiL) },
+      { cote: 'arriere', p: dehors(avant, -1, demiL) },
+      { cote: 'droite', p: dehors(droite, 1, demiW) },
+      { cote: 'gauche', p: dehors(droite, -1, demiW) },
     ],
   };
 }
@@ -1158,9 +1161,10 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   }
 
   // ── Rendu ─────────────────────────────────────────────────────────────────────────────────────
-  const poignees = edition && choisi !== undefined ? positionsPoignees(vue, choisi.rect) : null;
-  // Au doigt (écran de téléphone ou de tablette, ou écran tactile), la zone à toucher d'un sommet fait 44 px au moins.
-  const tailleSommet = surOrdinateur && !ecranTactile ? TAILLE_SOMMET_SOURIS_PX : TAILLE_SOMMET_DOIGT_PX;
+  // Au doigt (écran de téléphone ou de tablette, ou écran tactile), les zones à toucher font 44 px au moins.
+  const auDoigt = !surOrdinateur || ecranTactile;
+  const poignees = edition && choisi !== undefined ? positionsPoignees(vue, choisi.rect, auDoigt ? DECALAGE_POIGNEE_COTE_DOIGT_PX : 0) : null;
+  const tailleSommet = auDoigt ? TAILLE_SOMMET_DOIGT_PX : TAILLE_SOMMET_SOURIS_PX;
   const carreau = CARREAU_M / mpp;
   const depart = versEcran(vue, { x: 0, y: 0 });
   const enPoints = (c: readonly Point[]): string =>

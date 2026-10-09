@@ -254,11 +254,17 @@
   touch-action: none;
 }
 
-/* Zone à toucher de 44 px au moins autour de chaque poignée (le dessin reste petit). */
-.pl-poignee::after {
-  content: '';
-  position: absolute;
-  inset: -12px;
+/* Au doigt : zone à toucher de 44 px au moins autour de chaque poignée (le dessin reste petit). */
+@media (pointer: coarse) {
+  .pl-poignee::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+
+  .pl-poignee-cote::after {
+    inset: -11px;
+  }
 }
 
 .pl-poignee-rotation {
