@@ -130,6 +130,11 @@ export function geometrieStructure(): BufferGeometry {
   return f.geometrie();
 }
 
+/** Tuteur d'un plant (tige ou ficelle tendue) : 1 m de haut, fin, un peu plus étroit en haut. */
+export function geometrieTuteur(): BufferGeometry {
+  return new Facettes().tronc(4, 0, 0.5, 1, 0.35, BOIS, 0, 0, 0, 0, true).geometrie();
+}
+
 /** Triangles d'une géométrie (sans indice : trois sommets chacun). */
 export function trianglesDe(g: BufferGeometry): number {
   return g.getAttribute('position').count / 3;
