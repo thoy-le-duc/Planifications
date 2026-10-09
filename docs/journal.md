@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T33b : verrou e2e réentrant
+
+- **Fait** : `scripts/verrou-e2e.sh` lance la commande directement quand `VERROU_E2E_TENU` vaut 1 (appel imbriqué, sans prendre ni attendre le verrou) ; sinon il prend le verrou et exporte `VERROU_E2E_TENU=1` à la commande. Trois tests ajoutés dans `apps/web/scripts/verrou-e2e.test.ts` (les tests de T33 sont inchangés), consigne ajoutée dans `docs/boucle.md` (« Jeux e2e »).
+- **Décidé** : la variable d'environnement sert de marque de réentrance plutôt qu'un test du descripteur 9 ; `pnpm e2e` et `pnpm e2e:demo` se lancent tels quels.
+- **Bloquant** : rien. Le blocage du 9 octobre venait d'un enveloppement, pas du script : les appels existants à `pnpm e2e` sous `verrou-e2e.sh` profitent du correctif sans changement.
+
 ## 2026-10-09 — T38b : guide de mise en ligne pas à pas
 
 - **Fait** : `docs/mise-en-ligne.md` (Neon Francfort et adresse pooled, migrations, PowerSync Cloud UE, Brevo, Vercel « appli », premier compte, « Ce qui reste gratuit », « Que faire si… », rappels de sécurité). Le tableau des 18 variables est vérifié par `apps/api/src/guide-mise-en-ligne.test.ts` (relevé dans `config.ts`, `vercel.ts`, `vite.config.ts` et `import.meta.env.VITE_*`). Lien ajouté dans `CLAUDE.md`.

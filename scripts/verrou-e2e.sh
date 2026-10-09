@@ -23,6 +23,12 @@ if [ "$#" -eq 0 ]; then
   exit 2
 fi
 
+# Déjà sous verrou (appel imbriqué) : on ne le reprend pas, on lance la commande directement.
+if [ "${VERROU_E2E_TENU:-}" = "1" ]; then
+  "$@"
+  exit $?
+fi
+
 case "$DELAI_S" in
   ''|*[!0-9]*)
     echo "verrou-e2e : délai invalide (« $DELAI_S » : des secondes entières sont attendues)." >&2
@@ -52,5 +58,6 @@ if ! flock -n 9; then
 fi
 
 # La commande tourne sans le descripteur 9 : seul ce script garde le verrou.
-"$@" 9>&-
+# VERROU_E2E_TENU=1 signale aux appels imbriqués qu'ils tournent déjà sous ce verrou.
+VERROU_E2E_TENU=1 "$@" 9>&-
 exit $?
