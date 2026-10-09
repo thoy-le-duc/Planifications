@@ -1216,6 +1216,83 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     );
   }
 
+  /** Barre de boutons : en bas de l'écran sur téléphone et tablette (boutons larges), dans la colonne de droite sur ordinateur. */
+  const barre = edition ? (
+    <div data-testid="barre-doigt" className={`pl-barre${surOrdinateur ? ' pl-barre-colonne' : ''}`}>
+      {choisi !== undefined && (
+        <>
+          <button
+            type="button"
+            data-testid="tourner-moins"
+            className="pl-bouton pl-tourner"
+            onClick={() => {
+              tournerSelection(-PAS_ROTATION_DEG);
+            }}
+          >
+            Tourner −5°
+          </button>
+          <button
+            type="button"
+            data-testid="tourner-plus"
+            className="pl-bouton pl-tourner"
+            onClick={() => {
+              tournerSelection(PAS_ROTATION_DEG);
+            }}
+          >
+            Tourner +5°
+          </button>
+        </>
+      )}
+      <button
+        type="button"
+        className="pl-bouton"
+        disabled={origine === null || pose !== null || trace !== null}
+        aria-describedby={origine === null || pose !== null || trace !== null ? idRaisonNouveau : undefined}
+        onClick={() => {
+          setFormulaire(true);
+        }}
+      >
+        Nouveau bâtiment
+      </button>
+      {(origine === null || pose !== null || trace !== null) && (
+        <p id={idRaisonNouveau} className="pl-aide">
+          {raisonNouveau}
+        </p>
+      )}
+      <button
+        type="button"
+        className="pl-bouton pl-principal"
+        disabled={raisonEnregistrer !== null}
+        aria-describedby={raisonEnregistrer === null ? undefined : idRaisonEnregistrer}
+        onClick={() => void enregistrer()}
+      >
+        Enregistrer
+      </button>
+      {raisonEnregistrer !== null && (
+        <p id={idRaisonEnregistrer} className="pl-aide">
+          {raisonEnregistrer}
+        </p>
+      )}
+      {brouillonOuvert && (
+        <button type="button" className="pl-bouton" disabled={occupe} aria-describedby={occupe ? idRaisonEnregistrer : undefined} onClick={abandonner}>
+          Abandonner les changements
+        </button>
+      )}
+      {annulable !== undefined && (
+        <button
+          type="button"
+          data-testid="annuler-placement"
+          className="pl-bouton"
+          disabled={occupe}
+          aria-describedby={occupe ? idRaisonEnregistrer : undefined}
+          onClick={() => void defaire(annulable)}
+        >
+          Annuler l’enregistrement
+        </button>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div className="pl-voile">
       <div
@@ -1566,6 +1643,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               </p>
             )}
 
+            {surOrdinateur && barre}
+
             {pret && (
               <section data-testid="liste-zones" aria-label="Zones" className="pl-zones">
                 <h3>Zones</h3>
@@ -1634,81 +1713,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           </aside>
         </div>
 
-        {edition && (
-          <div data-testid="barre-doigt" className="pl-barre">
-            {choisi !== undefined && (
-              <>
-                <button
-                  type="button"
-                  data-testid="tourner-moins"
-                  className="pl-bouton pl-tourner"
-                  onClick={() => {
-                    tournerSelection(-PAS_ROTATION_DEG);
-                  }}
-                >
-                  Tourner −5°
-                </button>
-                <button
-                  type="button"
-                  data-testid="tourner-plus"
-                  className="pl-bouton pl-tourner"
-                  onClick={() => {
-                    tournerSelection(PAS_ROTATION_DEG);
-                  }}
-                >
-                  Tourner +5°
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              className="pl-bouton"
-              disabled={origine === null || pose !== null || trace !== null}
-              aria-describedby={origine === null || pose !== null || trace !== null ? idRaisonNouveau : undefined}
-              onClick={() => {
-                setFormulaire(true);
-              }}
-            >
-              Nouveau bâtiment
-            </button>
-            {(origine === null || pose !== null || trace !== null) && (
-              <p id={idRaisonNouveau} className="pl-aide">
-                {raisonNouveau}
-              </p>
-            )}
-            <button
-              type="button"
-              className="pl-bouton pl-principal"
-              disabled={raisonEnregistrer !== null}
-              aria-describedby={raisonEnregistrer === null ? undefined : idRaisonEnregistrer}
-              onClick={() => void enregistrer()}
-            >
-              Enregistrer
-            </button>
-            {raisonEnregistrer !== null && (
-              <p id={idRaisonEnregistrer} className="pl-aide">
-                {raisonEnregistrer}
-              </p>
-            )}
-            {brouillonOuvert && (
-              <button type="button" className="pl-bouton" disabled={occupe} aria-describedby={occupe ? idRaisonEnregistrer : undefined} onClick={abandonner}>
-                Abandonner les changements
-              </button>
-            )}
-            {annulable !== undefined && (
-              <button
-                type="button"
-                data-testid="annuler-placement"
-                className="pl-bouton"
-                disabled={occupe}
-                aria-describedby={occupe ? idRaisonEnregistrer : undefined}
-                onClick={() => void defaire(annulable)}
-              >
-                Annuler l’enregistrement
-              </button>
-            )}
-          </div>
-        )}
+        {!surOrdinateur && barre}
 
         {formulaire && (
           <FormulaireBatiment

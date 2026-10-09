@@ -523,6 +523,12 @@
   }
 }
 
+/* Sur ordinateur, la barre reste dans la colonne de droite. */
+.pl-barre-colonne {
+  flex-direction: column;
+  gap: 8px;
+}
+
 /* T28k : barre du bas, boutons larges (gants). Les raisons des boutons grisés passent sous les boutons. */
 .pl-barre {
   flex-shrink: 0;
@@ -535,17 +541,17 @@
   box-shadow: var(--ombre-carte);
 }
 
-.pl-barre .pl-bouton {
+.pl-barre:not(.pl-barre-colonne) .pl-bouton {
   flex: 1 1 120px;
   min-width: 44px;
   min-height: 52px;
 }
 
-.pl-barre .pl-tourner {
+.pl-barre:not(.pl-barre-colonne) .pl-tourner {
   flex-basis: 44%;
 }
 
-.pl-barre .pl-aide {
+.pl-barre:not(.pl-barre-colonne) .pl-aide {
   order: 2;
   flex: 1 1 100%;
   font-size: 13px;
