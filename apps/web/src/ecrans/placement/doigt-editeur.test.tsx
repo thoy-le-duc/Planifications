@@ -310,6 +310,10 @@ describe('T28k : deux doigts', () => {
   it('deux doigts qui s’écartent du double zooment d’un niveau, sans écrire ni tourner', async () => {
     await ouvrir({ origine: true });
     await selectionnerAuDoigt();
+    // L'éditeur s'ouvre au zoom 19, et data-zoom plafonne à 19 (limite des tuiles, T28h) : on recule
+    // d'abord de deux niveaux pour que le zoom avant au pincement soit lisible.
+    await toucher(bouton('Zoom arrière'));
+    await toucher(bouton('Zoom arrière'));
     const z0 = zoom();
     const debut: Doigts = { a: [250, 300], b: [350, 300] };
     const fin: Doigts = { a: [200, 300], b: [400, 300] };
