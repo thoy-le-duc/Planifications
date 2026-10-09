@@ -4,12 +4,9 @@
  * code 1, avec son message. Le relais SMTP est vérifié en tâche de fond (demarrage.ts) :
  * injoignable ou muet, il ne retarde ni n'arrête l'écoute (erreur sur la sortie d'erreur), pour que la synchro démarre quand même.
  */
-import { drizzle } from 'drizzle-orm/node-postgres';
 import pg from 'pg';
-import { creerApp } from './app.ts';
-import { trousseauDepuisJwks } from './auth/index.ts';
 import { lireConfig, type Config } from './config.ts';
-import { preparerExpediteur } from './demarrage.ts';
+import { assemblerApp } from './demarrage.ts';
 import { journalParDefaut } from './dependances.ts';
 import { decrireErreur, journalSur } from './journal.ts';
 import { creerServeur } from './serveur.ts';
@@ -37,26 +34,13 @@ try {
   process.exit(1);
 }
 
-const cles = await trousseauDepuisJwks(config.jwtClesPrivees);
-// COURRIEL_CONSOLE=1 (NODE_ENV=development seulement, lireConfig) ou relais SMTP, vérifié en
-// tâche de fond sans retarder l'écoute.
-const expediteur = await preparerExpediteur(config.courriel, journal);
-
 const pool = new pg.Pool({ connectionString: config.databaseUrl });
 // Client inactif du pool coupé (Postgres redémarré…) : sans écouteur, le processus s'arrêterait.
 pool.on('error', (erreur) => {
   journal(`[base] erreur d'un client inactif : ${decrireErreur(erreur)}`);
 });
-const app = creerApp({
-  db: drizzle(pool),
-  expediteur,
-  cles,
-  emetteur: config.emetteur,
-  audience: config.audience,
-  proxyDeConfiance: config.proxyDeConfiance,
-  journal,
-  ...(config.corsOrigines === undefined ? {} : { corsOrigines: config.corsOrigines }),
-});
+// Clés, expéditeur (relais SMTP vérifié en tâche de fond) et creerApp : demarrage.ts, commun à Vercel.
+const app = await assemblerApp(config, pool, journal);
 
 // Délai court de lecture du corps (T10f) : un client muet ne garde pas une connexion 300 s.
 // Même journal (T10p) : un corps de réponse en flux qui échoue y est décrit, jamais sur la console.

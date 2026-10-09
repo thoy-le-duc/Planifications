@@ -15,13 +15,10 @@
  * - PROXY_DE_CONFIANCE=1 obligatoire sur Vercel (le proxy de Vercel pose X-Forwarded-For) : absente
  *   en production Vercel (VERCEL=1), un avertissement est écrit au journal au premier appel.
  */
-import { drizzle } from 'drizzle-orm/node-postgres';
 import { Hono } from 'hono';
 import pg from 'pg';
-import { creerApp } from './app.ts';
-import { trousseauDepuisJwks } from './auth/index.ts';
 import { lireConfig } from './config.ts';
-import { preparerExpediteur } from './demarrage.ts';
+import { assemblerApp } from './demarrage.ts';
 import { journalParDefaut } from './dependances.ts';
 import { decrireErreur, journalSur } from './journal.ts';
 
@@ -56,24 +53,12 @@ async function construire(env: Environnement, journal: (ligne: string) => void):
       'Avertissement : PROXY_DE_CONFIANCE=1 absent sur Vercel : sans lui, aucune adresse de client n’est lue et la limite par adresse IP ne s’applique pas. Poser PROXY_DE_CONFIANCE=1 dans les variables du projet Vercel.',
     );
   }
-  const cles = await trousseauDepuisJwks(config.jwtClesPrivees);
-  const expediteur = await preparerExpediteur(config.courriel, journal);
   const pool = new pg.Pool({ connectionString: config.databaseUrl, ...POOL_VERCEL });
   // Client inactif coupé (Neon qui suspend sa base…) : sans écouteur, l'instance s'arrêterait.
   pool.on('error', (erreur) => {
     journal(`[base] erreur d'un client inactif : ${decrireErreur(erreur)}`);
   });
-  const app = creerApp({
-    db: drizzle(pool),
-    expediteur,
-    cles,
-    emetteur: config.emetteur,
-    audience: config.audience,
-    proxyDeConfiance: config.proxyDeConfiance,
-    journal,
-    ...(config.corsOrigines === undefined ? {} : { corsOrigines: config.corsOrigines }),
-  });
-  return new Hono().route(PREFIXE_API, app);
+  return new Hono().route(PREFIXE_API, await assemblerApp(config, pool, journal));
 }
 
 export function creerGestionnaire(env: Environnement, options: OptionsGestionnaire = {}): Gestionnaire {
