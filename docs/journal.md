@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T36 : la vue 3D ne charge plus tout le cœur
+
+- **Fait** : `scene.ts` importe `@planif/core/placement` (et non la racine) et `morceauManuel` range `packages/core/src/croissance/` dans le morceau `croissance` (3,9 Kio). Vue 3D 226,3 → 202,8 Kio (la relecture T35a annonçait 202,6) ; démarrage 71,0 et éditeur de placement 18,5 inchangés. Plafond `jsVue3dGzKio` 227 → 203,3.
+- **Décidé** : plafond = mesure + 0,5. Seule exception aux tests : les deux qui figeaient 227 (`cadrage.test.ts`, `placement.test.ts`) sont alignés sur 203,3 dans un commit à part, comme le demande le ticket. Les fichiers `*.test.ts` du dossier croissance restent hors du morceau.
+- **Bloquant** : rien. Le vol de caméra T07 a échoué au hasard en e2e (aussi 3 fois sur 4 relancé seul : 700,6 ms contre 700, seuil relatif), il passe une fois sur quatre ; c'est T34, sans lien avec ce ticket.
+
 ## 2026-10-09 — T14f : l'import reconnaît une planche par sa zone et son code
 
 - **Fait** : l'import compare un code de planche dans sa zone, comme le serveur depuis T10t (`lower(trim(code))`). Le contexte de l'import lit la zone de chaque planche dans la requête existante (`EmplacementConnu.zoneId`, planches retirées écartées). Le parcellaire repère les doublons par zone + code, contre la base et dans le fichier ; les séries gagnent une colonne « Zone » facultative ; séries et assolements désignent la planche de la zone + code, ou refusent la ligne avec « Code ambigu : « P3 » existe dans plusieurs zones. Ajoutez la zone. ». Vérifié : typage, lint, 4 299 tests unitaires, build, budgets (démarrage 71,0 / 71 Kio inchangé, 3D 226,4 / 226,5 Kio), e2e 83 passés + vol de caméra T07 passé à la relance (704 ms > 700 au 1er passage, T34), démo 11.
