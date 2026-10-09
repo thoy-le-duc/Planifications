@@ -197,7 +197,9 @@ describe('T28b : hors ligne et sécurité', () => {
         .map(([nom, ...valeurs]) => [nom, valeurs]),
     );
     expect(directives.get('img-src')).toEqual(["'self'", 'https://data.geopf.fr']);
-    for (const [nom, valeurs] of directives) if (nom !== 'img-src') expect(valeurs.join(' '), nom).not.toContain('geopf');
+    // T28h (Q35) : la recherche d'adresse ajoute l'origine de la Géoplateforme à connect-src, rien d'autre.
+    expect(directives.get('connect-src')).toContain('https://data.geopf.fr');
+    for (const [nom, valeurs] of directives) if (nom !== 'img-src' && nom !== 'connect-src') expect(valeurs.join(' '), nom).not.toContain('geopf');
   });
 });
 
@@ -248,6 +250,6 @@ describe('T28f : l’éditeur s’ouvre aussi depuis la vue 3D, sans bouger les 
     const b = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson & { readonly jsVue3dGzKio?: number };
     expect(b.jsInitialGzKio).toBe(BUDGET_DEMARRAGE_KIO);
     expect(b.jsVue3dGzKio).toBe(227);
-    expect(b.jsPlacementGzKio).toBe(18.5);
+    expect(b.jsPlacementGzKio).toBe(20); // T28h : recherche d'adresse, sites et recul (+1,4 Kio mesurés, chiffrés dans la PR)
   });
 });
