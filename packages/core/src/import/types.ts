@@ -67,6 +67,8 @@ export type CleChamp =
   | 'fenetre_recolte_jours'
   | 'rangs_par_planche'
   | 'ecartement_cm'
+  /** T35a : disposition des rangs, 'alignee' ou 'quinconce' (facultatif). */
+  | 'disposition'
   | 'poids_mille_graines_g'
   | 'date_semis'
   | 'date_plantation'

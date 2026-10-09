@@ -310,7 +310,7 @@ describe('creerModele : un modèle créé est toujours relisible (propriété, c
   const TYPES: readonly TypeContenu[] = ['parcellaire', 'cultures', 'series', 'assolement'];
   const TOUS_CHAMPS: readonly CleChamp[] = [
     'zone', 'sous_zone', 'emplacement', 'sorte', 'longueur_m', 'largeur_m', 'type_abri', 'surface_m2', 'nombre_places', 'espece', 'variete', 'famille', 'mode',
-    'duree_pepiniere_jours', 'duree_avant_recolte_jours', 'fenetre_recolte_jours', 'rangs_par_planche', 'ecartement_cm', 'poids_mille_graines_g', 'date_semis',
+    'duree_pepiniere_jours', 'duree_avant_recolte_jours', 'fenetre_recolte_jours', 'rangs_par_planche', 'ecartement_cm', 'disposition', 'poids_mille_graines_g', 'date_semis',
     'date_plantation', 'date_debut_recolte', 'date_fin_recolte', 'nombre_plants', 'annee',
   ];
   const UNITES: readonly UniteColonne[] = ['m', 'cm', 'kg', 'g', 'ha', 'semaine'];
