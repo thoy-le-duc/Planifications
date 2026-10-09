@@ -44,7 +44,13 @@ export interface BornesDessin {
   readonly appelsMax: number;
   readonly trianglesMax: number;
 }
-export const BORNES_FERME_T07: BornesDessin = { appelsMax: 3, trianglesMax: 5_500 };
+/**
+ * T32b : 3 appels (2 + un par forme ; la ferme T07 n'a que le profil générique, une seule forme) et au
+ * plus 14 000 triangles : ~4 300 de la ferme, plus au pire PLANTS_MAX_TOTAL (200) plants de 48 triangles
+ * = 9 600. Mesuré : 4 300 en navigation et en vol (plants fondus en masse de loin), 9 100 en fin de vol
+ * près d'une zone, 11 020 en zoom serré (100 plants). Avant T32b : 5 500.
+ */
+export const BORNES_FERME_T07: BornesDessin = { appelsMax: 3, trianglesMax: 14_000 };
 /** Jumeau de la ferme T07 placée (bâtiments, arceaux, bâches) : plus de géométrie que la ferme seule. */
 export const BORNES_JUMEAU_T07: BornesDessin = { appelsMax: 8, trianglesMax: 35_000 };
 export const BORNES_DEMO: BornesDessin = { appelsMax: 8, trianglesMax: 8_000 };

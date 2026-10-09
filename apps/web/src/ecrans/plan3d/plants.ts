@@ -24,7 +24,7 @@ import {
 /** Plafond de plants d'UNE planche : au-delà on espace les plants, on n'en dessine pas plus. */
 export const PLANTS_MAX_PAR_PLANCHE = 20;
 /** Plafond de plants dessinés pour toute la scène : les planches les plus proches d'abord. */
-export const PLANTS_MAX_TOTAL = 400;
+export const PLANTS_MAX_TOTAL = 200;
 /** Un jeune plant (levée, turion) se dessine à cette hauteur au moins (m). */
 export const HAUTEUR_PLANT_MINIMAL_M = 0.05;
 /** Triangles de la géométrie partagée de chaque forme (vérifié sur les géométries par geometries-plants.test.ts). */
@@ -45,7 +45,7 @@ const REMPLISSAGE_ADULTE = 0.9;
 /** Part de cet encombrement à la levée. */
 const REMPLISSAGE_JEUNE = 0.35;
 /** Un plant se voit de loin tant qu'il fait au moins ce nombre de pixels de large. */
-export const LARGEUR_VISIBLE_PX = 5;
+export const LARGEUR_VISIBLE_PX = 4;
 /** Rang de plants tous les tant de mètres de largeur de planche. */
 const LARGEUR_PAR_RANG_M = 0.5;
 const RANGS_MAX = 3;
