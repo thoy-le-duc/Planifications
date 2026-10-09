@@ -18,6 +18,20 @@
 import { MENTION_A_VERIFIER, validerProfilCroissance } from './profil.ts';
 import type { AllureCroissance, CycleAnnuel, DureeCroissance, FinDeCycle, FormePlant, ProfilCroissance, ProfilParDefaut } from './types.ts';
 
+/**
+ * Profils par défaut dont le feuillage ne monte qu'après la fin de la récolte (Q33 : l'asperge, turions
+ * seuls pendant la récolte). Reconnus par identité : le profil par défaut de la bibliothèque, tel que
+ * rendu par `profilParDefaut` ; un profil réglé par la ferme (une copie lue de la base) suit son seul
+ * cycle annuel, comme avant Q33. Le type du profil, et donc la base, ne changent pas ; le réglage de ce
+ * comportement par la ferme viendra avec T32c.
+ */
+const FEUILLAGE_APRES_RECOLTE = /* @__PURE__ */ new WeakSet<ProfilCroissance>();
+
+/** Le feuillage de ce profil ne monte qu'après la fin de la récolte (asperge par défaut). */
+export function feuillageApresRecolte(profil: ProfilCroissance): boolean {
+  return FEUILLAGE_APRES_RECOLTE.has(profil);
+}
+
 const jours = (n: number): DureeCroissance => ({ en: 'jours', jours: n });
 const part = (f: number): DureeCroissance => ({ en: 'fraction_cycle', fraction: f });
 const cycle = (debourrement: string, repos: string): CycleAnnuel => ({ debourrement, repos });
@@ -38,8 +52,8 @@ function entree(
     allure: options.allure ?? 'en-s',
     finDeCycle: options.finDeCycle ?? 'conservee',
     cycleAnnuel,
-    ...(options.feuillageApresRecolte === true ? { feuillageApresRecolte: true } : {}),
   });
+  if (options.feuillageApresRecolte === true) FEUILLAGE_APRES_RECOLTE.add(profil);
   return Object.freeze({ espece, synonymes: Object.freeze([...synonymes]), profil, source: MENTION_A_VERIFIER });
 }
 

@@ -7,6 +7,7 @@
  * Règles et exemples chiffrés : en-tête de test/contrat.ts.
  */
 import { ajouterJours, ecartEnJours, type DateCalendaire } from '../dates/index.ts';
+import { feuillageApresRecolte } from './defauts.ts';
 import type { AllureCroissance, DateRepere, DatesCroissance, EntreePerenne, EtatCroissance, ProfilCroissance, StadeCroissance } from './types.ts';
 
 /** Fin de la levée : tant que la hauteur reste sous cette part de la hauteur maximale. */
@@ -94,7 +95,7 @@ export function croissancePerenneA(entree: EntreePerenne, profil: ProfilCroissan
 
   // Q33 (asperge) : turions seuls pendant la récolte, la fougère part de 0 le lendemain de sa fin.
   let depart = debut;
-  if (profil.feuillageApresRecolte === true) {
+  if (feuillageApresRecolte(profil)) {
     const finRecolte = campagne.finRecolte ?? dansLAnnee(annee, FIN_RECOLTE_PAR_DEFAUT);
     depart = ajouterJours(finRecolte, 1);
     if (jour < depart) return etat('debourrement', profil, 0);

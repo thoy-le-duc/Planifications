@@ -11,6 +11,8 @@ import { hauteurRendue, type Scene, type SceneFiltree } from './scene.ts';
 
 /** Champ vertical de la caméra (degrés), le même que celui de la vue. */
 const CHAMP_DEGRES = 40;
+/** Un plant très haut (tomate sur sa ficelle) se voit de plus loin qu'il n'est large : sa hauteur compte pour ce quart. */
+const HAUTEUR_POUR_LARGEUR = 4;
 /** Largeur des pieds de gouttière (échelle horizontale du poteau, m). */
 const PIED_GOUTTIERE_M = 0.6;
 
@@ -91,7 +93,7 @@ export class RenduPlants {
       const v = scene.volumes[i];
       if (p === null || v === undefined) return;
       const d = Math.hypot(v.x - x, y, v.z - z);
-      if (plantsVisibles(p.echelleHorizontale, d, hauteurPx, CHAMP_DEGRES)) candidates.push({ i, d, n: p.nombre });
+      if (plantsVisibles(Math.max(p.echelleHorizontale, p.echelleVerticale / HAUTEUR_POUR_LARGEUR), d, hauteurPx, CHAMP_DEGRES)) candidates.push({ i, d, n: p.nombre });
     });
     candidates.sort((a, b) => a.d - b.d);
     let reste = PLANTS_MAX_TOTAL;
