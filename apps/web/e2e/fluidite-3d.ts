@@ -208,6 +208,31 @@ export interface Plancher {
 export const SEUIL_FAUTIF_PLAFOND_MS = 100;
 /** Au-delà de ce plancher médian (ms), la machine est trop chargée pour juger la fluidité : le test échoue. */
 export const PLANCHER_MAX_MS = 40;
+/** T34 : marge minimale (ms) d'un vol de caméra au-delà de sa durée contractuelle : la marge historique. */
+export const MARGE_VOL_MIN_MS = 100;
+/** T34 : plafond (ms) de cette marge, pour qu'un vrai ralentissement du vol échoue toujours. */
+export const MARGE_VOL_MAX_MS = 200;
+
+/**
+ * T34 : marge (ms) accordée à la durée d'un vol de caméra, déduite du plancher mesuré dans le même
+ * lancement : min(MARGE_VOL_MAX_MS, MARGE_VOL_MIN_MS + 3 × plancher). Erreur explicite si le plancher
+ * est absent ou non fini, ou s'il dépasse PLANCHER_MAX_MS (machine trop lente : pas de tolérance cachée).
+ */
+export function margeVolMs(plancherMs: number): number {
+  if (typeof plancherMs !== 'number' || !Number.isFinite(plancherMs) || plancherMs <= 0) {
+    throw new Error(`plancher mesuré absent ou invalide (${String(plancherMs)}) : marge de vol incalculable`);
+  }
+  if (plancherMs > PLANCHER_MAX_MS) {
+    throw new Error(`machine trop lente pour juger la durée des vols (plancher ${plancherMs.toFixed(1)} ms > ${String(PLANCHER_MAX_MS)} ms), relancer`);
+  }
+  return Math.min(MARGE_VOL_MAX_MS, MARGE_VOL_MIN_MS + 3 * plancherMs);
+}
+
+/** T34 : message d'échec d'une durée de vol : durée, plancher mesuré, marge appliquée, borne. */
+export function messageDureeVol(dureeMs: number, plancherMs: number, margeMs: number, dureeVolMaxMs: number): string {
+  return `durée du vol ${String(Math.round(dureeMs))} ms (plancher mesuré ${plancherMs.toFixed(1)} ms, marge ${String(Math.round(margeMs))} ms, borne ${String(Math.round(dureeVolMaxMs + margeMs))} ms = ${String(dureeVolMaxMs)} ms de vol + marge)`;
+}
+
 const IMAGES_PLANCHER = 90;
 const IMAGES_PLANCHER_IGNOREES = 5;
 
