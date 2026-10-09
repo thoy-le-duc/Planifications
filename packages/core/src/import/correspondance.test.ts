@@ -47,7 +47,7 @@ describe('CHAMPS_IMPORT : les champs de l’appli par type de contenu', () => {
       obligatoires: ['espece'],
     },
     series: {
-      champs: ['espece', 'variete', 'emplacement', 'date_semis', 'date_plantation', 'date_debut_recolte', 'date_fin_recolte', 'longueur_m', 'nombre_plants'],
+      champs: ['espece', 'variete', 'zone', 'emplacement', 'date_semis', 'date_plantation', 'date_debut_recolte', 'date_fin_recolte', 'longueur_m', 'nombre_plants'],
       obligatoires: ['espece'],
     },
     assolement: { champs: ['annee', 'zone', 'emplacement', 'famille', 'espece'], obligatoires: ['annee'] },

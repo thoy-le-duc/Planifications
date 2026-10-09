@@ -2,7 +2,7 @@
 
 **Objectif** (Q34) : voir d'un coup d'œil ce qui est à récolter. Les fruits apparaissent et grossissent (courgette, fraise, tomate…), une planche à récolter se signale même en vue d'ensemble, et les plants jaunissent ou se dégarnissent en fin de récolte. « Il faut que ce soit visuellement impactant. »
 
-**Dépend de** : T32d
+**Dépend de** : T32d, T36 (marge de poids de la vue 3D)
 **Périmètre** : `packages/core/src/croissance/**` (stade de récolte, calcul pur et testé), `apps/web/src/ecrans/plan3d/**`, e2e 3D, `apps/web/budget.json` (voir Budget)
 
 ## Règles
