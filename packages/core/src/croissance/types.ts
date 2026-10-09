@@ -31,11 +31,6 @@ export interface ProfilCroissance {
   readonly finDeCycle: FinDeCycle;
   /** Pérennes seulement ; null pour une culture annuelle. */
   readonly cycleAnnuel: CycleAnnuel | null;
-  /**
-   * Pérennes seulement (Q33, asperge) : pendant la récolte, pas de feuillage (turions seuls) ; le
-   * feuillage monte après la fin de la récolte de la campagne. Facultatif : absent = faux.
-   */
-  readonly feuillageApresRecolte?: boolean;
 }
 
 /** Profil par défaut d'une espèce de la bibliothèque commune. */

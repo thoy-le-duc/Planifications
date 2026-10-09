@@ -36,7 +36,7 @@ export const PROFIL_CARACTERES_MAX = 2048;
 /** Mention d'une valeur par défaut sans référence, que Théophane corrige à la revue. */
 export const MENTION_A_VERIFIER = 'valeur usuelle à vérifier';
 
-const CLES_PROFIL = ['forme', 'hauteurMaxM', 'duree', 'allure', 'finDeCycle', 'cycleAnnuel', 'feuillageApresRecolte'] as const;
+const CLES_PROFIL = ['forme', 'hauteurMaxM', 'duree', 'allure', 'finDeCycle', 'cycleAnnuel'] as const;
 /** Clés obligatoires, dans l'ordre où leur absence est signalée. */
 const CLES_OBLIGATOIRES = ['forme', 'hauteurMaxM', 'duree', 'allure', 'finDeCycle'] as const;
 
@@ -135,10 +135,7 @@ function valider(entree: unknown): ResultatCroissance<ProfilCroissance | null> {
   if (!parmi(finDeCycle, FINS_DE_CYCLE)) return refus('fin_de_cycle_inconnue', 'finDeCycle');
   const cycleAnnuel = lireCycle(propre(o, 'cycleAnnuel'));
   if (cycleAnnuel === undefined) return refus('cycle_annuel_invalide', 'cycleAnnuel');
-  const apresRecolte = propre(o, 'feuillageApresRecolte');
-  if (apresRecolte !== undefined && typeof apresRecolte !== 'boolean') return refus('entree_invalide', 'feuillageApresRecolte');
-  const base = { forme, hauteurMaxM, duree, allure, finDeCycle, cycleAnnuel };
-  return { ok: true, valeur: apresRecolte === undefined ? base : { ...base, feuillageApresRecolte: apresRecolte } };
+  return { ok: true, valeur: { forme, hauteurMaxM, duree, allure, finDeCycle, cycleAnnuel } };
 }
 
 /**
