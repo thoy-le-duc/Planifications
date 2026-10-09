@@ -290,6 +290,15 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q34 — Récolte visible, schéma des rangs, budget (posée le 2026-10-09, après les captures de T32b)
+
+Retour de Théophane : « C'est un peu mieux. Il faudrait voir les choses quand ça a besoin de récolter : les courgettes, il y a un truc qui grossit, les fraises pareil. Il faut que visuellement ce soit impactant. Et dans la fiche culturelle, quand on fait les écartements entre plants, double rang, triple rang, quadruple rang, un petit schéma qui se met en place : en double rang, en quinconce ou non, il faut pouvoir le voir. »
+
+Réponses (2026-10-09) :
+1. **Budget** : plus de plafond en nombre de tickets ; seuil de 70 % de la jauge avant mardi (25 tickets = 34 % le vendredi 9 octobre à 12 h 40).
+2. **Schéma des rangs** : un nouveau choix sur l'itinéraire, **alignés ou en quinconce** ; il ne change pas le nombre de plants, seulement leur place (schéma de la fiche et 3D). Ticket T35a, puis T35b pour la 3D.
+3. **Récolte dans la 3D** : **fruits qui grossissent** et prennent leur couleur pendant la fenêtre de récolte (courgette, fraise, tomate…), **signal « à récolter »** sur la planche, visible même en vue d'ensemble, et **fin de récolte** (plants qui jaunissent ou se dégarnissent). Ticket T32e, après T32d (rendu plus fin : planche fine, jeunes plants visibles, plants découpés et tuteurs).
+
 ### Q33 — Plants en 3D : budget et hauteurs par défaut (posée le 2026-10-08, avant T32b)
 
 Question : la vue 3D pèse 218,7 Kio pour un plafond de 220 ; les plants stylisés et le moteur de croissance ajoutent 5 à 7 Kio. Relever le plafond, charger les plants en différé, ou réduire les profils ? Et quatre valeurs par défaut de T32a à relire : asperge, tomate de serre, kiwi, fraisier hors-sol.
