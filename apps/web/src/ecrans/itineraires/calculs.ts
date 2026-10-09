@@ -17,6 +17,7 @@ import {
   type CategorieIntervention,
   type DateCalendaire,
   type DatesSerie,
+  type DispositionRangs,
   type FaconDensite,
   type ModeItineraire,
   type ParametresDatesSerie,
@@ -177,6 +178,8 @@ export interface Saisie {
   readonly facon: FaconDensite;
   readonly rangs: string;
   readonly ecartement: string;
+  /** T35a : rangs alignés (défaut, densité sans clé) ou en quinconce. */
+  readonly disposition: DispositionRangs;
   readonly grainesParMetre: string;
   readonly largeur: string;
   readonly dose: string;
@@ -275,6 +278,7 @@ export function saisieDepuis(parametres: Readonly<Objet>, nom: string, especeId:
     facon: mode === 'semis_direct' ? facon : 'ecartement',
     rangs: nombreTexte(densite.rangsParPlanche),
     ecartement: nombreTexte(densite.ecartementSurRangCm),
+    disposition: densite.disposition === 'quinconce' ? 'quinconce' : 'alignee',
     grainesParMetre: nombreTexte(densite.grainesParMetre),
     largeur: nombreTexte(densite.largeurSemeeCm),
     dose: nombreTexte(densite.doseGParM2),
@@ -353,7 +357,10 @@ function densiteDe(s: Saisie): Lecture<Objet> {
   }
   const ecartement = decimalRequis(s.ecartement, 'Écartement sur le rang');
   if (!ecartement.ok) return ecartement;
-  return ok({ facon, rangsParPlanche: rangs, ecartementSurRangCm: ecartement.valeur });
+  // T35a : seul le quinconce s'écrit (alignés = densité sans clé, comme avant T35a) ; un seul
+  // rang n'a pas de disposition.
+  const disposition = s.disposition === 'quinconce' && rangs > 1 ? { disposition: s.disposition } : {};
+  return ok({ facon, rangsParPlanche: rangs, ecartementSurRangCm: ecartement.valeur, ...disposition });
 }
 
 /** Travail prévu tiré de la saisie (sans contrôle de la liste des types), ou ce qui manque. */

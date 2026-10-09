@@ -269,7 +269,7 @@
  *                surface_m2, nombre_places
  *   cultures     espece*, variete, famille, mode, duree_pepiniere_jours,
  *                duree_avant_recolte_jours, fenetre_recolte_jours, rangs_par_planche,
- *                ecartement_cm, poids_mille_graines_g
+ *                ecartement_cm, disposition (T35a), poids_mille_graines_g
  *   series       espece*, variete, emplacement, date_semis, date_plantation,
  *                date_debut_recolte, date_fin_recolte, longueur_m, nombre_plants
  *                (au moins une des quatre dates : sinon 'champ_manquant', champ null)
@@ -279,7 +279,8 @@
  * Nature et valeur normalisée de chaque champ (dans `LignePlan.valeurs`) :
  *   texte     zone, sous_zone, emplacement, variete → texte sans espaces autour
  *   choix     sorte → 'planche' | 'rang' | 'gouttiere' ; type_abri → 'plein_champ' | 'tunnel' |
- *             'serre' | 'hors_sol' ; mode → 'semis_direct' | 'plant_maison' | 'plant_achete'.
+ *             'serre' | 'hors_sol' ; mode → 'semis_direct' | 'plant_maison' | 'plant_achete' ;
+ *             disposition (T35a) → 'alignee' | 'quinconce' (« alignés », « quinconce »…).
  *             Casse, accents et ponctuation ignorés ; au minimum : « plein champ », « open
  *             field », « tunnel », « serre », « greenhouse », « hors sol » ; « planche »,
  *             « rang », « gouttière » ; « semis direct », « plant maison », « plant acheté ».
@@ -527,6 +528,8 @@ export type CleChamp =
   | 'fenetre_recolte_jours'
   | 'rangs_par_planche'
   | 'ecartement_cm'
+  /** T35a : disposition des rangs, 'alignee' ou 'quinconce' (facultatif). */
+  | 'disposition'
   | 'poids_mille_graines_g'
   | 'date_semis'
   | 'date_plantation'

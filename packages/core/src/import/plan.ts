@@ -67,6 +67,15 @@ const MODES: Readonly<Record<string, string>> = {
   'plant maison': 'plant_maison',
   'plant achete': 'plant_achete',
 };
+/** T35a : disposition des rangs. Vide → null (la densité reste sans disposition : alignée). */
+const DISPOSITIONS: Readonly<Record<string, string>> = {
+  quinconce: 'quinconce',
+  'en quinconce': 'quinconce',
+  aligne: 'alignee',
+  alignee: 'alignee',
+  alignes: 'alignee',
+  alignees: 'alignee',
+};
 
 const TEXTE: Nature = { sorte: 'texte' };
 const DATE: Nature = { sorte: 'date' };
@@ -81,6 +90,7 @@ const NATURES: Readonly<Record<CleChamp, Nature>> = {
   sorte: { sorte: 'choix', valeurs: SORTES, attendus: 'planche, rang ou gouttière' },
   type_abri: { sorte: 'choix', valeurs: ABRIS, attendus: 'plein champ, tunnel, serre ou hors sol' },
   mode: { sorte: 'choix', valeurs: MODES, attendus: 'semis direct, plant maison ou plant acheté' },
+  disposition: { sorte: 'choix', valeurs: DISPOSITIONS, attendus: 'alignés ou quinconce' },
   longueur_m: { sorte: 'mesure', unite: 'm' },
   largeur_m: { sorte: 'mesure', unite: 'm' },
   ecartement_cm: { sorte: 'mesure', unite: 'cm' },

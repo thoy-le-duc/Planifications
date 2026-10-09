@@ -10,6 +10,7 @@
  */
 import type { DateCalendaire } from '../dates/index.ts';
 import type { Id, NomEntite } from './identifiants.ts';
+import type { DispositionRangs } from './densite.ts';
 import type { ProfilCroissance } from '../croissance/types.ts';
 
 // ---------------------------------------------------------------------------------------------
@@ -246,6 +247,8 @@ export interface DensiteEcartement {
   readonly facon: 'ecartement';
   readonly rangsParPlanche: number;
   readonly ecartementSurRangCm: Centimetres;
+  /** T35a : rangs alignés ou en quinconce ; absente → alignés (voir `dispositionDe`). */
+  readonly disposition?: DispositionRangs;
 }
 
 /** Semis en ligne : graines par mètre de rang (la germination est déjà comptée). */
