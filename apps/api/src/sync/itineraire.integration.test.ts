@@ -1422,4 +1422,55 @@ decrireAvecBase('T23')('T23 : POST /sync/upload accepte les itinéraires et les 
       }
     });
   });
+
+  // ── T35a : disposition des rangs (docs/backlog/T35a-schema-rangs.md) ────────────────────────
+  // parametres.densite.disposition : facultative ('alignee' par défaut), 'alignee' ou 'quinconce'.
+  // La densité vit dans le jsonb `parametres` : aucune migration. Le serveur rejoue
+  // validerItineraire / validerSerie du cœur : une autre valeur → 'ecriture_invalide', message en
+  // français dans refus_synchro.
+
+  describe('T35a : disposition des rangs', () => {
+    const avecDensite = (densite: Record<string, unknown>): string => JSON.stringify({ ...BATAVIA, densite, travauxPrevus: [GRELINETTE] });
+
+    it('itinéraire en quinconce : accepté, rangé tel quel dans le jsonb', async () => {
+      const densite = { ...BATAVIA.densite, disposition: 'quinconce' };
+      const i = await itineraireAccepte({ parametres: avecDensite(densite) });
+      const l = await ligne('itineraire', i.id);
+      expect((l?.parametres as Record<string, unknown> | undefined)?.densite).toEqual(densite);
+    });
+
+    it('itinéraire sans disposition (d’avant T35a) : accepté, rien n’est ajouté à la densité', async () => {
+      const i = await itineraireAccepte({ parametres: avecDensite(BATAVIA.densite) });
+      const l = await ligne('itineraire', i.id);
+      expect((l?.parametres as Record<string, unknown> | undefined)?.densite).toStrictEqual(BATAVIA.densite);
+    });
+
+    it('PATCH vers le quinconce puis retour aux rangs alignés : acceptés', async () => {
+      const i = await itineraireAccepte();
+      await accepte([patch('itineraire', i.id, { parametres: avecDensite({ ...BATAVIA.densite, disposition: 'quinconce' }) })]);
+      await accepte([patch('itineraire', i.id, { parametres: avecDensite(BATAVIA.densite) })]);
+      expect((await historique(i.id)).map((x) => x.operation)).toEqual(['creation', 'modification', 'modification']);
+    });
+
+    it('disposition inconnue à la création : ecriture_invalide, rien d’écrit, message en français', async () => {
+      const i = putItineraire({ parametres: avecDensite({ ...BATAVIA.densite, disposition: 'zigzag' }) });
+      await refuseEnEntier([i], i, 'ecriture_invalide');
+      const [refus] = await refusSynchro(i.id);
+      expect(refus?.message).toMatch(/disposition/i);
+      expect(refus?.message).toMatch(/quinconce/i);
+    });
+
+    it('disposition inconnue par PATCH : ecriture_invalide, la ligne ne change pas', async () => {
+      const i = await itineraireAccepte();
+      const fautive = patch('itineraire', i.id, { parametres: avecDensite({ ...BATAVIA.densite, disposition: 'Quinconce' }) });
+      await refuseEnEntier([fautive], fautive, 'ecriture_invalide');
+    });
+
+    it('instantané d’une série en quinconce : accepté ; disposition inconnue : refusée', async () => {
+      const i = await itineraireAccepte();
+      await accepte([putSerie(i.id, avecDensite({ ...BATAVIA.densite, disposition: 'quinconce' }))]);
+      const fautive = putSerie(i.id, avecDensite({ ...BATAVIA.densite, disposition: 'diagonale' }));
+      await refuseEnEntier([fautive], fautive, 'ecriture_invalide');
+    });
+  });
 });
