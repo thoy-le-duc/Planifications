@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T28j : le placement se fait en étapes guidées
+
+- **Fait** : l'éditeur de placement (mode édition) a en haut un bandeau de quatre pastilles numérotées (Trouver la ferme, Poser le point de départ, Ajouter une serre ou un bâtiment, Ajuster et tracer les zones), 4 colonnes au téléphone, l'étape en cours pleine orange, les faites cochées en vert forêt, couleurs par jetons. Dessous, une consigne (`aide-etape`) donne l'étape montrée et annonce la suivante. Les étapes se déduisent de l'état existant (origine, bâtiments lus ou au brouillon, pose en cours) : rien de stocké, une ferme déjà placée ouvre sur l'étape 4. Pendant la pose : « Touchez la photo où se trouve la serre » (« le bâtiment » hors serre). Tout bouton grisé a sa raison visible reliée par `aria-describedby` : « Posez d'abord le point de départ (étape 2) », rien à enregistrer, contour refusé, tracé ou pose en cours, enregistrement en cours, zoom limite, fiche du bâtiment incomplète. Code dans `etapes.tsx`.
+- **Décidé** : tap sur une étape faite = `aria-current="step"` et sa consigne, sans écriture ; étape 1 = focus sur le champ d'adresse ; étape à venir = rien. Budget de l'éditeur `jsPlacementGzKio` 20 → 21,2 Kio (19,9 → 20,9 mesurés, +1,0 Kio, marge 0,3), dans un commit séparé avec `scripts/placement.test.ts` ; démarrage 71 Kio inchangé.
+- **Bloquant** : rien.
+
 ## 2026-10-09 — T28h : chercher une adresse, voir large, plusieurs sites
 
 - **Fait** : l'éditeur de placement a, en haut, un champ « Adresse, commune ou lieu-dit » en gros caractères (18 px, cibles de 52 px) : attente de 300 ms après la dernière frappe, une seule requête au géocodage de la Géoplateforme (la précédente abandonnée), 5 propositions au plus, un tap (ou Entrée : la première) déplace la vue au zoom du type de lieu (commune 13, lieu-dit 15, rue 17, numéro 18). Sans réseau, service muet ou réponse illisible : « Recherche d'adresse indisponible sans réseau ; déplacez la carte à la main » ; sans résultat : « Aucune adresse trouvée » ; l'éditeur reste utilisable. Zoom minimal 14 → 6, zoom de départ sans origine ni position 16 → 6 avec le champ entouré d'orange. « Aller à » (zones de premier niveau placées) et « Toute la ferme » (union des contours, 90 % de l'écran au plus) via `vueSurEmprise` (`sites.ts`). `data-centre` sur l'éditeur. Amorçage `?jeu=placement&origine=1&sites=2`. La recherche ne touche jamais `ferme.origine_plan` ni la base.
