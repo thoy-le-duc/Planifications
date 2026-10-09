@@ -56,7 +56,8 @@ export function politiqueCsp(o: OptionsCsp): string {
     ['script-src', "'self'", "'wasm-unsafe-eval'"],
     // Workers de PowerSync et service worker : fichiers de l'appli.
     ['worker-src', "'self'"],
-    ['connect-src', "'self'", ...new Set(origines)],
+    // T28h : la recherche d'adresse (fetch) interroge le géocodage de la Géoplateforme ; seulement ce texte lui part.
+    ['connect-src', "'self'", ...new Set([...origines, 'https://data.geopf.fr'])],
     ['style-src', "'self'"],
     // T28b : l'orthophoto de l'éditeur de placement, par des <img> seulement (connect-src inchangé).
     ['img-src', "'self'", 'https://data.geopf.fr'],
