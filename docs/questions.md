@@ -290,6 +290,15 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q37 — Tester avec ses vraies données : mise en ligne gratuite (posée le 2026-10-09)
+
+Demande de Théophane : « J'aimerais tester avec les vraies données de ma ferme, avec un compte à moi. » Il a proposé une adresse et un mot de passe dans la conversation : la connexion de l'appli se fait **par code à 6 chiffres envoyé par courriel, sans mot de passe** ; aucun mot de passe ne doit circuler dans une conversation ni dans le dépôt. Rien n'est en ligne aujourd'hui (seule la démo l'est).
+
+Réponses (2026-10-09) :
+1. **Mise en ligne complète**, plutôt que la ferme gardée sur l'appareil.
+2. **Gratuit pendant toute la phase de développement** ; « on verra pour du sérieux plus tard ». Vercel convient pour l'appli et l'API ; même logique pour la synchro (offre gratuite).
+3. Choix du chef dans ce cadre : appli et API sur **Vercel** (fonctions en région Paris), PostgreSQL chez **Neon** (offre gratuite, région Francfort, UE), **PowerSync Cloud** (offre gratuite, région UE), courriels par **Brevo** (offre gratuite). Théophane crée les comptes et saisit lui-même les secrets ; la boucle n'y a jamais accès. Tickets T38a (API déployable sur Vercel) et T38b (guide pas à pas).
+
 ### Q36 — Placer sa serre, au doigt et dans la démo ; consignes aux ouvriers dans la 3D (posée le 2026-10-09)
 
 Retour de Théophane : « Passer au doigt sur le téléphone, c'est possible. Même le plan 3D sur le téléphone, c'est pas mal : je veux pouvoir dire aux ouvriers vous allez faire ça, ça, ça, pour qu'ils se repèrent facilement. Je ne vois toujours pas comment placer ma serre aux bons endroits, sur fixe comme sur téléphone. »
