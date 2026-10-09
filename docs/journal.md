@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T14f : l'import reconnaît une planche par sa zone et son code
+
+- **Fait** : l'import compare un code de planche dans sa zone, comme le serveur depuis T10t (`lower(trim(code))`). Le contexte de l'import lit la zone de chaque planche dans la requête existante (`EmplacementConnu.zoneId`, planches retirées écartées). Le parcellaire repère les doublons par zone + code, contre la base et dans le fichier ; les séries gagnent une colonne « Zone » facultative ; séries et assolements désignent la planche de la zone + code, ou refusent la ligne avec « Code ambigu : « P3 » existe dans plusieurs zones. Ajoutez la zone. ». Vérifié : typage, lint, 4 299 tests unitaires, build, budgets (démarrage 71,0 / 71 Kio inchangé, 3D 226,4 / 226,5 Kio), e2e 83 passés + vol de caméra T07 passé à la relance (704 ms > 700 au 1er passage, T34), démo 11.
+- **Décidé** (chef) : « P-3 », « P 3 », « P.3 » sont trois codes distincts ; toute planche dont `actif_au` est renseigné est écartée ; une zone désigne aussi ses sous-zones (code présent dans plusieurs → « Code ambigu », préciser la sous-zone). `correspondance.test.ts` mis à jour par le chef (champ `zone` des séries, commit ccaa501). Après relecture : doublon du parcellaire comparé sur l'id de la zone résolue (plus sur ses noms) ; deux planches en service de même code dans une zone → « Code ambigu » qui nomme la zone (jamais la première prise) ; code comparé avec le `trim()` de Postgres (espaces seulement) ; 7 tests de non-régression neufs.
+- **Bloquant** : rien. À faire si possible : relire l'import sur un vrai fichier de Théophane avec des codes repris dans plusieurs zones.
+
 ## 2026-10-09 — T32d : jeunes plants visibles, plants découpés
 
 - **Fait** : de près, une planche qui porte des plants devient une dalle de 3,1 cm (`hauteurDalle`, `EPAISSEUR_DALLE_PLANTS_M`) et les plants sont posés dessus : un plant de 5 cm se voit. De loin, la masse garde la hauteur du feuillage (T32b inchangé). La tomate (forme `erige-tuteure`) se dessine plant par plant, chacun avec son tuteur (un `InstancedMesh` de tuteurs partagé, 12 triangles, `BilanPlants.tuteurs`), au lieu d'un mur continu ; les autres formes gardent l'étirement de T32b. Budget 3D 226,1 → 226,3 Kio (plafond 226,5 inchangé, pas besoin des 228 de Q33) ; démarrage 71,0 et placement 18,5 inchangés.
