@@ -23,6 +23,7 @@
 import { createRoot, extend, useFrame, useThree, type ReconcilerRoot, type RootState } from '@react-three/fiber';
 import { Component, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type RefObject, type ReactNode } from 'react';
 import { AmbientLight, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
+import type { DateCalendaire } from '@planif/core';
 import type { Plan } from '../plan/calculs.ts';
 import { COULEURS, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
 import { boiteDe, cadrage, demarrerVol, empriseDe, meilleureVueDeFerme, poseAu, pointsDeFerme, type CibleVol, type Point3, type Pose, type Vol } from './cadrage.ts';
@@ -47,6 +48,11 @@ import {
 
 } from './scene.ts';
 import { fermeSansPlacement } from './invitation.ts';
+import { cultureAu, lireCultures, type CulturesLues } from './donnees-plants.ts';
+import { Plants } from './Plants.tsx';
+import { hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
+import { plantsDePlanche, type PlantsPlanche } from './plants.ts';
+import type { PorteDonnees } from '@planif/sync';
 import './vue3d.css';
 
 export interface ProprietesVue3d {
@@ -62,6 +68,12 @@ export interface ProprietesVue3d {
   readonly surModifierPlan?: () => void;
   /** T28f : l'utilisateur est gérant de la ferme (seul à pouvoir placer). */
   readonly gerant?: boolean;
+  /**
+   * T32b : la base locale et la ferme, pour lire (en lecture seule) ce que les plants demandent en plus du plan.
+   * Absents : la vue s'affiche sans plants.
+   */
+  readonly porte?: PorteDonnees;
+  readonly fermeId?: string;
 }
 
 /** T28f : écran assez grand pour éditer (même condition que l'éditeur, T28b), suivi en direct. */
@@ -163,6 +175,8 @@ interface Suivi {
   cameraAEcrire: boolean;
   vols: number;
   volFinEnAttente: string | null;
+  /** Plants (T32b) : ce qui vient d'être posé, écrit sur la toile à l'image suivante. */
+  plantsEnAttente: BilanPlants | null;
 }
 
 // ── Scène three (fiber) ──────────────────────────────────────────────────────────────────────
@@ -323,12 +337,17 @@ function Volumes({
   scene,
   filtres,
   filtree,
+  plants,
+  rendu,
   surGeometrie,
   surCouleurs,
 }: {
   readonly scene: Scene;
   readonly filtres: FiltresScene;
   readonly filtree: SceneFiltree;
+  /** T32b : les plants de chaque volume (même ordre), ou nul tant qu'ils ne sont pas lus. */
+  readonly plants: readonly (PlantsPlanche | null)[] | null;
+  readonly rendu: RenduPlants;
   readonly surGeometrie: () => void;
   readonly surCouleurs: (r: Recoloration) => void;
 }) {
@@ -341,12 +360,17 @@ function Volumes({
     [planche],
   );
   const invalider = useThree((s) => s.invalidate);
-  useLayoutEffect(() => {
+  // Les dalles : à plat, ou, de loin, un volume à la hauteur du feuillage (T32b) ; surélevées pour une gouttière hors-sol.
+  const poserDalles = useCallback(() => {
     const m = maillage.current;
     if (m === null) return;
     scene.volumes.forEach((v, i) => {
-      const h = hauteurRendue(v);
-      temporaire.position.set(v.x, h / 2, v.z);
+      const p = plants?.[i] ?? null;
+      const base = hauteurRendue(v);
+      const masse = p !== null && !rendu.enDetail(i);
+      const h = masse ? hauteurDeMasse(base, p) : base;
+      const y0 = !masse && p !== null ? p.surelevationM : 0;
+      temporaire.position.set(v.x, y0 + h / 2, v.z);
       temporaire.rotation.set(0, v.angle, 0);
       temporaire.scale.set(v.longueur, h, v.largeur);
       temporaire.updateMatrix();
@@ -354,9 +378,19 @@ function Volumes({
     });
     m.instanceMatrix.needsUpdate = true;
     m.computeBoundingSphere();
-    surGeometrie();
+  }, [scene, plants, rendu]);
+  useLayoutEffect(() => {
+    rendu.lierDalles(poserDalles);
+    poserDalles();
     invalider();
-  }, [scene, surGeometrie, invalider]);
+    return () => {
+      rendu.lierDalles(null);
+    };
+  }, [poserDalles, rendu, invalider]);
+  // Compteur lu par les tests : les matrices ont été posées pour un nouveau plan ou une nouvelle semaine (pas pour les plants lus après, ni un filtre).
+  useLayoutEffect(() => {
+    surGeometrie();
+  }, [scene, surGeometrie]);
   const precedent = useRef<{ readonly scene: Scene; readonly filtres: FiltresScene } | null>(null);
   useLayoutEffect(() => {
     const m = maillage.current;
@@ -772,7 +806,7 @@ const ElementBatiment = memo(function ElementBatiment({ batiment, surAller }: { 
   );
 });
 
-export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false }: ProprietesVue3d) {
+export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, porte, fermeId }: ProprietesVue3d) {
   const grandEcran = useGrandEcran();
   const peutModifier = gerant && grandEcran && surModifierPlan !== undefined;
   const sansPlacement = useMemo(() => fermeSansPlacement(plan), [plan]);
@@ -790,6 +824,34 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const semaineBornee = Math.min(semaine, Math.max(0, nbSemaines - 1));
   const scene = useMemo(() => (nbSemaines === 0 ? null : versScene(plan, semaineBornee)), [plan, semaineBornee, nbSemaines]);
   const { centre, rayon } = useMemo(() => (geometrie === null ? { centre: { x: 0, y: 0, z: 0 }, rayon: 1 } : empriseDe(geometrie)), [geometrie]);
+
+  // Plants (T32b) : ce que la 3D lit en plus du plan, une fois, en lecture seule ; sans lui, pas de plants.
+  const [cultures, setCultures] = useState<CulturesLues | null>(null);
+  useEffect(() => {
+    if (porte === undefined || fermeId === undefined) return undefined;
+    let actif = true;
+    lireCultures(porte, fermeId).then(
+      (c) => {
+        if (actif) setCultures(c);
+      },
+      (erreur: unknown) => {
+        console.error('Plants 3D : lecture impossible', erreur);
+      },
+    );
+    return () => {
+      actif = false;
+    };
+  }, [porte, fermeId, plan]);
+  const lundi = plan.semaines[semaineBornee]?.lundi;
+  const plants = useMemo<readonly (PlantsPlanche | null)[] | null>(() => {
+    if (scene === null || cultures === null || lundi === undefined) return null;
+    const jour = lundi as DateCalendaire;
+    return scene.volumes.map((v) => {
+      const c = v.occupationId === null ? undefined : cultures.parOccupation.get(v.occupationId);
+      return c === undefined ? null : plantsDePlanche({ volume: v, culture: cultureAu(c, jour), jour, horsSol: cultures.horsSol.has(v.id) });
+    });
+  }, [scene, cultures, lundi]);
+  const [rendu] = useState(() => new RenduPlants());
 
   // Filtres (T27b) : état local à la vue, jamais écrit ni stocké ; tout est coché à chaque ouverture.
   const [filtres, setFiltres] = useState<FiltresScene>(FILTRES_TOUT);
@@ -813,7 +875,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   }, []);
   const estCoche = (dimension: DimensionFiltre, valeur: string): boolean => filtres[dimension]?.has(valeur) ?? true;
 
-  const suivi = useRef<Suivi>({ rendus: 0, premiere: false, semaineEnAttente: null, filtreEnAttente: null, geometries: 0, glisse: false, dernier: -1, intervalles: [], cible: { x: 0, y: 0, z: 0 }, vol: false, volEcrit: false, cameraAEcrire: true, vols: 0, volFinEnAttente: null });
+  const suivi = useRef<Suivi>({ rendus: 0, premiere: false, semaineEnAttente: null, filtreEnAttente: null, geometries: 0, glisse: false, dernier: -1, intervalles: [], cible: { x: 0, y: 0, z: 0 }, vol: false, volEcrit: false, cameraAEcrire: true, vols: 0, volFinEnAttente: null, plantsEnAttente: null });
   const surEchecRef = useRef(surEchec);
   useLayoutEffect(() => {
     surEchecRef.current = surEchec;
@@ -830,6 +892,14 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
       const c = s.cible;
       ds.camera = `{"position":{"x":${String(x)},"y":${String(y)},"z":${String(z)}},"cible":{"x":${String(c.x)},"y":${String(c.y)},"z":${String(c.z)}}}`;
       s.cameraAEcrire = false;
+    }
+    if (s.plantsEnAttente !== null) {
+      const b = s.plantsEnAttente;
+      ds.plants = String(b.plants);
+      ds.formesPlants = String(b.formes);
+      ds.hauteursPlants = b.hauteurs;
+      ds.semainePlants = String(b.semaine);
+      s.plantsEnAttente = null;
     }
     if (s.volEcrit !== s.vol) {
       ds.vol = s.vol ? 'oui' : 'non';
@@ -875,6 +945,11 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
       else if (r.filtresChanges) suivi.current.filtreEnAttente = r.estompes;
     }
     couleursPosees.current = true;
+  }, []);
+
+  // Plants posés (T32b) : écrits sur la toile à l'image suivante, avec le compte de ce qui est dessiné.
+  const surBilan = useCallback((b: BilanPlants) => {
+    suivi.current.plantsEnAttente = b;
   }, []);
 
   // Matrices des planches posées (plan ou semaine, jamais un filtre) : compteur lu par les tests.
@@ -991,7 +1066,8 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         <directionalLight position={[rayon * 0.3, rayon, rayon * 0.5]} intensity={1.8} />
         <Sol scene={geometrie} />
         <Batiments scene={geometrie} />
-        <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
+        <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} plants={plants} rendu={rendu} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
+        {plants !== null && <Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={rendu} surBilan={surBilan} />}
         <Camera rayon={rayon} centre={centre} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
         <Rendu surImage={surImage} />
       </GardeErreur>,
@@ -1064,7 +1140,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               {zoneChoisie !== null && <p>Vue sur la zone {zoneChoisie}</p>}
             </div>
           )}
-          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-vols={0} data-vol="non" data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
         </div>
         <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
           <div className="plan3d-filtres">
@@ -1138,6 +1214,9 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               </ul>
             </>
           )}
+          <p data-testid="mention-hauteurs-3d" className="plan3d-mention">
+            Hauteurs indicatives, réglables dans la fiche de l’espèce
+          </p>
           <h2 id={idListe} className="plan3d-titre-liste">
             Planches et cultures, {libelle}
           </h2>

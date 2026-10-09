@@ -317,3 +317,12 @@
 .plan3d-encart .plan3d-bouton {
   min-height: 48px;
 }
+
+/* T32b : mention honnête sur les hauteurs des plants. */
+.plan3d-mention {
+  margin: 0;
+  padding: var(--espace-s) var(--espace-m);
+  font-size: 13px;
+  color: var(--couleur-secondaire);
+  border-top: 1px solid var(--couleur-trait);
+}

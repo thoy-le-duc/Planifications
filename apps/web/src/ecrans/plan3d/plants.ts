@@ -7,19 +7,19 @@
  * Une géométrie partagée par forme (./geometries-plants.ts), instanciée : `instancesParForme`
  * regroupe les planches par forme, la vue en fait un InstancedMesh par forme.
  */
+import type { DateCalendaire } from '@planif/core';
 import {
   croissanceA,
   croissancePerenneA,
   hauteurStructureM,
   surelevationHorsSolM,
   type DatesCroissance,
-  type DateCalendaire,
   type EntreePerenne,
   type EtatCroissance,
   type FormePlant,
   type ProfilCroissance,
   type StadeCroissance,
-} from '@planif/core';
+} from '@planif/core/croissance';
 
 /** Plafond de plants d'UNE planche : au-delà on espace les plants, on n'en dessine pas plus. */
 export const PLANTS_MAX_PAR_PLANCHE = 40;

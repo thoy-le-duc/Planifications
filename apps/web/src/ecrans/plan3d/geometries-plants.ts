@@ -5,7 +5,7 @@
  * sombre que le feuillage) que la couleur de l'instance multiplie. Pas de React ici : three seul.
  */
 import { BufferGeometry, Float32BufferAttribute } from 'three';
-import type { FormePlant } from '@planif/core';
+import type { FormePlant } from '@planif/core/croissance';
 
 /** Un pas de construction : positions et teintes des sommets, triangle par triangle. */
 class Facettes {

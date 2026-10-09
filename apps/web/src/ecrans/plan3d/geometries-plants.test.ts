@@ -4,7 +4,7 @@
  * et leurs faces regardent vers l'extérieur. three seul, sans navigateur ni WebGL.
  */
 import { describe, expect, it } from 'vitest';
-import { FORMES_PLANT } from '@planif/core';
+import { FORMES_PLANT } from '@planif/core/croissance';
 import { geometriePlant, geometrieStructure, trianglesDe } from './geometries-plants.ts';
 import { TRIANGLES_PAR_FORME } from './plants.ts';
 
