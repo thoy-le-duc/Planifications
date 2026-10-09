@@ -5,7 +5,7 @@
  * vérifier » et Théophane les corrige à la revue (les dix plus visibles sont listées dans
  * docs/journal.md, entrée T32a).
  *
- * Ordres de grandeur de départ donnés par le ticket : tomate tuteurée 2 m, salade 0,25 m,
+ * Ordres de grandeur de départ donnés par le ticket : tomate tuteurée 3 m (Q33, palissée haute sur ficelle), salade 0,25 m,
  * carotte 0,3 m, courgette 0,6 m (buisson), fraise 0,25 m, asperge 1,5 m en fougère.
  *
  * Durée : en jours depuis la mise en place pour les cultures qui « montent » puis produisent
@@ -18,6 +18,20 @@
 import { MENTION_A_VERIFIER, validerProfilCroissance } from './profil.ts';
 import type { AllureCroissance, CycleAnnuel, DureeCroissance, FinDeCycle, FormePlant, ProfilCroissance, ProfilParDefaut } from './types.ts';
 
+/**
+ * Profils par défaut dont le feuillage ne monte qu'après la fin de la récolte (Q33 : l'asperge, turions
+ * seuls pendant la récolte). Reconnus par identité : le profil par défaut de la bibliothèque, tel que
+ * rendu par `profilParDefaut` ; un profil réglé par la ferme (une copie lue de la base) suit son seul
+ * cycle annuel, comme avant Q33. Le type du profil, et donc la base, ne changent pas ; le réglage de ce
+ * comportement par la ferme viendra avec T32c.
+ */
+const FEUILLAGE_APRES_RECOLTE = /* @__PURE__ */ new WeakSet<ProfilCroissance>();
+
+/** Le feuillage de ce profil ne monte qu'après la fin de la récolte (asperge par défaut). */
+export function feuillageApresRecolte(profil: ProfilCroissance): boolean {
+  return FEUILLAGE_APRES_RECOLTE.has(profil);
+}
+
 const jours = (n: number): DureeCroissance => ({ en: 'jours', jours: n });
 const part = (f: number): DureeCroissance => ({ en: 'fraction_cycle', fraction: f });
 const cycle = (debourrement: string, repos: string): CycleAnnuel => ({ debourrement, repos });
@@ -28,7 +42,7 @@ function entree(
   forme: FormePlant,
   hauteurMaxM: number,
   duree: DureeCroissance,
-  options: { readonly allure?: AllureCroissance; readonly finDeCycle?: FinDeCycle; readonly cycleAnnuel?: CycleAnnuel } = {},
+  options: { readonly allure?: AllureCroissance; readonly finDeCycle?: FinDeCycle; readonly cycleAnnuel?: CycleAnnuel; readonly feuillageApresRecolte?: boolean } = {},
 ): ProfilParDefaut {
   const cycleAnnuel = options.cycleAnnuel === undefined ? null : Object.freeze({ ...options.cycleAnnuel });
   const profil: ProfilCroissance = Object.freeze({
@@ -39,6 +53,7 @@ function entree(
     finDeCycle: options.finDeCycle ?? 'conservee',
     cycleAnnuel,
   });
+  if (options.feuillageApresRecolte === true) FEUILLAGE_APRES_RECOLTE.add(profil);
   return Object.freeze({ espece, synonymes: Object.freeze([...synonymes]), profil, source: MENTION_A_VERIFIER });
 }
 
@@ -47,7 +62,7 @@ const BAISSEE = { finDeCycle: 'baissee' } as const;
 /** Une entrée par espèce de la bibliothèque commune ; `synonymes` : autres noms courants. */
 export const PROFILS_PAR_DEFAUT: readonly ProfilParDefaut[] = /* @__PURE__ */ Object.freeze([
   // Solanacées
-  /* @__PURE__ */ entree('Tomate', [], 'erige-tuteure', 2, jours(90)),
+  /* @__PURE__ */ entree('Tomate', [], 'erige-tuteure', 3, jours(90)),
   /* @__PURE__ */ entree('Aubergine', [], 'buisson', 0.9, jours(90)),
   /* @__PURE__ */ entree('Poivron', ['Piment'], 'buisson', 0.7, jours(90)),
   /* @__PURE__ */ entree('Pomme de terre', ['Patate'], 'touffe', 0.6, jours(60), BAISSEE),
@@ -92,7 +107,7 @@ export const PROFILS_PAR_DEFAUT: readonly ProfilParDefaut[] = /* @__PURE__ */ Ob
   /* @__PURE__ */ entree('Maïs doux', ['Maïs'], 'touffe', 1.8, jours(80)),
   // Pérennes (Q32 : cycle annuel simple, débourrement → repos)
   /* @__PURE__ */ entree('Artichaut', [], 'touffe', 1.2, jours(90), { cycleAnnuel: cycle('03-01', '10-31') }),
-  /* @__PURE__ */ entree('Asperge', [], 'touffe', 1.5, jours(100), { cycleAnnuel: cycle('04-01', '11-15') }),
+  /* @__PURE__ */ entree('Asperge', [], 'touffe', 1.5, jours(100), { cycleAnnuel: cycle('04-01', '11-15'), feuillageApresRecolte: true }),
   /* @__PURE__ */ entree('Fraisier', ['Fraise'], 'touffe', 0.25, jours(45), { cycleAnnuel: cycle('03-01', '11-30') }),
   /* @__PURE__ */ entree('Kiwi', [], 'arbre-ou-liane', 2.5, jours(75), { cycleAnnuel: cycle('04-01', '11-20') }),
   /* @__PURE__ */ entree('Pivoine', [], 'touffe', 0.9, jours(50), { cycleAnnuel: cycle('03-15', '10-31') }),
@@ -136,4 +151,27 @@ export function profilEffectif(espece: { readonly nom: string; readonly profilCr
   } catch {
     return PROFIL_GENERIQUE.profil;
   }
+}
+
+/** Hauteur de travail de la gouttière du fraisier hors-sol (Q33 : environ 1 m), en mètres. */
+export const HAUTEUR_TRAVAIL_HORS_SOL_M = 1;
+
+/**
+ * Surélévation (m) d'une culture : le fraisier hors-sol pousse sur une gouttière à hauteur de
+ * travail (Q33), toute autre espèce reste au sol, sur sol ou hors-sol. Ne lève jamais. L'appelant
+ * décide si la planche est hors-sol (zone `hors_sol` ou emplacement `gouttiere`).
+ */
+export function surelevationHorsSolM(nomEspece: string, horsSol: boolean): number {
+  return horsSol && profilParDefaut(nomEspece).espece === 'Fraisier' ? HAUTEUR_TRAVAIL_HORS_SOL_M : 0;
+}
+
+/** Hauteur de la pergola du kiwi, plafonnée à la hauteur maximale du profil (m). */
+const HAUTEUR_PERGOLA_MAX_M = 2;
+
+/**
+ * Hauteur (m) de la structure ligneuse qui reste visible au repos (Q33 : pergola et bois du kiwi).
+ * Forme « arbre ou liane » seulement ; 0 pour les autres. Ne dépend ni de la date ni du stade.
+ */
+export function hauteurStructureM(profil: ProfilCroissance): number {
+  return profil.forme === 'arbre-ou-liane' ? Math.min(profil.hauteurMaxM, HAUTEUR_PERGOLA_MAX_M) : 0;
 }

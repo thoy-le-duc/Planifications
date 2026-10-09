@@ -22,6 +22,7 @@
 
 ## Risques
 
+- **Asperge après récolte (relecture T32b)** : la règle Q33 « fougère seulement après la fin de récolte » est reconnue par identité de l'objet profil par défaut (`defauts.ts`). Un profil enregistré par la ferme, même identique, la perd. Avant d'ouvrir le réglage, porter cette règle par un vrai champ du profil, avec un test « asperge réglée par la ferme : toujours pas de fougère pendant la récolte ».
 - Dépend de la colonne et de la synchro de T32a : ne pas commencer avant.
 - Un profil trop libre produit une 3D absurde : bornes strictes, valeur par défaut toujours visible.
 

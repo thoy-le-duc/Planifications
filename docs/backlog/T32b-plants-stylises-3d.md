@@ -3,7 +3,7 @@
 **Objectif** : la scène place sur chaque planche des plants stylisés, dont la taille suit la semaine du curseur : tuteurs et feuillage pour la tomate, rosettes pour la salade, touffes, rampants, buissons (Q32). On voit l'avancement des cultures dans le temps.
 
 **Dépend de** : T32a, T28c, T29b (faits pour les deux derniers)
-**Périmètre** : `apps/web/src/ecrans/plan3d/**`, `apps/web/e2e/vue-3d*.e2e.ts` et `apps/web/e2e/fluidite-3d.ts` (bornes), `apps/web/budget.json` (seulement si hausse justifiée)
+**Périmètre** : `packages/core/src/croissance/**` (valeurs par défaut de Q33 seulement), `apps/web/src/ecrans/plan3d/**`, `apps/web/e2e/vue-3d*.e2e.ts` et `apps/web/e2e/fluidite-3d.ts` (bornes), `apps/web/budget.json` (seulement si hausse justifiée)
 
 ## Règles
 
@@ -14,17 +14,23 @@
 - **Filtres T27b, vol T29, bâches T28c inchangés** : une planche filtrée garde sa couleur, une bâche ne la cache pas, le vol fonctionne comme avant.
 - **Rendu à la demande** : la boucle d'images ne tourne que pendant un vol ou un geste ; le curseur de semaine redessine une fois, sans animer de croissance.
 - **Texte honnête** : une mention « Hauteurs indicatives, réglables dans la fiche de l'espèce » (lien vers T32c si fait) ; alternative texte et repli 2D inchangés.
-- **Budget** : `jsVue3dGzKio` (220 Kio) tenu, ou hausse chiffrée et justifiée dans la PR ; JS de démarrage inchangé.
+- **Budget (Q33)** : `jsVue3dGzKio` relevé de 220 à **228 Kio** au plus, décision de Théophane du 2026-10-09 ; la PR donne le poids mesuré avant et après. JS de démarrage inchangé (71 Kio).
+- **Valeurs par défaut (Q33)**, dans `packages/core/src/croissance`, tests du cœur compris :
+  - tomate : hauteur maximale 3 m (au lieu de 2 m) ;
+  - asperge : pendant la récolte des turions, pas de fougère (plant minimal) ; la fougère monte après la fin de récolte (fin de récolte par défaut 15 juin, ou date réelle de l'occupation) jusqu'à 1,5 m, repos 15 novembre ;
+  - kiwi : la structure ligneuse et la pergola restent visibles au repos (hauteur de structure non nulle l'hiver), le feuillage seulement en saison ;
+  - fraisier : forme « hors-sol » posée sur une gouttière surélevée (hauteur de travail, environ 1 m) quand la planche ou l'itinéraire est hors-sol ; au sol sinon. Si rien dans les données ne dit « hors-sol », le dire dans la PR et poser une question plutôt qu'inventer.
 
 ## Critères d'acceptation
 
-- [ ] Tests de l'adaptateur : tomate à la semaine de mise en place → pas de plant ou plant minimal ; à la semaine de hauteur maximale → échelle = 2 m ; après arrachage → aucun plant ; deux planches de formes différentes → deux instances distinctes.
+- [ ] Tests de l'adaptateur : tomate à la semaine de mise en place → pas de plant ou plant minimal ; à la semaine de hauteur maximale → échelle = 3 m (Q33) ; après arrachage → aucun plant ; deux planches de formes différentes → deux instances distinctes.
 - [ ] Test : nombre de plants d'une planche plafonné ; une planche très longue ne dépasse pas le plafond ; nombre de triangles par plant dans la borne.
 - [ ] Test : planche filtrée par T27b garde sa couleur avec les plants ; sélection et vol (T29) donnent le même cadrage qu'avant.
 - [ ] e2e (ordinateur) : semaine à semaine, la hauteur du volume d'une planche de tomates augmente (lecture d'un attribut `data-` de la toile) ; mesures de T27 tenues (affichage < 1 s, semaine < 100 ms) ; garde-fous de T29b tenus avec les nouvelles bornes mesurées.
 - [ ] e2e démo : la vue 3D de la démo montre des plants hors ligne.
 - [ ] Capture avant/après (mi-mai et fin août, même point de vue) jointe à la PR, pour le « joli », jugé par Théophane.
-- [ ] `pnpm verif` passe en entier. Budget `jsVue3dGzKio` tenu ou hausse justifiée.
+- [ ] Tests du cœur (Q33) : tomate à 3 m à pleine production ; asperge sans fougère pendant la récolte puis fougère après ; kiwi visible au repos ; fraisier hors-sol surélevé.
+- [ ] `pnpm verif` passe en entier. `jsVue3dGzKio` ≤ 228 Kio, poids mesuré dans la PR.
 
 ## Risques
 

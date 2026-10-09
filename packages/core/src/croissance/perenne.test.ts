@@ -203,10 +203,11 @@ describe('T32a : pérennes de la bibliothèque', () => {
     expect(hiver).toEqual({ stade: 'repos', hauteurM: 0, fraction: 0 });
   });
 
-  it('asperge : 1,5 m en fougère au cœur de l’été', () => {
+  // Q33 : la fougère ne monte qu'après la fin de récolte (15 juin par défaut) ; elle est à 1,5 m en automne (cf. q33.test.ts).
+  it('asperge : 1,5 m en fougère à l’automne, une fois montée', () => {
     const p = m.profilParDefaut('Asperge').profil;
     expect(p.hauteurMaxM).toBe(1.5);
-    const e = m.croissancePerenneA({ plantation: PLANTATION, campagne: campagne(2027, null, null) }, p, d('2027-08-15'));
+    const e = m.croissancePerenneA({ plantation: PLANTATION, campagne: campagne(2027, null, null) }, p, d('2027-10-15'));
     expect(e).toEqual({ stade: 'pleine_vegetation', hauteurM: 1.5, fraction: 1 });
   });
 

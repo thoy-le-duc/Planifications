@@ -7,6 +7,7 @@
  * Règles et exemples chiffrés : en-tête de test/contrat.ts.
  */
 import { ajouterJours, ecartEnJours, type DateCalendaire } from '../dates/index.ts';
+import { feuillageApresRecolte } from './defauts.ts';
 import type { AllureCroissance, DateRepere, DatesCroissance, EntreePerenne, EtatCroissance, ProfilCroissance, StadeCroissance } from './types.ts';
 
 /** Fin de la levée : tant que la hauteur reste sous cette part de la hauteur maximale. */
@@ -64,6 +65,9 @@ export function croissanceA(dates: DatesCroissance, profil: ProfilCroissance, jo
   return etat(fraction < FRACTION_FIN_LEVEE ? 'levee' : 'croissance', profil, fraction);
 }
 
+/** Fin de récolte par défaut des pérennes dont le feuillage monte après la récolte (Q33, asperge) : 15 juin. */
+const FIN_RECOLTE_PAR_DEFAUT = '06-15';
+
 /** Jour 'MM-JJ' d'un cycle annuel dans l'année `annee` (jour valide de toute année). */
 const dansLAnnee = (annee: number, mmjj: string): DateCalendaire => `${String(annee).padStart(4, '0')}-${mmjj}` as DateCalendaire;
 
@@ -89,7 +93,14 @@ export function croissancePerenneA(entree: EntreePerenne, profil: ProfilCroissan
   if (Number(datePlantation.slice(0, 4)) === annee && datePlantation > debut) debut = datePlantation;
   if (jour < debut || jour >= repos) return REPOS;
 
-  const dmax = profil.duree.en === 'jours' ? profil.duree.jours : profil.duree.fraction * ecartEnJours(debut, repos);
-  const x = avancement(ecartEnJours(debut, jour), dmax);
+  // Q33 (asperge) : turions seuls pendant la récolte, la fougère part de 0 le lendemain de sa fin.
+  let depart = debut;
+  if (feuillageApresRecolte(profil)) {
+    const finRecolte = campagne.finRecolte ?? dansLAnnee(annee, FIN_RECOLTE_PAR_DEFAUT);
+    depart = ajouterJours(finRecolte, 1);
+    if (jour < depart) return etat('debourrement', profil, 0);
+  }
+  const dmax = profil.duree.en === 'jours' ? profil.duree.jours : profil.duree.fraction * ecartEnJours(depart, repos);
+  const x = avancement(ecartEnJours(depart, jour), dmax);
   return etat(x < 1 ? 'debourrement' : 'pleine_vegetation', profil, courbe(profil.allure, x));
 }

@@ -290,6 +290,19 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q33 — Plants en 3D : budget et hauteurs par défaut (posée le 2026-10-08, avant T32b)
+
+Question : la vue 3D pèse 218,7 Kio pour un plafond de 220 ; les plants stylisés et le moteur de croissance ajoutent 5 à 7 Kio. Relever le plafond, charger les plants en différé, ou réduire les profils ? Et quatre valeurs par défaut de T32a à relire : asperge, tomate de serre, kiwi, fraisier hors-sol.
+
+Réponses (2026-10-09) :
+1. Plafond `jsVue3dGzKio` relevé à **228 Kio** (la 3D est chargée à l'ouverture de la vue 3D seulement ; démarrage inchangé à 71 Kio).
+2. **Asperge** : turions seuls pendant la récolte, la fougère ne monte qu'**après la fin de la récolte**, jusqu'à 1,5 m, repos mi-novembre.
+3. **Tomate** : hauteur maximale par défaut **3 m** (palissée haute sur ficelle), réglable par la ferme.
+4. **Kiwi** : la **pergola et la structure ligneuse restent visibles l'hiver** ; le feuillage seulement en saison.
+5. **Fraisier hors-sol** : dessiné sur des **gouttières surélevées** à hauteur de travail, pas au sol.
+
+Ticket T32b (élargi au réglage des valeurs par défaut dans `packages/core/src/croissance`).
+
 ### Q32 — Jumeau 3D : trouver l'éditeur, voir les cultures grandir (posée le 2026-10-08, après l'essai de la démo)
 
 Retour de Théophane : « La vue 3D est pas mal. Je ne vois pas comment je crée les bâtiments, comment je la place sur la carte et que j'adapte tout ça. Il faudra une version plus précise pour voir l'avancement de la culture dans le temps, visuellement, la hauteur des tomates, etc. On parle d'un jumeau numérique. »

@@ -755,7 +755,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
           {repli3d}
         </p>
       )}
-      {en3d && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} surModifierPlan={modifierPlan} />}
+      {en3d && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} surModifierPlan={modifierPlan} porte={porte} fermeId={fermeId} />}
       {EditeurPlacement !== null && utilisateurId !== undefined && (
         <EditeurPlacement
           key={fermeId}

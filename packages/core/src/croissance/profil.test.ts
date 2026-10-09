@@ -305,9 +305,9 @@ describe('T32a : profils par défaut de la bibliothèque commune', () => {
     expect(sansProfil).toEqual([]);
   });
 
-  it('ordres de grandeur du ticket : tomate 2 m tuteurée, salade 0,25 m en rosette, carotte 0,3 m, courgette 0,6 m en buisson, fraise 0,25 m, asperge 1,5 m', () => {
+  it('ordres de grandeur du ticket : tomate 3 m tuteurée (Q33), salade 0,25 m en rosette, carotte 0,3 m, courgette 0,6 m en buisson, fraise 0,25 m, asperge 1,5 m', () => {
     const p = (nom: string) => m.profilParDefaut(nom).profil;
-    expect(p('Tomate')).toMatchObject({ hauteurMaxM: 2, forme: 'erige-tuteure', finDeCycle: 'conservee' });
+    expect(p('Tomate')).toMatchObject({ hauteurMaxM: 3, forme: 'erige-tuteure', finDeCycle: 'conservee' });
     expect(p('Laitue')).toMatchObject({ hauteurMaxM: 0.25, forme: 'rosette' });
     expect(p('Salade')).toEqual(p('Laitue'));
     expect(p('Carotte').hauteurMaxM).toBe(0.3);
@@ -410,10 +410,10 @@ describe('T32a : profilEffectif, le profil réglé par la ferme remplace le déf
     const a = m.profilEffectif(fermeA);
     const b = m.profilEffectif(fermeB);
     expect(a.hauteurMaxM).toBe(1.2);
-    expect(b.hauteurMaxM).toBe(2);
-    expect(m.profilParDefaut('Tomate').profil.hauteurMaxM).toBe(2);
+    expect(b.hauteurMaxM).toBe(3);
+    expect(m.profilParDefaut('Tomate').profil.hauteurMaxM).toBe(3);
     // Ordre inverse : rien n'est retenu d'un appel à l'autre.
-    expect(m.profilEffectif(fermeB).hauteurMaxM).toBe(2);
+    expect(m.profilEffectif(fermeB).hauteurMaxM).toBe(3);
     expect(m.profilEffectif(fermeA).hauteurMaxM).toBe(1.2);
   });
 });

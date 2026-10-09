@@ -8,9 +8,20 @@
     ".": "./src/index.ts",
     "./import-xlsx": "./src/import/xlsx.ts",
     "./placement": "./src/placement/index.ts",
+    "./croissance": "./src/croissance/index.ts",
     "./identifiants": "./src/domaine/identifiants.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
-  }
+  },
+  "sideEffects": [
+    "./src/index.ts",
+    "./src/dates/**",
+    "./src/domaine/**",
+    "./src/export/**",
+    "./src/import/**",
+    "./src/placement/**",
+    "./src/planification/**",
+    "./src/saisies/**"
+  ]
 }

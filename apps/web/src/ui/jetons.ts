@@ -190,6 +190,12 @@ export const FAMILLES_SOMBRES: Readonly<Record<CleFamille, BandeFamille>> = {
  */
 export const COULEUR_ESTOMPEE = '#E9ECE6';
 
+/** Vue 3D (T32b) : feuillage des plants stylisés ; la couleur du filtre reste sur la planche. Une seule valeur pour les deux thèmes. */
+export const COULEUR_FEUILLAGE_3D = '#4FA55B';
+
+/** Vue 3D (T32b) : bois des poteaux (pergola du kiwi, pieds des gouttières hors-sol). Une seule valeur pour les deux thèmes. */
+export const COULEUR_BOIS_3D = '#8A6A48';
+
 /** Familles de polices (hébergées sous public/polices/, voir src/ui/base.css). */
 export const POLICES = {
   /** Titres : Archivo, largeur 112 % (posée par le @font-face). */
