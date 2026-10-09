@@ -601,10 +601,10 @@ describe('T28b : seul le gérant modifie', () => {
     expect(b.placements).toEqual([]);
   });
 
-  it('gérant sur téléphone : lecture seule, « à faire sur ordinateur », sans poignée', async () => {
-    const b = await ouvrir({ origine: true, ordinateur: false });
+  it('équipier sur téléphone : lecture seule, « seul le gérant », sans poignée', async () => {
+    const b = await ouvrir({ origine: true, ordinateur: false, role: 'equipier' });
     expect(editeurOuEchec().getAttribute('data-mode')).toBe('lecture');
-    expect(texte(editeurOuEchec())).toContain(MESSAGES_PLACEMENT.ordinateur);
+    expect(texte(editeurOuEchec())).toContain(MESSAGES_PLACEMENT.seulGerant);
     const serre = batimentOuEchec(SERRE);
     await selectionner(serre);
     await touche(serre, 'ArrowRight');

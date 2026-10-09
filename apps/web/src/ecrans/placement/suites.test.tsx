@@ -295,8 +295,8 @@ describe('T28e : poser au centre de la vue', () => {
     expect(b.placements).toEqual([]);
   });
 
-  it('lecture seule (téléphone) : ni bouton, ni pose par Entrée', async () => {
-    await ouvrir({ origine: true, ordinateur: false });
+  it('lecture seule (équipier sur téléphone) : ni bouton, ni pose par Entrée', async () => {
+    await ouvrir({ origine: true, ordinateur: false, role: 'equipier' });
     expect(editeur()?.getAttribute('data-mode')).toBe('lecture');
     expect(boutonsNommes(new RegExp(`^${BOUTON_POSER_AU_CENTRE}`))).toEqual([]);
     await touche(planOuEchec(), 'Enter');
