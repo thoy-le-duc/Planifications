@@ -1,9 +1,7 @@
 {
-  "maj": "8 octobre 2026, soir (heure de Paris)",
-  "resume": "Cinq tickets fusionnés le 8 octobre : **l'éditeur de placement se tient au clavier et dit ce qui se passe (T28e)**, **le parcellaire refuse les suppressions qui cassent un assolement et un code de planche est unique par zone (T10t)**, **l'éditeur de placement s'ouvre depuis la vue 3D, démo comprise (T28f)**, **la croissance des cultures est calculée à partir de profils testés, 44 espèces par défaut (T32a)**. En cours : **T33, un seul jeu e2e à la fois sur la machine**. Prochain : T32b plants stylisés qui grandissent en 3D, en attente de ton choix sur le budget 3D (A : plafond 228 Kio, recommandé). Puis T14f, T28g, T32c, T14e, T15d, T15e, T13n, T11b. Budget : 22 tickets sur 25 cette semaine (jusqu'au mercredi 14 octobre 10 h). Retour de Théophane : 3D appréciée, il demande la croissance visible (Q32).",
-  "en_cours": {
-    "T33": "en cours"
-  },
+  "maj": "9 octobre 2026, nuit (heure de Paris)",
+  "resume": "Sept tickets fusionnés le 8 octobre : **l'éditeur de placement se tient au clavier (T28e)**, **le parcellaire refuse les suppressions qui cassent un assolement et un code de planche est unique par zone (T10t)**, **l'éditeur s'ouvre depuis la vue 3D, démo comprise (T28f)**, **la croissance des cultures est calculée à partir de profils testés, 44 espèces par défaut (T32a)**, **un seul jeu e2e à la fois sur la machine, fini les échecs dus à la charge (T33)**, **l'éditeur rend le focus au bouton qui l'a ouvert et l'encart de la 3D est lu par les lecteurs d'écran (T28g)**. Prochain : T32b, plants stylisés qui grandissent en 3D, en attente de ton choix sur le budget 3D (A : plafond 228 Kio, recommandé ; B : plants chargés en différé ; C : moins de profils). Puis T14f, T32c, T14e, T15d, T15e, T13n, T11b. Budget : 24 tickets sur 25 cette semaine (jusqu'au mercredi 14 octobre 10 h), la dernière place est gardée pour T32b.",
+  "en_cours": {},
   "attente": "Choix du budget de la vue 3D pour T32b (A, B ou C). À relire : hauteurs par défaut (asperge, kiwi, fraisier hors-sol, tomate de serre). Hors questions : 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75. Vercel : désactiver « Vercel Authentication ». Connecteur MonCasierFrais à réautoriser. Mise en ligne : Brevo, domaine d'envoi, secrets de production. Ta jauge Claude de temps en temps.",
   "visuels": [
     {
