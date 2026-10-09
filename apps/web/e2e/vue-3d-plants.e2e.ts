@@ -91,7 +91,7 @@ test('plants 3D : la planche de tomates grandit semaine après semaine (ferme du
   await expect(page.getByTestId(TESTID_3D.repli)).toHaveCount(0);
 
   // La planche de tomates : celle dont la liste texte annonce « Tomate » la semaine du jour.
-  const idTomate = await page.getByTestId(TESTID_3D.elementListe).evaluateAll((els) => els.find((e) => e.getAttribute('data-culture') === 'Tomate')?.getAttribute('data-id') ?? null);
+  const idTomate = await page.getByTestId(TESTID_3D.elementListe).evaluateAll((els) => els.find((e) => e.getAttribute('data-culture')?.startsWith('Tomate') === true)?.getAttribute('data-id') ?? null);
   expect(idTomate, 'une planche de tomates la semaine du jour').not.toBeNull();
   if (idTomate === null) return;
   const max = Number(await curseur(page).getAttribute('max'));
@@ -103,7 +103,7 @@ test('plants 3D : la planche de tomates grandit semaine après semaine (ferme du
     await expect(vue(page)).toHaveAttribute('data-semaine', String(i));
     await expect(toile(page)).toHaveAttribute('data-semaine-plants', String(i));
     const culture = await page.locator(`[data-testid="${TESTID_3D.elementListe}"][data-id="${idTomate}"]`).getAttribute('data-culture');
-    if (culture !== 'Tomate') continue;
+    if (culture?.startsWith('Tomate') !== true) continue;
     serie.push({ semaine: i, hauteur: (await hauteurs(page))[idTomate] ?? 0 });
   }
   console.log(`hauteur de la planche de tomates, semaine par semaine : ${serie.map((s) => `S${String(s.semaine)}=${s.hauteur.toFixed(2)}`).join(' ')}`);
