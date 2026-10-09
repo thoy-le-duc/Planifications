@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T28h : chercher une adresse, voir large, plusieurs sites
+
+- **Fait** : l'éditeur de placement a, en haut, un champ « Adresse, commune ou lieu-dit » en gros caractères (18 px, cibles de 52 px) : attente de 300 ms après la dernière frappe, une seule requête au géocodage de la Géoplateforme (la précédente abandonnée), 5 propositions au plus, un tap (ou Entrée : la première) déplace la vue au zoom du type de lieu (commune 13, lieu-dit 15, rue 17, numéro 18). Sans réseau, service muet ou réponse illisible : « Recherche d'adresse indisponible sans réseau ; déplacez la carte à la main » ; sans résultat : « Aucune adresse trouvée » ; l'éditeur reste utilisable. Zoom minimal 14 → 6, zoom de départ sans origine ni position 16 → 6 avec le champ entouré d'orange. « Aller à » (zones de premier niveau placées) et « Toute la ferme » (union des contours, 90 % de l'écran au plus) via `vueSurEmprise` (`sites.ts`). `data-centre` sur l'éditeur. Amorçage `?jeu=placement&origine=1&sites=2`. La recherche ne touche jamais `ferme.origine_plan` ni la base.
+- **Décidé** : seul le texte tapé part vers l'IGN, rien n'est gardé ; CSP : `connect-src` gagne l'origine `https://data.geopf.fr`, rien d'autre. Zone placée : zoom 19. Le cadrage de la vue 3D est une caméra en perspective : pas réutilisable sur une carte à zoom entier, seule la mesure des mètres par pixel est partagée (`metresParPixel`). Budget de l'éditeur `jsPlacementGzKio` 18,5 → 20 Kio (morceau mesuré à 19,9 Kio, +1,4 Kio) : un morceau chargé au focus a été écarté (la lecture de la réponse à part ne gagne que 0,2 Kio et coûte des octets au démarrage ; la saisie avec minuteries factices ne tolère pas un chargement différé). Démarrage 71,0 / 71 Kio inchangé.
+- **Bloquant** : rien. À aligner par le chef (tests que je n'ai pas le droit de modifier) : `scripts/placement.test.ts` fige encore `jsPlacementGzKio` à 18,5 et interdit « geopf » hors `img-src` (la CSP de T28h l'autorise dans `connect-src`).
+
 ## 2026-10-09 — T36 : la vue 3D ne charge plus tout le cœur
 
 - **Fait** : `scene.ts` importe `@planif/core/placement` (et non la racine) et `morceauManuel` range `packages/core/src/croissance/` dans le morceau `croissance` (3,9 Kio). Vue 3D 226,3 → 202,8 Kio (la relecture T35a annonçait 202,6) ; démarrage 71,0 et éditeur de placement 18,5 inchangés. Plafond `jsVue3dGzKio` 227 → 203,3.

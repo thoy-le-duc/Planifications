@@ -55,8 +55,10 @@ export const TAILLE_TUILE_PX = 256;
 /** Zoom le plus fin demandé à la Géoplateforme ; au-delà, ses tuiles sont agrandies. */
 export const ZOOM_TUILES_MAX = 19;
 export const ZOOM_INITIAL = 19;
-/** Zoom de départ quand la ferme n'a ni origine du plan ni position : large, pour retrouver la ferme sur la carte. */
-export const ZOOM_DEPART_SANS_POSITION = 16;
+/** Zoom de départ quand la ferme n'a ni origine du plan ni position : la France entière ou presque, pour retrouver la ferme avec le champ d'adresse. */
+export const ZOOM_DEPART_SANS_POSITION = 6;
+/** Zoom minimal de l'éditeur (boutons et molette) : la vue d'une région. */
+export const ZOOM_MIN_VUE = 6;
 /** Délai entre l'échec d'une tuile et sa nouvelle demande. */
 export const DELAI_RELANCE_TUILE_MS = 4_000;
 /** Nouvelles demandes d'une même tuile après son premier échec. */

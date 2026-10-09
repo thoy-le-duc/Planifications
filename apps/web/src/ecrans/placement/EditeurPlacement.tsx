@@ -16,7 +16,10 @@ import type { ChangementPlacement, PorteDonnees } from '@planif/sync';
 import './placement.css';
 import { repereZone, TYPES_BATIMENT, versGeographique, versLocal, type TypeBatiment } from './coeur.ts';
 import { changementsDuBrouillon, contourChange, ECRITURES_MAX_PAR_LOT } from './brouillon.ts';
+import type { PropositionAdresse } from './adresse.ts';
 import { Champ, garderLeFocus, Modale } from './composants.tsx';
+import { RechercheAdresse } from './RechercheAdresse.tsx';
+import { empriseDeContours, vueSurEmprise, type Emprise } from './sites.ts';
 import { deplacerSommet, insererMilieu, poserPoint, replacerPlanches, retirerSommet, toucheSommet, TOLERANCE_FERMETURE_PX, verifierContour } from './contours.ts';
 import {
   lireTout,
@@ -47,7 +50,7 @@ import {
   type Repere,
   type RectanglePlace,
 } from './gestes.ts';
-import { DELAI_RELANCE_TUILE_MS, depuisEcran, ESSAIS_TUILE_MAX, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_DEPART_SANS_POSITION, ZOOM_INITIAL, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
+import { DELAI_RELANCE_TUILE_MS, depuisEcran, ESSAIS_TUILE_MAX, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_DEPART_SANS_POSITION, ZOOM_INITIAL, ZOOM_MIN_VUE, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
 
 export const MESSAGES_PLACEMENT = {
   seulGerant: 'Seul le gérant peut placer les éléments de la ferme',
@@ -86,7 +89,6 @@ export interface ProprietesEditeurPlacement {
   readonly nouvelId?: () => string;
 }
 
-const ZOOM_MIN = 14;
 const ZOOM_MAX = 22;
 /** Un clic bouge de moins que ça ; au-delà, c'est un glissement. */
 const SEUIL_GLISSEMENT_PX = 4;
@@ -435,6 +437,12 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const vue: VueCarte = useMemo(
     () => ({ origine: origineVue, centre: versLocal(origineVue, centreEffectif), zoom, largeurPx: taille.w, hauteurPx: taille.h }),
     [origineVue, centreEffectif, zoom, taille],
+  );
+
+  // Sites : les zones de premier niveau déjà placées (chacune peut être un site à part).
+  const zonesPlacees = useMemo(
+    () => (origine === null ? [] : (zones ?? []).flatMap((z) => (z.parenteId == null && z.contour !== null ? [{ id: z.id, nom: z.nom, contour: z.contour }] : []))),
+    [origine, zones],
   );
 
   const batimentsAff = useMemo(() => {
@@ -874,8 +882,21 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     return generateur.current<'Batiment'>();
   }
 
+  /** Recherche d'adresse : la vue seule se déplace, l'origine du plan et la base ne bougent pas. */
+  function allerAuLieu(p: PropositionAdresse): void {
+    setCentreGeo({ latitude: p.latitude, longitude: p.longitude });
+    setZoomChoisi(p.zoom);
+  }
+
+  /** « Aller à » et « Toute la ferme » : cadre l'emprise (repère local de la ferme) sur l'écran. */
+  function cadrer(emprise: Emprise): void {
+    const v = vueSurEmprise(emprise, { largeurPx: taille.w, hauteurPx: taille.h }, origineVue.latitude);
+    setCentreGeo(versGeographique(origineVue, v.centre));
+    setZoomChoisi(v.zoom);
+  }
+
   function changerZoom(delta: number): void {
-    setZoomChoisi(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom + delta)));
+    setZoomChoisi(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN_VUE, zoom + delta)));
   }
 
   // Clavier d'un élément : flèches 0,1 m (Maj : 1 m), [ ] 1°. AltGr (Ctrl+Alt sous Windows) donne [ et ] au clavier français.
@@ -993,6 +1014,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
         data-mode={mode}
         data-fond={fondPhoto ? 'photo' : 'neutre'}
         data-zoom={Math.min(zoom, ZOOM_TUILES_MAX)}
+        data-centre={pret ? `${centreEffectif.latitude.toFixed(5)},${centreEffectif.longitude.toFixed(5)}` : undefined}
         data-origine={pret ? (origine === null ? '' : `${String(origine.latitude)},${String(origine.longitude)}`) : undefined}
         className="pl-feuille"
         onKeyDown={surToucheEditeur}
@@ -1005,6 +1027,43 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             Fermer
           </button>
         </header>
+
+        <div className="pl-recherches">
+          <RechercheAdresse enLigne={enLigneEffectif} misEnAvant={pret && origine === null && ferme.valeur?.position == null} surChoix={allerAuLieu} />
+          {pret && zonesPlacees.length > 0 && (
+            <div className="pl-sites">
+              <select
+                data-testid="aller-a"
+                aria-label="Aller à"
+                className="pl-aller-a"
+                value=""
+                onChange={(e) => {
+                  const zone = zonesPlacees.find((z) => z.id === e.target.value);
+                  const emprise = zone === undefined ? null : empriseDeContours([zone.contour]);
+                  if (emprise !== null) cadrer(emprise);
+                }}
+              >
+                <option value="">Aller à…</option>
+                {zonesPlacees.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.nom}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                data-testid="toute-la-ferme"
+                className="pl-bouton"
+                onClick={() => {
+                  const emprise = empriseDeContours(zonesPlacees.map((z) => z.contour));
+                  if (emprise !== null) cadrer(emprise);
+                }}
+              >
+                Toute la ferme
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="pl-corps">
           <div className="pl-carte">
@@ -1191,7 +1250,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 type="button"
                 className="pl-bouton"
                 aria-label="Zoom arrière"
-                disabled={zoom <= ZOOM_MIN}
+                disabled={zoom <= ZOOM_MIN_VUE}
                 onClick={() => {
                   changerZoom(-1);
                 }}
