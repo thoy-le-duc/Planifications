@@ -1,14 +1,18 @@
 /**
- * Préparation de l'expéditeur d'e-mail au démarrage de l'API (T09c). Sans effet de bord à
- * l'import : index.ts appelle `preparerExpediteur(config.courriel)`.
+ * Préparation de l'expéditeur d'e-mail au démarrage de l'API (T09c), et assemblage de
+ * l'application commun à Node et Vercel (`assemblerApp`, T38a). Sans effet de bord à l'import.
  *
  * Une panne du relais SMTP (Brevo en production) ne doit jamais empêcher ni retarder le
  * démarrage de l'API, donc de la synchro : la vérification part en tâche de fond, son échec est
  * écrit dans le journal, et l'envoi d'un code échouera ensuite normalement. Seule une configuration
  * incomplète (lireConfig) arrête le processus. Contrat : demarrage.test.ts.
  */
-import { ErreurEnvoiCourriel, expediteurConsole, expediteurSmtp, type ExpediteurCourriel } from './auth/index.ts';
-import type { ConfigCourriel } from './config.ts';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import type { Hono } from 'hono';
+import type pg from 'pg';
+import { creerApp } from './app.ts';
+import { ErreurEnvoiCourriel, expediteurConsole, expediteurSmtp, trousseauDepuisJwks, type ExpediteurCourriel } from './auth/index.ts';
+import type { Config, ConfigCourriel } from './config.ts';
 import { journalParDefaut } from './dependances.ts';
 import { decrireErreur, ligneDeJournal } from './journal.ts';
 
@@ -37,4 +41,27 @@ export function preparerExpediteur(
     }
   });
   return Promise.resolve(expediteur);
+}
+
+/**
+ * Assemble l'application depuis une configuration lue (`lireConfig`) et un pool PostgreSQL :
+ * trousseau de clés, expéditeur d'e-mail, `creerApp`. Commun au serveur Node (index.ts) et aux
+ * fonctions Vercel (vercel.ts, T38a), qui ne diffèrent que par leur pool (connexions courtes sur
+ * Vercel) et par la façon de servir l'application. Lève si le JWKS est illisible.
+ */
+export async function assemblerApp(config: Config, pool: pg.Pool, journal: (ligne: string) => void): Promise<Hono> {
+  const cles = await trousseauDepuisJwks(config.jwtClesPrivees);
+  // COURRIEL_CONSOLE=1 (NODE_ENV=development seulement, lireConfig) ou relais SMTP, vérifié en
+  // tâche de fond sans retarder l'écoute.
+  const expediteur = await preparerExpediteur(config.courriel, journal);
+  return creerApp({
+    db: drizzle(pool),
+    expediteur,
+    cles,
+    emetteur: config.emetteur,
+    audience: config.audience,
+    proxyDeConfiance: config.proxyDeConfiance,
+    journal,
+    ...(config.corsOrigines === undefined ? {} : { corsOrigines: config.corsOrigines }),
+  });
 }

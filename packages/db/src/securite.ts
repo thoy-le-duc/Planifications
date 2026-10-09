@@ -33,3 +33,21 @@ export const demandeIp = securite.table(
     index('demande_ip_cree_idx').on(t.creeLe),
   ],
 );
+
+/**
+ * Débit de la synchro (T10f, T38a) : derniers envois POST /sync/upload acceptés d'un utilisateur,
+ * dans la fenêtre glissante d'une minute. Une ligne par utilisateur, tenue par une seule écriture
+ * atomique (`INSERT … ON CONFLICT … DO UPDATE … RETURNING`) : la limite tient d'un processus
+ * d'API ou d'une fonction Vercel à l'autre. `instants` garde au plus ENVOIS_MAX_PAR_MINUTE
+ * valeurs, toutes dans la fenêtre ; `maj_le` est le dernier envoi accepté. L'API efface au passage
+ * les lignes dont la fenêtre est passée. Sans clé étrangère : une ligne vit une minute.
+ */
+export const debitSynchro = securite.table(
+  'debit_synchro',
+  {
+    utilisateurId: uuid('utilisateur_id').primaryKey(),
+    instants: timestamp('instants', { withTimezone: true, mode: 'date' }).array().notNull(),
+    majLe: timestamp('maj_le', { withTimezone: true, mode: 'date' }).notNull(),
+  },
+  (t) => [index('debit_synchro_maj_idx').on(t.majLe)],
+);

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "NODE_ENV=development node --watch src/index.ts",
     "start": "node src/index.ts",
+    "build": "node scripts/construire-vercel.ts",
     "typecheck": "tsc --noEmit",
     "cles": "node src/generer-cles.ts"
   },
@@ -20,6 +21,7 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
-    "@types/pg": "^8.23.1"
+    "@types/pg": "^8.23.1",
+    "esbuild": "0.28.2"
   }
 }

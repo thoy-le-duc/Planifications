@@ -30,6 +30,18 @@ Aucune valeur secrète par défaut : une variable obligatoire absente arrête le
 
 **Envoi d'e-mail (T09b)** : relais SMTP générique (nodemailer), que proposent tous les fournisseurs hébergés en UE. Le choix du fournisseur (contrat, DPA, domaine d'envoi avec SPF, DKIM, DMARC) reste à faire par Théophane ; le code ne dépend que des variables `SMTP_*`.
 
+## Sur Vercel (T38a)
+
+La même application tourne aussi en fonctions Vercel (projet « appli », région `cdg1` Paris), servie sous `/api` en même origine que l'appli : aucune route dupliquée.
+
+- `vercel.json` à la racine du dépôt : construction `pnpm build` (l'appli dans `apps/web/dist`, et la fonction), réécriture `/api/(.*)` vers la fonction avant le repli de la SPA, mêmes en-têtes que la démo. La démo garde son projet Vercel (racine `apps/web`, `apps/web/vercel.json`), que ce fichier ne touche pas.
+- `api/[...route].js` réexporte `dist-vercel/fonction.mjs`, que `pnpm --filter @planif/api build` (`scripts/construire-vercel.ts`, esbuild) rassemble en un seul fichier depuis `src/vercel.ts` : le constructeur Node de Vercel ne sait pas charger nos imports `.ts` ni les paquets du dépôt écrits en TypeScript.
+- `src/vercel.ts` : `creerGestionnaire(env)` lit la configuration au premier appel (mêmes variables que ci-dessus, `PORT` ignorée). Configuration invalide : chaque appel répond 500 `{ "erreur": "configuration_invalide" }`, le message (qui nomme la variable, jamais sa valeur) va au journal de la fonction.
+- **`PROXY_DE_CONFIANCE=1` obligatoire sur Vercel** (le proxy de Vercel pose `X-Forwarded-For`) : sans elle, la limite par adresse IP ne s'applique pas ; un avertissement est écrit au journal au premier appel quand `VERCEL=1`.
+- Pool PostgreSQL à connexions courtes (3 au plus, fermées après 1 s d'inactivité) : prendre l'adresse « pooled » de Neon. Le serveur Node garde le pool par défaut.
+- Aucun état en mémoire d'une requête à l'autre : codes, tentatives, sessions, limite par IP et débit de la synchro sont en base.
+- Migrations : `pnpm --filter @planif/db migrer` avec la `DATABASE_URL` de production, lancé à la main avant le déploiement (pas dans la construction).
+
 ## Connexion (Q9)
 
 Code à 6 chiffres reçu par e-mail, pas de mot de passe.

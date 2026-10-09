@@ -12,6 +12,9 @@ export default defineConfig(
       '**/dist-essais/**',
       '**/dist-demo/**',
       '**/dev-dist/**',
+      // T38a : fonction Vercel rassemblée par apps/api/scripts/construire-vercel.ts, et sortie de `vercel build`.
+      '**/dist-vercel/**',
+      '.vercel/**',
       '**/playwright-report/**',
       '**/test-results/**',
       // T18 : script minifié, généré depuis les jetons, vérifié par apps/web/src/ui/theme-initial.test.ts.

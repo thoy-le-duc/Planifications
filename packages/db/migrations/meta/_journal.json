@@ -218,6 +218,13 @@
       "when": 1791488846413,
       "tag": "0030_espece_profil_croissance",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791567770195,
+      "tag": "0031_debit_synchro",
+      "breakpoints": true
     }
   ]
 }
