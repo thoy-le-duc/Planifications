@@ -290,6 +290,35 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q37 — Tester avec ses vraies données : mise en ligne gratuite (posée le 2026-10-09)
+
+Demande de Théophane : « J'aimerais tester avec les vraies données de ma ferme, avec un compte à moi. » Il a proposé une adresse et un mot de passe dans la conversation : la connexion de l'appli se fait **par code à 6 chiffres envoyé par courriel, sans mot de passe** ; aucun mot de passe ne doit circuler dans une conversation ni dans le dépôt. Rien n'est en ligne aujourd'hui (seule la démo l'est).
+
+Réponses (2026-10-09) :
+1. **Mise en ligne complète**, plutôt que la ferme gardée sur l'appareil.
+2. **Gratuit pendant toute la phase de développement** ; « on verra pour du sérieux plus tard ». Vercel convient pour l'appli et l'API ; même logique pour la synchro (offre gratuite).
+3. Choix du chef dans ce cadre : appli et API sur **Vercel** (fonctions en région Paris), PostgreSQL chez **Neon** (offre gratuite, région Francfort, UE), **PowerSync Cloud** (offre gratuite, région UE), courriels par **Brevo** (offre gratuite). Théophane crée les comptes et saisit lui-même les secrets ; la boucle n'y a jamais accès. Tickets T38a (API déployable sur Vercel) et T38b (guide pas à pas).
+
+### Q36 — Placer sa serre, au doigt et dans la démo ; consignes aux ouvriers dans la 3D (posée le 2026-10-09)
+
+Retour de Théophane : « Passer au doigt sur le téléphone, c'est possible. Même le plan 3D sur le téléphone, c'est pas mal : je veux pouvoir dire aux ouvriers vous allez faire ça, ça, ça, pour qu'ils se repèrent facilement. Je ne vois toujours pas comment placer ma serre aux bons endroits, sur fixe comme sur téléphone. »
+
+Constat du chef : l'essai s'est fait **sur la démo en ligne**. La démo n'a pas de photo aérienne (fond neutre) et le placement y est peu engageant ; sur une vraie ferme, il faut aujourd'hui un ordinateur, poser le point de départ, puis « Nouveau bâtiment » (type, nom, dimensions) et toucher la photo : aucune étape n'est annoncée.
+
+Réponses (2026-10-09) :
+1. **Placement au doigt** sur le téléphone : oui. Ticket T28k.
+2. **Parcours guidé** : les étapes (trouver la ferme, poser le point de départ, ajouter une serre, tracer une zone) annoncées et enchaînées. Ticket T28j.
+3. **Démo** : on doit pouvoir y essayer le placement d'une serre sur une vraie photo. Ticket T28i.
+4. **Consignes aux ouvriers** : les **travaux du jour, pour tous**, numérotés sur les planches de la 3D au téléphone ; un tap fait voler la caméra jusqu'à la planche. Ticket T37. L'attribution par ouvrier viendra plus tard si besoin.
+
+### Q35 — Droits des profils, recul de la photo aérienne, signal de récolte, fichier réel (posée le 2026-10-09)
+
+Réponses (2026-10-09) :
+1. **Profils de croissance** : réglables par le **gérant seulement** (pas tout membre, contrairement à la décision du chef du 8 octobre). Le serveur doit refuser une modification de `profil_croissance` par un équipier. Ticket T32c ajusté.
+2. **Photo aérienne** : le zoom de départ ne convient pas : « on n'arrive pas à avoir plus de recul, il peut y avoir des fermes beaucoup plus grandes que la mienne, avec parfois des sites différents ; pour positionner le lieu, ce serait pas mal de pouvoir taper l'adresse, là on est complètement paumé. » Ticket T28h : recherche d'adresse, recul bien plus large, plusieurs sites.
+3. **Signal « à récolter »** : une **balise au-dessus de la planche** (panier ou pastille vive), visible même en vue d'ensemble. Ticket T32e précisé.
+4. **Fichier réel pour l'import** : aucun ; « je vais construire ma ferme dans notre éditeur ; un nouveau client passera aussi par l'éditeur ». Conséquence : l'éditeur et la prise en main passent avant l'import.
+
 ### Q34 — Récolte visible, schéma des rangs, budget (posée le 2026-10-09, après les captures de T32b)
 
 Retour de Théophane : « C'est un peu mieux. Il faudrait voir les choses quand ça a besoin de récolter : les courgettes, il y a un truc qui grossit, les fraises pareil. Il faut que visuellement ce soit impactant. Et dans la fiche culturelle, quand on fait les écartements entre plants, double rang, triple rang, quadruple rang, un petit schéma qui se met en place : en double rang, en quinconce ou non, il faut pouvoir le voir. »
