@@ -326,3 +326,129 @@
   color: var(--couleur-secondaire);
   border-top: 1px solid var(--couleur-trait);
 }
+
+/*
+ * T37 : panneau « Travaux du jour », posé en bas de la scène (jamais sur un geste de la toile : il
+ * est son frère, pas son enfant). Gros caractères et boutons de 48 px au moins, pour des mains
+ * gantées au champ.
+ */
+.plan3d-travaux {
+  position: absolute;
+  inset: auto var(--espace-s) var(--espace-s) var(--espace-s);
+  z-index: 1;
+  max-width: 480px;
+  max-height: 60%;
+  display: flex;
+  flex-direction: column;
+  background: var(--couleur-surface);
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-carte);
+  box-shadow: var(--ombre-carte);
+  overflow: hidden;
+}
+
+.plan3d-travaux-tete {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--espace-s);
+  padding: var(--espace-xs) var(--espace-xs) var(--espace-xs) var(--espace-m);
+}
+
+.plan3d-travaux-titre {
+  flex: 1 1 auto;
+  margin: 0;
+  font-family: var(--police-titre);
+  font-size: 18px;
+  color: var(--couleur-encre);
+}
+
+.plan3d-travaux-bouton {
+  min-height: 48px;
+  padding: 0 14px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-family: var(--police-titre);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.plan3d-travaux-bouton:disabled {
+  opacity: 0.5;
+}
+
+.plan3d-travaux-replier {
+  min-width: 48px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.plan3d-travaux-liste {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0 var(--espace-xs) var(--espace-xs);
+  overflow-y: auto;
+  list-style: none;
+  border-top: 1px solid var(--couleur-trait);
+}
+
+.plan3d-travaux-liste[hidden] {
+  display: none;
+}
+
+.plan3d-travail {
+  padding-top: var(--espace-xs);
+}
+
+.plan3d-travail-aller {
+  width: 100%;
+  text-align: left;
+  border-width: 1px;
+  font-family: var(--police-texte);
+  font-size: 18px;
+  line-height: 1.25;
+  padding: 8px 12px;
+}
+
+.plan3d-travail-retard .plan3d-travail-aller {
+  border-left: 6px solid var(--couleur-orange);
+}
+
+.plan3d-travail[aria-current='true'] .plan3d-travail-aller {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+/* Téléphone (Q36) : la scène prend l'écran, le panneau de filtres de l'ordinateur n'est pas proposé. */
+@media (max-width: 1023px) {
+  .plan3d-outils {
+    flex-wrap: wrap;
+    gap: var(--espace-s);
+  }
+
+  .plan3d-curseur {
+    flex: 1 1 120px;
+    min-width: 120px;
+  }
+
+  .plan3d-etiquette {
+    margin-left: 0;
+  }
+
+  .plan3d-corps {
+    flex-direction: column;
+  }
+
+  .plan3d-scene {
+    min-height: 320px;
+  }
+
+  .plan3d-cote {
+    display: none;
+  }
+}

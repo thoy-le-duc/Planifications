@@ -12,6 +12,7 @@ import {
   LIBELLES_CATEGORIES,
   nombreFrancais,
   nomCulture,
+  phraseDeTache,
   quand,
   quantiteAvecUnite,
   VERBES,
@@ -19,6 +20,9 @@ import {
   type EvenementLu,
   type TacheJour,
 } from './calculs.ts';
+
+// Définis dans calculs.ts (morceau partagé avec la vue 3D, T37) ; exportés d'ici, où l'écran les cherche.
+export { phraseDeTache, tachesDeLEcran } from './calculs.ts';
 
 /** Carte d'une tâche, telle que dessinée. */
 export interface CarteVue {
@@ -103,7 +107,7 @@ export function vueCarte(t: TacheJour, aujourdhui: string): CarteVue {
   const travail = tache.etape === 'travail' ? tache : null;
   const surtitre = tache.etape === 'travail' ? LIBELLES_CATEGORIES[tache.travail.categorie] : VERBES[tache.etape];
   const peser = tache.etape === 'debut_recolte';
-  const phrase = travail === null ? `${surtitre.toLowerCase()} ${culture.espece.toLowerCase()}` : `${travail.travail.type} ${culture.espece.toLowerCase()}`;
+  const phrase = phraseDeTache(t);
   return {
     cle: t.cle,
     retard: tache.enRetard,
