@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-09 — T36 : la vue 3D ne charge plus tout le cœur
+
+- **Fait** : `scene.ts` importe `@planif/core/placement` (et non la racine) et `morceauManuel` range `packages/core/src/croissance/` dans le morceau `croissance` (3,9 Kio). Vue 3D 226,3 → 202,8 Kio (la relecture T35a annonçait 202,6) ; démarrage 71,0 et éditeur de placement 18,5 inchangés. Plafond `jsVue3dGzKio` 227 → 203,3.
+- **Décidé** : plafond = mesure + 0,5. Seule exception aux tests : les deux qui figeaient 227 (`cadrage.test.ts`, `placement.test.ts`) sont alignés sur 203,3 dans un commit à part, comme le demande le ticket. Les fichiers `*.test.ts` du dossier croissance restent hors du morceau.
+- **Bloquant** : rien. Le vol de caméra T07 a échoué au hasard en e2e (aussi 3 fois sur 4 relancé seul : 700,6 ms contre 700, seuil relatif), il passe une fois sur quatre ; c'est T34, sans lien avec ce ticket.
+
 ## 2026-10-09 — T32d : jeunes plants visibles, plants découpés
 
 - **Fait** : de près, une planche qui porte des plants devient une dalle de 3,1 cm (`hauteurDalle`, `EPAISSEUR_DALLE_PLANTS_M`) et les plants sont posés dessus : un plant de 5 cm se voit. De loin, la masse garde la hauteur du feuillage (T32b inchangé). La tomate (forme `erige-tuteure`) se dessine plant par plant, chacun avec son tuteur (un `InstancedMesh` de tuteurs partagé, 12 triangles, `BilanPlants.tuteurs`), au lieu d'un mur continu ; les autres formes gardent l'étirement de T32b. Budget 3D 226,1 → 226,3 Kio (plafond 226,5 inchangé, pas besoin des 228 de Q33) ; démarrage 71,0 et placement 18,5 inchangés.
