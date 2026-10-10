@@ -163,7 +163,7 @@ describe('T32g : « Personnaliser » une espèce de la bibliothèque (gérant, Q
     }
   });
 
-  it('un tap : une transaction, un INSERT espece ; une « Batavia » de la ferme, profil par défaut de la Batavia ; son réglage s’ouvre en mode réglage', async () => {
+  it('un tap : une transaction, un INSERT espece ; une « Batavia » de la ferme à profil nul ; son réglage s’ouvre en mode réglage, aux valeurs par défaut', async () => {
     await rendre();
     const avant = banc.base.ecritures.length;
     transactions = 0;
@@ -174,10 +174,12 @@ describe('T32g : « Personnaliser » une espèce de la bibliothèque (gérant, Q
     expect(ordres[0]).toMatch(/^INSERT\s+INTO\s+["`]?espece["`]?\s*\(/i);
     expect(copie).not.toBe(BATAVIA);
     expect(ligne(copie)).toMatchObject({ ferme_id: FERME, nom: 'Batavia', famille_id: FAMILLE.asteracees, supprime_le: null });
-    expect(profilDe(copie)).toEqual(profilParDefaut('Batavia').profil);
+    expect(ligne(copie)?.profil_croissance, 'profil nul : le défaut n’est pas figé').toBeNull();
     expect(nomAccessible(reglage), 'nom du réglage : celui de l’espèce').toContain('Batavia');
     const h = champ(/^Hauteur maximale/, reglage);
     expect(h.disabled || h.readOnly, 'copie de la ferme, gérant : champ modifiable').toBe(false);
+    expect(Number(h.value.replace(',', '.')), 'hauteur par défaut de la Batavia').toBe(profilParDefaut('Batavia').profil.hauteurMaxM);
+    if (aBouton('Rétablir la valeur par défaut', reglage)) expect(desactive(bouton('Rétablir la valeur par défaut', reglage)), 'rien à rétablir').toBe(true);
     expect(desactive(bouton('Enregistrer', reglage)), '« Enregistrer » actif').toBe(false);
   });
 

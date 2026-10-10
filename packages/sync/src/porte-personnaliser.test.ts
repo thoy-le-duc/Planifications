@@ -1,14 +1,14 @@
 /**
  * Tests d'acceptation T32g — « Personnaliser » une espèce de la bibliothèque commune
  * (docs/backlog/T32g-personnaliser-espece.md ; Q39) : la porte écrit, en une transaction, une
- * espèce de la ferme qui copie l'espèce de la bibliothèque (nom, champs, profil de croissance
- * effectif, règle de l'asperge comprise), côté téléphone, sans réseau, sur un SQLite en mémoire.
+ * espèce de la ferme qui copie l'espèce de la bibliothèque (nom, champs ; profil nul : le défaut,
+ * règle de l'asperge comprise, est retrouvé par le nom), côté téléphone, sans réseau, sur un SQLite en mémoire.
  * Contrat : ./test/contrat-personnaliser.ts (dont la décision sur l'origine de la copie : son nom).
  *
  * Le serveur reste l'arbitre des droits (apps/api/src/sync/personnaliser-droits.integration.test.ts
  * et profil-droits.integration.test.ts).
  */
-import { croissancePerenneA, profilEffectif, profilParDefaut, validerProfilCroissance, type DateCalendaire, type Id } from '@planif/core';
+import { croissancePerenneA, profilEffectif, profilParDefaut, type DateCalendaire, type Id } from '@planif/core';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { creerBaseMemoire, type BaseMemoire } from './test/base-memoire.ts';
 import { chargerSync, type BaseLocale, type ModuleSync, type PorteDonnees } from './test/contrat.ts';
@@ -171,7 +171,7 @@ describe('T32g : porte.personnaliserEspece', () => {
   }
 
   describe('le gérant personnalise une espèce de la bibliothèque', () => {
-    it('Tomate : une transaction, un seul INSERT espece ; une « Tomate » de la ferme, copie des champs, profil par défaut de la Tomate', async () => {
+    it('Tomate : une transaction, un seul INSERT espece ; une « Tomate » de la ferme, copie des champs, profil nul (défaut retrouvé par le nom)', async () => {
       const ecritures = base.ecritures.length;
       const id = await personnaliser(TOMATE_BIBLIOTHEQUE);
       expect(transactions).toBe(1);
@@ -195,14 +195,19 @@ describe('T32g : porte.personnaliserEspece', () => {
         modifie_le: INSTANT.toISOString(),
         supprime_le: null,
       });
-      expect(profilDe(id), 'profil par défaut de la Tomate, écrit en clair (jamais nul)').toEqual(profilParDefaut('Tomate').profil);
-      expect(validerProfilCroissance(espece(id)?.profil_croissance).ok, 'profil valide pour le cœur').toBe(true);
+      expect(espece(id)?.profil_croissance, 'profil nul : le défaut n’est pas figé dans la copie').toBeNull();
+      expect(profilEffectif({ nom: String(espece(id)?.nom), profilCroissance: espece(id)?.profil_croissance }), 'profil effectif : le défaut de la Tomate').toEqual(
+        profilParDefaut('Tomate').profil,
+      );
     });
 
-    it('le profil copié est le profil EFFECTIF de l’origine (profilEffectif du cœur)', async () => {
+    it('le profil effectif de la copie est celui de l’origine (profilEffectif du cœur, par le nom)', async () => {
       const origine = espece(AUBERGINE_BIBLIOTHEQUE);
       const id = await personnaliser(AUBERGINE_BIBLIOTHEQUE);
-      expect(profilDe(id)).toEqual(profilEffectif({ nom: 'Aubergine', profilCroissance: origine?.profil_croissance ?? null }));
+      expect(espece(id)?.profil_croissance).toBeNull();
+      expect(profilEffectif({ nom: String(espece(id)?.nom), profilCroissance: espece(id)?.profil_croissance })).toEqual(
+        profilEffectif({ nom: 'Aubergine', profilCroissance: origine?.profil_croissance ?? null }),
+      );
     });
 
     it('la copie est ensuite réglable : le gérant la règle à 1,8 m par reglerProfilCroissance', async () => {
@@ -210,6 +215,13 @@ describe('T32g : porte.personnaliserEspece', () => {
       await exigerReglerProfil(porte())(id, TOMATE_1_8);
       expect(profilDe(id)).toEqual(TOMATE_1_8);
       expect(espece(TOMATE_BIBLIOTHEQUE)?.profil_croissance, 'la bibliothèque n’a toujours pas de profil').toBeNull();
+    });
+
+    it('« Rétablir la valeur par défaut » sur la copie réglée : profil de nouveau nul', async () => {
+      const id = await personnaliser(TOMATE_BIBLIOTHEQUE);
+      await exigerReglerProfil(porte())(id, TOMATE_1_8);
+      await exigerReglerProfil(porte())(id, null);
+      expect(espece(id)?.profil_croissance).toBeNull();
     });
 
     it('cultures et itinéraires existants inchangés : toujours liés à l’espèce d’origine ; l’origine elle-même intacte', async () => {
@@ -237,16 +249,18 @@ describe('T32g : porte.personnaliserEspece', () => {
     const PLANTATION = { datePlantation: d('2020-03-01'), dateArrachage: null };
     const CAMPAGNE = { annee: 2027, debutRecolte: d('2027-04-01'), finRecolte: d('2027-06-15') };
 
-    it('le profil copié porte fougereApresRecolte: true et le cycle annuel de l’asperge', async () => {
+    it('copie à profil nul ; son profil effectif (par le nom) porte fougereApresRecolte: true et le cycle annuel de l’asperge', async () => {
       const id = await personnaliser(ASPERGE_BIBLIOTHEQUE);
-      expect(profilDe(id)).toEqual(profilParDefaut('Asperge').profil);
-      expect(profilDe(id)).toMatchObject({ fougereApresRecolte: true });
+      expect(espece(id)?.profil_croissance).toBeNull();
+      const effectif = profilEffectif({ nom: String(espece(id)?.nom), profilCroissance: espece(id)?.profil_croissance });
+      expect(effectif).toEqual(profilParDefaut('Asperge').profil);
+      expect(effectif).toMatchObject({ fougereApresRecolte: true });
       expect(espece(id)).toMatchObject({ nom: 'Asperge', perenne: 1, unite_recolte: 'botte', famille_id: ASPARAGACEES_BIBLIOTHEQUE });
     });
 
     it('cœur : relu de la base, le profil de la copie ne fait pas monter la fougère pendant la récolte, seulement après', async () => {
       const id = await personnaliser(ASPERGE_BIBLIOTHEQUE);
-      const profil = profilEffectif({ nom: 'Asperge', profilCroissance: espece(id)?.profil_croissance });
+      const profil = profilEffectif({ nom: String(espece(id)?.nom), profilCroissance: espece(id)?.profil_croissance });
       expect(profil.fougereApresRecolte).toBe(true);
       const pendant = croissancePerenneA({ plantation: PLANTATION, campagne: CAMPAGNE }, profil, d('2027-05-10'));
       expect(pendant.hauteurM, 'turions seuls pendant la récolte').toBe(0);
@@ -258,7 +272,8 @@ describe('T32g : porte.personnaliserEspece', () => {
       const id = await personnaliser(ASPERGE_BIBLIOTHEQUE);
       const reglee = { ...profilParDefaut('Asperge').profil, hauteurMaxM: 1.2 };
       await exigerReglerProfil(porte())(id, reglee);
-      const profil = profilEffectif({ nom: 'Asperge', profilCroissance: espece(id)?.profil_croissance });
+      expect(profilDe(id), 'le premier réglage écrit le profil, champ de l’asperge gardé').toEqual(reglee);
+      const profil = profilEffectif({ nom: String(espece(id)?.nom), profilCroissance: espece(id)?.profil_croissance });
       expect(croissancePerenneA({ plantation: PLANTATION, campagne: CAMPAGNE }, profil, d('2027-05-10')).hauteurM).toBe(0);
     });
   });

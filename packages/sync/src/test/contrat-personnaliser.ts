@@ -22,9 +22,11 @@
  *   - famille_id, nom, categorie, perenne, unite_recolte, delai_retour_minimal_ans,
  *     delai_retour_conseille_ans : ceux de l'espèce de la bibliothèque (la famille reste celle de
  *     la bibliothèque, permise pour une espèce de la ferme : docs/modele-donnees.md, Isolement) ;
- *   - profil_croissance : le texte JSON du profil EFFECTIF de l'espèce d'origine
- *     (`profilEffectif` de @planif/core : la bibliothèque n'en porte pas, c'est donc le profil par
- *     défaut de son nom, `fougereApresRecolte: true` compris pour l'asperge, Q33) — jamais nul ;
+ *   - profil_croissance : NULL (décision du chef). La copie garde le nom de l'origine, donc le cœur
+ *     lui retrouve le même profil par défaut (`profilEffectif` → `profilParDefaut(nom)`,
+ *     `fougereApresRecolte: true` compris pour l'asperge, Q33) et elle suit les futures
+ *     corrections des valeurs par défaut. C'est le premier réglage du gérant
+ *     (`reglerProfilCroissance`) qui écrit un profil ; « Rétablir » le remet à NULL ;
  *   - cree_le = modifie_le = maintenant de la porte (ISO UTC) ; supprime_le NULL.
  *
  * ── Origine de la copie (décision du testeur, à confirmer par le chef) ───────────────────────
@@ -37,6 +39,11 @@
  * Une espèce d'une autre ferme ne compte pas ; une copie supprimée (supprime_le non nul) non plus.
  * Limite assumée : une espèce « Tomate » créée à la main par la ferme bloque aussi la
  * personnalisation de la Tomate de la bibliothèque (une seule « Tomate » dans la ferme).
+ *
+ * Risque connu, hors périmètre de T32g : la règle « déjà personnalisée » n'est rejouée que par la
+ * porte, sur la base locale. Deux téléphones hors ligne qui personnalisent la même espèce
+ * envoient chacun leur copie ; le serveur ne refuse pas un nom en double et la ferme aura deux
+ * « Tomate ». À traiter dans un ticket de suite (refus serveur par nom rapproché, ou fusion).
  *
  * ── Rejets (promesse rejetée, RIEN d'écrit) ──────────────────────────────────────────────────
  *

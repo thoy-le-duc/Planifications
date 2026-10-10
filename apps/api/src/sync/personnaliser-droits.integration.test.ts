@@ -12,8 +12,8 @@
  *     refusée, l’espèce n’existe pas » — c'est exactement la copie envoyée par un équipier
  *     (même règle : PUT dont le profil n'est pas nul, quel que soit le nom ou la famille) ;
  *   - « le gérant règle le profil › crée une espèce avec son profil (PUT) : accepté ».
- * Ce fichier ajoute la forme exacte de la copie (famille de la bibliothèque, profil par défaut
- * écrit en clair, asperge avec `fougereApresRecolte`), les membres qui ne sont plus ou pas encore
+ * Ce fichier ajoute la forme de la copie (famille de la bibliothèque ; profil nul, comme l'écrit la
+ * porte ; ou profil par défaut écrit en clair, asperge avec `fougereApresRecolte`), les membres qui ne sont plus ou pas encore
  * actifs, et les renvois équivalents.
  *
  * ── Contrat ajouté (décision du testeur, à confirmer par le chef) ────────────────────────────
@@ -187,8 +187,12 @@ decrireAvecBase('T32g')('T32g : POST /sync/upload, la copie d’une espèce de l
   const texte = (profil: unknown): string | null => (profil === null ? null : JSON.stringify(profil));
   const patchEspece = (id: string, donnees: Record<string, unknown>): EcritureEnvoyee => ({ op: 'PATCH', table: 'espece', id, donnees });
 
-  /** La copie telle que porte.personnaliserEspece l'écrit : espèce de la ferme, famille de la bibliothèque, profil par défaut en clair. */
-  const copie = (nom: string, familleId: string, o: { perenne?: number; unite?: string } = {}): EcritureEnvoyee => ({
+  /**
+   * Une copie d'espèce de la bibliothèque : espèce de la ferme, famille de la bibliothèque. Par
+   * défaut avec le profil par défaut écrit en clair (le gérant en a le droit) ; `profilNul` : telle
+   * que porte.personnaliserEspece l'écrit (décision du chef : profil nul, défaut retrouvé par le nom).
+   */
+  const copie = (nom: string, familleId: string, o: { perenne?: number; unite?: string; profilNul?: boolean } = {}): EcritureEnvoyee => ({
     op: 'PUT',
     table: 'espece',
     id: randomUUID(),
@@ -201,13 +205,20 @@ decrireAvecBase('T32g')('T32g : POST /sync/upload, la copie d’une espèce de l
       unite_recolte: o.unite ?? 'kg',
       delai_retour_minimal_ans: null,
       delai_retour_conseille_ans: null,
-      profil_croissance: texte(profilParDefaut(nom).profil),
+      profil_croissance: o.profilNul === true ? null : texte(profilParDefaut(nom).profil),
     },
   });
 
   // ── 1. La copie envoyée par le gérant ───────────────────────────────────────────────────────
 
   describe('le gérant envoie la copie d’une espèce de la bibliothèque', () => {
+    it('Tomate à profil nul (ce qu’écrit la porte) : acceptée, espèce de la ferme sans profil', async () => {
+      const c = copie('Tomate', solanacees, { profilNul: true });
+      await accepte([c], gerant.jeton);
+      expect(await ligne(c.id)).toMatchObject({ ferme_id: ferme, famille_id: solanacees, nom: 'Tomate' });
+      expect(await profilDe(c.id)).toBeNull();
+    });
+
     it('Tomate (famille de la bibliothèque, profil par défaut en clair) : acceptée, espèce de la ferme avec ce profil', async () => {
       const c = copie('Tomate', solanacees);
       await accepte([c], gerant.jeton);
