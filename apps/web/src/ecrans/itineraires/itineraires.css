@@ -1144,6 +1144,7 @@ select.itin-liste {
 /* ── T32c : réglage de la croissance d'une espèce ─────────────────────────────────────────── */
 
 .itin-culture-tete {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
