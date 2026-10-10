@@ -86,7 +86,7 @@ test('« Filtres » au téléphone : un seul ascenseur, rien de coupé, cibles d
 
   await test.step('toutes les cibles du panneau font au moins 48 px de haut', async () => {
     const hauteurs = await panneau.locator('button, summary, label').evaluateAll((els) =>
-      els.filter((e) => (e as HTMLElement).offsetParent !== null).map((e) => ({ texte: (e.textContent ?? '').trim().slice(0, 40), h: e.getBoundingClientRect().height })),
+      els.filter((e) => (e as HTMLElement).offsetParent !== null).map((e) => ({ texte: e.textContent.trim().slice(0, 40), h: e.getBoundingClientRect().height })),
     );
     expect(hauteurs.length, 'cibles du panneau').toBeGreaterThan(10);
     const petites = hauteurs.filter((c) => c.h < HAUTEUR_TACTILE_MIN_PX - 0.5);
