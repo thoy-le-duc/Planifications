@@ -25,9 +25,16 @@ import type { VerificationEcriture } from './types.ts';
  * explique la règle ; vérifié par horodatage-instant.test.ts). `colonneHorodatage` et
  * `colonneId` sont des noms de colonnes écrits par le code, jamais une valeur reçue.
  */
-export const cleHorodatageSql = (colonneHorodatage: string, colonneId: string): string =>
-  `printf('%015d', CASE WHEN ${colonneHorodatage} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][T ]*'
-    THEN CAST(round(julianday(${colonneHorodatage}) * 86400000) AS INTEGER) END) || '|' || ${colonneId}`;
+export const cleHorodatageSql = (colonneHorodatage: string, colonneId: string): string => {
+  // Fuseau de Postgres sans deux-points (`+00`, `+0530`), en toute fin : complété en `±HH:MM`,
+  // comme `fuseauComplet` (horodatage.ts).
+  const h = `(CASE WHEN ${colonneHorodatage} GLOB '*[+-][0-9][0-9]' THEN ${colonneHorodatage} || ':00'
+    WHEN ${colonneHorodatage} GLOB '*[+-][0-9][0-9][0-9][0-9]'
+      THEN substr(${colonneHorodatage}, 1, length(${colonneHorodatage}) - 2) || ':' || substr(${colonneHorodatage}, -2)
+    ELSE ${colonneHorodatage} END)`;
+  return `printf('%015d', CASE WHEN ${h} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][T ]*'
+    THEN CAST(round(julianday(${h}) * 86400000) AS INTEGER) END) || '|' || ${colonneId}`;
+};
 
 /** « Fait » déjà noté (réalisé ou intervention en vigueur) : rien n'est écrit. */
 export class DejaFait extends Error {}

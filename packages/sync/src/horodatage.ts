@@ -14,7 +14,8 @@
  * avec `julianday` est vérifiée par horodatage-instant.test.ts sur une base node:sqlite.
  *
  * Formes admises (gardées par le même filtre des deux côtés) : `AAAA-MM-JJ`, puis `T` ou une
- * espace, puis éventuellement `HH:MM[:SS[.fraction]]` et un fuseau (`Z`, `±HH:MM`). Sans fuseau,
+ * espace, puis éventuellement `HH:MM[:SS[.fraction]]` et un fuseau (`Z`, `±HH:MM` ; `±HH` et
+ * `±HHMM` en toute fin, format de Postgres, complétés en `±HH:MM`). Sans fuseau,
  * l'heure est en UTC (comme SQLite, jamais l'heure locale du téléphone). Horodatage illisible :
  * instant 0, plus ancien que tout horodatage lisible ; l'id départage. Jamais d'erreur.
  */
@@ -38,12 +39,23 @@ const JULIEN_MAX = 464_269_060_799_999;
 const div = (a: number, b: number): number => Math.trunc(a / b);
 
 /**
+ * Fuseau sans deux-points (format texte de Postgres : `+00`, ou `+0530`) complété en `±HH:MM`,
+ * que SQLite seul ne lit pas. Seulement en toute fin du texte, comme le `GLOB` de
+ * `cleHorodatageSql` (fait-unique.ts), qui fait la même chose avant `julianday`.
+ */
+function fuseauComplet(h: string): string {
+  if (/[+-][0-9]{2}$/.test(h)) return `${h}:00`;
+  if (/[+-][0-9]{4}$/.test(h)) return `${h.slice(0, -2)}:${h.slice(-2)}`;
+  return h;
+}
+
+/**
  * Instant d'un horodatage : le jour julien de SQLite en millisecondes (`julianday(h) * 86400000`),
  * 0 s'il est illisible (absent, autre type, autre forme, valeur hors bornes).
  */
 export function instantHorodatage(h: unknown): number {
   if (typeof h !== 'string') return 0;
-  const m = FORME.exec(h);
+  const m = FORME.exec(fuseauComplet(h));
   if (m === null) return 0;
   const [, a, mo, j, hh, mi, ss, fraction, signe, fh, fm] = m;
   let annee = Number(a);

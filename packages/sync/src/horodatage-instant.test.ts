@@ -18,7 +18,7 @@ afterEach(() => {
 function clesSql(horodatages: readonly unknown[]): string[] {
   const b = creerBaseMemoire(SCHEMA_LOCAL);
   bases.push(b);
-  return horodatages.map((h) => b.lireDirect<{ c: string }>(`SELECT ${cleHorodatageSql('?', "'x'")} AS c`, [h, h])[0]?.c ?? 'absente');
+  return horodatages.map((h) => b.lireDirect<{ c: string }>(`WITH t(h) AS (SELECT ?) SELECT ${cleHorodatageSql('h', "'x'")} AS c FROM t`, [h])[0]?.c ?? 'absente');
 }
 
 /** La même clé, calculée en JavaScript. */
@@ -93,6 +93,56 @@ describe('T13n : instantHorodatage, comme julianday de SQLite', () => {
       return `${date}${hasard(2) === 0 ? 'T' : ' '}${deux(hasard(25))}:${deux(hasard(60))}:${deux(hasard(60))}${fraction}${fuseau}`;
     });
     expect(tires.map(cleJs)).toEqual(clesSql(tires));
+  });
+
+  it('fuseau de Postgres sans deux-points (±HH, ±HHMM) : même instant que SQLite, lu comme ±HH:MM', () => {
+    const formes = [
+      '2026-10-10 10:00:00.123+00',
+      '2026-10-10 10:00:00+00',
+      '2026-10-10 10:00:00.5-05',
+      '2026-10-10T10:00:00+14',
+      '2026-10-10 10:00:00.123456+0000',
+      '2026-10-10 10:00:00+0530',
+      '2026-10-10T10:00-0930',
+      '2026-10-10 10:00+02',
+      // Illisibles des deux côtés.
+      '2026-10-10 10:00:00+15',
+      '2026-10-10 10:00:00+0560',
+      '2026-10-10 10:00:00+00 ',
+      '2026-10-10 10:00:00+0',
+      '2026-10-10 10:00:00+000',
+      '2026-10-10 10:00:00+00000',
+      '2026-10-10',
+      '-12',
+      '+0530',
+    ];
+    expect(formes.map(cleJs)).toEqual(clesSql(formes));
+    expect(instantHorodatage('2026-10-10 10:00:00.123+00')).toBe(instantHorodatage('2026-10-10T10:00:00.123Z'));
+    expect(instantHorodatage('2026-10-10 10:00:00+0530')).toBe(instantHorodatage('2026-10-10T04:30:00Z'));
+    expect(instantHorodatage('2026-10-10 10:00:00+00 ')).toBe(0);
+  });
+
+  it('fuseaux ±HH et ±HHMM tirés au hasard : même instant que SQLite', () => {
+    let graine = 1013;
+    const hasard = (n: number): number => {
+      graine = (graine * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return graine % n;
+    };
+    const deux = (n: number): string => String(n).padStart(2, '0');
+    const tires = Array.from({ length: 1000 }, () => {
+      const fraction = hasard(2) === 0 ? '' : `.${String(hasard(1_000_000)).slice(0, 1 + hasard(6))}`;
+      const fuseau = `${hasard(2) === 0 ? '+' : '-'}${deux(hasard(16))}${hasard(2) === 0 ? '' : deux(hasard(61))}`;
+      return `2026-${deux(1 + hasard(12))}-${deux(1 + hasard(31))} ${deux(hasard(24))}:${deux(hasard(60))}:${deux(hasard(60))}${fraction}${fuseau}`;
+    });
+    expect(tires.map(cleJs)).toEqual(clesSql(tires));
+  });
+
+  it('même ordre que la clé SQL entre formats Postgres et toISOString', () => {
+    const s = (id: string, horodatage: string) => ({ id, horodatage });
+    expect(comparerSaisies(s('a', '2026-10-10 10:00:00.5+00'), s('b', '2026-10-10T10:00:00.400Z'))).toBeGreaterThan(0);
+    expect(comparerSaisies(s('b', '2026-10-10 10:00:00+00'), s('a', '2026-10-10T10:00:00.000Z'))).toBeGreaterThan(0);
+    const [ka, kb] = clesSql(['2026-10-10 10:00:00.5+00', '2026-10-10T10:00:00.400Z']);
+    expect((ka ?? '') > (kb ?? '')).toBe(true);
   });
 
   it('sans fuseau, l’heure est en UTC', () => {
