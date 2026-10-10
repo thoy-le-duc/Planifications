@@ -8,7 +8,7 @@
  */
 import { ajouterJours, ecartEnJours, type DateCalendaire } from '../dates/index.ts';
 import { feuillageApresRecolte } from './defauts.ts';
-import { campagneEnCours } from './recolte.ts';
+import { campagneEnCours, JOURS_FORMATION_FRUITS } from './recolte.ts';
 import type { AllureCroissance, DateRepere, DatesCroissance, EntreePerenne, EtatCroissance, ProfilCroissance, StadeCroissance } from './types.ts';
 
 /** Fin de la levée : tant que la hauteur reste sous cette part de la hauteur maximale. */
@@ -77,6 +77,7 @@ const dansLAnnee = (annee: number, mmjj: string): DateCalendaire => `${String(an
  * débourrement, pleine végétation, repos. La campagne vaut pour l'année du jour, ou, quelle que soit
  * son année de rattachement, quand elle contient le jour ou commence dans les 28 jours (T32f) : la
  * plante reste alors en végétation (pas de « repos » sans structure sous des fruits ou une balise).
+ * Au repos 28 jours avant le début de récolte, elle repousse sur ces 28 jours (Q41, T32i).
  */
 export function croissancePerenneA(entree: EntreePerenne, profil: ProfilCroissance, jour: DateCalendaire): EtatCroissance {
   const { datePlantation, dateArrachage } = entree.plantation;
@@ -92,20 +93,27 @@ export function croissancePerenneA(entree: EntreePerenne, profil: ProfilCroissan
   if (autre && !campagneEnCours(campagne, jour)) return REPOS;
 
   /** Fenêtre de végétation du cycle de l'année `an` : celle du profil, élargie par la récolte de la campagne. */
-  const fenetre = (an: number): readonly [DateCalendaire, DateCalendaire] => {
+  const fenetre = (an: number): readonly [DateCalendaire, DateCalendaire, boolean] => {
     let debut = dansLAnnee(an, cycle.debourrement);
     let repos = dansLAnnee(an, cycle.repos);
-    if (campagne.debutRecolte !== null && campagne.debutRecolte < debut) debut = campagne.debutRecolte;
+    let rampe = false;
+    const b = campagne.debutRecolte;
+    if (b !== null) {
+      // Q41 (T32i) : au repos 28 jours avant la récolte, la plante redémarre à J−28 et atteint sa pleine hauteur au début de récolte (sauf Q33, asperge).
+      const j28 = ajouterJours(b, -JOURS_FORMATION_FRUITS);
+      if (j28 < debut && !feuillageApresRecolte(profil)) [debut, rampe] = [j28, true];
+      else if (b < debut) debut = b;
+    }
     if (campagne.finRecolte !== null && campagne.finRecolte >= repos) repos = ajouterJours(campagne.finRecolte, 1);
     // L'année de plantation, la végétation part du jour de plantation.
-    if (Number(datePlantation.slice(0, 4)) === an && datePlantation > debut) debut = datePlantation;
-    return [debut, autre && jour >= repos ? ajouterJours(jour, 1) : repos];
+    if (Number(datePlantation.slice(0, 4)) === an && datePlantation > debut) [debut, rampe] = [datePlantation, false];
+    return [debut, autre && jour >= repos ? ajouterJours(jour, 1) : repos, rampe];
   };
   // Avant le débourrement de l'année (début d'hiver, janvier) : la végétation de l'année précédente se prolonge. Elle se prolonge aussi (T32f)
   // quand la campagne était déjà « en cours » le 31 décembre précédent (fraise d'hiver, récolte dès janvier) : pas de retour à 0 m au 1er janvier.
   const an =
     (autre && jour < fenetre(annee)[0]) || (jour < dansLAnnee(annee, cycle.debourrement) && campagneEnCours(campagne, dansLAnnee(annee - 1, '12-31')) && jour < fenetre(annee - 1)[1]) ? annee - 1 : annee;
-  const [debut, repos] = fenetre(an);
+  const [debut, repos, rampe] = fenetre(an);
   if (jour < debut || jour >= repos) return REPOS;
 
   // Q33 (asperge) : turions seuls pendant la récolte, la fougère part de 0 le lendemain de sa fin.
@@ -115,7 +123,8 @@ export function croissancePerenneA(entree: EntreePerenne, profil: ProfilCroissan
     depart = ajouterJours(finRecolte, 1);
     if (jour < depart) return etat('debourrement', profil, 0);
   }
-  const dmax = profil.duree.en === 'jours' ? profil.duree.jours : profil.duree.fraction * ecartEnJours(depart, repos);
+  // Repousse de Q41 : rampe régulière (linéaire) sur les 28 jours, pleine hauteur au premier jour de récolte.
+  const dmax = rampe ? JOURS_FORMATION_FRUITS : profil.duree.en === 'jours' ? profil.duree.jours : profil.duree.fraction * ecartEnJours(depart, repos);
   const x = avancement(ecartEnJours(depart, jour), dmax);
-  return etat(x < 1 ? 'debourrement' : 'pleine_vegetation', profil, courbe(profil.allure, x));
+  return etat(x < 1 ? 'debourrement' : 'pleine_vegetation', profil, rampe ? x : courbe(profil.allure, x));
 }
