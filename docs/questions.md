@@ -290,6 +290,12 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q38 — La balise de récolte pendant la fin de récolte (posée le 2026-10-10, T32e)
+
+Question : dans la 3D, une planche « à récolter » porte une balise orange au-dessus d'elle. Pendant les deux dernières semaines de la récolte, le feuillage jaunit et la balise disparaît, alors qu'on peut encore y récolter. Proposition : garder une balise jusqu'à la fin de la récolte, d'une teinte plus pâle pendant ces deux dernières semaines (« dernières récoltes »). Ou préfères-tu qu'elle disparaisse, comme aujourd'hui ?
+
+Réponse (2026-10-10) : balise pâle jusqu'au bout : la balise reste jusqu'à la fin de la récolte, plus pâle les deux dernières semaines (« dernières récoltes »), et la planche reste comptée dans « N planches à récolter ». Ticket T32f.
+
 ### Q37 — Tester avec ses vraies données : mise en ligne gratuite (posée le 2026-10-09)
 
 Demande de Théophane : « J'aimerais tester avec les vraies données de ma ferme, avec un compte à moi. » Il a proposé une adresse et un mot de passe dans la conversation : la connexion de l'appli se fait **par code à 6 chiffres envoyé par courriel, sans mot de passe** ; aucun mot de passe ne doit circuler dans une conversation ni dans le dépôt. Rien n'est en ligne aujourd'hui (seule la démo l'est).
