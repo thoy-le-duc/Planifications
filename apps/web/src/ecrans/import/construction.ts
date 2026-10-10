@@ -370,6 +370,8 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
   }
   const nomDeZone = new Map(ctx.zones.map((z) => [z.id, z.nom.trim()]));
   const zonesParCle = new Map<string, string>();
+  /** Clés parente + nom portées par plusieurs zones de la ferme (T14g) : jamais la dernière prise. */
+  const clesEnDouble = new Set<string>();
   /** Zones de premier niveau d'un nom, puis sous-zones d'un nom (avec leur parente), de la ferme. */
   const racinesParNom = new Map<string, string[]>();
   const sousZonesParNom = new Map<string, { readonly id: string; readonly parenteId: string }[]>();
@@ -379,7 +381,9 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
   const profondeurDe = new Map<string, number>();
   for (const z of ctx.zones) {
     const n = normaliser(z.nom);
-    zonesParCle.set(`${z.parenteId ?? ''}\u0001${n}`, z.id);
+    const cle = `${z.parenteId ?? ''}\u0001${n}`;
+    if (zonesParCle.has(cle)) clesEnDouble.add(cle);
+    zonesParCle.set(cle, z.id);
     if (z.parenteId === null) racinesParNom.set(n, [...(racinesParNom.get(n) ?? []), z.id]);
     else sousZonesParNom.set(n, [...(sousZonesParNom.get(n) ?? []), { id: z.id, parenteId: z.parenteId }]);
     toutesZonesParNom.set(n, [...(toutesZonesParNom.get(n) ?? []), z.id]);
@@ -433,10 +437,19 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
     const zones = toutesZonesParNom.get(normaliser(nomZone)) ?? [];
     if (zones.length === 0) throw new Refus(`Zone inconnue : « ${nomZone.trim()} » n’est pas une zone de la ferme (importez d’abord le parcellaire).`, 'zone');
     const candidates: EmplacementConnu[] = [];
-    for (const z of new Set(zones.flatMap((r) => [...zoneEtDescendantes(r)]))) candidates.push(...(planchesParZoneCode.get(`${z}\u0001${k}`) ?? []));
+    const arbres = zones.map(zoneEtDescendantes);
+    for (const z of new Set(arbres.flatMap((a) => [...a]))) candidates.push(...(planchesParZoneCode.get(`${z}\u0001${k}`) ?? []));
     const premiere = candidates[0];
     if (premiere === undefined) throw new Refus(`Emplacement inconnu : « ${affiche} » n’est pas un emplacement de la zone « ${nomZone.trim()} » (importez d’abord le parcellaire).`, 'emplacement');
-    if (candidates.length > 1) ambigu(affiche, candidates, nomZone.trim());
+    if (candidates.length > 1) {
+      // Planches trouvées sous plusieurs zones homonymes (« Chapelle A » du Tunnel 1 et du Tunnel 2) :
+      // préciser la sous-zone n'aide pas, il faut la zone parente (T14g).
+      const homonymes = arbres.filter((a) => candidates.some((c) => a.has(c.zoneId))).length > 1;
+      if (homonymes && new Set(candidates.map((c) => c.zoneId)).size > 1) {
+        throw new Refus(`Code ambigu : « ${affiche} » existe dans plusieurs zones nommées « ${nomZone.trim()} ». Indiquez plutôt la zone parente dans la colonne Zone.`, 'emplacement');
+      }
+      ambigu(affiche, candidates, nomZone.trim());
+    }
     return premiere;
   };
   /**
@@ -502,7 +515,12 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
     }
     /** Zone connue (de la ferme ou créée plus haut dans le fichier) ; nom seul : voir `zoneSeule`. */
     function zoneExiste(nom: string, parente: string | null): string | undefined {
-      return (parente === null ? zoneSeule(nom) : undefined) ?? zonesParCle.get(`${parente ?? ''}\u0001${normaliser(nom)}`);
+      if (parente === null) return zoneSeule(nom) ?? zonesParCle.get(`\u0001${normaliser(nom)}`);
+      const cle = `${parente}\u0001${normaliser(nom)}`;
+      // Seules les zones de la ferme remplissent `clesEnDouble` : une sous-zone créée par l'import
+      // n'est créée qu'une fois (les lignes suivantes la retrouvent), jamais de faux refus.
+      if (clesEnDouble.has(cle)) throw new Refus(`Zone ambiguë : « ${nom.trim()} » existe plusieurs fois dans ${nomDeZone.get(parente) ?? ''}. Renommez l’une d’elles dans le parcellaire.`, 'zone');
+      return zonesParCle.get(cle);
     }
 
     for (const l of lignesValides) {
