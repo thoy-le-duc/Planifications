@@ -285,7 +285,8 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
     const liste = itineraires ?? [];
     return especesTriees.flatMap((e) => {
       const siens = liste.filter((i) => i.especeId === e.id);
-      if (siens.length === 0) return [];
+      // Q40 : toute espèce de la ferme a son groupe, même sans itinéraire ; celles de la bibliothèque seulement si elles en ont.
+      if (siens.length === 0 && e.fermeId === null) return [];
       const trier = (a: ItineraireLu, b: ItineraireLu) => comparerNoms(a.nom, b.nom) || (a.id < b.id ? -1 : 1);
       return [{ espece: e, ferme: siens.filter((i) => i.fermeId !== null).sort(trier), bibliotheque: siens.filter((i) => i.fermeId === null).sort(trier) }];
     });
@@ -473,6 +474,7 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
                             </button>
                           )}
                         </div>
+                        {ferme.length === 0 && bibliotheque.length === 0 && <p className="itin-aide">Aucun itinéraire</p>}
                         <ul>
                           {ferme.map((i) => (
                             <li key={i.id} data-testid="itineraire" data-itineraire={i.id} data-origine="ferme" className="itin-item">
