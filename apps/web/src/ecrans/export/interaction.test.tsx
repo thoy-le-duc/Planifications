@@ -83,6 +83,7 @@ function porteControlee(mode: 'ok' | 'echec'): { porte: PorteDonnees; liberer: (
     surveillerRefus: interdit('surveillerRefus'),
     archiverRefus: () => Promise.resolve(),
     placer: () => Promise.resolve([]),
+    reglerProfilCroissance: () => Promise.resolve(),
   };
   return { porte, liberer: ouvrir, lectures: () => n };
 }

@@ -152,6 +152,7 @@ function porteFactice(): { porte: PorteDonnees; requetes: string[] } {
     surveillerRefus: interdit('surveillerRefus'),
     archiverRefus: () => Promise.resolve(),
     placer: () => Promise.resolve([]),
+    reglerProfilCroissance: () => Promise.resolve(),
   };
   return { porte, requetes };
 }
