@@ -72,7 +72,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T13k](T13k-fait-avant-base.md) | Aujourd'hui : « Fait » accepté avant la base | T13g | fait |
 | [T13l](T13l-gestes-pendant-file.md) | Aujourd'hui : « Annuler » et gestes pendant la file des « Fait » | T13g | fait |
 | [T13m](T13m-chaine-unique.md) | Une seule règle « chaîne d'une saisie » | T13l, T13j | fait |
-| [T13n](T13n-horodatages.md) | Horodatages comparés comme des dates | T13l | en revue |
+| [T13n](T13n-horodatages.md) | Horodatages comparés comme des dates | T13l | fait |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16, T10s | fait |
 | [T14e](T14e-import-series.md) | Import : suites (variétés, saisons, grandes fermes) | T14b | à faire |
