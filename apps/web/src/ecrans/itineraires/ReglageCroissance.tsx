@@ -9,11 +9,15 @@
  * tap. Tous les autres (équipier, utilisateur inconnu) et toute espèce de la bibliothèque commune :
  * lecture seule (Q35). Validation par le cœur ; écriture par la porte, que le serveur contrôle.
  */
-import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactElement } from 'react';
 import { FORMES_PLANT, profilEffectif, profilParDefaut, validerProfilCroissance, type DureeCroissance, type FormePlant, type ProfilCroissance } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import type { EspeceLue } from './calculs.ts';
-import { CROIX, garderLeFocus, type SaisieAnnulable } from './FormulaireItineraire.tsx';
+// Types seuls : aucun import de valeur depuis le morceau de l'écran Itinéraires (un import statique
+// de ce morceau, qui charge celui-ci à la demande, coûte des octets au démarrage : mesuré en T32c).
+import type { SaisieAnnulable } from './FormulaireItineraire.tsx';
+
+const CROIX = 'M6 6l12 12M18 6L6 18';
 
 /** Texte d'une espèce de la bibliothèque commune (Q39 ; « Personnaliser » vient avec T32g). */
 export const TEXTE_ESPECE_BIBLIOTHEQUE = 'Espèce de la bibliothèque : personnalisez-la pour régler sa croissance';
@@ -62,6 +66,8 @@ export interface ProprietesReglageCroissance {
   readonly surFermer: () => void;
   /** Enregistrement fait : le bandeau « Annuler » de l'écran. */
   readonly surEnregistre: (s: SaisieAnnulable) => void;
+  /** Tab et Maj+Tab restent dans le dialogue (celui de l'écran, passé en propriété). */
+  readonly garderLeFocus: (e: KeyboardEvent<HTMLElement>) => void;
 }
 
 /** L'utilisateur est-il gérant actif de la ferme (ligne locale `membre`) ? undefined : pas encore lu. */
@@ -88,15 +94,26 @@ function useGerant(porte: PorteDonnees, fermeId: string, utilisateurId: string |
   return gerant;
 }
 
-export function ReglageCroissance({ porte, fermeId, utilisateurId, espece, surFermer, surEnregistre }: ProprietesReglageCroissance): ReactElement | null {
+export function ReglageCroissance({ porte, fermeId, utilisateurId, espece, surFermer, surEnregistre, garderLeFocus }: ProprietesReglageCroissance): ReactElement | null {
   const gerant = useGerant(porte, fermeId, utilisateurId);
   // Rien tant que le rôle n'est pas lu (base locale : quelques millisecondes) : jamais de champs actifs à tort.
   if (gerant === undefined) return null;
   const deLaFerme = espece.fermeId === fermeId;
-  return <Reglage porte={porte} espece={espece} modifiable={gerant && deLaFerme} bibliotheque={espece.fermeId === null} surFermer={surFermer} surEnregistre={surEnregistre} />;
+  return (
+    <Reglage
+      porte={porte}
+      espece={espece}
+      modifiable={gerant && deLaFerme}
+      bibliotheque={espece.fermeId === null}
+      surFermer={surFermer}
+      surEnregistre={surEnregistre}
+      garderLeFocus={garderLeFocus}
+    />
+  );
 }
 
 interface ProprietesReglage {
+  readonly garderLeFocus: (e: KeyboardEvent<HTMLElement>) => void;
   readonly porte: PorteDonnees;
   readonly espece: EspeceLue;
   readonly modifiable: boolean;
@@ -105,7 +122,7 @@ interface ProprietesReglage {
   readonly surEnregistre: (s: SaisieAnnulable) => void;
 }
 
-function Reglage({ porte, espece, modifiable, bibliotheque, surFermer, surEnregistre }: ProprietesReglage): ReactElement {
+function Reglage({ porte, espece, modifiable, bibliotheque, surFermer, surEnregistre, garderLeFocus }: ProprietesReglage): ReactElement {
   const idTitre = useId();
   const idForme = useId();
   const idHauteur = useId();

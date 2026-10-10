@@ -682,6 +682,7 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
             setCroissance(null);
           }}
           surEnregistre={enregistre}
+          garderLeFocus={garderLeFocus}
         />
       )}
       {renommer !== null && pret && (
