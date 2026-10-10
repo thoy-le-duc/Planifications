@@ -6,6 +6,9 @@
  * (ContexteFerme). Un tap charge l'export (`import('../export/index.ts')`, jamais un import
  * statique : ni l'entrée ni ce morceau ne portent l'export), lit la base par la porte du contexte
  * et télécharge l'archive. Barre d'avancement et bouton « Annuler » pendant l'export.
+ * T15e : l'export vit dans le morceau de l'export (exportEnFond), pas dans l'écran ; l'écran en
+ * montre l'état. Avec `surExport` (App), l'appli héberge l'export : quitter l'onglet ne l'arrête
+ * plus, son bandeau le montre ailleurs. Sans hôte, quitter l'écran l'annule, comme avant.
  *
  * Déconnexion (T11) : la base ouverte par l'appli compte les saisies en attente et se ferme avant
  * l'effacement. Dès que la déconnexion est décidée, le bouton d'export est désactivé et un export
@@ -40,6 +43,8 @@ import { ContexteFerme } from '../../donnees/contexte.ts';
 import { baseLocaleExiste, effacerDonneesLocales } from '../../donnees/effacer.ts';
 import type { PorteDonnees, RefusSynchro } from '@planif/sync';
 import type { EtatBase, PoigneeDonnees } from '../../donnees/etat-appli.ts';
+import type * as ModuleExportType from '../export/index.ts';
+import type { EtatExport, InstantExport } from '../export/index.ts';
 import { AlerteOrange, BoutonSecondaire, CARTE } from '../../ui/elements.tsx';
 import { Confirmation } from '../../ui/confirmation.tsx';
 import { Apparence } from './Apparence.tsx';
@@ -69,10 +74,28 @@ export interface ProprietesEcranFerme {
   readonly etatBase: EtatBase;
   /** Démo (T25b) : pas de bouton « Se déconnecter ». */
   readonly sansDeconnexion?: boolean;
+  /**
+   * T15e : l'appli héberge l'export (bandeau sur les autres onglets) ; reçoit le morceau de
+   * l'export dès qu'il est chargé. Sans hôte, quitter l'écran annule l'export.
+   */
+  readonly surExport?: (module: ModuleExport) => void;
 }
 
+/** Morceau de l'export (T15e) : App en tire le bandeau. */
+export type ModuleExport = typeof ModuleExportType;
+
+/** Morceau de l'export une fois chargé : il porte l'export en cours, qui survit à l'écran. */
+let exportCharge: ModuleExport | null = null;
+
 /** L'écran d'export, chargé à la demande (morceau à part). */
-const chargerExport = () => import('../export/index.ts');
+const chargerExport = () =>
+  import('../export/index.ts').then((m) => {
+    exportCharge = m;
+    return m;
+  });
+
+/** Aucun export chargé : rien à montrer. */
+const SANS_EXPORT: InstantExport = { id: 0, porte: null, fermeId: null, etat: { etape: 'repos' }, actif: false };
 
 /** L'écran des itinéraires (T24), chargé à la demande (morceau à part). */
 const chargerItineraires = () => import('../itineraires/index.ts');
@@ -100,40 +123,6 @@ const EXPLICATION_EXPORT: Readonly<Record<Exclude<EtatBase, 'prete'>, string>> =
   echec: 'Les données de ce téléphone n’ont pas pu s’ouvrir : export impossible. Rechargez l’appli ; si cela recommence, signalez-le.',
 };
 
-type EtatExport =
-  | { readonly etape: 'repos' }
-  | { readonly etape: 'en_cours'; readonly fait: number; readonly total: number }
-  | { readonly etape: 'fini'; readonly message: string }
-  | { readonly etape: 'annule' }
-  | { readonly etape: 'echec' };
-
-/** Export en cours : son annulation, et sa fin, lectures de la porte comprises (jamais rejetée). */
-interface ExportEnCours {
-  readonly controleur: AbortController;
-  readonly fin: Promise<void>;
-}
-
-/** Attente maximale des lectures de l'export encore en vol avant de fermer la base (déconnexion). */
-const DELAI_FERMETURE_MS = 2_000;
-
-/** Attend la fin des lectures suivies, au plus DELAI_FERMETURE_MS ; ne rejette jamais, ne laisse aucune minuterie. */
-async function attendreLectures(lectures: ReadonlySet<Promise<unknown>>): Promise<void> {
-  if (lectures.size === 0) return;
-  let minuterie: ReturnType<typeof setTimeout> | undefined;
-  const limite = new Promise<void>((fin) => {
-    minuterie = setTimeout(fin, DELAI_FERMETURE_MS);
-  });
-  const toutes = (async () => {
-    while (lectures.size > 0) await Promise.allSettled([...lectures]);
-  })();
-  try {
-    await Promise.race([toutes, limite]);
-  } finally {
-    clearTimeout(minuterie);
-  }
-}
-
-const nombre = new Intl.NumberFormat('fr-FR');
 /** Texte de la zone d'annonce (role="status") de la carte « Mes données », selon l'étape. */
 const ANNONCE: Readonly<Partial<Record<EtatExport['etape'], string>>> = { en_cours: 'Export en cours…', annule: 'Export annulé.' };
 const BARRE: CSSProperties = { display: 'block', width: '100%', height: 16, accentColor: 'var(--couleur-foret)' };
@@ -205,18 +194,58 @@ function Carte({ titre, idTitre, children }: { readonly titre: string; readonly 
 /** Effacement d'un ancien compte resté en attente (T09b) : le dire, jusqu'à ce qu'il aboutisse. */
 const ALERTE_EFFACEMENT = 'Les données d’un ancien compte n’ont pas encore été effacées de ce téléphone : fermez les autres onglets.';
 
-export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBase, sansDeconnexion = false }: ProprietesEcranFerme) {
+export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBase, sansDeconnexion = false, surExport }: ProprietesEcranFerme) {
   const idApparence = useId();
   // Lu à l'ouverture de l'écran : l'effacement n'est repris que sur l'écran de connexion.
   const [effacementEnAttente] = useState(() => effacementsEnAttente(stockageNavigateur()).length > 0);
   const ouverte = useContext(ContexteFerme);
-  const [etatExport, setEtatExport] = useState<EtatExport>({ etape: 'repos' });
-  const exportEnCours = useRef<ExportEnCours | null>(null);
+  // T15e : l'export vit dans son morceau (exportEnFond) ; l'écran en suit l'état, par tranches
+  // (startTransition, T15d : chaque avancée de la barre redessine l'écran).
+  const [moduleExport, setModuleExport] = useState(exportCharge);
+  // Dernier état notifié ; avant la première notification, l'état est lu au rendu.
+  const [notifie, setNotifie] = useState<{ readonly module: ModuleExport; readonly instant: InstantExport } | null>(null);
+  const instant =
+    moduleExport === null ? SANS_EXPORT : notifie?.module === moduleExport ? notifie.instant : moduleExport.exportEnFond.lire();
+  const instantDessine = useRef(instant);
+  useLayoutEffect(() => {
+    instantDessine.current = instant;
+  });
+  useEffect(() => {
+    if (moduleExport === null) return undefined;
+    surExport?.(moduleExport);
+    const { exportEnFond } = moduleExport;
+    const suivre = () => {
+      startTransition(() => {
+        setNotifie({ module: moduleExport, instant: exportEnFond.lire() });
+      });
+    };
+    const fin = exportEnFond.abonner(suivre);
+    // Changé entre le rendu et l'abonnement : rattrapé.
+    if (exportEnFond.lire() !== instantDessine.current) suivre();
+    return fin;
+  }, [moduleExport, surExport]);
+  // Sans hôte (surExport), écran quitté (onglet changé, déconnexion) : l'export est annulé, rien ne sort après.
+  const heberge = surExport !== undefined;
+  const demonte = useRef(false);
+  useEffect(() => {
+    demonte.current = false;
+    return () => {
+      demonte.current = true;
+      if (!heberge) void exportCharge?.exportEnFond.arreter();
+    };
+  }, [heberge]);
+  // L'export d'une autre ferme ouverte ne concerne pas cet écran.
+  const exportDeCetteFerme = ouverte !== null && moduleExport?.exportDe(instant, ouverte.porte, ouverte.fermeId) === true;
+  const etatExport: EtatExport = exportDeCetteFerme ? instant.etat : SANS_EXPORT.etat;
   const [deconnexionEnCours, setDeconnexionEnCours] = useState(false);
   /** Déconnexion décidée : lu par `exporter` au moment du tap, sans attendre un nouveau rendu. */
   const deconnexionDecidee = useRef(false);
-  /** Vrai du tap jusqu'à la fin de l'export, lectures en vol comprises (annulé : un peu après « Export annulé »). */
-  const [exportActif, setExportActif] = useState(false);
+  /** Vrai du lancement jusqu'à la fin de l'export, lectures en vol comprises (annulé : un peu après « Export annulé »). */
+  const exportActif = exportDeCetteFerme && instant.actif;
+  /** Le morceau de l'export n'a pas pu se charger au tap : même alerte qu'un export en échec. */
+  const [echecChargement, setEchecChargement] = useState(false);
+  /** Export lancé depuis cet écran : le focus passe sur « Annuler » (pas au retour sur l'onglet). */
+  const focusAnnuler = useRef(false);
   const pied = useRef<HTMLDivElement>(null);
   const enCours = etatExport.etape === 'en_cours';
 
@@ -246,16 +275,10 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
 
   // Au lancement, le focus clavier passe sur « Annuler » (le bouton tapé devient désactivé).
   useEffect(() => {
-    if (enCours) pied.current?.querySelector('button')?.focus();
+    if (!enCours || !focusAnnuler.current) return;
+    focusAnnuler.current = false;
+    pied.current?.querySelector('button')?.focus();
   }, [enCours]);
-
-  // Écran quitté (onglet changé, déconnexion) : l'export en cours est annulé, rien ne sort après.
-  useEffect(
-    () => () => {
-      exportEnCours.current?.controleur.abort();
-    },
-    [],
-  );
 
   const exportPossible = etatBase === 'prete' && ouverte !== null && !deconnexionEnCours;
   const itinerairesPossibles = etatBase === 'prete' && ouverte !== null && !deconnexionEnCours;
@@ -343,7 +366,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     if (!exportPossible) return;
     const g = globalThis as { requestIdleCallback?: (f: () => void) => number; cancelIdleCallback?: (id: number) => void };
     const precharger = () => {
-      chargerExport().catch(() => undefined);
+      chargerExport().then(setModuleExport, () => undefined);
     };
     if (g.requestIdleCallback === undefined || g.cancelIdleCallback === undefined) {
       const minuterie = setTimeout(precharger, 500);
@@ -363,80 +386,38 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     etatBase === 'prete' && ouverte !== null ? null : EXPLICATION_EXPORT[etatBase === 'prete' ? 'ouverture' : etatBase];
 
   function exporter(): void {
-    if (ouverte === null || exportEnCours.current !== null || deconnexionDecidee.current) return;
-    const controleur = new AbortController();
-    const signal = controleur.signal;
-    // Porte suivie : les lectures encore en vol sont attendues avant de fermer la base.
-    const lectures = new Set<Promise<unknown>>();
-    const porte: PorteDonnees = {
-      ...ouverte.porte,
-      lire: <T,>(sql: string, parametres?: readonly unknown[]) => {
-        const p = ouverte.porte.lire<T>(sql, parametres);
-        const suivie = p.then(
-          () => undefined,
-          () => undefined,
-        );
-        lectures.add(suivie);
-        void suivie.then(() => lectures.delete(suivie));
-        return p;
-      },
+    if (ouverte === null || exportActif || deconnexionDecidee.current) return;
+    const { porte, fermeId } = ouverte;
+    if (echecChargement) setEchecChargement(false);
+    const lancer = (m: ModuleExport) => {
+      // Écran quitté pendant le chargement, sans hôte : rien ne part.
+      if (deconnexionDecidee.current || (!heberge && demonte.current)) return;
+      // L'appli reçoit le morceau ici aussi : écran déjà quitté (tap avant le préchargement),
+      // l'effet qui le lui donne ne s'exécutera plus ; sans lui, ni bandeau ni arrêt en fin de session.
+      surExport?.(m);
+      // Le rendu du tap (barre, « Annuler ») passe par l'abonnement, en transition (T15d).
+      if (m.exportEnFond.lancer(porte, fermeId)) focusAnnuler.current = true;
     };
-    const { fermeId } = ouverte;
-    // Rendu de l'écran en transition (T15d) : découpé par React en tranches de quelques ms. Rendu
-    // d'un bloc dans le tap, il faisait avec les événements du doigt une tâche de 64 à 78 ms
-    // (CPU ×4, machine chargée). Un second tap est déjà refusé par `exportEnCours`.
-    startTransition(() => {
-      setEtatExport({ etape: 'en_cours', fait: 0, total: 0 });
-      setExportActif(true);
-    });
-    const fin = (async () => {
-      try {
-        // Le rendu du tap (barre, « Annuler », focus) d'abord, le lancement dans une tâche à part :
-        // observé sous charge, les deux ensemble faisaient une tâche de ≈ 54 ms (CPU ×4).
-        await new Promise((suite) => setTimeout(suite, 0));
-        signal.throwIfAborted();
-        const { lancerExport, telechargerDansLeNavigateur } = await chargerExport();
-        signal.throwIfAborted();
-        const archive = await lancerExport({
-          porte,
-          fermeId,
-          maintenant: () => new Date(),
-          telecharger: telechargerDansLeNavigateur,
-          signal,
-          avancement: ({ fait, total }) => {
-            // Même raison : chaque avancée de la barre redessine l'écran, par tranches.
-            if (!signal.aborted) {
-              startTransition(() => {
-                setEtatExport({ etape: 'en_cours', fait, total });
-              });
-            }
-          },
-        });
-        const evenements = archive.lignes.evenement ?? 0;
-        setEtatExport({ etape: 'fini', message: `Archive ${archive.nomFichier} prête : ${nombre.format(evenements)} événements exportés.` });
-      } catch (erreur: unknown) {
-        if (signal.aborted) {
-          setEtatExport({ etape: 'annule' });
-          return;
-        }
-        console.error('Export de la ferme impossible', erreur);
-        setEtatExport({ etape: 'echec' });
-      } finally {
-        // Annulé : l'export a rejeté tout de suite, mais une lecture de page peut être en vol.
-        await attendreLectures(lectures);
-        if (exportEnCours.current?.controleur === controleur) exportEnCours.current = null;
-        setExportActif(false);
-      }
-    })();
-    exportEnCours.current = { controleur, fin };
+    if (exportCharge !== null) {
+      lancer(exportCharge);
+      return;
+    }
+    // Tap avant le préchargement au repos : le morceau se charge (quelques ms depuis le précache).
+    chargerExport().then(
+      (m) => {
+        setModuleExport(m);
+        lancer(m);
+      },
+      (e: unknown) => {
+        console.error('Export de la ferme impossible', e);
+        setEchecChargement(true);
+      },
+    );
   }
 
-  /** Annule l'export en cours (s'il y en a un) ; résout quand il est bien arrêté. */
+  /** Annule l'export en cours (s'il y en a un) ; résout quand il est bien arrêté, lectures en vol comprises. */
   function arreterExport(): Promise<void> {
-    const enCours = exportEnCours.current;
-    if (enCours === null) return Promise.resolve();
-    enCours.controleur.abort();
-    return enCours.fin;
+    return exportCharge?.exportEnFond.arreter() ?? Promise.resolve();
   }
 
   // Appel détaché : fetch ne doit pas être invoqué comme méthode d'un autre objet. Premier geste
@@ -597,7 +578,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
           }}
         />
       )}
-      {etatExport.etape === 'echec' && <AlerteOrange>L’export n’a pas pu se faire. Réessayez ; si cela recommence, signalez-le.</AlerteOrange>}
+      {(etatExport.etape === 'echec' || echecChargement) && <AlerteOrange>L’export n’a pas pu se faire. Réessayez ; si cela recommence, signalez-le.</AlerteOrange>}
 
       <Carte titre="Apparence" idTitre={idApparence}>
         <Apparence idTitre={idApparence} />

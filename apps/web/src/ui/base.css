@@ -123,6 +123,24 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* Onglet de la barre de navigation (src/ui/composants.tsx : cibles et couleur en ligne). */
+.onglet {
+  flex: 1 1 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: clamp(10px, 3.4vw, 13px);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .onglet:focus-visible,
 .ligne-carte:focus-visible {
   outline-offset: -4px;

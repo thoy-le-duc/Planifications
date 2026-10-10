@@ -170,25 +170,9 @@ export function BarreNavigation({ actif, surChoix, pastilleFerme = false }: Prop
             onClick={() => {
               surChoix(id);
             }}
-            style={{
-              flex: '1 1 0',
-              minWidth: 48,
-              minHeight: 60,
-              padding: 0,
-              border: 0,
-              background: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 4,
-              fontSize: 'clamp(10px, 3.4vw, 13px)',
-              fontWeight: 700,
-              lineHeight: 1.1,
-              textAlign: 'center',
-              overflowWrap: 'anywhere',
-              color: courant ? 'var(--couleur-foret)' : 'var(--couleur-tertiaire)',
-            }}
+            // Mise en page de l'onglet : classe onglet (src/ui/base.css), hors du JavaScript de
+            // démarrage (T15e) ; ici les cibles tactiles et la couleur de l'onglet actif.
+            style={{ minWidth: 48, minHeight: 60, color: courant ? 'var(--couleur-foret)' : 'var(--couleur-tertiaire)' }}
           >
             <span style={{ position: 'relative', display: 'flex' }}>
               <svg
