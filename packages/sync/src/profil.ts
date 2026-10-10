@@ -3,7 +3,7 @@
  * chargée à la demande (le réglage, dans l'écran Itinéraires, n'est pas au démarrage de l'appli).
  * Contrat : test/contrat-profil.ts.
  *
- * Elle rejoue avant d'écrire ce que le serveur refuserait (apps/api/src/sync/profil-droits.ts) :
+ * Elle rejoue avant d'écrire ce que le serveur refuserait (apps/api/src/sync/structure.ts) :
  * gérant actif de la ferme de la porte (Q35), règles du cœur (validerProfilCroissance), espèce de
  * la ferme de la porte (ni d'une autre ferme, ni de la bibliothèque commune). Le serveur reste
  * l'arbitre. Une transaction locale, un seul UPDATE : un envoi, tout ou rien.

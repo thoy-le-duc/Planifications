@@ -19,3 +19,8 @@
 - [ ] Test serveur : un équipier qui envoie la copie → refus ; le gérant → accepté.
 - [ ] Test : deuxième personnalisation de la même espèce refusée avec message.
 - [ ] `pnpm verif` passe en entier.
+
+## Suites de la relecture T32c
+
+- « Enregistrer » sans rien changer, sur une espèce sans profil, fige le défaut actuel en profil de la ferme : les corrections futures des valeurs par défaut ne s'y appliqueront plus. Ne rien écrire quand la saisie est égale au défaut (ou le signaler), avec un test.
+- Tests serveur à ajouter : profil équivalent écrit autrement (ordre des clés, `fougereApresRecolte: false`) renvoyé par un équipier → accepté sans changement ; membre retiré ou invité non accepté → refus.
