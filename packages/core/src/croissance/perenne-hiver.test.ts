@@ -61,10 +61,12 @@ describe('T32f B1 : continuité au 31 décembre (bord de la règle)', () => {
     expect(stadeA(avec('2027-01-28', '2027-04-20'), '2027-01-01').stade).not.toBe('repos');
   });
 
-  it('début le 1er février : pas en cours le 31 décembre (32 jours) → repos en janvier, comme T32a, puis débourrement au début', () => {
+  // Q41 (T32i) : J−28 tombe le 4 janvier ; repos jusqu'à J−29, puis repousse régulière jusqu'au début de récolte.
+  it('début le 1er février : pas en cours le 31 décembre (32 jours) → repos jusqu’à J−29, puis repousse sur 28 jours', () => {
     const e = avec('2027-02-01', '2027-04-20');
     expect(stadeA(e, '2027-01-01')).toMatchObject({ stade: 'repos', hauteurM: 0 });
-    expect(stadeA(e, '2027-01-31')).toMatchObject({ stade: 'repos', hauteurM: 0 });
-    expect(stadeA(e, '2027-02-01')).toMatchObject({ stade: 'debourrement', hauteurM: 0 });
+    expect(stadeA(e, '2027-01-31').stade).toBe('debourrement');
+    expect(stadeA(e, '2027-01-31').hauteurM).toBeGreaterThan(0);
+    expect(stadeA(e, '2027-02-01')).toMatchObject({ stade: 'pleine_vegetation', hauteurM: 0.25 });
   });
 });
