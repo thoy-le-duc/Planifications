@@ -20,10 +20,10 @@ import {
   type DecisionPrise,
   type TypeContenu,
 } from '@planif/core';
-import type { PorteDonnees } from '@planif/sync';
+import type { PorteDonnees, RefusSynchro } from '@planif/sync';
 import './import.css';
 import { lireContexte } from './contexte-base.ts';
-import { annulerImport, importsDeLaFerme, interruption, noterImport, noterLotsEcrits, type ImportPasse } from './historique.ts';
+import { annulerImport, importsDeLaFerme, interruption, noterImport, noterLotsEcrits, suivreRefus, type ImportPasse } from './historique.ts';
 import { modeleQuiConvient, rangerModele } from './modeles.ts';
 import { creerPreparateur } from './preparateur.ts';
 import { CATEGORIES_CULTURE, enFrancais, PLAFOND_VALEURS_A_RAPPROCHER, UNITES_CULTURE } from './constantes.ts';
@@ -136,6 +136,29 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
       clearTimeout(minuterie);
     };
   }, [toutesVisibles, colonnesVisibles]);
+
+  // T14e : refus du serveur (non archivés), en direct. Un refus d'annulation est noté sur
+  // l'import (historique) ; tant que la liste n'est pas lue, le refus noté reste montré.
+  const refus = useRef<readonly RefusSynchro[]>([]);
+  const [refusCourants, setRefusCourants] = useState<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    let actif = true;
+    const arreter = porte.surveillerRefus((r) => {
+      refus.current = r;
+      setRefusCourants(new Set(r.map((x) => x.id)));
+      suivreRefus(porte, fermeId, r)
+        .then((liste) => {
+          if (actif && liste !== null) setHistorique(liste);
+        })
+        .catch((e: unknown) => {
+          console.error('Refus d’annulation non noté', e);
+        });
+    });
+    return () => {
+      actif = false;
+      arreter();
+    };
+  }, [porte, fermeId]);
 
   // Moteur de préparation : un par écran ouvert (Worker arrêté à la fermeture).
   const preparateur = useRef<Preparateur | null>(null);
@@ -416,7 +439,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
     try {
       // L'état rangé le plus récent (lots déjà annulés, lots écrits).
       const actuel = importsDeLaFerme(fermeId).find((x) => x.id === passe.id) ?? passe;
-      const r = await annulerImport(porte, fermeId, actuel, maintenant().toISOString());
+      const r = await annulerImport(porte, fermeId, actuel, maintenant().toISOString(), refus.current);
       if (r.sorte === 'refuse') setAlerte(r.message);
       else if (r.sorte === 'incomplet') {
         setAlerte(
@@ -587,6 +610,11 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
                             · {dateCourte(i.le)}
                             {i.etat === 'annule' ? ' · annulé' : ''}
                           </span>
+                          {i.refusAnnulation !== undefined && (refusCourants === null || i.refusAnnulation.ids.some((id) => refusCourants.has(id))) && (
+                            <span data-testid="annulation-refusee" className="imp-refus-annulation">
+                              {i.refusAnnulation.texte}
+                            </span>
+                          )}
                         </span>
                         {i.etat === 'actif' && (
                           <button type="button" className="imp-bouton-secondaire" disabled={occupe} onClick={() => void annuler(i)}>
