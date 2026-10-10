@@ -124,7 +124,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T28f](T28f-trouver-editeur.md) | Plan de la ferme : trouver et ouvrir l'éditeur depuis la 3D, démo comprise (Q32) | T28b, T28e | fait |
 | [T32a](T32a-croissance-profils.md) | Croissance des cultures : profils et calcul (moteur) (Q32) | T02, T03 | fait |
 | [T32b](T32b-plants-stylises-3d.md) | Jumeau 3D : plants stylisés qui grandissent (Q32) | T32a, T28c, T29b | fait |
-| [T32c](T32c-reglage-profils.md) | Profils de croissance : réglage par la ferme (écran) (Q32) | T32a, T32b | à faire |
+| [T32c](T32c-reglage-profils.md) | Profils de croissance : réglage par la ferme (écran) (Q32) | T32a, T32b | en revue |
 | [T32g](T32g-personnaliser-espece.md) | « Personnaliser » une espèce de la bibliothèque pour régler sa croissance (Q39) | T32c | à faire |
 | [T33](T33-verrou-e2e.md) | Un seul jeu e2e à la fois sur la machine (verrou flock) | — | fait |
 | [T14f](T14f-import-codes-par-zone.md) | Import : codes de planche comparés par zone | T10t | fait |
