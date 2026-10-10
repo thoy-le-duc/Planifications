@@ -10,16 +10,21 @@
  *   surveillerMorceauIntrouvable(options?: OptionsRechargement): () => void
  *     Écoute EVENEMENT_MORCEAU_INTROUVABLE ('vite:preloadError') sur `options.cible` (défaut :
  *     window) ; rend la fonction qui arrête l'écoute. À chaque événement :
- *       - `event.preventDefault()` (Vite ne relance pas l'erreur : l'appli gère) ;
- *       - si aucune saisie n'est en cours : `options.recharger()` (défaut : location.reload()) ;
- *       - sinon : on ne recharge PAS ; dès que `saisieEnCours()` redevient faux (sondée toutes
- *         les `sondageMs`, défaut 1 000 ms), on recharge, une seule fois ;
+ *       - si aucune saisie n'est en cours (et le rechargement permis, voir anti-boucle) :
+ *         `event.preventDefault()` et `options.recharger()` (défaut : location.reload()) tout
+ *         de suite ;
+ *       - sinon : PAS de preventDefault (T11b, relecture B1 : avec Vite 8, un `import()` dont
+ *         l'erreur est empêchée se résout à vide ; l'erreur doit suivre son cours pour que
+ *         l'écran dise son échec et réessaie au prochain affichage) ; saisie en cours : on ne
+ *         recharge pas ; dès que `saisieEnCours()` redevient faux (sondée toutes les
+ *         `sondageMs`, défaut 1 000 ms), on recharge, une seule fois ;
  *       - plusieurs événements (plusieurs fichiers manquants) : un seul rechargement ;
  *       - anti-boucle : si un rechargement de ce genre a déjà eu lieu il y a moins de
  *         DELAI_ANTI_BOUCLE_MS (60 s ; l'heure est rangée sous CLE_RECHARGEMENT dans
  *         `options.stockage`, défaut sessionStorage, écrite AVANT de recharger), on ne recharge
  *         pas : un fichier vraiment absent du serveur ne doit pas faire boucler la page. Un
- *         stockage illisible (exception) n'empêche pas de recharger.
+ *         stockage illisible (exception) empêche de recharger (relecture N1 : sans l'heure
+ *         rangée, la page bouclerait).
  *
  *   saisieEnCours(doc?: Document): boolean   (défaut : document)
  *     Rien n'existait dans l'appli pour savoir si l'utilisateur est en train de saisir (pas de
@@ -120,7 +125,7 @@ describe('T11b : morceau introuvable après une mise à jour — rechargement de
     arreter = m.surveillerMorceauIntrouvable({ cible, recharger, saisieEnCours: () => saisie, stockage: stockageMemoire(), sondageMs: 1_000 });
     const e = preloadError();
     cible.dispatchEvent(e);
-    expect(e.defaultPrevented).toBe(true);
+    expect(e.defaultPrevented, 'pas de rechargement immédiat : l’erreur suit son cours (écran d’échec)').toBe(false);
     vi.advanceTimersByTime(30_000);
     expect(recharger, 'rien n’est rechargé pendant la saisie').not.toHaveBeenCalled();
     saisie = false;
@@ -154,9 +159,11 @@ describe('T11b : morceau introuvable après une mise à jour — rechargement de
     // La page rechargée (même stockage de session) retombe sur le même fichier manquant.
     const apres = vi.fn();
     arreter = m.surveillerMorceauIntrouvable({ cible, recharger: apres, saisieEnCours: () => false, stockage, maintenant: () => maintenant + m.DELAI_ANTI_BOUCLE_MS - 1_000 });
-    cible.dispatchEvent(preloadError());
+    const bloque = preloadError();
+    cible.dispatchEvent(bloque);
     vi.advanceTimersByTime(5_000);
     expect(apres, 'pas de boucle de rechargements').not.toHaveBeenCalled();
+    expect(bloque.defaultPrevented, 'l’erreur suit son cours : l’écran dit son échec').toBe(false);
     arreter();
 
     // Plus tard (une vraie mise à jour de plus), on recharge de nouveau.
@@ -167,7 +174,7 @@ describe('T11b : morceau introuvable après une mise à jour — rechargement de
     expect(plusTard).toHaveBeenCalledTimes(1);
   });
 
-  it('un stockage illisible n’empêche pas de recharger', () => {
+  it('un stockage illisible empêche de recharger (sinon boucle), et l’erreur suit son cours', () => {
     const cible = new EventTarget();
     const recharger = vi.fn();
     const casse: Pick<Storage, 'getItem' | 'setItem'> = {
@@ -179,9 +186,11 @@ describe('T11b : morceau introuvable après une mise à jour — rechargement de
       },
     };
     arreter = m.surveillerMorceauIntrouvable({ cible, recharger, saisieEnCours: () => false, stockage: casse });
-    cible.dispatchEvent(preloadError());
-    vi.advanceTimersByTime(2_000);
-    expect(recharger).toHaveBeenCalledTimes(1);
+    const e = preloadError();
+    cible.dispatchEvent(e);
+    vi.advanceTimersByTime(5_000);
+    expect(recharger).not.toHaveBeenCalled();
+    expect(e.defaultPrevented).toBe(false);
   });
 
   it('la fonction rendue arrête l’écoute', () => {
