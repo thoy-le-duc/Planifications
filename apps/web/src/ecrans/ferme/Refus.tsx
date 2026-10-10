@@ -348,6 +348,8 @@ function useArchivageDiffere(
 ) {
   const [enAttente, setEnAttente] = useState<readonly string[]>([]);
   const [envoyes, setEnvoyes] = useState<ReadonlySet<string>>(() => new Set());
+  /** T11b : écritures d'archivage parties et pas terminées (marqueur de saisie en cours). */
+  const [ecritures, setEcritures] = useState(0);
   const attente = useRef<readonly string[]>([]);
   const minuteur = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Écritures parties et pas encore terminées : la déconnexion les attend. */
@@ -389,7 +391,11 @@ function useArchivageDiffere(
       echec();
     });
     enCours.current.add(ecriture);
-    void ecriture.finally(() => enCours.current.delete(ecriture));
+    setEcritures((n) => n + 1);
+    void ecriture.finally(() => {
+      enCours.current.delete(ecriture);
+      setEcritures((n) => n - 1);
+    });
   }, [vider]);
 
   /** Écrit ce qui attend et résout quand toutes les écritures parties sont terminées (déconnexion). */
@@ -441,7 +447,7 @@ function useArchivageDiffere(
     vider();
   }
 
-  return { enAttente, envoyes, archiverPlusTard, annuler, ecrireEtAttendre };
+  return { enAttente, envoyes, ecritures, archiverPlusTard, annuler, ecrireEtAttendre };
 }
 
 /** T10n : « Annuler » du bandeau, 56 px pour un doigt ganté (en ligne : la hauteur se vérifie sans feuille de style). */
@@ -506,7 +512,7 @@ export function SaisiesRefusees({
   const signalerEchec = useCallback(() => {
     setEchec(true);
   }, []);
-  const { enAttente, envoyes, archiverPlusTard, annuler, ecrireEtAttendre } = useArchivageDiffere(refus, archiver, signalerEchec);
+  const { enAttente, envoyes, ecritures, archiverPlusTard, annuler, ecrireEtAttendre } = useArchivageDiffere(refus, archiver, signalerEchec);
   useEffect(() => {
     if (vidangeRef === undefined) return undefined;
     vidangeRef.current = ecrireEtAttendre;
@@ -520,7 +526,8 @@ export function SaisiesRefusees({
   const enAttenteListes = enAttente.length === 0 ? 0 : refus.filter((r) => enAttente.includes(r.id)).length;
   // Zone d'annonce à une seule place de l'arbre : le même nœud, que la carte soit là ou non.
   const zone = (
-    <div data-testid="refus-annulation" role="status">
+    // T11b : archivage en attente ou en cours d'écriture : pas de rechargement après une mise à jour.
+    <div data-testid="refus-annulation" data-saisie-en-cours={enAttente.length > 0 || ecritures > 0 ? 'oui' : undefined} role="status">
       {enAttenteListes > 0 && (
         <BandeauAnnulation
           nombre={enAttenteListes}

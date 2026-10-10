@@ -350,3 +350,25 @@ describe('T12b : N5, bandeau « Annuler » face à un autre téléphone (règle 
     verifierOrdres(b);
   });
 });
+
+describe('T11b : bandeau « Annuler » du plan marqué comme saisie en cours (relecture B2)', () => {
+  it('tant que le bandeau est affiché, data-saisie-en-cours="oui" : pas de rechargement après une mise à jour', async () => {
+    const { saisieEnCours } = await import('../../rechargement.ts');
+    await rendre();
+    await saison2027();
+    const barre = conteneur.querySelector<HTMLElement>(`[data-testid="barre"][data-occupation="${OCCUPATION_LAITUE}"]`);
+    if (barre === null) throw new Error('barre de SERIE_LAITUE absente');
+    await toucher(barre);
+    await toucher(bouton('Modifier la série', dialogueOuEchec('Détail de la série')));
+    await attendre(() => dialogue('Modifier la série') !== undefined, 'formulaire de modification');
+    const f = dialogueOuEchec('Modifier la série');
+    await attendre(() => f.querySelector('[data-testid="date-serie"]') !== null, 'formulaire rempli');
+    await remplir(champ('Longueur T2-P02', f), '20');
+    await toucher(bouton('Enregistrer', f));
+    await attendre(() => conteneur.querySelector('[data-testid="saisie-annulable"]') !== null, 'bandeau « Annuler »');
+    await attendre(() => dialogue('Modifier la série') === undefined, 'formulaire fermé');
+    const bandeau = conteneur.querySelector<HTMLElement>('[data-testid="saisie-annulable"]');
+    expect(bandeau?.dataset.saisieEnCours).toBe('oui');
+    expect(saisieEnCours(document)).toBe(true);
+  });
+});

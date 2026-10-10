@@ -618,7 +618,7 @@ type OccupationsPlan = Pick<DonneesPlan, 'occupation' | 'serie' | 'plantation'>;
 
 /** Colonnes lues : seules celles dont le plan se sert (moins de données à faire passer du worker). */
 const COLONNES = {
-  zone: 'id, nom, zone_parente_id, contour',
+  zone: 'id, nom, zone_parente_id, contour, supprime_le',
   emplacement:
     'id, ferme_id, zone_id, code, sorte, longueur_m, largeur_m, nombre_places, actif_du, actif_au, supprime_le, placement_x_m, placement_y_m, orientation_deg',
   batiment: 'id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, zone_id, supprime_le',
@@ -628,9 +628,36 @@ const COLONNES = {
   reference: 'id, nom',
 } as const;
 
+/**
+ * T11b : zones vivantes, c'est-à-dire non supprimées et dont aucune zone parente n'est supprimée
+ * (ni absente) : une zone supprimée emporte ses sous-zones et ses emplacements, comme les autres
+ * lignes supprimées. Rend ces zones et les emplacements qui s'y rattachent.
+ */
+function sansZonesSupprimees(zones: readonly LigneLocale[], emplacements: readonly LigneLocale[]): { zone: LigneLocale[]; emplacement: LigneLocale[] } {
+  const parId = new Map(zones.map((z) => [texte(z.id), z]));
+  const vivante = new Map<string, boolean>();
+  function estVivante(id: string, profondeur: number): boolean {
+    const connue = vivante.get(id);
+    if (connue !== undefined) return connue;
+    const z = parId.get(id);
+    // Zone absente, supprimée, ou chaîne de parentes trop longue (boucle) : pas vivante.
+    let r = z !== undefined && texteOuNul(z.supprime_le) === null && profondeur < parId.size;
+    if (r && z !== undefined) {
+      const parente = texteOuNul(z.zone_parente_id);
+      r = parente === null || estVivante(parente, profondeur + 1);
+    }
+    vivante.set(id, r);
+    return r;
+  }
+  return {
+    zone: zones.filter((z) => estVivante(texte(z.id), 0)),
+    emplacement: emplacements.filter((e) => estVivante(texte(e.zone_id), 0)),
+  };
+}
+
 /** Zones, emplacements et bibliothèque de la ferme (référence commune comprise : ferme_id nul). */
 async function lireStructure(porte: PorteDonnees, fermeId: string): Promise<StructurePlan> {
-  const [zone, emplacement, espece, variete, famille, batiment] = await Promise.all([
+  const [zones, emplacements, espece, variete, famille, batiment] = await Promise.all([
     porte.lire<LigneLocale>(`SELECT ${COLONNES.zone} FROM zone WHERE ferme_id = ?`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.emplacement} FROM emplacement WHERE ferme_id = ?`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.reference}, famille_id FROM espece WHERE ferme_id = ? OR ferme_id IS NULL`, [fermeId]),
@@ -638,7 +665,7 @@ async function lireStructure(porte: PorteDonnees, fermeId: string): Promise<Stru
     porte.lire<LigneLocale>(`SELECT ${COLONNES.reference} FROM famille WHERE ferme_id = ? OR ferme_id IS NULL`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.batiment} FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL`, [fermeId]),
   ]);
-  return { zone, emplacement, espece, variete, famille, batiment };
+  return { ...sansZonesSupprimees(zones, emplacements), espece, variete, famille, batiment };
 }
 
 const marques = (n: number) => Array.from({ length: n }, () => '?').join(', ');
@@ -716,19 +743,22 @@ export interface DonneesDebutDePlan extends DonneesPlan {
  */
 export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, emplacements: number): Promise<DonneesDebutDePlan> {
   // Peu de requêtes : chacune coûte un aller-retour vers le worker de la base.
-  const [petites, tous, batiment] = await Promise.all([
+  const [petites, emplacementsLus, batiment] = await Promise.all([
     porte.lire<LigneLocale>(
-      `SELECT 'zone' AS t, id, nom, zone_parente_id AS lien, contour FROM zone WHERE ferme_id = ?1
-       UNION ALL SELECT 'espece', id, nom, famille_id, NULL FROM espece WHERE ferme_id = ?1 OR ferme_id IS NULL
-       UNION ALL SELECT 'variete', id, nom, NULL, NULL FROM variete WHERE ferme_id = ?1 OR ferme_id IS NULL
-       UNION ALL SELECT 'famille', id, nom, NULL, NULL FROM famille WHERE ferme_id = ?1 OR ferme_id IS NULL`,
+      `SELECT 'zone' AS t, id, nom, zone_parente_id AS lien, contour, supprime_le FROM zone WHERE ferme_id = ?1
+       UNION ALL SELECT 'espece', id, nom, famille_id, NULL, NULL FROM espece WHERE ferme_id = ?1 OR ferme_id IS NULL
+       UNION ALL SELECT 'variete', id, nom, NULL, NULL, NULL FROM variete WHERE ferme_id = ?1 OR ferme_id IS NULL
+       UNION ALL SELECT 'famille', id, nom, NULL, NULL, NULL FROM famille WHERE ferme_id = ?1 OR ferme_id IS NULL`,
       [fermeId],
     ),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.emplacement} FROM emplacement WHERE ferme_id = ?`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.batiment} FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL`, [fermeId]),
   ]);
   const de = (t: string) => petites.filter((l) => l.t === t);
-  const zones = de('zone').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null, zone_parente_id: l.lien ?? null, contour: l.contour ?? null }));
+  const { zone: zones, emplacement: tous } = sansZonesSupprimees(
+    de('zone').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null, zone_parente_id: l.lien ?? null, contour: l.contour ?? null, supprime_le: l.supprime_le ?? null })),
+    emplacementsLus,
+  );
   const espece = de('espece').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null, famille_id: l.lien ?? null }));
   const variete = de('variete').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null }));
   const famille = de('famille').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null }));

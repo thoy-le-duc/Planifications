@@ -22,6 +22,10 @@
 - **Morceau introuvable après une mise à jour** (relecture T20) : une page restée ouverte sur l'ancienne version peut demander un écran dont le fichier a disparu. Écouter `vite:preloadError` et recharger la page, sans perdre une saisie en cours.
 - **Garde-fou en plus de la médiane** (relecture T20) : faire échouer une mesure si sa plus haute valeur dépasse 1,5 fois le budget.
 
+## Découpage (chef, 2026-10-10)
+
+Ce ticket garde les règles nettes et vérifiables : libellé collant, « Chevauche +2 », zones supprimées, focus rendu à la fermeture, hauteur réservée testée, morceau introuvable après une mise à jour, garde-fou de 1,5 fois le budget. Zones supprimées : décision du chef, elles sont filtrées partout (`zone.supprime_le IS NULL`), comme les autres lignes supprimées. Les règles qui demandent d'abord une mesure ou une maquette (ouvrir la base plus tôt, double téléchargement, écarts avec la maquette Plan, marge des temps) passent dans **T11e**.
+
 ## Critères d'acceptation
 
 - [ ] Un test par règle retenue.

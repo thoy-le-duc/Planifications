@@ -165,17 +165,22 @@ const Ligne = memo(function Ligne({ ligne, index, surBarre, surConflits }: Propr
   const style: CSSProperties = { transform: `translateY(${String(HAUTEUR_ENTETE + index * HAUTEUR_LIGNE_PX)}px)` };
   if (ligne.sorte !== 'emplacement') {
     return (
-      <div data-testid="ligne-plan" data-sorte={ligne.sorte} data-id={ligne.id} className={`plan-ligne plan-ligne-${ligne.sorte}`} style={style}>
+      <div data-testid="ligne-plan" data-sorte={ligne.sorte} data-id={ligne.id} tabIndex={-1} className={`plan-ligne plan-ligne-${ligne.sorte}`} style={style}>
         <span className="plan-etiquette plan-etiquette-zone">{ligne.nom}</span>
       </div>
     );
   }
   const sortes = sortesDe(ligne.conflits);
   const enConflit = sortes.length > 0;
-  // Plus de deux libellés : l'étiquette peut dépasser sur la ligne suivante plutôt que de rogner.
-  const classe = `plan-ligne${enConflit ? ' plan-ligne-conflit' : ''}${sortes.length > 2 ? ' plan-ligne-conflits-nombreux' : ''}`;
+  const classe = `plan-ligne${enConflit ? ' plan-ligne-conflit' : ''}`;
+  // T11b : plus de deux sortes, un seul libellé (« Chevauche +2 ») : l'étiquette tient dans sa ligne.
+  const libelles: readonly (readonly [SorteConflit, string])[] =
+    sortes.length > 2 && sortes[0] !== undefined
+      ? [[sortes[0], `${LIBELLES_COURTS_CONFLITS[sortes[0]]} +${String(sortes.length - 1)}`]]
+      : sortes.map((s) => [s, LIBELLES_COURTS_CONFLITS[s]] as const);
   return (
-    <div data-testid="ligne-plan" data-sorte="emplacement" data-id={ligne.id} data-conflit={enConflit ? 'oui' : undefined} className={classe} style={style}>
+    // tabIndex -1 : la ligne reçoit le focus rendu quand sa barre a disparu (T11b).
+    <div data-testid="ligne-plan" data-sorte="emplacement" data-id={ligne.id} data-conflit={enConflit ? 'oui' : undefined} tabIndex={-1} className={classe} style={style}>
       {enConflit ? (
         <button
           type="button"
@@ -188,9 +193,9 @@ const Ligne = memo(function Ligne({ ligne, index, surBarre, surConflits }: Propr
         >
           <span className="plan-code">{ligne.code}</span>
           <span className="plan-conflits">
-            {sortes.map((s) => (
+            {libelles.map(([s, texte]) => (
               <span key={s} data-testid="conflit" data-sorte={s} className="plan-conflit">
-                {LIBELLES_COURTS_CONFLITS[s]}
+                {texte}
               </span>
             ))}
           </span>
@@ -212,6 +217,27 @@ const Ligne = memo(function Ligne({ ligne, index, surBarre, surConflits }: Propr
 type Detail =
   | { readonly sorte: 'serie'; readonly ligne: LigneEmplacementPlan; readonly barre: BarrePlan }
   | { readonly sorte: 'conflits'; readonly ligne: LigneEmplacementPlan };
+
+/**
+ * T11b : ce qui a ouvert la feuille, noté au toucher (jamais lu dans document.activeElement : un
+ * tap ne focalise pas le bouton sous Safari). Retrouvé par son identité à la fermeture : la
+ * virtualisation a pu retirer la ligne puis en dessiner une nouvelle.
+ */
+interface OrigineFeuille {
+  readonly ligneId: string;
+  readonly occupationId: string | null;
+}
+
+/** Élément qui reçoit le focus à la fermeture : la barre ou l'étiquette, sinon la ligne, sinon la grille. */
+function cibleDuFocus(grille: HTMLElement, origine: OrigineFeuille): HTMLElement {
+  const ligne = [...grille.querySelectorAll<HTMLElement>('[data-testid="ligne-plan"]')].find((l) => l.dataset.id === origine.ligneId);
+  if (ligne === undefined) return grille;
+  const cible =
+    origine.occupationId === null
+      ? ligne.querySelector<HTMLElement>('[data-testid="etiquette-conflit"]')
+      : [...ligne.querySelectorAll<HTMLElement>('[data-testid="barre"]')].find((b) => b.dataset.occupation === origine.occupationId);
+  return cible ?? ligne;
+}
 
 const cleConflit = (c: ConflitPlan) => `${c.sorte}-${c.du}-${c.occupations.join('-')}`;
 
@@ -579,15 +605,29 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
     [lacherAppui],
   );
 
+  const origine = useRef<OrigineFeuille | null>(null);
+  const focusARendre = useRef(false);
+  const grille = useRef<HTMLDivElement>(null);
   const surBarre = useCallback((ligne: LigneEmplacementPlan, barre: BarrePlan) => {
+    origine.current = { ligneId: ligne.id, occupationId: barre.occupationId };
     setDetail({ sorte: 'serie', ligne, barre });
   }, []);
   const surConflits = useCallback((ligne: LigneEmplacementPlan) => {
+    origine.current = { ligneId: ligne.id, occupationId: null };
     setDetail({ sorte: 'conflits', ligne });
   }, []);
   const fermerDetail = useCallback(() => {
+    focusARendre.current = true;
     setDetail(null);
   }, []);
+  // Feuille fermée (« Fermer » ou Échap) : le focus revient à ce qui l'a ouverte (T11b).
+  useLayoutEffect(() => {
+    if (detail !== null || !focusARendre.current) return;
+    focusARendre.current = false;
+    const o = origine.current;
+    origine.current = null;
+    if (o !== null && grille.current !== null) cibleDuFocus(grille.current, o).focus({ preventScroll: true });
+  }, [detail]);
   const modifierSerie = useCallback((serieId: string) => {
     setDetail(null);
     setFormulaire({ sorte: 'modification', serieId });
@@ -774,6 +814,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
       )}
       <div data-testid="plan-defilement" ref={defilement} className="plan-defilement" hidden={en3d}>
         <div
+          ref={grille}
+          tabIndex={-1}
           className="plan-grille"
           style={{ width: largeur, height: hauteur }}
           onPointerDown={surPointeurBas}
@@ -814,7 +856,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
         </Suspense>
       )}
       {annulable !== null && (
-        <div key={annulable.numero} data-testid="saisie-annulable" role="status" className="plan-bandeau">
+        <div key={annulable.numero} data-testid="saisie-annulable" data-saisie-en-cours="oui" role="status" className="plan-bandeau">
           <span className="plan-bandeau-texte">
             <strong>Série enregistrée</strong>
             <span>{annulable.texte}</span>

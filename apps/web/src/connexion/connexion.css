@@ -21,6 +21,8 @@
 
 .connexion-titre {
   position: relative;
+  /* Au-dessus du motif, dessiné après lui dans le DOM (par Accueil, T11b). */
+  z-index: 1;
   padding: clamp(96px, 30dvh, 250px) clamp(16px, 6.2vw, 24px) var(--espace-xl);
   display: flex;
   flex-direction: column;

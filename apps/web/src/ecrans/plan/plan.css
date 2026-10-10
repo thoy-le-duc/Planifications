@@ -113,6 +113,11 @@
   contain: layout style paint;
 }
 
+/* Focus rendu à la ligne (T11b) : dessiné dedans, la ligne coupe ce qui la dépasse (contain). */
+.plan-ligne:focus-visible {
+  outline-offset: -3px;
+}
+
 .plan-ligne-zone,
 .plan-ligne-chapelle {
   background: var(--couleur-fond);
@@ -151,18 +156,6 @@
 
 .plan-etiquette-conflit:focus-visible {
   outline-offset: -3px;
-}
-
-/* Plus de deux libellés (rare) : l'étiquette grandit et passe sur la ligne suivante. */
-.plan-ligne-conflits-nombreux {
-  z-index: 1;
-  contain: layout style;
-}
-
-.plan-ligne-conflits-nombreux .plan-etiquette-conflit {
-  height: auto;
-  min-height: 100%;
-  overflow: visible;
 }
 
 .plan-etiquette-zone {
@@ -204,8 +197,12 @@
   gap: 0 6px;
 }
 
-/* Libellé court : entier, jamais tronqué (il passe à la ligne s'il le faut). */
+/* Libellé court : entier quand il tient ; sinon (« Chevauche +2 » sur une étiquette étroite),
+   coupé par une ellipse plutôt que rogné (T11b). */
 .plan-conflit {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 12px;
   font-weight: 700;
   line-height: 14px;
@@ -233,6 +230,10 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* T11b : collé au bord de la colonne des codes (92 px + 6 px) quand la barre commence avant la
+     zone visible ; aucun ancêtre jusqu'au défilement n'a d'overflow, sinon il n'y collerait plus. */
+  position: sticky;
+  left: 98px;
 }
 
 /* Cible tactile d'au moins 44 px de large, centrée sur la barre, sous les dessins des barres

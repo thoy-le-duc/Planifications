@@ -35,7 +35,7 @@ import type { ModuleExport } from './ecrans/ferme/EcranFerme.tsx';
  * jusqu'à 300 ms pour éviter les clignotements, ce qui ferait perdre le budget de 300 ms. Rien
  * ne s'affiche à sa place pendant le chargement (quelques millisecondes depuis le précache).
  */
-function differe<P extends object>(charger: () => Promise<{ default: ComponentType<P> }>): {
+export function differe<P extends object>(charger: () => Promise<{ default: ComponentType<P> }>): {
   readonly Composant: ComponentType<P>;
   /** Lance le chargement ; la promesse est tenue quand l'écran est prêt (ou a échoué). */
   readonly precharger: () => Promise<unknown>;
@@ -130,17 +130,6 @@ function jourAffiche(): string {
   return new Date().toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' }).toUpperCase();
 }
 
-/** Pousses du motif de l'écran de connexion (maquette) : centre (x, y), rayon, opacité. */
-const POUSSES: readonly (readonly [number, number, number, number])[] = [
-  [80, 66, 6, 1],
-  [140, 54, 6, 1],
-  [200, 50, 6, 1],
-  [260, 54, 6, 1],
-  [320, 66, 6, 1],
-  [110, 120, 5, 0.6],
-  [230, 112, 5, 0.6],
-  [290, 120, 5, 0.6],
-];
 
 /**
  * Au lancement, la lecture de la journée attend au plus ce délai le début du plan (T13c). Mesuré
@@ -312,23 +301,10 @@ export function App() {
   }, [utilisateurId]);
 
   if (session === null) {
-    // Maquette « Connexion » : bandeau vert et motif des planches, carte claire en bas.
+    // Maquette « Connexion » : bandeau vert, carte claire en bas. Le motif des planches est dessiné
+    // par Accueil (T11b : hors du JavaScript de démarrage ; Accueil est chargé avant le premier rendu sans session).
     return (
       <main data-testid="app" className="connexion">
-        <svg className="connexion-motif zone-entete" width="390" height="360" viewBox="0 0 390 360" aria-hidden="true">
-          <path
-            d="M-20 90Q195 30 410 90M-20 150Q195 90 410 150M-20 210Q195 150 410 210M-20 270Q195 210 410 270"
-            fill="none"
-            strokeWidth="18"
-            strokeLinecap="round"
-            style={{ stroke: 'var(--couleur-foret-clair)' }}
-          />
-          <g style={{ fill: 'var(--couleur-pousse)' }}>
-            {POUSSES.map(([x, y, r, opacite]) => (
-              <circle key={`${String(x)}-${String(y)}`} cx={x} cy={y} r={r} opacity={opacite} />
-            ))}
-          </g>
-        </svg>
         <div className="connexion-titre zone-entete">
           <h1>Planifications</h1>
           <p>Ta ferme dans la poche, même sans réseau.</p>

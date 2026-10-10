@@ -108,7 +108,8 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T20](T20-main-verte.md) | Main verte : service worker après le premier affichage, mesures e2e stables | T11 | fait |
 | [T11c](T11c-diagnostic-hors-prod.md) | Pages de test hors du site en production | T11, T10c | fait |
 | [T11d](T11d-defilement-plan-fiable.md) | Mesure du défilement du plan : fiable sans relever la limite | T11, T20 | fait |
-| [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | à faire |
+| [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | fait |
+| [T11e](T11e-plan-performances.md) | Planches : ouvrir la base plus tôt, maquette, marges de temps (découpage de T11b) | T11b | à faire |
 | [T27](T27-vue-3d-prototype.md) | Vue 3D : prototype mesurable (planches et cultures, curseur de semaine) | T11 | fait |
 | [T27b](T27b-vue-3d-filtres.md) | Vue 3D : filtres et couleurs lisibles (Q30) | T27 | fait |
 | [T28a](T28a-placement-modele.md) | Placement réel : modèle, calcul et base, zones en formes libres (Q30, Q31) | — | fait |

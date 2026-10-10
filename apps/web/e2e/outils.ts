@@ -107,6 +107,36 @@ export async function repeterMesure(fois: number, mesure: (repetition: number) =
   return temps;
 }
 
+/**
+ * T11b — garde-fou en plus de la médiane (relecture de T20) : une répétition qui explose fait aussi
+ * échouer la mesure, si elle dépasse FACTEUR_MAX_BUDGET fois le budget.
+ */
+export const FACTEUR_MAX_BUDGET = 1.5;
+
+export interface VerdictSerie {
+  /** medianeOk && maximumOk. */
+  readonly ok: boolean;
+  /** Médiane de la série strictement sous le budget. */
+  readonly medianeOk: boolean;
+  /** Plus haute valeur au plus FACTEUR_MAX_BUDGET × budget. */
+  readonly maximumOk: boolean;
+  readonly maximum: number;
+  /** Une phrase par critère manqué ; vide si la mesure passe. */
+  readonly raisons: readonly string[];
+}
+
+/** Juge une série : médiane (celle de la série, non recalculée) sous le budget, et maximum sous 1,5 × budget. */
+export function jugerSerie(serie: SerieMesures, budgetMs: number): VerdictSerie {
+  const maximum = Math.max(...serie.valeurs);
+  const limite = FACTEUR_MAX_BUDGET * budgetMs;
+  const medianeOk = serie.mediane < budgetMs;
+  const maximumOk = maximum <= limite;
+  const raisons: string[] = [];
+  if (!medianeOk) raisons.push(`médiane ${serie.mediane.toFixed(1)} ms, pas sous le budget de ${String(budgetMs)} ms`);
+  if (!maximumOk) raisons.push(`plus haute valeur ${String(maximum)} ms, au-delà de ${String(limite)} ms (${String(FACTEUR_MAX_BUDGET)} × ${String(budgetMs)} ms)`);
+  return { ok: medianeOk && maximumOk, medianeOk, maximumOk, maximum, raisons };
+}
+
 /** Ligne de journal : « libellé : 212, 230, 198, 250, 221 ms → médiane 221 ms (budget 300 ms) ». */
 export function decrireSerie(libelle: string, serie: SerieMesures, budgetMs: number): string {
   const valeurs = serie.valeurs.map((v) => v.toFixed(0)).join(', ');
