@@ -109,17 +109,17 @@ describe('T35b : quinconce — rangs pairs décalés d’un demi-pas', () => {
       expect(ra).toHaveLength(rangs);
       // Les rangs ne bougent pas en travers : mêmes dz, même nombre de plants par rang.
       expect(locales(vol, quinconce.positions).map((q) => cleDz(q.dz)).sort()).toEqual(locales(vol, alignes.positions).map((q) => cleDz(q.dz)).sort());
-      rq.forEach((dxs) => expect(dxs).toHaveLength(rq[0]?.length ?? -1));
+      rq.forEach((dxs) => { expect(dxs).toHaveLength(rq[0]?.length ?? -1); });
 
       const premier = rq[0] ?? [];
       const pas = (premier[1] ?? NaN) - (premier[0] ?? NaN);
       expect(pas).toBeGreaterThan(0);
       rq.forEach((dxs, r) => {
         // Pas régulier le long de chaque rang.
-        dxs.slice(1).forEach((dx, k) => expect(dx - (dxs[k] ?? NaN), `pas du rang ${String(r + 1)}`).toBeCloseTo(pas, 6));
+        dxs.slice(1).forEach((dx, k) => { expect(dx - (dxs[k] ?? NaN), `pas du rang ${String(r + 1)}`).toBeCloseTo(pas, 6); });
         // Rangs impairs (indice 0, 2) : sur la même ligne que le 1er ; rangs pairs (1, 3) : un demi-pas plus loin.
         const decalage = r % 2 === 1 ? pas / 2 : 0;
-        dxs.forEach((dx, k) => expect(dx - (premier[k] ?? NaN), `rang ${String(r + 1)}, plant ${String(k)}`).toBeCloseTo(decalage, 6));
+        dxs.forEach((dx, k) => { expect(dx - (premier[k] ?? NaN), `rang ${String(r + 1)}, plant ${String(k)}`).toBeCloseTo(decalage, 6); });
       });
     });
   }
