@@ -1,4 +1,4 @@
-# T13p — L'éditeur de placement ne charge plus la règle « déjà fait »
+# T13r — L'éditeur de placement ne charge plus la règle « déjà fait »
 
 **Objectif** : rendre de la marge au budget de l'éditeur de placement (62 octets après T13n) sans relever aucun budget.
 

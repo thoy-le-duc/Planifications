@@ -1,4 +1,4 @@
-# T13o — Horodatages : les derniers endroits qui comparent du texte
+# T13q — Horodatages : les derniers endroits qui comparent du texte
 
 **Objectif** : finir T13n (« partout ») : plus aucune règle ne compare des horodatages comme du texte.
 

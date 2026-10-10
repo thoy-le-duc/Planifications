@@ -66,6 +66,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T13h](T13h-fait-unique-en-base.md) | « Fait » unique vérifié au moment d'écrire | T13f | fait |
 | [T13i](T13i-fait-unique-partage.md) | « Fait » unique : partagé avec la voix et l'agent | T13h | fait |
 | [T13j](T13j-fait-unique-chemins.md) | « Fait » unique : tous les chemins d'écriture | T13i | fait |
+| [T13o](T13o-fait-unique-ps-crud.md) | « Fait » unique : contrôle d'après le journal d'envoi | T13j | fait |
 | [T13d](T13d-aujourdhui-froid.md) | Aujourd'hui : ouverture à froid sous 1 s sur une grande ferme (instantané de la journée) | T13b, T13c | fait |
 | [T13g](T13g-aujourdhui-avant-base.md) | Aujourd'hui : instantané avant la base, « Fait » en file au lancement | T13d | fait |
 | [T13k](T13k-fait-avant-base.md) | Aujourd'hui : « Fait » accepté avant la base | T13g | fait |
@@ -143,9 +144,8 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T37b](T37b-3d-telephone-suites.md) | 3D au téléphone : fluidité de près, filtres, suites de T37 | T37 | à faire |
 | [T38a](T38a-api-sur-vercel.md) | Mise en ligne gratuite : l'API sur Vercel (Q37) | T09c, T10 | fait |
 | [T38b](T38b-guide-mise-en-ligne.md) | Guide de mise en ligne pas à pas, pour Théophane (Q37) | T38a | fait |
-| [T13o](T13o-fait-unique-ps-crud.md) | « Fait » unique : contrôle d'après le journal d'envoi | T13j | fait |
-| [T13o](T13o-horodatages-suites.md) | Horodatages : les derniers endroits qui comparent du texte (relecture T13n) | T13n | à faire |
-| [T13p](T13p-morceau-identifiants.md) | L'éditeur de placement ne charge plus la règle « déjà fait » (relecture T13n) | T13n | à faire |
+| [T13q](T13q-horodatages-suites.md) | Horodatages : les derniers endroits qui comparent du texte (relecture T13n) | T13n | à faire |
+| [T13r](T13r-morceau-identifiants.md) | L'éditeur de placement ne charge plus la règle « déjà fait » (relecture T13n) | T13n | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 
