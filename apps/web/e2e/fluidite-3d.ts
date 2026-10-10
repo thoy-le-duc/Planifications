@@ -49,8 +49,11 @@ export interface BornesDessin {
  * plus 14 000 triangles : ~4 300 de la ferme, plus au pire PLANTS_MAX_TOTAL (200) plants de 48 triangles
  * = 9 600. Mesuré : 4 300 en navigation et en vol (plants fondus en masse de loin), 9 100 en fin de vol
  * près d'une zone, 11 020 en zoom serré (100 plants). Avant T32b : 5 500.
+ * T32e : 4 appels : le maillage partagé des balises « à récolter » (et des tuteurs et fruits, 8
+ * triangles par instance) s'ajoute dès qu'une forme de plant est en détail. Un appel instancié de plus,
+ * sans changer les bornes de temps (JS_MEDIANE_MAX_MS, JS_P95_MAX_MS), justifié dans la PR.
  */
-export const BORNES_FERME_T07: BornesDessin = { appelsMax: 3, trianglesMax: 14_000 };
+export const BORNES_FERME_T07: BornesDessin = { appelsMax: 4, trianglesMax: 14_000 };
 /** Jumeau de la ferme T07 placée (bâtiments, arceaux, bâches) : plus de géométrie que la ferme seule. */
 export const BORNES_JUMEAU_T07: BornesDessin = { appelsMax: 8, trianglesMax: 35_000 };
 /** Démo : 8 appels avant T32d ; 9 depuis (mesuré : 9 au plus en glissé, 6 974 triangles sur 8 000) : l'InstancedMesh des tuteurs de la tomate ajoute un appel. */
