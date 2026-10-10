@@ -52,3 +52,9 @@ describe('T28i : réseau de la démo', () => {
     expect(ok('https://example.com/')).toBe(false);
   });
 });
+
+describe('T28i (relecture) : /api ne se contourne ni par la casse ni par l’encodage', () => {
+  it.each(['/API/x', '/%61pi/x', '/Api', '/%41PI/journal'])('%s refusé', (chemin) => {
+    expect(m.reseauAutorise(new URL(`https://demo.planif.fr${chemin}`), 'https://demo.planif.fr')).toBe(false);
+  });
+});
