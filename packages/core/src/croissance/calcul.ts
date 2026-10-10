@@ -102,7 +102,10 @@ export function croissancePerenneA(entree: EntreePerenne, profil: ProfilCroissan
     return [debut, autre && jour >= repos ? ajouterJours(jour, 1) : repos];
   };
   // Avant le débourrement de l'année (début d'hiver, janvier) : la végétation de l'année précédente se prolonge.
-  const an = autre && jour < fenetre(annee)[0] ? annee - 1 : annee;
+  let an = autre && jour < fenetre(annee)[0] ? annee - 1 : annee;
+  // Continuité d'une année à l'autre (T32f) : campagne déjà « en cours » le 31 décembre précédent (fraise d'hiver,
+  // début de récolte en janvier) : la plante végète encore avant le débourrement du profil, elle ne retombe pas à 0 m au 1er janvier.
+  if (an === annee && jour < dansLAnnee(annee, cycle.debourrement) && campagneEnCours(campagne, dansLAnnee(annee - 1, '12-31')) && jour < fenetre(annee - 1)[1]) an = annee - 1;
   const [debut, repos] = fenetre(an);
   if (jour < debut || jour >= repos) return REPOS;
 

@@ -28,8 +28,8 @@ const entree = (annee: number): EntreePerenne => ({ plantation: PLANTATION, camp
 describe('T32f B1 : fraisier d’hiver, campagne rattachée à 2027 (10 janvier - 20 mars)', () => {
   for (const annee of [2027, 2026]) {
     const e = entree(annee);
-    it(`campagne rattachée à ${String(annee)} : du 14 décembre 2026 au 20 mars 2027, hauteur > 0 et jamais « repos »`, () => {
-      for (let jour: DateCalendaire = d('2026-12-14'); jour <= d('2027-03-20'); jour = ajouterJours(jour, 1)) {
+    it(`campagne rattachée à ${String(annee)} : du 14 décembre 2026 au 19 mars 2027 (dernier jour de récolte), hauteur > 0 et jamais « repos »`, () => {
+      for (let jour: DateCalendaire = d('2026-12-14'); jour <= d('2027-03-19'); jour = ajouterJours(jour, 1)) {
         const etat = m.croissancePerenneA(e, FRAISIER, jour);
         expect(etat.hauteurM, jour).toBeGreaterThan(0);
         expect(etat.stade, jour).not.toBe('repos');
@@ -43,4 +43,28 @@ describe('T32f B1 : fraisier d’hiver, campagne rattachée à 2027 (10 janvier 
       expect(m.croissancePerenneA(e, FRAISIER, d('2027-01-01')).hauteurM).toBeGreaterThanOrEqual(m.croissancePerenneA(e, FRAISIER, d('2026-12-31')).hauteurM);
     });
   }
+});
+
+describe('T32f B1 : continuité au 31 décembre (bord de la règle)', () => {
+  const avec = (debut: string, fin: string): EntreePerenne => ({ plantation: PLANTATION, campagne: { annee: 2027, debutRecolte: d(debut), finRecolte: d(fin) } });
+  const stadeA = (e: EntreePerenne, jour: string) => m.croissancePerenneA(e, FRAISIER, d(jour));
+
+  it('début le 27 janvier : en cours le 31 décembre (27 jours) → végétation du 1er janvier au début, 0,25 m', () => {
+    const e = avec('2027-01-27', '2027-04-20');
+    for (const jour of ['2026-12-31', '2027-01-01', '2027-01-15', '2027-01-26', '2027-01-27']) {
+      expect(stadeA(e, jour).hauteurM, jour).toBeGreaterThan(0);
+      expect(stadeA(e, jour).stade, jour).not.toBe('repos');
+    }
+  });
+
+  it('début le 28 janvier : en cours le 31 décembre (28 jours, limite incluse) → végétation', () => {
+    expect(stadeA(avec('2027-01-28', '2027-04-20'), '2027-01-01').stade).not.toBe('repos');
+  });
+
+  it('début le 1er février : pas en cours le 31 décembre (32 jours) → repos en janvier, comme T32a, puis débourrement au début', () => {
+    const e = avec('2027-02-01', '2027-04-20');
+    expect(stadeA(e, '2027-01-01')).toMatchObject({ stade: 'repos', hauteurM: 0 });
+    expect(stadeA(e, '2027-01-31')).toMatchObject({ stade: 'repos', hauteurM: 0 });
+    expect(stadeA(e, '2027-02-01')).toMatchObject({ stade: 'debourrement', hauteurM: 0 });
+  });
 });
