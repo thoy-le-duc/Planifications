@@ -13,6 +13,11 @@
  * T11 : connecté, l'appli ouvre la base locale (src/donnees/appli.ts, chargé à la demande, puis
  * PowerSync s'il y a une base à ouvrir), la garde ouverte pour les écrans et la ferme à la
  * déconnexion, avant l'effacement. Les écrans reçoivent la ferme par ContexteFerme.
+ *
+ * T15e : l'export de toute la ferme continue quand on quitte l'onglet Ferme. L'appli n'en garde
+ * que le morceau de l'export, reçu de l'écran Ferme une fois chargé (rien de plus au démarrage) ;
+ * son bandeau « Export en cours » s'affiche en tête des autres onglets, et son démontage (fin de
+ * la session connectée) arrête l'export.
  */
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { lireSession, stockageNavigateur, surveillerSession, type SessionConnexion } from './connexion/session.ts';
@@ -23,6 +28,7 @@ import { libelleSynchro } from './donnees/libelle-synchro.ts';
 import { lireRefusVus, noterRefusVus, refusNonVus } from './donnees/refus-vus.ts';
 import { marquerAppPrete } from './perf.ts';
 import { BarreNavigation, EnTete, ONGLETS, type Onglet } from './ui/composants.tsx';
+import type { ModuleExport } from './ecrans/ferme/EcranFerme.tsx';
 
 /**
  * Écran chargé à la demande, sans <Suspense> : React retient l'affichage d'un contenu suspendu
@@ -204,6 +210,8 @@ export function App() {
   /** Échec de la dernière déconnexion, montré sur l'écran de connexion. */
   const [erreur, setErreur] = useState<string | null>(null);
   const [onglet, setOnglet] = useState<Onglet>('aujourdhui');
+  /** Morceau de l'export (T15e), donné par l'écran Ferme une fois chargé : il porte le bandeau. */
+  const [exportCharge, setExportCharge] = useState<ModuleExport | null>(null);
 
   // Connecté : la coquille est le premier écran. Sinon, la carte de connexion pose la marque.
   const connecte = session !== null;
@@ -339,9 +347,10 @@ export function App() {
         </span>
       </EnTete>
       <div className="coquille-contenu">
+        {exportCharge && <exportCharge.BandeauExport onglet={onglet} />}
         <ContexteFerme value={donnees.ferme}>
           {onglet === 'ferme' ? (
-            <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} sansDeconnexion={demo} etatBase={donnees.base} />
+            <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} sansDeconnexion={demo} etatBase={donnees.base} surExport={setExportCharge} />
           ) : onglet === 'planches' ? (
             donnees.ferme === null ? (
               <Attente base={donnees.base} montrera="le plan s’affichera" />
