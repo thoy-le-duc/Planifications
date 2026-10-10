@@ -27,6 +27,8 @@ export interface CultureLue {
   readonly espece: string;
   readonly profil: ProfilCroissance;
   readonly ecartementM: number;
+  /** T35b : lue dans la densité de l'itinéraire de la série ; absente ou inconnue → alignés. */
+  readonly disposition?: 'quinconce';
   readonly annuelle: DatesCroissance | null;
   readonly perenne: { readonly datePlantation: DateCalendaire; readonly dateArrachage: DateCalendaire | null; readonly campagnes: ReadonlyMap<number, Campagne> } | null;
 }
@@ -48,16 +50,27 @@ export interface LignesPlants {
 const texteOuNul = (v: string | number | null | undefined): string | null => (v === null || v === undefined || v === '' ? null : String(v));
 const dateOuNulle = (v: string | number | null | undefined): DateCalendaire | null => texteOuNul(v) as DateCalendaire | null;
 
+interface DensiteLue {
+  readonly facon?: unknown;
+  readonly ecartementSurRangCm?: unknown;
+  readonly grainesParMetre?: unknown;
+  readonly disposition?: unknown;
+}
+
+/** La densité des paramètres figés de la série, ou nulle si illisible. */
+function densiteDe(parametres: string | number | null | undefined): DensiteLue | null {
+  try {
+    return typeof parametres === 'string' ? ((JSON.parse(parametres) as { densite?: DensiteLue } | null)?.densite ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Écartement (m) des plants d'après les paramètres figés de la série (texte JSON de l'itinéraire). */
 export function ecartementDe(parametres: string | number | null | undefined): number {
-  if (typeof parametres !== 'string') return ECARTEMENT_PAR_DEFAUT_M;
-  try {
-    const densite = (JSON.parse(parametres) as { densite?: { facon?: unknown; ecartementSurRangCm?: unknown; grainesParMetre?: unknown } } | null)?.densite;
-    const m = densite?.facon === 'ecartement' && typeof densite.ecartementSurRangCm === 'number' ? densite.ecartementSurRangCm / 100 : densite?.facon === 'metre_lineaire' && typeof densite.grainesParMetre === 'number' && densite.grainesParMetre > 0 ? 1 / densite.grainesParMetre : ECARTEMENT_PAR_DEFAUT_M;
-    return Number.isFinite(m) ? Math.min(ECARTEMENT_MAX_M, Math.max(ECARTEMENT_MIN_M, m)) : ECARTEMENT_PAR_DEFAUT_M;
-  } catch {
-    return ECARTEMENT_PAR_DEFAUT_M;
-  }
+  const densite = densiteDe(parametres);
+  const m = densite?.facon === 'ecartement' && typeof densite.ecartementSurRangCm === 'number' ? densite.ecartementSurRangCm / 100 : densite?.facon === 'metre_lineaire' && typeof densite.grainesParMetre === 'number' && densite.grainesParMetre > 0 ? 1 / densite.grainesParMetre : ECARTEMENT_PAR_DEFAUT_M;
+  return Number.isFinite(m) ? Math.min(ECARTEMENT_MAX_M, Math.max(ECARTEMENT_MIN_M, m)) : ECARTEMENT_PAR_DEFAUT_M;
 }
 
 /** Les lignes lues → cultures par occupation et emplacements hors-sol. Pur. */
@@ -85,6 +98,7 @@ export function construireCultures(lignes: LignesPlants): CulturesLues {
     parOccupation.set(String(o.id), {
       ...base,
       ecartementM: ecartementDe(o.s_parametres),
+      ...(densiteDe(o.s_parametres)?.disposition === 'quinconce' ? { disposition: 'quinconce' as const } : {}),
       annuelle: {
         miseEnPlace: { prevue: dateOuNulle(o.s_mise_en_place) ?? dateOuNulle(o.prevu_du), reelle: dateOuNulle(o.reel_du) },
         debutRecolte: { prevue: dateOuNulle(o.s_debut_recolte), reelle: null },
@@ -127,7 +141,7 @@ function campagneAu(campagnes: ReadonlyMap<number, Campagne>, jour: DateCalendai
 /** La culture de la semaine dont le lundi est `jour`. Une pérenne sans campagne en cours suit son cycle annuel. */
 export function cultureAu(c: CultureLue, jour: DateCalendaire): CultureDePlanche {
   if (c.perenne === null) {
-    return { espece: c.espece, profil: c.profil, ecartementM: c.ecartementM, croissance: { sorte: 'annuelle', dates: c.annuelle ?? { miseEnPlace: { prevue: null, reelle: null }, debutRecolte: { prevue: null, reelle: null }, finRecolte: { prevue: null, reelle: null }, arrachage: { prevue: null, reelle: null } } } };
+    return { espece: c.espece, profil: c.profil, ecartementM: c.ecartementM, disposition: c.disposition ?? 'alignee', croissance: { sorte: 'annuelle', dates: c.annuelle ?? { miseEnPlace: { prevue: null, reelle: null }, debutRecolte: { prevue: null, reelle: null }, finRecolte: { prevue: null, reelle: null }, arrachage: { prevue: null, reelle: null } } } };
   }
   return {
     espece: c.espece,
