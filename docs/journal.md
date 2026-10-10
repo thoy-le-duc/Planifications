@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-10 — T32j : pérennes, repousse continue au tournant de l'année
+
+- **Fait** : `croissancePerenneA` : la rampe de Q41 (0 m à J−28, pleine hauteur au premier jour de récolte) traverse le changement d'année quand la campagne est rattachée à l'année de la récolte (fraisier d'hiver du 10 janvier : rampe du 13 décembre au 10 janvier ; kiwi du 28 janvier : rampe dès le 31 décembre) ; plus de chute à 0 m au 1er janvier. Test `perenne-tournant-annee.test.ts` (rouge avant le correctif, commits séparés) : rampe au pas ≤ 1/20 à travers l'année, kiwi rattaché à l'année d'avant récolté en février, seuil J−28 = débourrement (pas de rampe à l'égalité, rampe la veille). Exceptions de T32i gardées (plantation pendant les 28 jours, asperge Q33) ; pergola du kiwi (Q33) non touchée, elle ne dépend pas du stade.
+- **Décidé** (chef) : deux changements de comportement. 1) Fraisier d'hiver rattaché à l'année de la récolte : rampe du 13 décembre au 10 janvier au lieu de 0,25 m d'un coup ; test T32i `perenne-repousse.test.ts` (branche 2027) changé dans un commit à part citant T32j et Q41, branche 2026 intacte. 2) Option (i) : la récolte ne prolonge la végétation dans l'année suivante que si la campagne est « en cours » le 31 décembre ; un kiwi rattaché à 2026 et récolté en février 2027 se repose donc dès le repos du profil (20 novembre 2026, au lieu de rester à 2,5 m jusqu'au 31 décembre), puis repousse par la rampe à J−28 (témoin ajouté).
+- **Bloquant** : rien.
+
 ## 2026-10-10 — T32i : les pérennes repoussent en douceur avant la récolte
 
 - **Fait** : `croissancePerenneA` (Q41) : quand J−28 (début de récolte − 28 jours) tombe avant le débourrement du profil, la plante au repos débourre à 0 m à J−28 (inclus) puis monte en rampe linéaire (1/28 de la hauteur maximale par jour, sous le pas fixé de 1/20) jusqu'à sa pleine hauteur au premier jour de récolte, tenue pendant la récolte, quelle que soit l'année de rattachement. Second défaut corrigé au passage : une campagne rattachée à l'année d'avant faisait surgir le kiwi à 2,5 m à J−28 puis le **retombait à 0 m le premier jour de récolte**. Test `perenne-repousse.test.ts` (rouge avant le correctif, commit séparé) : kiwi récolté le 20 mars, repos le 19 février, montée stricte chaque jour, dates témoins hors des 28 jours, exceptions, fraisier d'hiver de T32f inchangé.
