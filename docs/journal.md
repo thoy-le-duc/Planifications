@@ -2,6 +2,15 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-10 — T11b : planches, suites de la relecture
+
+- **Fait** : sur l'écran Planches, le libellé d'une barre qui commence avant la zone visible reste lisible, collé au bord de la colonne des codes. Une planche avec trois sortes de conflit ou plus affiche « Chevauche +2 » dans sa ligne, sans déborder sur la suivante. Une zone supprimée disparaît du plan avec ses sous-zones et ses planches, dans le début comme dans le plan complet, et la hauteur réservée reste juste. Quand la feuille d'une série ou des conflits se ferme (« Fermer » ou Échap), le focus revient à la barre ou à l'étiquette qui l'a ouverte. Si la barre a disparu, il va à sa ligne, et si la ligne n'est plus affichée, à la grille. Une page restée ouverte sur l'ancienne version se recharge quand un écran a disparu du serveur, mais jamais pendant une saisie (champ rempli ou focalisé, boîte de dialogue, pavé de récolte), une seule fois et sans boucle (au plus une fois par minute). Les mesures de `plan.e2e.ts` échouent aussi si une répétition dépasse 1,5 fois le budget.
+- **Décidé** :
+  - les sous-zones d'une zone supprimée sont masquées aussi, avec leurs planches ;
+  - le pavé de récolte porte `data-saisie-en-cours="oui"`, et les autres écrans de saisie sont déjà des boîtes de dialogue ;
+  - le garde-fou de 1,5 fois le budget ne s'applique qu'à `plan.e2e.ts` dans ce ticket, les autres jeux e2e passeront par un ticket de suite.
+- **Bloquant** : le budget de démarrage. Il ne restait que 32 octets de marge, et la surveillance du rechargement en coûte environ 350 : le démarrage pèse 71,3 Kio pour une limite de 71. Le budget de la vue 3D n'avait que 0,4 octet de marge : il dépasse d'1 octet, parce que les noms des fichiers (qui changent à chaque modification) sont écrits dans ce morceau. Le chef doit choisir entre relever les deux budgets ou alléger le démarrage ailleurs.
+
 ## 2026-10-10 — T13s : horodatages de la table des modifications
 
 - **Fait** : les quatre lectures de la table `modification` (historique de la série, entrées des occupations dans `ecrans/serie/donnees.ts`, historiques des pages de diagnostic `itineraires.ts` et `plan-serie.ts`) se trient par `cleHorodatageSql('horodatage', 'id')` (instant puis id, T13n) au lieu de `ORDER BY horodatage, id`. 4 tests ajoutés (`diagnostic/horodatages-modifications.test.ts`) : formes `Z` / `+00` / `+00:00`, `T` / espace, fractions, et même instant départagé par l'id ; en échec avant, verts après, aucun test existant modifié. Vérifié : typage, lint, 4 850 tests, build, budget (démarrage 71,0 / 71 Kio, non relevé).
