@@ -249,7 +249,7 @@ describe('T28f : l’éditeur s’ouvre aussi depuis la vue 3D, sans bouger les 
   it('budgets intacts : démarrage 71 Kio, morceau 3D et morceau de l’éditeur présents dans budget.json', () => {
     const b = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson & { readonly jsVue3dGzKio?: number };
     expect(b.jsInitialGzKio).toBe(BUDGET_DEMARRAGE_KIO);
-    expect(b.jsVue3dGzKio).toBe(203.3);
+    expect(b.jsVue3dGzKio).toBe(204.3);
     expect(b.jsPlacementGzKio).toBe(22.1); // T28k : placement au doigt (+0,9 Kio mesuré : 20,9 → 21,8 ; marge 0,3), chiffré dans la PR ; T28j : 19,9 → 20,9
   });
 });

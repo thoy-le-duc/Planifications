@@ -232,7 +232,7 @@ test('équipier, ferme placée : ni bouton ni encart', async ({ page, context })
   await expect(encart(page)).toHaveCount(0);
 });
 
-test('écran étroit : sous 1024 px le gérant garde le bouton et l’invitation (T28k, Q36) ; au téléphone la 3D n’est pas proposée', async ({ page, context }) => {
+test('écran étroit : sous 1024 px le gérant garde le bouton et l’invitation (T28k, Q36) ; au téléphone la 3D est proposée (Q36)', async ({ page, context }) => {
   test.skip(DEMO, 'amorçage de la page de diagnostic : pas dans la démo');
   test.setTimeout(DELAI_AMORCAGE_MS + 120_000);
   await bloquerLeReseau(context);
@@ -250,7 +250,7 @@ test('écran étroit : sous 1024 px le gérant garde le bouton et l’invitation
   await page.reload();
   await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: DELAI_MS });
   await onglet(page, 'Planches').click();
-  await expect(page.getByTestId(TESTID_3D.bouton), '« Voir en 3D » absent au téléphone').toBeHidden();
+  await expect(page.getByTestId(TESTID_3D.bouton), '« Voir en 3D » proposé au téléphone (Q36, les ouvriers y voient les travaux du jour)').toBeVisible();
   await expect(modifierPlan(page)).toHaveCount(0);
 });
 

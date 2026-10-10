@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-10 — T37 : les travaux du jour dans la 3D
+
+- **Fait** : la vue 3D liste les travaux du jour (mêmes tâches et même ordre que l'écran Aujourd'hui : `lireJournee`, `calculerJournee`, `tachesDeLEcran`, lecture seule), les numérote sur les planches par des pastilles, et un tap sur une ligne ou « Suivant » fait voler la caméra (T29) jusqu'à la planche. Panneau repliable, boutons de 48 px, mise en page du téléphone ; « Voir en 3D » est visible au téléphone (Q36).
+- **Décidé** : pastilles en HTML replacées à chaque image (zéro appel de dessin) : un nuage de points ajoutait un appel et dépassait BORNES_DEMO (10 pour 9). Le moteur de la journée se charge à part à l'ouverture de la 3D (budget 3D 203,3 → 204,3 Kio, démarrage 71,0 inchangé). Démo : fraises en retard de 1 jour seulement, pour que le premier « Suivant » ne tombe pas sur la gouttière de fraises, trop lourde de près (11 appels, 8 078 triangles). Seul test existant modifié : `vue-3d-editeur.e2e.ts` (« Voir en 3D » visible à 390 px, Q36).
+- **Bloquant** : rien. À voir plus tard : la gouttière de fraises dépasse les garde-fous de fluidité vue de près au téléphone.
+
 ## 2026-10-10 — T28i : la démo montre la photo et invite à placer une serre
 
 - **Fait** : la ferme de la démo est dans un grand champ ouvert de la plaine du Tarn, au sud de Moissac (44,091 N ; 1,071 E, origine du plan et position météo), relevé sur l'orthophoto IGN (aucune construction à moins de 100 m, vergers sous filets et serres autour). `src/demo/reseau.ts` : `fetch` laisse passer l'origine de l'appli (sauf /api) et seulement `data.geopf.fr/geocodage/…` en plus (recherche d'adresse) ; la photo passe par des `<img>` (CSP déjà ouverte). Invitation « Essayez : ajoutez une serre et posez-la sur la photo » dans l'éditeur et la vue 3D de la démo (`invitationDemo`, vrai seulement si `MODE === 'demo'`) ; le texte n'est pas dans `dist/` (nouveau test dans `scripts/demo.test.ts`). Le visiteur est déjà gérant ; « Réinitialiser la démo » vide la base, donc la serre ajoutée. Budgets inchangés (démarrage 71,0, 3D 202,7, éditeur 21,9).

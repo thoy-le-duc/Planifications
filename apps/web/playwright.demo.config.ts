@@ -12,7 +12,7 @@ process.env.E2E_DEMO = '1';
 
 export default defineConfig({
   testDir: 'e2e',
-  testMatch: ['**/demo.e2e.ts', '**/vue-3d-filtres.e2e.ts', '**/vue-3d-jumeau.e2e.ts', '**/vue-3d-editeur.e2e.ts', '**/demo-placement.e2e.ts'],
+  testMatch: ['**/demo.e2e.ts', '**/vue-3d-filtres.e2e.ts', '**/vue-3d-jumeau.e2e.ts', '**/vue-3d-editeur.e2e.ts', '**/vue-3d-travaux.e2e.ts', '**/demo-placement.e2e.ts'],
   // T28f : vue-3d-editeur.e2e.ts a un test pour la démo ; ses autres tests s'ignorent d'eux-mêmes (E2E_DEMO).
   // T28c : vue-3d-jumeau.e2e.ts a un test pour la démo ; ses autres tests visent la grande ferme de T07.
   // T28i : demo-placement.e2e.ts (essayer le placement d'une serre dans la démo, en ligne simulé et hors ligne).

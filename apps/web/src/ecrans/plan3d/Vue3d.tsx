@@ -50,6 +50,11 @@ import {
 import { fermeSansPlacement } from './invitation.ts';
 import { cultureAu, lireCultures, type CulturesLues } from './donnees-plants.ts';
 import { Plants } from './Plants.tsx';
+import { PanneauTravaux3d } from './PanneauTravaux.tsx';
+import { CouchePastilles, placerPastilles, type PastilleDessinee } from './Pastilles.tsx';
+import type { Camera as CameraThree } from 'three';
+import type { TacheJour } from '../aujourdhui/calculs.ts';
+import type { TravauxDuJour3d } from './travaux.ts';
 import { hauteurDalle, hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
 import { plantsDePlanche, type PlantsPlanche } from './plants.ts';
 import type { PorteDonnees } from '@planif/sync';
@@ -852,6 +857,35 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   }, [scene, cultures, lundi]);
   const [rendu] = useState(() => new RenduPlants());
 
+  // Travaux du jour (T37) : les tâches de l'écran Aujourd'hui, relues quand la base change (le plan se relit à chaque écriture), en lecture seule.
+  // Le moteur de l'écran Aujourd'hui se charge à part, à l'ouverture (précaché : hors ligne aussi), pour ne pas alourdir le morceau 3D.
+  const [calculTravaux, setCalculTravaux] = useState<{ readonly calculer: (taches: readonly TacheJour[], scene: { readonly volumes: readonly unknown[] }) => TravauxDuJour3d } | null>(null);
+  const [taches, setTaches] = useState<readonly TacheJour[]>([]);
+  useEffect(() => {
+    if (porte === undefined || fermeId === undefined) return undefined;
+    let actif = true;
+    import('./travaux.ts')
+      .then(async (m) => {
+        const lues = await m.lireTachesDuJour(porte, fermeId, m.jourDuTelephone());
+        if (!actif) return;
+        setCalculTravaux({ calculer: m.travauxDuJour3d });
+        setTaches(lues);
+      })
+      .catch((erreur: unknown) => {
+        console.error('Travaux du jour 3D : lecture impossible', erreur);
+      });
+    return () => {
+      actif = false;
+    };
+  }, [porte, fermeId, plan]);
+  const [travailActif, setTravailActif] = useState<number | null>(null);
+  const jour = useMemo<TravauxDuJour3d>(() => (geometrie === null || calculTravaux === null ? { travaux: [], pastilles: [] } : calculTravaux.calculer(taches, geometrie)), [calculTravaux, taches, geometrie]);
+  const pastillesDessinees = useMemo<readonly PastilleDessinee[]>(() => jour.pastilles.map((pastille) => ({ pastille, retard: jour.travaux.some((t) => t.planche === pastille.planche && t.enRetard) })), [jour]);
+  const couchePastilles = useRef<HTMLDivElement>(null);
+  const pastillesRef = useRef(pastillesDessinees);
+  const derniereCamera = useRef<CameraThree | null>(null);
+  const plancheActive = travailActif === null ? null : (jour.travaux.find((t) => t.rang === travailActif)?.planche ?? null);
+
   // Filtres (T27b) : état local à la vue, jamais écrit ni stocké ; tout est coché à chaque ouverture.
   const [filtres, setFiltres] = useState<FiltresScene>(FILTRES_TOUT);
   const options = useMemo(() => (scene === null ? { familles: [], cultures: [], zones: [] } : optionsFiltres(scene)), [scene]);
@@ -882,6 +916,8 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
 
   const surImage = useCallback(({ gl, camera }: RootState) => {
     const s = suivi.current;
+    derniereCamera.current = camera;
+    if (couchePastilles.current !== null) placerPastilles(couchePastilles.current, camera, gl.domElement.clientWidth, gl.domElement.clientHeight, pastillesRef.current);
     s.rendus += 1;
     const ds = gl.domElement.dataset;
     ds.rendus = String(s.rendus);
@@ -934,6 +970,23 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const aller = useCallback((cible: CibleVol) => {
     pilote.current?.(cible);
   }, []);
+  // Les pastilles changent (autre jour, autre plan) : replacées tout de suite avec la dernière caméra, sans attendre une image.
+  useLayoutEffect(() => {
+    pastillesRef.current = pastillesDessinees;
+    const toile = toileRef.current;
+    if (couchePastilles.current !== null && derniereCamera.current !== null && toile !== null) placerPastilles(couchePastilles.current, derniereCamera.current, toile.clientWidth, toile.clientHeight, pastillesDessinees);
+  }, [pastillesDessinees]);
+
+  // Un travail choisi (tap d'une ligne, « Suivant ») : la caméra vole vers sa planche, qui est mise en évidence.
+  const choisirTravail = useCallback(
+    (rang: number) => {
+      const planche = jour.travaux.find((t) => t.rang === rang)?.planche;
+      if (planche === undefined || planche === null) return;
+      setTravailActif(rang);
+      aller({ sorte: 'planche', id: planche });
+    },
+    [jour, aller],
+  );
 
   // Couleurs posées : la marque « semaine » ou « filtre » suit à l'image suivante (pas la première).
   const couleursPosees = useRef(false);
@@ -1140,7 +1193,9 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               {zoneChoisie !== null && <p>Vue sur la zone {zoneChoisie}</p>}
             </div>
           )}
-          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
+          <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} />
         </div>
         <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
           <div className="plan3d-filtres">
