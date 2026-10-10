@@ -40,6 +40,29 @@ class Facettes {
   }
 
   /**
+   * Sphère (ou, à peu de bandes, double pyramide) de rayon `r` à `seg` méridiens et `anneaux` bandes de latitude (pôles sur l'axe y) :
+   * 2 × seg × (anneaux − 1) triangles, tournés vers l'extérieur.
+   */
+  sphere(seg: number, anneaux: number, r: number, teinte: number): this {
+    const sommet = (i: number, j: number): [number, number, number] => {
+      const theta = (Math.PI * i) / anneaux;
+      const phi = (2 * Math.PI * j) / seg;
+      return [r * Math.sin(theta) * Math.cos(phi), r * Math.cos(theta), r * Math.sin(theta) * Math.sin(phi)];
+    };
+    for (let j = 0; j < seg; j += 1) {
+      for (let i = 0; i < anneaux; i += 1) {
+        const a = sommet(i, j);
+        const b = sommet(i, j + 1);
+        const c = sommet(i + 1, j);
+        const d = sommet(i + 1, j + 1);
+        if (i > 0) this.triangle(teinte, ...a, ...b, ...c);
+        if (i < anneaux - 1) this.triangle(teinte, ...b, ...d, ...c);
+      }
+    }
+    return this;
+  }
+
+  /**
    * Haie : un profil (y, demi-largeur) extrudé sur `baies` tronçons le long de x (de −0,5 à 0,5),
    * des deux côtés de z ; les bouts restent ouverts (les haies se touchent bout à bout).
    */
@@ -130,9 +153,21 @@ export function geometrieStructure(): BufferGeometry {
   return f.geometrie();
 }
 
-/** Tuteur d'un plant (tige ou ficelle tendue) : 1 m de haut, fin, un peu plus étroit en haut. */
+/**
+ * Fruit, balise et tuteur (T32e) : une double pyramide à 4 côtés (un octaèdre) de 1 m de haut et de large,
+ * posée sur son pied (y de 0 à 1), blanche (la couleur de l'instance la teinte), 8 triangles seulement :
+ * les fruits se comptent par centaines et les garde-fous de dessin (BORNES_DEMO) plafonnent les appels de dessin
+ * et les triangles de la scène. L'échelle de l'instance donne la forme : courgette en fuseau, tomate ramassée,
+ * tuteur en fuseau très fin et haut, balise grande et vive (symétrique : lisible sous tous les angles). Une seule
+ * géométrie pour les trois : un seul InstancedMesh, donc un seul appel de dessin, porte tuteurs, fruits et balises.
+ */
+export function geometrieFruit(): BufferGeometry {
+  return new Facettes().sphere(4, 2, 0.5, FEUILLE).geometrie().translate(0, 0.5, 0);
+}
+
+/** Tuteur d'un plant (tige ou ficelle tendue) : la même double pyramide, étirée par l'échelle de l'instance. */
 export function geometrieTuteur(): BufferGeometry {
-  return new Facettes().tronc(4, 0, 0.5, 1, 0.35, BOIS, 0, 0, 0, 0, true).geometrie();
+  return geometrieFruit();
 }
 
 /** Triangles d'une géométrie (sans indice : trois sommets chacun). */
