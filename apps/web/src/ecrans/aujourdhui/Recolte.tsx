@@ -150,7 +150,8 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
 
   return (
     <div className="auj-voile auj-voile-plein">
-      {/* T11b : saisie au pavé, sans champ (data-saisie-en-cours) : pas de rechargement après une mise à jour. */}
+      {/* T11b : pavé de récolte, déjà une boîte de dialogue ; le marqueur data-saisie-en-cours le dit en plus, explicitement
+          (saisie sans champ de texte) : pas de rechargement de la page après une mise à jour tant qu'il est ouvert. */}
       <div
         role="dialog"
         aria-modal="true"

@@ -856,7 +856,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
         </Suspense>
       )}
       {annulable !== null && (
-        <div key={annulable.numero} data-testid="saisie-annulable" role="status" className="plan-bandeau">
+        <div key={annulable.numero} data-testid="saisie-annulable" data-saisie-en-cours="oui" role="status" className="plan-bandeau">
           <span className="plan-bandeau-texte">
             <strong>Série enregistrée</strong>
             <span>{annulable.texte}</span>

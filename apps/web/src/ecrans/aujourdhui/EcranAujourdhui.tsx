@@ -1048,7 +1048,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
 
   if (echecLecture && journee === null) {
     return (
-      <div data-testid="aujourdhui" className="auj">
+      <div data-testid="aujourdhui" data-saisie-en-cours={occupe ? 'oui' : undefined} className="auj">
         <p role="alert" className="attente">
           Les tâches n’ont pas pu se lire sur ce téléphone. Rechargez l’appli ; si cela recommence, signalez-le.
         </p>
@@ -1075,7 +1075,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   const bandeauEnAnnulation = annulable !== null && (annulable.demandee || (annulable.evenement !== null && enAnnulation.has(annulable.evenement.id)));
 
   return (
-    <div data-testid="aujourdhui" className={annulable === null ? 'auj' : 'auj auj-avec-bandeau'}>
+    // T11b : écriture en cours ou en attente de la base : pas de rechargement après une mise à jour.
+    <div data-testid="aujourdhui" data-saisie-en-cours={occupe ? 'oui' : undefined} className={annulable === null ? 'auj' : 'auj auj-avec-bandeau'}>
       {vue !== null && (
         <div className="auj-resume">
           <span className="auj-semaine">Semaine {vue.semaine}</span>
@@ -1195,7 +1196,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
       )}
 
       {annulable !== null && (
-        <div key={annulable.numero} data-testid="saisie-annulable" role="status" className="auj-bandeau">
+        <div key={annulable.numero} data-testid="saisie-annulable" data-saisie-en-cours="oui" role="status" className="auj-bandeau">
           <span className="auj-bandeau-icone">
             <IconeCoche taille={24} />
           </span>

@@ -1041,5 +1041,29 @@ describe('T10l : archiver un refus vu', () => {
         expect(texte(zone)).toBe('');
       });
     });
+    it('T11b (relecture B2) : archivage en attente puis en cours d’écriture marqué data-saisie-en-cours, libre une fois écrit', async () => {
+      let terminer: () => void = () => undefined;
+      archiverRefus.mockImplementation(async (idsArchives) => {
+        await new Promise<void>((r) => {
+          terminer = r;
+        });
+        return vraiArchiver(idsArchives);
+      });
+      await troisRefus();
+      expect(zoneAnnonce()?.dataset.saisieEnCours, 'au repos : pas de marqueur').toBeUndefined();
+      await taper(archiverUn('r-2'));
+      await avancer(0);
+      expect(zoneAnnonce()?.dataset.saisieEnCours, 'archivage en attente (délai d’annulation)').toBe('oui');
+      await avancer(DELAI_ANNULATION_ARCHIVAGE_MS);
+      await avancer(0);
+      expect(archiverRefus).toHaveBeenCalledTimes(1);
+      expect(bandeau(), 'bandeau parti').toBeNull();
+      expect(zoneAnnonce()?.dataset.saisieEnCours, 'écriture partie, pas finie : toujours marqué').toBe('oui');
+      terminer();
+      await avancer(0);
+      await avancer(0);
+      expect(archiveLe('r-2'), 'archivé').not.toBeNull();
+      expect(zoneAnnonce()?.dataset.saisieEnCours, 'écriture finie : plus de marqueur').toBeUndefined();
+    });
   });
 });
