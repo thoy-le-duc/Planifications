@@ -8,6 +8,7 @@
  */
 import { mouvementAttendu } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees } from '@planif/sync';
+import { cleHorodatageSql } from '@planif/sync/fait-unique';
 
 export interface OptionsSectionSerie {
   readonly porte: PorteDonnees;
@@ -81,7 +82,8 @@ export function brancherSectionSerie(o: OptionsSectionSerie): void {
   const listeEvenements = element('evenements-serie', HTMLUListElement);
   porte.surveiller<Readonly<Record<string, unknown>>>(
     {
-      sql: 'SELECT id, detail, remplace_sorte, remplace_evenement_id FROM evenement WHERE serie_id = ? ORDER BY horodatage, id',
+      // T13q : ordre canonique (instant, id), jamais le texte de l'horodatage.
+      sql: `SELECT id, detail, remplace_sorte, remplace_evenement_id FROM evenement WHERE serie_id = ? ORDER BY ${cleHorodatageSql('horodatage', 'id')}`,
       parametres: [serieId],
       tables: ['evenement'],
     },
@@ -236,16 +238,17 @@ async function ordresRecolte(o: OptionsSectionSerie, quantite: number): Promise<
 }
 
 /**
- * Annulation de la dernière récolte de la série pas encore annulée : l'événement d'annulation
- * (mêmes colonnes et même détail, horodatage neuf) et, sur chaque article, le mouvement inverse
- * rattaché à l'annulation (−somme des mouvements de la récolte : `mouvementAttendu` du cœur).
+ * Annulation de la dernière récolte de la série pas encore annulée (ordre canonique instant, id :
+ * `cleHorodatageSql`, T13q) : l'événement d'annulation (mêmes colonnes et même détail, horodatage
+ * neuf) et, sur chaque article, le mouvement inverse rattaché à l'annulation (−somme des
+ * mouvements de la récolte : `mouvementAttendu` du cœur).
  */
 async function ordresAnnulation(o: OptionsSectionSerie): Promise<OrdreEcriture[] | null> {
   const [recolte] = await o.porte.lire<Readonly<Record<ColonneEvenement, unknown>>>(
     `SELECT ${COLONNES_EVENEMENT.join(', ')} FROM evenement r
      WHERE r.serie_id = ? AND r.type = 'recolte' AND r.remplace_sorte IS NULL
        AND NOT EXISTS (SELECT 1 FROM evenement a WHERE a.remplace_evenement_id = r.id AND a.remplace_sorte = 'annulation')
-     ORDER BY r.horodatage DESC, r.id DESC LIMIT 1`,
+     ORDER BY ${cleHorodatageSql('r.horodatage', 'r.id')} DESC LIMIT 1`,
     [o.serieId],
   );
   if (recolte === undefined) return null;
