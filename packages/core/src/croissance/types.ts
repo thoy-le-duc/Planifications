@@ -31,6 +31,11 @@ export interface ProfilCroissance {
   readonly finDeCycle: FinDeCycle;
   /** Pérennes seulement ; null pour une culture annuelle. */
   readonly cycleAnnuel: CycleAnnuel | null;
+  /**
+   * Pérennes (T32c, Q33) : le feuillage ne monte qu'après la fin de la récolte (asperge : turions
+   * seuls pendant la récolte). Facultatif ; absent = false. `croissanceA` (annuelles) l'ignore.
+   */
+  readonly fougereApresRecolte?: boolean;
 }
 
 /** Profil par défaut d'une espèce de la bibliothèque commune. */

@@ -144,6 +144,8 @@ export interface ProfilCroissance {
   readonly allure: AllureCroissance;
   readonly finDeCycle: FinDeCycle;
   readonly cycleAnnuel: CycleAnnuel | null;
+  /** T32c (test/contrat-reglage.ts) : feuillage après la fin de récolte ; facultatif, absent = false. */
+  readonly fougereApresRecolte?: boolean;
 }
 
 export interface ProfilParDefaut {

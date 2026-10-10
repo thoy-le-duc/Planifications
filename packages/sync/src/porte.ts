@@ -419,5 +419,11 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       const { ecrirePlacement } = await import('./placement.ts');
       return ecrirePlacement(base, { fermeId: options.fermeId, utilisateurId: options.utilisateurId, maintenant }, changements);
     },
+
+    async reglerProfilCroissance(especeId: string, profil: unknown): Promise<void> {
+      // T32c : chargé à la demande (règles du profil du cœur), hors du JavaScript de démarrage.
+      const { ecrireProfilCroissance } = await import('./profil.ts');
+      return ecrireProfilCroissance(base, { fermeId: options.fermeId, utilisateurId: options.utilisateurId, maintenant }, especeId, profil);
+    },
   };
 }

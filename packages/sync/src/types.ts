@@ -223,6 +223,15 @@ export interface PorteDonnees {
    * inverse (annuler une création = suppression douce) ; `placer(annulation)` annule.
    */
   placer(changements: readonly ChangementPlacement[]): Promise<readonly ChangementPlacement[]>;
+  /**
+   * T32c : écrit le profil de croissance (`espece.profil_croissance`) d'une espèce de la ferme de
+   * la porte ; `profil` null = « Rétablir la valeur par défaut ». Une transaction locale, un seul
+   * UPDATE (profil_croissance, modifie_le). Rejette sans rien écrire ce que le serveur refuserait :
+   * utilisateur qui n'est pas gérant actif de la ferme (Q35), profil refusé par le cœur
+   * (validerProfilCroissance, son message), espèce introuvable, d'une autre ferme ou de la
+   * bibliothèque commune.
+   */
+  reglerProfilCroissance(especeId: string, profil: unknown): Promise<void>;
 }
 
 /** Écriture en attente, telle que la donne PowerSync (`CrudEntry`). */

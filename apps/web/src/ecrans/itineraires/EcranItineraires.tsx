@@ -19,12 +19,21 @@ import { CROIX, FormulaireItineraire, garderLeFocus, type DepartFormulaire, type
 /** Marque de performance posée quand les listes de l'écran sont dessinées. */
 export const MARQUE_ITINERAIRES_AFFICHES = 'planif:itineraires-affiches';
 
+/** T32c : le réglage de croissance, chargé au premier tap sur « Croissance » (morceau à part). */
+const chargerReglage = () => import('./ReglageCroissance.tsx');
+type ReglageCharge = Awaited<ReturnType<typeof chargerReglage>>['ReglageCroissance'];
+
 /** Durée d'affichage du bandeau « Annuler » (comme T12 et T13). */
 export const DELAI_ANNULATION_MS = 10_000;
 
 export interface ProprietesEcranItineraires {
   readonly porte: PorteDonnees;
   readonly fermeId: string;
+  /**
+   * T32c : utilisateur du téléphone ; son rôle dans la ferme (ligne locale `membre`) décide si le
+   * réglage de croissance est modifiable (gérant) ou en lecture seule. Absent : lecture seule.
+   */
+  readonly utilisateurId?: string;
   readonly surFermer: () => void;
   /** Jour du téléphone, 'AAAA-MM-JJ'. */
   readonly aujourdhui?: () => string;
@@ -182,13 +191,16 @@ interface Bandeau extends SaisieAnnulable {
   readonly numero: number;
 }
 
-export function EcranItineraires({ porte, fermeId, surFermer, aujourdhui = jourDuTelephone, maintenant = maintenantParDefaut }: ProprietesEcranItineraires): ReactElement {
+export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, aujourdhui = jourDuTelephone, maintenant = maintenantParDefaut }: ProprietesEcranItineraires): ReactElement {
   const [jour] = useState(aujourdhui);
   const [itineraires, setItineraires] = useState<ItineraireLu[] | null>(null);
   const [especes, setEspeces] = useState<EspeceLue[] | null>(null);
   const [types, setTypes] = useState<TypeLu[] | null>(null);
   const [depart, setDepart] = useState<(DepartFormulaire & { readonly numero: number }) | null>(null);
   const [renommer, setRenommer] = useState<TypeLu | null>(null);
+  /** T32c : espèce dont le réglage de croissance est ouvert, et le réglage une fois chargé. */
+  const [croissance, setCroissance] = useState<string | null>(null);
+  const [Reglage, setReglage] = useState<{ readonly composant: ReglageCharge } | null>(null);
   const [bandeau, setBandeau] = useState<Bandeau | null>(null);
   const [echec, setEchec] = useState<{ readonly titre: string; readonly texte: string } | null>(null);
   const [categorie, setCategorie] = useState<CategorieIntervention>('entretien');
@@ -261,6 +273,21 @@ export function EcranItineraires({ porte, fermeId, surFermer, aujourdhui = jourD
     setDepart({ ...d, numero: compteur.current });
   }
 
+  function ouvrirCroissance(especeId: string): void {
+    setCroissance(especeId);
+    if (Reglage !== null) return;
+    chargerReglage().then(
+      (m) => {
+        setReglage({ composant: m.ReglageCroissance });
+      },
+      (e: unknown) => {
+        console.error('Réglage de croissance non chargé', e);
+        setCroissance(null);
+        setEchec({ titre: 'Réglage indisponible', texte: 'Le réglage de croissance ne s’est pas chargé : réessaie avec du réseau.' });
+      },
+    );
+  }
+
   function annuler(b: Bandeau): void {
     setBandeau(null);
     b.annuler().then(
@@ -312,6 +339,8 @@ export function EcranItineraires({ porte, fermeId, surFermer, aujourdhui = jourD
   // ── Rendu ──────────────────────────────────────────────────────────────────────────────────
 
   const listeTypes = types ?? [];
+  // T32c : l'espèce du réglage, relue dans la liste surveillée (le profil suit les écritures et la synchro).
+  const especeCroissance = croissance === null ? undefined : especesTriees.find((e) => e.id === croissance);
 
   return (
     <>
@@ -323,7 +352,7 @@ export function EcranItineraires({ porte, fermeId, surFermer, aujourdhui = jourD
           data-testid="ecran-itineraires"
           className="itin-feuille"
           onKeyDown={(e) => {
-            if (depart !== null || renommer !== null) return;
+            if (depart !== null || renommer !== null || croissance !== null) return;
             garderLeFocus(e);
             if (e.key === 'Escape') surFermer();
           }}
@@ -362,12 +391,24 @@ export function EcranItineraires({ porte, fermeId, surFermer, aujourdhui = jourD
                   {parCulture.length === 0 && <p className="itin-aide">Aucun itinéraire pour l’instant : crée le premier, ou attends la synchronisation de la bibliothèque.</p>}
                   {parCulture.map(({ espece, ferme, bibliotheque }) => (
                     <div key={espece.id} data-testid="culture-itineraires" data-espece={espece.id} className="itin-culture-groupe">
-                      <h4>
-                        {espece.nom}
-                        <span>
-                          {ferme.length} de la ferme · {bibliotheque.length} de la bibliothèque
-                        </span>
-                      </h4>
+                      <div className="itin-culture-tete">
+                        <h4>
+                          {espece.nom}
+                          <span>
+                            {ferme.length} de la ferme · {bibliotheque.length} de la bibliothèque
+                          </span>
+                        </h4>
+                        <button
+                          type="button"
+                          aria-label={`Croissance de ${espece.nom}`}
+                          className="itin-bouton-croissance"
+                          onClick={() => {
+                            ouvrirCroissance(espece.id);
+                          }}
+                        >
+                          Croissance
+                        </button>
+                      </div>
                       <ul>
                         {ferme.map((i) => (
                           <li key={i.id} data-testid="itineraire" data-itineraire={i.id} data-origine="ferme" className="itin-item">
@@ -629,6 +670,19 @@ export function EcranItineraires({ porte, fermeId, surFermer, aujourdhui = jourD
             ouvrir({ sorte: 'adaptation', itineraire: i });
           }}
           surEnregistre={enregistre}
+        />
+      )}
+      {especeCroissance !== undefined && Reglage !== null && pret && (
+        <Reglage.composant
+          porte={porte}
+          fermeId={fermeId}
+          utilisateurId={utilisateurId}
+          espece={especeCroissance}
+          surFermer={() => {
+            setCroissance(null);
+          }}
+          surEnregistre={enregistre}
+          garderLeFocus={garderLeFocus}
         />
       )}
       {renommer !== null && pret && (
