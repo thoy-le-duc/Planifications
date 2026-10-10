@@ -140,7 +140,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T32h](T32h-especes-sans-itineraire.md) | Toutes les espèces de la ferme dans l'écran Itinéraires (Q40) | T32c | à faire |
 | [T32i](T32i-perennes-repousse.md) | Pérennes : repousse en douceur avant la récolte (Q41) | T32f | à faire |
 | [T35a](T35a-schema-rangs.md) | Itinéraire : rangs alignés ou en quinconce, et leur schéma (Q34) | — | fait |
-| [T35b](T35b-quinconce-3d.md) | Jumeau 3D : plants posés selon la disposition des rangs (Q34) | T35a, T32d | à faire |
+| [T35b](T35b-quinconce-3d.md) | Jumeau 3D : plants posés selon la disposition des rangs (Q34) | T35a, T32d | en revue |
 | [T14g](T14g-sous-zones-homonymes.md) | Import : sous-zones homonymes sous deux zones différentes (relecture T14f) | T14f | fait |
 | [T28i](T28i-demo-placement.md) | Démo : essayer le placement d'une serre sur une vraie photo (Q36) | T28h | fait |
 | [T28k](T28k-placement-au-doigt.md) | Placement au doigt sur le téléphone (Q36) | T28j | fait |
