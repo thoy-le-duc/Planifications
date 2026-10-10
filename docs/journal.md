@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-10 — T14g : sous-zones homonymes à l'import
+
+- **Fait** : un nom de zone donné seul (colonne Zone sans sous-zone, parcellaire et assolement par zone) ne se range plus dans la première zone trouvée : `zonesParNom` remplacée par `zoneSeule` (`apps/web/src/ecrans/import/construction.ts`), même normalisation. Plusieurs sous-zones de ce nom → refus « Zone ambiguë : « Chapelle A » existe dans Tunnel 1 et Tunnel 2. Ajoutez la zone parente. » (parentes énumérées « A, B et C ») ; « Tunnel 2 / Chapelle A / P9 » désigne la bonne ; nom unique comme avant. 13 tests dans `sous-zones-homonymes.test.ts` (testeur puis développeur, commits distincts), tests T14f verts sans modification. Vérifié : typage, lint, 4 557 tests unitaires, build, budgets (démarrage 71,0 / 71 Kio inchangé, l'écran d'import reste chargé à la demande).
+- **Décidé** : une zone de premier niveau du même nom qu'une sous-zone reste désignée par la colonne Zone seule (correspondance exacte ; la refuser la rendrait impossible à désigner, la sous-zone se désigne par « parente / sous-zone »). Deux zones de premier niveau du même nom, ou deux sous-zones du même nom sous la même parente : refus aussi (« Renommez l’une d’elles dans le parcellaire »), jamais de choix silencieux.
+- **Bloquant** : rien. Hors périmètre, à voir : « Tunnel 3 / Chapelle D » avec deux « Chapelle D » sous le Tunnel 3 prend encore la dernière (`zonesParCle`) ; aux séries, une colonne Zone ambiguë cherche le code dans toutes les zones de ce nom (le refus « Code ambigu » protège, mais son texte parle de sous-zones).
+
 ## 2026-10-10 — T13r : l'éditeur de placement ne charge plus la règle « déjà fait »
 
 - **Fait** : `packages/sync/src/fait-unique.ts` (SQL des chaînes, clé d'horodatage) quitte le morceau `identifiants`, que l'éditeur de placement charge pour le seul UUID, et prend un petit morceau manuel à lui, `fait`, partagé par la porte (`sqlite/base-appli`) et l'écran Aujourd'hui (`apps/web/vite.config.ts`). Tests T13r ajoutés à `scripts/placement.test.ts` (aucun SQL des chaînes dans le morceau de l'éditeur, au moins 0,5 Kio sous l'ancien budget de 22,2). Éditeur 22,11 → 20,30 Kio ; budget `jsPlacementGzKio` **baissé** de 22,2 à 20,6 (mesuré + 0,3), épingle du test suivie.
