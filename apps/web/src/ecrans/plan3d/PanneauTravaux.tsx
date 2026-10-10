@@ -2,7 +2,9 @@
  * Vue 3D (T37) — panneau « Travaux du jour » : les travaux de l'écran Aujourd'hui, numérotés,
  * pour que les ouvriers se repèrent. Composant de présentation : il ne lit ni n'écrit rien ; le
  * tap d'une ligne et « Suivant » appellent `surChoisir(rang)`, la vue fait voler la caméra.
- * Repliable (au téléphone, en bas de l'écran) ; « Suivant » reste visible replié.
+ * Repliable (au téléphone, en bas de l'écran) ; « Suivant » reste visible replié. T37b : une zone
+ * vivante annonce le travail actif (l'ouvrier qui ne regarde pas l'écran l'entend), et un message
+ * dit quand la lecture des travaux a échoué.
  */
 import { useState } from 'react';
 import { travailSuivant, type Travail3d } from './choix-travail.ts';
@@ -14,12 +16,18 @@ export interface ProprietesPanneauTravaux3d {
   readonly surChoisir: (rang: number) => void;
   /** Replié à l'ouverture (faux par défaut). */
   readonly replieDepart?: boolean;
+  /** La lecture des travaux a échoué (T37b) : un message le dit, même sans travaux. */
+  readonly erreur?: boolean;
 }
 
-export function PanneauTravaux3d({ travaux, actif, surChoisir, replieDepart = false }: ProprietesPanneauTravaux3d) {
+/** Phrase du panneau quand la lecture des travaux échoue. */
+export const TEXTE_ERREUR_TRAVAUX = 'Impossible de lire les travaux du jour';
+
+export function PanneauTravaux3d({ travaux, actif, surChoisir, replieDepart = false, erreur = false }: ProprietesPanneauTravaux3d) {
   const [replie, setReplie] = useState(replieDepart);
-  if (travaux.length === 0) return null;
+  if (travaux.length === 0 && !erreur) return null;
   const suivant = travailSuivant(travaux, actif);
+  const annonce = actif === null ? '' : (travaux.find((t) => t.rang === actif)?.texte ?? '');
   return (
     <section data-testid="travaux-du-jour-3d" role="region" aria-label="Travaux du jour" data-nombre={travaux.length} data-replie={replie ? 'oui' : 'non'} data-actif={actif === null ? '' : String(actif)} className="plan3d-travaux">
       <div className="plan3d-travaux-tete">
@@ -51,6 +59,15 @@ export function PanneauTravaux3d({ travaux, actif, surChoisir, replieDepart = fa
           </svg>
         </button>
       </div>
+      {erreur && (
+        <p data-testid="travaux-erreur-3d" role="alert" className="plan3d-travaux-erreur">
+          {TEXTE_ERREUR_TRAVAUX}
+        </p>
+      )}
+      {/* Présente dès le premier rendu : un lecteur d'écran n'annonce que le texte d'une zone qui existait déjà. */}
+      <p data-testid="travail-annonce-3d" aria-live="polite" className="plan3d-annonce">
+        {annonce}
+      </p>
       <ul data-testid="travaux-liste-3d" role="list" className="plan3d-travaux-liste" hidden={replie}>
         {travaux.map((t) => (
           <li key={t.cle} data-testid="travail-3d" data-rang={t.rang} data-cle={t.cle} data-planche={t.planche ?? ''} aria-current={t.rang === actif ? 'true' : undefined} className={t.enRetard ? 'plan3d-travail plan3d-travail-retard' : 'plan3d-travail'}>

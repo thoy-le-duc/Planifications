@@ -53,8 +53,8 @@ import { Plants } from './Plants.tsx';
 import { PanneauTravaux3d } from './PanneauTravaux.tsx';
 import { CouchePastilles, placerPastilles, type PastilleDessinee } from './Pastilles.tsx';
 import type { Camera as CameraThree } from 'three';
-import type { TacheJour } from '../aujourdhui/calculs.ts';
-import type { TravauxDuJour3d } from './travaux.ts';
+import type { Masques } from '../aujourdhui/cache.ts';
+import type { LectureTravaux, tachesVisibles, travauxDuJour3d, TravauxDuJour3d } from './travaux.ts';
 import { hauteurDalle, hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
 import { plantsDePlanche, type PlantsPlanche } from './plants.ts';
 import { mentionRecolte, phrasePlanchesARecolter, planchesARecolter } from './recolte.ts';
@@ -212,6 +212,18 @@ function Sol({ scene }: { readonly scene: Scene }) {
       <meshLambertMaterial color={COULEURS.secondaire} side={DoubleSide} />
     </mesh>
   );
+}
+
+/**
+ * Appels de dessin de la ferme sans ses plants (T37b) : le sol, les planches, et pour les bâtiments les
+ * maillages que dessine <Batiments> (arceaux, bâches et bouts des serres ; murs et toits des volumes).
+ */
+export function appelsHorsPlants(scene: Scene): number {
+  const serres = scene.batiments.filter((b) => b.forme !== 'volume');
+  const arceaux = serres.reduce((n, b) => n + b.arceaux.length * b.nefs, 0);
+  const nefs = serres.reduce((n, b) => n + b.nefs, 0);
+  const volumes = scene.batiments.length - serres.length;
+  return (scene.socles.length > 0 ? 1 : 0) + (scene.volumes.length > 0 ? 1 : 0) + (arceaux > 0 ? 1 : 0) + (nefs > 0 ? 2 : 0) + (volumes > 0 ? 2 : 0);
 }
 
 /** Part de la hauteur d'un volume simple occupée par les murs ; le reste est le toit. */
@@ -826,6 +838,9 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const idCurseur = useId();
   const idListe = useId();
   const idBatiments = useId();
+  const idPanneau = useId();
+  /** T37b : au téléphone, légende, filtres et liste des planches sont derrière « Filtres » (fermé à l'ouverture) ; sur ordinateur, toujours affichés. */
+  const [filtresOuverts, setFiltresOuverts] = useState(false);
 
   // Géométrie : posée par le plan seul (la semaine ne change que les couleurs).
   const geometrie = useMemo(() => (nbSemaines === 0 ? null : versScene(plan, 0)), [plan, nbSemaines]);
@@ -863,31 +878,47 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
 
   // Travaux du jour (T37) : les tâches de l'écran Aujourd'hui, relues quand la base change (le plan se relit à chaque écriture), en lecture seule.
   // Le moteur de l'écran Aujourd'hui se charge à part, à l'ouverture (précaché : hors ligne aussi), pour ne pas alourdir le morceau 3D.
-  const [calculTravaux, setCalculTravaux] = useState<{ readonly calculer: (taches: readonly TacheJour[], scene: { readonly volumes: readonly unknown[] }) => TravauxDuJour3d } | null>(null);
-  const [taches, setTaches] = useState<readonly TacheJour[]>([]);
+  // T37b : les tâches cochées et pas encore relues (masques de l'écran) en sont retirées, reprises à chaque changement des masques.
+  // Les fonctions du module, pas le module lui-même : garder l'espace de noms ajouterait un utilitaire au JavaScript de démarrage.
+  const [travauxLus, setTravauxLus] = useState<{ readonly calculer: typeof travauxDuJour3d; readonly visibles: typeof tachesVisibles; readonly lecture: LectureTravaux } | null>(null);
+  const [erreurTravaux, setErreurTravaux] = useState(false);
+  const [masques, setMasques] = useState<Masques | null>(null);
   useEffect(() => {
     if (porte === undefined || fermeId === undefined) return undefined;
     let actif = true;
+    let arreter = (): void => undefined;
     import('./travaux.ts')
       .then(async (m) => {
-        const lues = await m.lireTachesDuJour(porte, fermeId, m.jourDuTelephone());
+        if (actif) {
+          arreter = m.suivreMasques(porte, fermeId, () => {
+            setMasques(m.masquesDe(porte, fermeId));
+          });
+          setMasques(m.masquesDe(porte, fermeId));
+        }
+        const lecture = await m.lireTravaux(porte, fermeId, m.jourDuTelephone());
         if (!actif) return;
-        setCalculTravaux({ calculer: m.travauxDuJour3d });
-        setTaches(lues);
+        setTravauxLus({ calculer: m.travauxDuJour3d, visibles: m.tachesVisibles, lecture });
+        setErreurTravaux(false);
       })
       .catch((erreur: unknown) => {
         console.error('Travaux du jour 3D : lecture impossible', erreur);
+        if (actif) setErreurTravaux(true);
       });
     return () => {
       actif = false;
+      arreter();
     };
   }, [porte, fermeId, plan]);
   const [travailActif, setTravailActif] = useState<number | null>(null);
-  const jour = useMemo<TravauxDuJour3d>(() => (geometrie === null || calculTravaux === null ? { travaux: [], pastilles: [] } : calculTravaux.calculer(taches, geometrie)), [calculTravaux, taches, geometrie]);
+  const jour = useMemo<TravauxDuJour3d>(
+    () => (geometrie === null || travauxLus === null || masques === null ? { travaux: [], pastilles: [] } : travauxLus.calculer(travauxLus.visibles(travauxLus.lecture, masques), geometrie)),
+    [travauxLus, masques, geometrie],
+  );
   const pastillesDessinees = useMemo<readonly PastilleDessinee[]>(() => jour.pastilles.map((pastille) => ({ pastille, retard: jour.travaux.some((t) => t.planche === pastille.planche && t.enRetard) })), [jour]);
   const couchePastilles = useRef<HTMLDivElement>(null);
   const pastillesRef = useRef(pastillesDessinees);
   const derniereCamera = useRef<CameraThree | null>(null);
+  const derniereTaille = useRef<{ readonly width: number; readonly height: number } | null>(null);
   const plancheActive = travailActif === null ? null : (jour.travaux.find((t) => t.rang === travailActif)?.planche ?? null);
 
   // Filtres (T27b) : état local à la vue, jamais écrit ni stocké ; tout est coché à chaque ouverture.
@@ -918,10 +949,12 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     surEchecRef.current = surEchec;
   }, [surEchec]);
 
-  const surImage = useCallback(({ gl, camera }: RootState) => {
+  const surImage = useCallback(({ gl, camera, size }: RootState) => {
     const s = suivi.current;
     derniereCamera.current = camera;
-    if (couchePastilles.current !== null) placerPastilles(couchePastilles.current, camera, gl.domElement.clientWidth, gl.domElement.clientHeight, pastillesRef.current);
+    derniereTaille.current = size;
+    // Taille de la toile lue par fiber (T37b) : aucune lecture de mise en page à chaque image.
+    if (couchePastilles.current !== null) placerPastilles(couchePastilles.current, camera, size.width, size.height, pastillesRef.current);
     s.rendus += 1;
     const ds = gl.domElement.dataset;
     ds.rendus = String(s.rendus);
@@ -938,6 +971,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
       ds.formesPlants = String(b.formes);
       ds.fruits = String(b.fruits);
       ds.balises = String(b.balises);
+      ds.activeEnDetail = b.activeEnDetail === null ? '' : b.activeEnDetail ? 'oui' : 'non';
       ds.hauteursPlants = b.hauteurs;
       ds.semainePlants = String(b.semaine);
       s.plantsEnAttente = null;
@@ -979,8 +1013,8 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   // Les pastilles changent (autre jour, autre plan) : replacées tout de suite avec la dernière caméra, sans attendre une image.
   useLayoutEffect(() => {
     pastillesRef.current = pastillesDessinees;
-    const toile = toileRef.current;
-    if (couchePastilles.current !== null && derniereCamera.current !== null && toile !== null) placerPastilles(couchePastilles.current, derniereCamera.current, toile.clientWidth, toile.clientHeight, pastillesDessinees);
+    const taille = derniereTaille.current;
+    if (couchePastilles.current !== null && derniereCamera.current !== null && taille !== null) placerPastilles(couchePastilles.current, derniereCamera.current, taille.width, taille.height, pastillesDessinees);
   }, [pastillesDessinees]);
 
   // Un travail choisi (tap d'une ligne, « Suivant ») : la caméra vole vers sa planche, qui est mise en évidence.
@@ -1108,6 +1142,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   }, [filtree]);
 
   const nbVolumes = geometrie?.volumes.length ?? 0;
+  const appelsFerme = useMemo(() => (geometrie === null ? 0 : appelsHorsPlants(geometrie)), [geometrie]);
   // Ce que le jumeau dessine, lu par les tests : bâtiments, arceaux (tous bâtiments), planches placées. La géométrie ne dépend pas de la semaine.
   const nbBatiments = geometrie?.batiments.length ?? 0;
   const nbArceaux = geometrie?.batiments.reduce((n, b) => n + b.arceaux.length, 0) ?? 0;
@@ -1129,7 +1164,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         <Sol scene={geometrie} />
         <Batiments scene={geometrie} />
         <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} plants={plants} rendu={rendu} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
-        {plants !== null && <Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={rendu} surBilan={surBilan} />}
+        {plants !== null && <Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={rendu} surBilan={surBilan} appelsHorsPlants={appelsFerme} plancheActive={plancheActive} />}
         <Camera rayon={rayon} centre={centre} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
         <Rendu surImage={surImage} />
       </GardeErreur>,
@@ -1179,6 +1214,18 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         >
           Vue d’ensemble
         </button>
+        <button
+          type="button"
+          data-testid="filtres-bouton-3d"
+          className="plan3d-bouton plan3d-filtres-bouton"
+          aria-expanded={filtresOuverts}
+          aria-controls={idPanneau}
+          onClick={() => {
+            setFiltresOuverts((o) => !o);
+          }}
+        >
+          Filtres
+        </button>
         {peutModifier && !sansPlacement && (
           <button type="button" data-testid="modifier-plan" className="plan3d-bouton" onClick={surModifierPlan}>
             Modifier le plan
@@ -1203,11 +1250,11 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               {zoneChoisie !== null && <p>Vue sur la zone {zoneChoisie}</p>}
             </div>
           )}
-          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-fruits={0} data-balises={0} data-planches-a-recolter={nbARecolter} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-fruits={0} data-balises={0} data-active-en-detail="" data-planches-a-recolter={nbARecolter} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-travaux-erreur={erreurTravaux ? 'oui' : 'non'} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
           <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
-          <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} />
+          <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} erreur={erreurTravaux} />
         </div>
-        <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
+        <aside id={idPanneau} data-testid="panneau-3d" hidden={!filtresOuverts} className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
           <div className="plan3d-filtres">
             <details open data-testid="legende-3d" className="plan3d-groupe">
               <summary>

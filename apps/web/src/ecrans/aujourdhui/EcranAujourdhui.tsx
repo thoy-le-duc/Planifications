@@ -82,7 +82,7 @@ export const MARQUE_AUJOURDHUI_AFFICHE = 'planif:aujourdhui-affiche';
  * Tâches dessinées par groupe avant « Voir les autres » : l'écran s'affiche vite même quand des
  * séries anciennes, jamais marquées faites, traînent en retard par centaines.
  */
-const TACHES_PAR_GROUPE = 25;
+export const TACHES_PAR_GROUPE = 25;
 
 /**
  * T13d : cartes du premier dessin à l'ouverture de l'écran (un écran de téléphone et un peu plus) ;

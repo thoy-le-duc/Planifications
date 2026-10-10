@@ -33,9 +33,48 @@ export function CouchePastilles({ pastilles, actif, couche }: { readonly pastill
 
 const point = new Vector3();
 
-/** Replace chaque disque sur l'écran d'après la caméra ; caché derrière la caméra ou hors du cadre. */
+/** Ce que la couche a posé la dernière fois : caméra (matrices), taille de la toile, pastilles. */
+interface Pose {
+  readonly vue: Float64Array;
+  largeur: number;
+  hauteur: number;
+  pastilles: readonly PastilleDessinee[];
+}
+const poses = new WeakMap<HTMLElement, Pose>();
+
+/** Recopie les matrices de la caméra dans `vue` ; rend vrai si l'une a changé. */
+function cameraChangee(vue: Float64Array, camera: Camera): boolean {
+  const monde = camera.matrixWorld.elements;
+  const projection = camera.projectionMatrix.elements;
+  let change = false;
+  for (let i = 0; i < 16; i += 1) {
+    const a = monde[i] ?? 0;
+    const b = projection[i] ?? 0;
+    if (vue[i] !== a || vue[16 + i] !== b) {
+      vue[i] = a;
+      vue[16 + i] = b;
+      change = true;
+    }
+  }
+  return change;
+}
+
+/**
+ * Replace chaque disque sur l'écran d'après la caméra ; caché derrière la caméra ou hors du cadre.
+ * Rien n'est écrit quand ni la caméra, ni la taille de la toile, ni les pastilles n'ont changé depuis
+ * le dernier appel (T37b) : la mise en page n'est pas relancée à chaque image.
+ */
 export function placerPastilles(couche: HTMLElement, camera: Camera, largeur: number, hauteur: number, pastilles: readonly PastilleDessinee[]): void {
   camera.updateMatrixWorld();
+  let pose = poses.get(couche);
+  if (pose === undefined) {
+    pose = { vue: new Float64Array(32).fill(Number.NaN), largeur, hauteur, pastilles };
+    poses.set(couche, pose);
+  } else if (!cameraChangee(pose.vue, camera) && pose.largeur === largeur && pose.hauteur === hauteur && pose.pastilles === pastilles) return;
+  cameraChangee(pose.vue, camera);
+  pose.largeur = largeur;
+  pose.hauteur = hauteur;
+  pose.pastilles = pastilles;
   pastilles.forEach(({ pastille }, i) => {
     const el = couche.children[i];
     if (!(el instanceof HTMLElement)) return;

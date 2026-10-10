@@ -14,7 +14,7 @@
  * demo`) ; le build de production n'en contient rien (scripts/demo.test.ts).
  */
 import { TABLES_LOCALES, type NomTableLocale } from '@planif/sync';
-import { CAMPAGNE, fermeDuJour, SERIE } from '../ecrans/aujourdhui/test/ferme-du-jour.ts';
+import { fermeDuJour, SERIE } from '../ecrans/aujourdhui/test/ferme-du-jour.ts';
 import { FERME_REFUS, refusDuJeu, UTILISATEUR_REFUS } from '../ecrans/ferme/test/refus.ts';
 import { fermeItineraires } from '../ecrans/itineraires/test/ferme-itineraires.ts';
 import { fermeSerie } from '../ecrans/serie/test/ferme-serie.ts';
@@ -32,12 +32,6 @@ function joursEntre(de: string, a: string): number {
   return Math.round((utc(a) - utc(de)) / 86_400_000);
 }
 
-/** La veille de `jour` ('AAAA-MM-JJ'), calculée en UTC. */
-function veilleDe(jour: string): string {
-  const d = new Date(Date.UTC(Number(jour.slice(0, 4)), Number(jour.slice(5, 7)) - 1, Number(jour.slice(8, 10)) - 1));
-  return d.toISOString().slice(0, 10);
-}
-
 /** Refus de synchro montrés dans la démo (écran Ferme) : quelques-uns, pas la centaine de l'e2e. */
 const REFUS_DE_LA_DEMO = 3;
 
@@ -46,14 +40,11 @@ function estTable(nom: string): nom is NomTableLocale {
 }
 
 /**
- * La ferme du jour de la démo. T37 : le début de récolte des fraises n'y est en retard que de 1 jour
- * (10 dans le jeu de test) : sa tâche passe après les travaux du jour des planches légères, de sorte
- * que le premier « Suivant » de la 3D ne mène pas devant la gouttière de fraises (plants par centaines),
- * dont le rendu de près dépasse les garde-fous de fluidité du téléphone (appels de dessin, triangles).
+ * La ferme du jour de la démo, avec ses données d'origine (T37b : le début de récolte des fraises est
+ * en retard de dix jours, comme dans le jeu de test ; la 3D tient ses garde-fous devant la gouttière).
  */
 function jeuDuJour(jour: string): Jeu {
   const duJour = fermeDuJour(jour, { travaux: true });
-  const debut = veilleDe(jour);
   // T35b : le chou (sous tunnel) et la courgette (plein champ, PC-P03) sont plantés en quinconce, pour que la démo montre la disposition dans la 3D ;
   // la même densité dans la série et dans son itinéraire (la série fige les paramètres de l'itinéraire).
   const enQuinconce = (parametres: string | number | null | undefined): string => {
@@ -64,7 +55,6 @@ function jeuDuJour(jour: string): Jeu {
   const itinerairesQuinconce: readonly unknown[] = (duJour.lignes.serie ?? []).filter((l) => quinconce.includes(l.id)).map((l) => l.itineraire_id);
   const lignes = {
     ...duJour.lignes,
-    campagne: (duJour.lignes.campagne ?? []).map((l) => (l.id === CAMPAGNE.fraise ? { ...l, debut_recolte_prevu: debut } : l)),
     serie: (duJour.lignes.serie ?? []).map((l) => (quinconce.includes(l.id) ? { ...l, parametres: enQuinconce(l.parametres) } : l)),
     itineraire: (duJour.lignes.itineraire ?? []).map((l) => (itinerairesQuinconce.includes(l.id) ? { ...l, parametres: enQuinconce(l.parametres) } : l)),
   };
