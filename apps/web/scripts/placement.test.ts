@@ -249,7 +249,7 @@ describe('T28f : l’éditeur s’ouvre aussi depuis la vue 3D, sans bouger les 
   it('budgets intacts : démarrage 71 Kio, morceau 3D et morceau de l’éditeur présents dans budget.json', () => {
     const b = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson & { readonly jsVue3dGzKio?: number };
     expect(b.jsInitialGzKio).toBe(BUDGET_DEMARRAGE_KIO);
-    expect(b.jsVue3dGzKio).toBe(206.8); // T32f : 206,7 → 206,8 (mesuré 206,5 → 206,77 : balise pâle, récoltes courtes, pérennes d'hiver), T32e : 204,3 → 206,7, plafond de Q33 : 228
+    expect(b.jsVue3dGzKio).toBe(206.9); // T32f : 206,7 → 206,9 (mesuré 206,5 → 206,81 : balise pâle, récoltes courtes, pérennes d'hiver), T32e : 204,3 → 206,7, plafond de Q33 : 228
     expect(b.jsPlacementGzKio).toBe(20.6); // T13r : l'éditeur ne charge plus fait-unique.ts (20,30 mesuré, marge 0,3 ; était 22,2) ; T13n : clé d'horodatage SQL dans fait-unique.ts, 22,11 mesuré ; T28k : placement au doigt (+0,9 Kio mesuré : 20,9 → 21,8 ; marge 0,3), chiffré dans la PR ; T28j : 19,9 → 20,9
   });
 });
