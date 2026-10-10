@@ -72,10 +72,10 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T13k](T13k-fait-avant-base.md) | Aujourd'hui : « Fait » accepté avant la base | T13g | fait |
 | [T13l](T13l-gestes-pendant-file.md) | Aujourd'hui : « Annuler » et gestes pendant la file des « Fait » | T13g | fait |
 | [T13m](T13m-chaine-unique.md) | Une seule règle « chaîne d'une saisie » | T13l, T13j | fait |
-| [T13n](T13n-horodatages.md) | Horodatages comparés comme des dates | T13l | à faire |
+| [T13n](T13n-horodatages.md) | Horodatages comparés comme des dates | T13l | fait |
 | [T14](T14-import-csv.md) | Import de n'importe quel tableur : moteur (cœur) | T10 | fait |
 | [T14b](T14b-import-ecrans.md) | Import : le parcours à l'écran | T14, T16, T10s | fait |
-| [T14e](T14e-import-series.md) | Import : suites (variétés, saisons, grandes fermes) | T14b | en revue |
+| [T14e](T14e-import-series.md) | Import : suites (variétés, saisons, grandes fermes) | T14b | fait |
 | [T14c](T14c-import-suites.md) | Import : suites de la relecture | T14 | fait |
 | [T14d](T14d-import-annee-suivante.md) | Import : saison à cheval sur deux années (Q18) | T14 | fait |
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
@@ -140,10 +140,12 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T14g](T14g-sous-zones-homonymes.md) | Import : sous-zones homonymes sous deux zones différentes (relecture T14f) | T14f | à faire |
 | [T28i](T28i-demo-placement.md) | Démo : essayer le placement d'une serre sur une vraie photo (Q36) | T28h | fait |
 | [T28k](T28k-placement-au-doigt.md) | Placement au doigt sur le téléphone (Q36) | T28j | fait |
-| [T37](T37-travaux-du-jour-3d.md) | 3D au téléphone : les travaux du jour, pour les ouvriers (Q36) | T29, T22, T13 | à faire |
+| [T37](T37-travaux-du-jour-3d.md) | 3D au téléphone : les travaux du jour, pour les ouvriers (Q36) | T29, T22, T13 | fait |
 | [T37b](T37b-3d-telephone-suites.md) | 3D au téléphone : fluidité de près, filtres, suites de T37 | T37 | à faire |
 | [T38a](T38a-api-sur-vercel.md) | Mise en ligne gratuite : l'API sur Vercel (Q37) | T09c, T10 | fait |
 | [T38b](T38b-guide-mise-en-ligne.md) | Guide de mise en ligne pas à pas, pour Théophane (Q37) | T38a | fait |
+| [T13q](T13q-horodatages-suites.md) | Horodatages : les derniers endroits qui comparent du texte (relecture T13n) | T13n | à faire |
+| [T13r](T13r-morceau-identifiants.md) | L'éditeur de placement ne charge plus la règle « déjà fait » (relecture T13n) | T13n | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 

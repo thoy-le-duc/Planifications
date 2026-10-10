@@ -34,6 +34,7 @@ import {
 } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { CHAINES } from '@planif/sync/fait-unique';
+import { comparerSaisies } from '@planif/sync/horodatage';
 import { cleFamille } from '../plan/calculs.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────────────────────────
@@ -256,7 +257,8 @@ export function enVigueur<E extends MaillonChaine>(evenements: readonly E[]): E[
     for (const id of chemin) origines.set(id, origine);
     return origine;
   };
-  const plusRecent = (a: E, b: E) => a.horodatage > b.horodatage || (a.horodatage === b.horodatage && a.id > b.id);
+  // T13n : (instant, id), l'horodatage lu comme un instant quel que soit son format.
+  const plusRecent = (a: E, b: E) => comparerSaisies(a, b) > 0;
   const annulees = new Set<string>();
   /** Par chaîne : la correction la plus récente, sinon l'origine (la première sans remplacement vue). */
   const retenue = new Map<string, E>();
@@ -1120,9 +1122,12 @@ function comparerRecoltes(socle: Socle, a: Culture, b: Culture): number {
   );
 }
 
-/** Ordre de l'historique : la saisie la plus récente d'abord (horodatage, puis id). */
+/**
+ * Ordre de l'historique : la saisie la plus récente d'abord (instant de l'horodatage, puis id ;
+ * T13n : jamais le texte de l'horodatage, dont le format varie).
+ */
 function avantDansHistorique(a: EvenementLu, b: EvenementLu): boolean {
-  return a.horodatage === b.horodatage ? a.id > b.id : a.horodatage > b.horodatage;
+  return comparerSaisies(a, b) > 0;
 }
 
 /** Saisies en vigueur parmi ces lignes récentes (règle jugée par la base sur toute la chaîne). */
@@ -1183,7 +1188,7 @@ export function calculerEtat(lignes: LignesJournee, aujourdhui: string): EtatJou
   recoltesEnCours.sort((a, b) => comparerRecoltes(socle, a, b));
 
   const historique: EntreeHistorique[] = vigueur
-    .sort((a, b) => (avantDansHistorique(a, b) ? -1 : 1))
+    .sort((a, b) => comparerSaisies(b, a))
     .map((evenement) => ({ evenement, culture: socle.cultures.get(evenement.serieId ?? evenement.campagneId ?? '') ?? null }));
 
   return {
@@ -1363,6 +1368,22 @@ export const VERBES: Readonly<Record<Exclude<TacheSemainier['etape'], 'travail'>
   arrachage: 'Arracher',
   debut_recolte: 'Récolter',
 };
+
+/**
+ * Ordre des tâches de l'écran : celles en retard d'abord, puis les autres, l'ordre relatif de
+ * chaque groupe conservé (ordre du moteur). Sans plafond : l'écran borne chaque groupe après coup
+ * (T13d), la vue 3D (T37) les montre toutes. L'entrée n'est jamais modifiée.
+ */
+export function tachesDeLEcran(taches: readonly TacheJour[]): TacheJour[] {
+  return [...taches.filter((t) => t.tache.enRetard), ...taches.filter((t) => !t.tache.enRetard)];
+}
+
+/** La tâche en une phrase, en minuscules : « planter chou pointu », « grelinette batavia ». */
+export function phraseDeTache(t: TacheJour): string {
+  const { tache, culture } = t;
+  const quoi = tache.etape === 'travail' ? tache.travail.type : VERBES[tache.etape].toLowerCase();
+  return `${quoi} ${culture.espece.toLowerCase()}`;
+}
 
 /** Nom de l'étape réalisée, pour l'historique. */
 export const ETAPES_FAITES: Readonly<Record<EtapeRealisee, string>> = {

@@ -538,9 +538,9 @@
   font-size: 18px;
 }
 
-/* « Voir en 3D » (T27, Q29) : sur ordinateur seulement ; au téléphone, le plan reste en 2D. */
+/* « Voir en 3D » (T27, Q29, Q36) : proposé partout, téléphone compris (les ouvriers y voient les travaux du jour). */
 .plan-voir-3d {
-  display: none;
+  display: flex;
   margin-left: auto;
   min-height: 56px;
   padding: 0 16px 0 12px;
@@ -562,10 +562,6 @@
 }
 
 @media (min-width: 1024px) {
-  .plan-voir-3d {
-    display: flex;
-  }
-
   .plan-voir-3d + .plan-nouvelle {
     margin-left: 0;
   }

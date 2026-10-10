@@ -17,6 +17,25 @@
  */
 import type { VerificationEcriture } from './types.ts';
 
+/**
+ * T13n : clé SQL de l'ordre canonique des saisies (instant, id), pour `MAX` : l'instant
+ * (`julianday` de SQLite, en millisecondes) sur 15 chiffres (ceux des années 0000 à 9999 en
+ * comptent 15 ; illisible : que des zéros, le plus ancien), `|`, l'id. Largeur fixe : aucun
+ * préfixe ne fausse l'ordre du texte. Même ordre que `comparerSaisies` (horodatage.ts, qui
+ * explique la règle ; vérifié par horodatage-instant.test.ts). `colonneHorodatage` et
+ * `colonneId` sont des noms de colonnes écrits par le code, jamais une valeur reçue.
+ */
+export const cleHorodatageSql = (colonneHorodatage: string, colonneId: string): string => {
+  // Fuseau de Postgres sans deux-points (`+00`, `+0530`), en toute fin : complété en `±HH:MM`,
+  // comme `fuseauComplet` (horodatage.ts).
+  const h = `(CASE WHEN ${colonneHorodatage} GLOB '*[+-][0-9][0-9]' THEN ${colonneHorodatage} || ':00'
+    WHEN ${colonneHorodatage} GLOB '*[+-][0-9][0-9][0-9][0-9]'
+      THEN substr(${colonneHorodatage}, 1, length(${colonneHorodatage}) - 2) || ':' || substr(${colonneHorodatage}, -2)
+    ELSE ${colonneHorodatage} END)`;
+  return `printf('%015d', CASE WHEN ${h} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][T ]*'
+    THEN CAST(round(julianday(${h}) * 86400000) AS INTEGER) END) || '|' || ${colonneId}`;
+};
+
 /** « Fait » déjà noté (réalisé ou intervention en vigueur) : rien n'est écrit. */
 export class DejaFait extends Error {}
 
@@ -32,7 +51,8 @@ export class DejaFait extends Error {}
  * maillons et ce qui y remonte ne sont pas dans `remplacement` : rien n'y est en vigueur.
  *   - `remplacement` : chaque correction ou annulation, avec l'origine de sa chaîne (le dernier
  *     maillon de sa montée : fini, ou dont le parent est une origine ou absent) ;
- *   - `chaine` : par origine, la clé (horodatage|id) de sa correction la plus récente et son
+ *   - `chaine` : par origine, la clé (instant|id, `cleHorodatageSql`, T13n : l'horodatage comparé
+ *     comme un instant, jamais comme du texte) de sa correction la plus récente et son
  *     `id` (colonne nue de SQLite : celle de la ligne du MAX), le nombre de ses annulations et
  *     de ses corrections.
  * `depart` filtre les remplacements dont on part ; `avant` : CTE placées avant
@@ -57,7 +77,7 @@ export const chaines = (depart: string, avant = '') => `WITH RECURSIVE ${avant}m
       WHERE p.id = m.origine AND +p.ferme_id = m.ferme AND (p.origine_id IS NOT NULL OR p.remplace_evenement_id IS NOT NULL))
   ),
   chaine AS (
-    SELECT origine, MAX(CASE WHEN sorte = 'correction' THEN horodatage || '|' || id END) AS cle, id,
+    SELECT origine, MAX(CASE WHEN sorte = 'correction' THEN ${cleHorodatageSql('horodatage', 'id')} END) AS cle, id,
       SUM(sorte = 'annulation') AS annulations, SUM(sorte = 'correction') AS corrections
     FROM remplacement GROUP BY origine
   )
@@ -246,10 +266,10 @@ const SQL_CHAINE_DE_L_ORIGINE = `${chaines(
 /**
  * T13m : la chaîne de remplacements de la ligne `id` de la ferme, selon la règle de `chaines`
  * (la seule) : la journée la lit pour toute la ferme (`CHAINES`), les écritures pour une saisie.
- * Chaîne qui contient une annulation, cycle, chaîne remplacée sans correction lisible, origine
- * dont `origine_id` désigne une autre ligne (données corrompues) : `annulee`, rien en vigueur
- * (le sens sûr : refus plutôt qu'écriture) ; sinon la correction
- * la plus récente (horodatage, puis id), à défaut l'origine. Ligne absente de la ferme : ni annulée,
+ * Chaîne qui contient une annulation, cycle, origine dont `origine_id` désigne une autre ligne
+ * (données corrompues) : `annulee`, rien en vigueur (le sens sûr : refus plutôt qu'écriture) ;
+ * sinon la correction la plus récente (instant, puis id ; T13n : un horodatage illisible ou nul
+ * vaut l'instant 0, il n'annule plus la chaîne), à défaut l'origine. Ligne absente de la ferme : ni annulée,
  * ni rien en vigueur.
  */
 export async function chaineDe(lire: Lire, fermeId: string, id: string): Promise<ChaineDe> {
@@ -263,7 +283,7 @@ export async function chaineDe(lire: Lire, fermeId: string, id: string): Promise
     await lire<{ annulations: number; cle: string | null; id: string | null }>(SQL_CHAINE_DE_L_ORIGINE, [origine, fermeId, origine, fermeId, fermeId, origine])
   )[0];
   if (c === undefined) return { annulee: false, enVigueur: origine };
-  // Annulation, ou chaîne remplacée sans correction lisible : rien en vigueur (comme EN_VIGUEUR).
+  // Annulation (ou chaîne sans clé, par sécurité) : rien en vigueur (comme EN_VIGUEUR).
   if (c.annulations > 0 || c.cle === null) return { annulee: true, enVigueur: null };
   return { annulee: false, enVigueur: c.id };
 }

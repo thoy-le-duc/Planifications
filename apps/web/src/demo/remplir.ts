@@ -14,7 +14,7 @@
  * demo`) ; le build de production n'en contient rien (scripts/demo.test.ts).
  */
 import { TABLES_LOCALES, type NomTableLocale } from '@planif/sync';
-import { fermeDuJour } from '../ecrans/aujourdhui/test/ferme-du-jour.ts';
+import { CAMPAGNE, fermeDuJour } from '../ecrans/aujourdhui/test/ferme-du-jour.ts';
 import { FERME_REFUS, refusDuJeu, UTILISATEUR_REFUS } from '../ecrans/ferme/test/refus.ts';
 import { fermeItineraires } from '../ecrans/itineraires/test/ferme-itineraires.ts';
 import { fermeSerie } from '../ecrans/serie/test/ferme-serie.ts';
@@ -32,11 +32,29 @@ function joursEntre(de: string, a: string): number {
   return Math.round((utc(a) - utc(de)) / 86_400_000);
 }
 
+/** La veille de `jour` ('AAAA-MM-JJ'), calculée en UTC. */
+function veilleDe(jour: string): string {
+  const d = new Date(Date.UTC(Number(jour.slice(0, 4)), Number(jour.slice(5, 7)) - 1, Number(jour.slice(8, 10)) - 1));
+  return d.toISOString().slice(0, 10);
+}
+
 /** Refus de synchro montrés dans la démo (écran Ferme) : quelques-uns, pas la centaine de l'e2e. */
 const REFUS_DE_LA_DEMO = 3;
 
 function estTable(nom: string): nom is NomTableLocale {
   return Object.hasOwn(TABLES_LOCALES, nom);
+}
+
+/**
+ * La ferme du jour de la démo. T37 : le début de récolte des fraises n'y est en retard que de 1 jour
+ * (10 dans le jeu de test) : sa tâche passe après les travaux du jour des planches légères, de sorte
+ * que le premier « Suivant » de la 3D ne mène pas devant la gouttière de fraises (plants par centaines),
+ * dont le rendu de près dépasse les garde-fous de fluidité du téléphone (appels de dessin, triangles).
+ */
+function jeuDuJour(jour: string): Jeu {
+  const duJour = fermeDuJour(jour, { travaux: true });
+  const debut = veilleDe(jour);
+  return { ...duJour, lignes: { ...duJour.lignes, campagne: (duJour.lignes.campagne ?? []).map((l) => (l.id === CAMPAGNE.fraise ? { ...l, debut_recolte_prevu: debut } : l)) } };
 }
 
 /** Les lignes de la démo, par table, pour le jour `jour` ('AAAA-MM-JJ') et l'instant `maintenant`. */
@@ -57,7 +75,7 @@ export function lignesDeLaDemo(jour: string, maintenant: Date): Map<string, Lign
       cree_le: r.cree_le,
     }));
   const jeux: Jeu[] = [
-    fermeDuJour(jour, { travaux: true }),
+    jeuDuJour(jour),
     fermeItineraires(jour),
     { ...plan, lignes: decalerJours(plan.lignes, joursEntre(JOUR_DU_JEU_PLAN, jour)) },
     { utilisateurId: UTILISATEUR_REFUS, fermeId: FERME_REFUS, lignes: { refus_synchro: refus } },
