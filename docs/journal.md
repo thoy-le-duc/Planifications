@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-10 — T32h : toutes les espèces de la ferme dans les itinéraires
+
+- **Fait** : dans l'écran Itinéraires, chaque espèce de la ferme non supprimée a son groupe avec « Croissance », même sans itinéraire (« Aucun itinéraire » écrit dessous) : asperge, kiwi, copie personnalisée de T32g, etc. se règlent enfin. Les espèces de la bibliothèque sans itinéraire de la ferme restent absentes ; les espèces supprimées aussi. Tri inchangé (par nom, l'id départage). Changement dans `EcranItineraires.tsx` seulement (un test de moins dans le filtre `parCulture`, une ligne de rendu) ; test `especes-sans-itineraire.test.tsx` écrit d'abord. Vérifié : typage, lint, tests, build, budgets (démarrage inchangé, 71,0 Kio), build des essais, e2e Itinéraires (médiane 80 ms, budget 300).
+- **Décidé** : une exception de test accordée (Q40) : le test T24 de `ecran.test.tsx` affirmait que le Radis n'avait pas de groupe ; or le Radis est une espèce **de la ferme** du jeu de test, il a donc maintenant son groupe (« Aucun itinéraire »), commit séparé. Pas de nouveau cas e2e : le jeu e2e n'a que trois espèces, et le surcoût par groupe vide est une ligne de texte.
+- **Bloquant** : rien. Non mesuré avec une centaine d'espèces en navigateur (aucun jeu e2e de cette taille).
+
 ## 2026-10-10 — T35b : plants en quinconce dans la 3D
 
 - **Fait** : la 3D pose les plants comme l'itinéraire le dit. `donnees-plants.ts` lit la `disposition` dans les paramètres figés de la série (instantané) ; `plantsDePlanche` décale les rangs pairs d'un demi-pas le long du rang quand elle vaut `quinconce` (2 rangs ou plus). Alignés ou disposition absente, illisible ou inconnue : positions identiques à avant (instantanés dans `quinconce-3d.test.ts`). Nombre de plants, plafonds (20 et 180), triangles et budgets de T32b/T32d inchangés. Vérifié : typage, lint, 4 802 tests unitaires, build, budgets (démarrage 71,0 / 71 ; vue 3D 207,0 / 207,1 Kio, non relevé), démo 15 passés, e2e 3D 4 passés.
