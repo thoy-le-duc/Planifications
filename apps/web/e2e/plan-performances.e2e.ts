@@ -3,10 +3,8 @@ import {
   decrireDefilement,
   decrireSerie,
   jugerDefilement,
-  jugerSerie,
   mediane,
   ralentirCpu,
-  REPETITIONS_MESURE,
   tempsAppPrete,
   type PassageDefilement,
   type SerieMesures,
@@ -14,24 +12,20 @@ import {
 import { installerAvecBase, noterPremierAppui, onglet, tapJusquAuPlanDepuisPremierAppui } from './plan-performances-outils.ts';
 
 /**
- * T11e — tests d'acceptation de « Planches : ouvrir la base plus tôt, marges de temps »
+ * T11e — tests d'acceptation de « Planches : marges de temps »
  * (docs/backlog/T11e-plan-performances.md). Mesures d'origine : docs/mesures/T11e-avant.md
  * (relevées par e2e/t11e-mesures.e2e.ts). Même cadre que plan.e2e.ts : build de production
  * (dist-essais), ferme de T07 (400 planches, 3 000 occupations) amorcée par
  * /diagnostic/amorcer.html, appli servie par le service worker, HORS LIGNE, CPU ralenti ×4.
  *
- * 1. Premier tap sur « Planches » dans la première seconde (règle « ouvrir la base plus tôt ») :
- *    tap dès la marque app-prete, base locale pas encore prête dans les mesures (prête vers
- *    560 à 880 ms) ; du tap à la marque 'planif:plan-affiche' : médiane < 300 ms et aucune
- *    répétition au-delà de 1,5 × 300 ms (jugerSerie, comme plan.e2e.ts). Mesuré avant : 576 à
- *    675 ms (médiane ≈ 625 ms). Même la base prête instantanément ne suffirait pas : entre la
- *    base prête et le plan dessiné, ≈ 290 à 420 ms (lecture du début du plan, journée
- *    d'Aujourd'hui en concurrence). L'utilisateur a déjà ouvert Planches une fois sur ce
- *    téléphone (comme T13g pour Aujourd'hui : on peut montrer ce qu'il a déjà vu).
- * 2. « Planches », base prête (marge, garde) : 10 taps, CHACUN sous 300 ms (plus de tolérance de
+ * Le premier tap dans la première seconde (base pas encore prête) est sorti dans T11g (décision
+ * du chef du 2026-10-10, docs/backlog/T11g-plan-avant-base.md) : il demande un instantané du plan
+ * montré avant la base (App.tsx, main.tsx, budget de démarrage).
+ *
+ * 1. « Planches », base prête (marge, garde) : 10 taps, CHACUN sous 300 ms (plus de tolérance de
  *    1,5 ×). Mesuré avant : 104 à 164 ms sans charge ; 313 ms relevés une fois sous charge (T11b).
  *    Ce test passe aujourd'hui : il garde la marge, il ne la crée pas.
- * 3. Défilement, 10 passages (40 px par image, comme plan.e2e.ts), plan complet lu et page au
+ * 2. Défilement, 10 passages (40 px par image, comme plan.e2e.ts), plan complet lu et page au
  *    calme : limite de T11d (au plus 2 images perdues d'affilée à 60 Hz), mais AU PLUS UN passage
  *    saccadé sur 10 et AU PLUS 2 intervalles fautifs au total (plan.e2e.ts tolère 3 passages sur
  *    5 et 6 intervalles). Mesuré avant : 2 passages saccadés sur 10, 5 intervalles fautifs, pire
@@ -48,8 +42,6 @@ const IMAGES_PERDUES_MAX = 2;
 const PASSAGES_SACCADES_ECHEC = 2;
 const RAFALES_TOTAL_MAX = 2;
 const PAS_DEFILEMENT_PX = 40;
-/** La première seconde après la navigation. */
-const PREMIERE_SECONDE_MS = 1_000;
 
 let contexte: BrowserContext;
 let page: Page;
@@ -79,27 +71,6 @@ async function recharger(): Promise<void> {
   await tempsAppPrete(page);
   expect(await page.evaluate(() => navigator.serviceWorker.controller !== null), 'servie par le service worker').toBe(true);
 }
-
-test('premier tap sur « Planches » dans la première seconde : plan affiché en moins de 300 ms', async () => {
-  test.setTimeout(180_000);
-  const valeurs: number[] = [];
-  for (let i = 0; i < REPETITIONS_MESURE; i += 1) {
-    await recharger();
-    const baseAuTap = await page.getByTestId('app').getAttribute('data-base');
-    await onglet(page, 'Planches').click();
-    const r = await tapJusquAuPlanDepuisPremierAppui(page);
-    console.log(`premier tap : à ${r.tap.toFixed(0)} ms (base « ${baseAuTap ?? '?'} »), plan à ${r.plan.toFixed(0)} ms → ${r.ms.toFixed(0)} ms`);
-    expect(r.tap, 'le tap tombe dans la première seconde').toBeLessThan(PREMIERE_SECONDE_MS);
-    await expect(page.getByRole('heading', { level: 1, name: 'Planches' })).toBeVisible();
-    await expect(page.getByTestId('ligne-plan').first()).toBeVisible();
-    await expect(page.getByTestId('barre').first()).toBeVisible();
-    valeurs.push(r.ms);
-    await onglet(page, 'Aujourd’hui').click();
-  }
-  const serie: SerieMesures = { valeurs, mediane: mediane(valeurs) };
-  console.log(decrireSerie('Planches, premier tap dans la première seconde', serie, BUDGET_MS));
-  expect(jugerSerie(serie, BUDGET_MS).raisons, 'premier tap sur Planches').toEqual([]);
-});
 
 test('« Planches », base prête : dix taps, chacun sous 300 ms (garde de la marge)', async () => {
   test.setTimeout(240_000);
