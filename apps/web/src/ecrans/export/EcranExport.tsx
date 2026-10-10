@@ -7,13 +7,13 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import type { PorteDonnees } from '@planif/sync/export';
 import { AlerteOrange, BoutonPrincipal, BoutonSecondaire } from '../../ui/elements.tsx';
-import { lancerExport, telechargerDansLeNavigateur } from './lancer.ts';
+import { lancerExport, telechargerDansLeNavigateur, type OptionsLancerExport } from './lancer.ts';
 
 export interface ProprietesEcranExport {
   readonly porte: PorteDonnees;
   readonly fermeId: string;
   readonly maintenant?: () => Date;
-  readonly telecharger?: (nomFichier: string, octets: Uint8Array) => void;
+  readonly telecharger?: OptionsLancerExport['telecharger'];
 }
 
 const PILE: CSSProperties = { display: 'grid', gap: 16, maxWidth: 420, margin: '24px auto', padding: '0 16px' };

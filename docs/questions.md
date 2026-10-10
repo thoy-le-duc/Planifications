@@ -290,6 +290,18 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q40 — Régler une espèce qui n'a pas encore d'itinéraire (posée le 2026-10-10, T32c)
+
+Question : une espèce de la ferme sans itinéraire n'a pas de groupe dans l'écran Itinéraires, donc pas de bouton « Croissance ». L'afficher quand même, ou créer l'itinéraire d'abord ?
+
+Réponse (2026-10-10) : l'afficher quand même : toutes les espèces de la ferme ont leur groupe, avec « Croissance », même sans itinéraire (« Aucun itinéraire » écrit dessous). Ticket T32h.
+
+### Q41 — Pérennes qui apparaissent d'un coup au printemps (posée le 2026-10-10, T32f)
+
+Question : une pérenne dont la récolte commence entre fin janvier et début avril reste « au repos » (invisible) dans la 3D jusqu'à 4 semaines avant la récolte, puis apparaît d'un coup en pleine végétation. Est-ce gênant ?
+
+Réponse (2026-10-10) : faire repousser en douceur : la plante redémarre progressivement pendant ces 4 semaines (débourrement puis végétation). Ticket T32i.
+
 ### Q39 — Régler la croissance d'une espèce de la bibliothèque, et où (posée le 2026-10-10, T32c)
 
 Question : le profil de croissance (hauteur, durée, forme) ne se règle que sur les espèces créées par la ferme ; celles de la bibliothèque commune sont partagées entre toutes les fermes. Pour une tomate de la bibliothèque, que doit pouvoir faire le gérant ? Et où trouver ce réglage, puisqu'il n'existe pas d'écran « fiche d'espèce » ?
