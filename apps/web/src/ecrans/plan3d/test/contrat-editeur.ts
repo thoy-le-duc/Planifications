@@ -44,7 +44,7 @@
  * Rôle gérant, ferme fictive déjà placée (T28c) : « Modifier le plan » est dans la 3D, ouvre l'éditeur,
  * hors réseau (service worker aux commandes, réseau coupé) : `data-fond="neutre"`, `fond-neutre` avec
  * « Photo aérienne indisponible hors ligne », aucune tuile demandée, un bâtiment peut être posé et
- * enregistré, et le retour montre un bâtiment de plus dans la 3D. Aucune requête hors de l'origine.
+ * enregistré, et le retour montre un bâtiment de plus dans la 3D. Aucune requête hors de l'origine (T28i : la démo en ligne laisse passer la photo IGN et le géocodage, voir src/demo/reseau.ts).
  *
  * ── Poids ────────────────────────────────────────────────────────────────────────────────────
  * JavaScript de démarrage inchangé (71 Kio, budget.json intact) ; le morceau de l'éditeur ne contient

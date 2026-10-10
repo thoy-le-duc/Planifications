@@ -53,7 +53,23 @@ import { Plants } from './Plants.tsx';
 import { hauteurDalle, hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
 import { plantsDePlanche, type PlantsPlanche } from './plants.ts';
 import type { PorteDonnees } from '@planif/sync';
+import { TEXTE_INVITATION } from '../../demo/invitation.ts';
 import './vue3d.css';
+
+/**
+ * T28i : l'invitation de la démo n'existe que dans les builds de la démo (et de test) : la condition
+ * est fixée au build, le texte n'entre donc pas dans le build de production (scripts/demo.test.ts).
+ */
+function invitation(voulue: boolean): ReactNode {
+  if (import.meta.env.MODE === 'demo' || import.meta.env.MODE === 'test') {
+    return voulue ? (
+      <p data-testid="invitation-demo" className="demo-invitation">
+        {TEXTE_INVITATION}
+      </p>
+    ) : null;
+  }
+  return null;
+}
 
 export interface ProprietesVue3d {
   readonly plan: Plan;
@@ -68,6 +84,8 @@ export interface ProprietesVue3d {
   readonly surModifierPlan?: () => void;
   /** T28f : l'utilisateur est gérant de la ferme (seul à pouvoir placer). */
   readonly gerant?: boolean;
+  /** T28i : build de la démo, la vue invite à essayer le placement d'une serre. Défaut : faux, rien n'est rendu. */
+  readonly invitationDemo?: boolean;
   /**
    * T32b : la base locale et la ferme, pour lire (en lecture seule) ce que les plants demandent en plus du plan.
    * Absents : la vue s'affiche sans plants.
@@ -787,7 +805,7 @@ const ElementBatiment = memo(function ElementBatiment({ batiment, surAller }: { 
   );
 });
 
-export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, porte, fermeId }: ProprietesVue3d) {
+export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, invitationDemo = false, porte, fermeId }: ProprietesVue3d) {
   // T28k (Q36) : le gérant place la ferme aussi au téléphone, à tout écran.
   const peutModifier = gerant && surModifierPlan !== undefined;
   const sansPlacement = useMemo(() => fermeSansPlacement(plan), [plan]);
@@ -1104,6 +1122,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           </button>
         )}
       </div>
+      {invitation(invitationDemo)}
       <div className="plan3d-corps">
         <div className="plan3d-scene">
           {sansPlacement && (

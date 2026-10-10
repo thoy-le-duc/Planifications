@@ -12,7 +12,7 @@
  * carte ; deux doigts zooment, et tournent l'élément choisi ; barre du bas « Tourner ±5° ». Sans
  * réseau, le fond est un quadrillage de 10 m et tout le reste marche.
  */
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactElement, type RefObject } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactElement, type ReactNode, type RefObject } from 'react';
 import { creerGenerateurId, type GenerateurId } from '@planif/core/identifiants';
 import type { ChangementPlacement, PorteDonnees } from '@planif/sync';
 import './placement.css';
@@ -22,6 +22,7 @@ import type { PropositionAdresse } from './adresse.ts';
 import { Champ, garderLeFocus, Modale } from './composants.tsx';
 import { RechercheAdresse } from './RechercheAdresse.tsx';
 import { BandeauEtapes, etapeCourante, MESSAGES_ETAPES, type NumeroEtape } from './etapes.tsx';
+import { TEXTE_INVITATION } from '../../demo/invitation.ts';
 import { empriseDeContours, vueSurEmprise, type Emprise } from './sites.ts';
 import { deplacerSommet, insererMilieu, poserPoint, replacerPlanches, retirerSommet, toucheSommet, TOLERANCE_FERMETURE_PX, verifierContour } from './contours.ts';
 import {
@@ -78,6 +79,21 @@ const MESSAGE_SOMMETS_MIN = `Un contour garde ${MESSAGES_CONTOURS.sommetsMin}.`;
 /** « Annuler » reste affiché quelques secondes après un enregistrement. */
 export const DELAI_ANNULATION_MS = 8_000;
 
+/**
+ * T28i : l'invitation de la démo n'existe que dans les builds de la démo (et de test) : la condition
+ * est fixée au build, le texte n'entre donc pas dans le build de production (scripts/demo.test.ts).
+ */
+function invitation(voulue: boolean): ReactNode {
+  if (import.meta.env.MODE === 'demo' || import.meta.env.MODE === 'test') {
+    return voulue ? (
+      <p data-testid="invitation-demo" className="demo-invitation">
+        {TEXTE_INVITATION}
+      </p>
+    ) : null;
+  }
+  return null;
+}
+
 export interface ProprietesEditeurPlacement {
   readonly porte: PorteDonnees;
   readonly fermeId: string;
@@ -92,6 +108,8 @@ export interface ProprietesEditeurPlacement {
   readonly delaiAnnulationMs?: number;
   /** Identifiant d'un nouveau bâtiment (UUID v7). */
   readonly nouvelId?: () => string;
+  /** T28i : build de la démo, l'éditeur invite à essayer (« Essayez : ajoutez une serre… »). Défaut : faux, rien n'est rendu. */
+  readonly invitationDemo?: boolean;
 }
 
 const ZOOM_MAX = 22;
@@ -338,7 +356,7 @@ interface ProprietesEditeurFerme extends ProprietesEditeurPlacement {
   readonly surBrouillon: (ouvert: boolean) => void;
 }
 
-function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, enLigne, delaiAnnulationMs = DELAI_ANNULATION_MS, nouvelId, brouillonAbandonne, surBrouillon }: ProprietesEditeurFerme): ReactElement {
+function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, enLigne, delaiAnnulationMs = DELAI_ANNULATION_MS, nouvelId, invitationDemo = false, brouillonAbandonne, surBrouillon }: ProprietesEditeurFerme): ReactElement {
   const idTitre = useId();
   const idRaisonZoom = useId();
   const idRaisonNouveau = useId();
@@ -1325,6 +1343,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             Fermer
           </button>
         </header>
+
+        {invitation(invitationDemo)}
 
         {pret && (
           <BandeauEtapes

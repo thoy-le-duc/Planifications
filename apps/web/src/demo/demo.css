@@ -238,3 +238,14 @@
     animation: none;
   }
 }
+
+/* T28i — invitation « Essayez : ajoutez une serre et posez-la sur la photo » (éditeur et vue 3D). */
+.demo-invitation {
+  margin: 0;
+  padding: 8px 16px;
+  background: var(--couleur-foret, #1f5a3a);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+}

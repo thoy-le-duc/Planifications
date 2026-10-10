@@ -10,7 +10,7 @@ export default defineConfig({
   testDir: 'e2e',
   testMatch: '**/*.e2e.ts',
   // T25 : la démo se teste sur dist-demo/ (playwright.demo.config.ts, `pnpm e2e:demo`).
-  testIgnore: '**/demo.e2e.ts',
+  testIgnore: ['**/demo.e2e.ts', '**/demo-placement.e2e.ts'],
   // Un seul navigateur à la fois : les mesures de temps ne doivent pas se gêner.
   workers: 1,
   forbidOnly: Boolean(process.env.CI),
