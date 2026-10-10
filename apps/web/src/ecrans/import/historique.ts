@@ -23,7 +23,7 @@
  */
 import { ECRITURES_MAX_PAR_LOT } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees, RefusSynchro } from '@planif/sync';
-import { ORDRE_ANNULATION } from './constantes.ts';
+import { enFrancais, ORDRE_ANNULATION } from './constantes.ts';
 
 type TableImport = (typeof ORDRE_ANNULATION)[number];
 
@@ -303,12 +303,16 @@ function avecSuivi(x: ImportPasse, lotsRefuses: readonly number[], refusAnnulati
   return r;
 }
 
-/** Annule l'import `i` (voir l'en-tête du fichier). `refus` : les refus du serveur (porte.surveillerRefus). */
-export async function annulerImport(porte: PorteDonnees, fermeId: string, i: ImportPasse, instant: string, refus: readonly RefusSynchro[] = []): Promise<ResultatAnnulation> {
+/**
+ * Annule l'import `i` (voir l'en-tête du fichier). `refus` : les refus du serveur
+ * (porte.surveillerRefus) ; null tant que la liste n'est pas lue (rien n'est alors purgé).
+ */
+export async function annulerImport(porte: PorteDonnees, fermeId: string, i: ImportPasse, instant: string, refus: readonly RefusSynchro[] | null = null): Promise<ResultatAnnulation> {
   const lots = lotsDe(i);
+  const liste = refus ?? [];
   // T14e : un lot dont le serveur a refusé l'annulation est réécrit, même s'il est noté annulé
   // (ses lignes sont revenues : le sauter laisserait l'import en place).
-  const refusIci = refusDAnnulation(i, refus);
+  const refusIci = refusDAnnulation(i, liste);
   const aRefaire = lotsVises(i, refusIci);
   const dejaAnnules = new Set((i.lotsAnnules ?? []).filter((k) => !aRefaire.has(k)));
   // Tous les lots, même ceux qu'on ne sait pas écrits (l'appli a pu s'arrêter juste après une
@@ -317,14 +321,33 @@ export async function annulerImport(porte: PorteDonnees, fermeId: string, i: Imp
   const usage = await premierUsage(porte, fermeId, aAnnuler.flatMap((k) => lignesDe(lots[k] ?? [])));
   if (usage !== null) return { sorte: 'refuse', message: usage };
 
+  // Relecture B1 : tout refus PATCH déjà là qui vise une ligne de l'import (une modification
+  // refusée avant, ou le refus d'une annulation précédente) n'est pas un refus de CETTE
+  // annulation : noté vu dès maintenant. Les vus qui ne sont plus dans la liste sont purgés.
+  const lot = lotParLigne(i);
+  const anterieurs = liste.filter((r) => r.operation === 'PATCH' && lot.has(`${r.nomTable}:${r.ligneId}`)).map((r) => r.id);
+  const presents = refus === null ? null : new Set(refus.map((r) => r.id));
+  const vusDe = (x: ImportPasse): string[] => [...new Set([...(x.refusVus ?? []).filter((id) => presents === null || presents.has(id)), ...anterieurs])];
+  // Lots notés refusés par le serveur pendant cette annulation (suivreRefus) : jamais remis annulés.
+  const refusesAuDepart = new Set([...(i.lotsRefuses ?? []), ...aRefaire]);
+  const refusesDepuis = (x: ImportPasse): Set<number> => new Set((x.lotsRefuses ?? []).filter((k) => !refusesAuDepart.has(k)));
+  const idsAuDepart = new Set(i.refusAnnulation?.ids ?? []);
+
   const annules = new Set(dejaAnnules);
-  const suivre = (x: ImportPasse, fini: boolean): ImportPasse => {
-    const lotsRefuses = (x.lotsRefuses ?? []).filter((k) => !annules.has(k));
-    if (!fini) return avecSuivi(x, lotsRefuses, x.refusAnnulation ?? null, x.refusVus ?? []);
-    // Annulation finie : les refus d'annulation connus sont suivis, ils ne comptent plus.
-    const vus = new Set([...(x.refusVus ?? []), ...(x.refusAnnulation?.ids ?? []), ...refusIci.map((r) => r.id)]);
-    return avecSuivi(x, lotsRefuses, null, [...vus]);
+  const suivre = (x: ImportPasse, fin: boolean): ImportPasse => {
+    const depuis = refusesDepuis(x);
+    const lotsAnnules = [...annules].filter((k) => !depuis.has(k));
+    const lotsRefuses = (x.lotsRefuses ?? []).filter((k) => depuis.has(k) || !annules.has(k));
+    const fini = fin && aAnnuler.every((k) => annules.has(k)) && depuis.size === 0;
+    const etat = fin ? (fini ? ('annule' as const) : ('actif' as const)) : x.etat;
+    const vus = vusDe(x);
+    // Annulation finie : le refus montré est suivi (ses ids connus au départ seulement).
+    const montre = x.refusAnnulation ?? null;
+    const nouveauRefus = montre?.ids.some((id) => !idsAuDepart.has(id)) === true ? montre : null;
+    if (fini) for (const id of idsAuDepart) if (!vus.includes(id)) vus.push(id);
+    return avecSuivi({ ...x, etat, lotsAnnules }, lotsRefuses, fini ? nouveauRefus : (x.refusAnnulation ?? null), vus);
   };
+  mettreAJour(fermeId, i.id, (x) => suivre(x, false));
   let refuses = 0;
   for (const k of [...aAnnuler].reverse()) {
     const ordres = lignesDe(lots[k] ?? [])
@@ -333,19 +356,45 @@ export async function annulerImport(porte: PorteDonnees, fermeId: string, i: Imp
     try {
       for (let d = 0; d < ordres.length; d += ECRITURES_MAX_PAR_LOT) await porte.ecrireEnsemble(ordres.slice(d, d + ECRITURES_MAX_PAR_LOT));
       annules.add(k);
-      mettreAJour(fermeId, i.id, (x) => suivre({ ...x, lotsAnnules: [...annules] }, false));
+      mettreAJour(fermeId, i.id, (x) => suivre(x, false));
     } catch (e) {
       console.error(`Annulation du lot ${String(k + 1)} refusée`, e);
       refuses++;
     }
   }
-  const fini = aAnnuler.every((k) => annules.has(k));
-  const etat = fini ? ('annule' as const) : ('actif' as const);
-  const passe = mettreAJour(fermeId, i.id, (x) => suivre({ ...x, etat, lotsAnnules: [...annules] }, fini)) ?? suivre({ ...i, etat, lotsAnnules: [...annules] }, fini);
-  return fini ? { sorte: 'annule', passe } : { sorte: 'incomplet', lotsRefuses: refuses, passe };
+  const passe = mettreAJour(fermeId, i.id, (x) => suivre(x, true)) ?? suivre(i, true);
+  const refusesParLeServeur = (passe.lotsRefuses ?? []).filter((k) => !refusesAuDepart.has(k)).length;
+  return passe.etat === 'annule' ? { sorte: 'annule', passe } : { sorte: 'incomplet', lotsRefuses: refuses + refusesParLeServeur, passe };
 }
 
 // ── Refus du serveur (T14e) ────────────────────────────────────────────────────────────────────
+
+/** Attente maximale d'une lecture des refus avant d'annuler (ms) ; au-delà : null. */
+const ATTENTE_REFUS_MS = 2_000;
+
+/**
+ * Les refus tels qu'ils sont en base à l'instant (une lecture de porte.surveillerRefus, puis
+ * arrêt) : l'annulation part de la liste à jour, pas d'une liste en retard d'un changement.
+ * null si la lecture n'arrive pas à temps.
+ */
+export function lireRefus(porte: PorteDonnees): Promise<readonly RefusSynchro[] | null> {
+  return new Promise((resolve) => {
+    let fini = false;
+    let arreter: (() => void) | null = null;
+    const finir = (r: readonly RefusSynchro[] | null): void => {
+      if (fini) return;
+      fini = true;
+      clearTimeout(minuterie);
+      resolve(r);
+      queueMicrotask(() => arreter?.());
+    };
+    const minuterie = setTimeout(() => {
+      finir(null);
+    }, ATTENTE_REFUS_MS);
+    // Arrêt en microtâche (finir) : `arreter` est déjà affecté, même si le rappel vient tout de suite.
+    arreter = porte.surveillerRefus(finir);
+  });
+}
 
 /** Lot (indice) de chaque ligne de l'import, « table:id ». */
 function lotParLigne(i: ImportPasse): Map<string, number> {
@@ -404,7 +453,7 @@ async function texteDuRefus(porte: PorteDonnees, fermeId: string, refus: readonl
     quoi = ` pour ${article}${nom}`;
   }
   const raison = fautif.message.replace(DEBUT_MESSAGE_SERVEUR, '').trim().replace(/([^.!?…])$/, '$1.');
-  const revenues = refus.length === 1 ? 'La ligne est revenue' : `Les ${String(refus.length)} lignes de cet envoi sont revenues`;
+  const revenues = refus.length === 1 ? 'La ligne est revenue' : `${enFrancais(refus.length)} lignes de cet import sont revenues`;
   return `Annulation refusée par le serveur${quoi} : ${raison} ${revenues} ; réglez cela, puis touchez « Annuler cet import » à nouveau.`;
 }
 

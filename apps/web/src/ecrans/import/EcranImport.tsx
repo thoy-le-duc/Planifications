@@ -23,7 +23,7 @@ import {
 import type { PorteDonnees, RefusSynchro } from '@planif/sync';
 import './import.css';
 import { lireContexte } from './contexte-base.ts';
-import { annulerImport, importsDeLaFerme, interruption, noterImport, noterLotsEcrits, suivreRefus, type ImportPasse } from './historique.ts';
+import { annulerImport, importsDeLaFerme, interruption, noterImport, lireRefus, noterLotsEcrits, suivreRefus, type ImportPasse } from './historique.ts';
 import { modeleQuiConvient, rangerModele } from './modeles.ts';
 import { creerPreparateur } from './preparateur.ts';
 import { CATEGORIES_CULTURE, enFrancais, PLAFOND_VALEURS_A_RAPPROCHER, UNITES_CULTURE } from './constantes.ts';
@@ -139,7 +139,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
 
   // T14e : refus du serveur (non archivés), en direct. Un refus d'annulation est noté sur
   // l'import (historique) ; tant que la liste n'est pas lue, le refus noté reste montré.
-  const refus = useRef<readonly RefusSynchro[]>([]);
+  const refus = useRef<readonly RefusSynchro[] | null>(null);
   const [refusCourants, setRefusCourants] = useState<ReadonlySet<string> | null>(null);
   useEffect(() => {
     let actif = true;
@@ -439,7 +439,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
     try {
       // L'état rangé le plus récent (lots déjà annulés, lots écrits).
       const actuel = importsDeLaFerme(fermeId).find((x) => x.id === passe.id) ?? passe;
-      const r = await annulerImport(porte, fermeId, actuel, maintenant().toISOString(), refus.current);
+      const r = await annulerImport(porte, fermeId, actuel, maintenant().toISOString(), (await lireRefus(porte)) ?? refus.current);
       if (r.sorte === 'refuse') setAlerte(r.message);
       else if (r.sorte === 'incomplet') {
         setAlerte(
@@ -611,7 +611,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
                             {i.etat === 'annule' ? ' · annulé' : ''}
                           </span>
                           {i.refusAnnulation !== undefined && (refusCourants === null || i.refusAnnulation.ids.some((id) => refusCourants.has(id))) && (
-                            <span data-testid="annulation-refusee" className="imp-refus-annulation">
+                            <span role="status" data-testid="annulation-refusee" className="imp-refus-annulation">
                               {i.refusAnnulation.texte}
                             </span>
                           )}
