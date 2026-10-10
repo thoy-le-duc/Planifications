@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-10 — T13s : horodatages de la table des modifications
+
+- **Fait** : les quatre lectures de la table `modification` (historique de la série, entrées des occupations dans `ecrans/serie/donnees.ts`, historiques des pages de diagnostic `itineraires.ts` et `plan-serie.ts`) se trient par `cleHorodatageSql('horodatage', 'id')` (instant puis id, T13n) au lieu de `ORDER BY horodatage, id`. 4 tests ajoutés (`diagnostic/horodatages-modifications.test.ts`) : formes `Z` / `+00` / `+00:00`, `T` / espace, fractions, et même instant départagé par l'id ; en échec avant, verts après, aucun test existant modifié. Vérifié : typage, lint, 4 850 tests, build, budget (démarrage 71,0 / 71 Kio, non relevé).
+- **Décidé** : import par le sous-chemin `@planif/sync/fait-unique` (le morceau `fait`), pas par l'index du paquet. Aucun index perdu : les lectures passaient par `modification_ligne_idx` (nom_table, ligne_id), aucun index ne portait l'horodatage, le tri restait en mémoire avant comme après. Les tests des pages de diagnostic posent le corps réel de `synchro.html`.
+- **Bloquant** : rien. Reste hors périmètre : `instantDe` (`donnees.ts`) lit encore l'instant par `Date.parse` (fuseau `+00` de Postgres sans deux-points non lu, donne NaN), à passer par `instantHorodatage`; et les restes de T13n (`ecrans/itineraires/donnees.ts:46`, `diagnostic/stock-serie.ts:248`, fenêtre `e.horodatage >= ?`).
+
 ## 2026-10-10 — T35b : plants en quinconce dans la 3D
 
 - **Fait** : la 3D pose les plants comme l'itinéraire le dit. `donnees-plants.ts` lit la `disposition` dans les paramètres figés de la série (instantané) ; `plantsDePlanche` décale les rangs pairs d'un demi-pas le long du rang quand elle vaut `quinconce` (2 rangs ou plus). Alignés ou disposition absente, illisible ou inconnue : positions identiques à avant (instantanés dans `quinconce-3d.test.ts`). Nombre de plants, plafonds (20 et 180), triangles et budgets de T32b/T32d inchangés. Vérifié : typage, lint, 4 802 tests unitaires, build, budgets (démarrage 71,0 / 71 ; vue 3D 207,0 / 207,1 Kio, non relevé), démo 15 passés, e2e 3D 4 passés.

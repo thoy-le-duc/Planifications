@@ -64,7 +64,7 @@ const attendre = async (condition: () => boolean): Promise<void> => {
 
 /** Pose le corps de la vraie page de diagnostic (les éléments qu'attendent les sections). */
 function poserPage(): void {
-  const html = readFileSync(resolve(process.cwd(), 'diagnostic/synchro.html'), 'utf8');
+  const html = readFileSync(resolve(import.meta.dirname, '../../diagnostic/synchro.html'), 'utf8');
   document.body.innerHTML = /<body[^>]*>([\s\S]*)<\/body>/.exec(html)?.[1]?.replace(/<script[\s\S]*?<\/script>/g, '') ?? '';
 }
 

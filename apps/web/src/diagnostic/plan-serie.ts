@@ -10,6 +10,7 @@
  */
 import { ajouterJours, calculerDatesSerie, estDateValide, type DateCalendaire, type DatesSerie, type ParametresDatesSerie } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees } from '@planif/sync';
+import { cleHorodatageSql } from '@planif/sync/fait-unique';
 
 export interface OptionsSectionPlanSerie {
   readonly porte: PorteDonnees;
@@ -139,7 +140,7 @@ export function brancherSectionPlanSerie(o: OptionsSectionPlanSerie): void {
       sql: `SELECT id, nom_table, ligne_id, operation FROM modification
             WHERE ligne_id IN (SELECT id FROM serie WHERE ferme_id = ? AND itineraire_id = ?)
                OR ligne_id IN (SELECT o.id FROM occupation o JOIN serie s ON s.id = o.serie_id WHERE s.ferme_id = ? AND s.itineraire_id = ?)
-            ORDER BY horodatage, id`,
+            ORDER BY ${cleHorodatageSql('horodatage', 'id')}`,
       parametres: [fermeId, itineraireId, fermeId, itineraireId],
       tables: ['modification', 'serie', 'occupation'],
     },

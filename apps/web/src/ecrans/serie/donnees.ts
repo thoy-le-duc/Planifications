@@ -6,6 +6,7 @@
  */
 import type { DateCalendaire, Emplacement, HierarchieParcellaire, Id, Instant, OccupationHistorique, TypeAbri } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
+import { cleHorodatageSql } from '@planif/sync/fait-unique';
 import type { EtatSerie } from '../../donnees/etat-serie.ts';
 import { versEmplacement, versOccupation } from '../plan/calculs.ts';
 import { comparerNoms, libelleCulture, versAssolement, type Bibliotheque, type EspeceLue, type FamilleLue, type OccupationLue, type PlancheLue, type VarieteLue } from './calculs.ts';
@@ -236,9 +237,12 @@ export function versModification(l: Readonly<Record<string, unknown>>): Modifica
  */
 export const entreeAnnulable = (m: Modification): boolean => !Number.isNaN(m.instant) && (m.operation === 'creation' || m.avant !== null);
 
+/** Ordre canonique (instant, id) des modifications (T13s, T13n) : jamais le texte de l'horodatage. */
+const CLE_MODIFICATION = cleHorodatageSql('horodatage', 'id');
+
 /** Historique de la série, le plus récent d'abord (requête surveillée par le formulaire). */
 export const requeteHistorique = (serieId: string) => ({
-  sql: `SELECT * FROM modification WHERE nom_table = 'Serie' AND ligne_id = ? AND supprime_le IS NULL ORDER BY horodatage DESC, id DESC`,
+  sql: `SELECT * FROM modification WHERE nom_table = 'Serie' AND ligne_id = ? AND supprime_le IS NULL ORDER BY ${CLE_MODIFICATION} DESC`,
   parametres: [serieId],
   tables: ['modification'],
   convertir: versModification,
@@ -249,7 +253,7 @@ export async function lireModificationsOccupations(porte: PorteDonnees, serieId:
   const lignes = await porte.lire<Readonly<Record<string, unknown>>>(
     `SELECT * FROM modification WHERE nom_table = 'Occupation' AND supprime_le IS NULL
        AND ligne_id IN (SELECT id FROM occupation WHERE serie_id = ?)
-     ORDER BY horodatage, id`,
+     ORDER BY ${CLE_MODIFICATION}`,
     [serieId],
   );
   return lignes.map(versModification);
