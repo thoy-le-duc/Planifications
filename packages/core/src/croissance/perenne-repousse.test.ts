@@ -11,10 +11,11 @@
  * - Hors de ces 28 jours et de la récolte : rien ne change (dates témoins).
  * - Exceptions : plantation pendant les 28 jours (la pousse part du jour de plantation, sur la
  *   courbe du profil) ; asperge et feuillage après récolte (Q33 : turions seuls, aucune rampe).
- * - Fraisier d'hiver de T32f (campagne déjà en cours le 31 décembre) : inchangé.
+ * - Fraisier d'hiver de T32f (campagne déjà en cours le 31 décembre) : inchangé rattaché à 2026 ;
+ *   rattaché à 2027, rampe du 13 décembre au 10 janvier (T32j).
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { ajouterJours } from '../dates/index.ts';
+import { ajouterJours, ecartEnJours } from '../dates/index.ts';
 import { campagneEnCours } from './recolte.ts';
 import { chargerCroissance, d, enS, profil, type DateCalendaire, type EntreePerenne, type ModuleCroissance, type ProfilCroissance } from './test/contrat.ts';
 
@@ -107,15 +108,25 @@ describe('T32i : exceptions et non-régressions', () => {
     }
   });
 
-  // Rattachée à 2026, la campagne prolonge la végétation de 2026 (T32a) : déjà 0,25 m début décembre ; rattachée à 2027, repos jusqu'au 12.
-  it('fraisier d’hiver de T32f (récolte du 10 janvier au 20 mars 2027) : inchangé, 0,25 m du 13 décembre au 19 mars', () => {
+  // Rattachée à 2026, la campagne prolonge la végétation de 2026 (T32a) : déjà 0,25 m début décembre ; rattachée à 2027, repos jusqu'au 12,
+  // puis (T32j, Q41) rampe du 13 décembre (0 m) au 10 janvier (0,25 m), la rampe traversant le changement d'année.
+  it('fraisier d’hiver de T32f (récolte du 10 janvier au 20 mars 2027) : rattaché à 2026 inchangé, 0,25 m ; rattaché à 2027, rampe du 13 décembre au 10 janvier', () => {
     const FRAISIER = profil({ forme: 'touffe', hauteurMaxM: 0.25, duree: { en: 'jours', jours: 30 }, cycleAnnuel: { debourrement: '03-01', repos: '11-30' } });
     for (const annee of [2027, 2026]) {
       const e: EntreePerenne = { plantation: PLANTATION, campagne: { annee, debutRecolte: d('2027-01-10'), finRecolte: d('2027-03-20') } };
       for (const jour of jours('2026-12-01', '2027-03-19')) {
         const repos = annee === 2027 && jour < d('2026-12-13');
-        const attendu = repos ? { stade: 'repos', hauteurM: 0, fraction: 0 } : { stade: 'pleine_vegetation', hauteurM: 0.25, fraction: 1 };
-        expect(m.croissancePerenneA(e, FRAISIER, jour), `${String(annee)} ${jour}`).toEqual(attendu);
+        const enRampe = annee === 2027 && !repos && jour < d('2027-01-10');
+        const x = ecartEnJours(d('2026-12-13'), jour) / 28;
+        const attendu = repos
+          ? { stade: 'repos', hauteurM: 0, fraction: 0 }
+          : enRampe
+            ? { stade: 'debourrement', hauteurM: 0.25 * x, fraction: x }
+            : { stade: 'pleine_vegetation', hauteurM: 0.25, fraction: 1 };
+        const etat = m.croissancePerenneA(e, FRAISIER, jour);
+        expect(etat.stade, `${String(annee)} ${jour}`).toBe(attendu.stade);
+        expect(etat.hauteurM, `${String(annee)} ${jour}`).toBeCloseTo(attendu.hauteurM, 9);
+        expect(etat.fraction, `${String(annee)} ${jour}`).toBeCloseTo(attendu.fraction, 9);
       }
     }
   });
