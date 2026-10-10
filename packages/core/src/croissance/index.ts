@@ -49,4 +49,4 @@ export {
 } from './defauts.ts';
 export { croissanceA, croissancePerenneA, FRACTION_FIN_LEVEE, FRACTION_HAUTEUR_FIN_BAISSEE, JOURS_REPLI_SANS_FIN } from './calcul.ts';
 export type { EtatRecolte, PhaseRecolte } from './recolte.ts';
-export { JOURS_FIN_RECOLTE, JOURS_FORMATION_FRUITS, PHASES_RECOLTE, recolteA, recoltePerenneA } from './recolte.ts';
+export { JOURS_FIN_RECOLTE, JOURS_FORMATION_FRUITS, jaunissementA, jaunissementPerenneA, PHASES_RECOLTE, recolteA, recoltePerenneA } from './recolte.ts';

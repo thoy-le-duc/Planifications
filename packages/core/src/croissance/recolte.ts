@@ -60,9 +60,31 @@ export function recolteA(dates: DatesCroissance, jour: DateCalendaire): EtatReco
 export function recoltePerenneA(entree: EntreePerenne, jour: DateCalendaire): EtatRecolte {
   const { datePlantation, dateArrachage } = entree.plantation;
   if (jour < datePlantation || (dateArrachage !== null && jour >= dateArrachage)) return AUCUNE;
-  const campagne = entree.campagne;
-  if (campagne === null || campagne.debutRecolte === null || campagne.annee !== Number(jour.slice(0, 4))) return AUCUNE;
+  const debut = entree.campagne?.debutRecolte ?? null;
+  const fin = entree.campagne?.finRecolte ?? null;
+  if (debut === null || entree.campagne?.annee !== Number(jour.slice(0, 4))) return AUCUNE;
   // Après la fin de la campagne, la plante n'est plus en récolte (la période est annuelle).
-  if (campagne.finRecolte !== null && jour >= campagne.finRecolte) return AUCUNE;
-  return phase(campagne.debutRecolte, campagne.finRecolte, jour);
+  if (fin !== null && jour >= fin) return AUCUNE;
+  return phase(debut, fin, jour);
+}
+
+/**
+ * Avancement du jaunissement du feuillage (0 à 1) : 0 hors « fin de récolte », puis croissant
+ * (positif dès le premier jour de la fin de récolte, 1 à la fin de la fenêtre, puis 1 jusqu'à
+ * l'arrachage). Fin de récolte inconnue : jamais de jaunissement (rien n'est inventé).
+ */
+function avancementJaunissement(fin: DateCalendaire | null, jour: DateCalendaire): number {
+  if (fin === null) return 0;
+  const ecoules = JOURS_FIN_RECOLTE - ecartEnJours(jour, fin);
+  return Math.min(1, (ecoules + 1) / (JOURS_FIN_RECOLTE + 1));
+}
+
+/** Jaunissement d'une culture annuelle au jour `jour` (0 hors « fin de récolte »). */
+export function jaunissementA(dates: DatesCroissance, jour: DateCalendaire): number {
+  return recolteA(dates, jour).phase === 'fin-de-recolte' ? avancementJaunissement(repere(dates.finRecolte), jour) : 0;
+}
+
+/** Jaunissement d'une pérenne à récolte annuelle au jour `jour` (0 hors « fin de récolte »). */
+export function jaunissementPerenneA(entree: EntreePerenne, jour: DateCalendaire): number {
+  return recoltePerenneA(entree, jour).phase === 'fin-de-recolte' ? avancementJaunissement(entree.campagne?.finRecolte ?? null, jour) : 0;
 }
