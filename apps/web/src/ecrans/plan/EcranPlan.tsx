@@ -626,7 +626,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
     focusARendre.current = false;
     const o = origine.current;
     origine.current = null;
-    if (o !== null && grille.current !== null) cibleDuFocus(grille.current, o).focus();
+    if (o !== null && grille.current !== null) cibleDuFocus(grille.current, o).focus({ preventScroll: true });
   }, [detail]);
   const modifierSerie = useCallback((serieId: string) => {
     setDetail(null);
