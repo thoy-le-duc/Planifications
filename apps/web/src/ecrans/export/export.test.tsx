@@ -153,6 +153,7 @@ function porteFactice(): { porte: PorteDonnees; requetes: string[] } {
     archiverRefus: () => Promise.resolve(),
     placer: () => Promise.resolve([]),
     reglerProfilCroissance: () => Promise.resolve(),
+    personnaliserEspece: () => Promise.resolve(''),
   };
   return { porte, requetes };
 }
