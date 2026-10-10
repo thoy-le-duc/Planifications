@@ -81,25 +81,6 @@ export interface ProprietesVue3d {
   readonly fermeId?: string;
 }
 
-/** T28f : écran assez grand pour éditer (même condition que l'éditeur, T28b), suivi en direct. */
-const REQUETE_ORDINATEUR = '(min-width: 1024px)';
-function useGrandEcran(): boolean {
-  const [grand, setGrand] = useState(() => typeof window.matchMedia !== 'function' || window.matchMedia(REQUETE_ORDINATEUR).matches);
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return undefined;
-    const m = window.matchMedia(REQUETE_ORDINATEUR);
-    const maj = () => {
-      setGrand(m.matches);
-    };
-    maj();
-    m.addEventListener('change', maj);
-    return () => {
-      m.removeEventListener('change', maj);
-    };
-  }, []);
-  return grand;
-}
-
 /** Marques de performance (e2e/vue-3d.e2e.ts) ; celle du module est posée par l'écran Planches (./entree.ts). */
 const MARQUE_AFFICHEE = 'planif:vue-3d-affichee';
 const MARQUE_SEMAINE = 'planif:vue-3d-semaine';
@@ -812,8 +793,8 @@ const ElementBatiment = memo(function ElementBatiment({ batiment, surAller }: { 
 });
 
 export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, porte, fermeId }: ProprietesVue3d) {
-  const grandEcran = useGrandEcran();
-  const peutModifier = gerant && grandEcran && surModifierPlan !== undefined;
+  // T28k (Q36) : le gérant place la ferme aussi au téléphone, à tout écran.
+  const peutModifier = gerant && surModifierPlan !== undefined;
   const sansPlacement = useMemo(() => fermeSansPlacement(plan), [plan]);
   const nbSemaines = plan.semaines.length;
   const [semaine, setSemaine] = useState(() => Math.min(Math.max(0, nbSemaines - 1), plan.semaineCourante ?? 0));

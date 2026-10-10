@@ -60,7 +60,7 @@ beforeEach(() => {
       disconnect = vi.fn();
     });
   }
-  // Écran d'ordinateur : « Modifier le plan » n'existe qu'à partir de 1024 px (T28f).
+  // Écran d'ordinateur (la largeur ne décide plus de « Modifier le plan » depuis T28k, Q36 : le gérant l'a partout).
   vi.stubGlobal('matchMedia', (requete: string) => ({
     matches: requete.includes('min-width: 1024px'),
     media: requete,
