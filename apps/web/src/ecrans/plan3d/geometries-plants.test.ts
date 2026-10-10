@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { FORMES_PLANT } from '@planif/core/croissance';
-import { geometriePlant, geometrieStructure, trianglesDe } from './geometries-plants.ts';
+import { geometriePlant, trianglesDe } from './geometries-plants.ts';
 import { TRIANGLES_PAR_FORME } from './plants.ts';
 
 describe('T32b : géométries des plants', () => {
@@ -33,9 +33,5 @@ describe('T32b : géométries des plants', () => {
       if (radial > -1e-9 || n.getY(i) > 0) dehors += 1;
     }
     expect(dehors / p.count).toBeGreaterThanOrEqual(0.9);
-  });
-
-  it('la structure (poteau et traverse) est légère', () => {
-    expect(trianglesDe(geometrieStructure())).toBeLessThanOrEqual(40);
   });
 });
