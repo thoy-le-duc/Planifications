@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-10 — T13n : horodatages comparés comme des dates
+
+- **Fait** : ordre canonique (instant, id) partout où l'on choisit « la plus récente » : `chaines` (donc `chaineDe`, la journée et le « déjà fait » de la porte) compare une clé `cleHorodatageSql` (julianday de SQLite en millisecondes sur 15 chiffres, puis l'id) au lieu de `horodatage || '|' || id` ; `enVigueur`, l'ordre de l'historique et la dernière récolte passent par `comparerSaisies` (`packages/sync/src/horodatage.ts`, sous-chemin `@planif/sync/horodatage`). Tests H1–H4 et W1–W6 verts sans modification ; 8 tests ajoutés (`horodatage-instant.test.ts`) : même instant que julianday de SQLite sur 46 formes choisies et 2 000 tirées au hasard, même ordre que la clé SQL.
+- **Décidé** : comparer comme des dates plutôt que normaliser à l'écriture (aucune ligne existante à réécrire). Le JS reproduit la lecture de SQLite (3.51 sous Node, 3.53 dans wa-sqlite) : `AAAA-MM-JJ`, `T` ou espace, heure facultative, fractions (plafonnées à 0,999, arrondies à la ms), `Z` ou `±HH:MM` ; sans fuseau = UTC ; illisible (autre forme, `+00` sans minutes, hors bornes) = instant 0, le plus ancien, l'id départage, jamais d'erreur. La clé SQL reste dans `fait-unique.ts` et la lecture JS dans son propre module : le morceau de l'éditeur de placement reste à 22,0 Kio (22,5 sinon, budget 22,1) ; démarrage inchangé (71,0 Kio).
+- **Bloquant** : rien pour le ticket. Ticket de suite à créer pour les comparaisons de texte restées hors périmètre : `apps/web/src/ecrans/itineraires/donnees.ts:46` (`MAX(horodatage || '|' || id)`), `apps/web/src/diagnostic/stock-serie.ts:248`, et la fenêtre `e.horodatage >= ?` de l'historique (`sqlRecents`, `dansLaFenetre`).
+
 ## 2026-10-09 — T28k : placer au doigt sur le téléphone
 
 - **Fait** : le gérant édite le placement sur téléphone et tablette (`data-ecran`, `data-geste`) : un doigt sur l'élément choisi le déplace, ailleurs il déplace la carte, un tap choisit sans déplacer, deux doigts zooment et tournent l'élément choisi ; barre du bas (« Tourner −5° / +5° », « Nouveau bâtiment », « Enregistrer », « Annuler ») ; appui long sur un côté pour ajouter un sommet ; sommets et poignées à 44 px ; `touch-action: none`. « Modifier le plan » de la vue 3D est aussi au téléphone pour le gérant. Bandeau d'étapes visible en lecture seule, étapes à venir en `aria-disabled` avec leur raison ; doublons de messages retirés. Budget de l'éditeur 21,2 → 22,1 Kio (mesuré 20,9 → 21,8).
