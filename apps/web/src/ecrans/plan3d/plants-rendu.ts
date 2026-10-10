@@ -55,8 +55,8 @@ const DEPASSEMENT_FRUIT_BUISSON = 0.15;
 const ETALEMENT_FRUIT = 0.7;
 /** Balise « à récolter » : plus petite taille (m, près de la planche), part de la distance à la caméra (elle grandit de loin pour rester lisible), plus grande taille (m). */
 export const BALISE_MIN_M = 0.8;
-const BALISE_PART_DISTANCE = 1 / 40;
-const BALISE_MAX_M = 8;
+const BALISE_PART_DISTANCE = 1 / 20;
+const BALISE_MAX_M = 12;
 /** Pas géométrique des tailles de balise : elle ne se repose que lorsque la caméra s'éloigne ou s'approche d'un cran. */
 const BALISE_CRAN = 1.2;
 /** Jeu entre le haut du feuillage et le bas de la balise, en part de sa taille. */
