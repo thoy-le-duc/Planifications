@@ -476,6 +476,24 @@ async function construireZip(fichiers: readonly FichierZip[], options: OptionsZi
  * Les tableaux de `compressees` sont vidés au fil de l'assemblage.
  */
 export function assemblerZip(entrees: readonly EntreeLancee[], compressees: Compressee[], date: number, methode: 0 | 8): Uint8Array {
+  const { parties, taille } = partiesZip(entrees, compressees, date, methode);
+  const octets = concatener(parties, taille);
+  parties.length = 0;
+  return octets;
+}
+
+/** L'archive en morceaux, dans l'ordre : en-têtes locaux et données, puis répertoire central et fin. */
+export interface PartiesZip {
+  readonly parties: Uint8Array[];
+  /** Taille totale de l'archive, en octets. */
+  readonly taille: number;
+}
+
+/**
+ * Comme `assemblerZip`, sans la copie finale d'un seul tenant : l'appelant recopie les parties
+ * à son rythme (T15d : par tranches, sur le fil principal, sans tâche longue).
+ */
+export function partiesZip(entrees: readonly EntreeLancee[], compressees: Compressee[], date: number, methode: 0 | 8): PartiesZip {
   const parties: Uint8Array[] = [];
   const centrales: Centrale[] = [];
   let p = 0;
@@ -536,8 +554,5 @@ export function assemblerZip(entrees: readonly EntreeLancee[], compressees: Comp
   v.setUint32(q + 12, tailleCentral, true);
   v.setUint32(q + 16, p, true);
   parties.push(central);
-
-  const octets = concatener(parties, p + central.length);
-  parties.length = 0;
-  return octets;
+  return { parties, taille: p + central.length };
 }

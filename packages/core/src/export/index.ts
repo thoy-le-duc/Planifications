@@ -12,7 +12,7 @@
  * Contrat détaillé : ./test/contrat.ts.
  */
 import { TABLES_EXPORTEES, type DescriptionTable, type TypeExport } from './tables.ts';
-import { annulable, assemblerZip, dateDos, EN_VOL, lancerEntree, verifierAnnulation, type Compressee, type Compresseur, type EntreeLancee, type MorceauZip, type SignalAnnulation } from './zip.ts';
+import { annulable, dateDos, EN_VOL, lancerEntree, partiesZip, verifierAnnulation, type Compressee, type Compresseur, type EntreeLancee, type MorceauZip, type SignalAnnulation } from './zip.ts';
 
 export { TABLES_EXPORTEES, type DescriptionColonne, type DescriptionTable, type TypeExport } from './tables.ts';
 export { annulable, creerZip, type Compresseur, type FichierZip, type MorceauZip, type OptionsZip, type SignalAnnulation } from './zip.ts';
@@ -515,7 +515,7 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
   const bibliotheques: TableRepartie[] = [];
   let nomFerme: unknown;
   /** Tables remises une à une à l'écrivain de ferme.json, puis la fin (bibliothèque) ; null : abandon. */
-  const remises = Array.from({ length: nTables }, () => attente<TableRemise | null>());
+  const remises: (Attente<TableRemise | null> | undefined)[] = Array.from({ length: nTables }, () => attente<TableRemise | null>());
   const remiseFin = attente<Compteur | null>();
   /** Tables entièrement écrites dans ferme.json. */
   const ecrites = Array.from({ length: nTables }, () => attente<undefined>());
@@ -555,7 +555,7 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
   const liberer = () => {
     rendeur.fermer();
     signal?.removeEventListener('abort', liberer);
-    for (const r of remises) r.tenir(null);
+    for (const r of remises) r?.tenir(null);
     remiseFin.tenir(null);
   };
   signal?.addEventListener('abort', liberer, { once: true });
@@ -610,6 +610,9 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
     const e = new EcrivainJson(fermeId, genereLe);
     for (let k = 0; k < nTables; k++) {
       const r = await remises[k]?.promesse;
+      // Table prise : la promesse tenue ne la garde plus en mémoire jusqu'à la fin de l'archive
+      // (T15d : moins de tas vivant, des ramasse-miettes plus courts sur le fil principal).
+      remises[k] = undefined;
       if (r === null || r === undefined || aArreter()) return;
       yield* flux(false, e.table(k, r.t.nom, r.t.d, r.t.ferme, r.compteur));
       ecrites[k]?.tenir(undefined);
@@ -669,7 +672,8 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
     lignes[nom] = t.ferme.length;
     if (d.bibliotheque) {
       lignes[`bibliotheque/${nom}`] = t.bibliotheque.length;
-      bibliotheques.push(t);
+      // Seules ses lignes de bibliothèque servent encore (fin de ferme.json) : pas celles de la ferme.
+      bibliotheques.push({ ...t, ferme: [] });
     }
     const compteur = ouvrirPart(k, 2 * t.ferme.length + (d.bibliotheque ? t.bibliotheque.length : 0));
     verifierArret();
@@ -717,7 +721,18 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
       avancer(true);
     }
     verifierArret();
-    const octets = assemblerZip(entrees as EntreeLancee[], compressees, date, methode);
+    // Copie finale par tranches (T15d) : d'un seul tenant, avec la création du Blob qui suit, elle
+    // faisait la dernière tâche de l'export, la plus longue (≈ 37 à 51 ms, CPU ×4, ferme de T07).
+    const { parties, taille } = partiesZip(entrees as EntreeLancee[], compressees, date, methode);
+    const octets = new Uint8Array(taille);
+    let p = 0;
+    for (const b of parties) {
+      octets.set(b, p);
+      p += b.length;
+      await peutEtreRendre();
+    }
+    parties.length = 0;
+    verifierArret();
     return { octets, lignes };
   }
 
