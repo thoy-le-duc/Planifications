@@ -136,6 +136,8 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T36](T36-allegement-vue-3d.md) | Alléger la vue 3D : ne plus charger tout le cœur (relecture T35a) | T32d, T35a | fait |
 | [T32e](T32e-recolte-visible.md) | Jumeau 3D : la récolte se voit (fruits, à récolter, fin de récolte) (Q34) | T32d, T36 | fait |
 | [T32f](T32f-recolte-suites.md) | Récolte visible : récoltes courtes, pérennes d'hiver, balise en fin de récolte (relecture T32e, Q38) | T32e | fait |
+| [T32h](T32h-especes-sans-itineraire.md) | Toutes les espèces de la ferme dans l'écran Itinéraires (Q40) | T32c | à faire |
+| [T32i](T32i-perennes-repousse.md) | Pérennes : repousse en douceur avant la récolte (Q41) | T32f | à faire |
 | [T35a](T35a-schema-rangs.md) | Itinéraire : rangs alignés ou en quinconce, et leur schéma (Q34) | — | fait |
 | [T35b](T35b-quinconce-3d.md) | Jumeau 3D : plants posés selon la disposition des rangs (Q34) | T35a, T32d | à faire |
 | [T14g](T14g-sous-zones-homonymes.md) | Import : sous-zones homonymes sous deux zones différentes (relecture T14f) | T14f | fait |

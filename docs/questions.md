@@ -290,6 +290,18 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q40 — Régler une espèce qui n'a pas encore d'itinéraire (posée le 2026-10-10, T32c)
+
+Question : une espèce de la ferme sans itinéraire n'a pas de groupe dans l'écran Itinéraires, donc pas de bouton « Croissance ». L'afficher quand même, ou créer l'itinéraire d'abord ?
+
+Réponse (2026-10-10) : l'afficher quand même : toutes les espèces de la ferme ont leur groupe, avec « Croissance », même sans itinéraire (« Aucun itinéraire » écrit dessous). Ticket T32h.
+
+### Q41 — Pérennes qui apparaissent d'un coup au printemps (posée le 2026-10-10, T32f)
+
+Question : une pérenne dont la récolte commence entre fin janvier et début avril reste « au repos » (invisible) dans la 3D jusqu'à 4 semaines avant la récolte, puis apparaît d'un coup en pleine végétation. Est-ce gênant ?
+
+Réponse (2026-10-10) : faire repousser en douceur : la plante redémarre progressivement pendant ces 4 semaines (débourrement puis végétation). Ticket T32i.
+
 ### Q38 — La balise de récolte pendant la fin de récolte (posée le 2026-10-10, T32e)
 
 Question : dans la 3D, une planche « à récolter » porte une balise orange au-dessus d'elle. Pendant les deux dernières semaines de la récolte, le feuillage jaunit et la balise disparaît, alors qu'on peut encore y récolter. Proposition : garder une balise jusqu'à la fin de la récolte, d'une teinte plus pâle pendant ces deux dernières semaines (« dernières récoltes »). Ou préfères-tu qu'elle disparaisse, comme aujourd'hui ?
