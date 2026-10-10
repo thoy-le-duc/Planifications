@@ -28,6 +28,7 @@ export function Plants({
   rendu,
   surBilan,
   appelsHorsPlants = 0,
+  plancheActive = null,
 }: {
   readonly scene: Scene;
   readonly filtree: SceneFiltree;
@@ -37,6 +38,8 @@ export function Plants({
   readonly surBilan: (b: BilanPlants) => void;
   /** Appels de dessin de la ferme sans ses plants (T37b) : au téléphone, les formes en détail tiennent dans le reste. */
   readonly appelsHorsPlants?: number;
+  /** Planche visée par « Suivant » (id) : au téléphone, sa forme passe d'abord en détail. */
+  readonly plancheActive?: string | null;
 }) {
   const invalider = useThree((s) => s.invalidate);
   const lireEtat = useThree((s) => s.get);
@@ -63,11 +66,12 @@ export function Plants({
   // La semaine, le plan, un filtre ou les plants ont changé : le détail est refait, tous les plants visibles sont reposés.
   useLayoutEffect(() => {
     rendu.fixerAppelsHorsPlants(appelsHorsPlants);
+    rendu.fixerPlancheActive(plancheActive);
     const { camera, size } = lireEtat();
     rendu.choisirDetail(scene, plants, camera.position.x, camera.position.y, camera.position.z, size.height, size.width);
     surBilan(rendu.poser(scene, filtree, plants));
     invalider();
-  }, [rendu, scene, filtree, plants, besoin, nbAccessoires, appelsHorsPlants, lireEtat, invalider, surBilan]);
+  }, [rendu, scene, filtree, plants, besoin, nbAccessoires, appelsHorsPlants, plancheActive, lireEtat, invalider, surBilan]);
 
   // Avant chaque image (après le vol de la caméra, avant le dessin) : le détail change-t-il ?
   useFrame(({ camera, size }) => {

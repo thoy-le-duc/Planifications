@@ -108,6 +108,8 @@ test('« Suivant » jusqu’à la gouttière de fraises (retard de dix jours), v
     expect(Math.abs(ecran.y), 'au centre de l’écran (y)').toBeLessThan(0.3);
     expect(distance(pose.position, pose.cible), 'de près (m)').toBeLessThan(80);
     await expect.poll(() => lireNombre(page, 'data-plants'), { message: 'des plants en détail devant la gouttière', timeout: 10_000 }).toBeGreaterThan(0);
+    // Relecture T37b (N1) : c'est la gouttière visée elle-même qui est en détail, pas seulement une voisine.
+    await expect(toile(page), 'la gouttière visée est dessinée en détail').toHaveAttribute('data-active-en-detail', 'oui', { timeout: 10_000 });
   });
 
   await test.step('un glissé devant la gouttière : images dessinées dans les garde-fous du téléphone', async () => {

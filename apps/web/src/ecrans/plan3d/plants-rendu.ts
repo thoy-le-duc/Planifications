@@ -103,6 +103,8 @@ export interface BilanPlants {
   readonly fruits: number;
   /** Balises « à récolter » posées (T32e), en détail ou non. */
   readonly balises: number;
+  /** La planche active (visée par « Suivant ») est-elle en détail ? null : pas de planche active, ou sans plants. */
+  readonly activeEnDetail: boolean | null;
 }
 
 interface BalisePosee {
@@ -162,6 +164,13 @@ export class RenduPlants {
   private readonly melangeFruit = new Color();
   private readonly cible = new Color();
   private readonly melangeTuteur = new Color();
+
+  /** Planche visée par « Suivant » ou un tap (id), ou null : sa forme passe d'abord au téléphone (relecture T37b). */
+  private plancheActive: string | null = null;
+
+  fixerPlancheActive(id: string | null): void {
+    this.plancheActive = id;
+  }
 
   /** Appels de dessin de la scène hors des plants (sol, planches, bâtiments), pour la limite du téléphone. */
   private appelsHorsPlants = 0;
@@ -253,8 +262,9 @@ export class RenduPlants {
       if (p.fruitsParPlant > 0 && plantsVisibles(p.tailleFruitM, d, hauteurPx, CHAMP_DEGRES, FRUIT_VISIBLE_PX)) fruitables.push({ i, d, n: p.nombre });
       if (plantsVisibles(Math.max(p.echelleHorizontale, p.echelleVerticale / HAUTEUR_POUR_LARGEUR), d, hauteurPx, CHAMP_DEGRES)) candidates.push({ i, d, n: p.nombre, t: p.nombre * TRIANGLES_PAR_FORME[p.forme], forme: p.forme });
     });
-    // À distance égale, l'ordre de la scène départage : le choix ne dépend que des distances.
-    candidates.sort((a, b) => a.d - b.d || a.i - b.i);
+    // La planche active d'abord, puis la distance ; à distance égale, l'ordre de la scène départage.
+    const active = this.plancheActive === null ? -1 : scene.volumes.findIndex((v) => v.id === this.plancheActive);
+    candidates.sort((a, b) => Number(b.i === active) - Number(a.i === active) || a.d - b.d || a.i - b.i);
     const etroit = largeurPx !== undefined && largeurPx < LARGEUR_ECRAN_ETROIT_PX;
     let reste = PLANTS_MAX_TOTAL;
     let resteTriangles = etroit ? ENVELOPPE_TRIANGLES_PLANTS_ETROIT : ENVELOPPE_TRIANGLES_PLANTS;
@@ -469,6 +479,8 @@ export class RenduPlants {
     // Hauteur du feuillage de chaque planche qui a des plants, quel que soit le détail (m, au centimètre).
     const hauteurs: Record<string, number> = {};
     for (const p of plants) if (p !== null) hauteurs[p.id] = Math.round(p.hauteurM * 100) / 100;
-    return { plants: total, formes, tuteurs: nbTuteurs, hauteurs: JSON.stringify(hauteurs), semaine: scene.semaine, fruits: nbFruits, balises: nbBalises };
+    const active = this.plancheActive === null ? -1 : scene.volumes.findIndex((v) => v.id === this.plancheActive);
+    const activeEnDetail = active < 0 || (plants[active] ?? null) === null ? null : this.enDetail(active);
+    return { plants: total, formes, tuteurs: nbTuteurs, hauteurs: JSON.stringify(hauteurs), semaine: scene.semaine, fruits: nbFruits, balises: nbBalises, activeEnDetail };
   }
 }

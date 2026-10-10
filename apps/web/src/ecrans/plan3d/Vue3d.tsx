@@ -971,6 +971,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
       ds.formesPlants = String(b.formes);
       ds.fruits = String(b.fruits);
       ds.balises = String(b.balises);
+      ds.activeEnDetail = b.activeEnDetail === null ? '' : b.activeEnDetail ? 'oui' : 'non';
       ds.hauteursPlants = b.hauteurs;
       ds.semainePlants = String(b.semaine);
       s.plantsEnAttente = null;
@@ -1163,7 +1164,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         <Sol scene={geometrie} />
         <Batiments scene={geometrie} />
         <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} plants={plants} rendu={rendu} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
-        {plants !== null && <Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={rendu} surBilan={surBilan} appelsHorsPlants={appelsFerme} />}
+        {plants !== null && <Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={rendu} surBilan={surBilan} appelsHorsPlants={appelsFerme} plancheActive={plancheActive} />}
         <Camera rayon={rayon} centre={centre} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
         <Rendu surImage={surImage} />
       </GardeErreur>,
@@ -1249,7 +1250,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               {zoneChoisie !== null && <p>Vue sur la zone {zoneChoisie}</p>}
             </div>
           )}
-          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-fruits={0} data-balises={0} data-planches-a-recolter={nbARecolter} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-travaux-erreur={erreurTravaux ? 'oui' : 'non'} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-fruits={0} data-balises={0} data-active-en-detail="" data-planches-a-recolter={nbARecolter} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-travaux-erreur={erreurTravaux ? 'oui' : 'non'} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
           <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} erreur={erreurTravaux} />
         </div>
