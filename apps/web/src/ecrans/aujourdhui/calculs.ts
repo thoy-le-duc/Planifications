@@ -513,7 +513,7 @@ export function bornesHistorique(aujourdhui: string, maintenant: Date): { readon
 /**
  * T13q : borne d'instant de la fenêtre élargie pour le SQL, qui compare le texte de l'horodatage
  * (comparer l'instant y ferait perdre l'index ferme_horodatage) : la veille du jour de la borne,
- * `AAAA-MM-JJ`. Toute forme lisible d'un instant postérieur à la borne commence par un jour au
+ * `AAAA-MM-JJ`. Toute forme canonique (jour valide, comme l'écrivent toISOString et Postgres) d'un instant postérieur à la borne commence par un jour au
  * plus un jour plus tôt (fuseau de −14:59 au plus), donc ne s'écrit pas avant ce texte. Les lignes
  * en trop sont écartées ensuite par `dansLaFenetre`, à l'instant près.
  */
