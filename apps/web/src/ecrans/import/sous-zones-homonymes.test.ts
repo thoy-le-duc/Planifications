@@ -39,6 +39,7 @@ const ZONE = {
   chapelleD1: id(0x1d),
   chapelleD2: id(0x1e),
 } as const;
+const PLANCHE = { p7a: id(0x20), p7b: id(0x21), p8a: id(0x22), p8b: id(0x23) } as const;
 const FAMILLE_SOLANACEES = id(0x30);
 const ESPECE_TOMATE = id(0x40);
 
@@ -62,7 +63,13 @@ const CONTEXTE: ContexteBase = {
     { id: ZONE.chapelleD1, nom: 'Chapelle D', parenteId: ZONE.tunnel3 },
     { id: ZONE.chapelleD2, nom: 'Chapelle D', parenteId: ZONE.tunnel3 },
   ],
-  emplacements: [],
+  emplacements: [
+    // P7 dans les deux « Chapelle A » (homonymes) ; P8 dans deux sous-zones du Tunnel 1.
+    { id: PLANCHE.p7a, zoneId: ZONE.chapelleAt1, code: 'P7', sorte: 'planche', longueurM: 30, nombrePlaces: null },
+    { id: PLANCHE.p7b, zoneId: ZONE.chapelleAt2, code: 'P7', sorte: 'planche', longueurM: 30, nombrePlaces: null },
+    { id: PLANCHE.p8a, zoneId: ZONE.chapelleAt1, code: 'P8', sorte: 'planche', longueurM: 30, nombrePlaces: null },
+    { id: PLANCHE.p8b, zoneId: ZONE.chapelleBt1, code: 'P8', sorte: 'planche', longueurM: 30, nombrePlaces: null },
+  ],
   especes: [{ id: ESPECE_TOMATE, nom: 'Tomate', familleId: FAMILLE_SOLANACEES }],
   familles: [{ id: FAMILLE_SOLANACEES, nom: 'Solanacées' }],
   varietes: [],
@@ -205,5 +212,56 @@ describe('T14g : assolement par zone, même règle', () => {
     expect(ligne(r, 2)?.statut, detail(r)).toBe('valide');
     expect(ligne(r, 3)?.statut, detail(r)).toBe('valide');
     expect(zonesAssolees(r)).toStrictEqual([ZONE.chapelleC, ZONE.serreNord]);
+  });
+});
+
+describe('T14g, relecture : deux sous-zones du même nom sous la même parente, parente donnée', () => {
+  const MESSAGE = 'Zone ambiguë : « Chapelle D » existe plusieurs fois dans Tunnel 3. Renommez l’une d’elles dans le parcellaire.';
+
+  it('« Tunnel 3 / Chapelle D / P1 » → refusée (colonne Zone), jamais la dernière prise', () => {
+    const r = importer('parcellaire', [PARCELLAIRE, ['Tunnel 3', 'Chapelle D', 'P1', '30']]);
+    expect(ligne(r, 2)?.statut, detail(r)).toBe('erreur');
+    expect(messages(r, 2)).toBe(MESSAGE);
+    expect(ligne(r, 2)?.erreurs[0]?.cellule).toBe('Tunnel 3');
+    expect(r.inserees.emplacement ?? []).toHaveLength(0);
+  });
+
+  it('« Tunnel 3 / chapelle d / – » (ligne de zone) → refusée aussi, pas un doublon', () => {
+    const r = importer('parcellaire', [PARCELLAIRE, ['Tunnel 3', 'chapelle d', '', '']]);
+    expect(ligne(r, 2)?.statut, detail(r)).toBe('erreur');
+    expect(messages(r, 2)).toBe('Zone ambiguë : « chapelle d » existe plusieurs fois dans Tunnel 3. Renommez l’une d’elles dans le parcellaire.');
+  });
+
+  it('pas de faux refus quand l’import crée lui-même la sous-zone : deux lignes « Tunnel 3 / Chapelle E » → une zone, deux planches', () => {
+    const r = importer('parcellaire', [PARCELLAIRE, ['Tunnel 3', 'Chapelle E', 'P1', '30'], ['Tunnel 3', 'chapelle e', 'P2', '30'], ['Tunnel 9', 'Chapelle E', 'P1', '30']]);
+    expect(ligne(r, 2)?.statut, detail(r)).toBe('valide');
+    expect(ligne(r, 3)?.statut, detail(r)).toBe('valide');
+    expect(ligne(r, 4)?.statut, detail(r)).toBe('valide');
+    expect((r.inserees.zone ?? []).map((z) => String(z.nom)).sort()).toStrictEqual(['Chapelle E', 'Chapelle E', 'Tunnel 9']);
+    expect(r.inserees.emplacement ?? []).toHaveLength(3);
+  });
+});
+
+describe('T14g, relecture : « Code ambigu » aux séries quand la zone donnée a des homonymes', () => {
+  const SERIE = ['Culture', 'Zone', 'Planche', 'Plantation', 'Début récolte', 'Fin récolte', 'Longueur (m)'];
+  const serie = (zone: string, code: string): string[] => ['Tomate', zone, code, '2027-04-05', '2027-05-20', '2027-06-10', '20'];
+
+  it('« Chapelle A / P7 », P7 dans les deux Chapelle A → refus qui parle de zones homonymes, pas de sous-zones', () => {
+    const r = importer('series', [SERIE, serie('Chapelle A', 'P7')]);
+    expect(ligne(r, 2)?.statut, detail(r)).toBe('erreur');
+    expect(messages(r, 2)).toBe('Code ambigu : « P7 » existe dans plusieurs zones nommées « Chapelle A ». Indiquez plutôt la zone parente dans la colonne Zone.');
+    expect(r.inserees.occupation ?? []).toHaveLength(0);
+  });
+
+  it('« Tunnel 2 / P7 » → la P7 de la Chapelle A du Tunnel 2', () => {
+    const r = importer('series', [SERIE, serie('Tunnel 2', 'P7')]);
+    expect(ligne(r, 2)?.statut, detail(r)).toBe('valide');
+    expect((r.inserees.occupation ?? []).map((o) => o.emplacement_id)).toStrictEqual([PLANCHE.p7b]);
+  });
+
+  it('« Tunnel 1 / P8 », P8 dans deux sous-zones du Tunnel 1 → le message des sous-zones reste', () => {
+    const r = importer('series', [SERIE, serie('Tunnel 1', 'P8')]);
+    expect(ligne(r, 2)?.statut, detail(r)).toBe('erreur');
+    expect(messages(r, 2)).toBe('Code ambigu : « P8 » existe dans plusieurs sous-zones de « Tunnel 1 ». Précisez la sous-zone dans la colonne Zone.');
   });
 });
