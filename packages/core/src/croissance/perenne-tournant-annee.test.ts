@@ -5,8 +5,10 @@
  * - La rampe de Q41 (J−28 inclus à 0 m, puis montée régulière, pas quotidien ≤ hauteur max / 20,
  *   pleine hauteur au premier jour de récolte) s'applique aussi quand J−28 tombe l'année précédente
  *   (campagne rattachée à l'année de la récolte, récolte au plus tard le 28 janvier).
- * - Aucune chute à 0 m au 1er janvier : une plante en végétation le 31 décembre l'est encore le
- *   1er janvier (campagne rattachée à l'année d'avant, récolte l'année suivante).
+ * - Aucune chute à 0 m au 1er janvier (campagne rattachée à l'année d'avant, récolte l'année
+ *   suivante) : la végétation ne se prolonge dans l'année suivante que si la campagne est « en
+ *   cours » le 31 décembre (T32f) ; sinon la plante se repose au repos du profil (kiwi : 20 novembre)
+ *   et repousse par la rampe de Q41.
  * - Seuil : J−28 égal au débourrement du profil ; la rampe ne vaut que si J−28 le précède
  *   strictement (T32i inchangé), sinon la pousse suit la courbe du profil dès le débourrement.
  */
@@ -80,17 +82,16 @@ describe('T32j (a) : campagne rattachée à l’année de la récolte, J−28 en
 });
 
 describe('T32j (b) : campagne rattachée à l’année d’avant, récolte l’année suivante', () => {
-  it('kiwi rattaché à 2026, récolté du 15 février au 1er avril 2027 : jamais 0 m au 1er janvier s’il était en végétation le 31 décembre', () => {
+  // Option (i) du chef : la végétation ne se prolonge dans l'année suivante que si la campagne est « en cours » le 31 décembre.
+  it('kiwi rattaché à 2026, récolté du 15 février au 1er avril 2027 : repos du 20 novembre au 31 décembre 2026 (repos du profil), donc pas de chute au 1er janvier', () => {
     const e = avec(2026, '2027-02-15', '2027-04-01');
-    const le31 = m.croissancePerenneA(e, KIWI, d('2026-12-31'));
-    const le1er = m.croissancePerenneA(e, KIWI, d('2027-01-01'));
-    if (le31.hauteurM > 0) {
-      expect(le1er.hauteurM).toBeGreaterThan(0);
-      expect(le1er.stade).not.toBe('repos');
+    expect(m.croissancePerenneA(e, KIWI, d('2026-11-19'))).toEqual({ stade: 'pleine_vegetation', hauteurM: KIWI.hauteurMaxM, fraction: 1 });
+    for (const jour of jours('2026-11-20', '2027-01-17')) {
+      expect(m.croissancePerenneA(e, KIWI, jour), jour).toEqual({ stade: 'repos', hauteurM: 0, fraction: 0 });
     }
   });
 
-  it('kiwi rattaché à 2026, récolte de février ou de mars 2027 : aucune chute à 0 m du 31 décembre au 1er janvier', () => {
+  it('kiwi rattaché à 2026, récolte de février ou de mars 2027 : repos le 31 décembre, aucune chute à 0 m au 1er janvier', () => {
     for (const [debut, fin] of [
       ['2027-02-01', '2027-03-15'],
       ['2027-02-15', '2027-04-01'],
@@ -98,16 +99,24 @@ describe('T32j (b) : campagne rattachée à l’année d’avant, récolte l’a
       ['2027-03-20', '2027-05-15'],
     ] as const) {
       const e = avec(2026, debut, fin);
-      if (m.croissancePerenneA(e, KIWI, d('2026-12-31')).hauteurM > 0) {
-        expect(m.croissancePerenneA(e, KIWI, d('2027-01-01')).hauteurM, debut).toBeGreaterThan(0);
-      }
+      expect(m.croissancePerenneA(e, KIWI, d('2026-12-31')), debut).toEqual({ stade: 'repos', hauteurM: 0, fraction: 0 });
+      const le31 = m.croissancePerenneA(e, KIWI, d('2026-12-31')).hauteurM;
+      expect(m.croissancePerenneA(e, KIWI, d('2027-01-01')).hauteurM, debut).toBeGreaterThanOrEqual(le31);
     }
   });
 
-  it('kiwi rattaché à 2026, récolte de février 2027 : pleine hauteur au premier jour de récolte et pendant la récolte', () => {
+  it('kiwi rattaché à 2026, récolte de février 2027 : rampe de Q41 du 18 janvier, pleine hauteur pendant la récolte', () => {
     const e = avec(2026, '2027-02-15', '2027-04-01');
+    rampe(e, KIWI, '2027-01-17', '2027-01-18', '2027-02-15');
     for (const jour of jours('2027-02-15', '2027-03-31')) {
       expect(m.croissancePerenneA(e, KIWI, jour), jour).toEqual({ stade: 'pleine_vegetation', hauteurM: KIWI.hauteurMaxM, fraction: 1 });
+    }
+  });
+
+  it('campagne déjà « en cours » le 31 décembre (fraisier rattaché à 2026, récolte le 10 janvier 2027) : la végétation de 2026 se prolonge (T32f)', () => {
+    const e = avec(2026, '2027-01-10', '2027-03-20');
+    for (const jour of jours('2026-12-01', '2027-03-19')) {
+      expect(m.croissancePerenneA(e, FRAISIER, jour), jour).toEqual({ stade: 'pleine_vegetation', hauteurM: 0.25, fraction: 1 });
     }
   });
 });
