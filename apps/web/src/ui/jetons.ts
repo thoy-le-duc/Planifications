@@ -196,6 +196,22 @@ export const COULEUR_FEUILLAGE_3D = '#4FA55B';
 /** Vue 3D (T32b) : bois des poteaux (pergola du kiwi, pieds des gouttières hors-sol). Une seule valeur pour les deux thèmes. */
 export const COULEUR_BOIS_3D = '#8A6A48';
 
+/** Vue 3D (T32e) : feuillage qui jaunit en fin de récolte (le vert du feuillage tire vers cette teinte). */
+export const COULEUR_FEUILLAGE_JAUNI_3D = '#C9B440';
+
+/** Vue 3D (T32e) : fruit encore vert, en formation (tous types). */
+export const COULEUR_FRUIT_VERT_3D = '#C4DE7A';
+/** Vue 3D (T32e) : courgette mûre, jaune d'or : seule teinte qui se détache du feuillage vert et du sol sombre (courgette jaune). */
+export const COULEUR_COURGETTE_MURE_3D = '#F7D21E';
+/** Vue 3D (T32e) : tomate mûre. */
+export const COULEUR_TOMATE_MURE_3D = '#D9321F';
+/** Vue 3D (T32e) : fraise mûre. */
+export const COULEUR_FRAISE_MURE_3D = '#E8184A';
+/** Vue 3D (T32e) : fruit mûr d'une espèce sans couleur propre (violet : distinct des fruits nommés et de la balise). */
+export const COULEUR_FRUIT_GENERIQUE_MUR_3D = '#8E44AD';
+/** Vue 3D (T32e) : balise « à récolter » au-dessus de la planche, orange vif visible de loin. */
+export const COULEUR_BALISE_RECOLTE_3D = '#FF6A00';
+
 /** Familles de polices (hébergées sous public/polices/, voir src/ui/base.css). */
 export const POLICES = {
   /** Titres : Archivo, largeur 112 % (posée par le @font-face). */
