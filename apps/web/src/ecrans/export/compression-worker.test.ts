@@ -226,6 +226,7 @@ function porteLente(delaiMs: number): PorteDonnees {
     archiverRefus: () => Promise.resolve(),
     placer: () => Promise.resolve([]),
     reglerProfilCroissance: () => Promise.resolve(),
+    personnaliserEspece: () => Promise.resolve(''),
   };
 }
 

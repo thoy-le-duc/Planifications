@@ -232,6 +232,16 @@ export interface PorteDonnees {
    * bibliothèque commune.
    */
   reglerProfilCroissance(especeId: string, profil: unknown): Promise<void>;
+  /**
+   * T32g : « Personnaliser » une espèce de la bibliothèque commune (Q39) : écrit sa copie propre à
+   * la ferme de la porte (mêmes nom, famille, catégorie, pérennité, unité, délais ; profil nul,
+   * le défaut est retrouvé par le nom) et rend son id. Une transaction locale, un seul INSERT ;
+   * rien d'autre ne change (cultures et itinéraires restent liés à l'origine). Rejette sans rien
+   * écrire : utilisateur qui n'est pas gérant actif, espèce introuvable ou qui n'est pas de la
+   * bibliothèque, ferme qui a déjà une espèce de même nom rapproché (« Tomate est déjà
+   * personnalisée »).
+   */
+  personnaliserEspece(especeBibliothequeId: string): Promise<string>;
 }
 
 /** Écriture en attente, telle que la donne PowerSync (`CrudEntry`). */

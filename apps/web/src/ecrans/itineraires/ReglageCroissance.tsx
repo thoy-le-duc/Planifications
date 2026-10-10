@@ -22,6 +22,8 @@ const CROIX = 'M6 6l12 12M18 6L6 18';
 /** Texte d'une espèce de la bibliothèque commune (Q39 ; « Personnaliser » vient avec T32g). */
 export const TEXTE_ESPECE_BIBLIOTHEQUE = 'Espèce de la bibliothèque : personnalisez-la pour régler sa croissance';
 const TEXTE_EQUIPIER = 'Seul le gérant de la ferme règle la croissance des espèces.';
+/** T32g : réglage d'une copie d'une espèce de la bibliothèque (Q39). */
+export const TEXTE_CULTURES_RESTENT = 'Les cultures et itinéraires existants restent liés à l’espèce d’origine.';
 
 const LIBELLE_FORME: Readonly<Record<FormePlant, string>> = {
   'erige-tuteure': 'Érigée, tuteurée',
@@ -46,6 +48,8 @@ function dureeEnTexte(d: DureeCroissance): string {
 /** Valeur du champ « Durée » : les jours, ou vide pour une durée en part du cycle (gardée si le champ reste vide). */
 const champDuree = (d: DureeCroissance): string => (d.en === 'jours' ? String(d.jours) : '');
 
+const memeDuree = (a: DureeCroissance, b: DureeCroissance): boolean => (a.en === 'jours' ? b.en === 'jours' && a.jours === b.jours : b.en !== 'jours' && a.fraction === b.fraction);
+
 /** Saisie décimale (« 1,8 » ou « 1.8 ») ; vide ou illisible : NaN, que le cœur refuse avec son message. */
 function lireNombre(brut: string): number {
   const t = brut.trim().replace(',', '.');
@@ -63,6 +67,8 @@ export interface ProprietesReglageCroissance {
   readonly fermeId: string;
   readonly utilisateurId: string | undefined;
   readonly espece: EspeceLue;
+  /** T32g : espèce de la ferme qui porte le nom d'une espèce de la bibliothèque (sa copie, « Personnaliser »). */
+  readonly copie?: boolean;
   readonly surFermer: () => void;
   /** Enregistrement fait : le bandeau « Annuler » de l'écran. */
   readonly surEnregistre: (s: SaisieAnnulable) => void;
@@ -94,7 +100,7 @@ function useGerant(porte: PorteDonnees, fermeId: string, utilisateurId: string |
   return gerant;
 }
 
-export function ReglageCroissance({ porte, fermeId, utilisateurId, espece, surFermer, surEnregistre, garderLeFocus }: ProprietesReglageCroissance): ReactElement | null {
+export function ReglageCroissance({ porte, fermeId, utilisateurId, espece, copie = false, surFermer, surEnregistre, garderLeFocus }: ProprietesReglageCroissance): ReactElement | null {
   const gerant = useGerant(porte, fermeId, utilisateurId);
   // Rien tant que le rôle n'est pas lu (base locale : quelques millisecondes) : jamais de champs actifs à tort.
   if (gerant === undefined) return null;
@@ -105,6 +111,7 @@ export function ReglageCroissance({ porte, fermeId, utilisateurId, espece, surFe
       espece={espece}
       modifiable={gerant && deLaFerme}
       bibliotheque={espece.fermeId === null}
+      copie={copie}
       surFermer={surFermer}
       surEnregistre={surEnregistre}
       garderLeFocus={garderLeFocus}
@@ -118,11 +125,12 @@ interface ProprietesReglage {
   readonly espece: EspeceLue;
   readonly modifiable: boolean;
   readonly bibliotheque: boolean;
+  readonly copie: boolean;
   readonly surFermer: () => void;
   readonly surEnregistre: (s: SaisieAnnulable) => void;
 }
 
-function Reglage({ porte, espece, modifiable, bibliotheque, surFermer, surEnregistre, garderLeFocus }: ProprietesReglage): ReactElement {
+function Reglage({ porte, espece, modifiable, bibliotheque, copie, surFermer, surEnregistre, garderLeFocus }: ProprietesReglage): ReactElement {
   const idTitre = useId();
   const idForme = useId();
   const idHauteur = useId();
@@ -185,7 +193,14 @@ function Reglage({ porte, espece, modifiable, bibliotheque, surFermer, surEnregi
       setMessage(v.ok ? 'Le profil de croissance est illisible.' : v.erreur.message);
       return;
     }
-    if (await ecrire(v.valeur, `Croissance de ${espece.nom}`)) surFermer();
+    // Rien de changé : rien n'est écrit (sans profil réglé, le défaut n'est pas figé et suivra ses corrections).
+    const p = v.valeur;
+    const e = effectif;
+    if (p.forme === e.forme && p.hauteurMaxM === e.hauteurMaxM && memeDuree(p.duree, e.duree)) {
+      surFermer();
+      return;
+    }
+    if (await ecrire(p, `Croissance de ${espece.nom}`)) surFermer();
   }
 
   async function retablir(): Promise<void> {
@@ -224,6 +239,7 @@ function Reglage({ porte, espece, modifiable, bibliotheque, surFermer, surEnregi
           </button>
         </header>
         <p>Pour la vue 3D : hauteur de la plante et temps pour l’atteindre. Une illustration, pas une prévision.</p>
+        {copie && <p className="itin-aide">{TEXTE_CULTURES_RESTENT}</p>}
 
         {modifiable ? (
           <div className="itin-croissance-champs">

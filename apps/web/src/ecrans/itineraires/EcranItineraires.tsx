@@ -89,6 +89,15 @@ function Icone({ chemin, taille = 22 }: { readonly chemin: string; readonly tail
 }
 
 const PLUS = 'M12 5v14M5 12h14';
+
+/** T32g : nom rapproché comme le cœur rapproche les noms (sans casse, sans accents, espaces en trop retirés). */
+const rapprocher = (nom: string): string =>
+  nom
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 const CHEVRON = 'M9 6l6 6-6 6';
 const COPIE = 'M9 9h10v10H9zM5 15V5h10';
 
@@ -201,6 +210,9 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
   /** T32c : espèce dont le réglage de croissance est ouvert, et le réglage une fois chargé. */
   const [croissance, setCroissance] = useState<string | null>(null);
   const [Reglage, setReglage] = useState<{ readonly composant: ReglageCharge } | null>(null);
+  /** T32g : gérant actif de la ferme (seul à personnaliser une espèce), et personnalisation en cours. */
+  const [gerant, setGerant] = useState(false);
+  const [enCopie, setEnCopie] = useState(false);
   const [bandeau, setBandeau] = useState<Bandeau | null>(null);
   const [echec, setEchec] = useState<{ readonly titre: string; readonly texte: string } | null>(null);
   const [categorie, setCategorie] = useState<CategorieIntervention>('entretien');
@@ -228,6 +240,24 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
       }),
     [porte, fermeId],
   );
+
+  useEffect(() => {
+    if (utilisateurId === undefined) return undefined;
+    let actif = true;
+    porte
+      .lire(`SELECT 1 AS n FROM membre WHERE utilisateur_id = ? AND ferme_id = ? AND role = 'gerant' AND etat = 'accepte' AND supprime_le IS NULL`, [utilisateurId, fermeId])
+      .then(
+        (l) => {
+          if (actif) setGerant(l.length > 0);
+        },
+        (e: unknown) => {
+          console.error('Rôle illisible', e);
+        },
+      );
+    return () => {
+      actif = false;
+    };
+  }, [porte, fermeId, utilisateurId]);
 
   const pret = itineraires !== null && especes !== null && types !== null;
   useEffect(() => {
@@ -260,6 +290,8 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
       return [{ espece: e, ferme: siens.filter((i) => i.fermeId !== null).sort(trier), bibliotheque: siens.filter((i) => i.fermeId === null).sort(trier) }];
     });
   }, [itineraires, especesTriees]);
+  /** T32g : espèce de la ferme par nom rapproché (la copie d'une espèce de la bibliothèque garde son nom). */
+  const deLaFerme = useMemo(() => new Map(especesTriees.filter((e) => e.fermeId !== null).map((e) => [rapprocher(e.nom), e.id] as const)), [especesTriees]);
   const utilises = useMemo(() => typesUtilises(itineraires ?? []), [itineraires]);
 
   function enregistre(s: SaisieAnnulable): void {
@@ -286,6 +318,21 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
         setEchec({ titre: 'Réglage indisponible', texte: 'Le réglage de croissance ne s’est pas chargé : réessaie avec du réseau.' });
       },
     );
+  }
+
+  /** T32g : copie de l'espèce de la bibliothèque écrite par la porte, puis son réglage ouvert. */
+  async function personnaliser(espece: EspeceLue): Promise<void> {
+    if (enCopie) return;
+    setEnCopie(true);
+    try {
+      ouvrirCroissance(await porte.personnaliserEspece(espece.id));
+    } catch (e) {
+      console.error('Espèce non personnalisée', e);
+      setBandeau(null);
+      setEchec({ titre: 'Rien n’a été copié', texte: e instanceof Error ? e.message : 'la base du téléphone a refusé l’écriture.' });
+    } finally {
+      setEnCopie(false);
+    }
   }
 
   function annuler(b: Bandeau): void {
@@ -389,86 +436,104 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
                     </button>
                   </div>
                   {parCulture.length === 0 && <p className="itin-aide">Aucun itinéraire pour l’instant : crée le premier, ou attends la synchronisation de la bibliothèque.</p>}
-                  {parCulture.map(({ espece, ferme, bibliotheque }) => (
-                    <div key={espece.id} data-testid="culture-itineraires" data-espece={espece.id} className="itin-culture-groupe">
-                      <div className="itin-culture-tete">
-                        <h4>
-                          {espece.nom}
-                          <span>
-                            {ferme.length} de la ferme · {bibliotheque.length} de la bibliothèque
-                          </span>
-                        </h4>
-                        <button
-                          type="button"
-                          aria-label={`Croissance de ${espece.nom}`}
-                          className="itin-bouton-croissance"
-                          onClick={() => {
-                            ouvrirCroissance(espece.id);
-                          }}
-                        >
-                          Croissance
-                        </button>
+                  {parCulture.map(({ espece, ferme, bibliotheque }) => {
+                    const copie = espece.fermeId === null && gerant ? deLaFerme.get(rapprocher(espece.nom)) : undefined;
+                    return (
+                      <div key={espece.id} data-testid="culture-itineraires" data-espece={espece.id} className="itin-culture-groupe">
+                        <div className="itin-culture-tete">
+                          <h4>
+                            {espece.nom}
+                            <span>
+                              {ferme.length} de la ferme · {bibliotheque.length} de la bibliothèque
+                              {copie !== undefined && ' · déjà personnalisée'}
+                            </span>
+                          </h4>
+                          <button
+                            type="button"
+                            aria-label={`Croissance de ${espece.nom}`}
+                            className="itin-bouton-croissance"
+                            onClick={() => {
+                              ouvrirCroissance(espece.id);
+                            }}
+                          >
+                            Croissance
+                          </button>
+                          {espece.fermeId === null && gerant && (
+                            <button
+                              type="button"
+                              aria-label={copie === undefined ? `Personnaliser ${espece.nom}` : `Régler ma copie de ${espece.nom}`}
+                              className="itin-bouton-croissance"
+                              disabled={enCopie}
+                              onClick={() => {
+                                if (copie === undefined) void personnaliser(espece);
+                                else ouvrirCroissance(copie);
+                              }}
+                            >
+                              {copie === undefined ? 'Personnaliser' : 'Ma copie'}
+                            </button>
+                          )}
+                        </div>
+                        <ul>
+                          {ferme.map((i) => (
+                            <li key={i.id} data-testid="itineraire" data-itineraire={i.id} data-origine="ferme" className="itin-item">
+                              <button
+                                type="button"
+                                aria-label={`Modifier ${i.nom}`}
+                                className="itin-item-bouton"
+                                onClick={() => {
+                                  ouvrir({ sorte: 'modification', itineraire: i });
+                                }}
+                              >
+                                <span className="itin-item-textes">
+                                  <strong>{i.nom}</strong>
+                                  <span>{resumeItineraire(i)}</span>
+                                </span>
+                                <span className="itin-item-action">
+                                  Modifier
+                                  <Icone chemin={CHEVRON} taille={18} />
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                          {bibliotheque.map((i) => (
+                            <li key={i.id} data-testid="itineraire" data-itineraire={i.id} data-origine="bibliotheque" className="itin-item itin-item-bibliotheque">
+                              <button
+                                type="button"
+                                aria-label={`Voir ${i.nom}`}
+                                className="itin-item-bouton"
+                                onClick={() => {
+                                  ouvrir({ sorte: 'lecture', itineraire: i });
+                                }}
+                              >
+                                <span className="itin-item-textes">
+                                  <strong>
+                                    {i.nom}
+                                    <em className="itin-pastille">Bibliothèque</em>
+                                  </strong>
+                                  <span>{resumeItineraire(i)}</span>
+                                </span>
+                                <span className="itin-item-action">
+                                  Voir
+                                  <Icone chemin={CHEVRON} taille={18} />
+                                </span>
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Adapter pour ma ferme : ${i.nom}`}
+                                className="itin-bouton-adapter"
+                                onClick={() => {
+                                  ouvrir({ sorte: 'adaptation', itineraire: i });
+                                }}
+                              >
+                                <Icone chemin={COPIE} taille={20} />
+                                Adapter pour ma ferme
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                      <ul>
-                        {ferme.map((i) => (
-                          <li key={i.id} data-testid="itineraire" data-itineraire={i.id} data-origine="ferme" className="itin-item">
-                            <button
-                              type="button"
-                              aria-label={`Modifier ${i.nom}`}
-                              className="itin-item-bouton"
-                              onClick={() => {
-                                ouvrir({ sorte: 'modification', itineraire: i });
-                              }}
-                            >
-                              <span className="itin-item-textes">
-                                <strong>{i.nom}</strong>
-                                <span>{resumeItineraire(i)}</span>
-                              </span>
-                              <span className="itin-item-action">
-                                Modifier
-                                <Icone chemin={CHEVRON} taille={18} />
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                        {bibliotheque.map((i) => (
-                          <li key={i.id} data-testid="itineraire" data-itineraire={i.id} data-origine="bibliotheque" className="itin-item itin-item-bibliotheque">
-                            <button
-                              type="button"
-                              aria-label={`Voir ${i.nom}`}
-                              className="itin-item-bouton"
-                              onClick={() => {
-                                ouvrir({ sorte: 'lecture', itineraire: i });
-                              }}
-                            >
-                              <span className="itin-item-textes">
-                                <strong>
-                                  {i.nom}
-                                  <em className="itin-pastille">Bibliothèque</em>
-                                </strong>
-                                <span>{resumeItineraire(i)}</span>
-                              </span>
-                              <span className="itin-item-action">
-                                Voir
-                                <Icone chemin={CHEVRON} taille={18} />
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              aria-label={`Adapter pour ma ferme : ${i.nom}`}
-                              className="itin-bouton-adapter"
-                              onClick={() => {
-                                ouvrir({ sorte: 'adaptation', itineraire: i });
-                              }}
-                            >
-                              <Icone chemin={COPIE} taille={20} />
-                              Adapter pour ma ferme
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </section>
 
                 <section aria-labelledby={idTypes} className="itin-section">
@@ -678,6 +743,7 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
           fermeId={fermeId}
           utilisateurId={utilisateurId}
           espece={especeCroissance}
+          copie={especeCroissance.fermeId !== null && especesTriees.some((e) => e.fermeId === null && rapprocher(e.nom) === rapprocher(especeCroissance.nom))}
           surFermer={() => {
             setCroissance(null);
           }}

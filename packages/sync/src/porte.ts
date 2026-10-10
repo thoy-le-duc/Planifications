@@ -425,5 +425,12 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       const { ecrireProfilCroissance } = await import('./profil.ts');
       return ecrireProfilCroissance(base, { fermeId: options.fermeId, utilisateurId: options.utilisateurId, maintenant }, especeId, profil);
     },
+
+    async personnaliserEspece(especeBibliothequeId: string): Promise<string> {
+      // T32g : même morceau à la demande que le réglage, qui s'ouvre juste après.
+      const { ecrirePersonnalisation } = await import('./profil.ts');
+      const contexte = { fermeId: options.fermeId, utilisateurId: options.utilisateurId, maintenant };
+      return ecrirePersonnalisation(base, contexte, nouvelId<'Espece'>(), especeBibliothequeId);
+    },
   };
 }
