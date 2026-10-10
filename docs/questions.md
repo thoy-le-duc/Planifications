@@ -294,7 +294,7 @@ Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit 
 
 Question : dans la 3D, une planche « à récolter » porte une balise orange au-dessus d'elle. Pendant les deux dernières semaines de la récolte, le feuillage jaunit et la balise disparaît, alors qu'on peut encore y récolter. Proposition : garder une balise jusqu'à la fin de la récolte, d'une teinte plus pâle pendant ces deux dernières semaines (« dernières récoltes »). Ou préfères-tu qu'elle disparaisse, comme aujourd'hui ?
 
-En attente. Ticket T32f.
+Réponse (2026-10-10) : balise pâle jusqu'au bout : la balise reste jusqu'à la fin de la récolte, plus pâle les deux dernières semaines (« dernières récoltes »), et la planche reste comptée dans « N planches à récolter ». Ticket T32f.
 
 ### Q37 — Tester avec ses vraies données : mise en ligne gratuite (posée le 2026-10-09)
 
