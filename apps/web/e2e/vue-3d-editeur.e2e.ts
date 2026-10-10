@@ -18,8 +18,8 @@ import { surveillerCsp } from './outils.ts';
  *   2. gérant, ferme placée (`…&origine=1`) : pas d'encart, le bouton est là, ouvre l'éditeur,
  *      « Fermer » ramène sur la 3D ;
  *   3. équipier : pas de bouton, encart sans bouton qui dit qui peut le faire (ferme vide), rien (placée) ;
- *   4. écran étroit (fenêtre rétrécie sous 1024 px, 3D ouverte) : le bouton disparaît, l'encart dit
- *      de passer par un ordinateur ; à la taille d'un téléphone, « Voir en 3D » n'est même pas proposé ;
+ *   4. écran étroit (fenêtre rétrécie sous 1024 px, 3D ouverte) : le gérant garde le bouton et l'encart
+ *      d'invitation (T28k, Q36) ; à la taille d'un téléphone, « Voir en 3D » n'est même pas proposé ;
  *   5. la démo en ligne (pnpm e2e:demo, E2E_DEMO=1) : « Modifier le plan » ouvre l'éditeur HORS LIGNE,
  *      fond neutre, un bâtiment se pose et s'enregistre, la 3D en montre un de plus.
  * Le poids (démarrage 71 Kio, morceaux 3D et éditeur séparés) : scripts/placement.test.ts.
@@ -232,17 +232,17 @@ test('équipier, ferme placée : ni bouton ni encart', async ({ page, context })
   await expect(encart(page)).toHaveCount(0);
 });
 
-test('écran étroit : sous 1024 px le bouton disparaît (3D ouverte), l’encart renvoie à un ordinateur ; au téléphone la 3D n’est pas proposée', async ({ page, context }) => {
+test('écran étroit : sous 1024 px le gérant garde le bouton et l’invitation (T28k, Q36) ; au téléphone la 3D n’est pas proposée', async ({ page, context }) => {
   test.skip(DEMO, 'amorçage de la page de diagnostic : pas dans la démo');
   test.setTimeout(DELAI_AMORCAGE_MS + 120_000);
   await bloquerLeReseau(context);
   await ouvrirEn3d(page, '');
   await expect(modifierPlan(page)).toHaveCount(1);
   await page.setViewportSize({ width: 700, height: 900 });
-  await expect(modifierPlan(page), 'même condition que l’éditeur : 1024 px').toHaveCount(0);
+  await expect(modifierPlan(page), 'Q36 : le gérant place aussi sur un écran étroit').toHaveCount(1);
   await expect(encart(page)).toBeVisible();
-  await expect(encart(page)).toContainText(TEXTE.pasGerant);
-  await expect(encart(page).getByRole('button')).toHaveCount(0);
+  await expect(encart(page)).toContainText(TEXTE.invitation);
+  await expect(encart(page).getByRole('button', { name: TEXTE.bouton })).toHaveCount(1);
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(modifierPlan(page)).toHaveCount(1);
 

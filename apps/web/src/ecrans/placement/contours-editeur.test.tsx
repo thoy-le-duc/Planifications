@@ -709,7 +709,7 @@ describe('T28d : une zone abritée suit sa serre, pas de contour à tracer', () 
 describe('T28d : seul le gérant trace ou modifie un contour', () => {
   for (const cas of [
     { nom: 'équipier', options: { role: 'equipier' as const } },
-    { nom: 'gérant sur téléphone', options: { ordinateur: false } },
+    { nom: 'équipier sur téléphone', options: { role: 'equipier' as const, ordinateur: false } },
   ]) {
     it(`${cas.nom} : zones consultables, aucun sommet ni côté, ni « Tracer le contour », les touches ne font rien`, async () => {
       const p = await ouvrir({ origine: true, ...cas.options });

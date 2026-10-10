@@ -129,3 +129,8 @@ export function versPlacementPlanche(repere: Repere, r: RectanglePlace): Placeme
 export function depuisPlacementPlanche(repere: Repere, placement: PlacementPlanche): { centre: Point; orientationDeg: number } {
   return { centre: depuisRepereZone(repere, { x: placement.x, y: placement.y }), orientationDeg: normaliserCap(placement.orientation_deg + repere.orientationDeg) };
 }
+
+/** Tourne le rectangle de `degres` (sens horaire positif) autour de son centre ; le cap reste dans [0, 360[. */
+export function tournerDe(r: RectanglePlace, degres: number): RectanglePlace {
+  return { ...r, orientationDeg: normaliserCap(net(r.orientationDeg + degres)) };
+}

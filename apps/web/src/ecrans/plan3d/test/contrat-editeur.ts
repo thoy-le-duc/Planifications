@@ -12,8 +12,8 @@
  * zone ni planche du tout (plan vide) est sans placement.
  *
  * ── Vue 3D (DOM) ─────────────────────────────────────────────────────────────────────────────
- * Conditions : gérant de la ferme (rôle `gerant`, comme l'éditeur, T28b) ET écran de 1024 px ou plus
- * (`matchMedia('(min-width: 1024px)')`, suivi en direct : la fenêtre rétrécie, le bouton disparaît).
+ * Condition : gérant de la ferme (rôle `gerant`, comme l'éditeur, T28b), QUELLE QUE SOIT la largeur
+ * de l'écran (Q36, T28k : le gérant place aussi au téléphone ; avant, 1024 px ou plus seulement).
  *
  * `modifier-plan` : bouton « Modifier le plan », DANS `vue-3d` (donc visible pendant que la 3D est
  *   ouverte), au plus un dans toute la page. Un tap ouvre l'éditeur de placement (`editeur-placement`,
@@ -21,9 +21,9 @@
  *   dynamique) par-dessus la vue ; la 3D reste montée dessous. « Fermer » dans l'éditeur ramène sur
  *   la vue 3D (`vue-3d` toujours là, `data-etat="pret"`), qui montre alors le placement enregistré
  *   (`toile-3d` : `data-batiments`, `data-placees` relus de la base ; la liste des bâtiments aussi).
- *   Non gérant, ou écran de moins de 1024 px : le bouton n'existe pas (count 0, pas seulement caché).
+ *   Non gérant : le bouton n'existe pas (count 0, pas seulement caché). Écran étroit : le gérant l'a (T28k).
  * `encart-placement` : encart (dans `vue-3d`) affiché si et seulement si `fermeSansPlacement(plan)`.
- *   Gérant sur ordinateur : il contient le texte « Placez votre ferme sur la photo aérienne » ET le
+ *   Gérant (tout écran) : il contient le texte « Placez votre ferme sur la photo aérienne » ET le
  *   bouton `modifier-plan` (c'est le même bouton, pas un second). Sinon : il contient le texte
  *   « Le gérant place la ferme depuis un ordinateur », sans bouton. Dès qu'un bâtiment, une zone à
  *   contour ou une planche est placé, l'encart disparaît (après le retour de l'éditeur).
