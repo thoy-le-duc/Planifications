@@ -20,14 +20,14 @@ import {
   type DecisionPrise,
   type TypeContenu,
 } from '@planif/core';
-import type { PorteDonnees } from '@planif/sync';
+import type { PorteDonnees, RefusSynchro } from '@planif/sync';
 import './import.css';
 import { lireContexte } from './contexte-base.ts';
-import { annulerImport, importsDeLaFerme, interruption, noterImport, noterLotsEcrits, type ImportPasse } from './historique.ts';
+import { annulerImport, importsDeLaFerme, interruption, noterImport, lireRefus, noterLotsEcrits, suivreRefus, type ImportPasse } from './historique.ts';
 import { modeleQuiConvient, rangerModele } from './modeles.ts';
 import { creerPreparateur } from './preparateur.ts';
 import { CATEGORIES_CULTURE, enFrancais, PLAFOND_VALEURS_A_RAPPROCHER, UNITES_CULTURE } from './constantes.ts';
-import type { Analyse, Apercu, AttributsEspece, ContexteBase, DecisionAffichee, LigneApercu, Preparateur, ResultatLecture, SorteDefaut } from './types.ts';
+import type { Analyse, Apercu, AttributsEspece, ContexteBase, DatesDeduites, DecisionAffichee, LigneApercu, Preparateur, ResultatLecture, SorteDefaut } from './types.ts';
 
 export interface ProprietesEcranImport {
   readonly porte: PorteDonnees;
@@ -90,6 +90,12 @@ const dateCourte = (iso: string): string => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
+/** Jour AAAA-MM-JJ en français (« 1 janv. 2027 »), sans fuseau : le jour écrit, tel quel. */
+const jourEnFrancais = (jour: string): string => {
+  const d = new Date(`${jour}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? jour : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+};
+
 interface EtatFichier {
   readonly analyse: Analyse;
   /** Modèle de la ferme qui convient aux en-têtes. */
@@ -130,6 +136,29 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
       clearTimeout(minuterie);
     };
   }, [toutesVisibles, colonnesVisibles]);
+
+  // T14e : refus du serveur (non archivés), en direct. Un refus d'annulation est noté sur
+  // l'import (historique) ; tant que la liste n'est pas lue, le refus noté reste montré.
+  const refus = useRef<readonly RefusSynchro[] | null>(null);
+  const [refusCourants, setRefusCourants] = useState<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    let actif = true;
+    const arreter = porte.surveillerRefus((r) => {
+      refus.current = r;
+      setRefusCourants(new Set(r.map((x) => x.id)));
+      suivreRefus(porte, fermeId, r)
+        .then((liste) => {
+          if (actif && liste !== null) setHistorique(liste);
+        })
+        .catch((e: unknown) => {
+          console.error('Refus d’annulation non noté', e);
+        });
+    });
+    return () => {
+      actif = false;
+      arreter();
+    };
+  }, [porte, fermeId]);
 
   // Moteur de préparation : un par écran ouvert (Worker arrêté à la fermeture).
   const preparateur = useRef<Preparateur | null>(null);
@@ -410,7 +439,7 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
     try {
       // L'état rangé le plus récent (lots déjà annulés, lots écrits).
       const actuel = importsDeLaFerme(fermeId).find((x) => x.id === passe.id) ?? passe;
-      const r = await annulerImport(porte, fermeId, actuel, maintenant().toISOString());
+      const r = await annulerImport(porte, fermeId, actuel, maintenant().toISOString(), (await lireRefus(porte)) ?? refus.current);
       if (r.sorte === 'refuse') setAlerte(r.message);
       else if (r.sorte === 'incomplet') {
         setAlerte(
@@ -581,6 +610,11 @@ export function EcranImport({ porte, fermeId, surFermer, maintenant = maintenant
                             · {dateCourte(i.le)}
                             {i.etat === 'annule' ? ' · annulé' : ''}
                           </span>
+                          {i.refusAnnulation !== undefined && (refusCourants === null || i.refusAnnulation.ids.some((id) => refusCourants.has(id))) && (
+                            <span role="status" data-testid="annulation-refusee" className="imp-refus-annulation">
+                              {i.refusAnnulation.texte}
+                            </span>
+                          )}
                         </span>
                         {i.etat === 'actif' && (
                           <button type="button" className="imp-bouton-secondaire" disabled={occupe} onClick={() => void annuler(i)}>
@@ -934,6 +968,7 @@ function VueApercu({ apercu }: { readonly apercu: Apercu }): ReactElement {
           </ul>
         </section>
       )}
+      <VueDatesDeduites dates={apercu.datesDeduites} />
       {apercu.ignorees > 0 && <p className="imp-aide">{apercu.ignorees === 1 ? '1 ligne vide ou de total ignorée.' : `${enFrancais(apercu.ignorees)} lignes vides ou de total ignorées.`}</p>}
       {montrees.length > 0 && (
         // Beaucoup de lignes : repliées (un tap les déplie), l'écran reste léger sur un téléphone lent.
@@ -949,6 +984,29 @@ function VueApercu({ apercu }: { readonly apercu: Apercu }): ReactElement {
         </details>
       )}
     </div>
+  );
+}
+
+/** T14e : dates que l'import déduit (le fichier ne les donne pas), montrées avant d'écrire. */
+function VueDatesDeduites({ dates }: { readonly dates: DatesDeduites }): ReactElement | null {
+  if (dates.actifsDu.length === 0 && dates.saisons.length === 0) return null;
+  return (
+    <section aria-label="Dates déduites" className="imp-note imp-defauts">
+      <strong>Dates déduites, à vérifier</strong>
+      <span className="imp-aide">Le fichier ne les donne pas : elles seront écrites telles quelles, modifiables ensuite.</span>
+      <ul className="imp-liste">
+        {dates.actifsDu.map((a) => (
+          <li key={a.date} data-testid="date-deduite" data-deduite="actif-du">
+            <strong>En service à partir du {jourEnFrancais(a.date)}</strong> : {a.emplacements === 1 ? '1 emplacement créé' : `${enFrancais(a.emplacements)} emplacements créés`}
+          </li>
+        ))}
+        {dates.saisons.map((x) => (
+          <li key={x.nom} data-testid="date-deduite" data-deduite="saison" data-saison={x.nom}>
+            <strong>Saison {x.nom} créée</strong> : du {jourEnFrancais(x.debut)} au {jourEnFrancais(x.fin)}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

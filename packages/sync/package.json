@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./export": "./src/export-seul.ts",
     "./fait-unique": "./src/fait-unique.ts",
+    "./horodatage": "./src/horodatage.ts",
     "./import": "./src/ecriture-import.ts"
   },
   "scripts": {
