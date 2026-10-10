@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-10 — T13n : horodatages comparés comme des dates
+
+- **Fait** : ordre canonique (instant, id) partout où l'on choisit « la plus récente » : `chaines` (donc `chaineDe`, la journée et le « déjà fait » de la porte) compare une clé `cleHorodatageSql` (julianday de SQLite en millisecondes sur 15 chiffres, puis l'id) au lieu de `horodatage || '|' || id` ; `enVigueur`, l'ordre de l'historique et la dernière récolte passent par `comparerSaisies` (`packages/sync/src/horodatage.ts`, sous-chemin `@planif/sync/horodatage`). Tests H1–H4 et W1–W6 verts sans modification ; 11 tests ajoutés (`horodatage-instant.test.ts`) : même instant que julianday de SQLite sur 63 formes choisies et 3 000 tirées au hasard (dont 1 000 avec fuseau `±HH`/`±HHMM`), même ordre que la clé SQL.
+- **Décidé** : comparer comme des dates plutôt que normaliser à l'écriture (aucune ligne existante à réécrire). Le JS reproduit la lecture de SQLite (3.51 sous Node, 3.53 dans wa-sqlite) : `AAAA-MM-JJ`, `T` ou espace, heure facultative, fractions (plafonnées à 0,999, arrondies à la ms), `Z` ou `±HH:MM` ; fuseau de Postgres sans deux-points (`±HH`, `±HHMM`, en toute fin du texte) complété en `±HH:MM` des deux côtés (CASE/GLOB en SQL avant julianday), donc `2026-10-10 10:00:00.123+00` est lu à son instant ; sans fuseau = UTC ; illisible (autre forme, hors bornes) = instant 0, le plus ancien, l'id départage, jamais d'erreur. La clé SQL reste dans `fait-unique.ts` et la lecture JS dans son propre module : le morceau de l'éditeur de placement reste à 22,1 Kio, au ras de son budget (22,5 sinon) ; démarrage inchangé (71,0 Kio).
+- **Bloquant** : rien pour le ticket. Ticket de suite à créer pour les comparaisons de texte restées hors périmètre : `apps/web/src/ecrans/itineraires/donnees.ts:46` (`MAX(horodatage || '|' || id)`), `apps/web/src/diagnostic/stock-serie.ts:248`, et la fenêtre `e.horodatage >= ?` de l'historique (`sqlRecents`, `dansLaFenetre`).
+
 ## 2026-10-10 — T37 : les travaux du jour dans la 3D
 
 - **Fait** : la vue 3D liste les travaux du jour (mêmes tâches et même ordre que l'écran Aujourd'hui : `lireJournee`, `calculerJournee`, `tachesDeLEcran`, lecture seule), les numérote sur les planches par des pastilles, et un tap sur une ligne ou « Suivant » fait voler la caméra (T29) jusqu'à la planche. Panneau repliable, boutons de 48 px, mise en page du téléphone ; « Voir en 3D » est visible au téléphone (Q36).
