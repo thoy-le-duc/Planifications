@@ -445,7 +445,7 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
                           <h4>
                             {espece.nom}
                             <span>
-                              {ferme.length} de la ferme · {bibliotheque.length} de la bibliothèque
+                              {ferme.length + bibliotheque.length > 0 && `${String(ferme.length)} de la ferme · ${String(bibliotheque.length)} de la bibliothèque`}
                               {copie !== undefined && ' · déjà personnalisée'}
                             </span>
                           </h4>
