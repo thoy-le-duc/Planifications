@@ -77,7 +77,9 @@ const dansLAnnee = (annee: number, mmjj: string): DateCalendaire => `${String(an
  * débourrement, pleine végétation, repos. La campagne vaut pour l'année du jour, ou, quelle que soit
  * son année de rattachement, quand elle contient le jour ou commence dans les 28 jours (T32f) : la
  * plante reste alors en végétation (pas de « repos » sans structure sous des fruits ou une balise).
- * Au repos 28 jours avant le début de récolte, elle repousse sur ces 28 jours (Q41, T32i).
+ * Au repos 28 jours avant le début de récolte, elle repousse sur ces 28 jours (Q41, T32i), y compris
+ * quand J−28 tombe l'année précédente (T32j) ; la récolte ne prolonge la végétation dans l'année
+ * suivante que si la campagne est « en cours » le 31 décembre (T32j) : aucune chute à 0 m au 1er janvier.
  */
 export function croissancePerenneA(entree: EntreePerenne, profil: ProfilCroissance, jour: DateCalendaire): EtatCroissance {
   const { datePlantation, dateArrachage } = entree.plantation;
@@ -104,15 +106,26 @@ export function croissancePerenneA(entree: EntreePerenne, profil: ProfilCroissan
       if (j28 < debut && !feuillageApresRecolte(profil)) [debut, rampe] = [j28, true];
       else if (b < debut) debut = b;
     }
-    if (campagne.finRecolte !== null && campagne.finRecolte >= repos) repos = ajouterJours(campagne.finRecolte, 1);
+    // La récolte prolonge la végétation, dans l'année suivante seulement si la campagne est « en cours » le 31 décembre (T32j, option i).
+    const fin = campagne.finRecolte;
+    const finAn = dansLAnnee(an, '12-31');
+    if (fin !== null && fin >= repos && (fin <= finAn || campagneEnCours(campagne, finAn))) repos = ajouterJours(fin, 1);
     // L'année de plantation, la végétation part du jour de plantation.
     if (Number(datePlantation.slice(0, 4)) === an && datePlantation > debut) [debut, rampe] = [datePlantation, false];
     return [debut, autre && jour >= repos ? ajouterJours(jour, 1) : repos, rampe];
   };
-  // Avant le débourrement de l'année (début d'hiver, janvier) : la végétation de l'année précédente se prolonge. Elle se prolonge aussi (T32f)
-  // quand la campagne était déjà « en cours » le 31 décembre précédent (fraise d'hiver, récolte dès janvier) : pas de retour à 0 m au 1er janvier.
+  // Cycle qui porte le jour :
+  // - T32j : rampe de Q41 commencée en décembre pour une campagne de l'année suivante (fraisier d'hiver, kiwi de fin janvier) : cycle suivant ;
+  // - avant le débourrement de l'année (début d'hiver, janvier) : la végétation de l'année précédente se prolonge. Elle se prolonge aussi (T32f)
+  //   quand la campagne était déjà « en cours » le 31 décembre précédent, sauf si la rampe de la campagne de l'année a commencé (T32j).
+  const rampeDeLAnnee = campagne.annee === annee && jour >= fenetre(annee)[0];
   const an =
-    (autre && jour < fenetre(annee)[0]) || (jour < dansLAnnee(annee, cycle.debourrement) && campagneEnCours(campagne, dansLAnnee(annee - 1, '12-31')) && jour < fenetre(annee - 1)[1]) ? annee - 1 : annee;
+    campagne.annee === annee + 1 && jour >= fenetre(annee + 1)[0]
+      ? annee + 1
+      : (autre && jour < fenetre(annee)[0]) ||
+          (!rampeDeLAnnee && jour < dansLAnnee(annee, cycle.debourrement) && campagneEnCours(campagne, dansLAnnee(annee - 1, '12-31')) && jour < fenetre(annee - 1)[1])
+        ? annee - 1
+        : annee;
   const [debut, repos, rampe] = fenetre(an);
   if (jour < debut || jour >= repos) return REPOS;
 
