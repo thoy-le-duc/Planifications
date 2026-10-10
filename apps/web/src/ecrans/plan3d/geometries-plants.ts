@@ -40,6 +40,29 @@ class Facettes {
   }
 
   /**
+   * Sphère de rayon `r` à `seg` méridiens et `anneaux` bandes de latitude (pôles sur l'axe y) :
+   * 2 × seg × (anneaux − 1) triangles, tournés vers l'extérieur.
+   */
+  sphere(seg: number, anneaux: number, r: number, teinte: number): this {
+    const sommet = (i: number, j: number): [number, number, number] => {
+      const theta = (Math.PI * i) / anneaux;
+      const phi = (2 * Math.PI * j) / seg;
+      return [r * Math.sin(theta) * Math.cos(phi), r * Math.cos(theta), r * Math.sin(theta) * Math.sin(phi)];
+    };
+    for (let j = 0; j < seg; j += 1) {
+      for (let i = 0; i < anneaux; i += 1) {
+        const a = sommet(i, j);
+        const b = sommet(i, j + 1);
+        const c = sommet(i + 1, j);
+        const d = sommet(i + 1, j + 1);
+        if (i > 0) this.triangle(teinte, ...a, ...b, ...c);
+        if (i < anneaux - 1) this.triangle(teinte, ...b, ...d, ...c);
+      }
+    }
+    return this;
+  }
+
+  /**
    * Haie : un profil (y, demi-largeur) extrudé sur `baies` tronçons le long de x (de −0,5 à 0,5),
    * des deux côtés de z ; les bouts restent ouverts (les haies se touchent bout à bout).
    */
@@ -133,6 +156,16 @@ export function geometrieStructure(): BufferGeometry {
 /** Tuteur d'un plant (tige ou ficelle tendue) : 1 m de haut, fin, un peu plus étroit en haut. */
 export function geometrieTuteur(): BufferGeometry {
   return new Facettes().tronc(4, 0, 0.5, 1, 0.35, BOIS, 0, 0, 0, 0, true).geometrie();
+}
+
+/**
+ * Fruit et balise (T32e) : une sphère de 1 m de diamètre, blanche (la couleur de l'instance la teinte),
+ * 64 triangles. L'échelle de l'instance donne la forme (courgette allongée, tomate ronde) et la taille.
+ * La balise est la même sphère, vive et grande : symétrique, donc lisible sous tous les angles, et le
+ * fruit et la balise tiennent dans un seul InstancedMesh (un seul appel de dessin).
+ */
+export function geometrieFruit(): BufferGeometry {
+  return new Facettes().sphere(8, 5, 0.5, FEUILLE).geometrie();
 }
 
 /** Triangles d'une géométrie (sans indice : trois sommets chacun). */

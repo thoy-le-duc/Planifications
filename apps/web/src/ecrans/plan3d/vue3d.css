@@ -500,3 +500,21 @@
   border-width: 4px;
   font-size: 28px;
 }
+
+/* T32e : la récolte, dite en mots dans le panneau (le signal de la scène est la balise jaune). */
+.plan3d-resume-recolte {
+  margin: 0;
+  padding: var(--espace-s) var(--espace-m);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--couleur-encre);
+  border-top: 1px solid var(--couleur-trait);
+}
+
+.plan3d-recolte {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--couleur-secondaire);
+  white-space: nowrap;
+}

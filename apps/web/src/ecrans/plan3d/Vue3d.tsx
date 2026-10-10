@@ -57,6 +57,7 @@ import type { TacheJour } from '../aujourdhui/calculs.ts';
 import type { TravauxDuJour3d } from './travaux.ts';
 import { hauteurDalle, hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
 import { plantsDePlanche, type PlantsPlanche } from './plants.ts';
+import { phrasePlanchesARecolter, planchesARecolter } from './recolte.ts';
 import type { PorteDonnees } from '@planif/sync';
 import { TEXTE_INVITATION } from '../../demo/invitation.ts';
 import './vue3d.css';
@@ -701,13 +702,17 @@ class GardeErreur extends Component<{ readonly surErreur: () => void; readonly c
 
 // ── Liste texte (alternative accessible) ─────────────────────────────────────────────────────
 
-const ElementListe = memo(function ElementListe({ id, code, culture, couleur, estompe }: { readonly id: string; readonly code: string; readonly culture: string | null; readonly couleur: string; readonly estompe: boolean }) {
+/** Ce que la ligne d'une planche dit de sa récolte (T32e) : rien tant qu'elle ne forme pas de fruits. */
+const MENTION_RECOLTE: Readonly<Record<string, string>> = { 'fruits-en-formation': 'fruits en formation', 'a-recolter': 'à récolter', 'fin-de-recolte': 'fin de récolte' };
+
+const ElementListe = memo(function ElementListe({ id, code, culture, couleur, estompe, recolte }: { readonly id: string; readonly code: string; readonly culture: string | null; readonly couleur: string; readonly estompe: boolean; readonly recolte: string }) {
   const classes = [culture === null ? 'plan3d-vide' : '', estompe ? 'plan3d-estompe' : ''].filter((c) => c !== '').join(' ');
   return (
-    <li data-testid="element-liste-3d" data-id={id} data-culture={culture ?? ''} data-estompe={estompe ? 'oui' : 'non'} className={classes === '' ? undefined : classes}>
+    <li data-testid="element-liste-3d" data-id={id} data-culture={culture ?? ''} data-estompe={estompe ? 'oui' : 'non'} data-recolte={recolte} className={classes === '' ? undefined : classes}>
       <i aria-hidden="true" style={{ background: couleur }} />
       <span className="plan3d-code">{code}</span>
       <span className="plan3d-culture">{culture ?? 'vide'}</span>
+      {MENTION_RECOLTE[recolte] !== undefined && <span className="plan3d-recolte">{MENTION_RECOLTE[recolte]}</span>}
     </li>
   );
 });
@@ -932,6 +937,8 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
       const b = s.plantsEnAttente;
       ds.plants = String(b.plants);
       ds.formesPlants = String(b.formes);
+      ds.fruits = String(b.fruits);
+      ds.balises = String(b.balises);
       ds.hauteursPlants = b.hauteurs;
       ds.semainePlants = String(b.semaine);
       s.plantsEnAttente = null;
@@ -1107,7 +1114,11 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const nbArceaux = geometrie?.batiments.reduce((n, b) => n + b.arceaux.length, 0) ?? 0;
   const nbPlacees = geometrie?.volumes.filter((v) => v.placee).length ?? 0;
   const libelleCourant = plan.semaines[semaineBornee]?.libelle ?? '';
-  const description = `Vue 3D des planches, semaine ${libelleCourant}. Glisser pour tourner, molette pour s’approcher ; au clavier, flèches et + ou -.`;
+  // Récolte (T32e) : les planches à récolter (non estompées par les filtres), annoncées dans le panneau et l'alternative texte de la toile.
+  const nbARecolter = useMemo(() => (plants === null || filtree === null ? 0 : planchesARecolter(plants, filtree).length), [plants, filtree]);
+  const phraseRecolte = phrasePlanchesARecolter(nbARecolter);
+  const recoltes = useMemo(() => (filtree?.volumes ?? []).map((_, i) => plants?.[i]?.recolte.phase ?? 'aucune'), [plants, filtree]);
+  const description = `Vue 3D des planches, semaine ${libelleCourant}. ${phraseRecolte}. Glisser pour tourner, molette pour s’approcher ; au clavier, flèches et + ou -.`;
 
   // La scène, rendue dans la racine fiber à chaque rendu de la vue (comme le fait <Canvas>).
   useLayoutEffect(() => {
@@ -1193,7 +1204,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               {zoneChoisie !== null && <p>Vue sur la zone {zoneChoisie}</p>}
             </div>
           )}
-          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-fruits={0} data-balises={0} data-planches-a-recolter={nbARecolter} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
           <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} />
         </div>
@@ -1269,6 +1280,9 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               </ul>
             </>
           )}
+          <p data-testid="resume-recolte-3d" role="status" className="plan3d-resume-recolte">
+            {phraseRecolte}
+          </p>
           <p data-testid="mention-hauteurs-3d" className="plan3d-mention">
             Hauteurs indicatives, réglables dans la fiche de l’espèce
           </p>
@@ -1276,7 +1290,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
             Planches et cultures, {libelle}
           </h2>
           <ul data-testid="liste-3d" role="list" aria-labelledby={idListe} className="plan3d-liste">
-            {filtree?.volumes.map((v) => <ElementListe key={v.id} id={v.id} code={v.code} culture={v.culture} couleur={v.couleur} estompe={v.estompe} />)}
+            {filtree?.volumes.map((v, i) => <ElementListe key={v.id} id={v.id} code={v.code} culture={v.culture} couleur={v.couleur} estompe={v.estompe} recolte={recoltes[i] ?? 'aucune'} />)}
           </ul>
         </aside>
       </div>

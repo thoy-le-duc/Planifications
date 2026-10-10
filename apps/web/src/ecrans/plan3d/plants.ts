@@ -8,14 +8,20 @@
  * regroupe les planches par forme, la vue en fait un InstancedMesh par forme.
  */
 import type { DateCalendaire } from '@planif/core';
+import { cleDeFruit, type CleFruit, type TypeFruit, typeDeFruit } from './recolte.ts';
 import {
   croissanceA,
   croissancePerenneA,
   hauteurStructureM,
+  jaunissementA,
+  jaunissementPerenneA,
+  recolteA,
+  recoltePerenneA,
   surelevationHorsSolM,
   type DatesCroissance,
   type EntreePerenne,
   type EtatCroissance,
+  type EtatRecolte,
   type FormePlant,
   type ProfilCroissance,
   type StadeCroissance,
@@ -25,6 +31,14 @@ import {
 export const PLANTS_MAX_PAR_PLANCHE = 20;
 /** Plafond de plants dessinés pour toute la scène : les planches les plus proches d'abord. */
 export const PLANTS_MAX_TOTAL = 200;
+/** Plafond de fruits dessinés par plant (T32e). */
+export const FRUITS_MAX_PAR_PLANT = 4;
+/** Plafond de fruits dessinés pour toute la scène (T32e). */
+export const FRUITS_MAX_TOTAL = 600;
+/** Un fruit en formation fait au moins cette part de sa taille mûre ; il grossit de là jusqu'à 1 avec la maturité. */
+const PART_FRUIT_NAISSANT = 0.25;
+/** Longueur mûre du fruit (m, plus grand axe), stylisée pour se lire d'un peu loin : la courgette fait ~25 cm (0,25 est exact en flottant 32 bits : la taille relue dans la matrice reste sous le plafond de 0,3 m), la tomate et la fraise sont grossies. */
+export const TAILLE_FRUIT_MURE_M: Readonly<Record<TypeFruit, number>> = { allonge: 0.25, rond: 0.12, generique: 0.14 };
 /** Un jeune plant (levée, turion) se dessine à cette hauteur au moins (m). */
 export const HAUTEUR_PLANT_MINIMAL_M = 0.05;
 /** Triangles de la géométrie partagée de chaque forme (vérifié sur les géométries par geometries-plants.test.ts). */
@@ -101,6 +115,17 @@ export interface PlantsPlanche {
   /** Longueur (m) du tronçon de rang que chaque plant couvre : une planche se lit comme un rang continu (bornée à 12 écartements). */
   readonly pasM: number;
   readonly nombre: number;
+  /** État de récolte du jour (T32e), calculé par le cœur. */
+  readonly recolte: EtatRecolte;
+  readonly typeFruit: TypeFruit;
+  /** Espèce de fruit pour la couleur mûre (la tomate et la fraise sont toutes deux rondes). */
+  readonly cleFruit: CleFruit;
+  /** Fruits dessinés par plant : 0 hors formation et récolte, sinon de 1 à FRUITS_MAX_PAR_PLANT. */
+  readonly fruitsParPlant: number;
+  /** Plus grand axe du fruit (m) : 0 sans fruit, sinon strictement croissant avec la maturité, au plus sa taille mûre. */
+  readonly tailleFruitM: number;
+  /** Jaunissement du feuillage en fin de récolte, de 0 à 1. */
+  readonly jaunissement: number;
   /** Coordonnées de scène, toutes dans le rectangle de la planche. */
   readonly positions: readonly { readonly x: number; readonly z: number }[];
 }
@@ -114,6 +139,12 @@ export interface GroupeInstances {
 
 function etatDuJour(culture: CultureDePlanche, jour: DateCalendaire): EtatCroissance {
   return culture.croissance.sorte === 'annuelle' ? croissanceA(culture.croissance.dates, culture.profil, jour) : croissancePerenneA(culture.croissance.entree, culture.profil, jour);
+}
+
+function recolteDuJour(culture: CultureDePlanche, jour: DateCalendaire): { readonly recolte: EtatRecolte; readonly jaunissement: number } {
+  return culture.croissance.sorte === 'annuelle'
+    ? { recolte: recolteA(culture.croissance.dates, jour), jaunissement: jaunissementA(culture.croissance.dates, jour) }
+    : { recolte: recoltePerenneA(culture.croissance.entree, jour), jaunissement: jaunissementPerenneA(culture.croissance.entree, jour) };
 }
 
 /** Positions des plants sur `rangs` rangs, `parRang` par rang, régulièrement répartis sur la longueur. */
@@ -145,6 +176,10 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
   const rangs = Math.min(RANGS_MAX, Math.max(1, Math.round(volume.largeur / LARGEUR_PAR_RANG_M)));
   const parRang = Math.max(1, Math.min(Math.floor(volume.longueur / ecart), Math.floor(PLANTS_MAX_PAR_PLANCHE / rangs)));
   const positions = positionsDe(volume, rangs, parRang);
+  const { recolte, jaunissement } = recolteDuJour(culture, jour);
+  const typeFruit = typeDeFruit(culture.espece);
+  const enFormation = recolte.phase === 'fruits-en-formation';
+  const avecFruits = enFormation || recolte.phase === 'a-recolter';
   const adulte = culture.profil.hauteurMaxM > 0 ? Math.min(1, etat.hauteurM / culture.profil.hauteurMaxM) : 1;
   return {
     id: volume.id,
@@ -158,6 +193,12 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
     couleur: volume.couleur,
     pasM: Math.min(volume.longueur / parRang, PAS_MAX_ECARTEMENTS * ecart),
     nombre: positions.length,
+    recolte,
+    typeFruit,
+    cleFruit: cleDeFruit(culture.espece),
+    fruitsParPlant: avecFruits ? (enFormation ? 1 + Math.floor(recolte.maturite * (FRUITS_MAX_PAR_PLANT - 1)) : FRUITS_MAX_PAR_PLANT) : 0,
+    tailleFruitM: avecFruits ? TAILLE_FRUIT_MURE_M[typeFruit] * (PART_FRUIT_NAISSANT + (1 - PART_FRUIT_NAISSANT) * recolte.maturite) : 0,
+    jaunissement,
     positions,
   };
 }
