@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-10 — T13r : l'éditeur de placement ne charge plus la règle « déjà fait »
+
+- **Fait** : `packages/sync/src/fait-unique.ts` (SQL des chaînes, clé d'horodatage) quitte le morceau `identifiants`, que l'éditeur de placement charge pour le seul UUID, et prend un petit morceau manuel à lui, `fait`, partagé par la porte (`sqlite/base-appli`) et l'écran Aujourd'hui (`apps/web/vite.config.ts`). Tests T13r ajoutés à `scripts/placement.test.ts` (aucun SQL des chaînes dans le morceau de l'éditeur, au moins 0,5 Kio sous l'ancien budget de 22,2). Éditeur 22,11 → 20,30 Kio ; budget `jsPlacementGzKio` **baissé** de 22,2 à 20,6 (mesuré + 0,3), épingle du test suivie.
+- **Décidé** : le compromis de T13i est chiffré : un nom de fichier de plus dans la table des dépendances coûte +8 octets gzip au démarrage (72 688 → 72 696 sur 72 704, toujours 71,0 Kio) et +17 octets à la vue 3D (204,2 Kio, inchangé à l'affichage). Nom court `fait` exprès : laissé à Rollup, le morceau s'appelle `fait-unique` et le démarrage dépasse de 3 octets. `ferme-memorisee.ts` reste dans `identifiants` (le sortir aussi coûtait plus au démarrage pour 0,1 Kio d'éditeur).
+- **Bloquant** : rien. Le démarrage n'a plus que 8 octets de marge : le prochain ticket qui ajoute un morceau à la demande devra trouver de la place. Le commentaire de `packages/sync/src/horodatage.ts` (« l'éditeur de placement, qui charge fait-unique.ts ») est devenu faux, hors périmètre : à corriger au passage.
+
 ## 2026-10-10 — T13n : horodatages comparés comme des dates
 
 - **Fait** : ordre canonique (instant, id) partout où l'on choisit « la plus récente » : `chaines` (donc `chaineDe`, la journée et le « déjà fait » de la porte) compare une clé `cleHorodatageSql` (julianday de SQLite en millisecondes sur 15 chiffres, puis l'id) au lieu de `horodatage || '|' || id` ; `enVigueur`, l'ordre de l'historique et la dernière récolte passent par `comparerSaisies` (`packages/sync/src/horodatage.ts`, sous-chemin `@planif/sync/horodatage`). Tests H1–H4 et W1–W6 verts sans modification ; 11 tests ajoutés (`horodatage-instant.test.ts`) : même instant que julianday de SQLite sur 63 formes choisies et 3 000 tirées au hasard (dont 1 000 avec fuseau `±HH`/`±HHMM`), même ordre que la clé SQL.
