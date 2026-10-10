@@ -370,7 +370,9 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
   }
   const nomDeZone = new Map(ctx.zones.map((z) => [z.id, z.nom.trim()]));
   const zonesParCle = new Map<string, string>();
-  const zonesParNom = new Map<string, string>();
+  /** Zones de premier niveau d'un nom, puis sous-zones d'un nom (avec leur parente), de la ferme. */
+  const racinesParNom = new Map<string, string[]>();
+  const sousZonesParNom = new Map<string, { readonly id: string; readonly parenteId: string }[]>();
   /** Toutes les zones d'un nom (le même nom peut servir sous deux zones parentes). */
   const toutesZonesParNom = new Map<string, string[]>();
   const enfantsDe = new Map<string, string[]>();
@@ -378,10 +380,30 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
   for (const z of ctx.zones) {
     const n = normaliser(z.nom);
     zonesParCle.set(`${z.parenteId ?? ''}\u0001${n}`, z.id);
-    if (!zonesParNom.has(n) || z.parenteId === null) zonesParNom.set(n, z.id);
+    if (z.parenteId === null) racinesParNom.set(n, [...(racinesParNom.get(n) ?? []), z.id]);
+    else sousZonesParNom.set(n, [...(sousZonesParNom.get(n) ?? []), { id: z.id, parenteId: z.parenteId }]);
     toutesZonesParNom.set(n, [...(toutesZonesParNom.get(n) ?? []), z.id]);
     if (z.parenteId !== null) enfantsDe.set(z.parenteId, [...(enfantsDe.get(z.parenteId) ?? []), z.id]);
   }
+  /**
+   * Zone de la ferme désignée par un nom donné seul (colonne Zone, sans sous-zone) (T14g) : la zone
+   * de premier niveau de ce nom (correspondance exacte, sans quoi elle ne pourrait plus être
+   * désignée), sinon l'unique sous-zone de ce nom. Plusieurs zones possibles : refus, jamais de
+   * choix silencieux (même règle que « Code ambigu »). Aucune : `undefined`.
+   */
+  const zoneSeule = (nom: string): string | undefined => {
+    const n = normaliser(nom);
+    const affiche = nom.trim();
+    const racines = racinesParNom.get(n) ?? [];
+    if (racines.length > 1) throw new Refus(`Zone ambiguë : « ${affiche} » désigne plusieurs zones de premier niveau. Renommez l’une d’elles dans le parcellaire.`, 'zone');
+    if (racines[0] !== undefined) return racines[0];
+    const sous = sousZonesParNom.get(n) ?? [];
+    if (sous.length <= 1) return sous[0]?.id;
+    const parentes = [...new Set(sous.map((s) => nomDeZone.get(s.parenteId) ?? ''))];
+    const derniere = parentes.pop() ?? '';
+    if (parentes.length === 0) throw new Refus(`Zone ambiguë : « ${affiche} » désigne plusieurs sous-zones de ${derniere}. Renommez l’une d’elles dans le parcellaire.`, 'zone');
+    throw new Refus(`Zone ambiguë : « ${affiche} » existe dans ${parentes.join(', ')} et ${derniere}. Ajoutez la zone parente.`, 'zone');
+  };
   /** La zone et ses descendantes (une planche peut être rangée dans une sous-zone). */
   const zoneEtDescendantes = (racine: string): Set<string> => {
     const vues = new Set<string>();
@@ -468,7 +490,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
     /** Zone (reprise ou créée) de nom `nom` sous `parente`. */
     function zone(nom: string, parente: string | null, abri: string | null, surface: number | null, profondeur: number): string {
       const k = `${parente ?? ''}\u0001${normaliser(nom)}`;
-      const connue = zonesParCle.get(k) ?? (parente === null ? zonesParNom.get(normaliser(nom)) : undefined);
+      const connue = zoneExiste(nom, parente);
       if (connue !== undefined) return connue;
       if (abri === null) noterDefaut('abri', `zone « ${nom.trim()} » : plein champ par défaut`, `${nom.trim()} : plein champ`);
       const id = nouvelId<'Zone'>();
@@ -478,8 +500,10 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
       ecr.noter('zone', id);
       return id;
     }
-    const zoneExiste = (nom: string, parente: string | null): string | undefined =>
-      zonesParCle.get(`${parente ?? ''}\u0001${normaliser(nom)}`) ?? (parente === null ? zonesParNom.get(normaliser(nom)) : undefined);
+    /** Zone connue (de la ferme ou créée plus haut dans le fichier) ; nom seul : voir `zoneSeule`. */
+    function zoneExiste(nom: string, parente: string | null): string | undefined {
+      return (parente === null ? zoneSeule(nom) : undefined) ?? zonesParCle.get(`${parente ?? ''}\u0001${normaliser(nom)}`);
+    }
 
     for (const l of lignesValides) {
       const v = l.valeurs;
@@ -835,7 +859,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
         if (code !== null) {
           emplacementId = plancheDe(code, nomZone).id;
         } else if (nomZone !== null) {
-          const z = zonesParNom.get(normaliser(nomZone));
+          const z = zoneSeule(nomZone);
           if (z === undefined) throw new Refus(`Zone inconnue : « ${nomZone.trim()} » n’est pas une zone de la ferme (importez d’abord le parcellaire).`, 'zone');
           zoneId = z;
         } else throw new Refus('Il faut une zone ou un emplacement.', null);
