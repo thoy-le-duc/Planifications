@@ -290,6 +290,12 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q39 — Régler la croissance d'une espèce de la bibliothèque, et où (posée le 2026-10-10, T32c)
+
+Question : le profil de croissance (hauteur, durée, forme) ne se règle que sur les espèces créées par la ferme ; celles de la bibliothèque commune sont partagées entre toutes les fermes. Pour une tomate de la bibliothèque, que doit pouvoir faire le gérant ? Et où trouver ce réglage, puisqu'il n'existe pas d'écran « fiche d'espèce » ?
+
+Réponse (2026-10-10) : copier l'espèce d'abord (bouton « Personnaliser » : une copie propre à la ferme, que l'on règle ; les cultures existantes restent liées à l'espèce d'origine) ; le réglage se trouve dans l'écran Itinéraires culturaux (« je pense que le mieux ce serait de le mettre dans itinéraire cultural »). Tickets T32c (réglage dans les itinéraires) et T32g (« Personnaliser »).
+
 ### Q38 — La balise de récolte pendant la fin de récolte (posée le 2026-10-10, T32e)
 
 Question : dans la 3D, une planche « à récolter » porte une balise orange au-dessus d'elle. Pendant les deux dernières semaines de la récolte, le feuillage jaunit et la balise disparaît, alors qu'on peut encore y récolter. Proposition : garder une balise jusqu'à la fin de la récolte, d'une teinte plus pâle pendant ces deux dernières semaines (« dernières récoltes »). Ou préfères-tu qu'elle disparaisse, comme aujourd'hui ?
