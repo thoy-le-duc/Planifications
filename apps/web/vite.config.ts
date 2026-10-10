@@ -154,6 +154,15 @@ const MORCEAU_FAIT = 'fait';
 const MODULE_FAIT_UNIQUE = fileURLToPath(new URL('../../packages/sync/src/fait-unique.ts', import.meta.url));
 
 /**
+ * T13s : l'ordre des horodatages (@planif/sync/horodatage), partagé par l'écran Aujourd'hui et
+ * l'écran Série, a un morceau à nom court : sans morceau manuel, Rollup le nomme `horodatage`, et
+ * ce nom, écrit dans la table des dépendances du morceau de la vue 3D (qui charge Aujourd'hui),
+ * fait dépasser son budget de quelques octets.
+ */
+const MORCEAU_HORODATAGE = 'h';
+const MODULE_HORODATAGE = fileURLToPath(new URL('../../packages/sync/src/horodatage.ts', import.meta.url));
+
+/**
  * T36 : le moteur de croissance du cœur (`packages/core/src/croissance/`) a son propre morceau.
  * Sans lui, il restait dans le morceau commun de `@planif/core` (24,5 Kio compressés) que la vue 3D
  * chargeait en entier pour deux fonctions.
@@ -164,6 +173,7 @@ const DOSSIER_CROISSANCE = fileURLToPath(new URL('../../packages/core/src/croiss
 function morceauManuel(id: string): string | undefined {
   if (MODULES_IDENTIFIANTS.includes(id)) return MORCEAU_IDENTIFIANTS;
   if (id === MODULE_FAIT_UNIQUE) return MORCEAU_FAIT;
+  if (id === MODULE_HORODATAGE) return MORCEAU_HORODATAGE;
   return id.startsWith(DOSSIER_CROISSANCE) && !id.endsWith('.test.ts') ? MORCEAU_CROISSANCE : undefined;
 }
 

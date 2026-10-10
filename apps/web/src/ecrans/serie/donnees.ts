@@ -6,6 +6,8 @@
  */
 import type { DateCalendaire, Emplacement, HierarchieParcellaire, Id, Instant, OccupationHistorique, TypeAbri } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
+import { cleHorodatageSql } from '@planif/sync/fait-unique';
+import { instantHorodatage } from '@planif/sync/horodatage';
 import type { EtatSerie } from '../../donnees/etat-serie.ts';
 import { versEmplacement, versOccupation } from '../plan/calculs.ts';
 import { comparerNoms, libelleCulture, versAssolement, type Bibliotheque, type EspeceLue, type FamilleLue, type OccupationLue, type PlancheLue, type VarieteLue } from './calculs.ts';
@@ -209,11 +211,13 @@ function jsonObjet(v: unknown): Readonly<Record<string, unknown>> | null {
   }
 }
 
-/** Instant d'un horodatage de Postgres (« …+00:00 », microsecondes comprises), en ms. */
-export function instantDe(horodatage: string): number {
-  const ramene = horodatage.replace(/(\.\d{3})\d+/, '$1');
-  return Date.parse(ramene);
-}
+/**
+ * Instant d'un horodatage (Postgres ou navigateur), en ms, par la règle canonique de T13n
+ * (`instantHorodatage`, arrondi à la ms comme SQLite). NaN si illisible : l'entrée n'est alors
+ * pas annulable. 210 866 760 000 000 = 1970-01-01T00:00Z en jour julien (ms) : `instantHorodatage`
+ * compte depuis -4713, les dates de l'écran depuis 1970.
+ */
+export const instantDe = (horodatage: string): number => (instantHorodatage(horodatage) || NaN) - 210_866_760_000_000;
 
 export function versModification(l: Readonly<Record<string, unknown>>): Modification {
   const op = l.operation;
@@ -236,9 +240,12 @@ export function versModification(l: Readonly<Record<string, unknown>>): Modifica
  */
 export const entreeAnnulable = (m: Modification): boolean => !Number.isNaN(m.instant) && (m.operation === 'creation' || m.avant !== null);
 
+/** Ordre canonique (instant, id) des modifications (T13s, T13n) : jamais le texte de l'horodatage. */
+const CLE_MODIFICATION = cleHorodatageSql('horodatage', 'id');
+
 /** Historique de la série, le plus récent d'abord (requête surveillée par le formulaire). */
 export const requeteHistorique = (serieId: string) => ({
-  sql: `SELECT * FROM modification WHERE nom_table = 'Serie' AND ligne_id = ? AND supprime_le IS NULL ORDER BY horodatage DESC, id DESC`,
+  sql: `SELECT * FROM modification WHERE nom_table = 'Serie' AND ligne_id = ? AND supprime_le IS NULL ORDER BY ${CLE_MODIFICATION} DESC`,
   parametres: [serieId],
   tables: ['modification'],
   convertir: versModification,
@@ -249,7 +256,7 @@ export async function lireModificationsOccupations(porte: PorteDonnees, serieId:
   const lignes = await porte.lire<Readonly<Record<string, unknown>>>(
     `SELECT * FROM modification WHERE nom_table = 'Occupation' AND supprime_le IS NULL
        AND ligne_id IN (SELECT id FROM occupation WHERE serie_id = ?)
-     ORDER BY horodatage, id`,
+     ORDER BY ${CLE_MODIFICATION}`,
     [serieId],
   );
   return lignes.map(versModification);
