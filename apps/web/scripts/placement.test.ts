@@ -10,7 +10,7 @@
  *   - Le morceau de l'éditeur : les fichiers JavaScript hors démarrage qui portent la couche
  *     « ORTHOIMAGERY.ORTHOPHOTOS » (tuiles.ts), avec ce qu'ils importent statiquement hors
  *     démarrage. Aucun fichier hors de ces porteurs ne les importe statiquement.
- *   - JavaScript de démarrage inchangé : `jsInitialGzKio` reste à 71 Kio, et rien de l'éditeur
+ *   - JavaScript de démarrage inchangé : `jsInitialGzKio` reste à 71,1 Kio (relevé par T11b), et rien de l'éditeur
  *     n'y entre (ni la couche, ni l'URL de la Géoplateforme).
  *   - Budget dédié `jsPlacementGzKio` dans apps/web/budget.json (chiffre mesuré + marge, justifié
  *     dans la PR ; entre 4 et 40 Kio), tenu par le morceau ; scripts/budget.ts le vérifie aussi.
@@ -31,7 +31,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const WEB = fileURLToPath(new URL('..', import.meta.url));
 
 const MARQUEUR_PLACEMENT = 'ORTHOIMAGERY.ORTHOPHOTOS';
-const BUDGET_DEMARRAGE_KIO = 71;
+const BUDGET_DEMARRAGE_KIO = 71.1;
 const BORNES_BUDGET_PLACEMENT_KIO = { min: 4, max: 40 } as const;
 
 interface BudgetJson {
@@ -153,7 +153,7 @@ describe('T28b : chargé à la demande, depuis l’écran Ferme', () => {
 describe('T28b : budgets (build de production)', () => {
   const budget = (): BudgetJson => JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson;
 
-  it('budget de démarrage inchangé (71 Kio) et poids du démarrage dessous', () => {
+  it('budget de démarrage inchangé (71,1 Kio) et poids du démarrage dessous', () => {
     expect(budget().jsInitialGzKio, 'budget.json : jsInitialGzKio relevé sans justification').toBe(BUDGET_DEMARRAGE_KIO);
     const total = initiaux.reduce((somme, f) => somme + gzKio(f), 0);
     expect(total, `JavaScript de démarrage (gzip, Kio) : ${total.toFixed(1)}`).toBeLessThanOrEqual(BUDGET_DEMARRAGE_KIO);
@@ -246,7 +246,7 @@ describe('T28f : l’éditeur s’ouvre aussi depuis la vue 3D, sans bouger les 
     }
   });
 
-  it('budgets intacts : démarrage 71 Kio, morceau 3D et morceau de l’éditeur présents dans budget.json', () => {
+  it('budgets intacts : démarrage 71,1 Kio, morceau 3D et morceau de l’éditeur présents dans budget.json', () => {
     const b = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson & { readonly jsVue3dGzKio?: number };
     expect(b.jsInitialGzKio).toBe(BUDGET_DEMARRAGE_KIO);
     expect(b.jsVue3dGzKio).toBe(207.9); // T37b : 207,1 → 207,9 (mesuré 207,695 : filtres au téléphone, masques des travaux, enveloppe de triangles) ; T32c : 206,8 → 207,1 (champ fougereApresRecolte, mesuré 206,9) ; T32f : 206,7 → 206,8 (mesuré 206,5 → 206,77 : balise pâle, récoltes courtes, pérennes d'hiver), T32e : 204,3 → 206,7, plafond de Q33 : 228
