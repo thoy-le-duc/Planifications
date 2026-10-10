@@ -336,7 +336,7 @@
   position: absolute;
   inset: auto var(--espace-s) var(--espace-s) var(--espace-s);
   z-index: 1;
-  max-width: 480px;
+  max-width: 340px;
   display: flex;
   flex-direction: column;
   background: var(--couleur-surface);
@@ -389,7 +389,7 @@
 .plan3d-travaux-liste {
   flex: 1 1 auto;
   min-height: 0;
-  max-height: 24vh;
+  max-height: 150px;
   margin: 0;
   padding: 0 var(--espace-xs) var(--espace-xs);
   overflow-y: auto;
@@ -426,6 +426,10 @@
 
 /* Téléphone (Q36) : la scène prend l'écran, le panneau de filtres de l'ordinateur n'est pas proposé. */
 @media (max-width: 1023px) {
+  .plan3d-travaux {
+    max-width: none;
+  }
+
   .plan3d-outils {
     flex-wrap: wrap;
     gap: var(--espace-s);
