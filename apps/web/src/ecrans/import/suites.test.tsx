@@ -174,7 +174,9 @@ describe('T14e, critère 1 : une annulation refusée par le serveur est montrée
     expect(alertes()).toEqual([]);
     expect(b().transactions(), 'de nouvelles suppressions douces sont écrites (le lot avait déjà été annulé une fois)').toBeGreaterThanOrEqual(1);
     for (const l of s.creees) expect(lire(b(), `SELECT supprime_le FROM ${l.table} WHERE id = ?`, [l.id])[0]?.supprime_le, `${l.table} ${l.id} retirée`).not.toBeNull();
-    expect(photographie(b()), 'la ferme revient à son état d’avant l’import').toStrictEqual(s.depart);
+    // Les refus insérés par le test (le serveur simulé) restent dans refus_synchro : le téléphone
+    // n'y écrit que `archive_le`. On compare donc la ferme hors de cette table.
+    expect({ ...photographie(b()), refus_synchro: [] }, 'la ferme revient à son état d’avant l’import').toStrictEqual({ ...s.depart, refus_synchro: [] });
   });
 
   it('rien sur un import jamais annulé, ni pour un refus qui vise une ligne hors de l’import', { timeout: 60_000 }, async () => {
