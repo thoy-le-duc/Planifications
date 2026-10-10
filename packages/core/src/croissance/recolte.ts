@@ -92,8 +92,7 @@ function avancementJaunissement(debut: DateCalendaire | null, fin: DateCalendair
   if (fin === null || debut === null) return 0;
   const avant = joursAvantLaFin(debut, fin);
   // Fin avant début (données incohérentes) : le dénominateur peut être nul ou négatif, le résultat reste dans [0, 1].
-  const duree = Math.max(1, ecartEnJours(debut, fin) - avant + 1);
-  return Math.min(1, Math.max(0, (ecartEnJours(debut, jour) - avant + 1) / duree));
+  return Math.min(1, Math.max(0, (ecartEnJours(debut, jour) - avant + 1) / Math.max(1, ecartEnJours(debut, fin) - avant + 1)));
 }
 
 /** Jaunissement d'une culture annuelle au jour `jour` (0 hors « fin de récolte »). */
