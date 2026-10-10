@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { TEXTE_INVITATION } from '../src/demo/test/contrat-placement.ts';
 import { DOSSIER_DEMO, FERME_DEMO, NOMS_DES_JEUX, TEXTE_BANDEAU, UTILISATEUR_DEMO } from '../src/demo/test/contrat.ts';
 
 const WEB = fileURLToPath(new URL('..', import.meta.url));
@@ -98,6 +99,10 @@ describe('T25 : build de la démo (dist-demo/)', () => {
     expect(contenant(DIST_DEMO, FERME_DEMO), 'fichiers avec la ferme de démo').not.toEqual([]);
   });
 
+  it('T28i : contient l’invitation « Essayez : ajoutez une serre et posez-la sur la photo »', () => {
+    expect(contenant(DIST_DEMO, TEXTE_INVITATION), 'fichiers avec l’invitation').not.toEqual([]);
+  });
+
   it('le service worker met le mode démo en précache (hors ligne)', () => {
     const sw = lire(DIST_DEMO, 'sw.js').toString('utf8');
     const morceaux = contenant(DIST_DEMO, TEXTE_BANDEAU).filter((f) => f.endsWith('.js') && f !== 'sw.js');
@@ -128,5 +133,10 @@ describe('T25 : le build de production n’embarque rien de la démo', () => {
     const trouvees: string[] = [];
     for (const trace of TRACES_DE_LA_DEMO) for (const f of contenant(sortie, trace)) trouvees.push(`${f} : « ${trace} »`);
     expect(trouvees).toEqual([]);
+  });
+
+  it('T28i : l’invitation de la démo n’apparaît pas dans le build de l’appli', () => {
+    expect(contenant(sortie, TEXTE_INVITATION)).toEqual([]);
+    expect(contenant(sortie, 'Essayez : ajoutez')).toEqual([]);
   });
 });
