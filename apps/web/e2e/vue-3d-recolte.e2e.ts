@@ -117,7 +117,9 @@ test('récolte visible dans la 3D de la démo : balises, fruits et « N planches
   const attendues = lues.filter((l) => l.recolte === 'a-recolter' && l.estompe === 'non');
   expect(aRecolter, 'autant de planches annoncées que de lignes « à récolter » non estompées').toBe(attendues.length);
   expect(await nombre(page, 'data-balises'), 'une balise par planche à récolter').toBe(aRecolter);
-  expect(await nombre(page, 'data-fruits'), 'des fruits sont dessinés').toBeGreaterThan(0);
+  // Les fruits ne se dessinent que sur les planches en détail : on vole vers la zone de la courgette.
+  await page.getByRole('button', { name: 'Aller à Plein champ' }).click();
+  await expect.poll(() => nombre(page, 'data-fruits'), { timeout: DELAI_MS, message: 'des fruits sont dessinés, vus de près' }).toBeGreaterThan(0);
   for (const l of attendues) expect(l.texte, 'la ligne de la planche dit « à récolter »').toContain('à récolter');
   const courgette = lues.find((l) => l.culture.startsWith('Courgette') && l.recolte === 'a-recolter');
   expect(courgette, 'la courgette est une planche à récolter').toBeDefined();
