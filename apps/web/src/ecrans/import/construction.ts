@@ -33,7 +33,7 @@ import {
 import { decouperEnLots, ordreInsertion, type LigneAEcrire } from '@planif/sync/import';
 import type { OrdreEcriture } from '@planif/sync';
 import { codeDe, normaliser } from './normaliser.ts';
-import type { Apercu, DemandePreparation, EmplacementConnu, ErreurAffichee, ItineraireConnu, LigneApercu, StatutApercu } from './types.ts';
+import type { Apercu, DatesDeduites, DemandePreparation, EmplacementConnu, ErreurAffichee, ItineraireConnu, LigneApercu, StatutApercu } from './types.ts';
 
 /** Colonnes écrites par table (schéma local, packages/sync/src/schema.ts). */
 export const COLONNES: Readonly<Record<string, readonly string[]>> = {
@@ -921,6 +921,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
   }
   const lots = decouperEnLots(ecr.groupes());
   const apercu: Apercu = {
+    datesDeduites: datesDeduites(ecr),
     valides,
     erreurs,
     doublons,
@@ -938,6 +939,31 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
     })),
   };
   return { apercu, lots };
+}
+
+/** Valeur texte d'une colonne d'un ordre d'insertion (ordreInsertion : paramètres dans l'ordre de COLONNES). */
+function valeurInseree(table: string, o: OrdreEcriture, colonne: string): string | null {
+  const v = o.parametres?.[(COLONNES[table] ?? []).indexOf(colonne)];
+  return typeof v === 'string' ? v : null;
+}
+
+/** T14e : dates déduites, lues dans les écritures finales (ce qui sera écrit, rien d'autre). */
+function datesDeduites(ecr: Ecritures): DatesDeduites {
+  const actifs = new Map<string, number>();
+  for (const o of ecr.emplacements.flat()) {
+    const d = valeurInseree('emplacement', o, 'actif_du');
+    if (d !== null) actifs.set(d, (actifs.get(d) ?? 0) + 1);
+  }
+  const saisons = ecr.saisons.flat().flatMap((o) => {
+    const nom = valeurInseree('saison', o, 'nom');
+    const debut = valeurInseree('saison', o, 'debut');
+    const fin = valeurInseree('saison', o, 'fin');
+    return nom === null || debut === null || fin === null ? [] : [{ nom, debut, fin }];
+  });
+  return {
+    actifsDu: [...actifs].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([date, emplacements]) => ({ date, emplacements })),
+    saisons: saisons.sort((a, b) => (a.debut < b.debut ? -1 : a.debut > b.debut ? 1 : 0)),
+  };
 }
 
 /** Une ligne en erreur retire ce qu'elle seule avait préparé (saison, espèce, famille, variété). */

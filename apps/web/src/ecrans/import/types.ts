@@ -184,6 +184,14 @@ export interface Apercu {
   readonly lotsCreees: readonly (readonly string[])[];
   /** Lignes créées, par table : de quoi annuler l'import. */
   readonly creees: Readonly<Record<string, readonly string[]>>;
+  /** T14e : dates que l'import déduit (pas lues dans le fichier), telles qu'elles seront écrites. */
+  readonly datesDeduites: DatesDeduites;
+}
+
+/** T14e : `actif_du` des emplacements créés (par date, AAAA-MM-JJ) et bornes des saisons créées. */
+export interface DatesDeduites {
+  readonly actifsDu: readonly { readonly date: string; readonly emplacements: number }[];
+  readonly saisons: readonly { readonly nom: string; readonly debut: string; readonly fin: string }[];
 }
 
 export type ResultatPreparation =

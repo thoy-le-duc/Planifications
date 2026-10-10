@@ -276,6 +276,12 @@
   font-weight: 800;
 }
 
+/* T14e : annulation refusée par le serveur, sur la ligne de l'import. */
+.imp-passe-textes .imp-refus-annulation {
+  color: var(--couleur-conflit);
+  font-weight: 700;
+}
+
 .imp-passe {
   display: flex;
   flex-wrap: wrap;
