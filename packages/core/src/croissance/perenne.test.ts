@@ -128,11 +128,12 @@ describe('T32a : pérenne, la récolte de la campagne élargit la fenêtre de v�
     attendu(etat('2027-12-01', { campagne: c }), 'repos', 0);
   });
 
-  it('début de récolte avant le débourrement du profil : débourrement dès le début de récolte', () => {
+  // Q41 (T32i) : la plante au repos repousse sur les 28 jours qui précèdent la récolte, pleine hauteur au premier jour de récolte.
+  it('début de récolte avant le débourrement du profil : repousse dès J−28, pleine hauteur au début de récolte', () => {
     const c = campagne(2027, '2027-03-20', '2027-05-15');
-    attendu(etat('2027-03-19', { campagne: c }), 'repos', 0);
-    attendu(etat('2027-03-20', { campagne: c }), 'debourrement', 0);
-    attendu(etat('2027-04-19', { campagne: c }), 'debourrement', 1.25);
+    attendu(etat('2027-03-19', { campagne: c }), 'debourrement', (2.5 * 27) / 28);
+    attendu(etat('2027-03-20', { campagne: c }), 'pleine_vegetation', 2.5);
+    attendu(etat('2027-04-19', { campagne: c }), 'pleine_vegetation', 2.5);
   });
 });
 
