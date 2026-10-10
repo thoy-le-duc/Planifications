@@ -14,7 +14,7 @@
  * demo`) ; le build de production n'en contient rien (scripts/demo.test.ts).
  */
 import { TABLES_LOCALES, type NomTableLocale } from '@planif/sync';
-import { CAMPAGNE, fermeDuJour } from '../ecrans/aujourdhui/test/ferme-du-jour.ts';
+import { CAMPAGNE, fermeDuJour, SERIE } from '../ecrans/aujourdhui/test/ferme-du-jour.ts';
 import { FERME_REFUS, refusDuJeu, UTILISATEUR_REFUS } from '../ecrans/ferme/test/refus.ts';
 import { fermeItineraires } from '../ecrans/itineraires/test/ferme-itineraires.ts';
 import { fermeSerie } from '../ecrans/serie/test/ferme-serie.ts';
@@ -54,7 +54,21 @@ function estTable(nom: string): nom is NomTableLocale {
 function jeuDuJour(jour: string): Jeu {
   const duJour = fermeDuJour(jour, { travaux: true });
   const debut = veilleDe(jour);
-  return { ...duJour, lignes: { ...duJour.lignes, campagne: (duJour.lignes.campagne ?? []).map((l) => (l.id === CAMPAGNE.fraise ? { ...l, debut_recolte_prevu: debut } : l)) } };
+  // T35b : le chou (sous tunnel) et la courgette (plein champ, PC-P03) sont plantés en quinconce, pour que la démo montre la disposition dans la 3D ;
+  // la même densité dans la série et dans son itinéraire (la série fige les paramètres de l'itinéraire).
+  const enQuinconce = (parametres: string | number | null | undefined): string => {
+    const p = JSON.parse(String(parametres ?? '{"densite":{}}')) as { densite: object };
+    return JSON.stringify({ ...p, densite: { ...p.densite, disposition: 'quinconce' } });
+  };
+  const quinconce: readonly unknown[] = [SERIE.chou, SERIE.courgette];
+  const itinerairesQuinconce: readonly unknown[] = (duJour.lignes.serie ?? []).filter((l) => quinconce.includes(l.id)).map((l) => l.itineraire_id);
+  const lignes = {
+    ...duJour.lignes,
+    campagne: (duJour.lignes.campagne ?? []).map((l) => (l.id === CAMPAGNE.fraise ? { ...l, debut_recolte_prevu: debut } : l)),
+    serie: (duJour.lignes.serie ?? []).map((l) => (quinconce.includes(l.id) ? { ...l, parametres: enQuinconce(l.parametres) } : l)),
+    itineraire: (duJour.lignes.itineraire ?? []).map((l) => (itinerairesQuinconce.includes(l.id) ? { ...l, parametres: enQuinconce(l.parametres) } : l)),
+  };
+  return { ...duJour, lignes };
 }
 
 /** Les lignes de la démo, par table, pour le jour `jour` ('AAAA-MM-JJ') et l'instant `maintenant`. */
