@@ -209,7 +209,7 @@ describe('T32e : « N planches à récolter »', () => {
   it('planchesARecolter : seulement la phase « à récolter », dans l’ordre de la scène, sans les null', () => {
     // Même jour : la courgette est à récolter, la tomate décalée de 90 jours n'est pas encore plantée, la laitue décalée de −90 est en fin.
     const jour = ajouterJours(B, 10);
-    const { scene, plants } = ferme([{ espece: 'Courgette' }, { espece: 'Tomate', decalage: 90 }, { espece: 'Tomate' }, { espece: 'Laitue', decalage: -90 }], jour);
+    const { scene, plants } = ferme([{ espece: 'Courgette' }, { espece: 'Tomate', decalage: 120 }, { espece: 'Tomate' }, { espece: 'Laitue', decalage: -90 }], jour);
     expect(plants.map((p) => p?.recolte.phase)).toEqual(['a-recolter', undefined, 'a-recolter', 'fin-de-recolte']);
     const filtree = appliquerFiltres(scene, FILTRES_TOUT);
     expect(rc.planchesARecolter(plants, filtree)).toEqual(['p0', 'p2']);
@@ -499,7 +499,7 @@ describe('T32e : fruits instanciés (un seul maillage)', () => {
 describe('T32e : balise « à récolter » au-dessus de la planche (Q35)', () => {
   it('une balise par planche à récolter, pas pour les autres', () => {
     const jour = ajouterJours(B, 10);
-    const { scene, plants } = ferme([{ espece: 'Courgette' }, { espece: 'Tomate', decalage: 90 }, { espece: 'Tomate' }, { espece: 'Laitue', decalage: -90 }, { espece: 'Courgette', decalage: 17 }], jour);
+    const { scene, plants } = ferme([{ espece: 'Courgette' }, { espece: 'Tomate', decalage: 120 }, { espece: 'Tomate' }, { espece: 'Laitue', decalage: -90 }, { espece: 'Courgette', decalage: 17 }], jour);
     const { balises, bilan, filtree } = poser(scene, plants);
     expect(plants.map((p) => p?.recolte.phase)).toEqual(['a-recolter', undefined, 'a-recolter', 'fin-de-recolte', 'fruits-en-formation']);
     expect(rc.planchesARecolter(plants, filtree)).toEqual(['p0', 'p2']);
