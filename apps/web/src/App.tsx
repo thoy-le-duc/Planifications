@@ -347,7 +347,7 @@ export function App() {
         </span>
       </EnTete>
       <div className="coquille-contenu">
-        {exportCharge && <exportCharge.BandeauExport onglet={onglet} />}
+        {exportCharge && <exportCharge.BandeauExport onglet={onglet} fermeId={donnees.ferme?.fermeId} />}
         <ContexteFerme value={donnees.ferme}>
           {onglet === 'ferme' ? (
             <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} sansDeconnexion={demo} etatBase={donnees.base} surExport={setExportCharge} />

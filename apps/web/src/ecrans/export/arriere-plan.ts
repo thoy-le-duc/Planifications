@@ -5,13 +5,15 @@
  * (barre, « Annuler », annonce) et le bandeau des autres onglets (./BandeauExport.tsx) lisent le
  * même état et s'y abonnent.
  *
- * Un seul export à la fois : un second lancement sur la même ferme ouverte est refusé tant que le
- * premier n'est pas fini, lectures en vol comprises. Une autre ferme ouverte (base rouverte,
- * autre compte) arrête l'ancien export, qui lit une porte périmée.
+ * Un seul export à la fois : un second lancement sur la même ferme est refusé tant que le premier
+ * n'est pas fini (lectures en vol comprises pour la même porte ; tant qu'il est en cours si la
+ * porte de cette ferme a été republiée). Un lancement sur une autre porte arrête l'ancien export.
  *
- * Qui l'arrête : « Annuler » (écran Ferme ou bandeau), la déconnexion (EcranFerme, AVANT la
- * fermeture de la base, en attendant les lectures en vol), et la fin de la session connectée de
- * l'appli (le bandeau démonté : déconnexion dans un autre onglet, appli fermée).
+ * Qui l'arrête : « Annuler » (écran Ferme ou bandeau), la déconnexion depuis l'écran Ferme (AVANT
+ * la fermeture de la base, en attendant les lectures en vol), le changement de ferme active (Q25 :
+ * le bandeau compare le fermeId de l'export à celui de la ferme ouverte), et la fin de la session
+ * connectée de l'appli (bandeau démonté : déconnexion dans un autre onglet, appli fermée), qui
+ * remet aussi l'état à zéro.
  */
 import type { PorteDonnees } from '@planif/sync/export';
 import { lancerExport, rendreLaMain, telechargerDansLeNavigateur } from './lancer.ts';
@@ -29,6 +31,8 @@ export interface InstantExport {
   readonly id: number;
   /** Porte de la ferme exportée (celle du contexte, avant suivi des lectures). */
   readonly porte: PorteDonnees | null;
+  /** Ferme exportée. */
+  readonly fermeId: string | null;
   readonly etat: EtatExport;
   /** Vrai du lancement jusqu'à la fin de l'export, lectures en vol comprises. */
   readonly actif: boolean;
@@ -56,17 +60,29 @@ async function attendreLectures(lectures: ReadonlySet<Promise<unknown>>): Promis
 
 const nombre = new Intl.NumberFormat('fr-FR');
 
-let instant: InstantExport = { id: 0, porte: null, etat: { etape: 'repos' }, actif: false };
+let instant: InstantExport = { id: 0, porte: null, fermeId: null, etat: { etape: 'repos' }, actif: false };
 let controleur: AbortController | null = null;
 /** Fin de l'export courant, lectures en vol comprises (jamais rejetée). */
 let fin: Promise<void> = Promise.resolve();
 const abonnes = new Set<() => void>();
 
+function notifier(): void {
+  for (const f of [...abonnes]) f();
+}
+
+/**
+ * Vrai si l'export courant est celui de cette ferme ouverte : même porte, ou même ferme (porte
+ * republiée) tant qu'il est en cours.
+ */
+export function exportDe(i: InstantExport, porte: PorteDonnees, fermeId: string): boolean {
+  return i.porte === porte || (i.fermeId === fermeId && i.etat.etape === 'en_cours');
+}
+
 /** Met à jour l'instant de l'export `id` ; ignoré si un autre export l'a remplacé. */
 function poser(id: number, changement: Partial<Pick<InstantExport, 'etat' | 'actif'>>): void {
   if (id !== instant.id) return;
   instant = { ...instant, ...changement };
-  for (const f of [...abonnes]) f();
+  notifier();
 }
 
 export const exportEnFond = {
@@ -85,8 +101,8 @@ export const exportEnFond = {
    * déjà en cours (un seul à la fois).
    */
   lancer(porteFerme: PorteDonnees, fermeId: string): boolean {
-    if (instant.actif && instant.porte === porteFerme) return false;
-    // Une autre ferme ouverte : l'ancien export lit une porte périmée, il s'arrête.
+    if (instant.actif && exportDe(instant, porteFerme, fermeId)) return false;
+    // Une autre porte : l'ancien export lit une porte périmée, il s'arrête.
     controleur?.abort();
     const ctrl = new AbortController();
     controleur = ctrl;
@@ -108,7 +124,7 @@ export const exportEnFond = {
         return p;
       },
     };
-    instant = { id, porte: porteFerme, etat: { etape: 'en_cours', fait: 0, total: 0 }, actif: true };
+    instant = { id, porte: porteFerme, fermeId, etat: { etape: 'en_cours', fait: 0, total: 0 }, actif: true };
     fin = (async () => {
       try {
         // Le rendu du tap (barre, « Annuler ») d'abord, le lancement dans une tâche à part :
@@ -142,7 +158,7 @@ export const exportEnFond = {
         poser(id, { actif: false });
       }
     })();
-    for (const f of [...abonnes]) f();
+    notifier();
     return true;
   },
 
@@ -155,5 +171,17 @@ export const exportEnFond = {
     controleur?.abort();
     if (instant.etat.etape === 'en_cours') poser(instant.id, { etat: { etape: 'annule' } });
     return fin;
+  },
+
+  /**
+   * Fin de la session connectée : l'export en cours est arrêté (aucun téléchargement ensuite) et
+   * l'état revient au repos ; les lectures encore en vol ne sont pas attendues.
+   */
+  reinitialiser(): void {
+    controleur?.abort();
+    controleur = null;
+    instant = { id: instant.id + 1, porte: null, fermeId: null, etat: { etape: 'repos' }, actif: false };
+    fin = Promise.resolve();
+    notifier();
   },
 };

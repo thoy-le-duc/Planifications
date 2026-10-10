@@ -95,7 +95,7 @@ const chargerExport = () =>
   });
 
 /** Aucun export chargé : rien à montrer. */
-const SANS_EXPORT: InstantExport = { id: 0, porte: null, etat: { etape: 'repos' }, actif: false };
+const SANS_EXPORT: InstantExport = { id: 0, porte: null, fermeId: null, etat: { etape: 'repos' }, actif: false };
 
 /** L'écran des itinéraires (T24), chargé à la demande (morceau à part). */
 const chargerItineraires = () => import('../itineraires/index.ts');
@@ -234,8 +234,8 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
       if (!heberge) void exportCharge?.exportEnFond.arreter();
     };
   }, [heberge]);
-  // L'export d'une autre ferme ouverte (base rouverte) ne concerne pas cet écran.
-  const exportDeCetteFerme = ouverte !== null && instant.porte === ouverte.porte;
+  // L'export d'une autre ferme ouverte ne concerne pas cet écran.
+  const exportDeCetteFerme = ouverte !== null && moduleExport?.exportDe(instant, ouverte.porte, ouverte.fermeId) === true;
   const etatExport: EtatExport = exportDeCetteFerme ? instant.etat : SANS_EXPORT.etat;
   const [deconnexionEnCours, setDeconnexionEnCours] = useState(false);
   /** Déconnexion décidée : lu par `exporter` au moment du tap, sans attendre un nouveau rendu. */
@@ -392,6 +392,9 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     const lancer = (m: ModuleExport) => {
       // Écran quitté pendant le chargement, sans hôte : rien ne part.
       if (deconnexionDecidee.current || (!heberge && demonte.current)) return;
+      // L'appli reçoit le morceau ici aussi : écran déjà quitté (tap avant le préchargement),
+      // l'effet qui le lui donne ne s'exécutera plus ; sans lui, ni bandeau ni arrêt en fin de session.
+      surExport?.(m);
       // Le rendu du tap (barre, « Annuler ») passe par l'abonnement, en transition (T15d).
       if (m.exportEnFond.lancer(porte, fermeId)) focusAnnuler.current = true;
     };

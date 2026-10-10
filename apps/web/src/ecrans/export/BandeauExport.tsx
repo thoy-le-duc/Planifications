@@ -16,6 +16,8 @@ import { exportEnFond } from './arriere-plan.ts';
 export interface ProprietesBandeauExport {
   /** Onglet affiché par l'appli. */
   readonly onglet: string;
+  /** Ferme active de l'appli (undefined : aucune) ; un export d'une autre ferme est arrêté (Q25). */
+  readonly fermeId: string | undefined;
 }
 
 const BANDEAU: CSSProperties = {
@@ -34,7 +36,7 @@ const BARRE: CSSProperties = { gridColumn: '1 / -1', display: 'block', width: '1
 /** Bandeaux montés : le démontage arrête l'export, pas le double montage de StrictMode (développement). */
 let montes = 0;
 
-export function BandeauExport({ onglet }: ProprietesBandeauExport) {
+export function BandeauExport({ onglet, fermeId }: ProprietesBandeauExport) {
   // Petit rendu : lu directement (useSyncExternalStore), sans transition.
   const instant = useSyncExternalStore(exportEnFond.abonner, exportEnFond.lire);
 
@@ -43,10 +45,17 @@ export function BandeauExport({ onglet }: ProprietesBandeauExport) {
     return () => {
       montes--;
       queueMicrotask(() => {
-        if (montes === 0) void exportEnFond.arreter();
+        if (montes === 0) exportEnFond.reinitialiser();
       });
     };
   }, []);
+
+  // Changement de ferme active (adhésion retirée, ferme supprimée) : rien de l'ancienne ferme ne
+  // sort (Q25). Comparé par ferme : une porte republiée pour la même ferme ne l'arrête pas.
+  const exportAutreFerme = instant.actif && instant.fermeId !== (fermeId ?? null);
+  useEffect(() => {
+    if (exportAutreFerme) void exportEnFond.arreter();
+  }, [exportAutreFerme]);
 
   // Export suivi sur cet onglet (vu en cours ici) : seul lui peut y laisser un message de fin.
   const [suivi, setSuivi] = useState<{ readonly id: number; readonly onglet: string } | null>(null);
