@@ -86,6 +86,8 @@ export interface CultureDePlanche {
   readonly croissance: { readonly sorte: 'annuelle'; readonly dates: DatesCroissance } | { readonly sorte: 'perenne'; readonly entree: EntreePerenne };
   /** Écartement réel des plants dans l'itinéraire (m). */
   readonly ecartementM: number;
+  /** Rangs alignés (défaut) ou en quinconce (T35b) : lu dans l'itinéraire de la série. */
+  readonly disposition?: 'alignee' | 'quinconce';
 }
 
 export interface EntreePlants {
@@ -156,14 +158,16 @@ function recolteDuJour(culture: CultureDePlanche, jour: DateCalendaire): { reado
 }
 
 /** Positions des plants sur `rangs` rangs, `parRang` par rang, régulièrement répartis sur la longueur. */
-function positionsDe(v: VolumePlant, rangs: number, parRang: number): { x: number; z: number }[] {
+function positionsDe(v: VolumePlant, rangs: number, parRang: number, quinconce: boolean): { x: number; z: number }[] {
   const cos = Math.cos(v.angle);
   const sin = Math.sin(v.angle);
+  // Quinconce : le pas se réduit d'un demi-pas pour que les rangs pairs, décalés d'un demi-pas, restent dans la planche.
+  const pas = v.longueur / (parRang + (quinconce ? 0.5 : 0));
   const positions: { x: number; z: number }[] = [];
   for (let r = 0; r < rangs; r += 1) {
     const dz = ((r + 0.5) / rangs - 0.5) * v.largeur;
     for (let k = 0; k < parRang; k += 1) {
-      const dx = ((k + 0.5) / parRang - 0.5) * v.longueur;
+      const dx = (k + 0.5 + (quinconce && r % 2 === 1 ? 0.5 : 0)) * pas - v.longueur / 2;
       positions.push({ x: v.x + dx * cos + dz * sin, z: v.z - dx * sin + dz * cos });
     }
   }
@@ -183,7 +187,8 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
   const ecart = culture.ecartementM > 0 ? culture.ecartementM : 0.3;
   const rangs = Math.min(RANGS_MAX, Math.max(1, Math.round(volume.largeur / LARGEUR_PAR_RANG_M)));
   const parRang = Math.max(1, Math.min(Math.floor(volume.longueur / ecart), Math.floor(PLANTS_MAX_PAR_PLANCHE / rangs)));
-  const positions = positionsDe(volume, rangs, parRang);
+  const quinconce = culture.disposition === 'quinconce' && rangs > 1;
+  const positions = positionsDe(volume, rangs, parRang, quinconce);
   const { recolte, jaunissement } = recolteDuJour(culture, jour);
   const typeFruit = typeDeFruit(culture.espece);
   const enFormation = recolte.phase === 'fruits-en-formation';
@@ -200,7 +205,7 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
     structureM,
     surelevationM: surelevationHorsSolM(culture.espece, horsSol),
     couleur: volume.couleur,
-    pasM: Math.min(volume.longueur / parRang, PAS_MAX_ECARTEMENTS * ecart),
+    pasM: Math.min(volume.longueur / (parRang + (quinconce ? 0.5 : 0)), PAS_MAX_ECARTEMENTS * ecart),
     nombre: positions.length,
     recolte,
     typeFruit,
