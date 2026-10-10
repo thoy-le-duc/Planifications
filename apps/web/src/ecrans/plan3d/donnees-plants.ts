@@ -141,7 +141,7 @@ function campagneAu(campagnes: ReadonlyMap<number, Campagne>, jour: DateCalendai
 /** La culture de la semaine dont le lundi est `jour`. Une pérenne sans campagne en cours suit son cycle annuel. */
 export function cultureAu(c: CultureLue, jour: DateCalendaire): CultureDePlanche {
   if (c.perenne === null) {
-    return { espece: c.espece, profil: c.profil, ecartementM: c.ecartementM, disposition: c.disposition, croissance: { sorte: 'annuelle', dates: c.annuelle ?? { miseEnPlace: { prevue: null, reelle: null }, debutRecolte: { prevue: null, reelle: null }, finRecolte: { prevue: null, reelle: null }, arrachage: { prevue: null, reelle: null } } } };
+    return { espece: c.espece, profil: c.profil, ecartementM: c.ecartementM, disposition: c.disposition ?? 'alignee', croissance: { sorte: 'annuelle', dates: c.annuelle ?? { miseEnPlace: { prevue: null, reelle: null }, debutRecolte: { prevue: null, reelle: null }, finRecolte: { prevue: null, reelle: null }, arrachage: { prevue: null, reelle: null } } } };
   }
   return {
     espece: c.espece,
