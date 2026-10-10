@@ -118,7 +118,7 @@ describe('T32h : toutes les espèces de la ferme ont leur groupe (Q40)', () => {
       expect(texte(g), nom).toMatch(new RegExp(`^${nom}`));
       expect(texte(g), `${nom} : dit qu'il n'y a pas d'itinéraire`).toContain('Aucun itinéraire');
       expect(g.querySelectorAll('[data-testid="itineraire"]'), `${nom} : aucun itinéraire listé`).toHaveLength(0);
-      expect(aBouton('Croissance', g), `${nom} : bouton « Croissance »`).toBe(true);
+      expect(aBouton(/^Croissance/, g), `${nom} : bouton « Croissance »`).toBe(true);
     }
   });
 
@@ -126,7 +126,7 @@ describe('T32h : toutes les espèces de la ferme ont leur groupe (Q40)', () => {
     await rendre();
     const g = groupe(ASPERGE);
     if (g === null) throw new Error('groupe de l’Asperge absent');
-    await toucher(bouton('Croissance', g));
+    await toucher(bouton(/^Croissance/, g));
     await attendre(() => reglageOuvert(ASPERGE) !== null, 'réglage data-testid="reglage-croissance" de l’Asperge');
   });
 
@@ -155,7 +155,7 @@ describe('T32h : toutes les espèces de la ferme ont leur groupe (Q40)', () => {
     expect(g, 'groupe de la copie').not.toBeNull();
     if (g === null) return;
     expect(texte(g)).toContain('Aucun itinéraire');
-    await toucher(bouton('Croissance', g));
+    await toucher(bouton(/^Croissance/, g));
     await attendre(() => reglageOuvert(BATAVIA_COPIE) !== null, 'réglage de la copie');
   });
 
