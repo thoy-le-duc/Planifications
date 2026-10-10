@@ -1,9 +1,9 @@
 /**
  * Vue 3D (T32b) — les plants stylisés, côté fiber : UN InstancedMesh par forme présente (7 au plus,
- * géométries partagées de ./geometries-plants.ts) et un pour les poteaux (pergola du kiwi, pieds de
- * la gouttière hors-sol), plus UN seul pour les tuteurs, les fruits et les balises « à récolter » (T32e : la
- * même double pyramide de 1 m, étirée et teintée par instance ; un seul appel de dessin pour les trois, les
- * garde-fous de T29b sont tenus). Ce que dessine chaque plant (forme, hauteur du jour, positions) vient de
+ * géométries partagées de ./geometries-plants.ts), plus UN seul pour les tuteurs, les poteaux (pergola du
+ * kiwi, pieds de la gouttière hors-sol, T37b), les fruits et les balises « à récolter » (T32e : la même
+ * double pyramide de 1 m, étirée et teintée par instance ; un seul appel de dessin pour les quatre, les
+ * garde-fous de T29b sont tenus au téléphone). Ce que dessine chaque plant (forme, hauteur du jour, positions) vient de
  * ./plants.ts, qui lit la croissance de T32a : aucun calcul de croissance ici. Le travail impératif (niveau
  * de détail, pose des instances) est dans ./plants-rendu.ts.
  *
@@ -27,6 +27,8 @@ export function Plants({
   plants,
   rendu,
   surBilan,
+  appelsHorsPlants = 0,
+  plancheActive = null,
 }: {
   readonly scene: Scene;
   readonly filtree: SceneFiltree;
@@ -34,6 +36,10 @@ export function Plants({
   readonly plants: readonly (PlantsPlanche | null)[];
   readonly rendu: RenduPlants;
   readonly surBilan: (b: BilanPlants) => void;
+  /** Appels de dessin de la ferme sans ses plants (T37b) : au téléphone, les formes en détail tiennent dans le reste. */
+  readonly appelsHorsPlants?: number;
+  /** Planche visée par « Suivant » (id) : au téléphone, sa forme passe d'abord en détail. */
+  readonly plancheActive?: string | null;
 }) {
   const invalider = useThree((s) => s.invalidate);
   const lireEtat = useThree((s) => s.get);
@@ -45,11 +51,11 @@ export function Plants({
   // Poteaux : un par plant de kiwi, des pieds tous les 3 m environ par planche hors-sol.
   const nbPoteaux = useMemo(() => plants.reduce((n, p, i) => n + (p === null ? 0 : (p.structureM > 0 ? Math.min(p.nombre, PLANTS_MAX_TOTAL) : 0) + (p.surelevationM > 0 ? piedsDeGouttiere(scene.volumes[i]?.longueur ?? 0) : 0)), 0), [plants, scene]);
   const nbTuteurs = useMemo(() => plants.reduce((n, p) => n + (p !== null && p.forme === 'erige-tuteure' && p.echelleVerticale > 0 ? p.nombre : 0), 0), [plants]);
-  // Tuteurs, fruits et balises (T32e) : un seul maillage (une seule double pyramide), de la taille de ce qui peut s'y poser.
+  // Tuteurs, poteaux (T37b), fruits et balises (T32e) : un seul maillage (une seule double pyramide), de la taille de ce qui peut s'y poser.
   const nbAccessoires = useMemo(() => {
     const fruits = Math.min(FRUITS_MAX_TOTAL, plants.reduce((n, p) => n + (p === null ? 0 : p.nombre * p.fruitsParPlant), 0));
-    return Math.min(nbTuteurs, PLANTS_MAX_TOTAL) + fruits + plants.reduce((n, p) => n + (p !== null && seRecolte(p) ? 1 : 0), 0);
-  }, [plants, nbTuteurs]);
+    return Math.min(nbTuteurs, PLANTS_MAX_TOTAL) + nbPoteaux + fruits + plants.reduce((n, p) => n + (p !== null && seRecolte(p) ? 1 : 0), 0);
+  }, [plants, nbTuteurs, nbPoteaux]);
   useEffect(
     () => () => {
       rendu.liberer();
@@ -59,15 +65,17 @@ export function Plants({
 
   // La semaine, le plan, un filtre ou les plants ont changé : le détail est refait, tous les plants visibles sont reposés.
   useLayoutEffect(() => {
+    rendu.fixerAppelsHorsPlants(appelsHorsPlants);
+    rendu.fixerPlancheActive(plancheActive);
     const { camera, size } = lireEtat();
-    rendu.choisirDetail(scene, plants, camera.position.x, camera.position.y, camera.position.z, size.height);
+    rendu.choisirDetail(scene, plants, camera.position.x, camera.position.y, camera.position.z, size.height, size.width);
     surBilan(rendu.poser(scene, filtree, plants));
     invalider();
-  }, [rendu, scene, filtree, plants, besoin, nbPoteaux, nbTuteurs, nbAccessoires, lireEtat, invalider, surBilan]);
+  }, [rendu, scene, filtree, plants, besoin, nbAccessoires, appelsHorsPlants, plancheActive, lireEtat, invalider, surBilan]);
 
   // Avant chaque image (après le vol de la caméra, avant le dessin) : le détail change-t-il ?
   useFrame(({ camera, size }) => {
-    if (rendu.choisirDetail(scene, plants, camera.position.x, camera.position.y, camera.position.z, size.height)) surBilan(rendu.poser(scene, filtree, plants));
+    if (rendu.choisirDetail(scene, plants, camera.position.x, camera.position.y, camera.position.z, size.height, size.width)) surBilan(rendu.poser(scene, filtree, plants));
     // Les balises grandissent de loin pour rester lisibles : reposées seulement quand un cran est franchi.
     else rendu.ajusterBalises();
   }, 0.5);
@@ -91,24 +99,12 @@ export function Plants({
           </instancedMesh>
         );
       })}
-      {nbPoteaux > 0 && (
-        <instancedMesh
-          key={`poteaux${String(capacite(nbPoteaux))}`}
-          ref={(m: InstancedMesh | null) => {
-            rendu.lierPoteaux(m);
-          }}
-          args={[rendu.geometriePoteau(), undefined, capacite(nbPoteaux)]}
-          frustumCulled={false}
-          count={0}
-        >
-          <meshLambertMaterial vertexColors />
-        </instancedMesh>
-      )}
       {nbAccessoires > 0 && (
         <instancedMesh
           key={`accessoires${String(capacite(nbAccessoires))}`}
           ref={(m: InstancedMesh | null) => {
             rendu.lierTuteurs(m);
+            rendu.lierPoteaux(m);
             rendu.lierFruits(m);
             rendu.lierBalises(m);
           }}

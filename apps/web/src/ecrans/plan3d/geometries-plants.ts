@@ -101,7 +101,6 @@ class Facettes {
 }
 
 const FEUILLE = 1;
-const BOIS = 0.45;
 
 /** Touffe de lames : `n` pointes à 4 côtés, les unes plus hautes, penchées vers l'extérieur. */
 function lames(n: number, anneau: number, largeur: number, penche: number, hauteurs: readonly number[]): Facettes {
@@ -143,19 +142,10 @@ export function geometriePlant(forme: FormePlant): BufferGeometry {
   return CONSTRUCTEURS[forme]().geometrie();
 }
 
-/** Poteau et traverse (pergola du kiwi, pieds de la gouttière) : 1 m de haut, traverse de 1 m en haut. */
-export function geometrieStructure(): BufferGeometry {
-  const f = new Facettes().tronc(4, 0, 0.05, 1, 0.05, BOIS, 0, 0, 0, 0, true);
-  // Traverse : un prisme à 4 côtés couché, de longueur 1 selon x, dessiné comme un poteau très aplati vers le haut.
-  const t = new Facettes().tronc(4, 0.96, 0.5, 1, 0.5, BOIS, 0, 0, 0, 0, true);
-  f.positions.push(...t.positions);
-  f.teintes.push(...t.teintes);
-  return f.geometrie();
-}
-
 /**
  * Fruit, balise et tuteur (T32e) : une double pyramide à 4 côtés (un octaèdre) de 1 m de haut et de large,
- * posée sur son pied (y de 0 à 1), blanche (la couleur de l'instance la teinte), 8 triangles seulement :
+ * posée sur son pied (y de 0 à 1), blanche (la couleur de l'instance la teinte), 8 triangles seulement ;
+ * depuis T37b, elle dessine aussi les poteaux (pergola, pieds de gouttière), en fuseau droit et fin :
  * les fruits se comptent par centaines et les garde-fous de dessin (BORNES_DEMO) plafonnent les appels de dessin
  * et les triangles de la scène. L'échelle de l'instance donne la forme : courgette en fuseau, tomate ramassée,
  * tuteur en fuseau très fin et haut, balise grande et vive (symétrique : lisible sous tous les angles). Une seule

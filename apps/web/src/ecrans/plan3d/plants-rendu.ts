@@ -1,12 +1,25 @@
 /**
  * Vue 3D (T32b) — la part impérative du rendu des plants, hors de React : les InstancedMesh (un par
- * forme, plus un pour les poteaux), le niveau de détail et la pose des instances. Un objet par vue,
+ * forme, plus UN pour les accessoires : tuteurs, poteaux, fruits et balises, T37b), le niveau de détail
+ * (enveloppe de triangles, T37b) et la pose des instances. Un objet par vue,
  * créé à son ouverture ; le composant ./Plants.tsx ne fait que le brancher à fiber.
  */
 import { Color, Object3D, type BufferGeometry, type InstancedMesh } from 'three';
 import type { FormePlant } from '@planif/core/croissance';
-import { geometrieFruit, geometriePlant, geometrieStructure } from './geometries-plants.ts';
-import { FORMES, FRUITS_MAX_TOTAL, piedsDeGouttiere, plantsVisibles, PLANTS_MAX_TOTAL, type PlantsPlanche } from './plants.ts';
+import { geometrieFruit, geometriePlant } from './geometries-plants.ts';
+import {
+  ENVELOPPE_TRIANGLES_PLANTS,
+  ENVELOPPE_TRIANGLES_PLANTS_ETROIT,
+  APPELS_DESSIN_MAX_ETROIT,
+  FORMES,
+  FRUITS_MAX_TOTAL,
+  LARGEUR_ECRAN_ETROIT_PX,
+  piedsDeGouttiere,
+  plantsVisibles,
+  PLANTS_MAX_TOTAL,
+  TRIANGLES_PAR_FORME,
+  type PlantsPlanche,
+} from './plants.ts';
 import { aBalise, type CleFruit, type TypeFruit } from './recolte.ts';
 import {
   COULEUR_BALISE_FIN_RECOLTE_3D,
@@ -30,8 +43,13 @@ const FRUITS_MAX_MASSE = 40;
 const CHAMP_DEGRES = 40;
 /** Un plant très haut (tomate sur sa ficelle) se voit de plus loin qu'il n'est large : sa hauteur compte pour ce quart. */
 const HAUTEUR_POUR_LARGEUR = 4;
-/** Largeur des pieds de gouttière (échelle horizontale du poteau, m) : de vrais pieds, bien visibles. */
+/** Longueur de gouttière qui ne porte pas de pied à ses bouts (m) : les pieds extrêmes restent sous la gouttière. */
 const PIED_GOUTTIERE_M = 1.2;
+/**
+ * Épaisseur d'un poteau (pied de gouttière, pergola), au plus large (m). Le poteau est la double pyramide
+ * partagée, étirée en hauteur : un fuseau droit et fin (T37b, un seul maillage pour tous les accessoires).
+ */
+const EPAISSEUR_POTEAU_M = 0.12;
 /** Le feuillage est vert ; la couleur du filtre reste sur la planche (de loin, sur la masse). Décochée, la planche garde sa couleur estompée. */
 const VERT_FEUILLAGE = COULEUR_FEUILLAGE_3D;
 /** Bois des poteaux (pergola, pieds de gouttière). */
@@ -85,6 +103,8 @@ export interface BilanPlants {
   readonly fruits: number;
   /** Balises « à récolter » posées (T32e), en détail ou non. */
   readonly balises: number;
+  /** La planche active (visée par « Suivant ») est-elle en détail ? null : pas de planche active, ou sans plants. */
+  readonly activeEnDetail: boolean | null;
 }
 
 interface BalisePosee {
@@ -138,13 +158,27 @@ export class RenduPlants {
   private decalageBalises = 0;
   private camera: { readonly x: number; readonly y: number; readonly z: number } | null = null;
   private readonly geometries = new Map<FormePlant, BufferGeometry>();
-  private poteau: BufferGeometry | null = null;
   private readonly temporaire = new Object3D();
   private readonly couleur = new Color();
   private readonly melangeFeuillage = new Color();
   private readonly melangeFruit = new Color();
   private readonly cible = new Color();
   private readonly melangeTuteur = new Color();
+
+  /** Planche visée par « Suivant » ou un tap (id), ou null : sa forme passe d'abord au téléphone (relecture T37b). */
+  private plancheActive: string | null = null;
+
+  fixerPlancheActive(id: string | null): void {
+    this.plancheActive = id;
+  }
+
+  /** Appels de dessin de la scène hors des plants (sol, planches, bâtiments), pour la limite du téléphone. */
+  private appelsHorsPlants = 0;
+
+  /** La vue dit combien d'appels de dessin coûte la ferme sans ses plants (T37b). */
+  fixerAppelsHorsPlants(n: number): void {
+    this.appelsHorsPlants = n;
+  }
 
   /** Vrai si les plants de la planche `i` se dessinent en détail (sinon : en masse, ou pas de plants). */
   enDetail(i: number): boolean {
@@ -161,6 +195,7 @@ export class RenduPlants {
     else this.maillages.set(forme, m);
   }
 
+  /** Poteaux (pergola, pieds de gouttière) : le maillage des tuteurs, fruits et balises peut les porter aussi (T37b). */
   lierPoteaux(m: InstancedMesh | null): void {
     this.poteaux = m;
   }
@@ -201,28 +236,23 @@ export class RenduPlants {
     return g;
   }
 
-  geometriePoteau(): BufferGeometry {
-    this.poteau ??= geometrieStructure();
-    return this.poteau;
-  }
-
   liberer(): void {
     for (const g of this.geometries.values()) g.dispose();
     this.geometries.clear();
-    this.poteau?.dispose();
-    this.poteau = null;
     this.fruit?.dispose();
     this.fruit = null;
   }
 
   /**
-   * Choisit les planches à dessiner en détail depuis la caméra : celles où un plant se voit, dans la
-   * limite de PLANTS_MAX_TOTAL plants, les plus proches d'abord. Rend vrai si le choix a changé.
+   * Choisit les planches à dessiner en détail depuis la caméra : celles où un plant se voit, les plus
+   * proches d'abord, dans la limite de PLANTS_MAX_TOTAL plants et d'une enveloppe de triangles (T37b),
+   * plus basse sur un écran étroit (`largeurPx`, la largeur de la toile ; absente : écran large).
+   * Une planche qui ne tient plus dans le reste reste une masse. Rend vrai si le choix a changé.
    */
-  choisirDetail(scene: Scene, plants: readonly (PlantsPlanche | null)[], x: number, y: number, z: number, hauteurPx: number): boolean {
+  choisirDetail(scene: Scene, plants: readonly (PlantsPlanche | null)[], x: number, y: number, z: number, hauteurPx: number, largeurPx?: number): boolean {
     this.camera = { x, y, z };
     const choix = new Uint8Array(plants.length);
-    const candidates: { i: number; d: number; n: number }[] = [];
+    const candidates: { i: number; d: number; n: number; t: number; forme: FormePlant }[] = [];
     const fruitables: { i: number; d: number; n: number }[] = [];
     plants.forEach((p, i) => {
       const v = scene.volumes[i];
@@ -230,13 +260,22 @@ export class RenduPlants {
       const d = Math.hypot(v.x - x, y, v.z - z);
       // Un fruit se voit de plus loin que son plant n'est large : il reste affiché sur la masse de la planche (T32e).
       if (p.fruitsParPlant > 0 && plantsVisibles(p.tailleFruitM, d, hauteurPx, CHAMP_DEGRES, FRUIT_VISIBLE_PX)) fruitables.push({ i, d, n: p.nombre });
-      if (plantsVisibles(Math.max(p.echelleHorizontale, p.echelleVerticale / HAUTEUR_POUR_LARGEUR), d, hauteurPx, CHAMP_DEGRES)) candidates.push({ i, d, n: p.nombre });
+      if (plantsVisibles(Math.max(p.echelleHorizontale, p.echelleVerticale / HAUTEUR_POUR_LARGEUR), d, hauteurPx, CHAMP_DEGRES)) candidates.push({ i, d, n: p.nombre, t: p.nombre * TRIANGLES_PAR_FORME[p.forme], forme: p.forme });
     });
-    candidates.sort((a, b) => a.d - b.d);
+    // La planche active d'abord, puis la distance ; à distance égale, l'ordre de la scène départage.
+    const active = this.plancheActive === null ? -1 : scene.volumes.findIndex((v) => v.id === this.plancheActive);
+    candidates.sort((a, b) => Number(b.i === active) - Number(a.i === active) || a.d - b.d || a.i - b.i);
+    const etroit = largeurPx !== undefined && largeurPx < LARGEUR_ECRAN_ETROIT_PX;
     let reste = PLANTS_MAX_TOTAL;
+    let resteTriangles = etroit ? ENVELOPPE_TRIANGLES_PLANTS_ETROIT : ENVELOPPE_TRIANGLES_PLANTS;
+    // Au téléphone, un appel de dessin par forme : les formes des planches les plus proches, dans la limite des appels qui restent.
+    const formesMax = etroit ? Math.max(1, APPELS_DESSIN_MAX_ETROIT - this.appelsHorsPlants - 1) : FORMES.length;
+    const formes = new Set<FormePlant>();
     for (const c of candidates) {
-      if (c.n > reste) continue;
+      if (c.n > reste || c.t > resteTriangles || (!formes.has(c.forme) && formes.size >= formesMax)) continue;
       reste -= c.n;
+      resteTriangles -= c.t;
+      formes.add(c.forme);
       choix[c.i] = 1;
     }
     const fruits = new Uint8Array(plants.length);
@@ -356,7 +395,8 @@ export class RenduPlants {
   /** Repose les instances des planches en détail (formes, poteaux), règle leur compte, et rend le bilan de la vue. */
   poser(scene: Scene, filtree: SceneFiltree, plants: readonly (PlantsPlanche | null)[]): BilanPlants {
     const comptes = new Map<FormePlant, number>();
-    let nbPoteaux = 0;
+    // Poteaux (pergola, pieds de gouttière) : posés après la boucle, derrière les tuteurs quand ils partagent leur maillage.
+    const poteaux: { readonly x: number; readonly y: number; readonly z: number; readonly hauteur: number; readonly couleur: string }[] = [];
     let nbTuteurs = 0;
     let total = 0;
     // Planches dont les fruits se posent après la boucle : un maillage peut porter tuteurs, fruits et balises ensemble.
@@ -389,7 +429,7 @@ export class RenduPlants {
             if (tuteure && this.mettre(this.tuteursMaillage, nbTuteurs, pos.x, y, pos.z, v.angle, LARGEUR_TUTEUR_M, p.echelleVerticale + DEPASSEMENT_TUTEUR_M, LARGEUR_TUTEUR_M, boisTuteur)) nbTuteurs += 1;
           }
         }
-        if (p.structureM > 0 && this.mettre(this.poteaux, nbPoteaux, pos.x, y, pos.z, v.angle, p.echelleHorizontale, p.structureM, p.echelleHorizontale, bois)) nbPoteaux += 1;
+        if (p.structureM > 0) poteaux.push({ x: pos.x, y, z: pos.z, hauteur: p.structureM, couleur: bois });
       }
       if (p.fruitsParPlant > 0) avecFruits.push({ p, v, y, pale: f.estompe ? f.couleur : null });
       if (p.surelevationM > 0) {
@@ -400,13 +440,21 @@ export class RenduPlants {
         const reste = Math.max(0, v.longueur - PIED_GOUTTIERE_M);
         for (let k = 0; k < pieds; k += 1) {
           const dx = (k / (pieds - 1) - 0.5) * reste;
-          if (this.mettre(this.poteaux, nbPoteaux, v.x + dx * cos, 0, v.z - dx * sin, v.angle, PIED_GOUTTIERE_M, p.surelevationM, Math.min(PIED_GOUTTIERE_M, Math.max(v.largeur, 0.3)), bois)) nbPoteaux += 1;
+          poteaux.push({ x: v.x + dx * cos, y: 0, z: v.z - dx * sin, hauteur: p.surelevationM, couleur: bois });
         }
       }
     });
-    // Rangs des maillages partagés : tuteurs d'abord, puis fruits, puis balises.
+    // Rangs des maillages partagés : tuteurs d'abord, puis poteaux, puis fruits, puis balises.
     const occupe = new Map<InstancedMesh, number>();
     if (this.tuteursMaillage !== null) occupe.set(this.tuteursMaillage, nbTuteurs);
+    const debutPoteaux = this.poteaux === null ? 0 : (occupe.get(this.poteaux) ?? 0);
+    let nbPoteaux = 0;
+    for (const t of poteaux) {
+      // Fuseau droit et fin, non tourné : la même silhouette sous tous les angles.
+      // Le bois garde le ton sombre qu'avait sa géométrie, la géométrie partagée étant blanche.
+      if (this.mettre(this.poteaux, debutPoteaux + nbPoteaux, t.x, t.y, t.z, 0, EPAISSEUR_POTEAU_M, t.hauteur, EPAISSEUR_POTEAU_M, this.melangeTuteur.set(t.couleur).multiplyScalar(TON_TUTEUR))) nbPoteaux += 1;
+    }
+    if (this.poteaux !== null) occupe.set(this.poteaux, debutPoteaux + nbPoteaux);
     const debutFruits = this.fruitsMaillage === null ? 0 : (occupe.get(this.fruitsMaillage) ?? 0);
     let nbFruits = 0;
     for (const { p, v, y, pale } of avecFruits) nbFruits = this.poserFruits(p, v, y, pale ?? this.couleurFruit(p), debutFruits, nbFruits);
@@ -427,11 +475,12 @@ export class RenduPlants {
       regler(m, n);
       if (n > 0) formes += 1;
     }
-    if (this.poteaux !== null) regler(this.poteaux, nbPoteaux);
     for (const [m, n] of occupe) regler(m, n);
     // Hauteur du feuillage de chaque planche qui a des plants, quel que soit le détail (m, au centimètre).
     const hauteurs: Record<string, number> = {};
     for (const p of plants) if (p !== null) hauteurs[p.id] = Math.round(p.hauteurM * 100) / 100;
-    return { plants: total, formes, tuteurs: nbTuteurs, hauteurs: JSON.stringify(hauteurs), semaine: scene.semaine, fruits: nbFruits, balises: nbBalises };
+    const active = this.plancheActive === null ? -1 : scene.volumes.findIndex((v) => v.id === this.plancheActive);
+    const activeEnDetail = active < 0 || (plants[active] ?? null) === null ? null : this.enDetail(active);
+    return { plants: total, formes, tuteurs: nbTuteurs, hauteurs: JSON.stringify(hauteurs), semaine: scene.semaine, fruits: nbFruits, balises: nbBalises, activeEnDetail };
   }
 }
