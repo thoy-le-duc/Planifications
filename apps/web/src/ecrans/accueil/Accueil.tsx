@@ -24,6 +24,42 @@ const clientConnexion = creerClientConnexion({ baseUrl: urlApi(), fetch: envoyer
 /** Intervalle entre deux essais d'un effacement resté en attente. */
 const INTERVALLE_REPRISE_MS = 5_000;
 
+/** Pousses du motif de l'écran de connexion (maquette) : centre (x, y), rayon, opacité. */
+const POUSSES: readonly (readonly [number, number, number, number])[] = [
+  [80, 66, 6, 1],
+  [140, 54, 6, 1],
+  [200, 50, 6, 1],
+  [260, 54, 6, 1],
+  [320, 66, 6, 1],
+  [110, 120, 5, 0.6],
+  [230, 112, 5, 0.6],
+  [290, 120, 5, 0.6],
+];
+
+/**
+ * Motif des planches du bandeau vert (maquette « Connexion »). Dessiné ici plutôt que dans App
+ * (T11b) : hors du JavaScript de démarrage. Placé après le titre dans le DOM, il passe dessous
+ * grâce au z-index du titre (connexion.css).
+ */
+function MotifConnexion() {
+  return (
+    <svg className="connexion-motif zone-entete" width="390" height="360" viewBox="0 0 390 360" aria-hidden="true">
+      <path
+        d="M-20 90Q195 30 410 90M-20 150Q195 90 410 150M-20 210Q195 150 410 210M-20 270Q195 210 410 270"
+        fill="none"
+        strokeWidth="18"
+        strokeLinecap="round"
+        style={{ stroke: 'var(--couleur-foret-clair)' }}
+      />
+      <g style={{ fill: 'var(--couleur-pousse)' }}>
+        {POUSSES.map(([x, y, r, opacite]) => (
+          <circle key={`${String(x)}-${String(y)}`} cx={x} cy={y} r={r} opacity={opacite} />
+        ))}
+      </g>
+    </svg>
+  );
+}
+
 export interface ProprietesAccueil {
   /** Échec de la dernière déconnexion. */
   readonly erreur: string | null;
@@ -62,18 +98,21 @@ export default function Accueil({ erreur, surConnexion }: ProprietesAccueil) {
   }, []);
 
   return (
-    <EcranConnexion
-      client={clientConnexion}
-      surConnexion={(nouvelle) => {
-        // Effacement de cette base resté en attente (déconnexion avec un autre onglet ouvert) :
-        // abandonné, l'utilisateur est de retour (2e relecture sécurité, B2).
-        retirerEffacementEnAttente(stockageNavigateur(), nouvelle.utilisateurId);
-        enregistrerSession(stockageNavigateur(), nouvelle);
-        surConnexion(nouvelle);
-      }}
-    >
-      {erreur !== null && <AlerteOrange>{erreur}</AlerteOrange>}
-      {enAttente.length > 0 && <AlerteOrange>{MESSAGE_EFFACEMENT_EN_ATTENTE}</AlerteOrange>}
-    </EcranConnexion>
+    <>
+      <MotifConnexion />
+      <EcranConnexion
+        client={clientConnexion}
+        surConnexion={(nouvelle) => {
+          // Effacement de cette base resté en attente (déconnexion avec un autre onglet ouvert) :
+          // abandonné, l'utilisateur est de retour (2e relecture sécurité, B2).
+          retirerEffacementEnAttente(stockageNavigateur(), nouvelle.utilisateurId);
+          enregistrerSession(stockageNavigateur(), nouvelle);
+          surConnexion(nouvelle);
+        }}
+      >
+        {erreur !== null && <AlerteOrange>{erreur}</AlerteOrange>}
+        {enAttente.length > 0 && <AlerteOrange>{MESSAGE_EFFACEMENT_EN_ATTENTE}</AlerteOrange>}
+      </EcranConnexion>
+    </>
   );
 }
