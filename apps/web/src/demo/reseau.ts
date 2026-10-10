@@ -13,6 +13,15 @@ const CHEMIN_GEOCODAGE = '/geocodage/';
 
 /** Vrai si la démo laisse partir cette requête `fetch`. */
 export function reseauAutorise(url: URL, origineApp: string): boolean {
-  if (url.origin === origineApp) return url.pathname !== '/api' && !url.pathname.startsWith('/api/');
+  if (url.origin === origineApp) {
+    // Casse et encodage ramenés à une seule forme : /API/x ou /%61pi/x restent refusés (relecture T28i).
+    let chemin: string;
+    try {
+      chemin = decodeURIComponent(url.pathname).toLowerCase();
+    } catch {
+      return false;
+    }
+    return chemin !== '/api' && !chemin.startsWith('/api/');
+  }
   return url.origin === ORIGINE_GEOPF && url.username === '' && url.password === '' && url.pathname.startsWith(CHEMIN_GEOCODAGE);
 }
