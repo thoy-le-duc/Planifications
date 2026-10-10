@@ -249,7 +249,40 @@ describe('T28f : l’éditeur s’ouvre aussi depuis la vue 3D, sans bouger les 
   it('budgets intacts : démarrage 71 Kio, morceau 3D et morceau de l’éditeur présents dans budget.json', () => {
     const b = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson & { readonly jsVue3dGzKio?: number };
     expect(b.jsInitialGzKio).toBe(BUDGET_DEMARRAGE_KIO);
-    expect(b.jsVue3dGzKio).toBe(204.3);
-    expect(b.jsPlacementGzKio).toBe(22.2); // T13n : clé d'horodatage SQL dans fait-unique.ts, que l'éditeur charge avec l'UUID (morceau identifiants, T13i) : 22,11 mesuré en CI, à rendre par T13r ; T28k : placement au doigt (+0,9 Kio mesuré : 20,9 → 21,8 ; marge 0,3), chiffré dans la PR ; T28j : 19,9 → 20,9
+    expect(b.jsVue3dGzKio).toBe(206.7); // T32e : 204,3 → 206,7 (mesuré 204,25 → 206,40), plafond de Q33 : 228
+    expect(b.jsPlacementGzKio).toBe(20.6); // T13r : l'éditeur ne charge plus fait-unique.ts (20,30 mesuré, marge 0,3 ; était 22,2) ; T13n : clé d'horodatage SQL dans fait-unique.ts, 22,11 mesuré ; T28k : placement au doigt (+0,9 Kio mesuré : 20,9 → 21,8 ; marge 0,3), chiffré dans la PR ; T28j : 19,9 → 20,9
+  });
+});
+
+/**
+ * Tests d'acceptation T13r — l'éditeur de placement ne charge plus la règle « déjà fait »
+ * (docs/backlog/T13r-morceau-identifiants.md). Depuis T13i, `packages/sync/src/fait-unique.ts`
+ * était rangé avec le générateur d'UUID dans le morceau `identifiants`, que l'éditeur charge pour
+ * le seul UUID : il payait tout le SQL des chaînes de remplacement (`chaines`, `WITH RECURSIVE …`).
+ * Même build et même morceau que ci-dessus (fermeture statique des porteurs de l'orthophoto).
+ */
+describe('T13r : l’éditeur de placement ne charge pas fait-unique.ts', () => {
+  /** Chaîne qui survit à la minification et n'existe que dans le SQL de `chaines` (fait-unique.ts). */
+  const MARQUEUR_CHAINES = 'WITH RECURSIVE';
+  const MARGE_KIO = 0.5;
+  /**
+   * Budget de l'éditeur après T13n, figé ici : T13r peut ensuite BAISSER jsPlacementGzKio (mesuré +
+   * marge), et la marge demandée par le ticket se mesure contre le budget d'avant.
+   */
+  const BUDGET_T13N_KIO = 22.2;
+
+  it('témoin : le SQL des chaînes est bien dans le build (hors du morceau de l’éditeur)', () => {
+    expect([...presents].some((f) => lire(f).includes(MARQUEUR_CHAINES)), `aucun fichier ne contient « ${MARQUEUR_CHAINES} »`).toBe(true);
+  });
+
+  it('aucun fichier du morceau de l’éditeur ne contient le SQL des chaînes', () => {
+    expect(morceau.size).toBeGreaterThan(0);
+    const fautifs = [...morceau].filter((f) => lire(f).includes(MARQUEUR_CHAINES) || lire(f).includes('remplace_evenement_id'));
+    expect(fautifs, 'fichiers de l’éditeur qui portent fait-unique.ts').toEqual([]);
+  });
+
+  it(`le morceau de l’éditeur est au moins ${String(MARGE_KIO)} Kio sous le budget de T13n (${String(BUDGET_T13N_KIO)} Kio)`, () => {
+    const total = [...morceau].reduce((somme, f) => somme + gzKio(f), 0);
+    expect(total, `morceau de l’éditeur (gzip, Kio) : ${total.toFixed(2)}`).toBeLessThanOrEqual(BUDGET_T13N_KIO - MARGE_KIO);
   });
 });
