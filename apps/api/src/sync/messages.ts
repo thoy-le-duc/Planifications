@@ -36,6 +36,8 @@ export const PRECISION_CHANGE_DE_FERME = 'une saisie ne change pas de ferme';
 
 /** T28s (Q31) : placer les éléments de la ferme (bâtiments, contours, planches, origine) est réservé au gérant. */
 export const PRECISION_SEUL_LE_GERANT = 'seul le gérant peut placer les éléments de la ferme';
+/** T32c (Q35) : régler le profil de croissance d'une espèce (le modifier, le créer, le remettre à nul) est réservé au gérant. */
+export const PRECISION_SEUL_LE_GERANT_PROFIL = 'seul le gérant peut régler le profil de croissance';
 /** T28s : l'origine du plan ne bouge plus dès qu'un élément est placé (Q31). */
 export const PRECISION_ORIGINE_FIGEE =
   'le point de départ du plan ne se déplace ni ne s’efface tant que des éléments sont placés : retirez-les d’abord du plan';

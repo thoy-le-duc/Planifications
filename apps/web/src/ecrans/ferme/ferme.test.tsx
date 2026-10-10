@@ -149,6 +149,7 @@ function porteControlee(): {
     },
     archiverRefus: () => Promise.resolve(),
     placer: () => Promise.resolve([]),
+    reglerProfilCroissance: () => Promise.resolve(),
     ecrireEnsemble: interdit('ecrireEnsemble'),
     preparerSaisie: interdit('preparerSaisie'),
   };

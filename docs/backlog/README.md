@@ -82,7 +82,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | fait |
 | [T15c](T15c-export-rapide.md) | Export : sous 10 secondes sur un téléphone moyen | T16b | fait |
 | [T15d](T15d-export-tache-longue.md) | Export : jamais de tâche longue sur le fil principal | T15c | fait |
-| [T15e](T15e-export-arriere-plan.md) | Export : continue en arrière-plan quand on change d'onglet | T15c | en revue |
+| [T15e](T15e-export-arriere-plan.md) | Export : continue en arrière-plan quand on change d'onglet | T15c | fait |
 | [T25](T25-demo-en-ligne.md) | Démo en ligne (Vercel) | — | fait |
 | [T25b](T25b-demo-finitions.md) | Démo : pas de déconnexion ni d’état de synchro | T25 | fait |
 | [T26](T26-e2e-synchro-robuste.md) | Synchro de bout en bout : un banc qui ne tombe plus tout seul | — | fait |
@@ -124,7 +124,8 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T28f](T28f-trouver-editeur.md) | Plan de la ferme : trouver et ouvrir l'éditeur depuis la 3D, démo comprise (Q32) | T28b, T28e | fait |
 | [T32a](T32a-croissance-profils.md) | Croissance des cultures : profils et calcul (moteur) (Q32) | T02, T03 | fait |
 | [T32b](T32b-plants-stylises-3d.md) | Jumeau 3D : plants stylisés qui grandissent (Q32) | T32a, T28c, T29b | fait |
-| [T32c](T32c-reglage-profils.md) | Profils de croissance : réglage par la ferme (écran) (Q32) | T32a, T32b | à faire |
+| [T32c](T32c-reglage-profils.md) | Profils de croissance : réglage par la ferme (écran) (Q32) | T32a, T32b | fait |
+| [T32g](T32g-personnaliser-espece.md) | « Personnaliser » une espèce de la bibliothèque pour régler sa croissance (Q39) | T32c | à faire |
 | [T33](T33-verrou-e2e.md) | Un seul jeu e2e à la fois sur la machine (verrou flock) | — | fait |
 | [T14f](T14f-import-codes-par-zone.md) | Import : codes de planche comparés par zone | T10t | fait |
 | [T28g](T28g-focus-editeur.md) | Éditeur : rendre le focus à la fermeture (relecture T28f) | T28f | fait |

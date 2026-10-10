@@ -36,7 +36,7 @@ export const PROFIL_CARACTERES_MAX = 2048;
 /** Mention d'une valeur par défaut sans référence, que Théophane corrige à la revue. */
 export const MENTION_A_VERIFIER = 'valeur usuelle à vérifier';
 
-const CLES_PROFIL = ['forme', 'hauteurMaxM', 'duree', 'allure', 'finDeCycle', 'cycleAnnuel'] as const;
+const CLES_PROFIL = ['forme', 'hauteurMaxM', 'duree', 'allure', 'finDeCycle', 'cycleAnnuel', 'fougereApresRecolte'] as const;
 /** Clés obligatoires, dans l'ordre où leur absence est signalée. */
 const CLES_OBLIGATOIRES = ['forme', 'hauteurMaxM', 'duree', 'allure', 'finDeCycle'] as const;
 
@@ -58,9 +58,12 @@ const MESSAGES: Readonly<Record<CodeErreurCroissance, string>> = {
   cycle_annuel_invalide: 'Le cycle annuel demande un jour de débourrement avant le jour de repos, sous la forme mois-jour.',
 };
 
-function refus<T>(code: CodeErreurCroissance, champ: string | null): ResultatCroissance<T> {
-  return { ok: false, erreur: { code, champ, message: MESSAGES[code] } };
+function refus<T>(code: CodeErreurCroissance, champ: string | null, message: string = MESSAGES[code]): ResultatCroissance<T> {
+  return { ok: false, erreur: { code, champ, message } };
 }
+
+/** T32c : le champ facultatif `fougereApresRecolte`, présent, doit être un booléen. */
+const MESSAGE_FOUGERE = 'Le feuillage après la récolte se règle par oui ou non.';
 
 const estObjet = (v: unknown): v is Brut => typeof v === 'object' && v !== null && !Array.isArray(v);
 const propre = (o: Brut, cle: string): unknown => (Object.hasOwn(o, cle) ? o[cle] : undefined);
@@ -135,7 +138,11 @@ function valider(entree: unknown): ResultatCroissance<ProfilCroissance | null> {
   if (!parmi(finDeCycle, FINS_DE_CYCLE)) return refus('fin_de_cycle_inconnue', 'finDeCycle');
   const cycleAnnuel = lireCycle(propre(o, 'cycleAnnuel'));
   if (cycleAnnuel === undefined) return refus('cycle_annuel_invalide', 'cycleAnnuel');
-  return { ok: true, valeur: { forme, hauteurMaxM, duree, allure, finDeCycle, cycleAnnuel } };
+  const fougere = propre(o, 'fougereApresRecolte');
+  if (fougere !== undefined && typeof fougere !== 'boolean') return refus('entree_invalide', 'fougereApresRecolte', MESSAGE_FOUGERE);
+  const profil: ProfilCroissance = { forme, hauteurMaxM, duree, allure, finDeCycle, cycleAnnuel };
+  // T32c : true est gardé (règle de l'asperge, Q33) ; false ou absent = forme à six clés de T32a.
+  return { ok: true, valeur: fougere === true ? { ...profil, fougereApresRecolte: true } : profil };
 }
 
 /**
