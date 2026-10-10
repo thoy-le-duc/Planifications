@@ -211,6 +211,8 @@ export const COULEUR_FRAISE_MURE_3D = '#E8184A';
 export const COULEUR_FRUIT_GENERIQUE_MUR_3D = '#8E44AD';
 /** Vue 3D (T32e) : balise « à récolter » au-dessus de la planche, orange vif visible de loin. */
 export const COULEUR_BALISE_RECOLTE_3D = '#FF6A00';
+/** Vue 3D (T32f, Q38) : balise « dernières récoltes » (les 14 derniers jours), la même orange en plus pâle. */
+export const COULEUR_BALISE_FIN_RECOLTE_3D = '#FFC9A0';
 
 /** Familles de polices (hébergées sous public/polices/, voir src/ui/base.css). */
 export const POLICES = {
