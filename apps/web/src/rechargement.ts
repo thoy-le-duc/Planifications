@@ -36,8 +36,15 @@ export function saisieEnCours(doc: Document = document): boolean {
 }
 
 /**
- * Écoute `vite:preloadError` et recharge la page (sondée toutes les `sondageMs`) dès qu'aucune
- * saisie n'est en cours, une seule fois ; rend la fonction qui arrête l'écoute.
+ * Écoute `vite:preloadError` ; rend la fonction qui arrête l'écoute.
+ *   - Rechargement permis (aucune saisie en cours, stockage lisible, pas de rechargement de ce
+ *     genre depuis DELAI_ANTI_BOUCLE_MS) : `preventDefault()` et rechargement tout de suite.
+ *   - Sinon l'erreur suit son cours (l'écran dit qu'il n'a pas pu s'ouvrir, et réessaiera au
+ *     prochain affichage) : jamais d'`import()` résolu à vide.
+ *   - Saisie en cours : sondée toutes les `sondageMs` ; rechargé une fois, dès qu'elle est finie
+ *     (si le rechargement est permis à ce moment-là).
+ *   - Stockage illisible : on ne recharge pas (sans l'heure rangée, un fichier vraiment absent
+ *     ferait boucler la page).
  */
 export function surveillerMorceauIntrouvable({
   cible = window,
@@ -49,22 +56,36 @@ export function surveillerMorceauIntrouvable({
   maintenant = Date.now,
   sondageMs = 1_000,
 }: OptionsRechargement = {}): () => void {
+  /** 0 : rien vu ; 1 : saisie en cours, on sonde ; 2 : décidé (rechargé ou refusé). */
+  let etat = 0;
+  let recharge = false;
   let minuterie: ReturnType<typeof setInterval> | undefined;
+  /** Recharge si c'est permis ; l'heure est rangée AVANT de recharger. */
+  const tenter = () => {
+    etat = 2;
+    try {
+      const s = stockage ?? sessionStorage;
+      const t = maintenant();
+      if (t - Number(s.getItem(CLE_RECHARGEMENT)) < DELAI_ANTI_BOUCLE_MS) return;
+      s.setItem(CLE_RECHARGEMENT, String(t));
+    } catch {
+      return;
+    }
+    recharge = true;
+    recharger();
+  };
   const surErreur = (e: Event) => {
-    e.preventDefault();
-    minuterie ??= setInterval(() => {
-      if (enCours()) return;
-      clearInterval(minuterie);
-      try {
-        const s = stockage ?? sessionStorage;
-        const t = maintenant();
-        if (t - Number(s.getItem(CLE_RECHARGEMENT)) < DELAI_ANTI_BOUCLE_MS) return;
-        s.setItem(CLE_RECHARGEMENT, String(t));
-      } catch {
-        // Stockage illisible : on recharge quand même.
-      }
-      recharger();
-    }, sondageMs);
+    if (etat === 0) {
+      if (enCours()) {
+        etat = 1;
+        minuterie = setInterval(() => {
+          if (enCours()) return;
+          clearInterval(minuterie);
+          tenter();
+        }, sondageMs);
+      } else tenter();
+    }
+    if (recharge) e.preventDefault();
   };
   cible.addEventListener(EVENEMENT_MORCEAU_INTROUVABLE, surErreur);
   return () => {

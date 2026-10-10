@@ -35,7 +35,7 @@ import type { ModuleExport } from './ecrans/ferme/EcranFerme.tsx';
  * jusqu'à 300 ms pour éviter les clignotements, ce qui ferait perdre le budget de 300 ms. Rien
  * ne s'affiche à sa place pendant le chargement (quelques millisecondes depuis le précache).
  */
-function differe<P extends object>(charger: () => Promise<{ default: ComponentType<P> }>): {
+export function differe<P extends object>(charger: () => Promise<{ default: ComponentType<P> }>): {
   readonly Composant: ComponentType<P>;
   /** Lance le chargement ; la promesse est tenue quand l'écran est prêt (ou a échoué). */
   readonly precharger: () => Promise<unknown>;
