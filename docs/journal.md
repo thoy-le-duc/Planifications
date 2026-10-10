@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-10 — T37 : les travaux du jour dans la 3D
+
+- **Fait** : la vue 3D liste les travaux du jour (mêmes tâches et même ordre que l'écran Aujourd'hui : `lireJournee`, `calculerJournee`, `tachesDeLEcran`, lecture seule), les numérote sur les planches par des pastilles, et un tap sur une ligne ou « Suivant » fait voler la caméra (T29) jusqu'à la planche. Panneau repliable, boutons de 48 px, mise en page du téléphone ; « Voir en 3D » est visible au téléphone (Q36).
+- **Décidé** : pastilles en HTML replacées à chaque image (zéro appel de dessin) : un nuage de points ajoutait un appel et dépassait BORNES_DEMO (10 pour 9). Le moteur de la journée se charge à part à l'ouverture de la 3D (budget 3D 203,3 → 204,3 Kio, démarrage 71,0 inchangé). Démo : fraises en retard de 1 jour seulement, pour que le premier « Suivant » ne tombe pas sur la gouttière de fraises, trop lourde de près (11 appels, 8 078 triangles). Seul test existant modifié : `vue-3d-editeur.e2e.ts` (« Voir en 3D » visible à 390 px, Q36).
+- **Bloquant** : rien. À voir plus tard : la gouttière de fraises dépasse les garde-fous de fluidité vue de près au téléphone.
+
 ## 2026-10-09 — T33b : verrou e2e réentrant
 
 - **Fait** : `scripts/verrou-e2e.sh` lance la commande directement quand `VERROU_E2E_TENU` vaut 1 (appel imbriqué, sans prendre ni attendre le verrou) ; sinon il prend le verrou et exporte `VERROU_E2E_TENU=1` à la commande. Trois tests ajoutés dans `apps/web/scripts/verrou-e2e.test.ts` (les tests de T33 sont inchangés), consigne ajoutée dans `docs/boucle.md` (« Jeux e2e »).
