@@ -21,6 +21,10 @@ import {
 } from '../../ui/jetons.ts';
 import { hauteurRendue, type Scene, type SceneFiltree } from './scene.ts';
 
+/** Un fruit se dessine tant qu'il fait au moins ce nombre de pixels de large (les plants : LARGEUR_VISIBLE_PX). */
+const FRUIT_VISIBLE_PX = 2;
+/** Sur la masse d'une planche hors détail : un fruit par plant, et au plus ce nombre pour la scène (les garde-fous de triangles de T29b tiennent). */
+const FRUITS_MAX_MASSE = 40;
 /** Champ vertical de la caméra (degrés), le même que celui de la vue. */
 const CHAMP_DEGRES = 40;
 /** Un plant très haut (tomate sur sa ficelle) se voit de plus loin qu'il n'est large : sa hauteur compte pour ce quart. */
@@ -118,6 +122,8 @@ export const capacite = (n: number): number => Math.max(64, 2 ** Math.ceil(Math.
 
 export class RenduPlants {
   private drapeaux = new Uint8Array(0);
+  /** Planches dont les fruits se dessinent : celles en détail, et celles dont le fruit se voit de loin (ils restent sur la masse). */
+  private fruitsChoisis = new Uint8Array(0);
   private dalles: (() => void) | null = null;
   private readonly maillages = new Map<FormePlant, InstancedMesh>();
   private poteaux: InstancedMesh | null = null;
@@ -215,10 +221,13 @@ export class RenduPlants {
     this.camera = { x, y, z };
     const choix = new Uint8Array(plants.length);
     const candidates: { i: number; d: number; n: number }[] = [];
+    const fruitables: { i: number; d: number; n: number }[] = [];
     plants.forEach((p, i) => {
       const v = scene.volumes[i];
       if (p === null || v === undefined) return;
       const d = Math.hypot(v.x - x, y, v.z - z);
+      // Un fruit se voit de plus loin que son plant n'est large : il reste affiché sur la masse de la planche (T32e).
+      if (p.fruitsParPlant > 0 && plantsVisibles(p.tailleFruitM, d, hauteurPx, CHAMP_DEGRES, FRUIT_VISIBLE_PX)) fruitables.push({ i, d, n: p.nombre });
       if (plantsVisibles(Math.max(p.echelleHorizontale, p.echelleVerticale / HAUTEUR_POUR_LARGEUR), d, hauteurPx, CHAMP_DEGRES)) candidates.push({ i, d, n: p.nombre });
     });
     candidates.sort((a, b) => a.d - b.d);
@@ -228,8 +237,18 @@ export class RenduPlants {
       reste -= c.n;
       choix[c.i] = 1;
     }
+    const fruits = new Uint8Array(plants.length);
+    fruitables.sort((a, b) => a.d - b.d);
+    let resteFruits = FRUITS_MAX_MASSE;
+    for (const c of fruitables) {
+      if (choix[c.i] === 1 || c.n > resteFruits) continue;
+      resteFruits -= c.n;
+      fruits[c.i] = 1;
+    }
     const avant = this.drapeaux;
-    const pareil = avant.length === choix.length && avant.every((v, i) => v === choix[i]);
+    const pareilFruits = this.fruitsChoisis.length === fruits.length && this.fruitsChoisis.every((v, i) => v === fruits[i]);
+    this.fruitsChoisis = fruits;
+    const pareil = avant.length === choix.length && avant.every((v, i) => v === choix[i]) && pareilFruits;
     this.drapeaux = choix;
     if (!pareil) this.dalles?.();
     return !pareil;
@@ -341,10 +360,15 @@ export class RenduPlants {
     // Planches dont les fruits se posent après la boucle : un maillage peut porter tuteurs, fruits et balises ensemble.
     const avecFruits: { readonly p: PlantsPlanche; readonly v: Scene['volumes'][number]; readonly y: number; readonly pale: string | null }[] = [];
     plants.forEach((p, i) => {
-      if (p === null || !this.enDetail(i)) return;
+      if (p === null) return;
       const v = scene.volumes[i];
       const f = filtree.volumes[i];
       if (v === undefined || f === undefined) return;
+      if (!this.enDetail(i)) {
+        // En masse : seuls les fruits qui se voient de loin, posés sur le haut de la masse (dalle entière, plus gouttière).
+        if (this.fruitsChoisis[i] === 1 && p.fruitsParPlant > 0) avecFruits.push({ p: { ...p, fruitsParPlant: 1 }, v, y: hauteurRendue(v) + p.surelevationM, pale: f.estompe ? f.couleur : null });
+        return;
+      }
       const y = hauteurDalle(hauteurRendue(v), p) + p.surelevationM;
       const feuillage = f.estompe ? f.couleur : this.couleurFeuillage(p.jaunissement);
       const bois = f.estompe ? f.couleur : BOIS_POTEAU;

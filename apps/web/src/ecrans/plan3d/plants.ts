@@ -38,7 +38,7 @@ export const FRUITS_MAX_TOTAL = 600;
 /** Un fruit en formation fait au moins cette part de sa taille mûre ; il grossit de là jusqu'à 1 avec la maturité. */
 const PART_FRUIT_NAISSANT = 0.25;
 /** Longueur mûre du fruit (m, plus grand axe), stylisée pour se lire d'un peu loin : la courgette fait ~28 cm (0,28125 = 9/32 est exact en flottant 32 bits : la taille relue dans la matrice reste sous le plafond de 0,3 m), la tomate et la fraise sont grossies. */
-export const TAILLE_FRUIT_MURE_M: Readonly<Record<TypeFruit, number>> = { allonge: 0.28125, rond: 0.12, generique: 0.14 };
+export const TAILLE_FRUIT_MURE_M: Readonly<Record<TypeFruit, number>> = { allonge: 0.28125, rond: 0.2, generique: 0.2 };
 /** Un jeune plant (levée, turion) se dessine à cette hauteur au moins (m). */
 export const HAUTEUR_PLANT_MINIMAL_M = 0.05;
 /** Triangles de la géométrie partagée de chaque forme (vérifié sur les géométries par geometries-plants.test.ts). */
@@ -234,7 +234,7 @@ export function instancesParForme(plants: readonly (PlantsPlanche | null)[]): re
  * `largeurM` : largeur apparente d'un plant ; `distanceM` : de la caméra à la planche ;
  * `hauteurEcranPx` : hauteur de la toile ; `champDegres` : champ vertical.
  */
-export function plantsVisibles(largeurM: number, distanceM: number, hauteurEcranPx: number, champDegres: number): boolean {
+export function plantsVisibles(largeurM: number, distanceM: number, hauteurEcranPx: number, champDegres: number, pixelsMin: number = LARGEUR_VISIBLE_PX): boolean {
   const pixelsParMetre = hauteurEcranPx / (2 * Math.max(distanceM, 1e-6) * Math.tan((champDegres * Math.PI) / 360));
-  return largeurM * pixelsParMetre >= LARGEUR_VISIBLE_PX;
+  return largeurM * pixelsParMetre >= pixelsMin;
 }
