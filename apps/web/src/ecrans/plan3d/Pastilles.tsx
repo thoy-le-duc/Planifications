@@ -5,6 +5,7 @@
  * projection du point de la planche sur l'écran. Taille fixe à l'écran, donc lisibles de loin ; leur
  * chiffre est du vrai texte, net à toute distance. La pastille du travail choisi est plus grande.
  */
+import type { RefObject } from 'react';
 import { Vector3, type Camera } from 'three';
 import type { Pastille3d } from './travaux.ts';
 
@@ -18,9 +19,9 @@ export interface PastilleDessinee {
 }
 
 /** Les disques, dans l'ordre de `pastilles` (placerPastilles les retrouve par leur rang). */
-export function CouchePastilles({ pastilles, actif }: { readonly pastilles: readonly PastilleDessinee[]; readonly actif: string | null }) {
+export function CouchePastilles({ pastilles, actif, couche }: { readonly pastilles: readonly PastilleDessinee[]; readonly actif: string | null; readonly couche: RefObject<HTMLDivElement | null> }) {
   return (
-    <div data-testid="pastilles-3d" className="plan3d-pastilles" aria-hidden="true">
+    <div ref={couche} data-testid="pastilles-3d" className="plan3d-pastilles" aria-hidden="true">
       {pastilles.map(({ pastille, retard }) => (
         <span key={pastille.planche} data-planche={pastille.planche} data-actif={pastille.planche === actif ? 'oui' : 'non'} className={retard ? 'plan3d-pastille plan3d-pastille-retard' : 'plan3d-pastille'}>
           {pastille.libelle}

@@ -1194,7 +1194,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
             </div>
           )}
           <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
-          <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} />
+          <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} />
         </div>
         <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
