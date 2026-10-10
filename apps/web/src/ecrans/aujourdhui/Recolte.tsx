@@ -150,7 +150,15 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
 
   return (
     <div className="auj-voile auj-voile-plein">
-      <div role="dialog" aria-modal="true" aria-label={culture === null ? 'Récolte' : `Récolte : ${nomCulture(culture)}`} className="auj-recolte" onKeyDown={surTouche}>
+      {/* T11b : saisie au pavé, sans champ (data-saisie-en-cours) : pas de rechargement après une mise à jour. */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={culture === null ? 'Récolte' : `Récolte : ${nomCulture(culture)}`}
+        data-saisie-en-cours="oui"
+        className="auj-recolte"
+        onKeyDown={surTouche}
+      >
         <div className="auj-recolte-tete">
           <button ref={retour} type="button" aria-label="Retour" className="auj-retour" onClick={surFermer}>
             <IconeRetour />
