@@ -37,8 +37,8 @@ export const FRUITS_MAX_PAR_PLANT = 4;
 export const FRUITS_MAX_TOTAL = 600;
 /** Un fruit en formation fait au moins cette part de sa taille mûre ; il grossit de là jusqu'à 1 avec la maturité. */
 const PART_FRUIT_NAISSANT = 0.25;
-/** Longueur mûre du fruit (m, plus grand axe), stylisée pour se lire d'un peu loin : la courgette fait ~25 cm (0,25 est exact en flottant 32 bits : la taille relue dans la matrice reste sous le plafond de 0,3 m), la tomate et la fraise sont grossies. */
-export const TAILLE_FRUIT_MURE_M: Readonly<Record<TypeFruit, number>> = { allonge: 0.25, rond: 0.12, generique: 0.14 };
+/** Longueur mûre du fruit (m, plus grand axe), stylisée pour se lire d'un peu loin : la courgette fait ~28 cm (0,28125 = 9/32 est exact en flottant 32 bits : la taille relue dans la matrice reste sous le plafond de 0,3 m), la tomate et la fraise sont grossies. */
+export const TAILLE_FRUIT_MURE_M: Readonly<Record<TypeFruit, number>> = { allonge: 0.28125, rond: 0.12, generique: 0.14 };
 /** Un jeune plant (levée, turion) se dessine à cette hauteur au moins (m). */
 export const HAUTEUR_PLANT_MINIMAL_M = 0.05;
 /** Triangles de la géométrie partagée de chaque forme (vérifié sur les géométries par geometries-plants.test.ts). */
@@ -141,6 +141,14 @@ function etatDuJour(culture: CultureDePlanche, jour: DateCalendaire): EtatCroiss
   return culture.croissance.sorte === 'annuelle' ? croissanceA(culture.croissance.dates, culture.profil, jour) : croissancePerenneA(culture.croissance.entree, culture.profil, jour);
 }
 
+/**
+ * Les fruits se dessinent pour la courgette, la tomate et la fraise (quelle que soit leur forme), et pour
+ * les autres espèces dont la forme porte des fruits (buisson, rampant, tuteurée, liane). Pas de fruit sur
+ * une salade, une racine, une touffe de feuilles : la balise suffit à dire qu'il y a de la récolte.
+ */
+const FORMES_A_FRUITS: ReadonlySet<FormePlant> = new Set<FormePlant>(['erige-tuteure', 'rampant', 'buisson', 'arbre-ou-liane']);
+const dessineDesFruits = (cle: CleFruit, forme: FormePlant): boolean => cle !== 'generique' || FORMES_A_FRUITS.has(forme);
+
 function recolteDuJour(culture: CultureDePlanche, jour: DateCalendaire): { readonly recolte: EtatRecolte; readonly jaunissement: number } {
   return culture.croissance.sorte === 'annuelle'
     ? { recolte: recolteA(culture.croissance.dates, jour), jaunissement: jaunissementA(culture.croissance.dates, jour) }
@@ -179,7 +187,8 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
   const { recolte, jaunissement } = recolteDuJour(culture, jour);
   const typeFruit = typeDeFruit(culture.espece);
   const enFormation = recolte.phase === 'fruits-en-formation';
-  const avecFruits = enFormation || recolte.phase === 'a-recolter';
+  const cleFruit = cleDeFruit(culture.espece);
+  const avecFruits = (enFormation || recolte.phase === 'a-recolter') && dessineDesFruits(cleFruit, culture.profil.forme);
   const adulte = culture.profil.hauteurMaxM > 0 ? Math.min(1, etat.hauteurM / culture.profil.hauteurMaxM) : 1;
   return {
     id: volume.id,
@@ -195,7 +204,7 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
     nombre: positions.length,
     recolte,
     typeFruit,
-    cleFruit: cleDeFruit(culture.espece),
+    cleFruit,
     fruitsParPlant: avecFruits ? (enFormation ? 1 + Math.floor(recolte.maturite * (FRUITS_MAX_PAR_PLANT - 1)) : FRUITS_MAX_PAR_PLANT) : 0,
     tailleFruitM: avecFruits ? TAILLE_FRUIT_MURE_M[typeFruit] * (PART_FRUIT_NAISSANT + (1 - PART_FRUIT_NAISSANT) * recolte.maturite) : 0,
     jaunissement,
@@ -225,7 +234,7 @@ export function instancesParForme(plants: readonly (PlantsPlanche | null)[]): re
  * `largeurM` : largeur apparente d'un plant ; `distanceM` : de la caméra à la planche ;
  * `hauteurEcranPx` : hauteur de la toile ; `champDegres` : champ vertical.
  */
-export function plantsVisibles(largeurM: number, distanceM: number, hauteurEcranPx: number, champDegres: number): boolean {
+export function plantsVisibles(largeurM: number, distanceM: number, hauteurEcranPx: number, champDegres: number, pixelsMin: number = LARGEUR_VISIBLE_PX): boolean {
   const pixelsParMetre = hauteurEcranPx / (2 * Math.max(distanceM, 1e-6) * Math.tan((champDegres * Math.PI) / 360));
-  return largeurM * pixelsParMetre >= LARGEUR_VISIBLE_PX;
+  return largeurM * pixelsParMetre >= pixelsMin;
 }

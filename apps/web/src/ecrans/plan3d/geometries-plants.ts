@@ -40,7 +40,7 @@ class Facettes {
   }
 
   /**
-   * Sphère de rayon `r` à `seg` méridiens et `anneaux` bandes de latitude (pôles sur l'axe y) :
+   * Sphère (ou, à peu de bandes, double pyramide) de rayon `r` à `seg` méridiens et `anneaux` bandes de latitude (pôles sur l'axe y) :
    * 2 × seg × (anneaux − 1) triangles, tournés vers l'extérieur.
    */
   sphere(seg: number, anneaux: number, r: number, teinte: number): this {
@@ -153,19 +153,21 @@ export function geometrieStructure(): BufferGeometry {
   return f.geometrie();
 }
 
-/** Tuteur d'un plant (tige ou ficelle tendue) : 1 m de haut, fin, un peu plus étroit en haut. */
-export function geometrieTuteur(): BufferGeometry {
-  return new Facettes().tronc(4, 0, 0.5, 1, 0.35, BOIS, 0, 0, 0, 0, true).geometrie();
-}
-
 /**
- * Fruit et balise (T32e) : une sphère de 1 m de diamètre, blanche (la couleur de l'instance la teinte),
- * 64 triangles. L'échelle de l'instance donne la forme (courgette allongée, tomate ronde) et la taille.
- * La balise est la même sphère, vive et grande : symétrique, donc lisible sous tous les angles, et le
- * fruit et la balise tiennent dans un seul InstancedMesh (un seul appel de dessin).
+ * Fruit, balise et tuteur (T32e) : une double pyramide à 4 côtés (un octaèdre) de 1 m de haut et de large,
+ * posée sur son pied (y de 0 à 1), blanche (la couleur de l'instance la teinte), 8 triangles seulement :
+ * les fruits se comptent par centaines et les garde-fous de dessin (BORNES_DEMO) plafonnent les appels de dessin
+ * et les triangles de la scène. L'échelle de l'instance donne la forme : courgette en fuseau, tomate ramassée,
+ * tuteur en fuseau très fin et haut, balise grande et vive (symétrique : lisible sous tous les angles). Une seule
+ * géométrie pour les trois : un seul InstancedMesh, donc un seul appel de dessin, porte tuteurs, fruits et balises.
  */
 export function geometrieFruit(): BufferGeometry {
-  return new Facettes().sphere(8, 5, 0.5, FEUILLE).geometrie();
+  return new Facettes().sphere(4, 2, 0.5, FEUILLE).geometrie().translate(0, 0.5, 0);
+}
+
+/** Tuteur d'un plant (tige ou ficelle tendue) : la même double pyramide, étirée par l'échelle de l'instance. */
+export function geometrieTuteur(): BufferGeometry {
+  return geometrieFruit();
 }
 
 /** Triangles d'une géométrie (sans indice : trois sommets chacun). */

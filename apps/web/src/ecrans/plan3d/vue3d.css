@@ -501,7 +501,7 @@
   font-size: 28px;
 }
 
-/* T32e : la récolte, dite en mots dans le panneau (le signal de la scène est la balise jaune). */
+/* T32e : la récolte, dite en mots dans le panneau (le signal de la scène est la balise orange). */
 .plan3d-resume-recolte {
   margin: 0;
   padding: var(--espace-s) var(--espace-m);

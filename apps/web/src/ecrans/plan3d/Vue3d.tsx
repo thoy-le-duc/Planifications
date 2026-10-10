@@ -703,7 +703,7 @@ class GardeErreur extends Component<{ readonly surErreur: () => void; readonly c
 // ── Liste texte (alternative accessible) ─────────────────────────────────────────────────────
 
 /** Ce que la ligne d'une planche dit de sa récolte (T32e) : rien tant qu'elle ne forme pas de fruits. */
-const MENTION_RECOLTE: Readonly<Record<string, string>> = { 'fruits-en-formation': 'fruits en formation', 'a-recolter': 'à récolter', 'fin-de-recolte': 'fin de récolte' };
+const MENTION_RECOLTE: Readonly<Record<string, string>> = { 'fruits-en-formation': 'récolte proche', 'a-recolter': 'à récolter', 'fin-de-recolte': 'fin de récolte' };
 
 const ElementListe = memo(function ElementListe({ id, code, culture, couleur, estompe, recolte }: { readonly id: string; readonly code: string; readonly culture: string | null; readonly couleur: string; readonly estompe: boolean; readonly recolte: string }) {
   const classes = [culture === null ? 'plan3d-vide' : '', estompe ? 'plan3d-estompe' : ''].filter((c) => c !== '').join(' ');
