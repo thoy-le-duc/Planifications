@@ -22,7 +22,7 @@
  */
 import { createRoot, extend, useFrame, useThree, type ReconcilerRoot, type RootState } from '@react-three/fiber';
 import { Component, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type RefObject, type ReactNode } from 'react';
-import { AmbientLight, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Points, Vector2 } from 'three';
+import { AmbientLight, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
 import type { DateCalendaire } from '@planif/core';
 import type { Plan } from '../plan/calculs.ts';
 import { COULEURS, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
@@ -51,7 +51,8 @@ import { fermeSansPlacement } from './invitation.ts';
 import { cultureAu, lireCultures, type CulturesLues } from './donnees-plants.ts';
 import { Plants } from './Plants.tsx';
 import { PanneauTravaux3d } from './PanneauTravaux.tsx';
-import { Pastilles, type PastilleDessinee } from './Pastilles.tsx';
+import { CouchePastilles, placerPastilles, type PastilleDessinee } from './Pastilles.tsx';
+import type { Camera as CameraThree } from 'three';
 import type { TacheJour } from '../aujourdhui/calculs.ts';
 import type { TravauxDuJour3d } from './travaux.ts';
 import { hauteurDalle, hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
@@ -130,7 +131,7 @@ const MESSAGE_ERREUR = 'La vue 3D s’est arrêtée (carte graphique indisponibl
  * Seuls objets three déclarés à fiber : pas de `<Canvas>`, qui déclare tout l'espace de noms
  * THREE (morceau plus lourd). La toile est la nôtre, fiber y monte sa racine (`createRoot`).
  */
-extend({ AmbientLight, DirectionalLight, InstancedMesh, Mesh, MeshLambertMaterial, Points });
+extend({ AmbientLight, DirectionalLight, InstancedMesh, Mesh, MeshLambertMaterial });
 
 /** Nom affiché de chaque famille (légende et cases), dans l'ordre des clés. */
 const NOMS_FAMILLES: Readonly<Record<CleFamille, string>> = {
@@ -881,6 +882,9 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const [travailActif, setTravailActif] = useState<number | null>(null);
   const jour = useMemo<TravauxDuJour3d>(() => (geometrie === null || calculTravaux === null ? { travaux: [], pastilles: [] } : calculTravaux.calculer(taches, geometrie)), [calculTravaux, taches, geometrie]);
   const pastillesDessinees = useMemo<readonly PastilleDessinee[]>(() => jour.pastilles.map((pastille) => ({ pastille, retard: jour.travaux.some((t) => t.planche === pastille.planche && t.enRetard) })), [jour]);
+  const couchePastilles = useRef<HTMLDivElement>(null);
+  const pastillesRef = useRef(pastillesDessinees);
+  const derniereCamera = useRef<CameraThree | null>(null);
   const plancheActive = travailActif === null ? null : (jour.travaux.find((t) => t.rang === travailActif)?.planche ?? null);
 
   // Filtres (T27b) : état local à la vue, jamais écrit ni stocké ; tout est coché à chaque ouverture.
@@ -913,6 +917,8 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
 
   const surImage = useCallback(({ gl, camera }: RootState) => {
     const s = suivi.current;
+    derniereCamera.current = camera;
+    if (couchePastilles.current !== null) placerPastilles(couchePastilles.current, camera, gl.domElement.clientWidth, gl.domElement.clientHeight, pastillesRef.current);
     s.rendus += 1;
     const ds = gl.domElement.dataset;
     ds.rendus = String(s.rendus);
@@ -965,6 +971,13 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const aller = useCallback((cible: CibleVol) => {
     pilote.current?.(cible);
   }, []);
+  // Les pastilles changent (autre jour, autre plan) : replacées tout de suite avec la dernière caméra, sans attendre une image.
+  useLayoutEffect(() => {
+    pastillesRef.current = pastillesDessinees;
+    const toile = toileRef.current;
+    if (couchePastilles.current !== null && derniereCamera.current !== null && toile !== null) placerPastilles(couchePastilles.current, derniereCamera.current, toile.clientWidth, toile.clientHeight, pastillesDessinees);
+  }, [pastillesDessinees]);
+
   // Un travail choisi (tap d'une ligne, « Suivant ») : la caméra vole vers sa planche, qui est mise en évidence.
   const choisirTravail = useCallback(
     (rang: number) => {
@@ -1108,7 +1121,6 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         <Batiments scene={geometrie} />
         <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} plants={plants} rendu={rendu} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
         {plants !== null && <Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={rendu} surBilan={surBilan} />}
-        {pastillesDessinees.length > 0 && <Pastilles pastilles={pastillesDessinees} actif={plancheActive} />}
         <Camera rayon={rayon} centre={centre} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
         <Rendu surImage={surImage} />
       </GardeErreur>,
@@ -1182,6 +1194,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
             </div>
           )}
           <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} />
         </div>
         <aside data-testid="panneau-3d" className="plan3d-cote" aria-label="Légende, filtres et liste des planches">

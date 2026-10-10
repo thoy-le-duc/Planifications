@@ -452,3 +452,47 @@
     display: none;
   }
 }
+
+/* T37 : pastilles numérotées des travaux du jour, posées sur la toile (replacées à chaque image). */
+.plan3d-pastilles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.plan3d-pastille {
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--couleur-surface);
+  border-radius: 22px;
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  box-shadow: var(--ombre-carte);
+  font-family: var(--police-titre);
+  font-weight: 700;
+  font-size: 20px;
+  white-space: nowrap;
+  visibility: hidden;
+}
+
+.plan3d-pastille-retard {
+  background: var(--couleur-orange);
+  color: var(--couleur-sur-orange);
+}
+
+.plan3d-pastille[data-actif='oui'] {
+  z-index: 1;
+  min-width: 60px;
+  height: 60px;
+  border-radius: 30px;
+  border-width: 4px;
+  font-size: 28px;
+}

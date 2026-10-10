@@ -249,7 +249,7 @@ describe('T28f : l’éditeur s’ouvre aussi depuis la vue 3D, sans bouger les 
   it('budgets intacts : démarrage 71 Kio, morceau 3D et morceau de l’éditeur présents dans budget.json', () => {
     const b = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson & { readonly jsVue3dGzKio?: number };
     expect(b.jsInitialGzKio).toBe(BUDGET_DEMARRAGE_KIO);
-    expect(b.jsVue3dGzKio).toBe(204.8);
+    expect(b.jsVue3dGzKio).toBe(204.3);
     expect(b.jsPlacementGzKio).toBe(21.2); // T28j : parcours guidé en étapes (+1,0 Kio mesuré : 19,9 → 20,9 ; marge 0,3), chiffré dans la PR
   });
 });
