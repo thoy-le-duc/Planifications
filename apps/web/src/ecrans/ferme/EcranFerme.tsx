@@ -32,7 +32,7 @@
  * tête de l'écran quand il y en a (./Refus.tsx). Marque MARQUE_REFUS_AFFICHES une fois par
  * ouverture, quand la liste est lue et dessinée (même vide).
  */
-import { useContext, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { startTransition, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { urlApi } from '../../connexion/client.ts';
 import { deconnecterAvecConfirmation, effacementsEnAttente } from '../../connexion/deconnexion.ts';
 import { stockageNavigateur, type SessionConnexion } from '../../connexion/session.ts';
@@ -382,8 +382,13 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
       },
     };
     const { fermeId } = ouverte;
-    setEtatExport({ etape: 'en_cours', fait: 0, total: 0 });
-    setExportActif(true);
+    // Rendu de l'écran en transition (T15d) : découpé par React en tranches de quelques ms. Rendu
+    // d'un bloc dans le tap, il faisait avec les événements du doigt une tâche de 64 à 78 ms
+    // (CPU ×4, machine chargée). Un second tap est déjà refusé par `exportEnCours`.
+    startTransition(() => {
+      setEtatExport({ etape: 'en_cours', fait: 0, total: 0 });
+      setExportActif(true);
+    });
     const fin = (async () => {
       try {
         // Le rendu du tap (barre, « Annuler », focus) d'abord, le lancement dans une tâche à part :
@@ -399,7 +404,12 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
           telecharger: telechargerDansLeNavigateur,
           signal,
           avancement: ({ fait, total }) => {
-            if (!signal.aborted) setEtatExport({ etape: 'en_cours', fait, total });
+            // Même raison : chaque avancée de la barre redessine l'écran, par tranches.
+            if (!signal.aborted) {
+              startTransition(() => {
+                setEtatExport({ etape: 'en_cours', fait, total });
+              });
+            }
           },
         });
         const evenements = archive.lignes.evenement ?? 0;

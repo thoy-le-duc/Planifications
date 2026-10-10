@@ -21,6 +21,8 @@ export interface OptionsExportFerme {
   readonly avancement?: (a: Avancement) => void;
   /** Annulation (bouton « Annuler ») : promesse rejetée (AbortError) dès l'annulation. */
   readonly signal?: AbortSignal;
+  /** Contre-pression de la lecture (voir LIGNES_EN_ATTENTE_MAX) ; réglable pour les tests. */
+  readonly lignesEnAttenteMax?: number;
 }
 
 export interface ArchiveExport {
@@ -99,8 +101,26 @@ export function compresseurParDefaut(): Compresseur | undefined {
  * principal reprend la main entre deux pages, le temps que le worker lise la suivante.
  * Mesuré aussi : lire par pages ne coûte pas plus cher que d'un bloc ; la lecture elle-même
  * (IndexedDB, dans le worker) domine.
+ *
+ * T15d : 1 000 lignes au lieu de 2 000. Profil Chrome, CPU ×4 : une page de 2 000 événements
+ * faisait sur le fil principal une tâche de 25 à 36 ms (message désérialisé, puis un objet par
+ * ligne), qu'un ramasse-miettes tombé au même moment poussait au-delà de 50 ms. Durée de
+ * l'export inchangée à la mesure près (7,9 à 9,9 s sur 10 passages, machine partagée).
  */
-const PAGE = 2_000;
+const PAGE = 1_000;
+
+/**
+ * Contre-pression de la lecture vers la construction (T15d, suite de la relecture T15c) : tant
+ * que LIGNES_EN_ATTENTE_MAX lignes lues (ou plus) attendent d'être écrites dans l'archive, la table
+ * k+1 n'est pas lue avant que la table k−1 soit entièrement écrite. La mémoire reste bornée quand
+ * la construction prend du retard sur la lecture (au plus deux tables lues d'avance).
+ *
+ * Pas de contre-pression en dessous : appliquée à chaque table, elle allongeait l'export d'environ
+ * 1 s (ferme de T07, CPU ×4 : 9,4 à 10,6 s au lieu de 8,6 à 8,9 s), car les petites tables lues
+ * après `evenement` attendaient la fin de son écriture. 50 000 lignes : la ferme de T07 (≈ 42 000
+ * lignes) se lit d'un trait ; une ferme plus grosse garde la mémoire bornée.
+ */
+const LIGNES_EN_ATTENTE_MAX = 50_000;
 
 interface LectureTable {
   /** Première page (ou la seule : table ferme). */
@@ -174,7 +194,7 @@ async function lireTable(porte: PorteDonnees, table: string, fermeId: string, si
  * constructeur traite les tables l'une après l'autre, dans l'ordre de lecture.
  */
 export async function exporterFerme(porte: PorteDonnees, options: OptionsExportFerme): Promise<ArchiveExport> {
-  const { fermeId, genereLe, jour, avancement, signal } = options;
+  const { fermeId, genereLe, jour, avancement, signal, lignesEnAttenteMax = LIGNES_EN_ATTENTE_MAX } = options;
   const compresseur = options.compresseur ?? compresseurParDefaut();
   // Annulé : rejet immédiat, sans attendre la base ni le compresseur ; plus aucune page lue ensuite.
   return annulable(signal, async () => {
@@ -197,7 +217,17 @@ export async function exporterFerme(porte: PorteDonnees, options: OptionsExportF
       // Dans un objet : posé depuis une fermeture, TypeScript ne le suit pas sur une variable.
       const etat: { echec: { readonly erreur: unknown } | undefined; nom: string | null } = { echec: undefined, nom: null };
       let derniere: Promise<void> = Promise.resolve();
+      /** Tables données au constructeur et pas encore écrites, dans l'ordre (contre-pression). */
+      const enAttente: { readonly ecrite: Promise<void>; readonly lignes: number }[] = [];
+      let lignesEnAttente = 0;
       for (const table of Object.keys(TABLES_EXPORTEES)) {
+        // Contre-pression (voir LIGNES_EN_ATTENTE_MAX) : la table k−1 écrite avant de lire k+1.
+        // Son échec éventuel est traité juste après (etat.echec).
+        while (enAttente.length >= 2 && lignesEnAttente >= lignesEnAttenteMax) {
+          const plusAncienne = enAttente[0];
+          if (plusAncienne === undefined) break;
+          await annulable(arretConstruction.signal, () => plusAncienne.ecrite);
+        }
         // La construction a échoué : inutile de lire la suite.
         if (etat.echec !== undefined) throw etat.echec.erreur;
         // Construction en échec pendant une lecture : rejet aussitôt, sans attendre la page en cours.
@@ -207,6 +237,20 @@ export async function exporterFerme(porte: PorteDonnees, options: OptionsExportF
           etat.nom = typeof ferme?.nom === 'string' ? ferme.nom : null;
         }
         derniere = constructeur.ajouterTable(table, lignes);
+        const attente = {
+          ecrite: derniere.then(
+            () => undefined,
+            () => undefined,
+          ),
+          lignes: lignes.length,
+        };
+        enAttente.push(attente);
+        lignesEnAttente += attente.lignes;
+        // Les tables s'écrivent dans l'ordre : la plus ancienne sort la première.
+        void attente.ecrite.then(() => {
+          enAttente.splice(enAttente.indexOf(attente), 1);
+          lignesEnAttente -= attente.lignes;
+        });
         derniere.catch((erreur: unknown) => {
           etat.echec ??= { erreur };
           arretConstruction.abort(erreur);
