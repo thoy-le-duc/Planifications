@@ -81,7 +81,7 @@ Critère de sortie : Théophane utilise l'appli chaque jour sur sa ferme pendant
 | [T15](T15-export.md) | Export complet JSON + CSV | T10 | fait |
 | [T15b](T15b-export-leger.md) | Export : archive compressée, légère en mémoire et sans formules | T15 | fait |
 | [T15c](T15c-export-rapide.md) | Export : sous 10 secondes sur un téléphone moyen | T16b | fait |
-| [T15d](T15d-export-tache-longue.md) | Export : jamais de tâche longue sur le fil principal | T15c | à faire |
+| [T15d](T15d-export-tache-longue.md) | Export : jamais de tâche longue sur le fil principal | T15c | fait |
 | [T15e](T15e-export-arriere-plan.md) | Export : continue en arrière-plan quand on change d'onglet | T15c | à faire |
 | [T25](T25-demo-en-ligne.md) | Démo en ligne (Vercel) | — | fait |
 | [T25b](T25b-demo-finitions.md) | Démo : pas de déconnexion ni d’état de synchro | T25 | fait |
@@ -139,7 +139,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T32f](T32f-recolte-suites.md) | Récolte visible : récoltes courtes, pérennes d'hiver, balise en fin de récolte (relecture T32e, Q38) | T32e | à faire |
 | [T35a](T35a-schema-rangs.md) | Itinéraire : rangs alignés ou en quinconce, et leur schéma (Q34) | — | fait |
 | [T35b](T35b-quinconce-3d.md) | Jumeau 3D : plants posés selon la disposition des rangs (Q34) | T35a, T32d | à faire |
-| [T14g](T14g-sous-zones-homonymes.md) | Import : sous-zones homonymes sous deux zones différentes (relecture T14f) | T14f | à faire |
+| [T14g](T14g-sous-zones-homonymes.md) | Import : sous-zones homonymes sous deux zones différentes (relecture T14f) | T14f | fait |
 | [T28i](T28i-demo-placement.md) | Démo : essayer le placement d'une serre sur une vraie photo (Q36) | T28h | fait |
 | [T28k](T28k-placement-au-doigt.md) | Placement au doigt sur le téléphone (Q36) | T28j | fait |
 | [T37](T37-travaux-du-jour-3d.md) | 3D au téléphone : les travaux du jour, pour les ouvriers (Q36) | T29, T22, T13 | fait |
