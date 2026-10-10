@@ -261,3 +261,31 @@ describe('T32f : pérennes à cheval sur deux années', () => {
     });
   });
 });
+
+describe('T32f : fenêtre d’un jour et données incohérentes', () => {
+  it('fenêtre d’un jour avec F = B : au moins un jour « à récolter » (le jour du début), puis « fin de récolte »', () => {
+    const memeJour: DatesCroissance = { ...cultureDe(1), finRecolte: repere('2027-07-01') };
+    expect(phaseA(memeJour, B)).toBe('a-recolter');
+    expect(phaseA(memeJour, plus(B, 1))).toBe('fin-de-recolte');
+  });
+
+  it('fin avant début : le jaunissement reste entre 0 et 1, jamais négatif', () => {
+    for (const ecart of [1, 2, 5, 30]) {
+      const incoherente: DatesCroissance = { ...cultureDe(10), finRecolte: repere(plus(B, -ecart)), arrachage: repere(plus(B, 60)) };
+      for (let k = -5; k < 70; k += 1) {
+        const j = jaunissementA(incoherente, plus(B, k));
+        expect(j, `fin B − ${String(ecart)}, jour B + ${String(k)}`).toBeGreaterThanOrEqual(0);
+        expect(j, `fin B − ${String(ecart)}, jour B + ${String(k)}`).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('fin avant début, pérenne : jaunissement dans [0, 1]', () => {
+    const e: EntreePerenne = { plantation: { datePlantation: d('2020-03-01'), dateArrachage: null }, campagne: { annee: 2027, debutRecolte: d('2027-07-01'), finRecolte: d('2027-06-20') } };
+    for (let k = -30; k < 40; k += 1) {
+      const j = m.jaunissementPerenneA(e, plus(B, k));
+      expect(j).toBeGreaterThanOrEqual(0);
+      expect(j).toBeLessThanOrEqual(1);
+    }
+  });
+});

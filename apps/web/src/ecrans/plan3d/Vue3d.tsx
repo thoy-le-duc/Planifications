@@ -702,16 +702,16 @@ class GardeErreur extends Component<{ readonly surErreur: () => void; readonly c
 
 // ── Liste texte (alternative accessible) ─────────────────────────────────────────────────────
 
-/** Ce que la ligne d'une planche dit de sa récolte (T32e, Q38) : rien tant qu'elle ne forme pas de fruits. */
-
+/** Une ligne de la liste : la mention de récolte (T32e, Q38) n'apparaît que quand la planche forme des fruits. */
 const ElementListe = memo(function ElementListe({ id, code, culture, couleur, estompe, recolte }: { readonly id: string; readonly code: string; readonly culture: string | null; readonly couleur: string; readonly estompe: boolean; readonly recolte: string }) {
   const classes = [culture === null ? 'plan3d-vide' : '', estompe ? 'plan3d-estompe' : ''].filter((c) => c !== '').join(' ');
+  const mention = mentionRecolte(recolte);
   return (
     <li data-testid="element-liste-3d" data-id={id} data-culture={culture ?? ''} data-estompe={estompe ? 'oui' : 'non'} data-recolte={recolte} className={classes === '' ? undefined : classes}>
       <i aria-hidden="true" style={{ background: couleur }} />
       <span className="plan3d-code">{code}</span>
       <span className="plan3d-culture">{culture ?? 'vide'}</span>
-      {mentionRecolte(recolte) !== null && <span className="plan3d-recolte">{mentionRecolte(recolte)}</span>}
+      {mention !== null && <span className="plan3d-recolte">{mention}</span>}
     </li>
   );
 });

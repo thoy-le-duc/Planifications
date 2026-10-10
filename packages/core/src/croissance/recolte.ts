@@ -38,7 +38,7 @@ const repere = (r: DateRepere): DateCalendaire | null => r.reelle ?? r.prevue;
  */
 const joursAvantLaFin = (b: DateCalendaire, f: DateCalendaire): number => {
   const longueur = ecartEnJours(b, f);
-  return Math.max(0, longueur - JOURS_FIN_RECOLTE, Math.ceil(longueur / 2));
+  return Math.max(1, longueur - JOURS_FIN_RECOLTE, Math.ceil(longueur / 2));
 };
 
 /**
@@ -91,7 +91,9 @@ export function recoltePerenneA(entree: EntreePerenne, jour: DateCalendaire): Et
 function avancementJaunissement(debut: DateCalendaire | null, fin: DateCalendaire | null, jour: DateCalendaire): number {
   if (fin === null || debut === null) return 0;
   const avant = joursAvantLaFin(debut, fin);
-  return Math.min(1, (ecartEnJours(debut, jour) - avant + 1) / (ecartEnJours(debut, fin) - avant + 1));
+  // Fin avant début (données incohérentes) : le dénominateur peut être nul ou négatif, le résultat reste dans [0, 1].
+  const duree = Math.max(1, ecartEnJours(debut, fin) - avant + 1);
+  return Math.min(1, Math.max(0, (ecartEnJours(debut, jour) - avant + 1) / duree));
 }
 
 /** Jaunissement d'une culture annuelle au jour `jour` (0 hors « fin de récolte »). */
