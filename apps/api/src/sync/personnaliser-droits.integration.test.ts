@@ -1,7 +1,9 @@
 /**
  * Tests d'acceptation T32g, serveur (SÉCURITÉ) — la copie d'une espèce de la bibliothèque
- * (« Personnaliser », Q39) arrive au serveur comme la création d'une espèce de la ferme AVEC un
- * profil de croissance : seul le gérant actif peut l'envoyer (Q35). Plus les « Suites de la
+ * (« Personnaliser », Q39) arrive au serveur comme la création d'une espèce de la ferme. La porte
+ * l'écrit avec un profil NUL (décision du chef) : elle relève alors du droit ordinaire de création
+ * d'espèce (T10s, tout membre actif) ; seul un profil non nul est réservé au gérant actif (Q35).
+ * Le « gérant seulement » de « Personnaliser » est donc tenu par la porte et l'écran. Plus les « Suites de la
  * relecture T32c » (docs/backlog/T32g-personnaliser-espece.md) : membre retiré et invité non
  * accepté, profil équivalent écrit autrement renvoyé par un équipier. Contre un vrai Postgres
  * (même amorçage que profil-droits.integration.test.ts : DATABASE_URL, base jetable supprimée à la
@@ -9,7 +11,7 @@
  *
  * Déjà couvert par T32c, NON dupliqué ici (profil-droits.integration.test.ts) :
  *   - « un équipier ne règle pas le profil (Q35) › crée une espèce AVEC un profil (PUT) :
- *     refusée, l’espèce n’existe pas » — c'est exactement la copie envoyée par un équipier
+ *     refusée, l’espèce n’existe pas » — la copie AVEC profil envoyée par un équipier
  *     (même règle : PUT dont le profil n'est pas nul, quel que soit le nom ou la famille) ;
  *   - « le gérant règle le profil › crée une espèce avec son profil (PUT) : accepté ».
  * Ce fichier ajoute la forme de la copie (famille de la bibliothèque ; profil nul, comme l'écrit la
