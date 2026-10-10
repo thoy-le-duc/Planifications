@@ -129,19 +129,29 @@ function nomFichierAnnexe(fichier: { names: readonly string[]; originalFileNames
 }
 
 /**
- * T13i : la règle « déjà fait » (@planif/sync/fait-unique), partagée par la porte et l'écran
- * Aujourd'hui, va dans le petit morceau partagé `identifiants` (générateur d'UUID de @planif/core,
- * déjà chargé par les deux) plutôt que dans un morceau à elle : un nom de fichier de moins dans
- * la table des dépendances du démarrage (budget de poids).
+ * Petit morceau partagé `identifiants` : le générateur d'UUID de @planif/core, chargé par presque
+ * tous les écrans (et par l'éditeur de placement), plutôt qu'un morceau naturel de plus.
  */
 const MORCEAU_IDENTIFIANTS = 'identifiants';
 const MODULES_IDENTIFIANTS = [
   fileURLToPath(new URL('../../packages/core/src/domaine/identifiants.ts', import.meta.url)),
-  fileURLToPath(new URL('../../packages/sync/src/fait-unique.ts', import.meta.url)),
   // T13g : la dernière ferme choisie, lue par l'écran Aujourd'hui avant la base et écrite par la
   // ferme active (src/donnees/ferme-memorisee.ts) : même raison, pas de morceau à elle.
   fileURLToPath(new URL('src/donnees/ferme-memorisee.ts', import.meta.url)),
 ];
+
+/**
+ * T13r : la règle « déjà fait » (@planif/sync/fait-unique, SQL des chaînes de remplacement),
+ * partagée par la porte (`assets/sqlite/base-appli-*.js`) et l'écran Aujourd'hui, a son propre
+ * morceau. T13i l'avait rangée dans `identifiants` pour éviter un nom de fichier de plus dans la
+ * table des dépendances du démarrage ; mais l'éditeur de placement, qui ne charge `identifiants`
+ * que pour l'UUID, payait tout ce SQL (1,8 Kio compressés). Compromis mesuré : +8 octets
+ * compressés au démarrage (72 688 → 72 696 sur 72 704), −1,8 Kio pour l'éditeur. Nom court
+ * exprès : sans morceau manuel, Rollup le nomme `fait-unique`, et ce nom plus long fait dépasser
+ * le démarrage de 3 octets (72 707).
+ */
+const MORCEAU_FAIT = 'fait';
+const MODULE_FAIT_UNIQUE = fileURLToPath(new URL('../../packages/sync/src/fait-unique.ts', import.meta.url));
 
 /**
  * T36 : le moteur de croissance du cœur (`packages/core/src/croissance/`) a son propre morceau.
@@ -153,6 +163,7 @@ const DOSSIER_CROISSANCE = fileURLToPath(new URL('../../packages/core/src/croiss
 
 function morceauManuel(id: string): string | undefined {
   if (MODULES_IDENTIFIANTS.includes(id)) return MORCEAU_IDENTIFIANTS;
+  if (id === MODULE_FAIT_UNIQUE) return MORCEAU_FAIT;
   return id.startsWith(DOSSIER_CROISSANCE) && !id.endsWith('.test.ts') ? MORCEAU_CROISSANCE : undefined;
 }
 
