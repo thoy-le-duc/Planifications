@@ -6,7 +6,7 @@
  * l'écran Planches ni le démarrage n'en portent le coût. Aucune écriture, aucun champ nouveau.
  */
 import type { DateCalendaire } from '@planif/core';
-import { profilEffectif, type DatesCroissance, type ProfilCroissance } from '@planif/core/croissance';
+import { campagneEnCours, profilEffectif, type DatesCroissance, type EntreePerenne, type ProfilCroissance } from '@planif/core/croissance';
 import type { PorteDonnees } from '@planif/sync';
 import type { LigneLocale } from '../plan/calculs.ts';
 import type { CultureDePlanche } from './plants.ts';
@@ -112,20 +112,37 @@ export function construireCultures(lignes: LignesPlants): CulturesLues {
   return { parOccupation, horsSol };
 }
 
-/** La culture de la semaine dont le lundi est `jour`. Une pérenne sans campagne de l'année suit son cycle annuel. */
+/**
+ * La campagne d'une pérenne au jour `jour` (T32f) : celle qui contient le jour, ou, à défaut, celle qui
+ * commence dans les 28 jours, quelle que soit son année de rattachement. Aucune des deux : celle de
+ * l'année du jour, ou une campagne vide (la plante suit son cycle annuel).
+ */
+function campagneAu(campagnes: ReadonlyMap<number, Campagne>, jour: DateCalendaire): EntreePerenne['campagne'] {
+  let proche: EntreePerenne['campagne'] = null;
+  for (const [annee, c] of [...campagnes].sort((x, y) => x[0] - y[0])) {
+    const candidate = { annee, debutRecolte: c.debut, finRecolte: c.fin };
+    if (!campagneEnCours(candidate, jour)) continue;
+    if (c.debut !== null && c.debut <= jour) return candidate;
+    proche ??= candidate;
+  }
+  if (proche !== null) return proche;
+  const annee = Number(jour.slice(0, 4));
+  const campagne = campagnes.get(annee);
+  return { annee, debutRecolte: campagne?.debut ?? null, finRecolte: campagne?.fin ?? null };
+}
+
+/** La culture de la semaine dont le lundi est `jour`. Une pérenne sans campagne en cours suit son cycle annuel. */
 export function cultureAu(c: CultureLue, jour: DateCalendaire): CultureDePlanche {
   if (c.perenne === null) {
     return { espece: c.espece, profil: c.profil, ecartementM: c.ecartementM, croissance: { sorte: 'annuelle', dates: c.annuelle ?? { miseEnPlace: { prevue: null, reelle: null }, debutRecolte: { prevue: null, reelle: null }, finRecolte: { prevue: null, reelle: null }, arrachage: { prevue: null, reelle: null } } } };
   }
-  const annee = Number(jour.slice(0, 4));
-  const campagne = c.perenne.campagnes.get(annee);
   return {
     espece: c.espece,
     profil: c.profil,
     ecartementM: c.ecartementM,
     croissance: {
       sorte: 'perenne',
-      entree: { plantation: { datePlantation: c.perenne.datePlantation, dateArrachage: c.perenne.dateArrachage }, campagne: { annee, debutRecolte: campagne?.debut ?? null, finRecolte: campagne?.fin ?? null } },
+      entree: { plantation: { datePlantation: c.perenne.datePlantation, dateArrachage: c.perenne.dateArrachage }, campagne: campagneAu(c.perenne.campagnes, jour) },
     },
   };
 }

@@ -57,7 +57,7 @@ import type { TacheJour } from '../aujourdhui/calculs.ts';
 import type { TravauxDuJour3d } from './travaux.ts';
 import { hauteurDalle, hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
 import { plantsDePlanche, type PlantsPlanche } from './plants.ts';
-import { phrasePlanchesARecolter, planchesARecolter } from './recolte.ts';
+import { mentionRecolte, phrasePlanchesARecolter, planchesARecolter } from './recolte.ts';
 import type { PorteDonnees } from '@planif/sync';
 import { TEXTE_INVITATION } from '../../demo/invitation.ts';
 import './vue3d.css';
@@ -702,8 +702,7 @@ class GardeErreur extends Component<{ readonly surErreur: () => void; readonly c
 
 // ── Liste texte (alternative accessible) ─────────────────────────────────────────────────────
 
-/** Ce que la ligne d'une planche dit de sa récolte (T32e) : rien tant qu'elle ne forme pas de fruits. */
-const MENTION_RECOLTE: Readonly<Record<string, string>> = { 'fruits-en-formation': 'récolte proche', 'a-recolter': 'à récolter', 'fin-de-recolte': 'fin de récolte' };
+/** Ce que la ligne d'une planche dit de sa récolte (T32e, Q38) : rien tant qu'elle ne forme pas de fruits. */
 
 const ElementListe = memo(function ElementListe({ id, code, culture, couleur, estompe, recolte }: { readonly id: string; readonly code: string; readonly culture: string | null; readonly couleur: string; readonly estompe: boolean; readonly recolte: string }) {
   const classes = [culture === null ? 'plan3d-vide' : '', estompe ? 'plan3d-estompe' : ''].filter((c) => c !== '').join(' ');
@@ -712,7 +711,7 @@ const ElementListe = memo(function ElementListe({ id, code, culture, couleur, es
       <i aria-hidden="true" style={{ background: couleur }} />
       <span className="plan3d-code">{code}</span>
       <span className="plan3d-culture">{culture ?? 'vide'}</span>
-      {MENTION_RECOLTE[recolte] !== undefined && <span className="plan3d-recolte">{MENTION_RECOLTE[recolte]}</span>}
+      {mentionRecolte(recolte) !== null && <span className="plan3d-recolte">{mentionRecolte(recolte)}</span>}
     </li>
   );
 });
