@@ -337,7 +337,6 @@
   inset: auto var(--espace-s) var(--espace-s) var(--espace-s);
   z-index: 1;
   max-width: 480px;
-  max-height: 60%;
   display: flex;
   flex-direction: column;
   background: var(--couleur-surface);
@@ -390,6 +389,7 @@
 .plan3d-travaux-liste {
   flex: 1 1 auto;
   min-height: 0;
+  max-height: 24vh;
   margin: 0;
   padding: 0 var(--espace-xs) var(--espace-xs);
   overflow-y: auto;
@@ -445,7 +445,7 @@
   }
 
   .plan3d-scene {
-    min-height: 320px;
+    min-height: 460px;
   }
 
   .plan3d-cote {
