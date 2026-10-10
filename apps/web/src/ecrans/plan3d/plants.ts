@@ -234,7 +234,7 @@ export function instancesParForme(plants: readonly (PlantsPlanche | null)[]): re
  * `largeurM` : largeur apparente d'un plant ; `distanceM` : de la caméra à la planche ;
  * `hauteurEcranPx` : hauteur de la toile ; `champDegres` : champ vertical.
  */
-export function plantsVisibles(largeurM: number, distanceM: number, hauteurEcranPx: number, champDegres: number, pixelsMin: number = LARGEUR_VISIBLE_PX): boolean {
+export function plantsVisibles(largeurM: number, distanceM: number, hauteurEcranPx: number, champDegres: number): boolean {
   const pixelsParMetre = hauteurEcranPx / (2 * Math.max(distanceM, 1e-6) * Math.tan((champDegres * Math.PI) / 360));
-  return largeurM * pixelsParMetre >= pixelsMin;
+  return largeurM * pixelsParMetre >= LARGEUR_VISIBLE_PX;
 }
