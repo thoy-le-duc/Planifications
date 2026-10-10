@@ -16,6 +16,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo } from 'react';
 import type { InstancedMesh } from 'three';
 import type { FormePlant } from '@planif/core/croissance';
+import { seRecolte } from './recolte.ts';
 import { capacite, type BilanPlants, type RenduPlants } from './plants-rendu.ts';
 import { FORMES, FRUITS_MAX_TOTAL, instancesParForme, piedsDeGouttiere, PLANTS_MAX_TOTAL, type PlantsPlanche } from './plants.ts';
 import type { Scene, SceneFiltree } from './scene.ts';
@@ -47,7 +48,7 @@ export function Plants({
   // Tuteurs, fruits et balises (T32e) : un seul maillage (une seule double pyramide), de la taille de ce qui peut s'y poser.
   const nbAccessoires = useMemo(() => {
     const fruits = Math.min(FRUITS_MAX_TOTAL, plants.reduce((n, p) => n + (p === null ? 0 : p.nombre * p.fruitsParPlant), 0));
-    return Math.min(nbTuteurs, PLANTS_MAX_TOTAL) + fruits + plants.reduce((n, p) => n + (p !== null && p.recolte.phase === 'a-recolter' ? 1 : 0), 0);
+    return Math.min(nbTuteurs, PLANTS_MAX_TOTAL) + fruits + plants.reduce((n, p) => n + (p !== null && seRecolte(p) ? 1 : 0), 0);
   }, [plants, nbTuteurs]);
   useEffect(
     () => () => {
