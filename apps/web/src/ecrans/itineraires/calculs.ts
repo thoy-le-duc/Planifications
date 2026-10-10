@@ -34,6 +34,10 @@ type Objet = Record<string, unknown>;
 export interface EspeceLue {
   readonly id: string;
   readonly nom: string;
+  /** T32c : null = espèce de la bibliothèque commune (profil en lecture seule). */
+  readonly fermeId?: string | null;
+  /** T32c : profil de croissance réglé par la ferme (texte JSON du téléphone), null = par défaut. */
+  readonly profilCroissance?: string | null;
 }
 
 export interface ItineraireLu {
@@ -97,7 +101,7 @@ export function versItineraire(l: Readonly<Record<string, unknown>>): Itineraire
 }
 
 export function versEspece(l: Readonly<Record<string, unknown>>): EspeceLue {
-  return { id: texte(l.id), nom: texte(l.nom) };
+  return { id: texte(l.id), nom: texte(l.nom), fermeId: texteOuNul(l.ferme_id), profilCroissance: texteOuNul(l.profil_croissance) };
 }
 
 /** Type lu, ou null si sa catégorie est inconnue (ligne d'une version future : ignorée). */
