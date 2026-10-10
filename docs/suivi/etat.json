@@ -1,10 +1,10 @@
 {
-  "maj": "9 octobre 2026, soir (heure de Paris)",
-  "resume": "Grosse journée, 14 tickets fusionnés le 9 octobre. **Jumeau 3D** : les cultures poussent (T32b), jeunes plants visibles et tomates plant par plant avec tuteur (T32d), vue 3D allégée de 226 à 203 Kio (T36). **Placement** : recherche d'adresse IGN, recul jusqu'à la région, plusieurs sites (T28h), parcours guidé en 4 étapes (T28j). **Itinéraire** : rangs alignés ou en quinconce avec schéma (T35a). **Import** : planche reconnue par sa zone et son code (T14f). **Fiabilité** : test du vol de caméra stabilisé (T34). **Mise en ligne gratuite** : l'API tourne sur Vercel (T38a) et le guide pas à pas est prêt : docs/mise-en-ligne.md (T38b). À toi : suivre le guide (une heure, ordinateur) pour ouvrir ta vraie ferme avec fermedebenoit@gmail.com. Prochains : T28k (placement au doigt), T28i (démo), T37 (travaux du jour en 3D), T35b, T32c (profils, gérant seulement), T32e (récolte visible), T14g, T33b. Budget : plus de plafond en nombre de tickets, seuil 70 % de la jauge (34 % vendredi 12 h 40).",
+  "maj": "10 octobre 2026, soir (heure de Paris)",
+  "resume": "Samedi 10 octobre, 18 tickets fusionnés. **Jumeau 3D** : la récolte se voit (fruits qui grossissent, balise orange au-dessus des planches à récolter, balise pâle en fin de récolte, T32e, T32f), plants en quinconce (T35b), pérennes qui repoussent en douceur avant la récolte et sans saut au 1er janvier (T32i, T32j), travaux du jour dans la 3D au téléphone (T37). **Croissance réglable** par le gérant depuis l'écran Itinéraires, « Personnaliser » une espèce de la bibliothèque, toutes les espèces de la ferme visibles (T32c, T32g, T32h). **Export** : ne fige plus l'écran et continue en arrière-plan (T15d, T15e). **Fiabilité** : heures comparées comme des instants partout (T13n, T13q, T13s), import plus sûr (T14e, T14g), démo pour essayer le placement d'une serre (T28i). En cours : la 3D fluide de près au téléphone, bouton « Filtres » (T37b).",
   "en_cours": {
-    "T34": "en revue"
+    "T37b": "en cours"
   },
-  "attente": "Mise en ligne : suivre docs/mise-en-ligne.md et me dire ce qui coince (sans jamais coller de clé). Ta jauge Claude (dernière : 34 % vendredi 12 h 40). 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75. Vercel : l'offre gratuite est réservée à un usage non commercial (bien pour la phase de test).",
+  "attente": "Ta jauge Claude (dernière : 34 % vendredi 12 h 40 ; à 70 % je m'arrête avant mardi). Mise en ligne : suivre docs/mise-en-ligne.md et me dire ce qui coince (sans jamais coller de clé). 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75.",
   "visuels": [
     {
       "titre": "Mode sombre",
@@ -98,6 +98,17 @@
       "titre": "Placement réel",
       "etat": "en cours",
       "texte": "T28a, T28s, T28b, T28c, T28d et T28e. Le gérant place ses bâtiments, serres, planches et contours de zones sur la photo aérienne IGN (ordinateur), et la vue 3D montre la ferme à sa vraie place. T28e (suites de relecture de l'éditeur) est fusionné ; T28f (ouvrir l'éditeur depuis la 3D) est en revue."
+    },
+    {
+      "titre": "La récolte se voit",
+      "etat": "fait",
+      "images": [
+        "recolte-fraises.png",
+        "recolte-balises.png",
+        "quinconce-courgettes.png"
+      ],
+      "alt": "Vue 3D : fraises rouges sous tunnel avec une balise orange au-dessus ; vue d'ensemble avec balise pâle sur les courgettes en fin de récolte et balises vives sur les fraises ; planche de courgettes plantée en quinconce",
+      "texte": "T32e, T32f, T35b (Q34, Q35, Q38). Les fruits apparaissent quatre semaines avant la récolte et grossissent ; une balise orange signale chaque planche à récolter, pâle pendant les deux dernières semaines ; « 3 planches à récolter » est annoncé. Les plants suivent la disposition de l'itinéraire, alignés ou en quinconce."
     }
   ]
 }
