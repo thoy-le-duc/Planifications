@@ -119,6 +119,7 @@ function porte(): PorteDonnees & { lectures: () => number } {
     archiverRefus: () => Promise.resolve(),
     placer: () => Promise.resolve([]),
     reglerProfilCroissance: () => Promise.resolve(),
+    personnaliserEspece: () => Promise.resolve(''),
   };
 }
 

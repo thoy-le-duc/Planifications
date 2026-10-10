@@ -10,7 +10,7 @@
 - Sur une espèce de la bibliothèque, dans l'écran Itinéraires : bouton « Personnaliser », gérant seulement. Il crée en une écriture une espèce de la ferme, copie de l'espèce de la bibliothèque (nom, champs, profil de croissance par défaut compris, règle de l'asperge comprise), puis ouvre son réglage de croissance.
 - Les cultures et itinéraires existants restent liés à l'espèce d'origine (rien n'est réécrit en silence). L'écran le dit en une phrase.
 - Deux copies de la même espèce : refusées (« Tomate est déjà personnalisée »), sauf si la première a été supprimée.
-- Hors ligne d'abord : la copie s'écrit par la porte et se synchronise ; un équipier ne peut pas personnaliser (refus serveur aussi).
+- Hors ligne d'abord : la copie s'écrit par la porte et se synchronise ; un équipier ne peut pas personnaliser (porte et écran). Côté serveur, la copie à profil nul relève du droit ordinaire de création d'espèce (T10s, tout membre actif) ; un profil non nul reste réservé au gérant (T32c).
 
 ## Critères d'acceptation
 
