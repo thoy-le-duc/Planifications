@@ -197,7 +197,14 @@ export async function exporterFerme(porte: PorteDonnees, options: OptionsExportF
       // Dans un objet : posé depuis une fermeture, TypeScript ne le suit pas sur une variable.
       const etat: { echec: { readonly erreur: unknown } | undefined; nom: string | null } = { echec: undefined, nom: null };
       let derniere: Promise<void> = Promise.resolve();
+      /** Ajouts au constructeur, dans l'ordre des tables (contre-pression de la lecture). */
+      const ajouts: Promise<void>[] = [];
       for (const table of Object.keys(TABLES_EXPORTEES)) {
+        // Contre-pression (T15d) : la table k−1 est entièrement écrite avant la lecture de k+1.
+        // Au plus deux tables lues en mémoire (k en construction, k+1 en lecture), même quand la
+        // construction prend du retard sur la lecture. Son échec est traité plus bas.
+        const avantDerniere = ajouts.at(-2);
+        if (avantDerniere !== undefined) await annulable(arretConstruction.signal, () => avantDerniere.catch(() => undefined));
         // La construction a échoué : inutile de lire la suite.
         if (etat.echec !== undefined) throw etat.echec.erreur;
         // Construction en échec pendant une lecture : rejet aussitôt, sans attendre la page en cours.
@@ -207,6 +214,7 @@ export async function exporterFerme(porte: PorteDonnees, options: OptionsExportF
           etat.nom = typeof ferme?.nom === 'string' ? ferme.nom : null;
         }
         derniere = constructeur.ajouterTable(table, lignes);
+        ajouts.push(derniere);
         derniere.catch((erreur: unknown) => {
           etat.echec ??= { erreur };
           arretConstruction.abort(erreur);
