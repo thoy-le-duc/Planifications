@@ -90,9 +90,15 @@ describe('T24 : la liste des itinéraires, par culture', () => {
     expect(e.dataset.testid).toBe('ecran-itineraires');
     const r = region('Itinéraires', e);
     const cultures = [...r.querySelectorAll<HTMLElement>('[data-testid="culture-itineraires"]')];
-    expect(cultures.map((c) => c.dataset.espece), 'Batavia puis Chou ; Radis n’a pas d’itinéraire').toEqual([ESPECE.batavia, ESPECE.chou]);
+    expect(cultures.map((c) => c.dataset.espece), 'Batavia, Chou puis Radis (espèce de la ferme sans itinéraire : son groupe existe quand même, Q40)').toEqual([
+      ESPECE.batavia,
+      ESPECE.chou,
+      ESPECE.radis,
+    ]);
     expect(texte(cultures[0])).toMatch(/^Batavia/);
     expect(texte(cultures[1])).toMatch(/^Chou/);
+    expect(texte(cultures[2])).toMatch(/^Radis/);
+    expect(texte(cultures[2]), 'Radis : Q40').toContain('Aucun itinéraire');
     const dans = (c: HTMLElement | undefined) =>
       [...(c?.querySelectorAll<HTMLElement>('[data-testid="itineraire"]') ?? [])].map((i) => [i.dataset.itineraire, i.dataset.origine]);
     expect(dans(cultures[0])).toEqual([
@@ -100,6 +106,7 @@ describe('T24 : la liste des itinéraires, par culture', () => {
       [ITINERAIRE.batavia, 'bibliotheque'],
     ]);
     expect(dans(cultures[1])).toEqual([[ITINERAIRE.chouAutomne, 'ferme']]);
+    expect(dans(cultures[2])).toEqual([]);
     expect(elementItineraire(ITINERAIRE.ancien), 'itinéraire supprimé jamais montré').toBeNull();
     expect(texte(itineraireOuEchec(ITINERAIRE.bataviaFerme))).toContain(NOMS_ITINERAIRES.bataviaFerme);
     expect(aBouton('Nouvel itinéraire', r)).toBe(true);
