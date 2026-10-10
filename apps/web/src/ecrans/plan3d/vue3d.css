@@ -424,8 +424,47 @@
   color: var(--couleur-sur-foret);
 }
 
-/* Téléphone (Q36) : la scène prend l'écran, le panneau de filtres de l'ordinateur n'est pas proposé. */
+/* T37b : le travail actif, dit en clair (zone vivante, lue aussi panneau replié). */
+.plan3d-annonce {
+  margin: 0;
+  padding: 0 var(--espace-m) var(--espace-s);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--couleur-encre);
+}
+
+.plan3d-annonce:empty {
+  padding: 0;
+}
+
+.plan3d-travaux-erreur {
+  margin: 0;
+  padding: var(--espace-s) var(--espace-m);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--couleur-texte-orange);
+}
+
+/* T37b : « Filtres », au téléphone seulement ; sur ordinateur, le panneau est toujours affiché. */
+.plan3d-filtres-bouton {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .plan3d-cote[hidden] {
+    display: flex;
+  }
+}
+
+/* Téléphone (Q36) : la scène prend l'écran ; légende, filtres et liste des planches derrière « Filtres » (T37b), rien de retiré. */
 @media (max-width: 1023px) {
+  .plan3d-outils .plan3d-filtres-bouton {
+    display: inline-flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 var(--espace-m);
+  }
+
   .plan3d-travaux {
     max-width: none;
   }
@@ -453,6 +492,11 @@
   }
 
   .plan3d-cote {
+    flex: 0 0 auto;
+    max-height: 70vh;
+  }
+
+  .plan3d-cote[hidden] {
     display: none;
   }
 }

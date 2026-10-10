@@ -31,6 +31,28 @@ import {
 export const PLANTS_MAX_PAR_PLANCHE = 20;
 /** Plafond de plants dessinés pour toute la scène : les planches les plus proches d'abord (200 → 180 en T32f : les balises de fin de récolte ajoutent des triangles, et la ferme T07 en zoom serré, 4 300 + 200 × 48 + 79 × 8, dépassait 14 000). */
 export const PLANTS_MAX_TOTAL = 180;
+/**
+ * Enveloppe de triangles des plants dessinés en détail (T37b), somme de `nombre × TRIANGLES_PAR_FORME`
+ * sur les planches choisies, les plus proches d'abord : le plafond de plants ne suffit plus quand les
+ * formes sont lourdes. Écran large : 180 plants de 48 triangles, ce que la ferme T07 tenait déjà en zoom
+ * serré (14 000 triangles pour toute la scène, 4 300 pour le reste).
+ */
+export const ENVELOPPE_TRIANGLES_PLANTS = 8_640;
+/**
+ * Écran étroit (téléphone) : 50 plants de 48 triangles, deux planches pleines et une petite (2 × 20 plants de
+ * 54 triangles au plus) ; tuteurs, fruits et balises s'y ajoutent. La démo vue de près (gouttière de fraises)
+ * tient ses 8 000 triangles.
+ */
+export const ENVELOPPE_TRIANGLES_PLANTS_ETROIT = 2_400;
+/**
+ * Écran étroit : appels de dessin de toute la scène, au plus (garde-fou du téléphone, T29b : 9 pour la démo).
+ * Chaque forme de plant en détail est un appel : les formes des planches les plus proches passent d'abord,
+ * dans la limite des appels que laissent la ferme (sol, planches, bâtiments) et le maillage des accessoires,
+ * une forme au moins. Les planches d'une autre forme restent des masses à la hauteur du feuillage (T37b).
+ */
+export const APPELS_DESSIN_MAX_ETROIT = 9;
+/** En dessous de cette largeur de toile (px), l'écran est étroit : un téléphone en portrait ; la toile d'un ordinateur, même petit, est plus large. */
+export const LARGEUR_ECRAN_ETROIT_PX = 600;
 /** Plafond de fruits dessinés par plant (T32e). */
 export const FRUITS_MAX_PAR_PLANT = 4;
 /** Plafond de fruits dessinés pour toute la scène (T32e). */
