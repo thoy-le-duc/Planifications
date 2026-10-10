@@ -27,7 +27,7 @@ import { annulerImport, importsDeLaFerme, interruption, noterImport, noterLotsEc
 import { modeleQuiConvient, rangerModele } from './modeles.ts';
 import { creerPreparateur } from './preparateur.ts';
 import { CATEGORIES_CULTURE, enFrancais, PLAFOND_VALEURS_A_RAPPROCHER, UNITES_CULTURE } from './constantes.ts';
-import type { Analyse, Apercu, AttributsEspece, ContexteBase, DecisionAffichee, LigneApercu, Preparateur, ResultatLecture, SorteDefaut } from './types.ts';
+import type { Analyse, Apercu, AttributsEspece, ContexteBase, DatesDeduites, DecisionAffichee, LigneApercu, Preparateur, ResultatLecture, SorteDefaut } from './types.ts';
 
 export interface ProprietesEcranImport {
   readonly porte: PorteDonnees;
@@ -88,6 +88,12 @@ const cleDecision = (champ: string, valeur: string): string => `${champ}\u0001${
 const dateCourte = (iso: string): string => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+/** Jour AAAA-MM-JJ en français (« 1 janv. 2027 »), sans fuseau : le jour écrit, tel quel. */
+const jourEnFrancais = (jour: string): string => {
+  const d = new Date(`${jour}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? jour : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 };
 
 interface EtatFichier {
@@ -934,6 +940,7 @@ function VueApercu({ apercu }: { readonly apercu: Apercu }): ReactElement {
           </ul>
         </section>
       )}
+      <VueDatesDeduites dates={apercu.datesDeduites} />
       {apercu.ignorees > 0 && <p className="imp-aide">{apercu.ignorees === 1 ? '1 ligne vide ou de total ignorée.' : `${enFrancais(apercu.ignorees)} lignes vides ou de total ignorées.`}</p>}
       {montrees.length > 0 && (
         // Beaucoup de lignes : repliées (un tap les déplie), l'écran reste léger sur un téléphone lent.
@@ -949,6 +956,29 @@ function VueApercu({ apercu }: { readonly apercu: Apercu }): ReactElement {
         </details>
       )}
     </div>
+  );
+}
+
+/** T14e : dates que l'import déduit (le fichier ne les donne pas), montrées avant d'écrire. */
+function VueDatesDeduites({ dates }: { readonly dates: DatesDeduites }): ReactElement | null {
+  if (dates.actifsDu.length === 0 && dates.saisons.length === 0) return null;
+  return (
+    <section aria-label="Dates déduites" className="imp-note imp-defauts">
+      <strong>Dates déduites, à vérifier</strong>
+      <span className="imp-aide">Le fichier ne les donne pas : elles seront écrites telles quelles, modifiables ensuite.</span>
+      <ul className="imp-liste">
+        {dates.actifsDu.map((a) => (
+          <li key={a.date} data-testid="date-deduite" data-deduite="actif-du">
+            <strong>En service à partir du {jourEnFrancais(a.date)}</strong> : {a.emplacements === 1 ? '1 emplacement créé' : `${enFrancais(a.emplacements)} emplacements créés`}
+          </li>
+        ))}
+        {dates.saisons.map((x) => (
+          <li key={x.nom} data-testid="date-deduite" data-deduite="saison" data-saison={x.nom}>
+            <strong>Saison {x.nom} créée</strong> : du {jourEnFrancais(x.debut)} au {jourEnFrancais(x.fin)}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
