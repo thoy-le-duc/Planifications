@@ -11,6 +11,7 @@ import {
   decrireSerie,
   jugerDefilement,
   ralentirCpu,
+  jugerSerie,
   repeterMesures,
   REPETITIONS_MESURE,
   surveillerCsp,
@@ -351,9 +352,10 @@ test('plan des planches : ferme de T07, hors ligne, CPU ×4', async ({ page, con
     console.log(decrireSerie('réouverture hors ligne, base locale remplie', series.reouverture, BUDGET_MS));
     console.log(decrireSerie('Planches, premier affichage', series.planches, BUDGET_MS));
     console.log(decrireSerie('Planches, retour', series.retour, BUDGET_MS));
-    expect(series.reouverture.mediane, 'réouverture hors ligne (médiane)').toBeLessThan(BUDGET_MS);
-    expect(series.planches.mediane, 'Planches, premier affichage (médiane)').toBeLessThan(BUDGET_MS);
-    expect(series.retour.mediane, 'Planches, retour (médiane)').toBeLessThan(BUDGET_MS);
+    // T11b : médiane sous le budget, et aucune répétition au-delà de 1,5 fois le budget.
+    expect(jugerSerie(series.reouverture, BUDGET_MS).raisons, 'réouverture hors ligne').toEqual([]);
+    expect(jugerSerie(series.planches, BUDGET_MS).raisons, 'Planches, premier affichage').toEqual([]);
+    expect(jugerSerie(series.retour, BUDGET_MS).raisons, 'Planches, retour').toEqual([]);
     await expect(page.getByRole('heading', { level: 1, name: 'Planches' })).toBeVisible();
   });
 
