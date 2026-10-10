@@ -8,6 +8,7 @@
  * Tout passe par la porte de @planif/sync ; ne dépend pas de l'écran de T24.
  */
 import type { OrdreEcriture, PorteDonnees } from '@planif/sync';
+import { cleHorodatageSql } from '@planif/sync/fait-unique';
 
 export interface OptionsSectionItineraires {
   readonly porte: PorteDonnees;
@@ -112,7 +113,7 @@ export function brancherSectionItineraires(o: OptionsSectionItineraires): void {
       sql: `SELECT id, nom_table, ligne_id, operation FROM modification
             WHERE (nom_table = 'Itineraire' AND ligne_id IN (SELECT id FROM itineraire WHERE ferme_id = ? AND espece_id = ?))
                OR (nom_table = 'TypeIntervention' AND ligne_id IN (SELECT id FROM type_intervention WHERE supprime_le IS NULL AND (ferme_id = ? OR ferme_id IS NULL)))
-            ORDER BY horodatage, id`,
+            ORDER BY ${cleHorodatageSql('horodatage', 'id')}`,
       parametres: [fermeId, especeId, fermeId],
       tables: ['modification', 'itineraire', 'type_intervention'],
     },
