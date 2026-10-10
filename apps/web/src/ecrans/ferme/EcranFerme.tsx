@@ -510,6 +510,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
         <itineraires.EcranItineraires
           porte={ouverte.porte}
           fermeId={ouverte.fermeId}
+          utilisateurId={session.utilisateurId}
           surFermer={() => {
             setItinerairesOuverts(false);
           }}

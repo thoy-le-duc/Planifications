@@ -17,7 +17,7 @@ export function requeteItineraires(fermeId: string): RequeteSurveillee<Itinerair
 
 export function requeteEspeces(fermeId: string): RequeteSurveillee<EspeceLue> {
   return {
-    sql: 'SELECT id, nom FROM espece WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL',
+    sql: 'SELECT id, nom, ferme_id, profil_croissance FROM espece WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL',
     parametres: [fermeId],
     tables: ['espece'],
     convertir: versEspece,
