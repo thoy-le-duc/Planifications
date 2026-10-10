@@ -6,9 +6,8 @@
  *
  * Une seule règle, deux écritures qui donnent exactement le même ordre :
  *   - en JavaScript : `instantHorodatage`, `comparerSaisies` (enVigueur, historique de l'écran) ;
- *   - en SQL : `cleHorodatageSql` (fait-unique.ts, les chaînes), par `julianday` de SQLite. Elle
- *     est rangée là pour que l'éditeur de placement, qui charge fait-unique.ts, ne charge pas la
- *     lecture JavaScript (budget de son morceau).
+ *   - en SQL : `cleHorodatageSql` (fait-unique.ts, les chaînes), par `julianday` de SQLite, à
+ *     côté du SQL qui l'utilise (morceau `fait` depuis T13r).
  * `instantHorodatage` reproduit la lecture de SQLite (3.51 et plus : Node et wa-sqlite) des
  * formes admises : l'instant est le « jour julien » de SQLite en millisecondes (entier). L'égalité
  * avec `julianday` est vérifiée par horodatage-instant.test.ts sur une base node:sqlite.
