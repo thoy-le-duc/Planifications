@@ -314,6 +314,9 @@ function DetailConflits({ ligne, surFermer }: { readonly ligne: LigneEmplacement
 
 // ── Écran ────────────────────────────────────────────────────────────────────────────────────
 
+/** T28i : build de la démo en ligne (constante du build, éliminée en production) : l'éditeur et la 3D y invitent à essayer. */
+const DEMO = import.meta.env.MODE === 'demo';
+
 const AUCUNE_SEMAINE: readonly SemainePlan[] = [];
 
 const LEGENDE: readonly (readonly [string, string])[] = [
@@ -755,13 +758,14 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
           {repli3d}
         </p>
       )}
-      {en3d && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} surModifierPlan={modifierPlan} porte={porte} fermeId={fermeId} />}
+      {en3d && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} invitationDemo={DEMO} surModifierPlan={modifierPlan} porte={porte} fermeId={fermeId} />}
       {EditeurPlacement !== null && utilisateurId !== undefined && (
         <EditeurPlacement
           key={fermeId}
           porte={porte}
           fermeId={fermeId}
           utilisateurId={utilisateurId}
+          invitationDemo={DEMO}
           surFermer={() => {
             rendreFocus.current = true;
             setEditeurPlacement(null);

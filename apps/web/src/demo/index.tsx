@@ -12,8 +12,9 @@
  *     ferme fictive (./remplir.ts, chargé à la demande), datée par rapport au jour du téléphone.
  *     Ensuite, l'appli s'ouvre directement sur la base gardée : les saisies restent sur le
  *     téléphone.
- *   - Aucune requête vers l'API ni vers une autre origine : `fetch` les refuse (ceinture et
- *     bretelles, l'appli n'en lance pas sans URL de synchro).
+ *   - Aucune requête vers l'API ni vers une autre origine que la recherche d'adresse de la
+ *     Géoplateforme : `fetch` refuse le reste (./reseau.ts ; ceinture et bretelles, l'appli n'en
+ *     lance pas sans URL de synchro). La photo aérienne passe par des <img> (CSP : img-src).
  *   - Bandeau « Démo — données fictives » et bouton « Réinitialiser la démo » (./Bandeau.tsx).
  */
 import './demo.css';
@@ -24,6 +25,7 @@ import { stockageNavigateur } from '../connexion/session.ts';
 import { baseLocaleExiste } from '../donnees/effacer.ts';
 import { BandeauDemo, ConfirmationDemo } from './Bandeau.tsx';
 import { CLE_REMPLIE, UTILISATEUR_DEMO } from './identite.ts';
+import { reseauAutorise } from './reseau.ts';
 import { poserSessionDemo, reinitialiserStockage } from './session.ts';
 
 /** 'AAAA-MM-JJ' du téléphone (heure locale). */
@@ -33,13 +35,13 @@ function jourDuTelephone(): string {
   return `${String(d.getFullYear())}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`;
 }
 
-/** Refuse toute requête `fetch` vers l'API (/api) ou une autre origine. */
+/** Refuse toute requête `fetch` hors de ce que permet `reseauAutorise` (l'API, une autre origine). */
 function garderLeReseau(): void {
   const natif = window.fetch.bind(window);
   window.fetch = (entree, init) => {
     const brute = entree instanceof Request ? entree.url : entree instanceof URL ? entree.href : entree;
     const url = new URL(brute, location.href);
-    if (url.origin !== location.origin || url.pathname === '/api' || url.pathname.startsWith('/api/')) {
+    if (!reseauAutorise(url, location.origin)) {
       return Promise.reject(new TypeError(`Démo : aucune requête vers un serveur (${url.origin}${url.pathname})`));
     }
     return natif(entree, init);

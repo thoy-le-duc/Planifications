@@ -14,7 +14,7 @@
  *   src/App.tsx, code sous src/demo/**, chargé à la demande) :
  *   - pas d'écran de connexion : l'utilisateur UTILISATEUR_DEMO et la ferme FERME_DEMO (ci-dessous)
  *     sont ouverts d'emblée ; la synchro n'est jamais branchée, aucune requête vers l'API ni
- *     PowerSync (le build démo se fait SANS VITE_API_URL ni VITE_POWERSYNC_URL, la CSP aussi) ;
+ *     PowerSync, et (T28i) aucune autre sortie que la photo IGN et la recherche d'adresse de la Géoplateforme (le build démo se fait SANS VITE_API_URL ni VITE_POWERSYNC_URL, la CSP aussi) ;
  *   - base vide au premier lancement → remplie avec les jeux de test existants (fermeDuJour,
  *     fermeSerie, fermeItineraires, refus), datés par rapport au jour du téléphone, et rattachés à
  *     UTILISATEUR_DEMO / FERME_DEMO (le développeur réécrit les identifiants de l'utilisateur et de
