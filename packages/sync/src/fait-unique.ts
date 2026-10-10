@@ -266,10 +266,10 @@ const SQL_CHAINE_DE_L_ORIGINE = `${chaines(
 /**
  * T13m : la chaîne de remplacements de la ligne `id` de la ferme, selon la règle de `chaines`
  * (la seule) : la journée la lit pour toute la ferme (`CHAINES`), les écritures pour une saisie.
- * Chaîne qui contient une annulation, cycle, chaîne remplacée sans correction lisible, origine
- * dont `origine_id` désigne une autre ligne (données corrompues) : `annulee`, rien en vigueur
- * (le sens sûr : refus plutôt qu'écriture) ; sinon la correction
- * la plus récente (horodatage, puis id), à défaut l'origine. Ligne absente de la ferme : ni annulée,
+ * Chaîne qui contient une annulation, cycle, origine dont `origine_id` désigne une autre ligne
+ * (données corrompues) : `annulee`, rien en vigueur (le sens sûr : refus plutôt qu'écriture) ;
+ * sinon la correction la plus récente (instant, puis id ; T13n : un horodatage illisible ou nul
+ * vaut l'instant 0, il n'annule plus la chaîne), à défaut l'origine. Ligne absente de la ferme : ni annulée,
  * ni rien en vigueur.
  */
 export async function chaineDe(lire: Lire, fermeId: string, id: string): Promise<ChaineDe> {
@@ -283,7 +283,7 @@ export async function chaineDe(lire: Lire, fermeId: string, id: string): Promise
     await lire<{ annulations: number; cle: string | null; id: string | null }>(SQL_CHAINE_DE_L_ORIGINE, [origine, fermeId, origine, fermeId, fermeId, origine])
   )[0];
   if (c === undefined) return { annulee: false, enVigueur: origine };
-  // Annulation, ou chaîne remplacée sans correction lisible : rien en vigueur (comme EN_VIGUEUR).
+  // Annulation (ou chaîne sans clé, par sécurité) : rien en vigueur (comme EN_VIGUEUR).
   if (c.annulations > 0 || c.cle === null) return { annulee: true, enVigueur: null };
   return { annulee: false, enVigueur: c.id };
 }
