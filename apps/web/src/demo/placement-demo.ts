@@ -17,8 +17,17 @@ import type { Ligne } from './fusion.ts';
 
 type Tables = ReadonlyMap<string, readonly Ligne[]>;
 
-/** Origine du plan : celle de la position météo de la démo (44,35 N, 2,57 E). */
-const ORIGINE_PLAN = JSON.stringify({ latitude: 44.35, longitude: 2.57 });
+/**
+ * Lieu de la ferme fictive (T28i, Q36) : un grand champ ouvert de la plaine du Tarn et de la
+ * Garonne, au sud de Moissac (Tarn-et-Garonne), entouré de vergers sous filets et de serres,
+ * comme le maraîchage et l'arboriculture de la région. Relevé sur l'orthophoto IGN : aucune
+ * construction à moins de 100 m, donc aucune exploitation désignée. Coordonnées fixes, arrondies
+ * à 3 décimales (~100 m). L'origine du plan et la position météo sont au même endroit : la météo
+ * de la démo et la photo parlent du même lieu. Les jeux de test partagés (44,35 N, 2,57 E)
+ * restent intacts : seule la ferme de la démo est déplacée.
+ */
+const LIEU_DEMO = { latitude: 44.091, longitude: 1.071 } as const;
+const ORIGINE_PLAN = JSON.stringify(LIEU_DEMO);
 /** Cap des serres (degrés, sens horaire depuis le nord). */
 const CAP = 12;
 const CAP_PERPENDICULAIRE = CAP + 90;
@@ -95,7 +104,7 @@ export function placerLaDemo(tables: Tables): Map<string, Ligne[]> {
   const horodatage = texte(ferme.cree_le);
 
   // Origine du plan : avant tout placement (règle du serveur, T28s).
-  sortie.set('ferme', modifier(sortie.get('ferme'), (l) => (l.id === ferme.id ? { ...l, origine_plan: ORIGINE_PLAN } : l)));
+  sortie.set('ferme', modifier(sortie.get('ferme'), (l) => (l.id === ferme.id ? { ...l, origine_plan: ORIGINE_PLAN, position: ORIGINE_PLAN } : l)));
 
   // Bâtiments, une serre par zone abritée (zones présentes dans la démo seulement).
   const batiments: Ligne[] = [];

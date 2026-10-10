@@ -88,6 +88,9 @@ type EcranImportCharge = Awaited<ReturnType<typeof chargerImport>>['EcranImport'
  * par un import dynamique d'EcranFerme au tap : ni l'éditeur ni l'écran Ferme ne sont chargés avant.
  */
 export const chargerPlacement = () => import('../placement/index.ts');
+/** T28i : build de la démo en ligne (constante du build, éliminée en production) : l'éditeur et la 3D y invitent à essayer. */
+const DEMO = import.meta.env.MODE === 'demo';
+
 export type EditeurPlacementCharge = Awaited<ReturnType<typeof chargerPlacement>>['EditeurPlacement'];
 
 /** Pourquoi le bouton d'export est désactivé, dit en clair. */
@@ -530,6 +533,7 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
           porte={ouverte.porte}
           fermeId={ouverte.fermeId}
           utilisateurId={session.utilisateurId}
+          invitationDemo={DEMO}
           surFermer={() => {
             rendreFocus.current = true;
             setEditeurPlacement(null);
