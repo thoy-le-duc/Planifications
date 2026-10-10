@@ -9,6 +9,7 @@ import { geometrieFruit, geometriePlant, geometrieStructure } from './geometries
 import { FORMES, FRUITS_MAX_TOTAL, piedsDeGouttiere, plantsVisibles, PLANTS_MAX_TOTAL, type PlantsPlanche } from './plants.ts';
 import { aBalise, type CleFruit, type TypeFruit } from './recolte.ts';
 import {
+  COULEUR_BALISE_FIN_RECOLTE_3D,
   COULEUR_BALISE_RECOLTE_3D,
   COULEUR_BOIS_3D,
   COULEUR_COURGETTE_MURE_3D,
@@ -93,6 +94,7 @@ interface BalisePosee {
   readonly masse: number;
   /** Taille posée (m), par crans de la distance à la caméra. */
   taille: number;
+  readonly couleur: string;
 }
 
 /** Hauteur de la planche vue de loin : la dalle, plus la gouttière, plus le feuillage ou la structure. */
@@ -312,7 +314,7 @@ export class RenduPlants {
     plants.forEach((p, i) => {
       const v = scene.volumes[i];
       if (p === null || v === undefined || !aBalise(p, filtree.volumes[i])) return;
-      this.balisesPosees.push({ x: v.x, z: v.z, masse: hauteurDeMasse(hauteurRendue(v), p), taille: this.tailleVers(v.x, v.z) });
+      this.balisesPosees.push({ x: v.x, z: v.z, masse: hauteurDeMasse(hauteurRendue(v), p), taille: this.tailleVers(v.x, v.z), couleur: p.recolte.phase === 'fin-de-recolte' ? COULEUR_BALISE_FIN_RECOLTE_3D : COULEUR_BALISE_RECOLTE_3D });
     });
     return this.ecrireBalises();
   }
@@ -326,7 +328,7 @@ export class RenduPlants {
     let n = 0;
     for (const b of this.balisesPosees) {
       // Forme symétrique : lisible sous tous les angles, sans la tourner vers la caméra.
-      if (this.mettre(this.balisesMaillage, this.decalageBalises + n, b.x, b.masse + b.taille * BALISE_JEU, b.z, 0, b.taille, b.taille, b.taille, COULEUR_BALISE_RECOLTE_3D)) n += 1;
+      if (this.mettre(this.balisesMaillage, this.decalageBalises + n, b.x, b.masse + b.taille * BALISE_JEU, b.z, 0, b.taille, b.taille, b.taille, b.couleur)) n += 1;
     }
     return n;
   }

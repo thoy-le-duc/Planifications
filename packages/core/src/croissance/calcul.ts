@@ -8,6 +8,7 @@
  */
 import { ajouterJours, ecartEnJours, type DateCalendaire } from '../dates/index.ts';
 import { feuillageApresRecolte } from './defauts.ts';
+import { campagneEnCours } from './recolte.ts';
 import type { AllureCroissance, DateRepere, DatesCroissance, EntreePerenne, EtatCroissance, ProfilCroissance, StadeCroissance } from './types.ts';
 
 /** Fin de la levée : tant que la hauteur reste sous cette part de la hauteur maximale. */
@@ -73,30 +74,44 @@ const dansLAnnee = (annee: number, mmjj: string): DateCalendaire => `${String(an
 
 /**
  * Plantation pérenne (kiwi, asperge, pivoine, fraisier conservé) : cycle annuel simple (Q32),
- * débourrement, pleine végétation, repos, sur la campagne de l'année du jour.
+ * débourrement, pleine végétation, repos. La campagne vaut pour l'année du jour, ou, quelle que soit
+ * son année de rattachement, quand elle contient le jour ou commence dans les 28 jours (T32f) : la
+ * plante reste alors en végétation (pas de « repos » sans structure sous des fruits ou une balise).
  */
 export function croissancePerenneA(entree: EntreePerenne, profil: ProfilCroissance, jour: DateCalendaire): EtatCroissance {
   const { datePlantation, dateArrachage } = entree.plantation;
   if (jour < datePlantation || (dateArrachage !== null && jour >= dateArrachage)) return RIEN;
   // Dates du cycle manquantes : repli « touffe haute fixe », plutôt que d'inventer une repousse.
-  if (profil.cycleAnnuel === null) return etat('pleine_vegetation', profil, 1);
+  const cycle = profil.cycleAnnuel;
+  if (cycle === null) return etat('pleine_vegetation', profil, 1);
   const annee = Number(jour.slice(0, 4));
   const campagne = entree.campagne;
-  if (campagne?.annee !== annee) return REPOS;
+  if (campagne === null) return REPOS;
+  // Campagne rattachée à une autre année : elle ne compte que si elle est en cours, et tient alors la plante en végétation.
+  const autre = campagne.annee !== annee;
+  if (autre && !campagneEnCours(campagne, jour)) return REPOS;
 
-  let debut = dansLAnnee(annee, profil.cycleAnnuel.debourrement);
-  let repos = dansLAnnee(annee, profil.cycleAnnuel.repos);
-  // La récolte de la campagne, hors de la fenêtre du profil, l'élargit.
-  if (campagne.debutRecolte !== null && campagne.debutRecolte < debut) debut = campagne.debutRecolte;
-  if (campagne.finRecolte !== null && campagne.finRecolte >= repos) repos = ajouterJours(campagne.finRecolte, 1);
-  // L'année de plantation, la végétation part du jour de plantation.
-  if (Number(datePlantation.slice(0, 4)) === annee && datePlantation > debut) debut = datePlantation;
+  /** Fenêtre de végétation du cycle de l'année `an` : celle du profil, élargie par la récolte de la campagne. */
+  const fenetre = (an: number): readonly [DateCalendaire, DateCalendaire] => {
+    let debut = dansLAnnee(an, cycle.debourrement);
+    let repos = dansLAnnee(an, cycle.repos);
+    if (campagne.debutRecolte !== null && campagne.debutRecolte < debut) debut = campagne.debutRecolte;
+    if (campagne.finRecolte !== null && campagne.finRecolte >= repos) repos = ajouterJours(campagne.finRecolte, 1);
+    // L'année de plantation, la végétation part du jour de plantation.
+    if (Number(datePlantation.slice(0, 4)) === an && datePlantation > debut) debut = datePlantation;
+    return [debut, autre && jour >= repos ? ajouterJours(jour, 1) : repos];
+  };
+  // Avant le débourrement de l'année (début d'hiver, janvier) : la végétation de l'année précédente se prolonge. Elle se prolonge aussi (T32f)
+  // quand la campagne était déjà « en cours » le 31 décembre précédent (fraise d'hiver, récolte dès janvier) : pas de retour à 0 m au 1er janvier.
+  const an =
+    (autre && jour < fenetre(annee)[0]) || (jour < dansLAnnee(annee, cycle.debourrement) && campagneEnCours(campagne, dansLAnnee(annee - 1, '12-31')) && jour < fenetre(annee - 1)[1]) ? annee - 1 : annee;
+  const [debut, repos] = fenetre(an);
   if (jour < debut || jour >= repos) return REPOS;
 
   // Q33 (asperge) : turions seuls pendant la récolte, la fougère part de 0 le lendemain de sa fin.
   let depart = debut;
   if (feuillageApresRecolte(profil)) {
-    const finRecolte = campagne.finRecolte ?? dansLAnnee(annee, FIN_RECOLTE_PAR_DEFAUT);
+    const finRecolte = campagne.finRecolte ?? dansLAnnee(an, FIN_RECOLTE_PAR_DEFAUT);
     depart = ajouterJours(finRecolte, 1);
     if (jour < depart) return etat('debourrement', profil, 0);
   }

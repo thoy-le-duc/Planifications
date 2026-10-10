@@ -46,7 +46,7 @@ export interface BornesDessin {
 }
 /**
  * T32b : 3 appels (2 + un par forme ; la ferme T07 n'a que le profil générique, une seule forme) et au
- * plus 14 000 triangles : ~4 300 de la ferme, plus au pire PLANTS_MAX_TOTAL (200) plants de 48 triangles
+ * plus 14 000 triangles : ~4 300 de la ferme, plus au pire PLANTS_MAX_TOTAL (180) plants de 48 triangles
  * = 9 600. Mesuré : 4 300 en navigation et en vol (plants fondus en masse de loin), 9 100 en fin de vol
  * près d'une zone, 11 020 en zoom serré (100 plants). Avant T32b : 5 500.
  * T32e : 4 appels : le maillage partagé des balises « à récolter » (et des tuteurs et fruits, 8
