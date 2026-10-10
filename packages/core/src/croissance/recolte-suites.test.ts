@@ -9,7 +9,7 @@
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ajouterJours } from '../dates/index.ts';
-import { jaunissementA } from './recolte.ts';
+import { jaunissementA, jaunissementPerenneA } from './recolte.ts';
 import { chargerRecolte, type DateCalendaire, type DatesCroissance, type EntreePerenne, type ModuleRecolte, type PhaseRecolte } from './test/contrat-recolte.ts';
 
 let m: ModuleRecolte;
@@ -283,7 +283,7 @@ describe('T32f : fenêtre d’un jour et données incohérentes', () => {
   it('fin avant début, pérenne : jaunissement dans [0, 1]', () => {
     const e: EntreePerenne = { plantation: { datePlantation: d('2020-03-01'), dateArrachage: null }, campagne: { annee: 2027, debutRecolte: d('2027-07-01'), finRecolte: d('2027-06-20') } };
     for (let k = -30; k < 40; k += 1) {
-      const j = m.jaunissementPerenneA(e, plus(B, k));
+      const j = jaunissementPerenneA(e, plus(B, k));
       expect(j).toBeGreaterThanOrEqual(0);
       expect(j).toBeLessThanOrEqual(1);
     }
