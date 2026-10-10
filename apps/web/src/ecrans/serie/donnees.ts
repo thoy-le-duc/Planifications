@@ -7,6 +7,7 @@
 import type { DateCalendaire, Emplacement, HierarchieParcellaire, Id, Instant, OccupationHistorique, TypeAbri } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { cleHorodatageSql } from '@planif/sync/fait-unique';
+import { instantHorodatage } from '@planif/sync/horodatage';
 import type { EtatSerie } from '../../donnees/etat-serie.ts';
 import { versEmplacement, versOccupation } from '../plan/calculs.ts';
 import { comparerNoms, libelleCulture, versAssolement, type Bibliotheque, type EspeceLue, type FamilleLue, type OccupationLue, type PlancheLue, type VarieteLue } from './calculs.ts';
@@ -210,11 +211,13 @@ function jsonObjet(v: unknown): Readonly<Record<string, unknown>> | null {
   }
 }
 
-/** Instant d'un horodatage de Postgres (« …+00:00 », microsecondes comprises), en ms. */
-export function instantDe(horodatage: string): number {
-  const ramene = horodatage.replace(/(\.\d{3})\d+/, '$1');
-  return Date.parse(ramene);
-}
+/**
+ * Instant d'un horodatage (Postgres ou navigateur), en ms, par la règle canonique de T13n
+ * (`instantHorodatage`, arrondi à la ms comme SQLite). NaN si illisible : l'entrée n'est alors
+ * pas annulable. 210 866 760 000 000 = 1970-01-01T00:00Z en jour julien (ms) : `instantHorodatage`
+ * compte depuis -4713, les dates de l'écran depuis 1970.
+ */
+export const instantDe = (horodatage: string): number => (instantHorodatage(horodatage) || NaN) - 210_866_760_000_000;
 
 export function versModification(l: Readonly<Record<string, unknown>>): Modification {
   const op = l.operation;
