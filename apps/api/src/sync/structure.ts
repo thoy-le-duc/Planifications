@@ -26,6 +26,11 @@
  * supprime pas tant que son bâtiment n'est pas supprimé ou détaché. L'origine du plan :
  * structure-origine.ts.
  *
+ * T32c (Q35) : le profil de croissance d'une espèce (`profil_croissance`) se règle par le GÉRANT
+ * seulement (droitsDuProfil) : le profil après l'écriture est comparé à celui relu en base, sous
+ * le verrou de la ligne, dans la transaction du lot ; un renvoi de la même valeur reste ouvert à
+ * tout membre actif, comme les autres colonnes de l'espèce.
+ *
  * Bibliothèque commune (ferme_id nul) : en lecture seule. Un PUT à ferme_id nul est refusé par
  * les règles de la ligne ; une telle ligne se comporte, pour un PATCH, exactement comme une ligne
  * inexistante (la requête du verrou ne voit que les fermes de l'utilisateur), et un PUT sur son id
@@ -57,7 +62,7 @@
  * dans le même lot se référence (import), et ce qui occupe un emplacement ne change pas pendant
  * qu'on vérifie qu'il est libre (séries et occupations s'écrivent sous le même verrou).
  */
-import { validerPlacement, type Id } from '@planif/core';
+import { validerPlacement, validerProfilCroissance, type Id } from '@planif/core';
 import { modification } from '@planif/db';
 import { sql, type SQL } from 'drizzle-orm';
 import { estUuid } from '../auth/jetons.ts';
@@ -70,6 +75,7 @@ import {
   PRECISION_INTROUVABLE,
   PRECISION_SANS_ORIGINE,
   PRECISION_SEUL_LE_GERANT,
+  PRECISION_SEUL_LE_GERANT_PROFIL,
   PRECISION_ZONE_A_UN_CONTOUR,
   PRECISION_ZONE_ABRITEE_SUPPRIMEE,
   PRECISION_ZONE_DEJA_ABRITEE,
@@ -189,6 +195,32 @@ async function droitsDuPlacement(
   if (!estPlacee(table, l)) return null;
   const sansOrigine = await existe(tx, sql`SELECT 1 FROM ferme f WHERE f.id = ${fermeId}::uuid AND f.origine_plan IS NULL`);
   return sansOrigine ? invalide(PRECISION_SANS_ORIGINE, fermeId) : null;
+}
+
+/**
+ * Forme canonique d'un profil de croissance (T32c) : le profil relu par le cœur, en texte JSON
+ * (clés dans l'ordre du cœur), ou 'null'. Un profil illisible (écrit directement en base hors des
+ * règles) n'a pas de forme canonique : undefined, toujours « différent ».
+ */
+function profilCanonique(v: unknown): string | undefined {
+  const r = validerProfilCroissance(v ?? null);
+  return r.ok ? JSON.stringify(r.valeur) : undefined;
+}
+
+/**
+ * T32c (Q35) : seul le gérant de la ferme de la ligne règle le profil de croissance d'une espèce.
+ * « Régler » = toute écriture dont le profil APRÈS diffère de celui d'AVANT (relu en base, sous
+ * FOR UPDATE, dans la transaction du lot), comparés comme profils relus par le cœur, pas comme
+ * textes : PATCH qui change le profil ou le remet à nul ; PUT (création, `avant` null) dont le
+ * profil n'est pas nul. Renvoyer la valeur en base n'est pas régler. `gerees` : rôle relu dans la
+ * même transaction (upload.ts). Les autres colonnes de l'espèce gardent leurs droits ordinaires.
+ */
+function droitsDuProfil(table: TableEcrite, l: Ligne, avant: Ligne | null, fermeId: string, gerees: ReadonlySet<string>): Refus | null {
+  if (table !== 'espece') return null;
+  const apres = profilCanonique(l.profil_croissance);
+  const precedent = profilCanonique(avant === null ? null : avant.profil_croissance);
+  if (apres !== undefined && apres === precedent) return null;
+  return gerees.has(fermeId) ? null : invalide(PRECISION_SEUL_LE_GERANT_PROFIL, fermeId);
 }
 
 /** Colonnes de `table`, préfixées par `alias`, séparées par des virgules. */
@@ -651,7 +683,10 @@ async function creer(
   }
 
   const maintenant = ctx.maintenant();
-  const refus = (await droitsDuPlacement(tx, e.table, ligne, null, fermeId, gerees)) ?? (await verifierEnBase(tx, e.table, ligne, null, maintenant));
+  const refus =
+    droitsDuProfil(e.table, ligne, null, fermeId, gerees) ??
+    (await droitsDuPlacement(tx, e.table, ligne, null, fermeId, gerees)) ??
+    (await verifierEnBase(tx, e.table, ligne, null, maintenant));
   if (refus !== null) return refus;
 
   if (!(await inserer(tx, e.table, ligne, maintenant))) {
@@ -715,7 +750,10 @@ async function modifier(
   if ((await identique(tx, e.table, ligne, id)) === true) return null;
 
   const maintenant = ctx.maintenant();
-  const refus = (await droitsDuPlacement(tx, e.table, ligne, avant, fermeId, gerees)) ?? (await verifierEnBase(tx, e.table, ligne, avant, maintenant));
+  const refus =
+    droitsDuProfil(e.table, ligne, avant, fermeId, gerees) ??
+    (await droitsDuPlacement(tx, e.table, ligne, avant, fermeId, gerees)) ??
+    (await verifierEnBase(tx, e.table, ligne, avant, maintenant));
   if (refus !== null) return refus;
 
   await tx.execute(
