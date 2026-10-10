@@ -1369,6 +1369,22 @@ export const VERBES: Readonly<Record<Exclude<TacheSemainier['etape'], 'travail'>
   debut_recolte: 'Récolter',
 };
 
+/**
+ * Ordre des tâches de l'écran : celles en retard d'abord, puis les autres, l'ordre relatif de
+ * chaque groupe conservé (ordre du moteur). Sans plafond : l'écran borne chaque groupe après coup
+ * (T13d), la vue 3D (T37) les montre toutes. L'entrée n'est jamais modifiée.
+ */
+export function tachesDeLEcran(taches: readonly TacheJour[]): TacheJour[] {
+  return [...taches.filter((t) => t.tache.enRetard), ...taches.filter((t) => !t.tache.enRetard)];
+}
+
+/** La tâche en une phrase, en minuscules : « planter chou pointu », « grelinette batavia ». */
+export function phraseDeTache(t: TacheJour): string {
+  const { tache, culture } = t;
+  const quoi = tache.etape === 'travail' ? tache.travail.type : VERBES[tache.etape].toLowerCase();
+  return `${quoi} ${culture.espece.toLowerCase()}`;
+}
+
 /** Nom de l'étape réalisée, pour l'historique. */
 export const ETAPES_FAITES: Readonly<Record<EtapeRealisee, string>> = {
   semis_pepiniere: 'Semis en pépinière',

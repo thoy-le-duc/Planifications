@@ -57,7 +57,7 @@ import { useFocusDuDialogue } from './dialogue.ts';
 import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
 import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
-import { libelleEvenement, vueCarte, vuesHistorique, type CarteVue, type SaisieVue } from './vues.ts';
+import { libelleEvenement, tachesDeLEcran, vueCarte, vuesHistorique, type CarteVue, type SaisieVue } from './vues.ts';
 
 export interface ProprietesEcranAujourdhui {
   /**
@@ -470,7 +470,7 @@ interface FaitEcrit {
 
 /** Ce que l'écran dessine de la journée relue (tâches masquées retirées) : c'est aussi l'instantané gardé. */
 function vueDeJournee(journee: Journee, masquees: Masques, toutVoir: boolean): VueJournee {
-  const taches = journee.taches.filter((t) => !estMasqueeDans(masquees, journee, t.cle));
+  const taches = tachesDeLEcran(journee.taches.filter((t) => !estMasqueeDans(masquees, journee, t.cle)));
   const enRetard = taches.filter((t) => t.tache.enRetard);
   const semaine = taches.filter((t) => !t.tache.enRetard);
   const groupe = (liste: readonly TacheJour[]) => (toutVoir ? liste : liste.slice(0, TACHES_PAR_GROUPE));
