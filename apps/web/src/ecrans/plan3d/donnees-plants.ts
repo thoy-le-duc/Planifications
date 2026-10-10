@@ -118,17 +118,10 @@ export function construireCultures(lignes: LignesPlants): CulturesLues {
  * l'année du jour, ou une campagne vide (la plante suit son cycle annuel).
  */
 function campagneAu(campagnes: ReadonlyMap<number, Campagne>, jour: DateCalendaire): EntreePerenne['campagne'] {
-  let proche: EntreePerenne['campagne'] = null;
-  for (const [annee, c] of [...campagnes].sort((x, y) => x[0] - y[0])) {
-    const candidate = { annee, debutRecolte: c.debut, finRecolte: c.fin };
-    if (!campagneEnCours(candidate, jour)) continue;
-    if (c.debut !== null && c.debut <= jour) return candidate;
-    proche ??= candidate;
-  }
-  if (proche !== null) return proche;
+  const liste = [...campagnes].sort((x, y) => x[0] - y[0]).map(([annee, c]) => ({ annee, debutRecolte: c.debut, finRecolte: c.fin }));
+  const enCours = liste.filter((c) => campagneEnCours(c, jour));
   const annee = Number(jour.slice(0, 4));
-  const campagne = campagnes.get(annee);
-  return { annee, debutRecolte: campagne?.debut ?? null, finRecolte: campagne?.fin ?? null };
+  return enCours.find((c) => c.debutRecolte !== null && c.debutRecolte <= jour) ?? enCours[0] ?? liste.find((c) => c.annee === annee) ?? { annee, debutRecolte: null, finRecolte: null };
 }
 
 /** La culture de la semaine dont le lundi est `jour`. Une pérenne sans campagne en cours suit son cycle annuel. */

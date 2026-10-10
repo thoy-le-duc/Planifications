@@ -39,18 +39,8 @@ export const seRecolte = (p: PlantsPlanche): boolean => p.recolte.phase === 'a-r
 export const aBalise = (p: PlantsPlanche | null, filtre: { readonly estompe: boolean } | undefined): boolean => p !== null && seRecolte(p) && filtre?.estompe === false;
 
 /** Ce que la ligne d'une planche dit de sa récolte : rien tant qu'elle ne forme pas de fruits. */
-export function mentionRecolte(phase: string): string | null {
-  switch (phase) {
-    case 'fruits-en-formation':
-      return 'récolte proche';
-    case 'a-recolter':
-      return 'à récolter';
-    case 'fin-de-recolte':
-      return 'dernières récoltes';
-    default:
-      return null;
-  }
-}
+const MENTIONS: Readonly<Record<string, string | undefined>> = { 'fruits-en-formation': 'récolte proche', 'a-recolter': 'à récolter', 'fin-de-recolte': 'dernières récoltes' };
+export const mentionRecolte = (phase: string): string | null => MENTIONS[phase] ?? null;
 
 /** Ids des planches où l'on récolte (« à récolter » ou en fin de récolte), non estompées par les filtres, dans l'ordre de la scène. */
 export function planchesARecolter(plants: readonly (PlantsPlanche | null)[], filtree: SceneFiltree): readonly string[] {

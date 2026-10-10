@@ -6,7 +6,7 @@
  *
  * Règles et exemples : en-tête de test/contrat-recolte.ts.
  */
-import { ajouterJours, ecartEnJours, type DateCalendaire } from '../dates/index.ts';
+import { ecartEnJours, type DateCalendaire } from '../dates/index.ts';
 import type { DateRepere, DatesCroissance, EntreePerenne } from './types.ts';
 
 export type PhaseRecolte = 'aucune' | 'fruits-en-formation' | 'a-recolter' | 'fin-de-recolte';
@@ -71,22 +71,16 @@ export function recolteA(dates: DatesCroissance, jour: DateCalendaire): EtatReco
  * 28 jours, quelle que soit l'année à laquelle elle est rattachée. Sans date de fin, elle va jusqu'au
  * 31 décembre de son année (rien n'est inventé au-delà). Sans début : jamais.
  */
-export function campagneEnCours(campagne: EntreePerenne['campagne'], jour: DateCalendaire): boolean {
-  const debut = campagne?.debutRecolte ?? null;
-  if (campagne === null || debut === null) return false;
-  if (ecartEnJours(jour, debut) > JOURS_FORMATION_FRUITS) return false;
-  const fin = campagne.finRecolte;
-  return fin !== null ? jour < fin : jour <= (`${String(campagne.annee).padStart(4, '0')}-12-31` as DateCalendaire);
-}
+export const campagneEnCours = (c: EntreePerenne['campagne'], jour: DateCalendaire): boolean =>
+  c !== null && c.debutRecolte !== null && ecartEnJours(jour, c.debutRecolte) <= JOURS_FORMATION_FRUITS && (c.finRecolte !== null ? jour < c.finRecolte : jour <= `${String(c.annee)}-12-31`);
 
 /** Pérenne à récolte annuelle (fraise, asperge, kiwi…) : suit la campagne qui contient le jour ou qui commence dans les 28 jours. */
 export function recoltePerenneA(entree: EntreePerenne, jour: DateCalendaire): EtatRecolte {
   const { datePlantation, dateArrachage } = entree.plantation;
-  if (jour < datePlantation || (dateArrachage !== null && jour >= dateArrachage)) return AUCUNE;
-  const debut = entree.campagne?.debutRecolte ?? null;
+  const c = entree.campagne;
   // Après la fin de la campagne, la plante n'est plus en récolte (la période est annuelle).
-  if (debut === null || !campagneEnCours(entree.campagne, jour)) return AUCUNE;
-  return phase(debut, entree.campagne?.finRecolte ?? null, jour);
+  if (c?.debutRecolte == null || jour < datePlantation || (dateArrachage !== null && jour >= dateArrachage) || !campagneEnCours(c, jour)) return AUCUNE;
+  return phase(c.debutRecolte, c.finRecolte, jour);
 }
 
 /**
@@ -96,9 +90,8 @@ export function recoltePerenneA(entree: EntreePerenne, jour: DateCalendaire): Et
  */
 function avancementJaunissement(debut: DateCalendaire | null, fin: DateCalendaire | null, jour: DateCalendaire): number {
   if (fin === null || debut === null) return 0;
-  const joursDeFin = ecartEnJours(debut, fin) - joursAvantLaFin(debut, fin);
-  const ecoules = ecartEnJours(ajouterJours(debut, joursAvantLaFin(debut, fin)), jour);
-  return Math.min(1, (ecoules + 1) / (joursDeFin + 1));
+  const avant = joursAvantLaFin(debut, fin);
+  return Math.min(1, (ecartEnJours(debut, jour) - avant + 1) / (ecartEnJours(debut, fin) - avant + 1));
 }
 
 /** Jaunissement d'une culture annuelle au jour `jour` (0 hors « fin de récolte »). */

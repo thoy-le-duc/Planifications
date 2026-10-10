@@ -87,37 +87,29 @@ export function croissancePerenneA(entree: EntreePerenne, profil: ProfilCroissan
   const annee = Number(jour.slice(0, 4));
   const campagne = entree.campagne;
   if (campagne === null) return REPOS;
-  const enCours = campagneEnCours(campagne, jour);
-  if (campagne.annee !== annee && !enCours) return REPOS;
-  // Une campagne de l'année du jour qui n'a pas encore commencé garde la règle de T32a (la végétation part du début de récolte) ;
-  // une campagne rattachée à une autre année, ou déjà commencée, tient la plante en végétation.
-  const tient = enCours && (campagne.annee !== annee || (campagne.debutRecolte !== null && campagne.debutRecolte <= jour));
+  // Campagne rattachée à une autre année : elle ne compte que si elle est en cours, et tient alors la plante en végétation.
+  const autre = campagne.annee !== annee;
+  if (autre && !campagneEnCours(campagne, jour)) return REPOS;
 
-  /** Fenêtre de végétation du cycle de l'année `cycleAnnee` : celle du profil, élargie par la récolte de la campagne. */
-  const fenetre = (cycleAnnee: number): { readonly debut: DateCalendaire; readonly repos: DateCalendaire } => {
-    let debut = dansLAnnee(cycleAnnee, cycle.debourrement);
-    let repos = dansLAnnee(cycleAnnee, cycle.repos);
+  /** Fenêtre de végétation du cycle de l'année `an` : celle du profil, élargie par la récolte de la campagne. */
+  const fenetre = (an: number): readonly [DateCalendaire, DateCalendaire] => {
+    let debut = dansLAnnee(an, cycle.debourrement);
+    let repos = dansLAnnee(an, cycle.repos);
     if (campagne.debutRecolte !== null && campagne.debutRecolte < debut) debut = campagne.debutRecolte;
     if (campagne.finRecolte !== null && campagne.finRecolte >= repos) repos = ajouterJours(campagne.finRecolte, 1);
     // L'année de plantation, la végétation part du jour de plantation.
-    if (Number(datePlantation.slice(0, 4)) === cycleAnnee && datePlantation > debut) debut = datePlantation;
-    // Une campagne en cours tient la plante en végétation jusqu'au jour (et le lendemain).
-    if (tient && jour >= repos) repos = ajouterJours(jour, 1);
-    return { debut, repos };
+    if (Number(datePlantation.slice(0, 4)) === an && datePlantation > debut) debut = datePlantation;
+    return [debut, autre && jour >= repos ? ajouterJours(jour, 1) : repos];
   };
-  let cycleAnnee = annee;
-  let { debut, repos } = fenetre(cycleAnnee);
-  // Récolte en cours avant le débourrement de l'année (début d'hiver, janvier) : la végétation de l'année précédente se prolonge.
-  if (tient && jour < debut) {
-    cycleAnnee = annee - 1;
-    ({ debut, repos } = fenetre(cycleAnnee));
-  }
+  // Avant le débourrement de l'année (début d'hiver, janvier) : la végétation de l'année précédente se prolonge.
+  const an = autre && jour < fenetre(annee)[0] ? annee - 1 : annee;
+  const [debut, repos] = fenetre(an);
   if (jour < debut || jour >= repos) return REPOS;
 
   // Q33 (asperge) : turions seuls pendant la récolte, la fougère part de 0 le lendemain de sa fin.
   let depart = debut;
   if (feuillageApresRecolte(profil)) {
-    const finRecolte = campagne.finRecolte ?? dansLAnnee(cycleAnnee, FIN_RECOLTE_PAR_DEFAUT);
+    const finRecolte = campagne.finRecolte ?? dansLAnnee(an, FIN_RECOLTE_PAR_DEFAUT);
     depart = ajouterJours(finRecolte, 1);
     if (jour < depart) return etat('debourrement', profil, 0);
   }
