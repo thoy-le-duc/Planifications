@@ -1,7 +1,7 @@
 /**
  * Contrat de T32c, porte du téléphone (docs/backlog/T32c-reglage-profils.md ; Q35) : l'écriture
  * du profil de croissance d'une espèce, par la porte, sans réseau. Proposé par le testeur ; la
- * fiche de l'espèce (apps/web/src/ecrans/bibliotheque) s'en sert.
+ * réglage de l'écran Itinéraires culturaux (apps/web/src/ecrans/itineraires, Q39) s'en sert.
  *
  *   porte.reglerProfilCroissance(especeId: string, profil: unknown): Promise<void>
  *
