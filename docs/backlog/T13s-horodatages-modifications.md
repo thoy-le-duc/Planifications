@@ -1,21 +1,19 @@
-# T13s — Horodatages de la table des modifications
+# T13s — Horodatages : la table des modifications aussi (relecture T13q)
 
-## Objectif
+**Objectif** : plus aucun tri d'horodatage en texte, y compris sur la table `modification`.
 
-Plus aucun tri d'horodatage en texte, y compris sur la table `modification`. Suite de T13n.
+**Dépend de** : T13q
+**Périmètre** : `apps/web/src/ecrans/serie/donnees.ts`, `apps/web/src/diagnostic/itineraires.ts`, `apps/web/src/diagnostic/plan-serie.ts`, et leurs tests
 
-## Périmètre
+## Constat (relecture T13q)
 
-- `apps/web/src/ecrans/serie/donnees.ts` (historique de la série, entrées des occupations) ;
-- `apps/web/src/diagnostic/itineraires.ts` (historique des itinéraires) ;
-- `apps/web/src/diagnostic/plan-serie.ts` (historique du plan de série) ;
-- leurs tests.
+Des `ORDER BY horodatage` comparent encore le texte sur la table `modification` : `serie/donnees.ts` (~241, ~252), `diagnostic/itineraires.ts` (~115), `diagnostic/plan-serie.ts` (~142).
 
-## Règle
+## Règles
 
-Même ordre (instant, id) que T13n : `cleHorodatageSql` (`packages/sync/src/fait-unique.ts`) en SQL, `comparerSaisies` (`packages/sync/src/horodatage.ts`) en JavaScript. Aucun index perdu.
+- Même ordre (instant, id) que T13n : `cleHorodatageSql` en SQL, `comparerSaisies` en JS ; aucun index perdu (plans de requête vérifiés si une requête est sur un chemin chaud).
 
 ## Critères d'acceptation
 
-- Deux modifications à formats différents (`Z` / `+00`, `T` / espace, fractions) sont ordonnées par leur instant, à chacun des endroits ci-dessus.
-- `pnpm verif` vert, aucun budget relevé (poids de l'écran Série et du morceau `fait`, voir `pnpm budget`).
+- [ ] Tests : deux modifications à formats différents (`Z` / `+00`, `T` / espace, fractions) → ordre par l'instant, à chaque endroit.
+- [ ] `pnpm verif` passe en entier.

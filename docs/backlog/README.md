@@ -137,7 +137,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T36](T36-allegement-vue-3d.md) | Alléger la vue 3D : ne plus charger tout le cœur (relecture T35a) | T32d, T35a | fait |
 | [T32e](T32e-recolte-visible.md) | Jumeau 3D : la récolte se voit (fruits, à récolter, fin de récolte) (Q34) | T32d, T36 | fait |
 | [T32f](T32f-recolte-suites.md) | Récolte visible : récoltes courtes, pérennes d'hiver, balise en fin de récolte (relecture T32e, Q38) | T32e | fait |
-| [T32h](T32h-especes-sans-itineraire.md) | Toutes les espèces de la ferme dans l'écran Itinéraires (Q40) | T32c | à faire |
+| [T32h](T32h-especes-sans-itineraire.md) | Toutes les espèces de la ferme dans l'écran Itinéraires (Q40) | T32c | fait |
 | [T32i](T32i-perennes-repousse.md) | Pérennes : repousse en douceur avant la récolte (Q41) | T32f | fait |
 | [T32j](T32j-perennes-tournant-annee.md) | Pérennes : repousse continue au tournant de l'année (relecture T32i) | T32i | fait |
 | [T35a](T35a-schema-rangs.md) | Itinéraire : rangs alignés ou en quinconce, et leur schéma (Q34) | — | fait |
@@ -149,7 +149,8 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T37b](T37b-3d-telephone-suites.md) | 3D au téléphone : fluidité de près, filtres, suites de T37 | T37 | à faire |
 | [T38a](T38a-api-sur-vercel.md) | Mise en ligne gratuite : l'API sur Vercel (Q37) | T09c, T10 | fait |
 | [T38b](T38b-guide-mise-en-ligne.md) | Guide de mise en ligne pas à pas, pour Théophane (Q37) | T38a | fait |
-| [T13q](T13q-horodatages-suites.md) | Horodatages : les derniers endroits qui comparent du texte (relecture T13n) | T13n | à faire |
+| [T13q](T13q-horodatages-suites.md) | Horodatages : les derniers endroits qui comparent du texte (relecture T13n) | T13n | fait |
+| [T13s](T13s-horodatages-modifications.md) | Horodatages : la table des modifications aussi (relecture T13q) | T13q | fait |
 | [T13r](T13r-morceau-identifiants.md) | L'éditeur de placement ne charge plus la règle « déjà fait » (relecture T13n) | T13n | fait |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.

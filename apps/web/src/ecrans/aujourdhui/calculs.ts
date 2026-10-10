@@ -34,7 +34,7 @@ import {
 } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { CHAINES } from '@planif/sync/fait-unique';
-import { comparerSaisies } from '@planif/sync/horodatage';
+import { comparerSaisies, instantHorodatage } from '@planif/sync/horodatage';
 import { cleFamille } from '../plan/calculs.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────────────────────────
@@ -458,6 +458,8 @@ function valeurExtraite(v: unknown): Valeur {
  * réunies par UNION (un OR empêcherait les index) ; la seconde ne garde que les saisies d'une date
  * plus ancienne (lue dans l'index ferme_horodatage) : les deux parties sont disjointes. Les
  * champs du detail sont extraits en un appel (`CHAMPS_DETAIL`), puis rangés en colonnes ici.
+ * T13q : la borne d'instant passée au SQL est élargie (`borneSql`), le texte de l'horodatage ne
+ * se compare pas comme un instant ; `dansLaFenetre` trie ensuite les lignes par l'instant.
  */
 const sqlRecents = (partie: string) => `SELECT e.id, e.type, e.date, e.horodatage, e.serie_id, e.campagne_id, e.remplace_sorte, e.remplace_evenement_id,
     json_extract(e.detail, ${CHAMPS_DETAIL.map(([chemin]) => `'$.${chemin}'`).join(', ')}) AS detail,
@@ -507,6 +509,15 @@ export function bornesHistorique(aujourdhui: string, maintenant: Date): { readon
     horodatageDepuis: new Date(maintenant.getTime() - JOURS_HISTORIQUE * 86_400_000).toISOString(),
   };
 }
+
+/**
+ * T13q : borne d'instant de la fenêtre élargie pour le SQL, qui compare le texte de l'horodatage
+ * (comparer l'instant y ferait perdre l'index ferme_horodatage) : la veille du jour de la borne,
+ * `AAAA-MM-JJ`. Toute forme canonique (jour valide, comme l'écrivent toISOString et Postgres) d'un instant postérieur à la borne commence par un jour au
+ * plus un jour plus tôt (fuseau de −14:59 au plus), donc ne s'écrit pas avant ce texte. Les lignes
+ * en trop sont écartées ensuite par `dansLaFenetre`, à l'instant près.
+ */
+const borneSql = (horodatageDepuis: string): string => ajouterJours(horodatageDepuis.slice(0, 10) as DateCalendaire, -1);
 
 /** Lecture abandonnée entre deux requêtes : plus aucun écran ne l'attend. */
 export class LectureAbandonnee extends Error {}
@@ -574,7 +585,8 @@ export async function lireJournee(
   maintenant: Date,
   continuer: () => boolean = () => true,
 ): Promise<LignesJournee> {
-  const { depuis, horodatageDepuis } = bornesHistorique(aujourdhui, maintenant);
+  const bornes = bornesHistorique(aujourdhui, maintenant);
+  const { depuis } = bornes;
   const lire: Lire = async (sql, parametres) => {
     if (!continuer()) throw new LectureAbandonnee();
     return porte.lire<Ligne>(sql, parametres);
@@ -594,7 +606,9 @@ export async function lireJournee(
     ...(idsCampagnes.length === 0 ? [] : await lire(SQL_REALISES_CAMPAGNES, [listeJson(idsCampagnes), jsonSeries, fermeId, ...vigueur])),
   ];
   const interventions = await lire(SQL_INTERVENTIONS, [jsonSeries, fermeId, ...vigueur]);
-  const recents = (await lire(SQL_RECENTS, [...vigueur, fermeId, depuis, ...vigueur, fermeId, horodatageDepuis, depuis])).map(ligneRecente);
+  const recents = (await lire(SQL_RECENTS, [...vigueur, fermeId, depuis, ...vigueur, fermeId, borneSql(bornes.horodatageDepuis), depuis]))
+    .filter((l) => dansLaFenetre(l, bornes))
+    .map(ligneRecente);
   // Historique : les cultures terminées ou passées qu'il nomme, lues en plus (rarement).
   const connues = new Set([...idsSeries, ...idsCampagnes]);
   const autresSeries = [...new Set(recents.map((l) => texte(l.serie_id)).filter((x) => x !== '' && !connues.has(x)))];
@@ -672,7 +686,7 @@ export async function lireCultures(
     return porte.lire<Ligne>(sql, parametres);
   };
   const vigueur = chaines ? await lireChaines(lire, fermeId) : contexte.vigueur;
-  const { depuis, horodatageDepuis } = bornes;
+  const { depuis } = bornes;
   const actives = listeJson(cultures.series.filter((id) => contexte.series.has(id)));
   const campagnesEnCours = listeJson(cultures.campagnes.filter((id) => contexte.campagnes.has(id)));
   const realises: Ligne[] = [];
@@ -689,7 +703,8 @@ export async function lireCultures(
   ] as const) {
     if (ids.length === 0) continue;
     const json = listeJson(ids);
-    recents.push(...(await lire(sql, [...vigueur, json, fermeId, depuis, ...vigueur, json, fermeId, horodatageDepuis, depuis])).map(ligneRecente));
+    const lignes = await lire(sql, [...vigueur, json, fermeId, depuis, ...vigueur, json, fermeId, borneSql(bornes.horodatageDepuis), depuis]);
+    recents.push(...lignes.filter((l) => dansLaFenetre(l, bornes)).map(ligneRecente));
   }
   return { series: cultures.series, campagnes: cultures.campagnes, vigueur, realises, interventions, recents, bornes };
 }
@@ -1205,11 +1220,15 @@ export function calculerJournee(lignes: LignesJournee, aujourdhui: string): Jour
   return calculerEtat(lignes, aujourdhui).journee;
 }
 
-/** La ligne récente est-elle dans la fenêtre de l'historique (même règle que `SQL_RECENTS`) ? */
+/**
+ * La ligne récente est-elle dans la fenêtre de l'historique ? Règle de `SQL_RECENTS`, l'horodatage
+ * comparé à la borne comme un instant (T13q : `instantHorodatage`, jamais le texte ; illisible =
+ * instant 0, hors de la fenêtre).
+ */
 function dansLaFenetre(l: Ligne, bornes: ReturnType<typeof bornesHistorique>): boolean {
   const date = typeof l.date === 'string' ? l.date : null;
   if (date !== null && date >= bornes.depuis) return true;
-  return typeof l.horodatage === 'string' && l.horodatage >= bornes.horodatageDepuis && (date === null || date < bornes.depuis);
+  return instantHorodatage(l.horodatage) >= instantHorodatage(bornes.horodatageDepuis) && (date === null || date < bornes.depuis);
 }
 
 /**

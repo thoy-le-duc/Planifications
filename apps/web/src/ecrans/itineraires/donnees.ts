@@ -4,6 +4,7 @@
  * écritures et la synchro), et les séries à venir d'un itinéraire.
  */
 import type { PorteDonnees, RequeteSurveillee } from '@planif/sync';
+import { cleHorodatageSql } from '@planif/sync/fait-unique';
 import { versEspece, versItineraire, versType, type EspeceLue, type ItineraireLu, type TypeLu } from './calculs.ts';
 
 export function requeteItineraires(fermeId: string): RequeteSurveillee<ItineraireLu> {
@@ -36,14 +37,16 @@ export function requeteTypes(fermeId: string): RequeteSurveillee<TypeLu | null> 
 /**
  * Règle « en vigueur » de l'écran Aujourd'hui (vue evenements_en_vigueur de @planif/db), pour
  * l'alias `ev` : ni une annulation, ni un événement annulé ou corrigé ; une correction seulement
- * si c'est la plus récente de son événement et qu'il n'est pas annulé.
+ * si c'est la plus récente de son événement et qu'il n'est pas annulé. La plus récente : ordre
+ * canonique (instant, id) de `cleHorodatageSql` (T13q : jamais le texte de l'horodatage, dont le
+ * format varie entre le téléphone et le serveur).
  */
 const EN_VIGUEUR = `(ev.remplace_sorte IS NULL OR ev.remplace_sorte <> 'annulation')
     AND ev.id NOT IN (SELECT remplace_evenement_id FROM evenement WHERE ferme_id = ? AND remplace_evenement_id IS NOT NULL)
     AND (ev.remplace_sorte IS NULL OR (
       ev.remplace_evenement_id NOT IN (SELECT remplace_evenement_id FROM evenement WHERE ferme_id = ? AND remplace_sorte = 'annulation')
-      AND (ev.remplace_evenement_id, ev.horodatage || '|' || ev.id) IN (
-        SELECT remplace_evenement_id, MAX(horodatage || '|' || id) FROM evenement
+      AND (ev.remplace_evenement_id, ${cleHorodatageSql('ev.horodatage', 'ev.id')}) IN (
+        SELECT remplace_evenement_id, MAX(${cleHorodatageSql('horodatage', 'id')}) FROM evenement
         WHERE ferme_id = ? AND remplace_sorte = 'correction' GROUP BY remplace_evenement_id)))`;
 
 /**
