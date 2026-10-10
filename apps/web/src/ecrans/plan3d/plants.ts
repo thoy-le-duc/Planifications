@@ -29,8 +29,8 @@ import {
 
 /** Plafond de plants d'UNE planche : au-delà on espace les plants, on n'en dessine pas plus. */
 export const PLANTS_MAX_PAR_PLANCHE = 20;
-/** Plafond de plants dessinés pour toute la scène : les planches les plus proches d'abord. */
-export const PLANTS_MAX_TOTAL = 200;
+/** Plafond de plants dessinés pour toute la scène : les planches les plus proches d'abord (200 → 180 en T32f : les balises de fin de récolte ajoutent des triangles, et la ferme T07 en zoom serré, 4 300 + 200 × 48 + 79 × 8, dépassait 14 000). */
+export const PLANTS_MAX_TOTAL = 180;
 /** Plafond de fruits dessinés par plant (T32e). */
 export const FRUITS_MAX_PAR_PLANT = 4;
 /** Plafond de fruits dessinés pour toute la scène (T32e). */
