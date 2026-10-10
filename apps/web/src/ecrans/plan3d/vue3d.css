@@ -499,6 +499,30 @@
   .plan3d-cote[hidden] {
     display: none;
   }
+
+  /* Relecture T37b : un seul ascenseur, celui du panneau ; rien n'est coupé dans une liste défilante sans indice. */
+  .plan3d-cote .plan3d-cases-defilantes,
+  .plan3d-cote .plan3d-liste {
+    max-height: none;
+    overflow: visible;
+  }
+
+  /* Cibles de 48 px au moins (boutons, « Tout » et « Rien », cases, titres repliables). */
+  .plan3d-cote .plan3d-bouton,
+  .plan3d-cote .plan3d-toutrien button,
+  .plan3d-cote .plan3d-case,
+  .plan3d-cote .plan3d-groupe > summary {
+    min-height: 48px;
+  }
+
+  .plan3d-cote .plan3d-toutrien button {
+    min-width: 64px;
+  }
+
+  .plan3d-cote .plan3d-case input {
+    width: 24px;
+    height: 24px;
+  }
 }
 
 /* T37 : pastilles numérotées des travaux du jour, posées sur la toile (replacées à chaque image). */
