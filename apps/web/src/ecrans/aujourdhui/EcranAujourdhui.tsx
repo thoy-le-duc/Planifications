@@ -236,6 +236,14 @@ interface ProprietesHistorique {
    */
   readonly instantane: { readonly vues: readonly SaisieVue[]; readonly total: number } | null;
   /**
+   * T13t, T13u : « Fait » écrits depuis l'instantané (lignes provisoires), en tête, boutons
+   * inactifs, jusqu'à ce que l'historique dessiné les contienne : jamais retirés avant, même si
+   * une journée relue arrive sans eux (lue avant leur écriture). `surContenues` : ceux que
+   * l'historique dessiné contient désormais (ils ne servent plus).
+   */
+  readonly provisoires: readonly EntreeHistorique[];
+  readonly surContenues: (ids: readonly string[]) => void;
+  /**
    * Saisie qui doit recevoir le focus (T13c, après « Changer la date ») : sa correction, une fois
    * la journée relue. Absente de l'historique, le focus va au titre de l'historique.
    */
@@ -249,7 +257,7 @@ interface ProprietesHistorique {
   readonly surChangerDate: (e: EntreeHistorique) => void;
 }
 
-function Historique({ id, entrees, instantane, focus, surFocusPlace, aujourdhui, enAnnulation, surAnnuler, surChangerDate }: ProprietesHistorique) {
+function Historique({ id, entrees, instantane, provisoires, surContenues, focus, surFocusPlace, aujourdhui, enAnnulation, surAnnuler, surChangerDate }: ProprietesHistorique) {
   const idTitre = useId();
   const [tout, setTout] = useState(false);
   // Dessinées en tâche de fond (interruptible) : l'historique, en bas de l'écran, ne retarde ni
@@ -257,15 +265,26 @@ function Historique({ id, entrees, instantane, focus, surFocusPlace, aujourdhui,
   const differees = useDeferredValue(entrees, AUCUNE_SAISIE);
   const vuesInstantane = useDeferredValue(instantane?.vues ?? AUCUNE_VUE, AUCUNE_VUE);
   const montrees = useMemo(() => (tout ? differees : differees.slice(0, SAISIES_HISTORIQUE)), [tout, differees]);
+  // Lignes provisoires : celles que l'historique dessiné (instantané, ou journée relue différée)
+  // ne contient pas encore.
+  const dessinees = useMemo(() => (instantane !== null ? null : new Set(differees.map((h) => h.evenement.id))), [instantane, differees]);
+  const enTete = useMemo(() => provisoires.filter((h) => dessinees?.has(h.evenement.id) !== true), [provisoires, dessinees]);
+  const contenues = provisoires.length - enTete.length;
+  useEffect(() => {
+    if (contenues > 0 && dessinees !== null) surContenues(provisoires.filter((h) => dessinees.has(h.evenement.id)).map((h) => h.evenement.id));
+  }, [contenues, dessinees, provisoires, surContenues]);
   const lignes = useMemo(
-    () =>
-      instantane !== null
+    () => [
+      ...vuesHistorique(enTete, aujourdhui).map((vue) => ({ vue, entree: null })),
+      ...(instantane !== null
         ? vuesInstantane.map((vue) => ({ vue, entree: null }))
-        : vuesHistorique(montrees, aujourdhui).map((vue, i) => ({ vue, entree: montrees[i] ?? null })),
-    [instantane, vuesInstantane, montrees, aujourdhui],
+        : vuesHistorique(montrees, aujourdhui).map((vue, i) => ({ vue, entree: montrees[i] ?? null }))),
+    ],
+    [enTete, instantane, vuesInstantane, montrees, aujourdhui],
   );
-  const total = instantane?.total ?? entrees.length;
-  const autres = (instantane !== null ? instantane.total : differees.length) - lignes.length;
+  const idsEntrees = useMemo(() => new Set(entrees.map((h) => h.evenement.id)), [entrees]);
+  const total = instantane !== null ? instantane.total + enTete.length : entrees.length + provisoires.filter((h) => !idsEntrees.has(h.evenement.id)).length;
+  const autres = (instantane !== null ? instantane.total + enTete.length : differees.length + enTete.length) - lignes.length;
   const section = useRef<HTMLElement>(null);
   const titre = useRef<HTMLHeadingElement>(null);
   // Focus placé UNE fois, à la première journée relue après la correction, puis oublié
@@ -614,7 +633,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   /**
    * T13t : « Fait » écrits depuis l'instantané, la plus récente d'abord. Ils sont écrits dans la
    * base : l'historique de l'instantané les montre dès l'écriture, sans attendre la journée relue
-   * (qui les contient, et remplace l'instantané).
+   * (qui les contient, et remplace l'instantané). T13u : montrés en tête jusqu'à ce que
+   * l'historique dessiné les contienne, même si une journée relue arrive sans eux (lue avant
+   * leur écriture), puis oubliés.
    */
   const [ecritsSurInstantane, setEcritsSurInstantane] = useState<readonly EntreeHistorique[]>(AUCUNE_SAISIE);
   const [dialogue, setDialogue] = useState<Dialogue>(null);
@@ -748,13 +769,20 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   // laisse la main à l'ouverture de la base ; le reste suit, différé, la base ouverte.
   const complet = useDeferredValue(porte !== null, false);
 
-  // T13t : historique de l'instantané, les « Fait » écrits depuis lui en tête (sauf annulés).
-  const historiqueInstantane = useMemo(() => {
-    if (journee !== null || !surInstantane) return null;
-    const ecrits = ecritsSurInstantane.filter((h) => !enAnnulation.has(h.evenement.id));
-    if (ecrits.length === 0) return { vues: instantane.historique, total: instantane.saisies };
-    return { vues: [...vuesHistorique(ecrits, jour), ...instantane.historique], total: instantane.saisies + ecrits.length };
-  }, [journee, surInstantane, instantane, ecritsSurInstantane, enAnnulation, jour]);
+  // T13d : historique de l'instantané, tant qu'aucune journée relue n'est là.
+  const historiqueInstantane = useMemo(
+    () => (journee !== null || !surInstantane ? null : { vues: instantane.historique, total: instantane.saisies }),
+    [journee, surInstantane, instantane],
+  );
+  // T13t, T13u : les « Fait » écrits depuis l'instantané, en tête de l'historique (sauf annulés)
+  // jusqu'à ce qu'il les contienne.
+  const provisoires = useMemo(() => ecritsSurInstantane.filter((h) => !enAnnulation.has(h.evenement.id)), [ecritsSurInstantane, enAnnulation]);
+  const oublierProvisoires = useCallback((ids: readonly string[]) => {
+    setEcritsSurInstantane((l) => {
+      const reste = l.filter((h) => !ids.includes(h.evenement.id));
+      return reste.length === l.length ? l : reste;
+    });
+  }, []);
 
   // Une marque par ouverture de l'écran, quand les tâches (ou « rien à faire ») sont dessinées,
   // celles de l'instantané comprises (T13d).
@@ -1210,6 +1238,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
           id={idHistorique}
           entrees={journee?.historique ?? AUCUNE_SAISIE}
           instantane={historiqueInstantane}
+          provisoires={provisoires}
+          surContenues={oublierProvisoires}
           focus={focusSaisie !== null && focusSaisie.avant !== journee ? focusSaisie.evenementId : null}
           surFocusPlace={oublierFocus}
           aujourdhui={jour}

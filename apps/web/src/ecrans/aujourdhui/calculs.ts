@@ -297,8 +297,8 @@ export function enVigueur<E extends MaillonChaine>(evenements: readonly E[]): E[
 //     toute la journée avec lui.
 
 /**
- * Séries que le semainier peut planifier : prévues ou en cours (index ferme_statut : les séries
- * terminées des saisons passées ne sont pas lues), avec un mode d'itinéraire valide, vérifié par
+ * Séries que le semainier peut planifier : prévues ou en cours (les séries terminées des saisons
+ * passées ne rendent que leur id, `sqlSeriesPage`), avec un mode d'itinéraire valide, vérifié par
  * `lireJournee` (`parametresDe`) : sans lui, pas de dates d'étapes, `calculerJournee` les
  * écarterait.
  */
@@ -309,14 +309,39 @@ const DANS = 'SELECT value FROM json_each(?)';
 const listeJson = (ids: Iterable<string>): string => JSON.stringify([...new Set(ids)].filter((x) => x !== ''));
 
 /**
- * Séries, l'instantané `parametres` en texte (lu une fois par texte : `parametresDe`), sans
- * jointure (l'espèce, la famille et la variété sont lues à part : `lireNoms`) ; `filtre`
- * sur l'alias `s`.
+ * Séries lues par leur id (`s.id IN (…)` : la liste JSON en paramètre, puis la ferme), l'instantané
+ * `parametres` en texte (lu une fois par texte : `parametresDe`), sans jointure (l'espèce, la
+ * famille et la variété sont lues à part : `lireNoms`) ; `filtre` en plus, sur l'alias `s`.
+ * T13u : la ferme et le statut sont écartés des index (`+`) : SQLite cherche chaque série par
+ * son id. Sinon, le SQLite du navigateur prend l'index ferme_statut et parcourt toutes les séries
+ * actives de la ferme pour en trouver une (0,5 à 0,9 s à froid sur la grande ferme).
  */
-const sqlSeries = (filtre: string) => `SELECT s.id, s.statut, s.parametres, s.prevu_semis_pepiniere,
-    s.prevu_mise_en_place, s.prevu_debut_recolte, s.prevu_fin_recolte, s.longueur_m, s.nombre_plants, s.espece_id, s.variete_id
+const COLONNES_SERIE = `s.id, s.statut, s.parametres, s.prevu_semis_pepiniere,
+    s.prevu_mise_en_place, s.prevu_debut_recolte, s.prevu_fin_recolte, s.longueur_m, s.nombre_plants, s.espece_id, s.variete_id`;
+const sqlSeriesParId = (filtre = '1') => `SELECT ${COLONNES_SERIE}
   FROM serie s
-  WHERE s.ferme_id = ? AND s.supprime_le IS NULL AND ${filtre}`;
+  WHERE s.id IN (${DANS}) AND +s.ferme_id = ? AND s.supprime_le IS NULL AND ${filtre}`;
+
+/** Les séries que lit la journée : prévues ou en cours (`FILTRE_SERIES_ACTIVES`), statut hors index. */
+const SERIES_ACTIVES = `+${FILTRE_SERIES_ACTIVES}`;
+
+/**
+ * T13u, séries actives lues par pages (`sqlSeriesPage`) : `TAILLE_PAGE_SERIES` séries de la
+ * base au plus par requête, dans l'ordre des id (index de la clé), à partir de la dernière lue (paramètres : la
+ * ferme, puis, après la première page, l'id après lequel lire). Entre deux pages, la relecture
+ * complète peut céder la place à une saisie (`continuer`) : lues d'une traite, les 3 000 séries
+ * de la grande ferme tenaient la base 0,75 à 0,9 s à froid, et un « Fait » tapé pendant
+ * attendait. Chaque page parcourt au plus `TAILLE_PAGE_SERIES` séries, de toute ferme et de tout
+ * statut : une page reste courte même derrière des années de séries terminées ; celles-là ne
+ * rendent que leur id (`active` à 0, `parametres` nul), les autres colonnes sont petites.
+ */
+const TAILLE_PAGE_SERIES = 250;
+const ACTIVE = `(s.ferme_id = f.ferme AND s.supprime_le IS NULL AND ${FILTRE_SERIES_ACTIVES})`;
+const sqlSeriesPage = (premiere: boolean) => `SELECT ${COLONNES_SERIE.replace('s.parametres', `CASE WHEN ${ACTIVE} THEN s.parametres END AS parametres`)}, ${ACTIVE} AS active
+  FROM serie s, (SELECT ? AS ferme) f
+  WHERE s.id > ${premiere ? "''" : '?'}
+  ORDER BY s.id
+  LIMIT ${String(TAILLE_PAGE_SERIES)}`;
 
 /**
  * Isolement entre fermes (T13c) : espèces, familles, variétés, emplacements et zones sont lus
@@ -548,7 +573,7 @@ interface Noms {
   readonly varietes: readonly Ligne[];
 }
 
-/** Espèces (avec leur famille) et variétés des séries lues par `sqlSeries`. */
+/** Espèces (avec leur famille) et variétés des séries lues (`lireSeriesActives`, `sqlSeriesParId`). */
 async function lireNoms(lire: Lire, fermeId: string, series: readonly Ligne[]): Promise<Noms> {
   if (series.length === 0) return { especes: [], varietes: [] };
   const especes = await lire(SQL_ESPECES, [listeJson(series.map((s) => texte(s.espece_id))), fermeId]);
@@ -573,6 +598,24 @@ async function lireOccupations(lire: Lire, fermeId: string, series: readonly str
 }
 
 /**
+ * Séries actives de la ferme avec un mode d'itinéraire valide (`parametresDe`), lues par pages
+ * (`sqlSeriesPage`, T13u) : une requête par page, `lire` vérifie avant chacune que la lecture
+ * doit continuer.
+ */
+async function lireSeriesActives(lire: Lire, fermeId: string): Promise<Ligne[]> {
+  const series: Ligne[] = [];
+  for (let apres: string | null = null; ; ) {
+    const page = await lire(sqlSeriesPage(apres === null), apres === null ? [fermeId] : [fermeId, apres]);
+    for (const { active, ...serie } of page) {
+      if (active === 1 && parametresDe(texte(serie.id), serie.parametres).mode !== null) series.push(serie);
+    }
+    const derniere = page.at(-1);
+    if (page.length < TAILLE_PAGE_SERIES || derniere === undefined) return series;
+    apres = texte(derniere.id);
+  }
+}
+
+/**
  * Lit ce dont la journée a besoin, bornée aux cultures actives. Une requête à la fois (la base
  * n'en sert qu'une à la fois de toute façon) : entre deux, `continuer()` dit si un écran attend
  * encore la journée ; sinon la lecture s'arrête (LectureAbandonnee) et laisse la base à l'écran
@@ -591,7 +634,7 @@ export async function lireJournee(
     if (!continuer()) throw new LectureAbandonnee();
     return porte.lire<Ligne>(sql, parametres);
   };
-  const series = (await lire(sqlSeries(FILTRE_SERIES_ACTIVES), [fermeId])).filter((s) => parametresDe(texte(s.id), s.parametres).mode !== null);
+  const series = await lireSeriesActives(lire, fermeId);
   const noms = await lireNoms(lire, fermeId, series);
   const campagnes = await lire(sqlCampagnes('(c.fin_recolte_prevue IS NULL OR c.fin_recolte_prevue >= ?)'), [fermeId, aujourdhui]);
   const idsSeries = series.map((s) => texte(s.id));
@@ -614,7 +657,7 @@ export async function lireJournee(
   const autresSeries = [...new Set(recents.map((l) => texte(l.serie_id)).filter((x) => x !== '' && !connues.has(x)))];
   const autresCampagnes = [...new Set(recents.map((l) => texte(l.campagne_id)).filter((x) => x !== '' && !connues.has(x)))];
   if (autresSeries.length === 0 && autresCampagnes.length === 0) return { series, ...noms, campagnes, occupations, realises, interventions, recents, contexte };
-  const s2 = autresSeries.length === 0 ? [] : await lire(sqlSeries(`s.id IN (${DANS})`), [fermeId, listeJson(autresSeries)]);
+  const s2 = autresSeries.length === 0 ? [] : await lire(sqlSeriesParId(), [listeJson(autresSeries), fermeId]);
   const noms2 = await lireNoms(lire, fermeId, s2);
   const c2 = autresCampagnes.length === 0 ? [] : await lire(sqlCampagnes(`c.id IN (${DANS})`), [fermeId, listeJson(autresCampagnes)]);
   const o2 = await lireOccupations(lire, fermeId, autresSeries, c2.map((l) => texte(l.plantation_id)), aujourdhui);
@@ -752,7 +795,7 @@ export async function lireTacheCiblee(porte: PorteDonnees, fermeId: string, aujo
   if (cibleId === '') return null;
   const lire: Lire = (sql, parametres) => porte.lire<Ligne>(sql, parametres);
   const ids = listeJson([cibleId]);
-  const series = (await lire(sqlSeries(`s.id IN (${DANS}) AND ${FILTRE_SERIES_ACTIVES}`), [fermeId, ids])).filter(
+  const series = (await lire(sqlSeriesParId(SERIES_ACTIVES), [ids, fermeId])).filter(
     (s) => parametresDe(texte(s.id), s.parametres).mode !== null,
   );
   const campagnes =
