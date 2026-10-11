@@ -44,6 +44,7 @@ import {
   type SemainePlan,
   type SorteConflit,
 } from './calculs.ts';
+import { alerteRetard, attribuerPlaces, surtitreZone, zonesDuPlan, type AlerteRetard, type ZoneDuPlan } from './zones.ts';
 
 export interface ProprietesEcranPlan {
   readonly porte: PorteDonnees;
@@ -86,6 +87,8 @@ const PX_PAR_JOUR = LARGEUR_SEMAINE / 7;
 const LARGEUR_BARRE_ETROITE = 24;
 /** Lignes dessinées au-delà de la vue, de chaque côté. */
 const MARGE_LIGNES = 5;
+/** Marge de la coquille de chaque côté du plan (.coquille-contenu), en px. */
+const GOUTTIERE_PX = 14;
 
 const deux = (n: number) => String(n).padStart(2, '0');
 
@@ -103,20 +106,73 @@ function dateLisible(date: string): string {
   return `${String(Number(j))} ${MOIS[Number(m) - 1] ?? ''} ${a ?? ''}`;
 }
 
-/** Hauteur de la vue : celle du conteneur, ou de la fenêtre si la mise en page n'est pas calculée. */
-function hauteurVue(el: HTMLElement | null): number {
-  const h = el?.clientHeight ?? 0;
-  return h > 0 ? h : window.innerHeight;
+/**
+ * T11e : position et taille de la vue, mémorisées (position lue dans l'événement de défilement,
+ * taille donnée par un ResizeObserver après la mise en page) : le calcul des lignes à dessiner ne
+ * lit jamais scrollTop ni clientHeight juste après une insertion de lignes (mise en page forcée).
+ */
+interface Mesure {
+  haut: number;
+  hauteur: number;
+  largeur: number;
 }
 
-function fenetre(el: HTMLElement | null, total: number): { debut: number; fin: number } {
-  return fenetreVisible({
-    defilement: Math.max(0, (el?.scrollTop ?? 0) - HAUTEUR_ENTETE),
-    hauteurVue: hauteurVue(el),
+/** Dernière taille mesurée de la vue : à la réouverture de l'écran, la fenêtre est juste dès le premier rendu. */
+let hauteurConnue = 0;
+let largeurConnue = 0;
+
+/** Lignes à dessiner [debut, fin[, et première ligne visible sous l'en-tête des semaines (zone active). */
+interface Vue {
+  readonly debut: number;
+  readonly fin: number;
+  readonly premiere: number;
+}
+
+function fenetre(m: Mesure, total: number): Vue {
+  const f = fenetreVisible({
+    defilement: Math.max(0, m.haut - HAUTEUR_ENTETE),
+    // Taille pas encore mesurée : l'écran du téléphone, qui la majore (window.innerHeight
+    // forcerait la mise en page, comme clientHeight).
+    hauteurVue: m.hauteur > 0 ? m.hauteur : screen.height,
     hauteurLigne: HAUTEUR_LIGNE_PX,
     total,
     marge: MARGE_LIGNES,
   });
+  return { ...f, premiere: Math.max(0, Math.min(total - 1, Math.floor(m.haut / HAUTEUR_LIGNE_PX))) };
+}
+
+/**
+ * Fenêtre et place (clé React) de chaque ligne visible : une ligne garde sa place tant qu'elle
+ * reste dans la fenêtre, celle qui entre reprend la place d'une ligne sortie (T11e : au
+ * défilement, les nœuds sont réutilisés au lieu d'être retirés puis recréés).
+ */
+interface EtatVue extends Vue {
+  /** Ligne qui contient le focus, dessinée même hors de la fenêtre (jamais recyclée), ou nulle. */
+  readonly garde: number | null;
+  readonly places: ReadonlyMap<number, number>;
+}
+
+function avecPlaces(precedentes: ReadonlyMap<number, number>, f: Vue, garde: number | null): EtatVue {
+  return { ...f, garde, places: attribuerPlaces(precedentes, f.debut, f.fin, garde) };
+}
+
+/**
+ * Index de la ligne du plan qui contient le focus (clavier, ou rendu à la fermeture d'une
+ * feuille), hors de [debut, fin[ ; nul sinon. Aucune mise en page : ni mesure, ni position.
+ */
+function ligneGardee(el: HTMLElement, f: Vue, total: number): number | null {
+  const actif = document.activeElement;
+  if (actif === null || !el.contains(actif)) return null;
+  const index = Number(actif.closest<HTMLElement>('[data-testid="ligne-plan"]')?.dataset.index);
+  if (!Number.isInteger(index) || index >= total || (index >= f.debut && index < f.fin)) return null;
+  return index;
+}
+
+/** '2026-04-12' → '12 avril' (l'année en plus si elle n'est pas celle de `aujourdhui`). */
+function jourEtMois(date: string, aujourdhui: string): string {
+  const [a, m, j] = date.split('-');
+  const jour = `${String(Number(j))} ${MOIS[Number(m) - 1] ?? ''}`;
+  return a === aujourdhui.slice(0, 4) ? jour : `${jour} ${a ?? ''}`;
 }
 
 // ── Lignes et barres ─────────────────────────────────────────────────────────────────────────
@@ -165,7 +221,7 @@ const Ligne = memo(function Ligne({ ligne, index, surBarre, surConflits }: Propr
   const style: CSSProperties = { transform: `translateY(${String(HAUTEUR_ENTETE + index * HAUTEUR_LIGNE_PX)}px)` };
   if (ligne.sorte !== 'emplacement') {
     return (
-      <div data-testid="ligne-plan" data-sorte={ligne.sorte} data-id={ligne.id} tabIndex={-1} className={`plan-ligne plan-ligne-${ligne.sorte}`} style={style}>
+      <div data-testid="ligne-plan" data-sorte={ligne.sorte} data-id={ligne.id} data-index={index} tabIndex={-1} className={`plan-ligne plan-ligne-${ligne.sorte}`} style={style}>
         <span className="plan-etiquette plan-etiquette-zone">{ligne.nom}</span>
       </div>
     );
@@ -180,7 +236,7 @@ const Ligne = memo(function Ligne({ ligne, index, surBarre, surConflits }: Propr
       : sortes.map((s) => [s, LIBELLES_COURTS_CONFLITS[s]] as const);
   return (
     // tabIndex -1 : la ligne reçoit le focus rendu quand sa barre a disparu (T11b).
-    <div data-testid="ligne-plan" data-sorte="emplacement" data-id={ligne.id} data-conflit={enConflit ? 'oui' : undefined} tabIndex={-1} className={classe} style={style}>
+    <div data-testid="ligne-plan" data-sorte="emplacement" data-id={ligne.id} data-index={index} data-conflit={enConflit ? 'oui' : undefined} tabIndex={-1} className={classe} style={style}>
       {enConflit ? (
         <button
           type="button"
@@ -205,8 +261,9 @@ const Ligne = memo(function Ligne({ ligne, index, surBarre, surConflits }: Propr
           <span className="plan-code">{ligne.code}</span>
         </span>
       )}
-      {ligne.barres.map((b) => (
-        <Barre key={b.occupationId} ligne={ligne} barre={b} surBarre={surBarre} />
+      {ligne.barres.map((b, i) => (
+        // T11e : clé par position, le bouton d'une ligne réutilisée au défilement est mis à jour, pas recréé.
+        <Barre key={i} ligne={ligne} barre={b} surBarre={surBarre} />
       ))}
     </div>
   );
@@ -223,13 +280,14 @@ type Detail =
  * tap ne focalise pas le bouton sous Safari). Retrouvé par son identité à la fermeture : la
  * virtualisation a pu retirer la ligne puis en dessiner une nouvelle.
  */
-interface OrigineFeuille {
-  readonly ligneId: string;
-  readonly occupationId: string | null;
-}
+type OrigineFeuille =
+  | { readonly sorte: 'plan'; readonly ligneId: string; readonly occupationId: string | null }
+  /** T11e : la carte d'alerte ; le focus lui revient (la planche en retard est souvent hors de vue). */
+  | { readonly sorte: 'alerte' };
 
 /** Élément qui reçoit le focus à la fermeture : la barre ou l'étiquette, sinon la ligne, sinon la grille. */
 function cibleDuFocus(grille: HTMLElement, origine: OrigineFeuille): HTMLElement {
+  if (origine.sorte === 'alerte') return grille.closest('.plan')?.querySelector<HTMLElement>('[data-testid="plan-alerte"]') ?? grille;
   const ligne = [...grille.querySelectorAll<HTMLElement>('[data-testid="ligne-plan"]')].find((l) => l.dataset.id === origine.ligneId);
   if (ligne === undefined) return grille;
   const cible =
@@ -392,6 +450,107 @@ const Legende = memo(function Legende() {
   );
 });
 
+/**
+ * T11e, maquette Plan : surtitre de la zone active et puces de zone, sur le vert de l'en-tête.
+ * Les puces NAVIGUENT (toucher amène la zone en haut du plan), elles ne filtrent pas ; la puce
+ * active suit la première ligne visible. Redessiné seulement quand la zone active change.
+ */
+const BandeZones = memo(function BandeZones({
+  zones,
+  actif,
+  complet,
+  surPuce,
+}: {
+  readonly zones: readonly ZoneDuPlan[];
+  readonly actif: number;
+  readonly complet: boolean;
+  readonly surPuce: (index: number) => void;
+}) {
+  const rangee = useRef<HTMLDivElement>(null);
+  // Puce active gardée dans la rangée. Lue et placée dans la première observation d'un
+  // ResizeObserver : après la mise en page de l'image, rien n'est forcé.
+  useEffect(() => {
+    const r = rangee.current;
+    if (r === null || typeof ResizeObserver === 'undefined') return undefined;
+    const observateur = new ResizeObserver(() => {
+      observateur.disconnect();
+      const b = r.children[actif];
+      if (!(b instanceof HTMLElement)) return;
+      const gauche = b.offsetLeft - GOUTTIERE_PX;
+      const droite = b.offsetLeft + b.offsetWidth + GOUTTIERE_PX - r.clientWidth;
+      if (gauche < r.scrollLeft) r.scrollLeft = gauche;
+      else if (droite > r.scrollLeft) r.scrollLeft = droite;
+    });
+    observateur.observe(r);
+    return () => {
+      observateur.disconnect();
+    };
+  }, [actif]);
+  const zone = zones[actif];
+  return (
+    <div className="plan-zones zone-entete">
+      {/* Début du plan seulement : le nom ; planches et longueurs viennent avec le plan complet. */}
+      {zone !== undefined && (
+        <p data-testid="plan-surtitre" className="plan-surtitre">
+          {complet ? surtitreZone(zone) : zone.nom}
+        </p>
+      )}
+      <div ref={rangee} role="group" aria-label="Zones" className="plan-puces">
+        {zones.map((z, i) => (
+          <button
+            key={z.id}
+            type="button"
+            aria-pressed={i === actif}
+            className="plan-puce"
+            onClick={() => {
+              surPuce(i);
+            }}
+          >
+            <span>{z.nom}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+});
+
+/**
+ * T11e, maquette Plan : carte d'alerte sous la légende, la culture prévue la plus en retard.
+ * Toucher ouvre son détail. « Récolte décalée au … » attend un calcul du moteur (ticket de suite).
+ */
+const CarteAlerte = memo(function CarteAlerte({
+  alerte,
+  aujourdhui,
+  surOuvrir,
+}: {
+  readonly alerte: AlerteRetard;
+  readonly aujourdhui: string;
+  readonly surOuvrir: (ligne: LigneEmplacementPlan, barre: BarrePlan) => void;
+}) {
+  const { ligne, barre, autres } = alerte;
+  const s = autres > 1 ? 's' : '';
+  return (
+    <button
+      type="button"
+      data-testid="plan-alerte"
+      className="plan-alerte"
+      onClick={() => {
+        surOuvrir(ligne, barre);
+      }}
+    >
+      <span className="plan-alerte-code">
+        {ligne.code} · {barre.libelle}
+      </span>
+      <span className="plan-alerte-titre">Mise en place prévue le {jourEtMois(barre.du, aujourdhui)}, pas encore faite</span>
+      {autres > 0 && (
+        <span className="plan-alerte-suite">
+          Et {String(autres)} autre{s} culture{s} prévue{s} en retard sur le plan.
+        </span>
+      )}
+    </button>
+  );
+});
+
 export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId }: ProprietesEcranPlan) {
   const [jour] = useState(aujourdhui);
   const [version, setVersion] = useState(0);
@@ -411,7 +570,11 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   const [repli3d, setRepli3d] = useState<string | null>(null);
   const defilement = useRef<HTMLDivElement>(null);
   const total = plan?.lignes.length ?? 0;
-  const [vue, setVue] = useState(() => fenetre(null, total));
+  const mesure = useRef<Mesure>({ haut: 0, hauteur: hauteurConnue, largeur: largeurConnue });
+  // Fenêtre vide au premier rendu : l'effet ci-dessous la remplit aussitôt, avant la peinture.
+  const [vue, setVue] = useState<EtatVue>(() => avecPlaces(new Map(), { debut: 0, fin: 0, premiere: 0 }, null));
+  /** Puce touchée et position où elle a mené : active tant que le plan n'a pas bougé (fin du plan atteinte). */
+  const [touchee, setTouchee] = useState<{ readonly zoneId: string; readonly haut: number } | null>(null);
   const idSaison = useId();
 
   // Plan complet déjà affiché : une relecture ne repasse jamais par le début (retour en haut).
@@ -493,30 +656,85 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
     };
   }, [debutAffiche, porte, fermeId, saison, jour, version]);
 
-  // Lignes à dessiner : recalculées au défilement, et quand le plan ou la vue change.
+  // Lignes à dessiner : recalculées au défilement, et quand le plan ou la vue change. T11e :
+  // position mémorisée dans l'événement de défilement, taille par un ResizeObserver ; rien n'est
+  // lu dans le DOM juste après l'insertion des lignes.
   useLayoutEffect(() => {
     const el = defilement.current;
-    const recalculer = () => {
-      const f = fenetre(el, total);
-      setVue((v) => (v.debut === f.debut && v.fin === f.fin ? v : f));
+    const m = mesure.current;
+    const maj = (agrandirSeulement: boolean) => {
+      const f = fenetre(m, total);
+      const garde = el === null ? null : ligneGardee(el, f, total);
+      setVue((v) =>
+        v.garde === garde &&
+        ((v.debut === f.debut && v.fin === f.fin && v.premiere === f.premiere) ||
+          // Taille mesurée plus petite que l'estimation : les lignes en trop restent jusqu'au prochain défilement.
+          (agrandirSeulement && v.premiere === f.premiere && f.debut >= v.debut && f.fin <= v.fin))
+          ? v
+          : avecPlaces(v.places, f, garde),
+      );
     };
-    recalculer();
-    el?.addEventListener('scroll', recalculer, { passive: true });
-    addEventListener('resize', recalculer);
+    maj(false);
+    if (el === null) return undefined;
+    const surDefilement = () => {
+      m.haut = el.scrollTop;
+      maj(false);
+      setTouchee((t) => (t !== null && Math.abs(t.haut - m.haut) > 1 ? null : t));
+    };
+    el.addEventListener('scroll', surDefilement, { passive: true });
+    const surTaille = (hauteur: number, largeur: number) => {
+      // Vue cachée (3D ouverte) : taille nulle, on garde la dernière.
+      if (hauteur <= 0) return;
+      m.hauteur = hauteurConnue = hauteur;
+      m.largeur = largeurConnue = largeur;
+      maj(true);
+    };
+    const observateur =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver((entrees) => {
+            const r = entrees[entrees.length - 1]?.contentRect;
+            if (r !== undefined) surTaille(r.height, r.width);
+          });
+    observateur?.observe(el);
+    const surFenetre = () => {
+      maj(false);
+    };
+    if (observateur === null) addEventListener('resize', surFenetre);
     return () => {
-      el?.removeEventListener('scroll', recalculer);
-      removeEventListener('resize', recalculer);
+      el.removeEventListener('scroll', surDefilement);
+      observateur?.disconnect();
+      removeEventListener('resize', surFenetre);
     };
   }, [total]);
 
-  // Nouvelle saison affichée : la semaine courante dans la vue, au tiers de la largeur.
+  // Nouvelle saison affichée : la semaine courante dans la vue, au tiers de la largeur. T11e :
+  // écrire scrollLeft juste après le rendu forcerait la mise en page ; on l'écrit dans la
+  // première observation d'un ResizeObserver, qui arrive après la mise en page et avant la
+  // peinture de la même image (pas de saut visible), avec la largeur qu'il vient de mesurer.
   const saisonAffichee = plan?.saison.id;
   const semaineCourante = plan?.semaineCourante ?? null;
   useLayoutEffect(() => {
     const el = defilement.current;
-    if (el === null || saisonAffichee === undefined) return;
-    const utile = Math.max(0, el.clientWidth - LARGEUR_ETIQUETTE);
-    el.scrollLeft = semaineCourante === null ? 0 : Math.max(0, semaineCourante * LARGEUR_SEMAINE - utile / 3);
+    if (el === null || saisonAffichee === undefined) return undefined;
+    const placer = (largeur: number) => {
+      // Vue cachée (3D) : largeur nulle, celle de l'écran moins les marges de la coquille.
+      const largeurVue = largeur > 0 ? largeur : screen.width - 2 * GOUTTIERE_PX;
+      const utile = Math.max(0, largeurVue - LARGEUR_ETIQUETTE);
+      el.scrollLeft = semaineCourante === null ? 0 : Math.max(0, semaineCourante * LARGEUR_SEMAINE - utile / 3);
+    };
+    if (typeof ResizeObserver === 'undefined') {
+      placer(mesure.current.largeur);
+      return undefined;
+    }
+    const observateur = new ResizeObserver((entrees) => {
+      observateur.disconnect();
+      placer(entrees[entrees.length - 1]?.contentRect.width ?? 0);
+    });
+    observateur.observe(el);
+    return () => {
+      observateur.disconnect();
+    };
   }, [saisonAffichee, semaineCourante]);
 
   // Une marque par ouverture de l'écran, quand les premières lignes sont dessinées ; le
@@ -609,12 +827,16 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   const focusARendre = useRef(false);
   const grille = useRef<HTMLDivElement>(null);
   const surBarre = useCallback((ligne: LigneEmplacementPlan, barre: BarrePlan) => {
-    origine.current = { ligneId: ligne.id, occupationId: barre.occupationId };
+    origine.current = { sorte: 'plan', ligneId: ligne.id, occupationId: barre.occupationId };
     setDetail({ sorte: 'serie', ligne, barre });
   }, []);
   const surConflits = useCallback((ligne: LigneEmplacementPlan) => {
-    origine.current = { ligneId: ligne.id, occupationId: null };
+    origine.current = { sorte: 'plan', ligneId: ligne.id, occupationId: null };
     setDetail({ sorte: 'conflits', ligne });
+  }, []);
+  const surAlerte = useCallback((ligne: LigneEmplacementPlan, barre: BarrePlan) => {
+    origine.current = { sorte: 'alerte' };
+    setDetail({ sorte: 'serie', ligne, barre });
   }, []);
   const fermerDetail = useCallback(() => {
     focusARendre.current = true;
@@ -721,13 +943,35 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
 
   const lignesVisibles = useMemo(() => {
     if (plan === null) return [];
-    const r: { ligne: LignePlan; index: number }[] = [];
-    for (let i = vue.debut; i < Math.min(vue.fin, plan.lignes.length); i++) {
+    const r: { ligne: LignePlan; index: number; place: number }[] = [];
+    const ajouter = (i: number) => {
       const ligne = plan.lignes[i];
-      if (ligne !== undefined) r.push({ ligne, index: i });
-    }
+      // Place négative en secours : jamais celle d'une autre ligne.
+      if (ligne !== undefined) r.push({ ligne, index: i, place: vue.places.get(i) ?? -1 - i });
+    };
+    // Ligne focalisée sortie de la fenêtre : dessinée à sa place dans l'ordre du plan.
+    const garde = vue.garde;
+    if (garde !== null && garde < vue.debut) ajouter(garde);
+    for (let i = vue.debut; i < Math.min(vue.fin, plan.lignes.length); i++) ajouter(i);
+    if (garde !== null && garde >= vue.fin) ajouter(garde);
     return r;
   }, [plan, vue]);
+
+  // Maquette (T11e) : zones du plan, zone active, culture la plus en retard.
+  const zonesPlan = useMemo(() => (plan === null ? null : zonesDuPlan(plan.lignes)), [plan]);
+  // Plan complet seulement (comme le surtitre) : la carte ne change pas à l'arrivée de la suite.
+  const alerte = useMemo(() => (plan === null || lu?.complet !== true ? null : alerteRetard(plan.lignes, jour)), [plan, lu, jour]);
+  const zoneVue = Math.max(0, zonesPlan?.zoneDeLigne[vue.premiere] ?? 0);
+  const indexTouchee = touchee === null ? -1 : (zonesPlan?.zones.findIndex((z) => z.id === touchee.zoneId) ?? -1);
+  const zoneActive = indexTouchee >= 0 ? indexTouchee : zoneVue;
+  const allerAZone = useCallback((index: number) => {
+    const el = defilement.current;
+    const zone = zonesPlan?.zones[index];
+    if (el === null || zone === undefined) return;
+    el.scrollTop = zone.ligne * HAUTEUR_LIGNE_PX;
+    // Fin du plan : la zone ne peut pas monter tout en haut ; sa puce reste active là où le plan s'arrête.
+    setTouchee({ zoneId: zone.id, haut: el.scrollTop });
+  }, [zonesPlan]);
 
   if (echec) {
     return (
@@ -750,6 +994,9 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   const en3d = vue3d.sorte === 'ouverte' && plan !== null;
   return (
     <div className="plan">
+      {!en3d && zonesPlan !== null && zonesPlan.zones.length > 0 && (
+        <BandeZones zones={zonesPlan.zones} actif={Math.min(zoneActive, zonesPlan.zones.length - 1)} complet={lu?.complet === true} surPuce={allerAZone} />
+      )}
       <div className="plan-outils">
         <label htmlFor={idSaison}>Saison</label>
         <select
@@ -837,8 +1084,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
               style={{ left: LARGEUR_ETIQUETTE + (semaineCourante + 0.5) * LARGEUR_SEMAINE - 1, height: hauteur }}
             />
           )}
-          {lignesVisibles.map(({ ligne, index }) => (
-            <Ligne key={ligne.id} ligne={ligne} index={index} surBarre={surBarre} surConflits={surConflits} />
+          {lignesVisibles.map(({ ligne, index, place }) => (
+            <Ligne key={place} ligne={ligne} index={index} surBarre={surBarre} surConflits={surConflits} />
           ))}
           {suite && (
             <p className="plan-suite" style={{ transform: `translateY(${String(HAUTEUR_ENTETE + total * HAUTEUR_LIGNE_PX)}px)` }}>
@@ -848,6 +1095,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
         </div>
       </div>
       {!en3d && <Legende />}
+      {!en3d && alerte !== null && <CarteAlerte alerte={alerte} aujourdhui={jour} surOuvrir={surAlerte} />}
       {detail?.sorte === 'serie' && <DetailSerie ligne={detail.ligne} barre={detail.barre} surFermer={fermerDetail} surModifier={modifierSerie} />}
       {detail?.sorte === 'conflits' && <DetailConflits ligne={detail.ligne} surFermer={fermerDetail} />}
       {formulaire !== null && (

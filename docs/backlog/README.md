@@ -112,6 +112,9 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T11e](T11e-plan-performances.md) | Planches : ouvrir la base plus tôt, maquette, marges de temps (découpage de T11b) | T11b | à faire |
 | [T11f](T11f-suites-t11b.md) | Suites de la relecture T11b (garde-fou partout, zones supprimées, écritures en cours) | T11b | en revue |
 | [T13t](T13t-premiere-relecture.md) | Aujourd'hui : la première relecture après « Fait » est lente (relevé par T11f) | T11f | à faire |
+| [T11e](T11e-plan-performances.md) | Planches : maquette, marges de temps (découpage de T11b) | T11b | fait |
+| [T11g](T11g-plan-avant-base.md) | Planches : plan affiché avant la base, premier tap dans la première seconde (sorti de T11e, Q19 sans priorité) | T11e | à faire |
+| [T11f](T11f-suites-t11b.md) | Suites de la relecture T11b (garde-fou partout, zones supprimées, écritures en cours) | T11b | à faire |
 | [T27](T27-vue-3d-prototype.md) | Vue 3D : prototype mesurable (planches et cultures, curseur de semaine) | T11 | fait |
 | [T27b](T27b-vue-3d-filtres.md) | Vue 3D : filtres et couleurs lisibles (Q30) | T27 | fait |
 | [T28a](T28a-placement-modele.md) | Placement réel : modèle, calcul et base, zones en formes libres (Q30, Q31) | — | fait |
