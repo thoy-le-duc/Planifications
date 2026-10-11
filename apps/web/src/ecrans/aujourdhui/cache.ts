@@ -16,6 +16,13 @@
  * toute relecture incrémentale, au calme (`VERIFICATION_MS` sans saisie), et cède la place à la
  * moindre saisie.
  *
+ * T13t : une relecture complète (réouverture de l'écran, synchro) cède aussi la place à une saisie
+ * de l'écran : elle s'arrête à sa requête suivante ; la saisie passe (lecture ciblée d'un « Fait »
+ * tapé sur l'instantané, `retenirRelecture`, puis écriture), puis sa relecture (incrémentale si une
+ * journée est là), puis la relecture complète reprend aussitôt (elle reste due). Sans cela, un
+ * « Fait » tapé juste après l'ouverture attendait toute la relecture de la journée et son calcul
+ * (plus d'une seconde sur une grande ferme).
+ *
  * T13f : les tâches marquées faites (masques) sont gardées ici, par porte et ferme (pas par jour :
  * la clé d'une tâche ne dépend pas du jour, les numéros viennent d'une seule horloge) : un écran
  * quitté puis rouvert avant la relecture, même le lendemain, les retrouve (un second « Fait »
@@ -111,6 +118,10 @@ interface Suivi {
   enCours: Promise<unknown> | null;
   /** La lecture en cours est une vérification : elle cède la place à toute relecture demandée. */
   verificationEnCours: boolean;
+  /** T13t : une relecture complète a cédé la place à une saisie ; elle reste due, juste après. */
+  completeDue: boolean;
+  /** T13t : saisies de l'écran en préparation (`retenirRelecture`), pas encore annoncées. */
+  retenues: number;
   sale: boolean;
   aRelire: ARelire | null;
   annonces: Annonce[];
@@ -140,6 +151,8 @@ function suiviDe(porte: PorteDonnees, fermeId: string, jour: string): Suivi {
       etat: null,
       enCours: null,
       verificationEnCours: false,
+      completeDue: false,
+      retenues: 0,
       sale: false,
       aRelire: null,
       annonces: [],
@@ -177,6 +190,19 @@ function demander(s: Suivi, besoin: ARelire): void {
     for (const id of besoin.series) a.series.add(id);
     for (const id of besoin.campagnes) a.campagnes.add(id);
     a.chaines ||= besoin.chaines;
+  }
+}
+
+/** T13t : une saisie de l'écran se prépare ou attend sa relecture (annoncée, ou son changement déjà vu). */
+function saisieEnAttente(s: Suivi): boolean {
+  return s.retenues > 0 || s.annonces.length > 0 || s.aRelire?.sorte === 'cultures';
+}
+
+/** T13t : plus aucune saisie en attente : la relecture complète qui leur a cédé la place reprend. */
+function reprendreSiDue(porte: PorteDonnees, s: Suivi): void {
+  if (s.completeDue && s.enCours === null && !saisieEnAttente(s) && s.abonnes.size > 0) {
+    demander(s, { sorte: 'tout' });
+    relire(porte, s).catch(() => undefined);
   }
 }
 
@@ -224,10 +250,23 @@ function relire(porte: PorteDonnees, s: Suivi, options: { readonly apres?: Promi
   // Écran quitté (avant le tour de la préparation, ou pendant la lecture) : la lecture s'arrête
   // et laisse la base à l'écran affiché ; le prochain affichage relira. Une vérification s'arrête
   // aussi dès qu'une autre relecture est demandée (une saisie n'attend pas derrière elle).
-  const continuer = () => (s.abonnes.size > 0 || (options.preparation === true && !s.quittee)) && !(verification && s.aRelire !== null);
   const etat = s.etat;
+  const incrementale = besoin.sorte === 'cultures' && etat !== null && s.abonnes.size > 0;
+  // T13t : une relecture complète cède la place à une saisie de l'écran (la vérification, elle,
+  // cède déjà à toute relecture demandée).
+  const cedable = !incrementale && !verification;
+  let cede = false;
+  const continuer = () => {
+    if (!(s.abonnes.size > 0 || (options.preparation === true && !s.quittee))) return false;
+    if (verification && s.aRelire !== null) return false;
+    if (cedable && saisieEnAttente(s)) {
+      cede = true;
+      return false;
+    }
+    return true;
+  };
   let lecture: Promise<unknown>;
-  if (besoin.sorte === 'cultures' && etat !== null && s.abonnes.size > 0) {
+  if (incrementale) {
     const cultures = { series: [...besoin.series], campagnes: [...besoin.campagnes] };
     const numero = ++horloge;
     lecture = lireCultures(porte, etat.contexte, cultures, besoin.chaines, new Date(), continuer).then((lues) => {
@@ -244,6 +283,12 @@ function relire(porte: PorteDonnees, s: Suivi, options: { readonly apres?: Promi
       for (const id of [...cultures.series, ...cultures.campagnes]) parCulture.set(id, numero);
       lectures.set(suivant.journee, { complete: avant?.complete ?? 0, cultures: parCulture });
       remettre(s);
+      if (s.completeDue) {
+        // T13t : la relecture complète qui a cédé la place reprend tout de suite.
+        s.completeDue = false;
+        demander(s, { sorte: 'tout' });
+        return;
+      }
       s.verification = setTimeout(() => {
         s.verification = null;
         if (s.abonnes.size === 0) return;
@@ -255,6 +300,7 @@ function relire(porte: PorteDonnees, s: Suivi, options: { readonly apres?: Promi
     // Une lecture complète voit toutes les saisies écrites avant elle : leurs annonces tombent
     // (au pire, le changement d'une saisie en cours d'écriture fera tout relire).
     s.annonces = [];
+    s.completeDue = false;
     let numero = 0;
     lecture = (options.apres ?? Promise.resolve())
       .catch(() => undefined)
@@ -280,8 +326,15 @@ function relire(porte: PorteDonnees, s: Suivi, options: { readonly apres?: Promi
   };
   lecture.then(fin, (erreur: unknown) => {
     if (erreur instanceof LectureAbandonnee) {
+      // T13t : cédée à une saisie : elle reste due, après la relecture de la saisie (que l'avis de
+      // changement de la saisie lance, s'il n'est pas déjà là). Plus aucune saisie en attente
+      // (écriture déjà en échec, annonce retirée) : elle reprend tout de suite.
+      if (cede) {
+        s.completeDue = true;
+        if (!saisieEnAttente(s)) demander(s, { sorte: 'tout' });
+      }
       // Un écran revenu entre temps attendait peut-être cette lecture : il en aura une autre.
-      if (s.abonnes.size > 0 && s.aRelire === null) s.sale = true;
+      else if (s.abonnes.size > 0 && s.aRelire === null) s.sale = true;
     } else {
       console.error('Journée illisible', erreur);
       // Une relecture incrémentale en échec : tout relire.
@@ -362,7 +415,37 @@ export function annoncerSaisie(porte: PorteDonnees, fermeId: string, culture: Cu
     touches.push(s);
   }
   return () => {
-    for (const s of touches) s.annonces = s.annonces.filter((a) => a !== annonce);
+    for (const s of touches) {
+      s.annonces = s.annonces.filter((a) => a !== annonce);
+      // T13t : écriture en échec, aucun changement ne viendra : la relecture complète qui lui a
+      // cédé la place reprend.
+      reprendreSiDue(porte, s);
+    }
+  };
+}
+
+/**
+ * T13t : une saisie de l'écran se prépare (« Fait » tapé sur l'instantané : lecture ciblée de la
+ * tâche, puis écriture) : la relecture complète en cours lui cède la place dès sa requête suivante,
+ * au lieu de partager la base avec elle jusqu'au bout. Rend la fonction qui lève la retenue, à
+ * appeler une fois la saisie écrite (annoncée, `annoncerSaisie`) ou abandonnée ; la relecture
+ * complète reprend alors, si plus rien ne l'attend.
+ */
+export function retenirRelecture(porte: PorteDonnees, fermeId: string): () => void {
+  const touches: Suivi[] = [];
+  for (const s of suivis.get(porte)?.values() ?? []) {
+    if (s.fermeId !== fermeId) continue;
+    s.retenues++;
+    touches.push(s);
+  }
+  let levee = false;
+  return () => {
+    if (levee) return;
+    levee = true;
+    for (const s of touches) {
+      s.retenues--;
+      reprendreSiDue(porte, s);
+    }
   };
 }
 

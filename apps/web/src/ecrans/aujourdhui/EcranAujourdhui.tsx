@@ -39,7 +39,7 @@ import type { PorteDonnees } from '@planif/sync';
 import { commencerEcriture } from '../../donnees/ecritures-en-cours.ts';
 import { lireFermeMontree } from '../../donnees/ferme-memorisee.ts';
 import './aujourdhui.css';
-import { changerMasques, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, suivreJournee, suivreMasques, type Masque, type Masques } from './cache.ts';
+import { changerMasques, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, retenirRelecture, suivreJournee, suivreMasques, type Masque, type Masques } from './cache.ts';
 import {
   capitale,
   ETAPES_FAITES,
@@ -611,6 +611,12 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   /** T13l : saisies dont l'annulation est en file ou écrite : une seule annulation par saisie. */
   const annulations = useRef(new Set<string>());
   const [enAnnulation, setEnAnnulation] = useState<ReadonlySet<string>>(() => new Set());
+  /**
+   * T13t : « Fait » écrits depuis l'instantané, la plus récente d'abord. Ils sont écrits dans la
+   * base : l'historique de l'instantané les montre dès l'écriture, sans attendre la journée relue
+   * (qui les contient, et remplace l'instantané).
+   */
+  const [ecritsSurInstantane, setEcritsSurInstantane] = useState<readonly EntreeHistorique[]>(AUCUNE_SAISIE);
   const [dialogue, setDialogue] = useState<Dialogue>(null);
   const [toutVoir, setToutVoir] = useState(false);
   /**
@@ -740,6 +746,14 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   // T13g : avant la base, seulement elles, sans l'historique : un écran de téléphone, et la page
   // laisse la main à l'ouverture de la base ; le reste suit, différé, la base ouverte.
   const complet = useDeferredValue(porte !== null, false);
+
+  // T13t : historique de l'instantané, les « Fait » écrits depuis lui en tête (sauf annulés).
+  const historiqueInstantane = useMemo(() => {
+    if (journee !== null || !surInstantane) return null;
+    const ecrits = ecritsSurInstantane.filter((h) => !enAnnulation.has(h.evenement.id));
+    if (ecrits.length === 0) return { vues: instantane.historique, total: instantane.saisies };
+    return { vues: [...vuesHistorique(ecrits, jour), ...instantane.historique], total: instantane.saisies + ecrits.length };
+  }, [journee, surInstantane, instantane, ecritsSurInstantane, enAnnulation, jour]);
 
   // Une marque par ouverture de l'écran, quand les tâches (ou « rien à faire ») sont dessinées,
   // celles de l'instantané comprises (T13d).
@@ -902,6 +916,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
     let changee = false;
     /** T13k : écran remplacé avant la base : rien d'écrit, rien à démasquer ni à compter. */
     let abandonne = false;
+    /** T13t : lève la retenue de la relecture complète (lecture ciblée, puis écriture). */
+    let lever: () => void = () => undefined;
     if (journee !== null) {
       const t = journee.taches.find((x) => x.cle === cle);
       if (t === undefined || t.tache.etape === 'debut_recolte') return;
@@ -918,6 +934,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
           abandonne = true;
           return null;
         }
+        // T13t : la relecture complète en cours cède la place à ce « Fait » (lecture ciblée et
+        // écriture), au lieu de partager la base avec lui jusqu'au bout.
+        lever = retenirRelecture(venue, fermeId);
         const t = await lireTacheCiblee(venue, fermeId, jourCourant(), cle);
         if (t === null) {
           setAvis('Déjà notée depuis un autre téléphone : rien de plus n’est enregistré.');
@@ -952,7 +971,10 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
       try {
         const t = await tache();
         if (t !== null) fait = await ecrireFait(t);
+        const ecrit = fait?.evenement;
+        if (t !== null && ecrit !== undefined && journee === null) setEcritsSurInstantane((l) => [{ evenement: ecrit, culture: t.culture }, ...l]);
       } finally {
+        lever();
         // Avant le tour de l'annulation éventuelle, rangée derrière dans la file.
         rendre(fait?.evenement ?? null);
         const f = fait;
@@ -1185,7 +1207,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         <Historique
           id={idHistorique}
           entrees={journee?.historique ?? AUCUNE_SAISIE}
-          instantane={journee === null && surInstantane ? { vues: instantane.historique, total: instantane.saisies } : null}
+          instantane={historiqueInstantane}
           focus={focusSaisie !== null && focusSaisie.avant !== journee ? focusSaisie.evenementId : null}
           surFocusPlace={oublierFocus}
           aujourdhui={jour}
