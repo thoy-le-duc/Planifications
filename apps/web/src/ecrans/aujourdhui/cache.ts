@@ -300,6 +300,8 @@ export function journeeEnCache(porte: PorteDonnees, fermeId: string, jour: strin
 /** Masques d'une ferme (remplacés à chaque changement), et les écrans qui les suivent. */
 interface MasquesFerme {
   masques: Masques;
+  /** « Voir les autres » touché : l'écran montre toutes ses tâches (la 3D les numérote de même, T37c). */
+  toutVoir: boolean;
   readonly abonnes: Set<() => void>;
 }
 
@@ -313,7 +315,7 @@ function masquesFerme(porte: PorteDonnees, fermeId: string): MasquesFerme {
   }
   let m = parFerme.get(fermeId);
   if (m === undefined) {
-    m = { masques: new Map(), abonnes: new Set() };
+    m = { masques: new Map(), toutVoir: false, abonnes: new Set() };
     parFerme.set(fermeId, m);
   }
   return m;
@@ -324,7 +326,19 @@ export function masquesDe(porte: PorteDonnees, fermeId: string): Masques {
   return masquesFerme(porte, fermeId).masques;
 }
 
-/** Suit les masques de la ferme : `rappel` à chaque changement. Rend le désabonnement. */
+/** L'écran Aujourd'hui de la ferme est-il déplié (« Voir les autres ») ? Gardé comme les masques, tant que la page vit. */
+export function toutVoirDe(porte: PorteDonnees, fermeId: string): boolean {
+  return masquesFerme(porte, fermeId).toutVoir;
+}
+
+/** « Voir les autres » : déplie l'écran de la ferme, et prévient ceux qui suivent les masques (la 3D). */
+export function deplierTout(porte: PorteDonnees, fermeId: string): void {
+  const f = masquesFerme(porte, fermeId);
+  f.toutVoir = true;
+  for (const rappel of [...f.abonnes]) rappel();
+}
+
+/** Suit les masques de la ferme (et l'état déplié de l'écran) : `rappel` à chaque changement. Rend le désabonnement. */
 export function suivreMasques(porte: PorteDonnees, fermeId: string, rappel: () => void): () => void {
   const m = masquesFerme(porte, fermeId);
   m.abonnes.add(rappel);

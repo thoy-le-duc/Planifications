@@ -16,13 +16,14 @@ import {
   phraseDeTache,
   suivreMasques,
   TACHES_PAR_GROUPE,
+  toutVoirDe,
   tachesDeLEcran,
   type Masques,
   type TacheJour,
 } from '../aujourdhui/index.ts';
 import { travailSuivant, type Travail3d } from './choix-travail.ts';
 
-export { jourDuTelephone, masquesDe, suivreMasques, travailSuivant, type Travail3d };
+export { jourDuTelephone, masquesDe, suivreMasques, toutVoirDe, travailSuivant, type Travail3d };
 
 /** Une pastille numérotée au-dessus d'une planche. */
 export interface Pastille3d {
@@ -111,16 +112,19 @@ export async function lireTravaux(porte: PorteDonnees, fermeId: string, aujourdh
  * encore relues (ses masques, lus à l'appel), en retard d'abord puis la semaine ; les cartes visibles
  * de chaque groupe (25 au plus) d'abord, puis celles cachées derrière « Voir les autres ». La carte
  * n° i de l'écran est donc la tâche n° i ici. `masques` : ceux de la ferme (`masquesDe`), au moment de l'appel.
+ * T37c : écran déplié (`toutVoir`, « Voir les autres » : `toutVoirDe`), tout le retard puis toute la semaine,
+ * comme les cartes de l'écran déplié.
  */
-export function tachesVisibles(lecture: LectureTravaux, masques: Masques): TacheJour[] {
+export function tachesVisibles(lecture: LectureTravaux, masques: Masques, toutVoir = false): TacheJour[] {
   const taches = tachesDeLEcran(masques.size === 0 ? lecture.taches : lecture.taches.filter((t) => !masqueePour(masques, lecture.numero, t.cle)));
   const retard = taches.filter((t) => t.tache.enRetard);
   const semaine = taches.filter((t) => !t.tache.enRetard);
+  if (toutVoir) return [...retard, ...semaine];
   return [...retard.slice(0, TACHES_PAR_GROUPE), ...semaine.slice(0, TACHES_PAR_GROUPE), ...retard.slice(TACHES_PAR_GROUPE), ...semaine.slice(TACHES_PAR_GROUPE)];
 }
 
 /** Les tâches de l'écran Aujourd'hui pour `aujourdhui`, dans l'ordre de ses cartes. Lecture seule. */
 export async function lireTachesDuJour(porte: PorteDonnees, fermeId: string, aujourdhui: string, maintenant: Date = new Date()): Promise<TacheJour[]> {
   const lecture = await lireTravaux(porte, fermeId, aujourdhui, maintenant);
-  return tachesVisibles(lecture, masquesDe(porte, fermeId));
+  return tachesVisibles(lecture, masquesDe(porte, fermeId), toutVoirDe(porte, fermeId));
 }
