@@ -1057,3 +1057,57 @@ describe("T13d, I8 : l’instantané ne contient pas plus que ce que l’écran 
     }
   }, 180_000);
 });
+
+// ── T13t ─────────────────────────────────────────────────────────────────────────────────────
+
+describe("T13t : « Fait » sur l’instantané pendant la relecture complète", () => {
+  it("la saisie paraît dans l’historique dès son écriture, sans attendre la journée relue ; puis la journée relue la confirme", async () => {
+    const stockage = stockageMemoire();
+    await ouvrirEtGarder(stockage);
+    fermerRacine();
+    vi.resetModules();
+    await chargerEcran();
+    nouvelleRacine();
+    // Relecture complète figée à sa première requête (séries actives, paramètre : la ferme seule) ;
+    // la lecture ciblée de la tâche (séries filtrées par id) et l'écriture passent.
+    const vraie = creerPorte(base, {
+      utilisateurId: UTILISATEUR as Id<"Utilisateur">,
+      fermeId: FERME as Id<"Ferme">,
+    });
+    let liberer: () => void = () => undefined;
+    const barriere = new Promise<void>((r) => {
+      liberer = r;
+    });
+    let completesRetenues = 0;
+    const porte: PorteDonnees = {
+      ...vraie,
+      lire: async <T,>(sql: string, parametres?: readonly unknown[]): Promise<T[]> => {
+        if (/FROM serie s\b/.test(sql) && (parametres ?? []).length === 1) {
+          completesRetenues++;
+          await barriere;
+        }
+        return vraie.lire<T>(sql, parametres);
+      },
+    };
+    await rendre(porte, { stockage });
+    await attendre(() => tache(CHOU) !== undefined, "chou dessiné depuis l’instantané");
+    await attendre(() => completesRetenues > 0, "relecture complète en cours");
+    remiseAZero();
+    await toucher(boutonFait(CHOU));
+    await attendre(() => nouveauxRealisesChou().length === 1, "réalisé écrit pendant la relecture complète");
+    const id = nouveauxRealisesChou()[0]?.id ?? "";
+    const saisies = () => [...conteneur.querySelectorAll<HTMLElement>('[data-testid="saisie-historique"]')];
+    await attendre(() => saisies()[0]?.dataset.evenement === id, "saisie en tête de l’historique de l’instantané");
+    // Toujours l'instantané (la relecture complète n'a pas fini) : ses boutons attendent la journée relue.
+    for (const b of saisies()[0]?.querySelectorAll<HTMLButtonElement>("button") ?? []) {
+      expect(b.disabled || b.getAttribute("aria-disabled") === "true", `« ${b.textContent} » inactif sur l’instantané`).toBe(true);
+    }
+
+    liberer();
+    await attendre(() => saisies().some((s) => s.dataset.evenement === id && [...s.querySelectorAll<HTMLButtonElement>("button")].some((b) => !b.disabled && b.getAttribute("aria-disabled") !== "true")), "journée relue : la saisie, avec ses boutons actifs");
+    expect(saisies()[0]?.dataset.evenement).toBe(id);
+    expect(saisies().filter((s) => s.dataset.evenement === id), "une seule fois").toHaveLength(1);
+    expect(tache(CHOU)).toBeUndefined();
+    expect(nouveauxEvenements(), "aucune autre écriture").toHaveLength(1);
+  });
+});
