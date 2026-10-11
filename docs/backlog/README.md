@@ -110,7 +110,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T11d](T11d-defilement-plan-fiable.md) | Mesure du défilement du plan : fiable sans relever la limite | T11, T20 | fait |
 | [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | fait |
 | [T11f](T11f-suites-t11b.md) | Suites de la relecture T11b (garde-fou partout, zones supprimées, écritures en cours) | T11b | fait |
-| [T13t](T13t-premiere-relecture.md) | Aujourd'hui : la première relecture après « Fait » est lente (relevé par T11f) | T11f | à faire |
+| [T13t](T13t-premiere-relecture.md) | Aujourd'hui : la première relecture après « Fait » est lente (relevé par T11f) | T11f | en revue |
 | [T11e](T11e-plan-performances.md) | Planches : maquette, marges de temps (découpage de T11b) | T11b | fait |
 | [T11g](T11g-plan-avant-base.md) | Planches : plan affiché avant la base, premier tap dans la première seconde (sorti de T11e, Q19 sans priorité) | T11e | à faire |
 | [T27](T27-vue-3d-prototype.md) | Vue 3D : prototype mesurable (planches et cultures, curseur de semaine) | T11 | fait |

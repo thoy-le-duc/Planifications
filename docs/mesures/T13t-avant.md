@@ -51,6 +51,21 @@ C'est l'étape qui précède dans `aujourdhui-grande-ferme.e2e.ts` : le test tap
 | tâche longue sur le fil principal | **747 → 1 026 (279 ms)** | — | — | — | — |
 | **saisie dans l'historique** | **1 072** | 269 | 203 | 267 | 194 |
 
+### La vraie séquence de l'e2e (marques ajoutées dans une copie jetable de l'e2e)
+
+Dans `aujourdhui-grande-ferme.e2e.ts` lui-même, le premier « Fait » tombe le plus souvent **sur l'instantané** : chaque aller-retour Planches → Aujourd'hui arrête la relecture complète en cours (l'écran est quitté avant sa fin), si bien qu'aucune journée n'a été calculée depuis le rechargement de l'étape T13k. L'écran montre l'instantané (T13d), et « Fait » passe par la lecture ciblée de la tâche (`lireTacheCiblee`) :
+
+| Étape | 1re relecture |
+| --- | --- |
+| appui sur « Fait » (instantané) | 1 |
+| début de la lecture ciblée (8 requêtes) | 13 |
+| fin de la relecture complète (lue) | 1 122 |
+| journée remise (`calculerEtat`, tâche longue de 215 ms) | 1 318 |
+| **saisie dans l'historique** (journée relue) | **1 338** |
+| fin de la lecture ciblée, début de l'écriture | ≈ 1 350 |
+
+La lecture ciblée partage la base avec la relecture complète, requête après requête : elle finit **après** elle. La saisie n'apparaît qu'avec la journée relue.
+
 ## La cause
 
 **La première relecture attend une relecture complète de la journée.** Rouvrir l'onglet « Aujourd'hui » dessine la journée gardée en cache (budget du tap), puis relit **toute** la journée (`lireJournee` : une dizaine de requêtes sur 3 000 séries, puis `calculerEtat`), au cas où la base aurait changé pendant que l'écran était fermé. Le « Fait » tapé tout de suite après tombe pendant cette relecture :
@@ -58,6 +73,8 @@ C'est l'étape qui précède dans `aujourdhui-grande-ferme.e2e.ts` : le test tap
 1. la relecture incrémentale de la culture touchée (T13c) ne démarre qu'à la fin de la relecture complète : une lecture à la fois (`cache.ts`, `relire`). Ici, l'avis de changement arrive à 395 ms, `lireCultures` ne démarre qu'à 1 024 ms ;
 2. entre les deux, la journée complète est recalculée sur le fil principal (`calculerEtat` sur 3 000 séries : tâche longue de **279 ms** sous CPU ×4) ;
 3. la saisie paraît dans l'historique à la fin de cette relecture complète (ses dernières requêtes, lancées après l'écriture, la voient déjà), soit **1 072 ms**, puis la relecture incrémentale repasse derrière.
+
+Quand le « Fait » tombe sur l'instantané (vraie séquence de l'e2e, ci-dessus), c'est la même cause sous une autre forme : la lecture ciblée et l'écriture partagent la base avec la relecture complète jusqu'au bout, et l'historique de l'instantané ne montre la saisie qu'à l'arrivée de la journée relue.
 
 Les relectures suivantes n'ont plus de relecture complète devant elles (150 à 290 ms). Les 712 à 792 ms vus en 3e position dans l'e2e n'ont pas été reproduits par le banc de profil (203 ms) ; piste la plus probable : le même effet en plus petit (une relecture complète, ou son recalcul, encore en cours au moment de l'appui).
 
@@ -71,4 +88,4 @@ Contribution secondaire : la première transaction d'écriture après l'ouvertur
 
 ## Correction visée
 
-Une relecture complète qui n'est pas indispensable à l'affichage (la journée en cache est déjà là) **cède la place** à une saisie de l'écran, comme le fait déjà la vérification de T13c : elle s'arrête à la requête suivante, la relecture incrémentale de la culture touchée passe tout de suite, puis la relecture complète reprend juste après. Rien de nouveau au démarrage.
+Une relecture complète **cède la place** à une saisie de l'écran, comme le fait déjà la vérification de T13c : elle s'arrête à sa requête suivante, la saisie passe (lecture ciblée et écriture sur l'instantané, relecture incrémentale sur une journée relue), puis la relecture complète reprend juste après. Sur l'instantané, la saisie écrite paraît dans l'historique dès son écriture. Rien de nouveau au démarrage.
