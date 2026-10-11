@@ -39,7 +39,11 @@ import type { PorteDonnees } from '@planif/sync';
 import { commencerEcriture } from '../../donnees/ecritures-en-cours.ts';
 import { lireFermeMontree } from '../../donnees/ferme-memorisee.ts';
 import './aujourdhui.css';
+<<<<<<< HEAD
 import { changerMasques, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, retenirRelecture, suivreJournee, suivreMasques, type Masque, type Masques } from './cache.ts';
+=======
+import { changerMasques, deplierTout, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, suivreJournee, suivreMasques, toutVoirDe, type Masque, type Masques } from './cache.ts';
+>>>>>>> origin/main
 import {
   capitale,
   ETAPES_FAITES,
@@ -618,7 +622,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
    */
   const [ecritsSurInstantane, setEcritsSurInstantane] = useState<readonly EntreeHistorique[]>(AUCUNE_SAISIE);
   const [dialogue, setDialogue] = useState<Dialogue>(null);
-  const [toutVoir, setToutVoir] = useState(false);
+  // Déplié (« Voir les autres ») : gardé dans le cache avec les masques, la 3D le suit (T37c) ; local tant que la base s'ouvre.
+  const [toutVoir, setToutVoir] = useState(() => porte !== null && toutVoirDe(porte, fermeId));
   /**
    * Tâches marquées faites et masquées dès le tap (un second tap n'écrit rien) : 'attente'
    * pendant l'écriture, puis le numéro pris à la fin de l'écriture. Gardées dans le cache, par
@@ -1195,6 +1200,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
               className="auj-bouton-secondaire"
               onClick={() => {
                 setToutVoir(true);
+                if (porte !== null) deplierTout(porte, fermeId);
               }}
             >
               Voir les {cachees} autres tâches

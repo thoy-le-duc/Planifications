@@ -883,6 +883,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const [travauxLus, setTravauxLus] = useState<{ readonly calculer: typeof travauxDuJour3d; readonly visibles: typeof tachesVisibles; readonly lecture: LectureTravaux } | null>(null);
   const [erreurTravaux, setErreurTravaux] = useState(false);
   const [masques, setMasques] = useState<Masques | null>(null);
+  const [toutVoir, setToutVoir] = useState(false);
   useEffect(() => {
     if (porte === undefined || fermeId === undefined) return undefined;
     let actif = true;
@@ -892,8 +893,10 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         if (actif) {
           arreter = m.suivreMasques(porte, fermeId, () => {
             setMasques(m.masquesDe(porte, fermeId));
+            setToutVoir(m.toutVoirDe(porte, fermeId));
           });
           setMasques(m.masquesDe(porte, fermeId));
+          setToutVoir(m.toutVoirDe(porte, fermeId));
         }
         const lecture = await m.lireTravaux(porte, fermeId, m.jourDuTelephone());
         if (!actif) return;
@@ -911,8 +914,8 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   }, [porte, fermeId, plan]);
   const [travailActif, setTravailActif] = useState<number | null>(null);
   const jour = useMemo<TravauxDuJour3d>(
-    () => (geometrie === null || travauxLus === null || masques === null ? { travaux: [], pastilles: [] } : travauxLus.calculer(travauxLus.visibles(travauxLus.lecture, masques), geometrie)),
-    [travauxLus, masques, geometrie],
+    () => (geometrie === null || travauxLus === null || masques === null ? { travaux: [], pastilles: [] } : travauxLus.calculer(travauxLus.visibles(travauxLus.lecture, masques, toutVoir), geometrie)),
+    [travauxLus, masques, toutVoir, geometrie],
   );
   const pastillesDessinees = useMemo<readonly PastilleDessinee[]>(() => jour.pastilles.map((pastille) => ({ pastille, retard: jour.travaux.some((t) => t.planche === pastille.planche && t.enRetard) })), [jour]);
   const couchePastilles = useRef<HTMLDivElement>(null);
@@ -1254,7 +1257,9 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} erreur={erreurTravaux} />
         </div>
-        <aside id={idPanneau} data-testid="panneau-3d" hidden={!filtresOuverts} className="plan3d-cote" aria-label="Légende, filtres et liste des planches">
+        <aside id={idPanneau} data-testid="panneau-3d" className={filtresOuverts ? 'plan3d-cote' : 'plan3d-cote plan3d-cote-replie'} aria-label="Légende, filtres et liste des planches">
+          {/* T37c : replié au téléphone, le panneau n'a plus de taille mais la liste des planches (l'alternative texte de la toile) reste lisible au lecteur d'écran : seul le reste est `hidden`. */}
+          <div hidden={!filtresOuverts} className="plan3d-cote-reste">
           <div className="plan3d-filtres">
             <details open data-testid="legende-3d" className="plan3d-groupe">
               <summary>
@@ -1332,6 +1337,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           <p data-testid="mention-hauteurs-3d" className="plan3d-mention">
             Hauteurs indicatives, réglables dans la fiche de l’espèce
           </p>
+          </div>
           <h2 id={idListe} className="plan3d-titre-liste">
             Planches et cultures, {libelle}
           </h2>
