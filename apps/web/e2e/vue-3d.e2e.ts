@@ -6,7 +6,7 @@ import { remplirJeuT07 } from '../../../packages/sync/src/test/jeu-t07.ts';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { MARQUES_3D, TESTID_3D, type ModuleScene, type Plan3d, type Scene } from '../src/ecrans/plan3d/test/contrat.ts';
-import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement } from './outils.ts';
+import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement, jugerSerie } from './outils.ts';
 import { arreterImages, BORNES_FERME_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous, type Plancher } from './fluidite-3d.ts';
 
 /**
@@ -40,8 +40,6 @@ const DELAI_AMORCAGE_MS = 120_000;
 
 const BUDGET_AFFICHAGE_MS = 1_000;
 const BUDGET_SEMAINE_MS = 100;
-/** Garde-fou en plus de la médiane : la plus haute valeur ne dépasse pas 1,5 fois le budget. */
-const FACTEUR_MAXIMUM = 1.5;
 const IMAGES_PERDUES_MAX = 2;
 const PASSAGES_SACCADES_ECHEC = 4;
 const RAFALES_TOTAL_MAX = 6;
@@ -274,8 +272,7 @@ test('vue 3D : grande ferme de T07, ordinateur, WebGL', async ({ page }) => {
       return { affichage };
     });
     console.log(decrireSerie('vue 3D, affichage après chargement du module', series.affichage, BUDGET_AFFICHAGE_MS));
-    expect(series.affichage.mediane, 'affichage (médiane)').toBeLessThan(BUDGET_AFFICHAGE_MS);
-    expect(Math.max(...series.affichage.valeurs), 'affichage (plus haute valeur)').toBeLessThan(BUDGET_AFFICHAGE_MS * FACTEUR_MAXIMUM);
+    expect(jugerSerie(series.affichage, BUDGET_AFFICHAGE_MS).raisons, 'affichage').toEqual([]);
   });
 
   await test.step('curseur de semaine : accessible, borné par les semaines du plan', async () => {
@@ -304,8 +301,7 @@ test('vue 3D : grande ferme de T07, ordinateur, WebGL', async ({ page }) => {
       return { semaine: ms };
     });
     console.log(decrireSerie('vue 3D, changement de semaine', series.semaine, BUDGET_SEMAINE_MS));
-    expect(series.semaine.mediane, 'changement de semaine (médiane)').toBeLessThan(BUDGET_SEMAINE_MS);
-    expect(Math.max(...series.semaine.valeurs), 'changement de semaine (plus haute valeur)').toBeLessThan(BUDGET_SEMAINE_MS * FACTEUR_MAXIMUM);
+    expect(jugerSerie(series.semaine, BUDGET_SEMAINE_MS).raisons, 'changement de semaine').toEqual([]);
     expect(await page.evaluate(() => (window as unknown as { __memePage?: boolean }).__memePage), 'pas de rechargement').toBe(true);
   });
 

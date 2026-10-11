@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import { MARQUE_AUJOURDHUI_ATTENDUE } from '../src/ecrans/aujourdhui/test/contrat.ts';
 import { grandeFerme } from '../src/ecrans/aujourdhui/test/grande-ferme.ts';
-import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, repeterMesures } from './outils.ts';
+import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, repeterMesures, jugerSerie } from './outils.ts';
 
 /**
  * T13b — écran « Aujourd'hui » sur une grande ferme, build de production servi par
@@ -371,7 +371,7 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
     });
     console.log(decrireSerie('Aujourd’hui (grande ferme), lancement à froid hors ligne, avec instantané', series.ecran, BUDGET_FROID_MS));
     console.log(`${decrireSerie('Grande ferme, ouverture de la base (data-base="prete"), avec instantané', series.base, BUDGET_FROID_MS)} : non bloquant`);
-    expect(series.ecran.mediane).toBeLessThan(BUDGET_FROID_MS);
+    expect(jugerSerie(series.ecran, BUDGET_FROID_MS).raisons).toEqual([]);
   });
 
   await test.step(`T13g : lancement à froid hors ligne AVEC instantané, CPU ×4 : affiché AVANT la base, en lecture seule, en moins de ${String(BUDGET_FROID_AVANT_BASE_MS)} ms, médiane de 5`, async () => {
@@ -398,7 +398,7 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
       expect.soft(v.baseALaPremiereTache, `${n} : base pas encore prête quand la première carte est dessinée`).not.toBe('prete');
       expect.soft(v.boutonsActifs, `${n} : instantané en lecture seule (sauf « Marquer fait », Q26), aucun autre bouton de carte ni de l’historique actif avant la base prête`).toEqual([]);
     });
-    expect.soft(series.ecran.mediane, `médiane sous ${String(BUDGET_FROID_AVANT_BASE_MS)} ms`).toBeLessThan(BUDGET_FROID_AVANT_BASE_MS);
+    expect.soft(jugerSerie(series.ecran, BUDGET_FROID_AVANT_BASE_MS).raisons, `médiane sous ${String(BUDGET_FROID_AVANT_BASE_MS)} ms, plus haute valeur sous 1,5 fois`).toEqual([]);
   });
 
   await test.step('T13g : un instantané d’une autre ferme que la dernière choisie n’est jamais dessiné', async () => {
@@ -460,7 +460,7 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
       return ms;
     });
     console.log(decrireSerie('Aujourd’hui (grande ferme), tap depuis Planches', serie, BUDGET_TAP_MS));
-    expect(serie.mediane).toBeLessThan(BUDGET_TAP_MS);
+    expect(jugerSerie(serie, BUDGET_TAP_MS).raisons).toEqual([]);
   });
 
   await test.step(`relecture après « Fait » : saisie dans l’historique en moins de ${String(BUDGET_RELECTURE_MS)} ms, médiane de 5 (T13c)`, async () => {
@@ -471,6 +471,6 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
       return ms;
     });
     console.log(decrireSerie('Aujourd’hui (grande ferme), relecture après « Fait » (appui → saisie dans l’historique)', serie, BUDGET_RELECTURE_MS));
-    expect(serie.mediane).toBeLessThan(BUDGET_RELECTURE_MS);
+    expect(jugerSerie(serie, BUDGET_RELECTURE_MS).raisons).toEqual([]);
   });
 });

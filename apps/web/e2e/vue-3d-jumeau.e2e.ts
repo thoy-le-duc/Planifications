@@ -9,7 +9,7 @@ import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { MARQUES_3D, TESTID_3D, type ModuleScene } from '../src/ecrans/plan3d/test/contrat.ts';
 import { type CibleVol, type ModuleCadrage, TESTID_3D_CAMERA } from '../src/ecrans/plan3d/test/contrat-camera.ts';
 import { TESTID_3D_JUMEAU, type PlanJumeau, type SceneJumeau, type ModuleJumeau } from '../src/ecrans/plan3d/test/contrat-jumeau.ts';
-import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement } from './outils.ts';
+import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement, jugerSerie } from './outils.ts';
 import { arreterImages, BORNES_DEMO, BORNES_JUMEAU_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous } from './fluidite-3d.ts';
 
 /**
@@ -38,7 +38,6 @@ const DELAI_AMORCAGE_MS = 120_000;
 
 const BUDGET_AFFICHAGE_MS = 1_000;
 const BUDGET_SEMAINE_MS = 100;
-const FACTEUR_MAXIMUM = 1.5;
 const IMAGES_PERDUES_MAX = 2;
 const PASSAGES_SACCADES_ECHEC = 4;
 const RAFALES_TOTAL_MAX = 6;
@@ -237,8 +236,7 @@ test('jumeau 3D : grande ferme de T07 placée, ordinateur, WebGL', async ({ page
       return { affichage };
     });
     console.log(decrireSerie('jumeau 3D, affichage après chargement du module', series.affichage, BUDGET_AFFICHAGE_MS));
-    expect(series.affichage.mediane, 'affichage (médiane)').toBeLessThan(BUDGET_AFFICHAGE_MS);
-    expect(Math.max(...series.affichage.valeurs), 'affichage (plus haute valeur)').toBeLessThan(BUDGET_AFFICHAGE_MS * FACTEUR_MAXIMUM);
+    expect(jugerSerie(series.affichage, BUDGET_AFFICHAGE_MS).raisons, 'affichage').toEqual([]);
   });
 
   await test.step('la vue dessine le jumeau : bâtiments, arceaux et planches placées comme versScene', async () => {
@@ -265,8 +263,7 @@ test('jumeau 3D : grande ferme de T07 placée, ordinateur, WebGL', async ({ page
     const touches = ['ArrowRight', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'ArrowLeft'] as const;
     const series = await repeterMesures(touches.length, async (i) => ({ semaine: await changerDeSemaine(page, touches[i] ?? 'ArrowRight') }));
     console.log(decrireSerie('jumeau 3D, changement de semaine', series.semaine, BUDGET_SEMAINE_MS));
-    expect(series.semaine.mediane, 'changement de semaine (médiane)').toBeLessThan(BUDGET_SEMAINE_MS);
-    expect(Math.max(...series.semaine.valeurs), 'changement de semaine (plus haute valeur)').toBeLessThan(BUDGET_SEMAINE_MS * FACTEUR_MAXIMUM);
+    expect(jugerSerie(series.semaine, BUDGET_SEMAINE_MS).raisons, 'changement de semaine').toEqual([]);
     expect(await lireJumeau(page), 'mêmes bâtiments, arceaux et planches placées d’une semaine à l’autre').toEqual(avant);
     expect(await semaineAffichee(page)).toBeGreaterThanOrEqual(0);
   });

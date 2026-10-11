@@ -3,7 +3,7 @@ import { lundiDeSemaine } from '@planif/core';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import { DELAI_APPUI_LONG_MS, MARQUE_SERIE_AFFICHEE_ATTENDUE } from '../src/ecrans/serie/test/contrat.ts';
 import { ATTENDU, EMPLACEMENT, ESPECE, fermeSerie, ITINERAIRE, SAISON, VARIETE } from '../src/ecrans/serie/test/ferme-serie.ts';
-import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp } from './outils.ts';
+import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp, jugerSerie } from './outils.ts';
 
 /**
  * T12 — plan de culture, de bout en bout, sur le build des essais servi par `vite preview`
@@ -271,7 +271,7 @@ test('plan de culture hors ligne : la batavia de T02 en moins de 8 gestes, 300 m
       return ms;
     });
     console.log(decrireSerie('formulaire d’une série, tap sur « Nouvelle série »', serie, BUDGET_AFFICHAGE_MS));
-    expect(serie.mediane).toBeLessThan(BUDGET_AFFICHAGE_MS);
+    expect(jugerSerie(serie, BUDGET_AFFICHAGE_MS).raisons).toEqual([]);
   });
 
   let gestes = 0;
@@ -398,7 +398,7 @@ test('plan de culture hors ligne : la batavia de T02 en moins de 8 gestes, 300 m
       return ms;
     });
     console.log(decrireSerie('recalcul du formulaire (semaine changée)', serie, BUDGET_RECALCUL_MS));
-    expect(serie.mediane).toBeLessThan(BUDGET_RECALCUL_MS);
+    expect(jugerSerie(serie, BUDGET_RECALCUL_MS).raisons).toEqual([]);
     await m.getByRole('button', { name: 'Fermer' }).click();
     await expect(m).toHaveCount(0);
     await expect(etatSynchro(page), 'fermer sans enregistrer n’écrit rien').toHaveText('Hors ligne · 1 saisie en attente');

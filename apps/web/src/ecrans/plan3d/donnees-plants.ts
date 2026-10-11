@@ -154,7 +154,7 @@ export function cultureAu(c: CultureLue, jour: DateCalendaire): CultureDePlanche
   };
 }
 
-/** Lit les lignes de la ferme par la porte (4 requêtes, colonnes utiles seulement) et construit les cultures. */
+/** Lit les lignes de la ferme par la porte (4 requêtes, colonnes utiles seulement, zones supprimées exclues (T11f)) et construit les cultures. */
 export async function lireCultures(porte: PorteDonnees, fermeId: string): Promise<CulturesLues> {
   const [occupations, campagnes, zones, emplacements] = await Promise.all([
     porte.lire<LigneLocale>(
@@ -169,7 +169,7 @@ export async function lireCultures(porte: PorteDonnees, fermeId: string): Promis
       [fermeId],
     ),
     porte.lire<LigneLocale>('SELECT plantation_id, annee, debut_recolte_prevu, fin_recolte_prevue FROM campagne WHERE ferme_id = ? AND supprime_le IS NULL', [fermeId]),
-    porte.lire<LigneLocale>('SELECT id, zone_parente_id, type_abri FROM zone WHERE ferme_id = ?', [fermeId]),
+    porte.lire<LigneLocale>('SELECT id, zone_parente_id, type_abri FROM zone WHERE ferme_id = ? AND supprime_le IS NULL', [fermeId]),
     porte.lire<LigneLocale>('SELECT id, zone_id, sorte FROM emplacement WHERE ferme_id = ?', [fermeId]),
   ]);
   return construireCultures({ occupations, campagnes, zones, emplacements });

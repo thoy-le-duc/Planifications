@@ -7,7 +7,7 @@ import { CLE_SESSION } from '../src/connexion/session.ts';
 import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { MARQUES_3D, TESTID_3D, type ModuleScene, type Plan3d } from '../src/ecrans/plan3d/test/contrat.ts';
 import { MARQUES_3D_FILTRES, TESTID_3D_FILTRES as T, type DimensionFiltre, type FiltresScene, type ModuleFiltres } from '../src/ecrans/plan3d/test/contrat-filtres.ts';
-import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp } from './outils.ts';
+import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp, jugerSerie } from './outils.ts';
 
 /**
  * T27b — vue 3D : filtres et légende, de bout en bout, sur ordinateur (Chromium 1280 × 800, WebGL
@@ -31,7 +31,6 @@ const CHEMIN_CALCULS = '../src/ecrans/plan/calculs.ts';
 const CHEMIN_SCENE = '../src/ecrans/plan3d/scene.ts';
 const DELAI_AMORCAGE_MS = 120_000;
 const BUDGET_FILTRE_MS = 100;
-const FACTEUR_MAXIMUM = 1.5;
 
 const executablePath = process.env.CHROMIUM_PATH;
 
@@ -235,8 +234,7 @@ test('vue 3D : filtres et légende, grande ferme de T07, ordinateur', async ({ p
       return { filtre: ms };
     });
     console.log(decrireSerie('vue 3D, changement de filtre', series.filtre, BUDGET_FILTRE_MS));
-    expect(series.filtre.mediane, 'changement de filtre (médiane)').toBeLessThan(BUDGET_FILTRE_MS);
-    expect(Math.max(...series.filtre.valeurs), 'changement de filtre (plus haute valeur)').toBeLessThan(BUDGET_FILTRE_MS * FACTEUR_MAXIMUM);
+    expect(jugerSerie(series.filtre, BUDGET_FILTRE_MS).raisons, 'changement de filtre').toEqual([]);
     // 5 bascules depuis « tout » : la famille est décochée, donc des planches sont estompées.
     expect(await caseFamille.isChecked()).toBe(false);
     expect(await nombreAttr(toile(page), 'data-estompes'), 'décocher une famille estompe ses planches').toBeGreaterThan(0);
@@ -358,8 +356,7 @@ test('vue 3D : filtres et légende, grande ferme de T07, ordinateur', async ({ p
       return { semaine: ms };
     });
     console.log(decrireSerie('vue 3D, changement de semaine avec un filtre actif', series.semaine, 100));
-    expect(series.semaine.mediane, 'changement de semaine (médiane)').toBeLessThan(100);
-    expect(Math.max(...series.semaine.valeurs), 'changement de semaine (plus haute valeur)').toBeLessThan(150);
+    expect(jugerSerie(series.semaine, 100).raisons, 'changement de semaine').toEqual([]);
   });
 
   expect(await violations(), 'violations de la CSP').toEqual([]);

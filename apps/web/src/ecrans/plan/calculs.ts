@@ -631,9 +631,14 @@ const COLONNES = {
 /**
  * T11b : zones vivantes, c'est-à-dire non supprimées et dont aucune zone parente n'est supprimée
  * (ni absente) : une zone supprimée emporte ses sous-zones et ses emplacements, comme les autres
- * lignes supprimées. Rend ces zones et les emplacements qui s'y rattachent.
+ * lignes supprimées. Rend ces zones et les emplacements qui s'y rattachent, et les bâtiments
+ * sans zone ou rattachés à l'une d'elles (T11f).
  */
-function sansZonesSupprimees(zones: readonly LigneLocale[], emplacements: readonly LigneLocale[]): { zone: LigneLocale[]; emplacement: LigneLocale[] } {
+function sansZonesSupprimees(
+  zones: readonly LigneLocale[],
+  emplacements: readonly LigneLocale[],
+  batiments: readonly LigneLocale[],
+): { zone: LigneLocale[]; emplacement: LigneLocale[]; batiment: LigneLocale[] } {
   const parId = new Map(zones.map((z) => [texte(z.id), z]));
   const vivante = new Map<string, boolean>();
   function estVivante(id: string, profondeur: number): boolean {
@@ -652,6 +657,11 @@ function sansZonesSupprimees(zones: readonly LigneLocale[], emplacements: readon
   return {
     zone: zones.filter((z) => estVivante(texte(z.id), 0)),
     emplacement: emplacements.filter((e) => estVivante(texte(e.zone_id), 0)),
+    // T11f : un bâtiment sans zone reste ; rattaché à une zone, il suit son sort.
+    batiment: batiments.filter((b) => {
+      const zone = texteOuNul(b.zone_id);
+      return zone === null || estVivante(zone, 0);
+    }),
   };
 }
 
@@ -665,7 +675,7 @@ async function lireStructure(porte: PorteDonnees, fermeId: string): Promise<Stru
     porte.lire<LigneLocale>(`SELECT ${COLONNES.reference} FROM famille WHERE ferme_id = ? OR ferme_id IS NULL`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.batiment} FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL`, [fermeId]),
   ]);
-  return { ...sansZonesSupprimees(zones, emplacements), espece, variete, famille, batiment };
+  return { ...sansZonesSupprimees(zones, emplacements, batiment), espece, variete, famille };
 }
 
 const marques = (n: number) => Array.from({ length: n }, () => '?').join(', ');
@@ -743,7 +753,7 @@ export interface DonneesDebutDePlan extends DonneesPlan {
  */
 export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, emplacements: number): Promise<DonneesDebutDePlan> {
   // Peu de requêtes : chacune coûte un aller-retour vers le worker de la base.
-  const [petites, emplacementsLus, batiment] = await Promise.all([
+  const [petites, emplacementsLus, batimentsLus] = await Promise.all([
     porte.lire<LigneLocale>(
       `SELECT 'zone' AS t, id, nom, zone_parente_id AS lien, contour, supprime_le FROM zone WHERE ferme_id = ?1
        UNION ALL SELECT 'espece', id, nom, famille_id, NULL, NULL FROM espece WHERE ferme_id = ?1 OR ferme_id IS NULL
@@ -755,9 +765,14 @@ export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, empl
     porte.lire<LigneLocale>(`SELECT ${COLONNES.batiment} FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL`, [fermeId]),
   ]);
   const de = (t: string) => petites.filter((l) => l.t === t);
-  const { zone: zones, emplacement: tous } = sansZonesSupprimees(
+  const {
+    zone: zones,
+    emplacement: tous,
+    batiment,
+  } = sansZonesSupprimees(
     de('zone').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null, zone_parente_id: l.lien ?? null, contour: l.contour ?? null, supprime_le: l.supprime_le ?? null })),
     emplacementsLus,
+    batimentsLus,
   );
   const espece = de('espece').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null, famille_id: l.lien ?? null }));
   const variete = de('variete').map((l) => ({ id: l.id ?? null, nom: l.nom ?? null }));

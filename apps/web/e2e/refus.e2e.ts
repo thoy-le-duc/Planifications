@@ -7,7 +7,7 @@ import {
   REFUS_PLUS_RECENT,
 } from '../src/ecrans/ferme/test/refus.ts';
 import { CLE_SESSION } from '../src/connexion/session.ts';
-import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp } from './outils.ts';
+import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp, jugerSerie } from './outils.ts';
 
 /**
  * T10i — les refus de synchro dans l'onglet Ferme, de bout en bout, sur le build des essais servi
@@ -132,7 +132,7 @@ test('refus de synchro dans l’onglet Ferme : 100 refus, hors ligne, CPU ×4, m
       return ms;
     });
     console.log(decrireSerie('onglet Ferme avec 100 refus, tap sur « Ferme »', serie, BUDGET_AFFICHAGE_MS));
-    expect(serie.mediane).toBeLessThan(BUDGET_AFFICHAGE_MS);
+    expect(jugerSerie(serie, BUDGET_AFFICHAGE_MS).raisons).toEqual([]);
   });
 
   await test.step('le plus récent en tête ; jamais le refus d’un autre utilisateur', async () => {
