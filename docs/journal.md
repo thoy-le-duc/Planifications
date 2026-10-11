@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-11 — T37c : suites de la relecture T37b
+
+- **Fait** : (1) la 3D suit l'état de l'écran Aujourd'hui. Replié : 25 tâches en retard puis 25 de la semaine ; après « Voir les autres » : tout le retard, puis toute la semaine, comme les cartes de l'écran déplié. L'état déplié est gardé dans le cache de l'écran avec les masques (`toutVoirDe`, `deplierTout`, `cache.ts`), la 3D le relit à chaque changement. (2) Panneau replié au téléphone : la liste des planches n'est plus retirée par `hidden` ; le panneau n'a plus de taille (position absolue, 0 × 0) et seul le reste (légende, filtres, résumé) est `hidden`. La liste reste dans l'arbre d'accessibilité. Tests : `travaux-rangs-deplie.test.tsx` (30+ tâches en retard, replié puis déplié), `e2e/vue-3d-liste-lecteur.e2e.ts` (démo, 390 px). Vue 3D : 207,9 Kio, budget inchangé ; démarrage inchangé (71,1).
+- **Décidé** : l'état déplié est partagé (pas de second ordre à deviner) et il reste tant que la page vit, comme les masques ; l'écran rouvert se replie donc seulement au rechargement. Aucune classe « visuellement masquée » existante n'allait (1 px, donc « visible » pour les e2e de T37b qui attendent le panneau caché) : classe `plan3d-cote-replie`, 0 × 0, propre à la 3D. Aucun test de T37b modifié.
+- **Bloquant** : rien. La règle des poteaux (gouttière et pergola devenus des fuseaux pointus sans traverse en T) reste ouverte : question posée à Théophane, à lui montrer en capture avant tout changement. Poteaux non touchés.
+
 ## 2026-10-11 — T11f : suites de la relecture T11b
 
 - **Fait** : les dix jeux e2e qui mesurent un temps en série (Aujourd'hui, grande ferme, démarrage, Itinéraires, refus, Série, Planches, trois vues 3D) jugent chaque série par `jugerSerie` : médiane sous le budget ET plus haute valeur au plus 1,5 fois le budget. Un bâtiment rattaché à une zone supprimée (ou à une sous-zone d'une zone supprimée) disparaît du plan et de la 3D ; la 3D ne lit plus les zones supprimées. Un « Fait » qui s'écrit encore quand on quitte Aujourd'hui retient le rechargement automatique jusqu'à la fin de l'écriture. Vérifié : typage, lint, 5 074 tests unitaires, build, budgets, `pnpm e2e:demo` 18 passés, `pnpm e2e` 87 passés sur 88 (voir Bloquant).

@@ -456,6 +456,21 @@
   }
 }
 
+/* T37c : le reste du panneau (légende, filtres, résumé) se replie par `hidden` ; la liste des planches, non. */
+.plan3d-cote-reste {
+  display: contents;
+}
+
+.plan3d-cote-reste[hidden] {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .plan3d-cote-reste[hidden] {
+    display: contents;
+  }
+}
+
 /* Téléphone (Q36) : la scène prend l'écran ; légende, filtres et liste des planches derrière « Filtres » (T37b), rien de retiré. */
 @media (max-width: 1023px) {
   .plan3d-outils .plan3d-filtres-bouton {
@@ -498,6 +513,17 @@
 
   .plan3d-cote[hidden] {
     display: none;
+  }
+
+  /* Replié : visuellement masqué, pas retiré de l'arbre d'accessibilité (la liste des planches est l'alternative texte de la toile). */
+  .plan3d-cote-replie {
+    position: absolute;
+    width: 0;
+    height: 0;
+    max-height: 0;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
   }
 
   /* Relecture T37b : un seul ascenseur, celui du panneau ; rien n'est coupé dans une liste défilante sans indice. */

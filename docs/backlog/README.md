@@ -151,7 +151,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T28k](T28k-placement-au-doigt.md) | Placement au doigt sur le téléphone (Q36) | T28j | fait |
 | [T37](T37-travaux-du-jour-3d.md) | 3D au téléphone : les travaux du jour, pour les ouvriers (Q36) | T29, T22, T13 | fait |
 | [T37b](T37b-3d-telephone-suites.md) | 3D au téléphone : fluidité de près, filtres, suites de T37 | T37 | fait |
-| [T37c](T37c-suites-t37b.md) | Suites de la relecture T37b (numéros dépliés, accessibilité, poteaux) | T37b | à faire |
+| [T37c](T37c-suites-t37b.md) | Suites de la relecture T37b (numéros dépliés, accessibilité, poteaux) | T37b | fait |
 | [T38a](T38a-api-sur-vercel.md) | Mise en ligne gratuite : l'API sur Vercel (Q37) | T09c, T10 | fait |
 | [T38b](T38b-guide-mise-en-ligne.md) | Guide de mise en ligne pas à pas, pour Théophane (Q37) | T38a | fait |
 | [T13q](T13q-horodatages-suites.md) | Horodatages : les derniers endroits qui comparent du texte (relecture T13n) | T13n | fait |
