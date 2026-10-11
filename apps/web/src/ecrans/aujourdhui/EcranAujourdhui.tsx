@@ -39,11 +39,7 @@ import type { PorteDonnees } from '@planif/sync';
 import { commencerEcriture } from '../../donnees/ecritures-en-cours.ts';
 import { lireFermeMontree } from '../../donnees/ferme-memorisee.ts';
 import './aujourdhui.css';
-<<<<<<< HEAD
-import { changerMasques, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, retenirRelecture, suivreJournee, suivreMasques, type Masque, type Masques } from './cache.ts';
-=======
-import { changerMasques, deplierTout, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, suivreJournee, suivreMasques, toutVoirDe, type Masque, type Masques } from './cache.ts';
->>>>>>> origin/main
+import { changerMasques, deplierTout, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, retenirRelecture, suivreJournee, suivreMasques, toutVoirDe, type Masque, type Masques } from './cache.ts';
 import {
   capitale,
   ETAPES_FAITES,
