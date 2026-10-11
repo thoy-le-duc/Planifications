@@ -22,7 +22,7 @@ import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { creerPorte, SCHEMA_LOCAL, type PorteDonnees } from '@planif/sync';
 import type { DateCalendaire, Id } from '@planif/core';
-import { journeeEnCache, suivreJournee } from './cache.ts';
+import { journeeEnCache, retenirRelecture, suivreJournee } from './cache.ts';
 import { calculerJournee, lireJournee, type Journee, type TacheJour } from './calculs.ts';
 import { marquerFait, type ContexteEcriture } from './ecritures.ts';
 import { creerBasePowerSync, type BasePowerSync, type SchemaJson } from './test/base-powersync.ts';
@@ -241,6 +241,27 @@ describe('T13t : une saisie passe devant la relecture complète de réouverture'
       // La relecture complète en cours va jusqu'au bout (elle voit la ligne), sans repartir de zéro.
       const jusquALaRemise = requetes.slice(avant, suivi.requetesALaRemise[suivi.remises.indexOf(j)]);
       expect(jusquALaRemise.filter((sql) => SERIES.test(sql)), 'la relecture complète n’a pas été relancée').toEqual([]);
+      expect(empreinte(j)).toBe(empreinte(await complete()));
+    } finally {
+      suivi.arreter();
+    }
+  });
+
+  it('« Fait » sur l’instantané (aucune journée encore lue) : la relecture complète cède la place pendant la lecture ciblée et l’écriture, puis reprend', async () => {
+    const r = retenir();
+    const suivi = suivre();
+    try {
+      await r.atteinte;
+      const lever = retenirRelecture(porte, FERME);
+      const avant = requetes.length;
+      r.liberer();
+      // La requête en cours finit ; la relecture complète s'arrête là, rien d'autre n'est lu.
+      await new Promise((attente) => setTimeout(attente, 20));
+      expect(requetes.slice(avant), 'relecture complète arrêtée pendant la saisie').toEqual([]);
+      expect(suivi.remises, 'aucune journée remise').toHaveLength(0);
+      lever();
+      const j = await suivi.prochaine(() => true);
+      expect(requetes.slice(avant).filter((sql) => SERIES.test(sql)), 'relecture complète reprise').toHaveLength(1);
       expect(empreinte(j)).toBe(empreinte(await complete()));
     } finally {
       suivi.arreter();
