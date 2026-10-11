@@ -15,7 +15,7 @@ import {
   seriesDuJeu,
   typeDepart,
 } from '../src/ecrans/itineraires/test/ferme-itineraires.ts';
-import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp } from './outils.ts';
+import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp, jugerSerie } from './outils.ts';
 
 /**
  * T24 — mes itinéraires et mes types d'intervention, de bout en bout, sur le build des essais
@@ -271,7 +271,7 @@ test('adapter la Batavia de la bibliothèque : grelinette et désherbage, les t�
       return ms;
     });
     console.log(decrireSerie('écran des itinéraires, tap sur « Mes itinéraires »', serie, BUDGET_AFFICHAGE_MS));
-    expect(serie.mediane).toBeLessThan(BUDGET_AFFICHAGE_MS);
+    expect(jugerSerie(serie, BUDGET_AFFICHAGE_MS).raisons).toEqual([]);
   });
 
   await test.step('« Adapter pour ma ferme » : formulaire en moins de 300 ms, médiane de 5 ; rien n’est écrit', async () => {
@@ -284,7 +284,7 @@ test('adapter la Batavia de la bibliothèque : grelinette et désherbage, les t�
       return ms;
     });
     console.log(decrireSerie('formulaire d’itinéraire, tap sur « Adapter pour ma ferme »', serie, BUDGET_AFFICHAGE_MS));
-    expect(serie.mediane).toBeLessThan(BUDGET_AFFICHAGE_MS);
+    expect(jugerSerie(serie, BUDGET_AFFICHAGE_MS).raisons).toEqual([]);
     await expect(etatSynchro(page), 'adapter puis fermer n’écrit rien').toHaveText('Hors ligne');
   });
 
@@ -327,7 +327,7 @@ test('adapter la Batavia de la bibliothèque : grelinette et désherbage, les t�
     const valeurs = ['11', '12', '13', '14', '15'];
     const serie = await repeterMesure(REPETITIONS_MESURE, async (i) => tempsApercu(page, 0, valeurs[i] ?? '11'));
     console.log(decrireSerie('aperçu d’un itinéraire (jours d’un travail changés)', serie, BUDGET_APERCU_MS));
-    expect(serie.mediane).toBeLessThan(BUDGET_APERCU_MS);
+    expect(jugerSerie(serie, BUDGET_APERCU_MS).raisons).toEqual([]);
     await travail(page, 0).getByLabel('Jours', { exact: true }).fill('10');
   });
 
