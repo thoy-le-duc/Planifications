@@ -1,6 +1,6 @@
-# T11e — Planches : ouvrir la base plus tôt, maquette, marges de temps
+# T11e — Planches : maquette, marges de temps
 
-**Objectif** : les règles de T11b qui demandent d'abord une mesure ou une maquette (découpage du 2026-10-10).
+**Objectif** : les règles de T11b qui demandent d'abord une mesure ou une maquette (découpage du 2026-10-10). « Ouvrir la base plus tôt » (premier tap avant la base prête) est sorti dans T11g (décision du chef du 2026-10-10).
 
 **Dépend de** : T11b
 **Périmètre** : `apps/web/src/donnees/**`, `apps/web/src/ecrans/plan/**`, `apps/web/vite.config.ts`, `apps/web/e2e/**`
