@@ -110,6 +110,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T11d](T11d-defilement-plan-fiable.md) | Mesure du défilement du plan : fiable sans relever la limite | T11, T20 | fait |
 | [T11b](T11b-plan-suites.md) | Planches : suites de la relecture | T11 | fait |
 | [T11e](T11e-plan-performances.md) | Planches : ouvrir la base plus tôt, maquette, marges de temps (découpage de T11b) | T11b | à faire |
+| [T11f](T11f-suites-t11b.md) | Suites de la relecture T11b (garde-fou partout, zones supprimées, écritures en cours) | T11b | à faire |
 | [T27](T27-vue-3d-prototype.md) | Vue 3D : prototype mesurable (planches et cultures, curseur de semaine) | T11 | fait |
 | [T27b](T27b-vue-3d-filtres.md) | Vue 3D : filtres et couleurs lisibles (Q30) | T27 | fait |
 | [T28a](T28a-placement-modele.md) | Placement réel : modèle, calcul et base, zones en formes libres (Q30, Q31) | — | fait |
@@ -148,6 +149,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T28k](T28k-placement-au-doigt.md) | Placement au doigt sur le téléphone (Q36) | T28j | fait |
 | [T37](T37-travaux-du-jour-3d.md) | 3D au téléphone : les travaux du jour, pour les ouvriers (Q36) | T29, T22, T13 | fait |
 | [T37b](T37b-3d-telephone-suites.md) | 3D au téléphone : fluidité de près, filtres, suites de T37 | T37 | fait |
+| [T37c](T37c-suites-t37b.md) | Suites de la relecture T37b (numéros dépliés, accessibilité, poteaux) | T37b | à faire |
 | [T38a](T38a-api-sur-vercel.md) | Mise en ligne gratuite : l'API sur Vercel (Q37) | T09c, T10 | fait |
 | [T38b](T38b-guide-mise-en-ligne.md) | Guide de mise en ligne pas à pas, pour Théophane (Q37) | T38a | fait |
 | [T13q](T13q-horodatages-suites.md) | Horodatages : les derniers endroits qui comparent du texte (relecture T13n) | T13n | fait |
