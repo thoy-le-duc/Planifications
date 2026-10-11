@@ -22,8 +22,10 @@ import { installerAvecBase, navigation, onglet, planAttendu } from './plan-perfo
  *   d'elle-même, jamais la page (pas de défilement horizontal à 360 px).
  * Surtitre — data-testid="plan-surtitre", au-dessus du plan : « NOM DE LA ZONE ACTIVE · N
  *   PLANCHES · L M », en capitales : N = planches (emplacements) de la zone dans le plan affiché
- *   (« 1 PLANCHE » au singulier), L = total de leurs longueurs en mètres (mètres de planche),
- *   écrit à la française (Intl fr-FR, au plus une décimale). Suit la puce active. Entier
+ *   (« 0 PLANCHE », « 1 PLANCHE » au singulier), L = longueur COMMUNE de ses planches en mètres,
+ *   ou l'intervalle « 25–30 M » si elles diffèrent (décision du chef, T11e : le testeur avait
+ *   pris le total ; pas de longueur sans planche), écrit à la française (Intl fr-FR, au plus une
+ *   décimale). Suit la puce active. Entier
  *   (ni tronqué ni coupé), police d'au moins 12 px.
  * Carte d'alerte — data-testid="plan-alerte", SOUS la légende (« Légende »), dans l'écran sans
  *   défiler la page (au-dessus de la barre de navigation), bord gauche orange (COULEURS.orange,
@@ -86,9 +88,13 @@ test.beforeAll(async ({ browser }) => {
     .filter((l): l is LigneZonePlan => l.sorte === 'zone')
     .map((z) => {
       const planches = plan.lignes.filter((l): l is LigneEmplacementPlan => l.sorte === 'emplacement' && l.zoneId === z.id);
-      const total = planches.reduce((s, l) => s + (attendu.longueurs.get(l.id) ?? 0), 0);
+      // Décision du chef (T11e) : longueur commune des planches de la zone, sinon l'intervalle « 25–30 M ».
+      const longueurs = planches.map((l) => metres.format(attendu.longueurs.get(l.id) ?? 0));
+      const min = metres.format(Math.min(...planches.map((l) => attendu.longueurs.get(l.id) ?? 0)));
+      const max = metres.format(Math.max(...planches.map((l) => attendu.longueurs.get(l.id) ?? 0)));
       const n = planches.length;
-      return { id: z.id, nom: z.nom, surtitre: normaliser(`${z.nom} · ${String(n)} ${n === 1 ? 'PLANCHE' : 'PLANCHES'} · ${metres.format(total)} M`) };
+      const longueur = n === 0 ? '' : ` · ${new Set(longueurs).size === 1 ? min : `${min}–${max}`} M`;
+      return { id: z.id, nom: z.nom, surtitre: normaliser(`${z.nom} · ${String(n)} ${n < 2 ? 'PLANCHE' : 'PLANCHES'}${longueur}`) };
     });
   enRetard = plan.lignes
     .filter((l): l is LigneEmplacementPlan => l.sorte === 'emplacement')

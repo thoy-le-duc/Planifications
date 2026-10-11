@@ -408,6 +408,133 @@
   background-image: repeating-linear-gradient(135deg, var(--bande) 0 2px, transparent 2px 5px);
 }
 
+/*
+ * T11e, maquette Plan : surtitre et puces de zone sur le vert de l'en-tête. Premier élément de
+ * l'écran : la bande prolonge l'en-tête (marges de la coquille annulées) ; sinon (bandeau
+ * d'export au-dessus), une carte verte.
+ */
+.plan-zones {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--espace-s) 0 var(--espace-xs);
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.coquille-contenu > .plan:first-child > .plan-zones {
+  margin: calc(-1 * var(--espace-l)) -14px 0;
+  padding-top: 0;
+  border-radius: 0;
+}
+
+.plan-surtitre {
+  margin: 0;
+  padding: 0 20px;
+  font-family: var(--police-code);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  line-height: 18px;
+  text-transform: uppercase;
+  color: var(--couleur-sur-foret-doux);
+}
+
+/* Trop de zones pour la largeur : la rangée défile seule, jamais la page. */
+.plan-puces {
+  position: relative;
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  padding: 0 14px;
+}
+
+.plan-puces::-webkit-scrollbar {
+  display: none;
+}
+
+/* Cible de 48 px (gants) ; la pastille dessinée garde les 36 px de la maquette. */
+.plan-puce {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 3px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.plan-puce > span {
+  padding: 8px 14px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-foret-clair);
+  color: var(--couleur-sur-foret);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.plan-puce[aria-pressed='true'] > span {
+  background: var(--couleur-sur-foret);
+  color: var(--couleur-foret);
+}
+
+.plan-puce:focus-visible {
+  outline: none;
+}
+
+.plan-puce:focus-visible > span {
+  outline: 3px solid var(--couleur-sur-foret);
+  outline-offset: 2px;
+}
+
+/* Carte d'alerte sous la légende : la culture prévue la plus en retard (bord orange). */
+.plan-alerte {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 14px;
+  border: 0;
+  border-left: 8px solid var(--couleur-orange);
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-surface);
+  box-shadow: var(--ombre-carte);
+  color: var(--couleur-encre);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-alerte-code {
+  font-family: var(--police-code);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--couleur-texte-orange);
+  overflow-wrap: anywhere;
+}
+
+.plan-alerte-titre {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.plan-alerte-suite {
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
 /* Détail d'une barre : feuille en bas de l'écran, lecture seule. */
 .plan-voile {
   position: fixed;
