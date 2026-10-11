@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { CLE_SESSION } from '../src/connexion/session.ts';
-import { decrireSerie, ralentirCpu, repeterMesure, REPETITIONS_MESURE, tempsAppPrete } from './outils.ts';
+import { decrireSerie, ralentirCpu, repeterMesure, REPETITIONS_MESURE, tempsAppPrete, jugerSerie } from './outils.ts';
 
 /**
  * Contrat (T16, relecture, point 3) : deux réouvertures hors ligne, CPU ralenti ×4, sous 300 ms
@@ -60,7 +60,7 @@ test('démarrage à froid sous le budget, CPU ralenti', async ({ browser }) => {
     }
   });
   console.log(decrireSerie('démarrage à froid', serie, DEMARRAGE_FROID_MAX_MS));
-  expect(serie.mediane).toBeLessThan(DEMARRAGE_FROID_MAX_MS);
+  expect(jugerSerie(serie, DEMARRAGE_FROID_MAX_MS).raisons).toEqual([]);
 });
 
 test('réouverture hors ligne sous 300 ms, CPU ralenti', async ({ page, context }) => {
@@ -76,7 +76,7 @@ test('réouverture hors ligne sous 300 ms, CPU ralenti', async ({ page, context 
     return ms;
   });
   console.log(decrireSerie('réouverture hors ligne', serie, ECRAN_COURANT_MAX_MS));
-  expect(serie.mediane).toBeLessThan(ECRAN_COURANT_MAX_MS);
+  expect(jugerSerie(serie, ECRAN_COURANT_MAX_MS).raisons).toEqual([]);
 });
 
 test('réouverture hors ligne, connecté, sous 300 ms, CPU ralenti', async ({ page, context }) => {
@@ -104,5 +104,5 @@ test('réouverture hors ligne, connecté, sous 300 ms, CPU ralenti', async ({ pa
     return ms;
   });
   console.log(decrireSerie('réouverture hors ligne, connecté', serie, ECRAN_COURANT_MAX_MS));
-  expect(serie.mediane).toBeLessThan(ECRAN_COURANT_MAX_MS);
+  expect(jugerSerie(serie, ECRAN_COURANT_MAX_MS).raisons).toEqual([]);
 });

@@ -36,6 +36,7 @@
 import { useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
+import { commencerEcriture } from '../../donnees/ecritures-en-cours.ts';
 import { lireFermeMontree } from '../../donnees/ferme-memorisee.ts';
 import './aujourdhui.css';
 import { changerMasques, deplierTout, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, suivreJournee, suivreMasques, toutVoirDe, type Masque, type Masques } from './cache.ts';
@@ -804,6 +805,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
       setOccupe(true);
     }
     ecritures.current++;
+    // T11f : compte dans le compteur global dès le tap, jusqu'à la fin de l'écriture, même si
+    // l'écran est démonté entre-temps (changement d'onglet) : pas de rechargement automatique.
+    const finir = commencerEcriture();
     const tour = file.current.then(async () => {
       try {
         await action();
@@ -813,6 +817,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         setErreur(`La saisie n’a pas pu s’enregistrer sur ce téléphone${e instanceof Error && e.message !== '' ? ` : ${e.message}` : ''}. Réessayez ; si cela recommence, signalez-le.`);
         return false;
       } finally {
+        finir();
         ecritures.current--;
         if (ecritures.current === 0) setOccupe(false);
       }

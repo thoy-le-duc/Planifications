@@ -3,7 +3,7 @@ import { CLE_SESSION } from '../src/connexion/session.ts';
 import { LIBELLES_UNITES, MARQUE_AUJOURDHUI_ATTENDUE } from '../src/ecrans/aujourdhui/test/contrat.ts';
 import { cleTache, fermeDuJour, LIBELLES_CATEGORIES, SERIE, texteCharge, texteDuree } from '../src/ecrans/aujourdhui/test/ferme-du-jour.ts';
 import { COULEURS } from '../src/ui/jetons.ts';
-import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp } from './outils.ts';
+import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, surveillerCsp, jugerSerie } from './outils.ts';
 
 /**
  * T13 — saisie terrain hors ligne, de bout en bout, sur le build de production servi par
@@ -217,7 +217,7 @@ test('saisie terrain hors ligne : Fait, 12 kg de tomates, rechargement, annulati
       return ms;
     });
     console.log(decrireSerie('Aujourd’hui, tap depuis Planches', serie, BUDGET_MS));
-    expect(serie.mediane).toBeLessThan(BUDGET_MS);
+    expect(jugerSerie(serie, BUDGET_MS).raisons).toEqual([]);
   });
 
   await test.step('fidélité à la maquette : bande orange du retard, « Fait » sur la forêt', async () => {
