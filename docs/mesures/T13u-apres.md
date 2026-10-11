@@ -46,3 +46,4 @@ Pistes (à trancher par le chef) :
 - `aujourdhui.e2e.ts` : vert.
 - Démarrage : 72 801 octets gzip pour une limite de 72 806 (71,1 Kio) : rien de nouveau au démarrage (le code touché est dans le morceau Aujourd'hui et dans `base-appli`).
 - La relecture complète lit désormais toutes les séries de la base page par page (les terminées ne rendent que leur id) : ≈ 16 pages de 60 à 100 ms à froid sur la grande ferme, au lieu d'une requête de 750 à 860 ms ; elle cède à chaque page.
+- `pnpm e2e` complet : 97 passés, 13 ignorés, 2 en échec : le nouvel e2e T13u (1 005, 759, 648, 467, 252 ms → médiane 648 ms) et `serie.e2e.ts` (« Nouvelle série », 1re répétition 468 ms pour un plafond de 450 ; médiane 120 ms). Relancé seul, `serie.e2e.ts` passe (359, 122, 143, 112, 89 ms) : écran hors du périmètre, aléa de la machine.
