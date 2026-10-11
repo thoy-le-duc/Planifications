@@ -6,6 +6,10 @@
 **Périmètre** : `apps/web/src/App.tsx`, `apps/web/src/main.tsx`, `apps/web/src/donnees/**`, `apps/web/src/ecrans/plan/**`, `apps/web/e2e/**`, `apps/web/budget.json` (justifié dans la PR)
 **Priorité** : basse (Q19 : « ok pour l'instant », sans priorité).
 
+## Précondition du test
+
+L'utilisateur a déjà ouvert Planches une fois sur ce téléphone (comme T13g pour Aujourd'hui : on peut montrer ce qu'il a déjà vu). Le `beforeAll` du test le fait : installation, base prête, ouverture de Planches, retour à Aujourd'hui, puis hors ligne et CPU ×4 (voir `e2e/plan-performances.e2e.ts`). Sans visite préalable, il n'y a pas d'instantané : le test ne porte pas sur ce cas.
+
 ## Mesures du testeur (T11e, `docs/mesures/T11e-avant.md`, section 1)
 
 Chromium headless, CPU ×4, ferme de T07, hors ligne, 5 répétitions, tap dès la marque `app-prete` (376 à 547 ms après la navigation), base pas encore prête :

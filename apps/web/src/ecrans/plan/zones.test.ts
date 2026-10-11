@@ -104,4 +104,14 @@ describe('attribuerPlaces', () => {
     const loin = attribuerPlaces(plus, 100, 104);
     expect([...loin.values()].sort()).toEqual([0, 1, 2, 3]);
   });
+
+  it('la ligne gardée (focus) sortie de la fenêtre garde sa place, que personne ne reprend', () => {
+    const avant = attribuerPlaces(new Map(), 0, 4);
+    const garde = avant.get(0);
+    const apres = attribuerPlaces(avant, 1, 5, 0);
+    expect(apres.get(0)).toBe(garde);
+    expect(apres.get(4)).not.toBe(garde);
+    expect(new Set(apres.values()).size).toBe(5);
+    expect(attribuerPlaces(apres, 1, 5, 2).has(0), 'gardée dans la fenêtre : rien de plus').toBe(false);
+  });
 });

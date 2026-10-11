@@ -147,11 +147,25 @@ function fenetre(m: Mesure, total: number): Vue {
  * défilement, les nœuds sont réutilisés au lieu d'être retirés puis recréés).
  */
 interface EtatVue extends Vue {
+  /** Ligne qui contient le focus, dessinée même hors de la fenêtre (jamais recyclée), ou nulle. */
+  readonly garde: number | null;
   readonly places: ReadonlyMap<number, number>;
 }
 
-function avecPlaces(precedentes: ReadonlyMap<number, number>, f: Vue): EtatVue {
-  return { ...f, places: attribuerPlaces(precedentes, f.debut, f.fin) };
+function avecPlaces(precedentes: ReadonlyMap<number, number>, f: Vue, garde: number | null): EtatVue {
+  return { ...f, garde, places: attribuerPlaces(precedentes, f.debut, f.fin, garde) };
+}
+
+/**
+ * Index de la ligne du plan qui contient le focus (clavier, ou rendu à la fermeture d'une
+ * feuille), hors de [debut, fin[ ; nul sinon. Aucune mise en page : ni mesure, ni position.
+ */
+function ligneGardee(el: HTMLElement, f: Vue, total: number): number | null {
+  const actif = document.activeElement;
+  if (actif === null || !el.contains(actif)) return null;
+  const index = Number(actif.closest<HTMLElement>('[data-testid="ligne-plan"]')?.dataset.index);
+  if (!Number.isInteger(index) || index >= total || (index >= f.debut && index < f.fin)) return null;
+  return index;
 }
 
 /** '2026-04-12' → '12 avril' (l'année en plus si elle n'est pas celle de `aujourdhui`). */
@@ -207,7 +221,7 @@ const Ligne = memo(function Ligne({ ligne, index, surBarre, surConflits }: Propr
   const style: CSSProperties = { transform: `translateY(${String(HAUTEUR_ENTETE + index * HAUTEUR_LIGNE_PX)}px)` };
   if (ligne.sorte !== 'emplacement') {
     return (
-      <div data-testid="ligne-plan" data-sorte={ligne.sorte} data-id={ligne.id} tabIndex={-1} className={`plan-ligne plan-ligne-${ligne.sorte}`} style={style}>
+      <div data-testid="ligne-plan" data-sorte={ligne.sorte} data-id={ligne.id} data-index={index} tabIndex={-1} className={`plan-ligne plan-ligne-${ligne.sorte}`} style={style}>
         <span className="plan-etiquette plan-etiquette-zone">{ligne.nom}</span>
       </div>
     );
@@ -222,7 +236,7 @@ const Ligne = memo(function Ligne({ ligne, index, surBarre, surConflits }: Propr
       : sortes.map((s) => [s, LIBELLES_COURTS_CONFLITS[s]] as const);
   return (
     // tabIndex -1 : la ligne reçoit le focus rendu quand sa barre a disparu (T11b).
-    <div data-testid="ligne-plan" data-sorte="emplacement" data-id={ligne.id} data-conflit={enConflit ? 'oui' : undefined} tabIndex={-1} className={classe} style={style}>
+    <div data-testid="ligne-plan" data-sorte="emplacement" data-id={ligne.id} data-index={index} data-conflit={enConflit ? 'oui' : undefined} tabIndex={-1} className={classe} style={style}>
       {enConflit ? (
         <button
           type="button"
@@ -266,13 +280,14 @@ type Detail =
  * tap ne focalise pas le bouton sous Safari). Retrouvé par son identité à la fermeture : la
  * virtualisation a pu retirer la ligne puis en dessiner une nouvelle.
  */
-interface OrigineFeuille {
-  readonly ligneId: string;
-  readonly occupationId: string | null;
-}
+type OrigineFeuille =
+  | { readonly sorte: 'plan'; readonly ligneId: string; readonly occupationId: string | null }
+  /** T11e : la carte d'alerte ; le focus lui revient (la planche en retard est souvent hors de vue). */
+  | { readonly sorte: 'alerte' };
 
 /** Élément qui reçoit le focus à la fermeture : la barre ou l'étiquette, sinon la ligne, sinon la grille. */
 function cibleDuFocus(grille: HTMLElement, origine: OrigineFeuille): HTMLElement {
+  if (origine.sorte === 'alerte') return grille.closest('.plan')?.querySelector<HTMLElement>('[data-testid="plan-alerte"]') ?? grille;
   const ligne = [...grille.querySelectorAll<HTMLElement>('[data-testid="ligne-plan"]')].find((l) => l.dataset.id === origine.ligneId);
   if (ligne === undefined) return grille;
   const cible =
@@ -557,7 +572,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   const total = plan?.lignes.length ?? 0;
   const mesure = useRef<Mesure>({ haut: 0, hauteur: hauteurConnue, largeur: largeurConnue });
   // Fenêtre vide au premier rendu : l'effet ci-dessous la remplit aussitôt, avant la peinture.
-  const [vue, setVue] = useState<EtatVue>(() => avecPlaces(new Map(), { debut: 0, fin: 0, premiere: 0 }));
+  const [vue, setVue] = useState<EtatVue>(() => avecPlaces(new Map(), { debut: 0, fin: 0, premiere: 0 }, null));
   /** Puce touchée et position où elle a mené : active tant que le plan n'a pas bougé (fin du plan atteinte). */
   const [touchee, setTouchee] = useState<{ readonly zoneId: string; readonly haut: number } | null>(null);
   const idSaison = useId();
@@ -649,12 +664,14 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
     const m = mesure.current;
     const maj = (agrandirSeulement: boolean) => {
       const f = fenetre(m, total);
+      const garde = el === null ? null : ligneGardee(el, f, total);
       setVue((v) =>
-        (v.debut === f.debut && v.fin === f.fin && v.premiere === f.premiere) ||
-        // Taille mesurée plus petite que l'estimation : les lignes en trop restent jusqu'au prochain défilement.
-        (agrandirSeulement && v.premiere === f.premiere && f.debut >= v.debut && f.fin <= v.fin)
+        v.garde === garde &&
+        ((v.debut === f.debut && v.fin === f.fin && v.premiere === f.premiere) ||
+          // Taille mesurée plus petite que l'estimation : les lignes en trop restent jusqu'au prochain défilement.
+          (agrandirSeulement && v.premiere === f.premiere && f.debut >= v.debut && f.fin <= v.fin))
           ? v
-          : avecPlaces(v.places, f),
+          : avecPlaces(v.places, f, garde),
       );
     };
     maj(false);
@@ -810,12 +827,16 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   const focusARendre = useRef(false);
   const grille = useRef<HTMLDivElement>(null);
   const surBarre = useCallback((ligne: LigneEmplacementPlan, barre: BarrePlan) => {
-    origine.current = { ligneId: ligne.id, occupationId: barre.occupationId };
+    origine.current = { sorte: 'plan', ligneId: ligne.id, occupationId: barre.occupationId };
     setDetail({ sorte: 'serie', ligne, barre });
   }, []);
   const surConflits = useCallback((ligne: LigneEmplacementPlan) => {
-    origine.current = { ligneId: ligne.id, occupationId: null };
+    origine.current = { sorte: 'plan', ligneId: ligne.id, occupationId: null };
     setDetail({ sorte: 'conflits', ligne });
+  }, []);
+  const surAlerte = useCallback((ligne: LigneEmplacementPlan, barre: BarrePlan) => {
+    origine.current = { sorte: 'alerte' };
+    setDetail({ sorte: 'serie', ligne, barre });
   }, []);
   const fermerDetail = useCallback(() => {
     focusARendre.current = true;
@@ -923,17 +944,23 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   const lignesVisibles = useMemo(() => {
     if (plan === null) return [];
     const r: { ligne: LignePlan; index: number; place: number }[] = [];
-    for (let i = vue.debut; i < Math.min(vue.fin, plan.lignes.length); i++) {
+    const ajouter = (i: number) => {
       const ligne = plan.lignes[i];
       // Place négative en secours : jamais celle d'une autre ligne.
       if (ligne !== undefined) r.push({ ligne, index: i, place: vue.places.get(i) ?? -1 - i });
-    }
+    };
+    // Ligne focalisée sortie de la fenêtre : dessinée à sa place dans l'ordre du plan.
+    const garde = vue.garde;
+    if (garde !== null && garde < vue.debut) ajouter(garde);
+    for (let i = vue.debut; i < Math.min(vue.fin, plan.lignes.length); i++) ajouter(i);
+    if (garde !== null && garde >= vue.fin) ajouter(garde);
     return r;
   }, [plan, vue]);
 
   // Maquette (T11e) : zones du plan, zone active, culture la plus en retard.
   const zonesPlan = useMemo(() => (plan === null ? null : zonesDuPlan(plan.lignes)), [plan]);
-  const alerte = useMemo(() => (plan === null ? null : alerteRetard(plan.lignes, jour)), [plan, jour]);
+  // Plan complet seulement (comme le surtitre) : la carte ne change pas à l'arrivée de la suite.
+  const alerte = useMemo(() => (plan === null || lu?.complet !== true ? null : alerteRetard(plan.lignes, jour)), [plan, lu, jour]);
   const zoneVue = Math.max(0, zonesPlan?.zoneDeLigne[vue.premiere] ?? 0);
   const indexTouchee = touchee === null ? -1 : (zonesPlan?.zones.findIndex((z) => z.id === touchee.zoneId) ?? -1);
   const zoneActive = indexTouchee >= 0 ? indexTouchee : zoneVue;
@@ -1068,7 +1095,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
         </div>
       </div>
       {!en3d && <Legende />}
-      {!en3d && alerte !== null && <CarteAlerte alerte={alerte} aujourdhui={jour} surOuvrir={surBarre} />}
+      {!en3d && alerte !== null && <CarteAlerte alerte={alerte} aujourdhui={jour} surOuvrir={surAlerte} />}
       {detail?.sorte === 'serie' && <DetailSerie ligne={detail.ligne} barre={detail.barre} surFermer={fermerDetail} surModifier={modifierSerie} />}
       {detail?.sorte === 'conflits' && <DetailConflits ligne={detail.ligne} surFermer={fermerDetail} />}
       {formulaire !== null && (

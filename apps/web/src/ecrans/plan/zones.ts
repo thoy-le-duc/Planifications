@@ -98,14 +98,20 @@ export function alerteRetard(lignes: readonly LignePlan[], aujourdhui: string): 
 }
 
 /**
- * Place (clé React) de chaque ligne de [debut, fin[ : une ligne qui reste dans la fenêtre garde
- * sa place ; une ligne qui entre prend la place d'une ligne sortie, sinon la plus petite libre.
- * Au défilement, React déplace et met à jour les nœuds au lieu d'en retirer et d'en créer.
+ * Place (clé React) de chaque ligne de [debut, fin[, plus la ligne `garde` (celle qui a le focus,
+ * même sortie de la fenêtre) : une ligne qui reste dessinée garde sa place ; une ligne qui entre
+ * prend la place d'une ligne sortie, sinon la plus petite libre. Au défilement, React déplace et
+ * met à jour les nœuds au lieu d'en retirer et d'en créer ; la ligne focalisée n'est jamais
+ * réutilisée pour une autre planche.
  */
-export function attribuerPlaces(precedentes: ReadonlyMap<number, number>, debut: number, fin: number): Map<number, number> {
+export function attribuerPlaces(precedentes: ReadonlyMap<number, number>, debut: number, fin: number, garde: number | null = null): Map<number, number> {
+  const indices: number[] = [];
+  for (let i = debut; i < fin; i++) indices.push(i);
+  if (garde !== null && (garde < debut || garde >= fin)) indices.push(garde);
+  const dessinees = new Set(indices);
   const places = new Map<number, number>();
   const prises = new Set<number>();
-  for (let i = debut; i < fin; i++) {
+  for (const i of indices) {
     const p = precedentes.get(i);
     if (p !== undefined) {
       places.set(i, p);
@@ -113,10 +119,10 @@ export function attribuerPlaces(precedentes: ReadonlyMap<number, number>, debut:
     }
   }
   const liberees: number[] = [];
-  for (const [i, p] of precedentes) if ((i < debut || i >= fin) && !prises.has(p)) liberees.push(p);
+  for (const [i, p] of precedentes) if (!dessinees.has(i) && !prises.has(p)) liberees.push(p);
   liberees.sort((a, b) => b - a);
   let suivante = 0;
-  for (let i = debut; i < fin; i++) {
+  for (const i of indices) {
     if (places.has(i)) continue;
     let p = liberees.pop();
     if (p === undefined) {
