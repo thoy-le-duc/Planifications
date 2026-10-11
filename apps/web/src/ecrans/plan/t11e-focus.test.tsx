@@ -65,7 +65,7 @@ async function laisserFinir(tours = 10): Promise<void> {
   }
 }
 
-const q = <T extends HTMLElement>(sel: string): T | null => conteneur.querySelector<T>(sel);
+const q = (sel: string): HTMLElement | null => conteneur.querySelector<HTMLElement>(sel);
 
 /** Rend l'écran et attend le plan complet (plus de « Lecture des autres planches… »). */
 async function rendreComplet(): Promise<void> {
@@ -73,7 +73,7 @@ async function rendreComplet(): Promise<void> {
     racine.render(<ecran.EcranPlan porte={porte} fermeId={jeu.principale.fermeId} aujourdhui={() => AUJOURDHUI} />);
     await Promise.resolve();
   });
-  for (let k = 0; k < 400 && (q('[data-testid="barre"]') === null || (conteneur.textContent ?? '').includes('Lecture des autres planches')); k++) await laisserFinir(1);
+  for (let k = 0; k < 400 && (q('[data-testid="barre"]') === null || conteneur.textContent.includes('Lecture des autres planches')); k++) await laisserFinir(1);
   expect(q('[data-testid="barre"]'), 'barres dessinées').not.toBeNull();
 }
 
