@@ -452,11 +452,9 @@ export function retenirRelecture(porte: PorteDonnees, fermeId: string): () => vo
     s.retenues++;
     touches.push(s);
   }
-  let levee = false;
+  // `splice` vide la liste : un second appel ne relâche rien (idempotent).
   return () => {
-    if (levee) return;
-    levee = true;
-    for (const s of touches) {
+    for (const s of touches.splice(0)) {
       s.retenues--;
       reprendreSiDue(porte, s);
     }
