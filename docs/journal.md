@@ -2,6 +2,17 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-11 — T13t : première relecture après « Fait »
+
+- **Fait** : sur la grande ferme (CPU ×4), la première saisie « Fait » paraît dans l'historique en **346 à 448 ms** au lieu de **1 145 à 2 361 ms** ; médianes 224 à 266 ms au lieu de 388 à 497 ms. Le garde-fou complet est rétabli sur cette série (`jugerSerie(...).raisons` vide, l'exception de T11f est retirée) : `aujourdhui-grande-ferme.e2e.ts` passe 5 fois sur 5. Cause trouvée par profil (`docs/mesures/T13t-avant.md`) : ni la préparation des requêtes, ni le JIT, ni le recalcul incrémental (18 ms). Le « Fait » attendait la **relecture complète** de la journée lancée au retour sur l'onglet (une dizaine de requêtes, puis `calculerEtat`, tâche longue de 200 à 280 ms). Sur l'instantané, sa lecture ciblée partageait la base avec elle jusqu'au bout. Désormais, une relecture complète cède la place à une saisie de l'écran dès sa requête suivante, puis reprend aussitôt. Un « Fait » tapé sur l'instantané paraît dans son historique dès qu'il est écrit. Tests d'abord, en commits séparés : `premiere-relecture.test.ts` (4) et `instantane.test.tsx` (1), rouges avant, verts après. Vérifié : typage, lint, tests unitaires, build, budgets, build des essais, `aujourdhui.e2e.ts`, grande ferme ×5 (5 sur 5), `pnpm e2e` 98 passés (12 ignorés), dont la grande ferme : 459, 196, 230, 189, 271 ms. Mesures : `docs/mesures/T13t-apres.md`.
+- **Décidé** :
+  - la retenue s'applique à toute relecture complète, sauf la vérification de T13c, qui cédait déjà ;
+  - un changement venu d'ailleurs (synchro) n'interrompt jamais une relecture complète, sinon elle pourrait ne jamais finir ;
+  - une écriture en échec relance aussi la relecture complète ;
+  - sur l'instantané, la saisie écrite paraît en tête de son historique avec des boutons inactifs (lecture seule, T13g), jusqu'à la journée relue ;
+  - aucun budget relevé ; démarrage inchangé, le code est dans le morceau Aujourd'hui.
+- **Bloquant** : rien pour le ticket. Reste le tout premier « Fait » d'un lancement à froid, tapé sur l'instantané dans la seconde qui suit l'ouverture de la base : environ 1,0 à 1,2 s. La première requête de la relecture complète (3 000 séries, pages froides) dure environ 1,4 s et ne s'interrompt pas. La première écriture de la porte coûte environ 280 ms (`packages/sync`). L'e2e ne mesure pas ce cas. Ticket de suite proposé.
+
 ## 2026-10-11 — T11f : suites de la relecture T11b
 
 - **Fait** : les dix jeux e2e qui mesurent un temps en série (Aujourd'hui, grande ferme, démarrage, Itinéraires, refus, Série, Planches, trois vues 3D) jugent chaque série par `jugerSerie` : médiane sous le budget ET plus haute valeur au plus 1,5 fois le budget. Un bâtiment rattaché à une zone supprimée (ou à une sous-zone d'une zone supprimée) disparaît du plan et de la 3D ; la 3D ne lit plus les zones supprimées. Un « Fait » qui s'écrit encore quand on quitte Aujourd'hui retient le rechargement automatique jusqu'à la fin de l'écriture. Vérifié : typage, lint, 5 074 tests unitaires, build, budgets, `pnpm e2e:demo` 18 passés, `pnpm e2e` 87 passés sur 88 (voir Bloquant).
