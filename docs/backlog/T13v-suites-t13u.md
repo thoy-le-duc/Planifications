@@ -13,8 +13,8 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : deux `prechargerPlan` en même temps pendant une saisie ; l'écran Planches (`obtenirDebutDePlan`) rend le plan sans attendre `CESSION_MAX_MS`.
-- [ ] Test : après `presser`, aucun minuteur ni observateur de `cederAuxSaisies` ne reste actif.
-- [ ] Test : `SQL_OCCUPATIONS` (UNION ALL) rend exactement les mêmes lignes que l'ancienne requête en `OR`, avec une occupation de série et une occupation de plantation (sans série).
-- [ ] Test : passage « pressé » au milieu de la lecture des emplacements par pages : toutes les lignes lues, une seule fois.
-- [ ] Octets de démarrage inchangés ; `pnpm test`, `pnpm typecheck`, `pnpm lint` passent ; e2e `aujourdhui-premier-fait` et `plan-performances` toujours verts.
+- [x] Test : deux `prechargerPlan` en même temps pendant une saisie ; l'écran Planches (`obtenirDebutDePlan`) rend le plan sans attendre `CESSION_MAX_MS`.
+- [x] Test : après `presser`, aucun minuteur ni observateur de `cederAuxSaisies` ne reste actif.
+- [x] Test : `SQL_OCCUPATIONS` (UNION ALL) rend exactement les mêmes lignes que l'ancienne requête en `OR`, avec une occupation de série et une occupation de plantation (sans série).
+- [x] Test : passage « pressé » au milieu de la lecture des emplacements par pages : toutes les lignes lues, une seule fois.
+- [x] Octets de démarrage inchangés ; `pnpm test`, `pnpm typecheck`, `pnpm lint` passent ; e2e `aujourdhui-premier-fait` et `plan-performances` toujours verts.

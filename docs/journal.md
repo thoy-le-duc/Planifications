@@ -960,3 +960,9 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Fait** : brief copié dans `CLAUDE.md` (esprit, principes, méthode) et `docs/brief.md` (le reste) ; dossiers `docs/backlog/` et `docs/questions.md` créés.
 - **Décidé** : les questions sur le modèle de données sont posées une par une ; les réponses sont consignées dans `docs/questions.md`.
 - **Bloquant** : le modèle de données attend les réponses de Théophane sur le parcellaire, les séries et la saisie au champ.
+
+## 2026-10-13 — T13v : suites de T13u (préchargement du plan pressable de bout en bout)
+
+- **Fait** : le cache garde un ensemble de `presser` (deux `prechargerPlan` de la même ferme sont pressés ensemble par l'écran Planches) ; `presser` libère tout de suite l'attente de `cederAuxSaisies` (plus de minuteur ni d'observateur) ; 4 tests ajoutés (`plan/precharge-presse.test.ts`, `aujourdhui/occupations-union.test.ts`, `SQL_OCCUPATIONS` exportée pour le test). Démarrage : 72 797 octets (72 801 avant, limite 72 806).
+- **Décidé** : `ceder` reçoit la promesse « levée » (`ceder(levee)`) plutôt qu'un second mécanisme ; parcours de l'ensemble sans copie pour tenir le budget.
+- **Bloquant** : l'e2e `plan-performances` (défilement : 5 passages saccadés pour moins de 2) est rouge sur cette machine, avec ou sans T13v ; à revoir sur la CI.
