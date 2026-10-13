@@ -22,9 +22,12 @@ import type { PorteDonnees } from '@planif/sync';
 import {
   chargerSaisons,
   construirePlan,
+  DECOUPE_FOND,
+  SANS_DECOUPE,
   lireDebutDePlan,
   lireDonneesPlan,
   saisonParDefaut,
+  type DecoupeDebut,
   type DonneesDebutDePlan,
   type DonneesPlan,
   type Plan,
@@ -78,6 +81,8 @@ interface CacheFerme {
   /** Plans calculés, par données lues puis par saison et jour. */
   readonly plans: WeakMap<DonneesPlan, Map<string, Plan>>;
   readonly abonnes: Set<() => void>;
+  /** T13u : préchargement en cours, qui cède aux saisies ; `presser` le fait lire sans plus céder. */
+  presser: (() => void) | null;
 }
 
 const caches = new WeakMap<PorteDonnees, Map<string, CacheFerme>>();
@@ -118,6 +123,7 @@ function cacheDe(porte: PorteDonnees, fermeId: string): CacheFerme {
       derniere: Number.NEGATIVE_INFINITY,
       plans: new WeakMap(),
       abonnes: new Set(),
+      presser: null,
     };
     cache = neuf;
     parFerme.set(fermeId, neuf);
@@ -184,11 +190,15 @@ function relire(porte: PorteDonnees, fermeId: string, cache: CacheFerme): void {
     });
 }
 
-/** Saisons de la ferme, lues une fois tant que rien ne change. */
-export function obtenirSaisons(porte: PorteDonnees, fermeId: string): Promise<SaisonPlan[]> {
+/**
+ * Saisons de la ferme, lues une fois tant que rien ne change. `lecteur` : la porte par laquelle
+ * lire (le cache reste celui de `porte`) ; `prechargerPlan` y passe une porte qui cède.
+ */
+export function obtenirSaisons(porte: PorteDonnees, fermeId: string, lecteur: PorteDonnees = porte): Promise<SaisonPlan[]> {
   const cache = cacheDe(porte, fermeId);
+  if (lecteur === porte) cache.presser?.();
   cache.saisons ??= retenir(
-    () => chargerSaisons(porte, fermeId),
+    () => chargerSaisons(lecteur, fermeId),
     (e) => {
       if (cache.saisons === e) cache.saisons = null;
     },
@@ -200,12 +210,12 @@ export function saisonsEnCache(porte: PorteDonnees, fermeId: string): SaisonPlan
   return cacheDe(porte, fermeId).saisons?.valeur ?? null;
 }
 
-function lireDebut(porte: PorteDonnees, fermeId: string): Promise<DonneesDebutDePlan> {
+function lireDebut(porte: PorteDonnees, fermeId: string, lecteur: PorteDonnees = porte, decoupe?: () => DecoupeDebut): Promise<DonneesDebutDePlan> {
   const cache = cacheDe(porte, fermeId);
   const e =
     cache.debut ??
     retenir(
-      () => lireDebutDePlan(porte, fermeId, EMPLACEMENTS_DU_DEBUT),
+      () => lireDebutDePlan(lecteur, fermeId, EMPLACEMENTS_DU_DEBUT, decoupe),
       (x) => {
         if (cache.debut === x) cache.debut = null;
       },
@@ -258,12 +268,14 @@ function debutDe(cache: CacheFerme, donnees: DonneesDebutDePlan, saison: SaisonP
 
 /** Début du plan de la saison (lignes des premières zones, exactes). */
 export async function obtenirDebutDePlan(porte: PorteDonnees, fermeId: string, saison: SaisonPlan, aujourdhui: string): Promise<PlanLu> {
+  cacheDe(porte, fermeId).presser?.();
   const donnees = await lireDebut(porte, fermeId);
   return debutDe(cacheDe(porte, fermeId), donnees, saison, aujourdhui);
 }
 
 /** Plan complet de la saison. */
 export async function obtenirPlan(porte: PorteDonnees, fermeId: string, saison: SaisonPlan, aujourdhui: string): Promise<PlanLu> {
+  cacheDe(porte, fermeId).presser?.();
   const donnees = await lireTout(porte, fermeId);
   return complet(cacheDe(porte, fermeId), donnees, saison, aujourdhui);
 }
@@ -293,12 +305,112 @@ export function surChangement(porte: PorteDonnees, fermeId: string, rappel: () =
 }
 
 /**
- * Prépare le début du plan de la saison par défaut (base ouverte, avant le premier tap sur
- * « Planches ») : saisons et lignes du début lues ensemble, plan calculé.
+ * T13u : attente maximale d'une saisie par le préchargement, avant chaque lecture. Une écriture
+ * qui ne se termine jamais ne retient pas le plan plus longtemps (l'écran Planches, s'il est
+ * ouvert, attend ce même début du plan).
  */
-export async function prechargerPlan(porte: PorteDonnees, fermeId: string, aujourdhui: string): Promise<void> {
-  const debut = lireDebut(porte, fermeId);
-  const saison = saisonParDefaut(await obtenirSaisons(porte, fermeId), aujourdhui);
-  await debut;
-  if (saison !== null) await obtenirDebutDePlan(porte, fermeId, saison, aujourdhui);
+export const CESSION_MAX_MS = 2_000;
+
+/**
+ * Cède à une saisie en cours : attend qu'aucune écriture ne soit en cours, CESSION_MAX_MS au plus.
+ * Une écriture en cours se lit sur <html data-saisie-en-cours="oui">, que le compteur global
+ * (`donnees/ecritures-en-cours.ts`, T11f) pose de son début à sa fin : le plan n'importe rien de
+ * `donnees/`.
+ */
+export function cederAuxSaisies(): Promise<void> {
+  const html = document.documentElement;
+  const libre = () => html.dataset.saisieEnCours !== 'oui';
+  if (libre()) return Promise.resolve();
+  return new Promise((servir) => {
+    const fin = () => {
+      observateur.disconnect();
+      clearTimeout(minuterie);
+      servir();
+    };
+    const observateur = new MutationObserver(() => {
+      if (libre()) fin();
+    });
+    observateur.observe(html, { attributes: true, attributeFilter: ['data-saisie-en-cours'] });
+    const minuterie = setTimeout(fin, CESSION_MAX_MS);
+  });
+}
+
+/** Porte qui cède (`porteQuiCede`), et de quoi la presser. */
+export interface LecteurQuiCede {
+  readonly porte: PorteDonnees;
+  /** Vrai une fois pressée. */
+  readonly pressee: () => boolean;
+  /** Plus de cession : les lectures en attente et les suivantes partent tout de suite. */
+  readonly presser: () => void;
+}
+
+/** T13u : lectures du préchargement envoyées à la base en même temps, au plus. */
+export const LECTURES_EN_VOL = 2;
+
+/**
+ * T13u : porte de lecture d'un travail de fond. Au plus `enVolMax` lectures à la fois, et chacune
+ * attend `ceder()` avant de partir : la base n'a qu'une connexion, et une lecture partie passe
+ * devant tout ce qui arrive après elle. Une saisie (le premier « Fait » juste après l'ouverture de
+ * la base) n'attend donc que les lectures déjà parties, jamais tout le préchargement. Deux en vol
+ * plutôt qu'une : la base enchaîne la suivante sans attendre que la page, occupée au démarrage,
+ * ait traité la précédente. Pressée (l'écran Planches attend ces lectures), elle ne cède plus et
+ * ne limite plus rien.
+ */
+export function porteQuiCede(porte: PorteDonnees, ceder: () => Promise<void>, enVolMax = LECTURES_EN_VOL): LecteurQuiCede {
+  let presse = false;
+  let enVol = 0;
+  const enAttente: (() => Promise<void>)[] = [];
+  let liberer: (() => void) | undefined;
+  const levee = new Promise<void>((tenir) => {
+    liberer = tenir;
+  });
+  const servir = () => {
+    while (enAttente.length > 0 && (presse || enVol < enVolMax)) void enAttente.shift()?.();
+  };
+  const lire = <T>(sql: string, parametres?: readonly unknown[]): Promise<T[]> =>
+    new Promise<T[]>((rendre, refuser) => {
+      enAttente.push(async () => {
+        enVol += 1;
+        try {
+          if (!presse) await Promise.race([ceder(), levee]);
+          rendre(await porte.lire<T>(sql, parametres));
+        } catch (e) {
+          refuser(e instanceof Error ? e : new Error(String(e)));
+        } finally {
+          enVol -= 1;
+          servir();
+        }
+      });
+      servir();
+    });
+  return {
+    porte: { ...porte, lire },
+    pressee: () => presse,
+    presser: () => {
+      presse = true;
+      liberer?.();
+      servir();
+    },
+  };
+}
+
+/**
+ * Prépare le début du plan de la saison par défaut (base ouverte, avant le premier tap sur
+ * « Planches ») : saisons et lignes du début lues, plan calculé. T13u : lu par une porte qui cède
+ * aux saisies (`ceder`, par défaut `cederAuxSaisies`) : Aujourd'hui, écran d'accueil, écrit
+ * avant que le plan ne finisse de se lire.
+ */
+export async function prechargerPlan(porte: PorteDonnees, fermeId: string, aujourdhui: string, ceder: () => Promise<void> = cederAuxSaisies): Promise<void> {
+  const cache = cacheDe(porte, fermeId);
+  const lecteur = porteQuiCede(porte, ceder);
+  cache.presser = lecteur.presser;
+  try {
+    // Découpé en petites requêtes tant que personne n'attend le plan ; pressé, le reste d'un coup.
+    const debut = lireDebut(porte, fermeId, lecteur.porte, () => (lecteur.pressee() ? SANS_DECOUPE : DECOUPE_FOND));
+    const saison = saisonParDefaut(await obtenirSaisons(porte, fermeId, lecteur.porte), aujourdhui);
+    await debut;
+    if (saison !== null) await obtenirDebutDePlan(porte, fermeId, saison, aujourdhui);
+  } finally {
+    if (cache.presser === lecteur.presser) cache.presser = null;
+  }
 }
