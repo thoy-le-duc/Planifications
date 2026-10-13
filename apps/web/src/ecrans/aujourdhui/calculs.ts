@@ -371,9 +371,17 @@ const sqlCampagnes = (filtre: string) => `SELECT c.id, c.debut_recolte_prevu, c.
   LEFT JOIN variete v ON v.id = p.variete_id AND v.ferme_id = c.ferme_id
   WHERE c.ferme_id = ? AND c.supprime_le IS NULL AND p.supprime_le IS NULL AND ${filtre}`;
 
-/** Occupations non supprimées des séries et des plantations données (deux listes JSON). */
+/**
+ * Occupations non supprimées des séries et des plantations données (deux listes JSON). T13u : deux
+ * branches en `UNION ALL`, chacune cherchée dans l'index ferme_culture (ferme, série, plantation) ;
+ * un `OR` entre les deux listes parcourait toutes les occupations de la ferme (≈ 4 000 sur la
+ * grande ferme, 110 à 150 ms à froid pour la série d'un seul « Fait »). Une occupation n'a qu'un
+ * occupant (contrainte un_occupant du serveur) : celle d'une plantation n'a pas de série.
+ */
 const SQL_OCCUPATIONS = `SELECT o.serie_id, o.plantation_id, o.emplacement_id FROM occupation o
-  WHERE o.ferme_id = ? AND o.supprime_le IS NULL AND (o.serie_id IN (${DANS}) OR o.plantation_id IN (${DANS}))`;
+  WHERE o.ferme_id = ?1 AND o.serie_id IN (SELECT value FROM json_each(?2)) AND o.supprime_le IS NULL
+  UNION ALL SELECT o.serie_id, o.plantation_id, o.emplacement_id FROM occupation o
+  WHERE o.ferme_id = ?1 AND o.serie_id IS NULL AND o.plantation_id IN (SELECT value FROM json_each(?3)) AND o.supprime_le IS NULL`;
 
 /**
  * Emplacements occupés (liste JSON, puis la ferme), avec leur zone. Seuls les emplacements actifs
@@ -576,9 +584,12 @@ interface Noms {
 /** Espèces (avec leur famille) et variétés des séries lues (`lireSeriesActives`, `sqlSeriesParId`). */
 async function lireNoms(lire: Lire, fermeId: string, series: readonly Ligne[]): Promise<Noms> {
   if (series.length === 0) return { especes: [], varietes: [] };
-  const especes = await lire(SQL_ESPECES, [listeJson(series.map((s) => texte(s.espece_id))), fermeId]);
   const idsVarietes = series.map((s) => texte(s.variete_id)).filter((x) => x !== '');
-  const varietes = idsVarietes.length === 0 ? [] : await lire(SQL_VARIETES, [listeJson(idsVarietes), fermeId]);
+  // T13u : les deux requêtes partent ensemble (indépendantes) : un aller-retour vers la base de moins.
+  const [especes, varietes] = await Promise.all([
+    lire(SQL_ESPECES, [listeJson(series.map((s) => texte(s.espece_id))), fermeId]),
+    idsVarietes.length === 0 ? [] : lire(SQL_VARIETES, [listeJson(idsVarietes), fermeId]),
+  ]);
   return { especes, varietes };
 }
 
@@ -803,15 +814,21 @@ export async function lireTacheCiblee(porte: PorteDonnees, fermeId: string, aujo
   if (series.length === 0 && campagnes.length === 0) return null;
   const idsSeries = series.map((s) => texte(s.id));
   const idsCampagnes = campagnes.map((c) => texte(c.id));
-  const noms = await lireNoms(lire, fermeId, series);
-  const occupations = await lireOccupations(lire, fermeId, idsSeries, campagnes.map((c) => texte(c.plantation_id)), aujourdhui);
-  const vigueur = chainesDeCulture(await lire(sqlJournalDe(series.length > 0 ? 'serie_id' : 'campagne_id'), [ids, fermeId]));
+  // T13u : les lectures indépendantes partent ensemble (Promise.all) : moins d'allers-retours vers
+  // la base, et une fois en file, aucune lecture d'un autre travail ne se glisse entre elles.
+  const [noms, occupations, journal] = await Promise.all([
+    lireNoms(lire, fermeId, series),
+    lireOccupations(lire, fermeId, idsSeries, campagnes.map((c) => texte(c.plantation_id)), aujourdhui),
+    lire(sqlJournalDe(series.length > 0 ? 'serie_id' : 'campagne_id'), [ids, fermeId]),
+  ]);
+  const vigueur = chainesDeCulture(journal);
   const jsonSeries = listeJson(idsSeries);
-  const realises =
+  const [realises, interventions] = await Promise.all([
     series.length > 0
-      ? await lire(SQL_REALISES_SERIES, [jsonSeries, fermeId, ...vigueur, jsonSeries, fermeId, ...vigueur])
-      : await lire(SQL_REALISES_CAMPAGNES, [listeJson(idsCampagnes), jsonSeries, fermeId, ...vigueur]);
-  const interventions = series.length > 0 ? await lire(SQL_INTERVENTIONS, [jsonSeries, fermeId, ...vigueur]) : [];
+      ? lire(SQL_REALISES_SERIES, [jsonSeries, fermeId, ...vigueur, jsonSeries, fermeId, ...vigueur])
+      : lire(SQL_REALISES_CAMPAGNES, [listeJson(idsCampagnes), jsonSeries, fermeId, ...vigueur]),
+    series.length > 0 ? lire(SQL_INTERVENTIONS, [jsonSeries, fermeId, ...vigueur]) : [],
+  ]);
   const contexte: ContexteLecture = { fermeId, aujourdhui, vigueur, jsonSeries, series: new Set(idsSeries), campagnes: new Set(idsCampagnes) };
   const journee = calculerJournee({ series, ...noms, campagnes, occupations, realises, interventions, recents: [], contexte }, aujourdhui);
   return journee.taches.find((t) => t.cle === cle) ?? null;
