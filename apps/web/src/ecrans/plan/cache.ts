@@ -104,7 +104,7 @@ function retenir<T>(lire: () => Promise<T>, oublier: (e: Entree<T>) => void): En
 
 /** Presse tous les préchargements en cours (l'écran Planches attend leurs lectures). */
 function presserTout(cache: CacheFerme): void {
-  for (const presser of [...cache.presser]) presser();
+  for (const presser of cache.presser) presser();
 }
 
 function cacheDe(porte: PorteDonnees, fermeId: string): CacheFerme {
