@@ -47,3 +47,37 @@ Pistes (à trancher par le chef) :
 - Démarrage : 72 801 octets gzip pour une limite de 72 806 (71,1 Kio) : rien de nouveau au démarrage (le code touché est dans le morceau Aujourd'hui et dans `base-appli`).
 - La relecture complète lit désormais toutes les séries de la base page par page (les terminées ne rendent que leur id) : ≈ 16 pages de 60 à 100 ms à froid sur la grande ferme, au lieu d'une requête de 750 à 860 ms ; elle cède à chaque page.
 - `pnpm e2e` complet : 97 passés, 13 ignorés, 2 en échec : le nouvel e2e T13u (1 005, 759, 648, 467, 252 ms → médiane 648 ms) et `serie.e2e.ts` (« Nouvelle série », 1re répétition 468 ms pour un plafond de 450 ; médiane 120 ms). Relancé seul, `serie.e2e.ts` passe (359, 122, 143, 112, 89 ms) : écran hors du périmètre, aléa de la machine.
+
+## Suite (2026-10-13) : la file de la base au démarrage, corrigée
+
+Sonde provisoire (non commitée) : chaque requête de la porte horodatée, plus les tâches longues de la page, relevées autour du tap.
+
+**Cause confirmée**, en deux parties :
+
+1. Préchargement du plan coupé (expérience) : 817, 385, 492, 391, 531 ms, médiane 492 ms, maximum 817 ms. Le préchargement explique l'essentiel de l'écart, mais pas tout.
+2. Dans la lecture ciblée, la requête des occupations (`SQL_OCCUPATIONS`, un `OR` entre séries et plantations) parcourait les ≈ 4 000 occupations de la ferme dans l'index ferme_culture : 110 à 150 ms à froid pour une seule série. Le plan des occupations du préchargement, lui, durait 0,55 à 0,75 s à froid d'une seule traite, et les emplacements 0,2 à 0,45 s : partis avant le tap, ils ne s'interrompent pas.
+
+**Correctif** :
+
+- `SQL_OCCUPATIONS` en deux branches `UNION ALL`, chacune cherchée dans l'index (ferme, série, plantation) ; une occupation n'a qu'un occupant (contrainte un_occupant) : 0,84 → 0,13 ms sur le banc, ≈ 15 ms à froid au lieu de 110 à 150 ;
+- lecture ciblée : les lectures indépendantes partent ensemble (`Promise.all`) : moins d'allers-retours, rien ne se glisse entre elles ;
+- préchargement du plan par une porte qui cède (`porteQuiCede`) : au plus 2 lectures parties à la fois, chacune attend qu'aucune écriture ne soit en cours (marqueur `data-saisie-en-cours` du compteur global, 2 s au plus) ; lu en petites requêtes (emplacements par pages de 150, occupations par lots de 4) ; l'écran Planches qui attend le début du plan le presse : plus d'attente, plus de découpe.
+
+**Après** (`aujourdhui-premier-fait.e2e.ts`, du tap à la saisie dans l'historique, délais 0 / 200 / 400 / 600 / 800 ms) :
+
+| Passage | 0 ms | 200 ms | 400 ms | 600 ms | 800 ms | Médiane |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 (sonde active) | 668 | 322 | 416 | 333 | 457 | 416 |
+| 2 | 638 | 280 | 570 | 354 | 330 | 354 |
+| 3 | 575 | 252 | 438 | 333 | 398 | 398 |
+| 4 (jeu e2e complet) | 684 | 273 | 377 | 317 | 565 | 377 |
+
+Version intermédiaire (lectures du plan une à une) : médianes 347 à 406 ms, mais tap à 0 ms jusqu'à 770 ms (un passage rouge sur 3), et Planches ralenti (voir plus bas).
+
+Avant : médianes 616 à 714 ms, maximum 1 143 ms. Après : médianes **354 à 416 ms**, maximum **684 ms** (plafond 750 ms), 4 passages verts sur 4. Le tap à 0 ms reste le plus lent : la première requête du plan est déjà partie, et la page a une tâche longue de démarrage (≈ 150 ms) au même moment.
+
+**Planches** (`plan.e2e.ts`, premier affichage juste après l'ouverture de la base, ferme de T07) : avant 55 à 67 ms de médiane ; après 41, 145 et 207 ms de médiane, maximum 290 ms (budget 300). Une version où les lectures du plan passaient une à une montait à 241 à 303 ms : d'où deux lectures en vol et la pression de l'écran.
+
+Démarrage : 72 801 octets gzip pour 72 806, inchangé (le plan lit le marqueur du DOM, il n'importe rien de `donnees/`).
+
+Hors ticket, rouge aussi sur la base sans ce correctif (machine chargée) : défilement de `plan.e2e.ts` (5 passages saccadés sur 5 relevés avant le correctif).
