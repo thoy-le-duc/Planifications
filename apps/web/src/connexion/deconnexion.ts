@@ -6,6 +6,7 @@
 import { cleChoix, cleMontree } from '../donnees/ferme-memorisee.ts';
 import { cleRefusVus } from '../donnees/refus-vus.ts';
 import { cleInstantane } from '../ecrans/aujourdhui/cle-instantane.ts';
+import { cleInstantanePlan } from '../ecrans/plan/cle-instantane.ts';
 import { effacerSession, lireSession, type SessionConnexion } from './session.ts';
 
 export interface OptionsDeconnexion {
@@ -153,13 +154,14 @@ export async function deconnecter(session: SessionConnexion, options: OptionsDec
     await revoquer(session, options);
   } finally {
     effacerSession(options.stockage);
-    // Téléphone partagé : les refus vus du compte (T10i), l'instantané de sa journée (T13d) et ses
+    // Téléphone partagé : les refus vus du compte (T10i), l'instantané de sa journée (T13d), celui
+    // du début de son plan (T11g) et ses
     // fermes retenues (choix T11, dernière montrée T13g ; T13l) ne restent pas, quoi qu'il arrive
     // ensuite. Celles d'un autre compte ne sont pas touchées.
     const id = session.utilisateurId;
     // T14b : modèles et imports récents (planif:import:*), de toutes les fermes du téléphone.
     const s = options.stockage as Partial<Storage>;
-    const cles = [cleRefusVus(id), cleInstantane(id), cleChoix(id), cleMontree(id)];
+    const cles = [cleRefusVus(id), cleInstantane(id), cleInstantanePlan(id), cleChoix(id), cleMontree(id)];
     try {
       for (let i = 0; i < (s.length ?? 0); i++) {
         const c = s.key?.(i);
