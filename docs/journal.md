@@ -972,3 +972,9 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Fait** : instantané du début du plan (`ecrans/plan/instantane.ts`, 40 premières lignes, vérifié champ par champ, effacé à la déconnexion) ; Planches monté dès l'ouverture de la base, en lecture seule sur l'instantané puis sur le plan relu, sans remontage ; premier tap dans la première seconde : médiane 25 ms (633 ms avant). Démarrage : 72 752 octets (72 797 avant, limite 72 806), préparation du plan et de la journée sortie dans `donnees/precharger.ts`, chargé à la demande.
 - **Décidé** : `donnees/precharger.ts` plutôt que `donnees/appli.ts` (les tests d'App remplacent `appli.ts` par un double : la préparation y aurait disparu) ; la clé de la ferme montrée est recopiée dans `ecrans/plan/instantane.ts` (l'écran n'importe rien de `src/donnees`, et l'importer depuis App ajoutait un morceau de 600 octets au démarrage), égalité vérifiée par un test ; instantané gardé aussi en quittant l'écran avant 300 ms.
 - **Bloquant** : rien pour T11g ; deux e2e rouges aussi sur 0f50da3 (défilement de `plan-performances`, étape T13k intermittente d'`aujourdhui-grande-ferme`), à revoir sur la CI.
+
+## 2026-10-14 — T11h : instantané de Planches vraiment en lecture seule
+
+- **Fait** : sur l'instantané, « Modifier la série » est masqué (`lectureSeule`, base arrivée ou non), un détail ouvert se ferme quand le plan relu le remplace, le sélecteur de saison garde la saison de l'instantané même si les saisons sont lues avant le plan ; 3 tests (`avant-base-suites.test.tsx`). Démarrage : 72 758 octets (72 752 avant, limite 72 806).
+- **Décidé** : le détail est fermé (pas mis à jour) au passage instantané vers plan relu ; test B3 sans garde « au moins un changement vu » (l'écran ne bouge plus, c'est le bon comportement).
+- **Bloquant** : rien ; le défilement de `plan-performances` est passé cette fois (1 passage saccadé sur 10, limite 2), à surveiller.

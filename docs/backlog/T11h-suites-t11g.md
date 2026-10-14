@@ -14,7 +14,7 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : instantané affiché, base arrivée mais plan pas encore relu : pas de bouton « Modifier la série ».
-- [ ] Test : détail d'une barre ouvert sur l'instantané, puis plan relu : le détail n'affiche plus la barre de l'instantané.
-- [ ] Test : saisons lues avant le plan : le sélecteur montre la saison de l'instantané.
-- [ ] Octets de démarrage inchangés ou en baisse ; `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm budget` passent ; e2e `plan-performances` (premier tap) toujours vert.
+- [x] Test : instantané affiché, base arrivée mais plan pas encore relu : pas de bouton « Modifier la série ».
+- [x] Test : détail d'une barre ouvert sur l'instantané, puis plan relu : le détail n'affiche plus la barre de l'instantané.
+- [x] Test : saisons lues avant le plan : le sélecteur montre la saison de l'instantané.
+- [x] Octets de démarrage inchangés ou en baisse ; `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm budget` passent ; e2e `plan-performances` (premier tap) toujours vert.
