@@ -45,15 +45,26 @@ import {
   type SorteConflit,
 } from './calculs.ts';
 import { alerteRetard, attribuerPlaces, surtitreZone, zonesDuPlan, type AlerteRetard, type ZoneDuPlan } from './zones.ts';
+import { debutPourInstantane, garderInstantanePlan, lireFermeMontree, lireInstantanePlan, stockageParDefaut, type StockageInstantane } from './instantane.ts';
 
 export interface ProprietesEcranPlan {
-  readonly porte: PorteDonnees;
-  readonly fermeId: string;
+  /** T11g : null tant que la base s'ouvre (l'instantané du début du plan est montré, en lecture seule). */
+  readonly porte: PorteDonnees | null;
+  /** T11g : null tant que la base s'ouvre (l'écran prend alors la dernière ferme montrée à cet utilisateur). */
+  readonly fermeId: string | null;
   /** Jour affiché comme « aujourd'hui », 'AAAA-MM-JJ' ; par défaut, celui du téléphone. */
   readonly aujourdhui?: () => string;
-  /** T28f : l'utilisateur de la session ; sans lui, la vue 3D ne propose pas « Modifier le plan ». */
+  /**
+   * T28f : l'utilisateur de la session ; sans lui, la vue 3D ne propose pas « Modifier le plan ».
+   * T11g : sans lui, aucun instantané n'est lu ni gardé.
+   */
   readonly utilisateurId?: string;
+  /** T11g : où l'instantané est gardé ; par défaut localStorage. */
+  readonly stockage?: StockageInstantane;
 }
+
+/** T11g : délai avant de garder le plan affiché comme instantané (rien ne retarde l'affichage). */
+const DELAI_INSTANTANE_MS = 1_000;
 
 /**
  * Formulaire d'une série (T12), chargé à la demande : ni dans le JavaScript de démarrage, ni
@@ -331,7 +342,8 @@ interface ProprietesDetailSerie {
   readonly ligne: LigneEmplacementPlan;
   readonly barre: BarrePlan;
   readonly surFermer: () => void;
-  readonly surModifier: (serieId: string) => void;
+  /** T11g : null tant que la base n'est pas ouverte (instantané) : pas de « Modifier ». */
+  readonly surModifier: ((serieId: string) => void) | null;
 }
 
 /**
@@ -343,7 +355,7 @@ function DetailSerie({ ligne, barre, surFermer, surModifier }: ProprietesDetailS
   const nature = barre.serieId !== null ? 'Série' : barre.plantationId !== null ? 'Plantation' : 'Couverture';
   const serieId = barre.serieId;
   const actions =
-    serieId === null ? undefined : (
+    serieId === null || surModifier === null ? undefined : (
       <button
         type="button"
         className="plan-modifier"
@@ -551,14 +563,41 @@ const CarteAlerte = memo(function CarteAlerte({
   );
 });
 
-export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId }: ProprietesEcranPlan) {
+/**
+ * T11g : l'écran sur la ferme ouverte ; tant que la base s'ouvre (`porte` null), sur la dernière
+ * ferme montrée à cet utilisateur sur ce téléphone, avec l'instantané du début de son plan (sans
+ * lui, rien n'est montré). Un écran par utilisateur et par ferme (`key`) : l'instantané ne passe
+ * jamais de l'un à l'autre, et l'arrivée de la base sur la même ferme ne redessine pas l'écran.
+ */
+export function EcranPlan(p: ProprietesEcranPlan) {
+  const { porte, utilisateurId } = p;
+  const [stockageDonne] = useState(() => p.stockage ?? stockageParDefaut());
+  const stockage = utilisateurId === undefined ? null : stockageDonne;
+  const fermeId = porte !== null ? p.fermeId : utilisateurId === undefined || stockage === null ? null : lireFermeMontree(stockage, utilisateurId);
+  if (fermeId === null) return <p className="attente">Ouverture des données de ce téléphone…</p>;
+  return <Ecran key={`${utilisateurId ?? ''}|${fermeId}`} {...p} porte={porte} fermeId={fermeId} stockage={stockage} />;
+}
+
+interface ProprietesEcran extends Omit<ProprietesEcranPlan, 'fermeId' | 'stockage'> {
+  readonly fermeId: string;
+  readonly stockage: StockageInstantane | null;
+}
+
+function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, stockage }: ProprietesEcran) {
   const [jour] = useState(aujourdhui);
   const [version, setVersion] = useState(0);
-  const [saisons, setSaisons] = useState<SaisonPlan[] | null>(() => saisonsEnCache(porte, fermeId));
+  const [saisons, setSaisons] = useState<SaisonPlan[] | null>(() => (porte === null ? null : saisonsEnCache(porte, fermeId)));
   const [saisonId, setSaisonId] = useState<string | null>(() => (saisons === null ? null : (saisonParDefaut(saisons, jour)?.id ?? null)));
   const saison = saisons?.find((s) => s.id === saisonId) ?? null;
-  const [lu, setLu] = useState<PlanLu | null>(() => (saison === null ? null : planEnCache(porte, fermeId, saison, jour)));
-  const plan = lu?.plan ?? null;
+  const [lu, setLu] = useState<PlanLu | null>(() => (saison === null || porte === null ? null : planEnCache(porte, fermeId, saison, jour)));
+  // T11g : l'instantané du début du plan, lu au premier rendu (synchrone), montré en lecture
+  // seule tant qu'aucun plan relu n'est là.
+  const [instantane] = useState(() => (lu !== null || utilisateurId === undefined || stockage === null ? null : lireInstantanePlan(stockage, { utilisateurId, fermeId })));
+  const surInstantane = lu === null && instantane !== null;
+  /** Lecture seule : base pas encore ouverte, ou instantané encore affiché. */
+  const lectureSeule = porte === null || surInstantane;
+  const montre: PlanLu | null = lu ?? (instantane === null ? null : { plan: instantane.plan, complet: false, totalLignes: instantane.totalLignes });
+  const plan = montre?.plan ?? null;
   const [echec, setEchec] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [formulaire, setFormulaire] = useState<DepartSerie | null>(null);
@@ -587,13 +626,16 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   // Données changées (saisie, synchro) et ferme relue par le cache : on prend le plan relu.
   useEffect(
     () =>
-      surChangement(porte, fermeId, () => {
-        setVersion((v) => v + 1);
-      }),
+      porte === null
+        ? undefined
+        : surChangement(porte, fermeId, () => {
+            setVersion((v) => v + 1);
+          }),
     [porte, fermeId],
   );
 
   useEffect(() => {
+    if (porte === null) return undefined;
     let actif = true;
     obtenirSaisons(porte, fermeId).then(
       (s) => {
@@ -614,7 +656,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   // Saison choisie : le plan en cache, sinon son début (premiers emplacements), vite lu ; si le
   // plan complet est déjà à l'écran, il y reste jusqu'à ce que le plan complet relu le remplace.
   useEffect(() => {
-    if (saison === null) return undefined;
+    if (saison === null || porte === null) return undefined;
     const enCache = planEnCache(porte, fermeId, saison, jour);
     let actif = true;
     const lecture =
@@ -640,7 +682,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   // Début affiché : le plan complet se lit ensuite et le remplace.
   const debutAffiche = lu !== null && !lu.complet && saison !== null && lu.plan.saison.id === saison.id;
   useEffect(() => {
-    if (!debutAffiche) return undefined;
+    if (!debutAffiche || porte === null) return undefined;
     let actif = true;
     obtenirPlan(porte, fermeId, saison, jour).then(
       (p) => {
@@ -655,6 +697,19 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
       actif = false;
     };
   }, [debutAffiche, porte, fermeId, saison, jour, version]);
+
+  // T11g : chaque plan relu affiché (saison par défaut) devient l'instantané du prochain
+  // lancement : son début seulement, un peu plus tard (rien ne retarde l'affichage).
+  const saisonDefaut = saisons === null ? null : (saisonParDefaut(saisons, jour)?.id ?? null);
+  useEffect(() => {
+    if (lu === null || utilisateurId === undefined || stockage === null || lu.plan.saison.id !== saisonDefaut) return undefined;
+    const minuterie = setTimeout(() => {
+      garderInstantanePlan(stockage, { utilisateurId, fermeId }, debutPourInstantane(lu.plan, lu.totalLignes));
+    }, DELAI_INSTANTANE_MS);
+    return () => {
+      clearTimeout(minuterie);
+    };
+  }, [lu, saisonDefaut, utilisateurId, fermeId, stockage]);
 
   // Lignes à dessiner : recalculées au défilement, et quand le plan ou la vue change. T11e :
   // position mémorisée dans l'événement de défilement, taille par un ResizeObserver ; rien n'est
@@ -789,7 +844,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   const surPointeurBas = useCallback(
     (e: EvenementPointeur<HTMLDivElement>) => {
       lacherAppui();
-      if (!e.isPrimary || e.button > 0 || !(e.target instanceof Element)) return;
+      // T11g : instantané (lecture seule) : pas de création.
+      if (lectureSeule || !e.isPrimary || e.button > 0 || !(e.target instanceof Element)) return;
       // Sur une barre ou sur l'étiquette (code de la planche) : pas de création.
       if (e.target.closest('[data-testid="barre"], .plan-etiquette') !== null) return;
       const ligne = e.target.closest<HTMLElement>('[data-testid="ligne-plan"][data-sorte="emplacement"]');
@@ -813,7 +869,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
       }, DELAI_APPUI_LONG_MS);
       appui.current = { x, y, minuterie };
     },
-    [lacherAppui, semainesDuPlan, saisonDuPlan],
+    [lacherAppui, semainesDuPlan, saisonDuPlan, lectureSeule],
   );
   const surPointeurBouge = useCallback(
     (e: EvenementPointeur<HTMLDivElement>) => {
@@ -900,7 +956,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   // montre le placement enregistré au retour.
   const [gerant, setGerant] = useState(false);
   useEffect(() => {
-    if (utilisateurId === undefined) return undefined;
+    if (utilisateurId === undefined || porte === null) return undefined;
     return porte.surveiller<string>(
       {
         sql: "SELECT role FROM membre WHERE ferme_id = ? AND utilisateur_id = ? AND etat = 'accepte' AND supprime_le IS NULL",
@@ -980,6 +1036,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
       </p>
     );
   }
+  // T11g : base pas encore ouverte et aucun instantané de cette ferme : on le dit.
+  if (porte === null && !surInstantane) return <p className="attente">Ouverture des données de ce téléphone…</p>;
   if (saisons !== null && saisons.length === 0) {
     return <p className="attente">Aucune saison dans cette ferme pour l’instant : le plan s’affichera dès qu’il y en aura une.</p>;
   }
@@ -988,8 +1046,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
   const largeur = LARGEUR_ETIQUETTE + semaines.length * LARGEUR_SEMAINE;
   // Début du plan affiché : une ligne de plus dit que la suite arrive, et la hauteur du plan
   // complet est réservée (le défilement ne bute pas sur la fin du début).
-  const suite = lu !== null && !lu.complet;
-  const hauteur = HAUTEUR_ENTETE + Math.max(total + (suite ? 1 : 0), lu?.totalLignes ?? 0) * HAUTEUR_LIGNE_PX;
+  const suite = montre !== null && !montre.complet;
+  const hauteur = HAUTEUR_ENTETE + Math.max(total + (suite ? 1 : 0), montre?.totalLignes ?? 0) * HAUTEUR_LIGNE_PX;
   // La 2D reste montée sous la 3D (défilement et lignes visibles intacts au retour).
   const en3d = vue3d.sorte === 'ouverte' && plan !== null;
   return (
@@ -1001,12 +1059,13 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
         <label htmlFor={idSaison}>Saison</label>
         <select
           id={idSaison}
-          value={saisonId ?? ''}
+          disabled={lectureSeule}
+          value={saisonId ?? (surInstantane ? instantane.plan.saison.id : '')}
           onChange={(e) => {
             setSaisonId(e.target.value);
           }}
         >
-          {(saisons ?? []).map((s) => (
+          {(saisons ?? (surInstantane ? [instantane.plan.saison] : [])).map((s) => (
             <option key={s.id} value={s.id}>
               {s.nom}
             </option>
@@ -1017,7 +1076,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
             type="button"
             data-testid="voir-en-3d"
             className="plan-voir-3d"
-            disabled={plan === null}
+            disabled={plan === null || lectureSeule}
             aria-busy={vue3d.sorte === 'chargement'}
             onClick={ouvrir3d}
           >
@@ -1030,6 +1089,7 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
         <button
           type="button"
           className="plan-nouvelle"
+          disabled={lectureSeule}
           onClick={() => {
             setFormulaire({ sorte: 'creation', ...(saisonId === null ? {} : { saisonId }) });
           }}
@@ -1045,8 +1105,8 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
           {repli3d}
         </p>
       )}
-      {en3d && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} invitationDemo={DEMO} surModifierPlan={modifierPlan} porte={porte} fermeId={fermeId} />}
-      {EditeurPlacement !== null && utilisateurId !== undefined && (
+      {en3d && porte !== null && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} invitationDemo={DEMO} surModifierPlan={modifierPlan} porte={porte} fermeId={fermeId} />}
+      {EditeurPlacement !== null && utilisateurId !== undefined && porte !== null && (
         <EditeurPlacement
           key={fermeId}
           porte={porte}
@@ -1096,9 +1156,9 @@ export function EcranPlan({ porte, fermeId, aujourdhui = jourDuTelephone, utilis
       </div>
       {!en3d && <Legende />}
       {!en3d && alerte !== null && <CarteAlerte alerte={alerte} aujourdhui={jour} surOuvrir={surAlerte} />}
-      {detail?.sorte === 'serie' && <DetailSerie ligne={detail.ligne} barre={detail.barre} surFermer={fermerDetail} surModifier={modifierSerie} />}
+      {detail?.sorte === 'serie' && <DetailSerie ligne={detail.ligne} barre={detail.barre} surFermer={fermerDetail} surModifier={porte === null ? null : modifierSerie} />}
       {detail?.sorte === 'conflits' && <DetailConflits ligne={detail.ligne} surFermer={fermerDetail} />}
-      {formulaire !== null && (
+      {formulaire !== null && porte !== null && (
         <Suspense fallback={null}>
           <FormulaireSerie porte={porte} fermeId={fermeId} depart={formulaire} aujourdhui={() => jour} surFermer={fermerFormulaire} surEnregistree={surEnregistree} />
         </Suspense>
