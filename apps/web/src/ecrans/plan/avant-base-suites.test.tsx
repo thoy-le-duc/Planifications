@@ -162,7 +162,7 @@ describe('T11h — instantané de Planches en lecture seule', () => {
     });
     for (let k = 0; k < 400 && conteneur.textContent.includes('Lecture des autres planches'); k++) await laisserFinir(1);
     veilleur.disconnect();
-    expect(vus.length, 'changements vus sur l’instantané').toBeGreaterThan(0);
+    // Sans correction, la lecture des saisons change le sélecteur ; avec, l'écran ne bouge pas : aucun changement vu est permis.
     expect(vus.every((v) => v === attendue), `saisons montrées ${JSON.stringify(vus)}`).toBe(true);
   }, 60_000);
 });
