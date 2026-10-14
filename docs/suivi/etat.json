@@ -1,10 +1,11 @@
 {
-  "maj": "10 octobre 2026, soir (heure de Paris)",
-  "resume": "Samedi 10 octobre, 18 tickets fusionnés. **Jumeau 3D** : la récolte se voit (fruits qui grossissent, balise orange au-dessus des planches à récolter, balise pâle en fin de récolte, T32e, T32f), plants en quinconce (T35b), pérennes qui repoussent en douceur avant la récolte et sans saut au 1er janvier (T32i, T32j), travaux du jour dans la 3D au téléphone (T37). **Croissance réglable** par le gérant depuis l'écran Itinéraires, « Personnaliser » une espèce de la bibliothèque, toutes les espèces de la ferme visibles (T32c, T32g, T32h). **Export** : ne fige plus l'écran et continue en arrière-plan (T15d, T15e). **Fiabilité** : heures comparées comme des instants partout (T13n, T13q, T13s), import plus sûr (T14e, T14g), démo pour essayer le placement d'une serre (T28i). En cours : la 3D fluide de près au téléphone, bouton « Filtres » (T37b).",
+  "maj": "14 octobre 2026, matin (heure de Paris)",
+  "resume": "Du 11 au 13 octobre, 6 tickets fusionnés et 2 prêts. **3D au téléphone** : fluide de près, bouton « Filtres », liste des planches toujours accessible (T37b, T37c). **Planches** : plus de rechargement en pleine saisie, alertes plus lisibles, tests de temps jugés sur la médiane et le pire cas (T11b, T11e, T11f). **Aujourd'hui** : la relecture de la journée cède la place à une saisie (T13t). **Prêts, à fusionner** : premier « Fait » juste après l'ouverture de l'appli en environ 0,4 s au lieu de 1,6 s (T13u, PR #185), et ses suites (T13v, PR #186).",
   "en_cours": {
-    "T37b": "en cours"
+    "T13u": "PR #185 verte, à fusionner",
+    "T13v": "PR #186 verte, à fusionner après #185"
   },
-  "attente": "Ta jauge Claude (dernière : 34 % vendredi 12 h 40 ; à 70 % je m'arrête avant mardi). Mise en ligne : suivre docs/mise-en-ligne.md et me dire ce qui coince (sans jamais coller de clé). 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75.",
+  "attente": "Fusionner #185 puis #186 (« Merge commit ») : la fusion m'est refusée par les permissions de la session, ou autorise-la. Ta jauge Claude après la réinitialisation de mercredi 10 h. Mise en ligne : suivre docs/mise-en-ligne.md et me dire ce qui coince (sans jamais coller de clé). 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75.",
   "visuels": [
     {
       "titre": "Mode sombre",
