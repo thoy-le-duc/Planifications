@@ -3,8 +3,10 @@ import {
   decrireDefilement,
   decrireSerie,
   jugerDefilement,
+  jugerSerie,
   mediane,
   ralentirCpu,
+  REPETITIONS_MESURE,
   tempsAppPrete,
   type PassageDefilement,
   type SerieMesures,
@@ -20,7 +22,9 @@ import { installerAvecBase, noterPremierAppui, onglet, tapJusquAuPlanDepuisPremi
  *
  * Le premier tap dans la première seconde (base pas encore prête) est sorti dans T11g (décision
  * du chef du 2026-10-10, docs/backlog/T11g-plan-avant-base.md) : il demande un instantané du plan
- * montré avant la base (App.tsx, main.tsx, budget de démarrage).
+ * montré avant la base (App.tsx, main.tsx, budget de démarrage). Le test est remis ci-dessous
+ * (test 3) tel que donné dans le ticket ; il est rouge tant que T11g n'est pas codé (mesuré avant :
+ * médiane 633 ms, pire 694 ms, docs/mesures/T11e-avant.md, section 1).
  *
  * 1. « Planches », base prête (marge, garde) : 10 taps, CHACUN sous 300 ms (plus de tolérance de
  *    1,5 ×). Mesuré avant : 104 à 164 ms sans charge ; 313 ms relevés une fois sous charge (T11b).
@@ -34,6 +38,8 @@ import { installerAvecBase, noterPremierAppui, onglet, tapJusquAuPlanDepuisPremi
  */
 
 const BUDGET_MS = 300;
+/** T11g : la première seconde après la navigation. */
+const PREMIERE_SECONDE_MS = 1_000;
 const REPETITIONS_MARGE = 10;
 const PASSAGES_DEFILEMENT = 10;
 /** T11d : au plus 2 images perdues d'affilée (≈ 50 ms, frontière réelle ≈ 58 ms). */
@@ -137,4 +143,26 @@ test('défilement : dix passages, au plus un saccadé et au plus deux intervalle
   console.log(decrireDefilement('défilement, 10 passages', verdict));
   expect(verdict.passagesSaccades, 'passages qui perdent plus de 2 images d’affilée (sur 10)').toBeLessThan(PASSAGES_SACCADES_ECHEC);
   expect(verdict.rafalesTotal, 'intervalles au-delà de 2 images perdues, sur les 10 passages').toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
+});
+
+// T11g (docs/backlog/T11g-plan-avant-base.md) : remis tel quel depuis le ticket.
+test('premier tap sur « Planches » dans la première seconde : plan affiché en moins de 300 ms', async () => {
+  test.setTimeout(180_000);
+  const valeurs: number[] = [];
+  for (let i = 0; i < REPETITIONS_MESURE; i += 1) {
+    await recharger();
+    const baseAuTap = await page.getByTestId('app').getAttribute('data-base');
+    await onglet(page, 'Planches').click();
+    const r = await tapJusquAuPlanDepuisPremierAppui(page);
+    console.log(`premier tap : à ${r.tap.toFixed(0)} ms (base « ${baseAuTap ?? '?'} »), plan à ${r.plan.toFixed(0)} ms → ${r.ms.toFixed(0)} ms`);
+    expect(r.tap, 'le tap tombe dans la première seconde').toBeLessThan(PREMIERE_SECONDE_MS);
+    await expect(page.getByRole('heading', { level: 1, name: 'Planches' })).toBeVisible();
+    await expect(page.getByTestId('ligne-plan').first()).toBeVisible();
+    await expect(page.getByTestId('barre').first()).toBeVisible();
+    valeurs.push(r.ms);
+    await onglet(page, 'Aujourd’hui').click();
+  }
+  const serie: SerieMesures = { valeurs, mediane: mediane(valeurs) };
+  console.log(decrireSerie('Planches, premier tap dans la première seconde', serie, BUDGET_MS));
+  expect(jugerSerie(serie, BUDGET_MS).raisons, 'premier tap sur Planches').toEqual([]);
 });
