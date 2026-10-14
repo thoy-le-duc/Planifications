@@ -745,13 +745,59 @@ export interface DonneesDebutDePlan extends DonneesPlan {
 }
 
 /**
+ * T13u : découpe des lectures du début du plan en petites requêtes. La base n'a qu'une connexion
+ * et une requête partie ne s'interrompt pas : à froid sur la grande ferme, tous les emplacements
+ * d'un coup la tenaient 0,2 à 0,45 s, et les occupations du début 0,5 à 0,7 s. Découpées, une
+ * saisie n'attend jamais qu'un morceau (le préchargement cède entre deux, `prechargerPlan`).
+ * Sans découpe (Infinity), une requête de chaque : le moins d'allers-retours.
+ */
+export interface DecoupeDebut {
+  /** Emplacements par page, pour la structure (toute la ferme). */
+  readonly emplacementsParPage: number;
+  /** Emplacements par requête des occupations du début. */
+  readonly emplacementsParLot: number;
+}
+
+export const SANS_DECOUPE: DecoupeDebut = { emplacementsParPage: Infinity, emplacementsParLot: Infinity };
+/** Découpe du préchargement (travail de fond qui cède aux saisies). */
+export const DECOUPE_FOND: DecoupeDebut = { emplacementsParPage: 150, emplacementsParLot: 4 };
+
+/**
+ * Tous les emplacements de la ferme ; par pages (dans l'ordre des id, par l'index de la clé) si
+ * `decoupe()` le demande. Relue avant chaque page : une découpe levée en route lit tout le reste
+ * d'un coup.
+ */
+async function lireEmplacements(porte: PorteDonnees, fermeId: string, decoupe: () => DecoupeDebut): Promise<LigneLocale[]> {
+  const tous: LigneLocale[] = [];
+  for (let apres = ''; ; ) {
+    const n = decoupe().emplacementsParPage;
+    const page =
+      apres === '' && !Number.isFinite(n)
+        ? await porte.lire<LigneLocale>(`SELECT ${COLONNES.emplacement} FROM emplacement WHERE ferme_id = ?`, [fermeId])
+        : await porte.lire<LigneLocale>(
+            `SELECT ${COLONNES.emplacement} FROM emplacement WHERE ferme_id = ?1 AND id > ?2 ORDER BY id LIMIT ${Number.isFinite(n) ? String(n) : '-1'}`,
+            [fermeId, apres],
+          );
+    tous.push(...page);
+    const derniere = page.at(-1);
+    if (!Number.isFinite(n) || page.length < n || derniere === undefined) return tous;
+    apres = texte(derniere.id);
+  }
+}
+
+/**
  * Lignes du début du plan, pour le premier affichage : celles des premières zones seulement
  * (dans l'ordre du plan), jusqu'à au moins `emplacements` emplacements, avec toutes leurs
  * occupations : le plan construit dessus est exact pour ces lignes-là (les conflits d'un
  * emplacement ne dépendent que des siennes). Peu de lignes à lire : il s'affiche vite, le plan
  * complet le remplace ensuite. Indépendantes de la saison.
  */
-export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, emplacements: number): Promise<DonneesDebutDePlan> {
+export async function lireDebutDePlan(
+  porte: PorteDonnees,
+  fermeId: string,
+  emplacements: number,
+  decoupe: () => DecoupeDebut = () => SANS_DECOUPE,
+): Promise<DonneesDebutDePlan> {
   // Peu de requêtes : chacune coûte un aller-retour vers le worker de la base.
   const [petites, emplacementsLus, batimentsLus] = await Promise.all([
     porte.lire<LigneLocale>(
@@ -761,7 +807,7 @@ export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, empl
        UNION ALL SELECT 'famille', id, nom, NULL, NULL, NULL FROM famille WHERE ferme_id = ?1 OR ferme_id IS NULL`,
       [fermeId],
     ),
-    porte.lire<LigneLocale>(`SELECT ${COLONNES.emplacement} FROM emplacement WHERE ferme_id = ?`, [fermeId]),
+    lireEmplacements(porte, fermeId, decoupe),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.batiment} FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL`, [fermeId]),
   ]);
   const de = (t: string) => petites.filter((l) => l.t === t);
@@ -805,11 +851,17 @@ export async function lireDebutDePlan(porte: PorteDonnees, fermeId: string, empl
       pile.push(...(enfants.get(id) ?? []));
     }
   }
-  const occupations = await lireOccupationsDesEmplacements(
-    porte,
-    fermeId,
-    emplacement.map((e) => texte(e.id)),
-  );
+  // T13u : occupations lues par lots si `decoupe()` le demande (une requête par lot).
+  const ids = emplacement.map((e) => texte(e.id));
+  const parLot = Math.max(1, decoupe().emplacementsParLot);
+  const lots: string[][] = [];
+  for (let i = 0; i < ids.length; i += parLot) lots.push(ids.slice(i, i + parLot));
+  const lus = await Promise.all(lots.map((lot) => lireOccupationsDesEmplacements(porte, fermeId, lot)));
+  const occupations: OccupationsPlan = {
+    occupation: lus.flatMap((l) => l.occupation),
+    serie: [...new Map(lus.flatMap((l) => l.serie).map((x) => [texte(x.id), x])).values()],
+    plantation: [...new Map(lus.flatMap((l) => l.plantation).map((x) => [texte(x.id), x])).values()],
+  };
   const bibliotheque = { zone: zones, espece, variete, famille, batiment };
   return {
     ...bibliotheque,

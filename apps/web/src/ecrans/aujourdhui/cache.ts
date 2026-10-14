@@ -46,6 +46,17 @@ import {
 export const VERIFICATION_MS = 4_000;
 
 /**
+ * T13u : attente la plus longue qu'une saisie de l'écran impose à la relecture complète (retenue
+ * pendant sa préparation, `retenirRelecture` ; annonce jusqu'à son changement, `annoncerSaisie`).
+ * Une saisie se prépare et s'écrit en moins d'une seconde, même à froid sur la grande ferme ;
+ * une écriture qui ne se termine jamais (base bloquée, promesse perdue) ne suspend pas la
+ * relecture complète plus longtemps : passé ce délai, la retenue est levée et l'annonce retirée,
+ * la relecture complète reprend. Sans danger : une annonce retirée trop tôt fait tout relire au
+ * changement de la saisie (plus lent, jamais faux).
+ */
+export const ATTENTE_SAISIE_MAX_MS = 5_000;
+
+/**
  * T13e : horloge des lectures. Chaque lecture prend un numéro quand elle commence ; la journée
  * qu'elle produit le porte (`lectureDe`). Une écriture de l'écran prend le sien en finissant
  * (`marquerEcriture`) : une journée dont la lecture est plus ancienne n'a pas pu voir l'écriture.
@@ -418,7 +429,8 @@ export function changerMasques(porte: PorteDonnees, fermeId: string, affichee: J
  * Annonce une saisie de l'écran sur `culture`, AVANT de l'écrire : le changement qu'elle
  * provoquera ne relira que cette culture (`remplace` : elle corrige ou annule une saisie, les
  * chaînes du journal sont relues aussi). Rend la fonction qui retire l'annonce si l'écriture
- * échoue (aucun changement ne viendra).
+ * échoue (aucun changement ne viendra). Au plus tard après ATTENTE_SAISIE_MAX_MS (T13u),
+ * l'annonce tombe d'elle-même.
  */
 export function annoncerSaisie(porte: PorteDonnees, fermeId: string, culture: Culture['cible'], remplace: boolean): () => void {
   const annonce: Annonce = { cible: culture, remplace };
@@ -428,7 +440,8 @@ export function annoncerSaisie(porte: PorteDonnees, fermeId: string, culture: Cu
     s.annonces.push(annonce);
     touches.push(s);
   }
-  return () => {
+  const retirer = () => {
+    clearTimeout(minuterie);
     for (const s of touches) {
       s.annonces = s.annonces.filter((a) => a !== annonce);
       // T13t : écriture en échec, aucun changement ne viendra : la relecture complète qui lui a
@@ -436,6 +449,9 @@ export function annoncerSaisie(porte: PorteDonnees, fermeId: string, culture: Cu
       reprendreSiDue(porte, s);
     }
   };
+  // T13u : écriture jamais finie : l'annonce tombe (ATTENTE_SAISIE_MAX_MS).
+  const minuterie = setTimeout(retirer, ATTENTE_SAISIE_MAX_MS);
+  return retirer;
 }
 
 /**
@@ -443,7 +459,8 @@ export function annoncerSaisie(porte: PorteDonnees, fermeId: string, culture: Cu
  * tâche, puis écriture) : la relecture complète en cours lui cède la place dès sa requête suivante,
  * au lieu de partager la base avec elle jusqu'au bout. Rend la fonction qui lève la retenue, à
  * appeler une fois la saisie écrite (annoncée, `annoncerSaisie`) ou abandonnée ; la relecture
- * complète reprend alors, si plus rien ne l'attend.
+ * complète reprend alors, si plus rien ne l'attend. Au plus tard après ATTENTE_SAISIE_MAX_MS
+ * (T13u), la retenue tombe d'elle-même.
  */
 export function retenirRelecture(porte: PorteDonnees, fermeId: string): () => void {
   const touches: Suivi[] = [];
@@ -453,12 +470,16 @@ export function retenirRelecture(porte: PorteDonnees, fermeId: string): () => vo
     touches.push(s);
   }
   // `splice` vide la liste : un second appel ne relâche rien (idempotent).
-  return () => {
+  const lever = () => {
+    clearTimeout(minuterie);
     for (const s of touches.splice(0)) {
       s.retenues--;
       reprendreSiDue(porte, s);
     }
   };
+  // T13u : saisie jamais écrite ni abandonnée : la retenue tombe (ATTENTE_SAISIE_MAX_MS).
+  const minuterie = setTimeout(lever, ATTENTE_SAISIE_MAX_MS);
+  return lever;
 }
 
 /** Oublie les journées des jours passés de la ferme qu'aucun écran ne montre (le cache ne grossit pas). */

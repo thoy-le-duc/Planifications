@@ -154,13 +154,17 @@ type LigneEcrite = Readonly<
  *     qui transforme une ligne en « Fait », le DELETE suivi d'un INSERT ;
  *   - d'après le rowid de la table de rangement, au-delà du plus grand d'avant : l'INSERT direct
  *     dans `ps_data__evenement`, qui ne passe pas par `ps_crud` ; seul repère sans `ps_crud`.
+ * T13u : `UNION ALL`, pas `UNION` (un id en double ne change rien à `IN`). Avec `UNION`, le SQLite
+ * du navigateur fusionne les deux sources triées par id (MERGE) et parcourt pour cela tout
+ * l'index des id du journal : 220 à 290 ms à chaque écriture sur la grande ferme (51 000
+ * événements), au lieu de quelques millisecondes.
  */
 const sqlLignesEcrites = (r: RangementJournal): string =>
   `SELECT id, ferme_id, type, serie_id, campagne_id, remplace_sorte, remplace_evenement_id, detail FROM evenement
   WHERE id IN (SELECT id FROM "${r.table}" WHERE rowid > ?${
     r.crud
       ? `
-    UNION SELECT json_extract(data, '$.id') FROM ps_crud
+    UNION ALL SELECT json_extract(data, '$.id') FROM ps_crud
     WHERE id > ? AND json_extract(data, '$.type') = 'evenement' AND json_extract(data, '$.op') IN ('PUT', 'PATCH')`
       : ''
   })`;
