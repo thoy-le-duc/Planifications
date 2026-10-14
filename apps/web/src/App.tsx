@@ -88,10 +88,8 @@ export function differe<P extends object>(charger: () => Promise<{ default: Comp
 
 const accueil = differe(() => import('./ecrans/accueil/Accueil.tsx'));
 const ferme = differe(() => import('./ecrans/ferme/EcranFerme.tsx'));
-const chargerPlanches = () => import('./ecrans/plan/index.ts');
-const planches = differe(chargerPlanches);
-const chargerAujourdhui = () => import('./ecrans/aujourdhui/index.ts');
-const aujourdhui = differe(chargerAujourdhui);
+const planches = differe(() => import('./ecrans/plan/index.ts'));
+const aujourdhui = differe(() => import('./ecrans/aujourdhui/index.ts'));
 /**
  * À attendre avant le premier rendu (main.tsx) : sans session, la carte de connexion est le
  * premier écran, son chargement part tout de suite et l'appli s'affiche d'un coup, carte
@@ -132,16 +130,8 @@ function jourAffiche(): string {
 
 
 /**
- * Au lancement, la lecture de la journée attend au plus ce délai le début du plan (T13c). Mesuré
- * (e2e, CPU ×4) : sans aucune attente, la journée et le plan se disputent la base et le tap sur
- * « Planches » juste après l'ouverture passe de ≈ 140 ms à ≈ 650 ms (budget 300 ms) ; avec
- * l'attente bornée, ≈ 110 ms, et Aujourd'hui s'affiche même si le plan ne finit jamais.
- */
-const ATTENTE_PLAN_MAX_MS = 400;
-
-/**
  * Refus de synchro (T10i) : la coquille ne les lit qu'après ce délai, une fois la journée et le
- * plan lancés (même raison qu'ATTENTE_PLAN_MAX_MS : ne pas disputer la base aux écrans au
+ * plan lancés (même raison que l'attente bornée de donnees/precharger.ts : ne pas disputer la base aux écrans au
  * lancement). Onglet Ferme ouvert : tout de suite.
  */
 const ATTENTE_REFUS_MS = 1_000;
@@ -237,14 +227,13 @@ export function App() {
       },
     };
     poignee.current = p;
-    // L'écran Planches se charge pendant que la base s'ouvre ; dès la ferme connue, le début de
-    // son plan se prépare (avant même le rendu) : un tap sur « Planches » l'affiche tout de suite.
-    const planches = chargerPlanches();
-    // Aujourd'hui, premier écran : son code se charge aussi pendant que la base s'ouvre, et la
-    // journée se lit dès la ferme connue. T13d : chargé par `precharger`, l'écran (et son
-    // instantané) se dessine dans le même rendu que la ferme ouverte, sans rendu de plus.
-    const ecranDuJour = chargerAujourdhui();
+    // Les écrans Planches et Aujourd'hui se chargent pendant que la base s'ouvre : chargés par
+    // `precharger`, ils (et leur instantané : T13d, T11g) se dessinent dès le premier rendu qui
+    // les montre. Dès la ferme connue, le début du plan et la journée se préparent (avant même le
+    // rendu), par donnees/precharger.ts, chargé à la demande.
+    void planches.precharger();
     void aujourdhui.precharger();
+    const prechargement = import('./donnees/precharger.ts').catch(() => null);
     let prechargee: FermeOuverte | null = null;
     const surEtat = (e: EtatDonnees) => {
       if (fermee) return;
@@ -252,16 +241,7 @@ export function App() {
       const f = e.ferme;
       if (f !== null && f !== prechargee) {
         prechargee = f;
-        // Échec : l'écran lira le plan (ou la journée) lui-même à l'ouverture. Le début du plan
-        // passe d'abord à la base (un tap sur « Planches » juste après l'ouverture l'affiche
-        // tout de suite) ; la journée le suit, mais ne l'attend jamais plus de
-        // ATTENTE_PLAN_MAX_MS (T13c) : Aujourd'hui, écran d'accueil, ne reste pas bloqué
-        // derrière le plan d'une grande ferme ou d'un téléphone lent.
-        const plan = planches.then((m) => m.prechargerPlan(f.porte, f.fermeId, m.jourDuTelephone())).catch(() => undefined);
-        const auPlusTard = new Promise<void>((tenir) => {
-          setTimeout(tenir, ATTENTE_PLAN_MAX_MS);
-        });
-        ecranDuJour.then((m) => m.prechargerJournee(f.porte, f.fermeId, m.jourDuTelephone(), Promise.race([plan, auPlusTard]))).catch(() => undefined);
+        void prechargement.then((m) => m?.prechargerFerme(f));
       }
     };
     import('./donnees/appli.ts').then(
@@ -315,6 +295,7 @@ export function App() {
   }
 
   const titre = ONGLETS.find((o) => o.id === onglet)?.libelle ?? '';
+  const EcranDeLaFerme = onglet === 'planches' ? planches.Composant : aujourdhui.Composant;
   return (
     <main data-testid="app" data-base={donnees.base} className={onglet === 'planches' ? 'coquille coquille-plan' : 'coquille'}>
       <EnTete titre={titre} {...(onglet === 'aujourdhui' ? { surtitre: jourAffiche() } : {})}>
@@ -327,20 +308,15 @@ export function App() {
         <ContexteFerme value={donnees.ferme}>
           {onglet === 'ferme' ? (
             <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} sansDeconnexion={demo} etatBase={donnees.base} surExport={setExportCharge} />
-          ) : onglet === 'planches' ? (
-            donnees.ferme === null ? (
-              <Attente base={donnees.base} montrera="le plan s’affichera" />
-            ) : (
-              <planches.Composant key={donnees.ferme.fermeId} porte={donnees.ferme.porte} fermeId={donnees.ferme.fermeId} utilisateurId={session.utilisateurId} />
-            )
-          ) : onglet === 'aujourdhui' ? (
-            // T13g : dessiné dès l'ouverture de la base, sans attendre la ferme : l'écran montre en
-            // lecture seule l'instantané de la dernière ferme montrée (ecrans/aujourdhui/), puis
-            // reçoit la porte. T13d : l'utilisateur de la session, pour l'instantané.
+          ) : onglet === 'planches' || onglet === 'aujourdhui' ? (
+            // T13g (Aujourd'hui), T11g (Planches) : dessinés dès l'ouverture de la base, sans
+            // attendre la ferme : l'écran montre en lecture seule l'instantané de la dernière ferme
+            // montrée, puis reçoit la porte (un écran par utilisateur et par ferme, clé posée par
+            // l'écran). L'utilisateur de la session, pour l'instantané.
             donnees.ferme !== null || donnees.base === 'ouverture' ? (
-              <aujourdhui.Composant porte={donnees.ferme?.porte ?? null} fermeId={donnees.ferme?.fermeId ?? null} utilisateurId={session.utilisateurId} />
+              <EcranDeLaFerme porte={donnees.ferme?.porte ?? null} fermeId={donnees.ferme?.fermeId ?? null} utilisateurId={session.utilisateurId} />
             ) : (
-              <Attente base={donnees.base} montrera="les tâches du jour s’afficheront" />
+              <Attente base={donnees.base} montrera={onglet === 'planches' ? 'le plan s’affichera' : 'les tâches du jour s’afficheront'} />
             )
           ) : (
             <p className="attente">{BIENTOT[onglet]}</p>

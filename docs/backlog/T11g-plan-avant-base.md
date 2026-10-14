@@ -27,9 +27,9 @@ Chromium headless, CPU ×4, ferme de T07, hors ligne, 5 répétitions, tap dès 
 
 ## Critère d'acceptation
 
-- [ ] Le test ci-dessous (écrit par le testeur de T11e, retiré de `e2e/plan-performances.e2e.ts`, à remettre dans ce fichier tel quel) passe : médiane sous 300 ms et aucune répétition au-delà de 1,5 × 300 ms (`jugerSerie`).
-- [ ] Un test vérifie que l'instantané n'est jamais montré à un autre utilisateur ni pour une autre ferme, et qu'il est effacé à la déconnexion.
-- [ ] Mesure avant/après chiffrée dans la PR ; `pnpm verif` passe en entier.
+- [x] Le test ci-dessous (écrit par le testeur de T11e, retiré de `e2e/plan-performances.e2e.ts`, à remettre dans ce fichier tel quel) passe : médiane sous 300 ms et aucune répétition au-delà de 1,5 × 300 ms (`jugerSerie`). Mesuré : 25, 26, 31, 25, 22 ms, médiane 25 ms (`docs/mesures/T11g-apres.md`).
+- [x] Un test vérifie que l'instantané n'est jamais montré à un autre utilisateur ni pour une autre ferme, et qu'il est effacé à la déconnexion (`ecrans/plan/instantane.test.ts` du testeur ; `ecrans/plan/avant-base.test.tsx` pour l'écran).
+- [x] Mesure avant/après chiffrée dans la PR (`docs/mesures/T11g-apres.md`) ; `pnpm verif` passe en entier, aux chronos instables de cette machine près : typage, lint, tests, builds, budget (72 752 octets, limite 72 806), e2e démo verts ; e2e de l'appli verts au rejeu, sauf deux déjà rouges sur 0f50da3 (défilement de `plan-performances`, étape T13k intermittente d'`aujourdhui-grande-ferme`).
 
 ```ts
 // Constante à remettre : const PREMIERE_SECONDE_MS = 1_000; (la première seconde après la navigation)
