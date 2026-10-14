@@ -63,8 +63,11 @@ export interface ProprietesEcranPlan {
   readonly stockage?: StockageInstantane;
 }
 
-/** T11g : délai avant de garder le plan affiché comme instantané (rien ne retarde l'affichage). */
-const DELAI_INSTANTANE_MS = 1_000;
+/**
+ * T11g : délai avant de garder le plan affiché comme instantané (rien ne retarde l'affichage) ;
+ * l'écran quitté avant (retour à Aujourd'hui juste après le plan affiché), il est gardé en partant.
+ */
+const DELAI_INSTANTANE_MS = 300;
 
 /**
  * Formulaire d'une série (T12), chargé à la demande : ni dans le JavaScript de démarrage, ni
@@ -701,15 +704,27 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
   // T11g : chaque plan relu affiché (saison par défaut) devient l'instantané du prochain
   // lancement : son début seulement, un peu plus tard (rien ne retarde l'affichage).
   const saisonDefaut = saisons === null ? null : (saisonParDefaut(saisons, jour)?.id ?? null);
+  /** Instantané pas encore gardé : gardé au démontage s'il n'a pas eu le temps de l'être. */
+  const aGarder = useRef<(() => void) | null>(null);
   useEffect(() => {
+    aGarder.current = null;
     if (lu === null || utilisateurId === undefined || stockage === null || lu.plan.saison.id !== saisonDefaut) return undefined;
-    const minuterie = setTimeout(() => {
+    const garder = () => {
+      aGarder.current = null;
       garderInstantanePlan(stockage, { utilisateurId, fermeId }, debutPourInstantane(lu.plan, lu.totalLignes));
-    }, DELAI_INSTANTANE_MS);
+    };
+    aGarder.current = garder;
+    const minuterie = setTimeout(garder, DELAI_INSTANTANE_MS);
     return () => {
       clearTimeout(minuterie);
     };
   }, [lu, saisonDefaut, utilisateurId, fermeId, stockage]);
+  useEffect(
+    () => () => {
+      aGarder.current?.();
+    },
+    [],
+  );
 
   // Lignes à dessiner : recalculées au défilement, et quand le plan ou la vue change. T11e :
   // position mémorisée dans l'événement de défilement, taille par un ResizeObserver ; rien n'est

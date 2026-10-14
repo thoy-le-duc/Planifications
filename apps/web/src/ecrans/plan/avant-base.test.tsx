@@ -144,6 +144,21 @@ describe('T11g — Planches avant la base', () => {
     expect(conteneur.querySelector('select')?.disabled).toBe(false);
   }, 60_000);
 
+  it('A1 bis : écran quitté dès le plan affiché (avant le délai) : l’instantané est gardé en partant', async () => {
+    const s = stockage(jeu.utilisateurId);
+    await act(async () => {
+      racine.render(<EcranPlan porte={porte} fermeId={jeu.principale.fermeId} utilisateurId={jeu.utilisateurId} stockage={s} aujourdhui={() => AUJOURDHUI} />);
+      await Promise.resolve();
+    });
+    for (let k = 0; k < 400 && q('[data-testid="barre"]') === null; k++) await laisserFinir(1);
+    expect(q('[data-testid="barre"]')).not.toBeNull();
+    act(() => {
+      racine.unmount();
+    });
+    racine = createRoot(conteneur);
+    expect(lireInstantanePlan(s, { utilisateurId: jeu.utilisateurId, fermeId: jeu.principale.fermeId })).not.toBeNull();
+  }, 60_000);
+
   it('A4 : autre utilisateur connecté, autre ferme, ou aucune ferme montrée : rien de l’instantané', async () => {
     const s = stockage(jeu.utilisateurId);
     await garderUnInstantane(s);
