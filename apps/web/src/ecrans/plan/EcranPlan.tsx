@@ -345,7 +345,7 @@ interface ProprietesDetailSerie {
   readonly ligne: LigneEmplacementPlan;
   readonly barre: BarrePlan;
   readonly surFermer: () => void;
-  /** T11g : null tant que la base n'est pas ouverte (instantané) : pas de « Modifier ». */
+  /** T11g/T11h : null tant que l'instantané est affiché : pas de « Modifier ». */
   readonly surModifier: ((serieId: string) => void) | null;
 }
 
@@ -603,6 +603,12 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
   const plan = montre?.plan ?? null;
   const [echec, setEchec] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
+  // T11h : un détail ouvert sur l'instantané se ferme quand le plan relu le remplace.
+  const etaitSurInstantane = useRef(surInstantane);
+  useEffect(() => {
+    if (etaitSurInstantane.current && !surInstantane) setDetail(null);
+    etaitSurInstantane.current = surInstantane;
+  }, [surInstantane]);
   const [formulaire, setFormulaire] = useState<DepartSerie | null>(null);
   const [annulable, setAnnulable] = useState<(SaisieSerieAnnulable & { readonly numero: number }) | null>(null);
   const numeroAnnulable = useRef(0);
@@ -1075,12 +1081,12 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
         <select
           id={idSaison}
           disabled={lectureSeule}
-          value={saisonId ?? (surInstantane ? instantane.plan.saison.id : '')}
+          value={surInstantane ? instantane.plan.saison.id : (saisonId ?? '')}
           onChange={(e) => {
             setSaisonId(e.target.value);
           }}
         >
-          {(saisons ?? (surInstantane ? [instantane.plan.saison] : [])).map((s) => (
+          {(surInstantane ? [instantane.plan.saison] : (saisons ?? [])).map((s) => (
             <option key={s.id} value={s.id}>
               {s.nom}
             </option>
@@ -1171,7 +1177,7 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
       </div>
       {!en3d && <Legende />}
       {!en3d && alerte !== null && <CarteAlerte alerte={alerte} aujourdhui={jour} surOuvrir={surAlerte} />}
-      {detail?.sorte === 'serie' && <DetailSerie ligne={detail.ligne} barre={detail.barre} surFermer={fermerDetail} surModifier={porte === null ? null : modifierSerie} />}
+      {detail?.sorte === 'serie' && <DetailSerie ligne={detail.ligne} barre={detail.barre} surFermer={fermerDetail} surModifier={lectureSeule ? null : modifierSerie} />}
       {detail?.sorte === 'conflits' && <DetailConflits ligne={detail.ligne} surFermer={fermerDetail} />}
       {formulaire !== null && porte !== null && (
         <Suspense fallback={null}>
