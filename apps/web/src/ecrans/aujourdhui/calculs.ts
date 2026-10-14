@@ -378,7 +378,7 @@ const sqlCampagnes = (filtre: string) => `SELECT c.id, c.debut_recolte_prevu, c.
  * grande ferme, 110 à 150 ms à froid pour la série d'un seul « Fait »). Une occupation n'a qu'un
  * occupant (contrainte un_occupant du serveur) : celle d'une plantation n'a pas de série.
  */
-const SQL_OCCUPATIONS = `SELECT o.serie_id, o.plantation_id, o.emplacement_id FROM occupation o
+export const SQL_OCCUPATIONS = `SELECT o.serie_id, o.plantation_id, o.emplacement_id FROM occupation o
   WHERE o.ferme_id = ?1 AND o.serie_id IN (SELECT value FROM json_each(?2)) AND o.supprime_le IS NULL
   UNION ALL SELECT o.serie_id, o.plantation_id, o.emplacement_id FROM occupation o
   WHERE o.ferme_id = ?1 AND o.serie_id IS NULL AND o.plantation_id IN (SELECT value FROM json_each(?3)) AND o.supprime_le IS NULL`;
