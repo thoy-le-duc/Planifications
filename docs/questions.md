@@ -290,6 +290,12 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q42 — Backlog vide : quelle suite ? (posée le 2026-10-14, après T11h)
+
+Question : tous les tickets spécifiés sont faits (dernier : T11h). Sur quoi préparer les suivants : retours d'usage sur la ferme (phase 1), journal vocal (phase 2), agent et serveur MCP, ou import Elzéard / Qrop ?
+
+Réponse (2026-10-14) : les retours d'usage. Théophane utilise l'appli sur sa ferme et chaque retour devient un ticket ; la phase 1 se termine après un mois d'usage quotidien. Préalable : la mise en ligne (`docs/mise-en-ligne.md`), guidée étape par étape par Claude, Théophane saisissant lui-même chaque secret. En attendant ses retours, la boucle surveille seulement les PR.
+
 ### Q40 — Régler une espèce qui n'a pas encore d'itinéraire (posée le 2026-10-10, T32c)
 
 Question : une espèce de la ferme sans itinéraire n'a pas de groupe dans l'écran Itinéraires, donc pas de bouton « Croissance ». L'afficher quand même, ou créer l'itinéraire d'abord ?

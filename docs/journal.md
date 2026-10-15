@@ -978,3 +978,9 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Fait** : sur l'instantané, « Modifier la série » est masqué (`lectureSeule`, base arrivée ou non), un détail ouvert se ferme quand le plan relu le remplace, le sélecteur de saison garde la saison de l'instantané même si les saisons sont lues avant le plan ; 3 tests (`avant-base-suites.test.tsx`). Démarrage : 72 758 octets (72 752 avant, limite 72 806).
 - **Décidé** : le détail est fermé (pas mis à jour) au passage instantané vers plan relu ; test B3 sans garde « au moins un changement vu » (l'écran ne bouge plus, c'est le bon comportement).
 - **Bloquant** : rien ; le défilement de `plan-performances` est passé cette fois (1 passage saccadé sur 10, limite 2), à surveiller.
+
+## 2026-10-15 — Backlog vide (Q42)
+
+- **Fait** : aucun ticket lancé : tous les tickets spécifiés sont faits (dernier T11h, fusionné le 14). Q42 notée avec la réponse de Théophane.
+- **Décidé** : la suite vient des retours d'usage de Théophane sur sa ferme ; la boucle n'invente pas de ticket et surveille seulement les PR.
+- **Bloquant** : la mise en ligne (Neon, PowerSync, Brevo, Vercel), que Théophane fait pas à pas, étape 1 (Neon) en cours.
