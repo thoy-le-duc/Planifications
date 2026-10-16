@@ -62,6 +62,8 @@ interface Envoi {
 }
 let envois: Envoi[] = [];
 
+const adresse = (u: RequestInfo | URL): string => (typeof u === 'string' ? u : u instanceof URL ? u.href : u.url);
+
 beforeEach(() => {
   session = { utilisateurId: MOI, email: 'theophane@ferme.fr', jetonAcces: jetonValableUneHeure(), jetonRenouvellement: 'r'.repeat(43) };
   localStorage.setItem('planif.session', JSON.stringify(session));
@@ -71,12 +73,12 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
-      if (!String(url).endsWith('/fermes')) return Promise.reject(new Error(`appel inattendu : ${String(url)}`));
+      if (!adresse(url).endsWith('/fermes')) return Promise.reject(new Error(`appel inattendu : ${adresse(url)}`));
       return new Promise<Response>((resoudre, rejeter) => {
         envois.push({
-          url: String(url),
+          url: adresse(url),
           entetes: new Headers(init?.headers),
-          corps: JSON.parse(String(init?.body)) as Envoi['corps'],
+          corps: JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as Envoi['corps'],
           repondre: (r) => {
             if (r instanceof Error) rejeter(r);
             else resoudre(r);
@@ -128,9 +130,8 @@ const alerte = () => conteneur.querySelector('[role="alert"]')?.textContent ?? n
 function saisir(valeur: string): void {
   const input = champ();
   if (input === null) throw new Error('champ « Nom de la ferme » absent');
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
   act(() => {
-    setter?.call(input, valeur);
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, valeur);
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 }
@@ -266,7 +267,7 @@ describe('T39 — formulaire', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: RequestInfo | URL) =>
-        Promise.resolve(String(url).endsWith('/auth/renouveler') ? reponse(401, { erreur: 'session_expiree' }) : reponse(401)),
+        Promise.resolve(adresse(url).endsWith('/auth/renouveler') ? reponse(401, { erreur: 'session_expiree' }) : reponse(401)),
       ),
     );
     monter();

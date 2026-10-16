@@ -76,7 +76,7 @@ function fetchSimule(...reponses: (Response | Error)[]) {
   let i = 0;
   const f = vi.fn((url: RequestInfo | URL, init?: RequestInit) => {
     appels.push({
-      url: String(url),
+      url: typeof url === 'string' ? url : url instanceof URL ? url.href : url.url,
       methode: init?.method,
       entetes: new Headers(init?.headers),
       corps: typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body,
