@@ -291,9 +291,11 @@ Pour chaque ligne : écris le nom **exactement** comme ci-dessous (majuscules, t
 3. Saisis ton adresse et valide.
 4. Ouvre ta boîte mail : un message de `Planifications` contient un **code à 6 chiffres**. Compte jusqu'à une minute. Regarde dans les indésirables.
 5. Saisis le code dans l'appli.
-6. Ce que tu dois voir : l'écran de création de la ferme.
-7. Saisis le nom de ta ferme et valide.
-8. Ce que tu dois voir : ta ferme vide, sans les données de la démo.
+6. Ce que tu dois voir : l'onglet **Aujourd'hui** avec « Aucune ferme sur ce compte pour l'instant », un champ **Nom de la ferme** et un bouton **Créer ma ferme**. Le même écran est proposé dans les onglets **Planches** et **Ferme** (dans **Ferme**, l'export et « Se déconnecter » restent dessous).
+   - Si tu lis « Première synchronisation en cours… » : l'appli vérifie d'abord que ton compte n'a pas déjà une ferme. Le formulaire apparaît dès que c'est fait (quelques secondes). S'il n'apparaît pas, voir « La synchro ne part pas » plus bas.
+   - Si tu lis « Pas de réseau » : la première création demande du réseau. Le formulaire revient tout seul quand le téléphone capte.
+7. Saisis le nom de ta ferme (200 caractères au plus) et touche **Créer ma ferme**. Le fuseau horaire est Europe/Paris. Pour le changer, il n'y a pas encore d'écran : demande-le à Claude.
+8. Ce que tu dois voir : « Ferme créée, synchronisation… », puis, au bout de quelques secondes, ta ferme vide (sans les données de la démo) dans l'onglet **Aujourd'hui**. Tu en es le gérant. Si un message s'affiche à la place (« Pas de réseau », « Votre session a expiré », « Ce nom de ferme n'est pas accepté »), ce que tu as tapé reste dans le champ : corrige ou réessaie.
 9. Pour vérifier la synchro : ajoute une zone ou une planche, puis ouvre l'appli sur un autre appareil avec la même adresse courriel. Au bout de quelques secondes, la zone doit apparaître.
 10. Sur le téléphone, utilise « Ajouter à l'écran d'accueil » : l'appli se comporte alors comme une application, et marche aussi sans réseau.
 
