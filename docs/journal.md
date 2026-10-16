@@ -984,3 +984,9 @@ Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en 
 - **Fait** : aucun ticket lancé : tous les tickets spécifiés sont faits (dernier T11h, fusionné le 14). Q42 notée avec la réponse de Théophane.
 - **Décidé** : la suite vient des retours d'usage de Théophane sur sa ferme ; la boucle n'invente pas de ticket et surveille seulement les PR.
 - **Bloquant** : la mise en ligne (Neon, PowerSync, Brevo, Vercel), que Théophane fait pas à pas, étape 1 (Neon) en cours.
+
+## 2026-10-16 — T39 : créer sa ferme depuis l'appli
+
+- **Fait** : écran « Créer ma ferme » (`ecrans/creer-ferme/`, chargé à la demande) sur Aujourd'hui, Planches et en tête de Ferme quand la base est ouverte sans ferme : POST /fermes avec les jetons de la session (renouvellement compris), un seul envoi, erreurs en français, nom conservé ; ferme mémorisée puis active à son arrivée par la synchro. Tests unitaires, e2e simulé (`e2e/creer-ferme.e2e.ts`) et de bout en bout sur la pile de synchro (`e2e-synchro/creer-ferme.e2e.ts`, `amorcer-e2e.ts --compte-neuf`), guide de mise en ligne étape 7 à jour. Démarrage : 72 785 octets (72 758 avant, limite 72 806).
+- **Décidé** : formulaire seulement en ligne ET après la première synchro (sinon un compte qui a déjà une ferme pourrait en créer une seconde) ; id UUID gardé d'un essai à l'autre, 409 = déjà créée ; « Ferme créée » rangée sur le téléphone (vérifiée par GET /moi, effacée à la déconnexion) ; fuseau Europe/Paris sans choix à l'écran. Test modifié : `habillage.e2e.ts` accepte « Aucune ferme sur ce compte » (texte de l'écran de création), commit à part.
+- **Bloquant** : rien. Les e2e de bout en bout de la synchro tournent ici (Docker démarré à la main) : 11/11 verts.

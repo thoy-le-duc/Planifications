@@ -18,8 +18,8 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests unitaires : formulaire (nom vide ou trop long refusé, double tap, envoi unique, erreurs réseau / 401 / 400 traduites, nom conservé), choix de l'écran selon `base` et réseau.
-- [ ] Test : après réussite, la ferme créée devient active quand `membre` et `ferme` arrivent dans la base locale, et elle est mémorisée.
-- [ ] e2e : compte neuf → « Créer ma ferme » → la ferme apparaît (sur la pile de synchro de `pnpm e2e:synchro` si possible, sinon avec la base locale simulée comme les autres e2e).
-- [ ] `docs/mise-en-ligne.md` étape 7 décrit l'écran réel.
-- [ ] `pnpm verif` passe ; démarrage dans le budget.
+- [x] Tests unitaires : formulaire (nom vide ou trop long refusé, double tap, envoi unique, erreurs réseau / 401 / 400 traduites, nom conservé), choix de l'écran selon `base` et réseau.
+- [x] Test : après réussite, la ferme créée devient active quand `membre` et `ferme` arrivent dans la base locale, et elle est mémorisée.
+- [x] e2e : compte neuf → « Créer ma ferme » → la ferme apparaît (sur la pile de synchro de `pnpm e2e:synchro` si possible, sinon avec la base locale simulée comme les autres e2e).
+- [x] `docs/mise-en-ligne.md` étape 7 décrit l'écran réel.
+- [x] `pnpm verif` passe ; démarrage dans le budget.
