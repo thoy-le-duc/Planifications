@@ -1,0 +1,21 @@
+/* Écran « Créer ma ferme » (T39) : champ et bouton de la carte de connexion (connexion.css, ui/). */
+.creer-ferme {
+  margin: var(--espace-xl) var(--espace-s) 0;
+}
+
+.creer-ferme-formulaire {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-l);
+}
+
+.creer-ferme-texte {
+  margin: 0;
+  font-size: 18px;
+  color: var(--couleur-secondaire);
+}
+
+/* En tête de l'onglet Ferme : l'export et la déconnexion restent dessous. */
+.creer-ferme + * {
+  margin-top: var(--espace-xl);
+}

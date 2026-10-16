@@ -15,6 +15,11 @@
 export const cleChoix = (utilisateurId: string): string => `planif.ferme-active.${utilisateurId}`;
 /** Clé de la dernière ferme montrée (T13g) ; effacée à la déconnexion (T13l). */
 export const cleMontree = (utilisateurId: string): string => `planif.ferme-montree.${utilisateurId}`;
+/**
+ * Clé de la ferme créée depuis ce téléphone et pas encore arrivée par la synchro (T39,
+ * ecrans/creer-ferme/) ; effacée à la déconnexion.
+ */
+export const cleFermeCreee = (utilisateurId: string): string => `planif.ferme-creee.${utilisateurId}`;
 
 function lire(stockage: Pick<Storage, 'getItem'>, cle: string): string | null {
   try {

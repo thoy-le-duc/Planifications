@@ -7,7 +7,8 @@
  *     attente : ecrans/accueil/Accueil.tsx ;
  *   - l'écran Ferme (export, déconnexion) : ecrans/ferme/EcranFerme.tsx ;
  *   - l'écran Planches (T11) : ecrans/plan/ ;
- *   - l'écran Aujourd'hui (T13) : ecrans/aujourdhui/.
+ *   - l'écran Aujourd'hui (T13) : ecrans/aujourdhui/ ;
+ *   - l'écran « Créer ma ferme » (T39), base ouverte sans ferme : ecrans/creer-ferme/.
  * Tous sont dans le précache du service worker : ils s'ouvrent aussi hors ligne.
  *
  * T11 : connecté, l'appli ouvre la base locale (src/donnees/appli.ts, chargé à la demande, puis
@@ -90,6 +91,7 @@ const accueil = differe(() => import('./ecrans/accueil/Accueil.tsx'));
 const ferme = differe(() => import('./ecrans/ferme/EcranFerme.tsx'));
 const planches = differe(() => import('./ecrans/plan/index.ts'));
 const aujourdhui = differe(() => import('./ecrans/aujourdhui/index.ts'));
+const creerFerme = differe(() => import('./ecrans/creer-ferme/EcranCreerFerme.tsx'));
 /**
  * À attendre avant le premier rendu (main.tsx) : sans session, la carte de connexion est le
  * premier écran, son chargement part tout de suite et l'appli s'affiche d'un coup, carte
@@ -103,22 +105,6 @@ export function avantPremierRendu(): Promise<unknown> {
 const BIENTOT: Readonly<Record<Exclude<Onglet, 'ferme' | 'planches' | 'aujourdhui'>, string>> = {
   dicter: 'Bientôt : dicter une récolte ou une tâche ; l’appli propose, vous validez.',
 };
-
-/**
- * Onglet d'un écran de la ferme (Aujourd'hui, Planches) sans ferme ouverte : ce qui se passe, dit
- * franchement. `sans-ferme` : ce que l'onglet montrera.
- */
-function Attente({ base, montrera }: { readonly base: EtatDonnees['base']; readonly montrera: string }) {
-  return (
-    <p className="attente">
-      {base === 'sans-ferme'
-        ? `Aucune ferme sur ce téléphone pour l’instant : ${montrera} après la première synchronisation.`
-        : base === 'echec'
-          ? 'Les données de ce téléphone n’ont pas pu s’ouvrir. Rechargez l’appli ; si cela recommence, signalez-le.'
-          : 'Ouverture des données de ce téléphone…'}
-    </p>
-  );
-}
 
 /**
  * Date de l'en-tête d'Aujourd'hui : « MAR. 29 SEPTEMBRE ». Formatée à l'affichage : créer un
@@ -296,6 +282,8 @@ export function App() {
 
   const titre = ONGLETS.find((o) => o.id === onglet)?.libelle ?? '';
   const EcranDeLaFerme = onglet === 'planches' ? planches.Composant : aujourdhui.Composant;
+  // T39 : base ouverte, aucune ferme → « Créer ma ferme » (en tête de l'onglet Ferme).
+  const creation = donnees.base === 'sans-ferme' && <creerFerme.Composant session={session} synchro={donnees.synchro} />;
   return (
     <main data-testid="app" data-base={donnees.base} className={onglet === 'planches' ? 'coquille coquille-plan' : 'coquille'}>
       <EnTete titre={titre} {...(onglet === 'aujourdhui' ? { surtitre: jourAffiche() } : {})}>
@@ -307,7 +295,10 @@ export function App() {
         {exportCharge && <exportCharge.BandeauExport onglet={onglet} fermeId={donnees.ferme?.fermeId} />}
         <ContexteFerme value={donnees.ferme}>
           {onglet === 'ferme' ? (
-            <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} sansDeconnexion={demo} etatBase={donnees.base} surExport={setExportCharge} />
+            <>
+              {creation}
+              <ferme.Composant session={session} baseLocale={baseLocale} surDeconnecte={finDeSession} sansDeconnexion={demo} etatBase={donnees.base} surExport={setExportCharge} />
+            </>
           ) : onglet === 'planches' || onglet === 'aujourdhui' ? (
             // T13g (Aujourd'hui), T11g (Planches) : dessinés dès l'ouverture de la base, sans
             // attendre la ferme : l'écran montre en lecture seule l'instantané de la dernière ferme
@@ -316,7 +307,8 @@ export function App() {
             donnees.ferme !== null || donnees.base === 'ouverture' ? (
               <EcranDeLaFerme porte={donnees.ferme?.porte ?? null} fermeId={donnees.ferme?.fermeId ?? null} utilisateurId={session.utilisateurId} />
             ) : (
-              <Attente base={donnees.base} montrera={onglet === 'planches' ? 'le plan s’affichera' : 'les tâches du jour s’afficheront'} />
+              // Sans ferme : « Créer ma ferme » (T39) ; sinon la base n'a pas pu s'ouvrir.
+              creation || <p className="attente">Les données de ce téléphone n’ont pas pu s’ouvrir. Rechargez l’appli ; si cela recommence, signalez-le.</p>
             )
           ) : (
             <p className="attente">{BIENTOT[onglet]}</p>
