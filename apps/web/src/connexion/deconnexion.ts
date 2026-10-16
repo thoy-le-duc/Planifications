@@ -3,7 +3,7 @@
  * lisible. Contrat : deconnexion.test.ts. Ni PowerSync ni jose : JavaScript de démarrage ;
  * l'effacement de la base locale est injecté (src/donnees, chargé à la demande).
  */
-import { cleChoix, cleMontree } from '../donnees/ferme-memorisee.ts';
+import { cleChoix, cleFermeCreee, cleMontree } from '../donnees/ferme-memorisee.ts';
 import { cleRefusVus } from '../donnees/refus-vus.ts';
 import { cleInstantane } from '../ecrans/aujourdhui/cle-instantane.ts';
 import { cleInstantanePlan } from '../ecrans/plan/cle-instantane.ts';
@@ -161,7 +161,7 @@ export async function deconnecter(session: SessionConnexion, options: OptionsDec
     const id = session.utilisateurId;
     // T14b : modèles et imports récents (planif:import:*), de toutes les fermes du téléphone.
     const s = options.stockage as Partial<Storage>;
-    const cles = [cleRefusVus(id), cleInstantane(id), cleInstantanePlan(id), cleChoix(id), cleMontree(id)];
+    const cles = [cleRefusVus(id), cleInstantane(id), cleInstantanePlan(id), cleChoix(id), cleMontree(id), cleFermeCreee(id)];
     try {
       for (let i = 0; i < (s.length ?? 0); i++) {
         const c = s.key?.(i);
