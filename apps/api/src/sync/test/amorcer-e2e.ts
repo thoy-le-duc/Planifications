@@ -33,6 +33,12 @@
  * "especeId", "familleId", "delaiMinimalAns", "planches" }` (e2e-synchro/serie.e2e.ts).
  *
  *   node apps/api/src/sync/test/amorcer-e2e.ts --plan-serie
+ *
+ * T39 : avec `--compte-neuf`, la sortie gagne `"compteNeuf": SessionConnexion` : un compte créé
+ * par sa première connexion (vraie session de l'API, API_URL requise), membre d'AUCUNE ferme
+ * (e2e-synchro/creer-ferme.e2e.ts).
+ *
+ *   node apps/api/src/sync/test/amorcer-e2e.ts --compte-neuf
  */
 import { randomUUID } from 'node:crypto';
 import { ajouterJours, type DateCalendaire } from '@planif/core';
@@ -193,6 +199,7 @@ async function amorcerPlanSerie(bd: pg.Pool, fermeId: string): Promise<PlanSerie
 
 const avecSerieTomates = process.argv.slice(2).includes('--serie-tomates');
 const avecPlanSerie = process.argv.slice(2).includes('--plan-serie');
+const avecCompteNeuf = process.argv.slice(2).includes('--compte-neuf');
 const urlApi = process.env.API_URL ?? '';
 const pool = new pg.Pool({ connectionString: variable('DATABASE_URL'), max: 1 });
 try {
@@ -224,11 +231,15 @@ try {
   }
   const serieTomates = avecSerieTomates ? await amorcerSerieTomates(pool, fermeId) : undefined;
   const planSerie = avecPlanSerie ? await amorcerPlanSerie(pool, fermeId) : undefined;
+  if (avecCompteNeuf && urlApi === '') throw new Error('--compte-neuf : API_URL requise (vraie session de l’API)');
+  // Le compte est créé par /auth/verifier, comme à une vraie première connexion.
+  const compteNeuf = avecCompteNeuf ? await sessionDeLApi(pool, urlApi, `e2e-neuf-${randomUUID().slice(0, 8)}@ferme.fr`) : undefined;
   const sortie = {
     fermeId,
     sessions,
     ...(serieTomates === undefined ? {} : { serieTomates }),
     ...(planSerie === undefined ? {} : { planSerie }),
+    ...(compteNeuf === undefined ? {} : { compteNeuf }),
   };
   process.stdout.write(`${JSON.stringify(sortie)}\n`);
 } finally {
