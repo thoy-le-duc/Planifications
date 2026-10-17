@@ -11,6 +11,12 @@
          par `pnpm --filter @planif/web jetons` (scripts/theme-initial-contenu.ts). -->
     <script src="/theme-initial.js"></script>
     <link rel="icon" href="/icone.svg" type="image/svg+xml" />
+    <!-- T40 : installée sur l'écran d'accueil, l'appli s'ouvre plein écran, avec son icône et son
+         nom court (iPhone : pas de manifeste lu pour l'icône, d'où le PNG 180 à fond plein). -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Planif" />
     <!-- Polices de l'écran de connexion, demandées dès le HTML (T16). crossorigin : les polices se
          chargent en CORS ; sans lui, chaque fichier partirait deux fois. -->
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/polices/archivo-latin-112-wght.woff2" />

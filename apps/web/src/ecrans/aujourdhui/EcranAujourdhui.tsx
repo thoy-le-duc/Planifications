@@ -33,7 +33,7 @@
  * fermée (ou onglet quitté) avant la base : le nombre en attente est noté avec l'instantané
  * (`noterFaitsEnAttente`), le lancement suivant le dit de la même façon.
  */
-import { useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { commencerEcriture } from '../../donnees/ecritures-en-cours.ts';
@@ -55,6 +55,7 @@ import {
   type TacheJour,
 } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
+import type { ProprietesBandeauInstallation } from '../../installation/BandeauInstallation.tsx';
 import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
 import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
@@ -528,6 +529,27 @@ const AUCUN_MASQUE: Masques = new Map();
 const sansMasques = () => () => undefined;
 
 /** T13k : message des « Fait » d'avant la base abandonnés (0 : rien). */
+/**
+ * T40 : le bandeau « Installer l'appli », dans le morceau de l'installation chargé à la demande
+ * (src/installation/index.ts) : ni ce morceau ni ses dépendances statiques ne s'alourdissent.
+ */
+function BandeauInstallation(p: ProprietesBandeauInstallation) {
+  const [Bandeau, setBandeau] = useState<((p: ProprietesBandeauInstallation) => ReactNode) | null>(null);
+  useEffect(() => {
+    let actif = true;
+    import('../../installation/index.ts').then(
+      (m) => {
+        if (actif) setBandeau(() => m.BandeauInstallation);
+      },
+      () => undefined,
+    );
+    return () => {
+      actif = false;
+    };
+  }, []);
+  return Bandeau === null ? null : <Bandeau {...p} />;
+}
+
 function MessageAbandon({ nombre }: { readonly nombre: number }) {
   return nombre > 0 ? (
     <p role="status" className="auj-avis">
@@ -1253,6 +1275,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
           }}
         />
       )}
+
+      {/* T40 : proposer d'installer l'appli, une fois, jamais pendant une saisie. */}
+      <BandeauInstallation enSaisie={occupe || annulable !== null || dialogue !== null} />
 
       {annulable !== null && (
         <div key={annulable.numero} data-testid="saisie-annulable" data-saisie-en-cours="oui" role="status" className="auj-bandeau">
