@@ -103,10 +103,18 @@ export function messageCreation(raison: RaisonEchecCreation): string {
   }
 }
 
-export type EcranSansFerme = 'formulaire' | 'hors-ligne' | 'premiere-synchro';
+export type EcranSansFerme = 'formulaire' | 'hors-ligne' | 'premiere-synchro' | 'session-expiree';
+
+/**
+ * T39b : au-delà de ce délai, « Première synchronisation en cours… » ou « Ferme créée,
+ * synchronisation… » dit franchement que la synchronisation ne répond pas.
+ */
+export const DELAI_ATTENTE_SYNCHRO_MS = 30_000;
 
 export function choisirEcranSansFerme(o: { readonly synchro: EtatSynchro; readonly enLigne: boolean }): EcranSansFerme {
   if (!o.enLigne) return 'hors-ligne';
+  // T39b : session expirée, le formulaire échouerait à coup sûr : se reconnecter d'abord.
+  if (o.synchro === 'session-expiree') return 'session-expiree';
   // Première synchro pas finie : la ferme du compte existe peut-être déjà, elle n'est pas arrivée.
   if (o.synchro === 'connexion') return 'premiere-synchro';
   return 'formulaire';

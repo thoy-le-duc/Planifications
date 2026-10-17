@@ -15,8 +15,8 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : réponse du POST perdue, rechargement, nouvel essai : même id envoyé, une seule ferme.
-- [ ] Test : attente de plus de 30 s : message franc et bouton « Réessayer ».
-- [ ] Test : la clé `ferme-creee` disparaît au passage à `prete`, et à la déconnexion (comme l'id en cours).
-- [ ] Test : `session-expiree` : pas de formulaire, message de reconnexion.
-- [ ] `pnpm verif` passe ; démarrage dans le budget (72 806 octets).
+- [x] Test : réponse du POST perdue, rechargement, nouvel essai : même id envoyé, une seule ferme.
+- [x] Test : attente de plus de 30 s : message franc et bouton « Réessayer ».
+- [x] Test : la clé `ferme-creee` disparaît au passage à `prete`, et à la déconnexion (comme l'id en cours).
+- [x] Test : `session-expiree` : pas de formulaire, message de reconnexion.
+- [x] `pnpm verif` passe ; démarrage dans le budget (72 806 octets).

@@ -6,22 +6,58 @@
  * La ferme créée n'est pas écrite dans la base locale : elle y arrive par la synchro (membre et
  * ferme), et la coquille passe alors d'elle-même à l'écran de la ferme (donnees/ferme-active.ts).
  * D'ici là, « Ferme créée, synchronisation… ».
+ *
+ * T39b : l'id en cours d'envoi est rangé sur le téléphone (cleFermeEnCours) ; une attente de plus
+ * de 30 s le dit et propose de réessayer ; session expirée : pas de formulaire.
  */
 import { useEffect, useRef, useState, useSyncExternalStore, type SyntheticEvent } from 'react';
 import { urlApi } from '../../connexion/client.ts';
 import { stockageNavigateur, type SessionConnexion } from '../../connexion/session.ts';
 import type { EtatSynchro } from '../../donnees/connecteur.ts';
-import { cleFermeCreee, memoriserFerme } from '../../donnees/ferme-memorisee.ts';
+import { cleFermeCreee, cleFermeEnCours, memoriserFerme } from '../../donnees/ferme-memorisee.ts';
 import { gererJetons } from '../../donnees/jeton.ts';
 import { BoutonPrincipal } from '../../ui/elements.tsx';
-import { choisirEcranSansFerme, creerFerme, messageCreation, messageNom, NOM_FERME_MAX, validerNomFerme } from './creer-ferme.ts';
+import { choisirEcranSansFerme, creerFerme, DELAI_ATTENTE_SYNCHRO_MS, messageCreation, messageNom, NOM_FERME_MAX, validerNomFerme } from './creer-ferme.ts';
 import './creer-ferme.css';
 
 /**
- * Pour la vie de la page, par utilisateur : l'id de la ferme en cours de création, le même à
- * chaque essai (une réponse perdue ne crée pas deux fermes, l'API répond 409 au second envoi).
+ * Par utilisateur : l'id de la ferme en cours de création, le même à chaque essai et après un
+ * rechargement (T39b) : une réponse perdue ne crée pas deux fermes, l'API répond 409 au second
+ * envoi. Rangé sur le téléphone (cleFermeEnCours) AVANT l'envoi ; stockage indisponible : gardé
+ * pour la vie de la page seulement.
  */
 const idsEnCours = new Map<string, string>();
+
+function idEnCours(utilisateurId: string): string {
+  let id: string | null = null;
+  try {
+    id = stockageNavigateur().getItem(cleFermeEnCours(utilisateurId));
+  } catch {
+    // Stockage indisponible : l'id de la page, s'il y en a un.
+  }
+  id = id !== null && id !== '' ? id : (idsEnCours.get(utilisateurId) ?? crypto.randomUUID());
+  idsEnCours.set(utilisateurId, id);
+  try {
+    stockageNavigateur().setItem(cleFermeEnCours(utilisateurId), id);
+  } catch {
+    // Non rangé : seul l'id de la page protège d'une seconde ferme.
+  }
+  return id;
+}
+
+function oublierIdEnCours(utilisateurId: string): void {
+  idsEnCours.delete(utilisateurId);
+  try {
+    stockageNavigateur().removeItem(cleFermeEnCours(utilisateurId));
+  } catch {
+    // Rien de lisible à retirer.
+  }
+}
+
+/** Par défaut, « Réessayer » recharge la page : la synchro et la vérification repartent de zéro. */
+function recharger(): void {
+  location.reload();
+}
 
 /**
  * Ferme créée et pas encore arrivée (cleFermeCreee) : rangée sur le téléphone, pour que ni un
@@ -49,9 +85,11 @@ const enLigne = () => navigator.onLine;
 export interface ProprietesCreerFerme {
   readonly session: SessionConnexion;
   readonly synchro: EtatSynchro;
+  /** T39b : « Réessayer » après une attente trop longue ; recharge la page par défaut. */
+  readonly surReessayer?: (() => void) | undefined;
 }
 
-export default function EcranCreerFerme({ session, synchro }: ProprietesCreerFerme) {
+export default function EcranCreerFerme({ session, synchro, surReessayer = recharger }: ProprietesCreerFerme) {
   const utilisateurId = session.utilisateurId;
   const reseau = useSyncExternalStore(abonnerReseau, enLigne, () => true);
   const [nom, setNom] = useState('');
@@ -60,6 +98,10 @@ export default function EcranCreerFerme({ session, synchro }: ProprietesCreerFer
   const [creee, setCreee] = useState(() => lireCreee(utilisateurId) !== null);
   /** Garde du double tap : l'état React n'est relu qu'au rendu suivant. */
   const enCours = useRef(false);
+  /** T39b : numéro de l'attente en cours (« Réessayer » en commence une autre). */
+  const [essai, setEssai] = useState(0);
+  /** T39b : l'attente (écran et numéro) qui dure depuis plus de 30 s ; null : aucune. */
+  const [attenteLongue, setAttenteLongue] = useState<string | null>(null);
 
   // Ferme créée lors d'une ouverture précédente et toujours pas arrivée : si l'API dit que le
   // compte n'a aucune ferme de cet id (supprimée depuis, autre cas imprévu), le formulaire
@@ -103,11 +145,7 @@ export default function EcranCreerFerme({ session, synchro }: ProprietesCreerFer
     enCours.current = true;
     setEnvoi(true);
     setMessage(null);
-    let id = idsEnCours.get(utilisateurId);
-    if (id === undefined) {
-      id = crypto.randomUUID();
-      idsEnCours.set(utilisateurId, id);
-    }
+    const id = idEnCours(utilisateurId);
     const stockage = stockageNavigateur();
     const url = urlApi();
     const r = await creerFerme({
@@ -123,7 +161,7 @@ export default function EcranCreerFerme({ session, synchro }: ProprietesCreerFer
       setMessage(messageCreation(r.raison));
       return;
     }
-    idsEnCours.delete(utilisateurId);
+    oublierIdEnCours(utilisateurId);
     try {
       stockage.setItem(cleFermeCreee(utilisateurId), r.fermeId);
     } catch {
@@ -134,12 +172,46 @@ export default function EcranCreerFerme({ session, synchro }: ProprietesCreerFer
     setCreee(true);
   }
 
-  const etat = creee ? 'creee' : choisirEcranSansFerme({ synchro, enLigne: reseau });
+  // Session expirée : rien n'arrivera par la synchro avant de se reconnecter, même une ferme créée.
+  const etat = creee && synchro !== 'session-expiree' ? 'creee' : choisirEcranSansFerme({ synchro, enLigne: reseau });
+  const attente = etat === 'creee' || etat === 'premiere-synchro' ? `${etat}:${String(essai)}` : null;
+  useEffect(() => {
+    if (attente === null) return undefined;
+    const minuterie = setTimeout(() => {
+      setAttenteLongue(attente);
+    }, DELAI_ATTENTE_SYNCHRO_MS);
+    return () => {
+      clearTimeout(minuterie);
+    };
+  }, [attente]);
+  const tropLongue = attente !== null && attenteLongue === attente && (
+    <>
+      <p role="alert" className="message-connexion">
+        La synchronisation ne répond pas depuis 30 secondes : réseau trop faible ou service indisponible. Rien n’est perdu.
+      </p>
+      <BoutonPrincipal
+        type="button"
+        onClick={() => {
+          setEssai((n) => n + 1);
+          surReessayer();
+        }}
+      >
+        Réessayer
+      </BoutonPrincipal>
+    </>
+  );
   return (
     <section data-testid="creer-ferme" data-etat={etat} className="creer-ferme">
       {etat === 'creee' ? (
-        <p role="status" className="creer-ferme-texte">
-          Ferme créée, synchronisation…
+        <>
+          <p role="status" className="creer-ferme-texte">
+            Ferme créée, synchronisation…
+          </p>
+          {tropLongue}
+        </>
+      ) : etat === 'session-expiree' ? (
+        <p role="alert" className="creer-ferme-texte">
+          {messageCreation('session_expiree')}
         </p>
       ) : etat === 'hors-ligne' ? (
         <p className="creer-ferme-texte">
@@ -147,7 +219,10 @@ export default function EcranCreerFerme({ session, synchro }: ProprietesCreerFer
           formulaire reviendra dès que le téléphone capte.
         </p>
       ) : etat === 'premiere-synchro' ? (
-        <p className="creer-ferme-texte">Première synchronisation en cours : si votre compte a déjà une ferme, elle arrive.</p>
+        <>
+          <p className="creer-ferme-texte">Première synchronisation en cours : si votre compte a déjà une ferme, elle arrive.</p>
+          {tropLongue}
+        </>
       ) : (
         <form className="creer-ferme-formulaire" onSubmit={(e) => void creer(e)} noValidate>
           <p className="creer-ferme-texte">Aucune ferme sur ce compte pour l’instant. Donnez-lui un nom pour commencer.</p>
