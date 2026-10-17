@@ -18,7 +18,9 @@
  *     message franc (role="alert") : la synchronisation ne répond pas (réseau, service), et un
  *     bouton « Réessayer » qui appelle surReessayer ; l'attente repart de zéro.
  *   - synchro 'session-expiree' : data-etat 'session-expiree', pas de formulaire, message qui
- *     invite à se reconnecter (choisirEcranSansFerme rend 'session-expiree', avant tout le reste).
+ *     invite à se reconnecter (choisirEcranSansFerme rend 'session-expiree' en ligne ; hors ligne,
+ *     'hors-ligne' de T39 prime : se reconnecter demande du réseau). Prime sur 'creee' : rien
+ *     n'arrive par la synchro avant la reconnexion.
  */
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -280,9 +282,9 @@ describe('T39b — 3. clés effacées quand la ferme arrive, et à la déconnexi
 });
 
 describe('T39b — 4. session expirée : pas de formulaire voué à l’échec', () => {
-  it('choisirEcranSansFerme rend « session-expiree », en ligne ou non', () => {
+  it('choisirEcranSansFerme rend « session-expiree » en ligne ; hors ligne, « hors-ligne » (T39) prime', () => {
     expect(choisirEcranSansFerme({ synchro: 'session-expiree', enLigne: true })).toBe('session-expiree');
-    expect(choisirEcranSansFerme({ synchro: 'session-expiree', enLigne: false })).toBe('session-expiree');
+    expect(choisirEcranSansFerme({ synchro: 'session-expiree', enLigne: false })).toBe('hors-ligne');
   });
 
   it('l’écran le dit avant la saisie : message de reconnexion, ni champ ni bouton', () => {
@@ -291,6 +293,13 @@ describe('T39b — 4. session expirée : pas de formulaire voué à l’échec',
     expect(champ()).toBeNull();
     expect(boutonNomme('Créer ma ferme')).toBeNull();
     expect(ecran()?.textContent).toMatch(/session a expiré/i);
+    expect(ecran()?.textContent).toMatch(/reconnect/i);
+  });
+
+  it('même avec une ferme créée pas encore arrivée : rien n’arrivera avant de se reconnecter', () => {
+    localStorage.setItem(cleFermeCreee(MOI), FERME);
+    monter('session-expiree');
+    expect(etat()).toBe('session-expiree');
     expect(ecran()?.textContent).toMatch(/reconnect/i);
   });
 });
