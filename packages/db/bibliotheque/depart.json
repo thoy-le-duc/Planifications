@@ -1,0 +1,2208 @@
+{
+  "meta": {
+    "version": "2026-10-17",
+    "statut": "Valeurs usuelles arrondies, indépendantes, à valider par le maraîcher",
+    "hypotheses": [
+      "Planche permanente d'environ 75 cm de large et 30 m de long, passe-pied d'environ 45 cm.",
+      "rendementAttendu 'par metre' = kg par mètre linéaire de planche (tous rangs confondus).",
+      "rendementAttendu 'par plant' = kg par plant, ou par motte pour les mottes multigraines.",
+      "dureeAvantRecolteJours compte depuis la mise en place (plantation ou semis direct).",
+      "periodeUsage : semaines ISO de mise en place, France tempérée.",
+      "Ail : caïeux traités comme semis direct à l'écartement (1 caïeu par poquet)."
+    ]
+  },
+  "familles": [
+    {
+      "nom": "Solanacées",
+      "delaiRetourMinAnnees": 3,
+      "delaiRetourConseilleAnnees": 4,
+      "remarque": "Tomate, aubergine, poivron, piment, pomme de terre. Sous abri, rotation souvent impossible : greffage, engrais verts."
+    },
+    {
+      "nom": "Brassicacées",
+      "delaiRetourMinAnnees": 3,
+      "delaiRetourConseilleAnnees": 5,
+      "remarque": "Hernie du chou : choux à 4 ans minimum, 6 conseillés ; radis, navet, roquette à cycle court tolèrent moins."
+    },
+    {
+      "nom": "Amaranthacées",
+      "delaiRetourMinAnnees": 2,
+      "delaiRetourConseilleAnnees": 4,
+      "remarque": "Bette, betterave, épinard (ex-Chénopodiacées). Betterave : 4 ans conseillés par les chambres."
+    },
+    {
+      "nom": "Apiacées",
+      "delaiRetourMinAnnees": 3,
+      "delaiRetourConseilleAnnees": 4,
+      "remarque": "Carotte, céleri, fenouil, aneth, coriandre. Mouche de la carotte, maladies du sol."
+    },
+    {
+      "nom": "Astéracées",
+      "delaiRetourMinAnnees": 2,
+      "delaiRetourConseilleAnnees": 3,
+      "remarque": "Laitue, chicorée, base des mesclun. Sclérotinia et Bremia : aérer les retours sous abri."
+    },
+    {
+      "nom": "Cucurbitacées",
+      "delaiRetourMinAnnees": 3,
+      "delaiRetourConseilleAnnees": 4,
+      "remarque": "Courgette, courge, concombre, melon. Fusariose du melon : 5 ans et plus."
+    },
+    {
+      "nom": "Fabacées",
+      "delaiRetourMinAnnees": 3,
+      "delaiRetourConseilleAnnees": 5,
+      "remarque": "Pois (aphanomyces : 6 ans et plus sur parcelle touchée), haricot."
+    },
+    {
+      "nom": "Amaryllidacées (Alliacées)",
+      "delaiRetourMinAnnees": 4,
+      "delaiRetourConseilleAnnees": 5,
+      "remarque": "Ail, oignon, poireau, cébette. Pourriture blanche : délai long (jusqu'à 7-8 ans en Bretagne)."
+    },
+    {
+      "nom": "Lamiacées",
+      "delaiRetourMinAnnees": 2,
+      "delaiRetourConseilleAnnees": 3,
+      "remarque": "Basilic. Peu de maladies du sol connues ; mildiou du basilic sous abri."
+    },
+    {
+      "nom": "Zingibéracées",
+      "delaiRetourMinAnnees": 3,
+      "delaiRetourConseilleAnnees": 4,
+      "remarque": "Gingembre. Peu de références en France ; prudence (pourritures du rhizome)."
+    }
+  ],
+  "especes": [
+    {
+      "nom": "ail",
+      "famille": "Amaryllidacées (Alliacées)",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "aneth",
+      "famille": "Apiacées",
+      "categorie": "aromatique",
+      "uniteRecolte": "botte"
+    },
+    {
+      "nom": "aubergine",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "basilic",
+      "famille": "Lamiacées",
+      "categorie": "aromatique",
+      "uniteRecolte": "botte"
+    },
+    {
+      "nom": "bette",
+      "famille": "Amaranthacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "betterave",
+      "famille": "Amaranthacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "brocoli",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "carotte",
+      "famille": "Apiacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "chicorée frisée",
+      "famille": "Astéracées",
+      "categorie": "legume",
+      "uniteRecolte": "piece"
+    },
+    {
+      "nom": "chou kale",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "chou pommé",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "uniteRecolte": "piece"
+    },
+    {
+      "nom": "chou-fleur",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "uniteRecolte": "piece"
+    },
+    {
+      "nom": "concombre",
+      "famille": "Cucurbitacées",
+      "categorie": "legume",
+      "uniteRecolte": "piece"
+    },
+    {
+      "nom": "coriandre",
+      "famille": "Apiacées",
+      "categorie": "aromatique",
+      "uniteRecolte": "botte"
+    },
+    {
+      "nom": "courge d'hiver",
+      "famille": "Cucurbitacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "courgette",
+      "famille": "Cucurbitacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "cébette",
+      "famille": "Amaryllidacées (Alliacées)",
+      "categorie": "legume",
+      "uniteRecolte": "botte"
+    },
+    {
+      "nom": "céleri branche",
+      "famille": "Apiacées",
+      "categorie": "legume",
+      "uniteRecolte": "piece"
+    },
+    {
+      "nom": "fenouil",
+      "famille": "Apiacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "gingembre",
+      "famille": "Zingibéracées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "haricot",
+      "famille": "Fabacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "laitue",
+      "famille": "Astéracées",
+      "categorie": "legume",
+      "uniteRecolte": "piece"
+    },
+    {
+      "nom": "melon",
+      "famille": "Cucurbitacées",
+      "categorie": "legume",
+      "uniteRecolte": "piece"
+    },
+    {
+      "nom": "mesclun",
+      "famille": "Astéracées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "navet",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "uniteRecolte": "botte"
+    },
+    {
+      "nom": "oignon",
+      "famille": "Amaryllidacées (Alliacées)",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "piment",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "poireau",
+      "famille": "Amaryllidacées (Alliacées)",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "pois",
+      "famille": "Fabacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "poivron",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "pomme de terre",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "radis",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "uniteRecolte": "botte"
+    },
+    {
+      "nom": "roquette",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "tomate",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "épinard",
+      "famille": "Amaranthacées",
+      "categorie": "legume",
+      "uniteRecolte": "kg"
+    }
+  ],
+  "itineraires": [
+    {
+      "espece": "aubergine",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "nom": "Aubergine sous serre chauffée, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "serre",
+      "periodeUsage": {
+        "debutSemaine": 10,
+        "finSemaine": 14
+      },
+      "dureePepiniereJours": 60,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 1,
+        "ecartementCm": 50,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 60,
+      "fenetreRecolteJours": 120,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 3.0
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "OptiAbriBio – rotations Solanacées/Cucurbitacées sous abris en bio (compte rendu)",
+          "url": "https://orgprints.org/id/eprint/43816/1/CR_OptiAbriBio_Valo.pdf"
+        }
+      ],
+      "aVerifier": "Rendement très dépendant du chauffage et de la durée de culture ; plant greffé possible."
+    },
+    {
+      "espece": "aubergine",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "nom": "Aubergine sous tunnel ou plein champ, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "tunnel",
+      "periodeUsage": {
+        "debutSemaine": 18,
+        "finSemaine": 22
+      },
+      "dureePepiniereJours": 55,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 1,
+        "ecartementCm": 60,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 70,
+      "fenetreRecolteJours": 75,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 2.0
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "OptiAbriBio – rotations Solanacées/Cucurbitacées sous abris en bio (compte rendu)",
+          "url": "https://orgprints.org/id/eprint/43816/1/CR_OptiAbriBio_Valo.pdf"
+        }
+      ],
+      "aVerifier": "En plein champ au nord de la Loire, rendement nettement plus faible."
+    },
+    {
+      "espece": "poivron",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "nom": "Poivron sous serre, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "serre",
+      "periodeUsage": {
+        "debutSemaine": 15,
+        "finSemaine": 18
+      },
+      "dureePepiniereJours": 60,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 45,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 75,
+      "fenetreRecolteJours": 100,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 2.0
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "OptiAbriBio – rotations Solanacées/Cucurbitacées sous abris en bio (compte rendu)",
+          "url": "https://orgprints.org/id/eprint/43816/1/CR_OptiAbriBio_Valo.pdf"
+        }
+      ],
+      "aVerifier": "Durée avant récolte : poivron vert plus tôt, coloré 2-3 semaines plus tard."
+    },
+    {
+      "espece": "poivron",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "nom": "Poivron sous tunnel ou plein champ, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "tunnel",
+      "periodeUsage": {
+        "debutSemaine": 19,
+        "finSemaine": 22
+      },
+      "dureePepiniereJours": 60,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 50,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 80,
+      "fenetreRecolteJours": 70,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 1.5
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique gestion des abris",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2021/04/FICHE_TK_GESTION_ABRIS_WEB.pdf"
+        }
+      ],
+      "aVerifier": "Rendement plein champ faible en zone fraîche ; à ajuster par région."
+    },
+    {
+      "espece": "piment",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "nom": "Piment fort sous tunnel, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "tunnel",
+      "periodeUsage": {
+        "debutSemaine": 19,
+        "finSemaine": 22
+      },
+      "dureePepiniereJours": 60,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 45,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 80,
+      "fenetreRecolteJours": 75,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.8
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique gestion des abris",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2021/04/FICHE_TK_GESTION_ABRIS_WEB.pdf"
+        }
+      ],
+      "aVerifier": "Rendement très variable selon le type (Cayenne, Espelette, habanero)."
+    },
+    {
+      "espece": "tomate",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "nom": "Tomate sous serre, plant greffé deux têtes",
+      "mode": "plant_achete",
+      "typeAbri": "serre",
+      "periodeUsage": {
+        "debutSemaine": 12,
+        "finSemaine": 16
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 1,
+        "ecartementCm": 50,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 70,
+      "fenetreRecolteJours": 110,
+      "margeSecuritePct": 10,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 8.0
+      },
+      "sources": [
+        {
+          "titre": "GRAB – Bilan essai variétés tomate grappe sous abri bio 2021",
+          "url": "https://www.grab.fr/wp-content/uploads/2021/07/12-bilan-6-07-21-essai-GRAB-varietes-tomate-grappe-2021.pdf"
+        },
+        {
+          "titre": "GRAB – Essai variétés tomate grappe (L21PACA01107)",
+          "url": "https://www.grab.fr/wp-content/uploads/2022/11/L21PACA01107-varietes-TOMATE-GRAPPE.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Rendement par plant greffé deux têtes : 6 à 12 kg selon durée et chauffage."
+    },
+    {
+      "espece": "tomate",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "nom": "Tomate sous tunnel ou plein champ, plant maison franc",
+      "mode": "plant_maison",
+      "typeAbri": "tunnel",
+      "periodeUsage": {
+        "debutSemaine": 17,
+        "finSemaine": 22
+      },
+      "dureePepiniereJours": 50,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 1,
+        "ecartementCm": 40,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 65,
+      "fenetreRecolteJours": 75,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 4.0
+      },
+      "sources": [
+        {
+          "titre": "GRAB – Bilan essai variétés tomate grappe sous abri bio 2021",
+          "url": "https://www.grab.fr/wp-content/uploads/2021/07/12-bilan-6-07-21-essai-GRAB-varietes-tomate-grappe-2021.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Plein champ : mildiou et cycle plus court, rendement souvent 2-3 kg/plant."
+    },
+    {
+      "espece": "pomme de terre",
+      "famille": "Solanacées",
+      "categorie": "legume",
+      "nom": "Pomme de terre primeur, plant certifié",
+      "mode": "plant_achete",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 11,
+        "finSemaine": 18
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 1,
+        "ecartementCm": 30,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 90,
+      "fenetreRecolteJours": 30,
+      "margeSecuritePct": 10,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.8
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture Corrèze – Fiche technique pomme de terre bio (2013)",
+          "url": "https://correze.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/FicheTec_pommeTerreBio_2013.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture de l'Ain – Culture biologique de la pomme de terre (2013)",
+          "url": "https://ain.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_pomme_de_terre_2013.pdf"
+        }
+      ],
+      "aVerifier": "Une seule rangée par planche de 75 cm pour butter ; rendement 5 à 45 t/ha."
+    },
+    {
+      "espece": "gingembre",
+      "famille": "Zingibéracées",
+      "categorie": "legume",
+      "nom": "Gingembre primeur sous serre, rhizomes prégermés",
+      "mode": "plant_maison",
+      "typeAbri": "serre",
+      "periodeUsage": {
+        "debutSemaine": 18,
+        "finSemaine": 21
+      },
+      "dureePepiniereJours": 49,
+      "alveolesParPlaque": null,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 25,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 120,
+      "fenetreRecolteJours": 45,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.4
+      },
+      "sources": [
+        {
+          "titre": "UNH Extension – Ginger production in high tunnels",
+          "url": "https://extension.unh.edu/resources/files/Resource007161_Rep10344.pdf"
+        },
+        {
+          "titre": "University of Delaware Extension – Growing Baby Ginger",
+          "url": "https://sites.udel.edu/weeklycropupdate?p=21228"
+        }
+      ],
+      "aVerifier": "Culture rare en France : références surtout nord-américaines, rendement et durée très incertains."
+    },
+    {
+      "espece": "concombre",
+      "famille": "Cucurbitacées",
+      "categorie": "legume",
+      "nom": "Concombre sous serre, palissé, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "serre",
+      "periodeUsage": {
+        "debutSemaine": 14,
+        "finSemaine": 26
+      },
+      "dureePepiniereJours": 25,
+      "alveolesParPlaque": 40,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 1,
+        "ecartementCm": 40,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 45,
+      "fenetreRecolteJours": 60,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 5.0
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "OptiAbriBio – rotations Solanacées/Cucurbitacées sous abris en bio (compte rendu)",
+          "url": "https://orgprints.org/id/eprint/43816/1/CR_OptiAbriBio_Valo.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique gestion des abris",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2021/04/FICHE_TK_GESTION_ABRIS_WEB.pdf"
+        }
+      ],
+      "aVerifier": "Rendement selon type (long, mini) et taille ; souvent deux plantations successives."
+    },
+    {
+      "espece": "courgette",
+      "famille": "Cucurbitacées",
+      "categorie": "legume",
+      "nom": "Courgette plein champ, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 16,
+        "finSemaine": 28
+      },
+      "dureePepiniereJours": 25,
+      "alveolesParPlaque": 40,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 1,
+        "ecartementCm": 70,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 45,
+      "fenetreRecolteJours": 60,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 4.0
+      },
+      "sources": [
+        {
+          "titre": "Agrobio Bretagne – Fiche technique courgette",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2010/09/Courgettes.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Occitanie – Fiche technico-économique courgette plein champ (2013)",
+          "url": "https://ariege.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Occitanie/FTE_courgette_plein_champ_2013.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Fenêtre de récolte limitée par l'oïdium ; rendement 3 à 6 kg/plant."
+    },
+    {
+      "espece": "courge d'hiver",
+      "famille": "Cucurbitacées",
+      "categorie": "legume",
+      "nom": "Courge d'hiver (potimarron, butternut), plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 20,
+        "finSemaine": 24
+      },
+      "dureePepiniereJours": 25,
+      "alveolesParPlaque": 40,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 1,
+        "ecartementCm": 80,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 100,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 2.5
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture Haute-Garonne/Gers – Fiche courge (2022)",
+          "url": "https://gers.chambre-agriculture.fr/fileadmin/user_upload/Occitanie/067_Inst-Gers/documents/agriculturebiologique/Bulletins_techniques/maraichage/CDA31-fiche_courge-10-2022-.pdf"
+        },
+        {
+          "titre": "CAB Pays de la Loire – Fiche technique courges",
+          "url": "https://www.la-cab.fr/wp-content/uploads/2020/10/fichetk_courges.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Rendement 10 à 20 t/ha et 20 % de pertes au stockage ; ajuster selon variété."
+    },
+    {
+      "espece": "melon",
+      "famille": "Cucurbitacées",
+      "categorie": "legume",
+      "nom": "Melon sous chenille, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "chenille",
+      "periodeUsage": {
+        "debutSemaine": 18,
+        "finSemaine": 23
+      },
+      "dureePepiniereJours": 25,
+      "alveolesParPlaque": 40,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 1,
+        "ecartementCm": 60,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 75,
+      "fenetreRecolteJours": 30,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 2.5
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "APREL / DEPHY – Fiche PBI melon sous abri (2023)",
+          "url": "https://pprod.ecophytopic.fr/sites/default/files/2024-03/23-027%20AGRECOMEL%20PBI%20melon%202023.pdf"
+        }
+      ],
+      "aVerifier": "Abri le plus courant selon la région : plein champ dans le Sud, chenille ailleurs."
+    },
+    {
+      "espece": "ail",
+      "famille": "Amaryllidacées (Alliacées)",
+      "categorie": "legume",
+      "nom": "Ail d'automne, caïeux",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 43,
+        "finSemaine": 49
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 4,
+        "ecartementCm": 12,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": 1,
+      "dureeAvantRecolteJours": 220,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 10,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 1.6
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture Occitanie – BSV bilan ail 2021",
+          "url": "https://occitanie.chambre-agriculture.fr/fileadmin/user_upload/Occitanie/512_Fichiers-communs/documents/BSV/BSV_ex-MP/Bilans/BSV_BILAN_AIL_MP_2021.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Dordogne – Bulletin maraîchage AB, septembre 2022",
+          "url": "https://dordogne.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/CRANA_BIO/MARAICHAGE_AB_BULLETIN_SEPT_2022.pdf"
+        }
+      ],
+      "aVerifier": "Écartement et rendement au mètre peu documentés en source publique ; à confirmer."
+    },
+    {
+      "espece": "oignon",
+      "famille": "Amaryllidacées (Alliacées)",
+      "categorie": "legume",
+      "nom": "Oignon frais (botte ou primeur), mottes",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 10,
+        "finSemaine": 15
+      },
+      "dureePepiniereJours": 50,
+      "alveolesParPlaque": 104,
+      "grainesParMotte": 5,
+      "plantsParMotte": 4,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 3,
+        "ecartementCm": 25,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 75,
+      "fenetreRecolteJours": 30,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 4.0
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture Occitanie – Fiche technico-économique oignon botte (2012)",
+          "url": "https://aude.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Occitanie/FTE_oignonbotte_2012.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Auvergne-Rhône-Alpes – Culture biologique de l'oignon (2012)",
+          "url": "https://aura.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_oignon_2012.pdf"
+        }
+      ],
+      "aVerifier": "Nombre d'oignons par motte et poids vendu en botte à ajuster."
+    },
+    {
+      "espece": "oignon",
+      "famille": "Amaryllidacées (Alliacées)",
+      "categorie": "legume",
+      "nom": "Oignon de conservation, bulbilles",
+      "mode": "plant_achete",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 9,
+        "finSemaine": 14
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 3,
+        "ecartementCm": 6,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 130,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 10,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 4.0
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture Auvergne-Rhône-Alpes – Culture biologique de l'oignon (2012)",
+          "url": "https://aura.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_oignon_2012.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche n°29 oignon",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2014/03/FicheFL29_oignon.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Plantation après mi-mars : montaison moindre ; rendement bio très variable."
+    },
+    {
+      "espece": "cébette",
+      "famille": "Amaryllidacées (Alliacées)",
+      "categorie": "legume",
+      "nom": "Oignon vert (cébette), mottes",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 10,
+        "finSemaine": 32
+      },
+      "dureePepiniereJours": 45,
+      "alveolesParPlaque": 104,
+      "grainesParMotte": 8,
+      "plantsParMotte": 6,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 3,
+        "ecartementCm": 20,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 50,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.25
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture Occitanie – Fiche technico-économique oignon botte (2012)",
+          "url": "https://aude.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Occitanie/FTE_oignonbotte_2012.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Rendement compté par motte (une botte environ) ; espèce selon variété."
+    },
+    {
+      "espece": "poireau",
+      "famille": "Amaryllidacées (Alliacées)",
+      "categorie": "legume",
+      "nom": "Poireau d'automne-hiver, plant racines nues",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 22,
+        "finSemaine": 30
+      },
+      "dureePepiniereJours": 80,
+      "alveolesParPlaque": null,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 25,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 3,
+        "ecartementCm": 12,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 120,
+      "fenetreRecolteJours": 90,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.25
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture Charente-Maritime – Fiche technique poireau bio (2013)",
+          "url": "https://charente-maritime.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/FicheTec_poireauBio_2013.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique poireau (2019)",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2020/12/FT-2019-Poireau-BD.pdf"
+        }
+      ],
+      "aVerifier": "Pépinière en planche (pas de plaque) ; perte en pépinière à affiner."
+    },
+    {
+      "espece": "carotte",
+      "famille": "Apiacées",
+      "categorie": "legume",
+      "nom": "Carotte de conservation, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 20,
+        "finSemaine": 26
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 4,
+        "grainesParMetre": 50
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 120,
+      "fenetreRecolteJours": 60,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 5.0
+      },
+      "sources": [
+        {
+          "titre": "FRAB AURA – Fiche pratique remarquable carotte",
+          "url": "https://ecophytopic.fr/sites/default/files/2021-09/Fiche_pratique_remarquable_L%C3%A9gumes%20CAROTTE%20FRAB%20AURA%20VF_1.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Auvergne-Rhône-Alpes – Culture biologique de la carotte (2012)",
+          "url": "https://aura.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_carotte_2012.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Levée irrégulière en bio : rendement réel souvent 30 à 35 t/ha."
+    },
+    {
+      "espece": "carotte",
+      "famille": "Apiacées",
+      "categorie": "legume",
+      "nom": "Carotte botte, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 8,
+        "finSemaine": 32
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 4,
+        "grainesParMetre": 70
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 85,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 25,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 4.0
+      },
+      "sources": [
+        {
+          "titre": "Ecophytopic – Produire des carottes bottes bio toute l'année sur compost de déchets verts",
+          "url": "https://ecophytopic.fr/sites/default/files/2024-06/Produire%20des%20carottes%20bottes%20bio%20toute%20l%E2%80%99ann%C3%A9e%20sur%20compost%20de%20d%C3%A9chets%20verts.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Auvergne-Rhône-Alpes – Culture biologique de la carotte (2012)",
+          "url": "https://aura.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_carotte_2012.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Semis précoces (février) sous tunnel ou voile : durée plus longue."
+    },
+    {
+      "espece": "céleri branche",
+      "famille": "Apiacées",
+      "categorie": "legume",
+      "nom": "Céleri branche, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 18,
+        "finSemaine": 26
+      },
+      "dureePepiniereJours": 60,
+      "alveolesParPlaque": 104,
+      "grainesParMotte": 2,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 20,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 30,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 90,
+      "fenetreRecolteJours": 30,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.8
+      },
+      "sources": [
+        {
+          "titre": "GRAB / Réf'Bio PACA – Dossier céleri branche (2023)",
+          "url": "https://www.grab.fr/wp-content/uploads/2023/08/RefBio-Maraich_Dossier-celeri-branchePACA_juillet-aout2023.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Pépinière longue et levée lente : perte en pépinière incertaine."
+    },
+    {
+      "espece": "fenouil",
+      "famille": "Apiacées",
+      "categorie": "legume",
+      "nom": "Fenouil mini, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 14,
+        "finSemaine": 34
+      },
+      "dureePepiniereJours": 30,
+      "alveolesParPlaque": 150,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 3,
+        "ecartementCm": 20,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 50,
+      "fenetreRecolteJours": 10,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.2
+      },
+      "sources": [
+        {
+          "titre": "GRAB / Réf'Bio PACA – Dossier fenouil sous abris (2025)",
+          "url": "https://www.grab.fr/wp-content/uploads/2025/07/RefBio2025-dossier-fenouil-abris.pdf"
+        }
+      ],
+      "aVerifier": "Montaison en jours longs ; poids du mini-fenouil à fixer selon vente."
+    },
+    {
+      "espece": "aneth",
+      "famille": "Apiacées",
+      "categorie": "aromatique",
+      "nom": "Aneth, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 15,
+        "finSemaine": 32
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 3,
+        "grainesParMetre": 60
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 45,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 25,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 0.8
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Herb Growing Guide Comparison Chart",
+          "url": "https://johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw80b19107/assets/information/herb-growing-guide-comparison-chart.pdf"
+        }
+      ],
+      "aVerifier": "Montaison rapide l'été ; rendement en bottes par mètre peu documenté."
+    },
+    {
+      "espece": "coriandre",
+      "famille": "Apiacées",
+      "categorie": "aromatique",
+      "nom": "Coriandre, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 12,
+        "finSemaine": 38
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 3,
+        "grainesParMetre": 80
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 45,
+      "fenetreRecolteJours": 14,
+      "margeSecuritePct": 25,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 0.8
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Herb Growing Guide Comparison Chart",
+          "url": "https://johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw80b19107/assets/information/herb-growing-guide-comparison-chart.pdf"
+        }
+      ],
+      "aVerifier": "Monte vite à graines en été ; éviter semis de juin-juillet."
+    },
+    {
+      "espece": "basilic",
+      "famille": "Lamiacées",
+      "categorie": "aromatique",
+      "nom": "Basilic sous tunnel, mottes multigraines",
+      "mode": "plant_maison",
+      "typeAbri": "tunnel",
+      "periodeUsage": {
+        "debutSemaine": 19,
+        "finSemaine": 26
+      },
+      "dureePepiniereJours": 35,
+      "alveolesParPlaque": 104,
+      "grainesParMotte": 4,
+      "plantsParMotte": 3,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 3,
+        "ecartementCm": 25,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 30,
+      "fenetreRecolteJours": 75,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.5
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Dolly Organic Basil, informations de culture",
+          "url": "https://www.johnnyseeds.com/herbs/basil/dolly-organic-basil-seed-3875G.html"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Herb Growing Guide Comparison Chart",
+          "url": "https://johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw80b19107/assets/information/herb-growing-guide-comparison-chart.pdf"
+        }
+      ],
+      "aVerifier": "Rendement compté par motte de 3 plants ; mildiou du basilic fréquent."
+    },
+    {
+      "espece": "bette",
+      "famille": "Amaranthacées",
+      "categorie": "legume",
+      "nom": "Bette (blette), plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 14,
+        "finSemaine": 30
+      },
+      "dureePepiniereJours": 35,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 15,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 30,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 55,
+      "fenetreRecolteJours": 90,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 1.5
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Bright Lights Swiss Chard, informations de culture",
+          "url": "https://www.johnnyseeds.com/vegetables/swiss-chard/bright-lights-swiss-chard-seed-703D.html"
+        }
+      ],
+      "aVerifier": "Rendement par plant sur une longue cueillette feuille à feuille : à confirmer."
+    },
+    {
+      "espece": "betterave",
+      "famille": "Amaranthacées",
+      "categorie": "legume",
+      "nom": "Betterave, mottes multigraines",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 13,
+        "finSemaine": 28
+      },
+      "dureePepiniereJours": 28,
+      "alveolesParPlaque": 104,
+      "grainesParMotte": 3,
+      "plantsParMotte": 4,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 3,
+        "ecartementCm": 25,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 60,
+      "fenetreRecolteJours": 30,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 2.5
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture Corrèze – Fiche technique betterave rouge bio (2013)",
+          "url": "https://correze.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/FicheTec_betteraveRougeBio_2013.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Plants par motte (glomérules) et calibre visé changent fortement le rendement."
+    },
+    {
+      "espece": "épinard",
+      "famille": "Amaranthacées",
+      "categorie": "legume",
+      "nom": "Épinard de printemps, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 9,
+        "finSemaine": 17
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 4,
+        "grainesParMetre": 60
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 45,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 25,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 1.8
+      },
+      "sources": [
+        {
+          "titre": "Agrobio Bretagne – Fiche technique épinard",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2010/09/Epinard.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Semis d'automne aussi possible ; monte en jours longs, éviter mai-juillet."
+    },
+    {
+      "espece": "épinard",
+      "famille": "Amaranthacées",
+      "categorie": "legume",
+      "nom": "Épinard d'hiver sous tunnel, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "tunnel",
+      "periodeUsage": {
+        "debutSemaine": 37,
+        "finSemaine": 42
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 4,
+        "grainesParMetre": 60
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 60,
+      "fenetreRecolteJours": 100,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 2.0
+      },
+      "sources": [
+        {
+          "titre": "APREL / GRAB – Fiche technique épinard bio sous abri (2008)",
+          "url": "https://www.grab.fr/wp-content/uploads/2016/07/4-Fiche-EPINARD-bio-sous-abri-aprel-grab-2008.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique épinard",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2010/09/Epinard.pdf"
+        }
+      ],
+      "aVerifier": "Nombre de coupes et rendement d'hiver très dépendants de la lumière."
+    },
+    {
+      "espece": "brocoli",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "nom": "Brocoli, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 14,
+        "finSemaine": 32
+      },
+      "dureePepiniereJours": 28,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 40,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 65,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.4
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture des Bouches-du-Rhône – Fiche culturale choux (2013)",
+          "url": "https://www.grab.fr/wp-content/uploads/2020/05/3-Fiche-culturale-Choux-CA13-juillet-2013.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Durée très variable selon variété (45 à 90 jours) ; jets secondaires inclus."
+    },
+    {
+      "espece": "chou pommé",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "nom": "Chou pommé, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 13,
+        "finSemaine": 30
+      },
+      "dureePepiniereJours": 35,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 45,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 80,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 1.2
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture Auvergne-Rhône-Alpes – Culture biologique des choux (2013)",
+          "url": "https://aura.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_choux_2013.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Durée de 50 à 150 jours selon type : choisir l'itinéraire par variété."
+    },
+    {
+      "espece": "chou-fleur",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "nom": "Chou-fleur, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 14,
+        "finSemaine": 30
+      },
+      "dureePepiniereJours": 35,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 50,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 80,
+      "fenetreRecolteJours": 14,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 1.0
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture Auvergne-Rhône-Alpes – Culture biologique des choux (2013)",
+          "url": "https://aura.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_choux_2013.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Taux de pommes commercialisables souvent bas ; durée très variable selon variété."
+    },
+    {
+      "espece": "chou kale",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "nom": "Chou kale, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 17,
+        "finSemaine": 30
+      },
+      "dureePepiniereJours": 35,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 45,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 60,
+      "fenetreRecolteJours": 90,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.8
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Darkibor Organic (F1) Kale, informations de culture",
+          "url": "https://www.johnnyseeds.com/vegetables/kale/darkibor-organic-f1-kale-seed-3658G.html"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Rendement sur cueillette longue peu documenté en France."
+    },
+    {
+      "espece": "chou kale",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "nom": "Kale d'hiver sous tunnel, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "tunnel",
+      "periodeUsage": {
+        "debutSemaine": 36,
+        "finSemaine": 40
+      },
+      "dureePepiniereJours": 35,
+      "alveolesParPlaque": 77,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 40,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 60,
+      "fenetreRecolteJours": 120,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.6
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Darkibor Organic (F1) Kale, informations de culture",
+          "url": "https://www.johnnyseeds.com/vegetables/kale/darkibor-organic-f1-kale-seed-3658G.html"
+        }
+      ],
+      "aVerifier": "Croissance quasi nulle en décembre-janvier : fenêtre et rendement à vérifier."
+    },
+    {
+      "espece": "navet",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "nom": "Navet primeur (rabiole, Hakurei), semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 10,
+        "finSemaine": 36
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 4,
+        "grainesParMetre": 40
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 40,
+      "fenetreRecolteJours": 14,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 2.0
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Hakurei (F1) Turnip, informations de culture",
+          "url": "https://johnnyseeds.com/vegetables/turnips/hakurei-f1-turnip-seed-706.html"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Altise en été ; poids de la botte et densité à ajuster."
+    },
+    {
+      "espece": "radis",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "nom": "Radis rond, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 8,
+        "finSemaine": 38
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 6,
+        "grainesParMetre": 25
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 30,
+      "fenetreRecolteJours": 10,
+      "margeSecuritePct": 25,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 2.4
+      },
+      "sources": [
+        {
+          "titre": "GRAB / Réf'Bio PACA – Dossier radis sous abris (2024)",
+          "url": "https://grab.fr/wp-content/uploads/2024/07/RefBio-juilet-aout2024_dossier-RADIS-sous-abris.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique radis",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2012/04/fiche_radis.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Cycle 3 à 5 semaines en plein champ, 6 à 10 sous abri en hiver."
+    },
+    {
+      "espece": "roquette",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "nom": "Roquette, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 12,
+        "finSemaine": 35
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 5,
+        "grainesParMetre": 150
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 30,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 25,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 1.0
+      },
+      "sources": [
+        {
+          "titre": "GRAB – DIVERMABIO, variétés de roquette sous abris (2019)",
+          "url": "https://www.grab.fr/wp-content/uploads/2020/09/L19-01107-2-DIVERMABIO-vari%C3%A9t%C3%A9s-roquette-sous-abris.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique mesclun",
+          "url": "https://www.agrobio-bretagne.org/voy_content/uploads/2021/12/Web_32-MESCLUN.pdf"
+        }
+      ],
+      "aVerifier": "Densité au mètre et nombre de coupes peu documentés ; altise en été."
+    },
+    {
+      "espece": "roquette",
+      "famille": "Brassicacées",
+      "categorie": "legume",
+      "nom": "Roquette d'hiver sous tunnel, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "tunnel",
+      "periodeUsage": {
+        "debutSemaine": 37,
+        "finSemaine": 44
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 5,
+        "grainesParMetre": 150
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 40,
+      "fenetreRecolteJours": 60,
+      "margeSecuritePct": 25,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 1.0
+      },
+      "sources": [
+        {
+          "titre": "GRAB – DIVERMABIO, variétés de roquette sous abris (2019)",
+          "url": "https://www.grab.fr/wp-content/uploads/2020/09/L19-01107-2-DIVERMABIO-vari%C3%A9t%C3%A9s-roquette-sous-abris.pdf"
+        }
+      ],
+      "aVerifier": "Repousse hivernale lente : nombre de coupes à vérifier."
+    },
+    {
+      "espece": "laitue",
+      "famille": "Astéracées",
+      "categorie": "legume",
+      "nom": "Laitue (batavia, feuille de chêne), plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 10,
+        "finSemaine": 36
+      },
+      "dureePepiniereJours": 28,
+      "alveolesParPlaque": 150,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 3,
+        "ecartementCm": 30,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 50,
+      "fenetreRecolteJours": 10,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.4
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture de l'Ain – Culture biologique des laitues (2013)",
+          "url": "https://ain.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_laitues_2013.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Cycle de 35 à 65 jours selon saison : prévoir un itinéraire par saison."
+    },
+    {
+      "espece": "laitue",
+      "famille": "Astéracées",
+      "categorie": "legume",
+      "nom": "Laitue sucrine, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 10,
+        "finSemaine": 36
+      },
+      "dureePepiniereJours": 28,
+      "alveolesParPlaque": 150,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 3,
+        "ecartementCm": 25,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 45,
+      "fenetreRecolteJours": 10,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.2
+      },
+      "sources": [
+        {
+          "titre": "Chambre d'agriculture de l'Ain – Culture biologique des laitues (2013)",
+          "url": "https://ain.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_laitues_2013.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Écartement serré possible (20 cm) ; poids vendu à la pièce variable."
+    },
+    {
+      "espece": "chicorée frisée",
+      "famille": "Astéracées",
+      "categorie": "legume",
+      "nom": "Chicorée frisée d'automne, plant maison",
+      "mode": "plant_maison",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 26,
+        "finSemaine": 36
+      },
+      "dureePepiniereJours": 30,
+      "alveolesParPlaque": 150,
+      "grainesParMotte": 1,
+      "plantsParMotte": 1,
+      "pertePepinierePct": 10,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 35,
+        "disposition": "quinconce"
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 70,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 15,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.5
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "GRAB / Réf'Bio PACA – Dossier céleri branche (2023)",
+          "url": "https://www.grab.fr/wp-content/uploads/2023/08/RefBio-Maraich_Dossier-celeri-branchePACA_juillet-aout2023.pdf"
+        }
+      ],
+      "aVerifier": "Peu de fiches publiques chiffrées ; durée selon variété et date."
+    },
+    {
+      "espece": "mesclun",
+      "famille": "Astéracées",
+      "categorie": "legume",
+      "nom": "Mesclun, semis direct en lignes",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 12,
+        "finSemaine": 36
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 6,
+        "grainesParMetre": 200
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 30,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 25,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 1.2
+      },
+      "sources": [
+        {
+          "titre": "Agrobio Bretagne – Fiche technique mesclun",
+          "url": "https://www.agrobio-bretagne.org/voy_content/uploads/2021/12/Web_32-MESCLUN.pdf"
+        }
+      ],
+      "aVerifier": "Mélange multi-familles ; rendement selon nombre de coupes."
+    },
+    {
+      "espece": "mesclun",
+      "famille": "Astéracées",
+      "categorie": "legume",
+      "nom": "Mesclun d'hiver sous tunnel, semis direct en lignes",
+      "mode": "semis_direct",
+      "typeAbri": "tunnel",
+      "periodeUsage": {
+        "debutSemaine": 37,
+        "finSemaine": 44
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 6,
+        "grainesParMetre": 200
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 45,
+      "fenetreRecolteJours": 60,
+      "margeSecuritePct": 25,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 1.2
+      },
+      "sources": [
+        {
+          "titre": "Agrobio Bretagne – Fiche technique mesclun",
+          "url": "https://www.agrobio-bretagne.org/voy_content/uploads/2021/12/Web_32-MESCLUN.pdf"
+        }
+      ],
+      "aVerifier": "Durée et nombre de coupes très dépendants de la lumière hivernale."
+    },
+    {
+      "espece": "haricot",
+      "famille": "Fabacées",
+      "categorie": "legume",
+      "nom": "Haricot nain, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 19,
+        "finSemaine": 30
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 2,
+        "grainesParMetre": 20
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 60,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 1.3
+      },
+      "sources": [
+        {
+          "titre": "Agrobio Bretagne – Fiche technique haricot",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2012/04/fiche_haricot.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Tarn-et-Garonne – Fiche technico-économique haricot vert plein champ (2013)",
+          "url": "https://agri82.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Occitanie/FTE_haricotvert_plein_champ_2013.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Levée sensible au froid (sol < 12 °C) ; rendement bio variable."
+    },
+    {
+      "espece": "haricot",
+      "famille": "Fabacées",
+      "categorie": "legume",
+      "nom": "Haricot grimpant, semis direct en poquets",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 19,
+        "finSemaine": 27
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "ecartement",
+        "rangsParPlanche": 2,
+        "ecartementCm": 40,
+        "disposition": "alignee"
+      },
+      "grainesParPoquet": 5,
+      "dureeAvantRecolteJours": 70,
+      "fenetreRecolteJours": 45,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 2.5
+      },
+      "sources": [
+        {
+          "titre": "Agrobio Bretagne – Fiche technique haricot",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2012/04/fiche_haricot.pdf"
+        },
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Rendement selon durée de cueillette ; souvent cultivé sous tunnel aussi."
+    },
+    {
+      "espece": "pois",
+      "famille": "Fabacées",
+      "categorie": "legume",
+      "nom": "Pois mangetout ou sucré, semis direct",
+      "mode": "semis_direct",
+      "typeAbri": "plein_champ",
+      "periodeUsage": {
+        "debutSemaine": 7,
+        "finSemaine": 14
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "metre_lineaire",
+        "rangsParPlanche": 2,
+        "grainesParMetre": 60
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 75,
+      "fenetreRecolteJours": 21,
+      "margeSecuritePct": 20,
+      "rendementAttendu": {
+        "par": "metre",
+        "kg": 0.8
+      },
+      "sources": [
+        {
+          "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
+          "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        }
+      ],
+      "aVerifier": "Peu de références françaises publiques pour le mangetout ; rendement à confirmer."
+    }
+  ]
+}
