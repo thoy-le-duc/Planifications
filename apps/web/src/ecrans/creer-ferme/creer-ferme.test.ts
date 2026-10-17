@@ -30,7 +30,7 @@
  *
  * messageCreation(raison: RaisonEchecCreation): string — en français, sans jargon.
  *
- * type EcranSansFerme = 'formulaire' | 'hors-ligne' | 'premiere-synchro'
+ * type EcranSansFerme = 'formulaire' | 'hors-ligne' | 'premiere-synchro' | 'session-expiree' (T39b)
  * choisirEcranSansFerme({ synchro: EtatSynchro; enLigne: boolean }): EcranSansFerme
  *   (base 'sans-ferme' : la coquille ne le demande que là)
  *   hors ligne (navigator.onLine faux) → 'hors-ligne' : on ne propose pas un bouton qui échouera ;
@@ -222,6 +222,6 @@ describe('T39 — choisirEcranSansFerme : selon le réseau et la synchro', () =>
   it('en ligne, synchro faite (ou appli sans service de synchro) : formulaire', () => {
     expect(choisirEcranSansFerme({ synchro: 'synchronise', enLigne: true })).toBe('formulaire');
     expect(choisirEcranSansFerme({ synchro: 'hors-ligne', enLigne: true })).toBe('formulaire');
-    expect(choisirEcranSansFerme({ synchro: 'session-expiree', enLigne: true })).toBe('formulaire');
+    // T39b (règle 4) : session expirée en ligne → 'session-expiree', plus le formulaire (suites.test.tsx).
   });
 });

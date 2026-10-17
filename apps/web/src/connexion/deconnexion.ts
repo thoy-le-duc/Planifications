@@ -3,7 +3,7 @@
  * lisible. Contrat : deconnexion.test.ts. Ni PowerSync ni jose : JavaScript de démarrage ;
  * l'effacement de la base locale est injecté (src/donnees, chargé à la demande).
  */
-import { cleChoix, cleFermeCreee, cleMontree } from '../donnees/ferme-memorisee.ts';
+import { cleChoix, cleFermeCreee, cleFermeEnCours, cleMontree } from '../donnees/ferme-memorisee.ts';
 import { cleRefusVus } from '../donnees/refus-vus.ts';
 import { cleInstantane } from '../ecrans/aujourdhui/cle-instantane.ts';
 import { cleInstantanePlan } from '../ecrans/plan/cle-instantane.ts';
@@ -155,13 +155,13 @@ export async function deconnecter(session: SessionConnexion, options: OptionsDec
   } finally {
     effacerSession(options.stockage);
     // Téléphone partagé : les refus vus du compte (T10i), l'instantané de sa journée (T13d), celui
-    // du début de son plan (T11g) et ses
-    // fermes retenues (choix T11, dernière montrée T13g ; T13l) ne restent pas, quoi qu'il arrive
-    // ensuite. Celles d'un autre compte ne sont pas touchées.
+    // du début de son plan (T11g) et ses fermes retenues (choix T11, dernière montrée T13g ; T13l ;
+    // créée et en cours d'envoi, T39 et T39b) ne restent pas, quoi qu'il arrive ensuite.
+    // Celles d'un autre compte ne sont pas touchées.
     const id = session.utilisateurId;
     // T14b : modèles et imports récents (planif:import:*), de toutes les fermes du téléphone.
     const s = options.stockage as Partial<Storage>;
-    const cles = [cleRefusVus(id), cleInstantane(id), cleInstantanePlan(id), cleChoix(id), cleMontree(id), cleFermeCreee(id)];
+    const cles = [cleRefusVus(id), cleInstantane(id), cleInstantanePlan(id), cleChoix(id), cleMontree(id), cleFermeCreee(id), cleFermeEnCours(id)];
     try {
       for (let i = 0; i < (s.length ?? 0); i++) {
         const c = s.key?.(i);

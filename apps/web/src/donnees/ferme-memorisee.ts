@@ -17,9 +17,30 @@ export const cleChoix = (utilisateurId: string): string => `planif.ferme-active.
 export const cleMontree = (utilisateurId: string): string => `planif.ferme-montree.${utilisateurId}`;
 /**
  * Clé de la ferme créée depuis ce téléphone et pas encore arrivée par la synchro (T39,
- * ecrans/creer-ferme/) ; effacée à la déconnexion.
+ * ecrans/creer-ferme/) ; effacée quand la base la désigne (./ferme-active.ts, T39b) et à la
+ * déconnexion.
  */
 export const cleFermeCreee = (utilisateurId: string): string => `planif.ferme-creee.${utilisateurId}`;
+/**
+ * T39b : id de la ferme en cours d'envoi (POST /fermes), rangé avant l'envoi et repris après un
+ * rechargement : une réponse perdue ne crée jamais une seconde ferme. Effacée quand la ferme est
+ * créée, quand la base la désigne, et à la déconnexion.
+ */
+export const cleFermeEnCours = (utilisateurId: string): string => `planif.ferme-en-cours.${utilisateurId}`;
+
+/**
+ * T39b : la ferme créée est arrivée par la synchro : plus rien à attendre ni à renvoyer. Stockage
+ * sans removeItem (bancs d'essai) : rien n'est retiré.
+ */
+export function oublierFermeCreee(stockage: Partial<Pick<Storage, 'removeItem'>>, utilisateurId: string): void {
+  for (const cle of [cleFermeCreee(utilisateurId), cleFermeEnCours(utilisateurId)]) {
+    try {
+      stockage.removeItem?.(cle);
+    } catch {
+      // Stockage refusé : rien de lisible à retirer.
+    }
+  }
+}
 
 function lire(stockage: Pick<Storage, 'getItem'>, cle: string): string | null {
   try {

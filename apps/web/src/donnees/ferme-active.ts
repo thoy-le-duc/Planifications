@@ -13,7 +13,7 @@
  */
 import type { Id } from '@planif/core';
 import { creerPorte, type BaseLocale, type PorteDonnees } from '@planif/sync';
-import { lireFermeMemorisee, memoriserFerme, noterFermeMontree } from './ferme-memorisee.ts';
+import { lireFermeMemorisee, memoriserFerme, noterFermeMontree, oublierFermeCreee } from './ferme-memorisee.ts';
 
 export { lireFermeMemorisee, memoriserFerme };
 
@@ -61,7 +61,7 @@ export function choisirFermeActive(fermes: readonly FermeDisponible[], memorisee
  */
 export function suivreFermeActive(
   base: BaseLocale,
-  o: { readonly utilisateurId: string; readonly stockage: Pick<Storage, 'getItem' | 'setItem'> },
+  o: { readonly utilisateurId: string; readonly stockage: Pick<Storage, 'getItem' | 'setItem'> & Partial<Pick<Storage, 'removeItem'>> },
   rappel: (e: FermeActive) => void,
   surEchec?: (erreur: unknown) => void,
 ): () => void {
@@ -80,6 +80,8 @@ export function suivreFermeActive(
     signalee = cle;
     // T13g : la ferme montrée, à part du choix de l'utilisateur (qui reste intact) ; '' : aucune.
     noterFermeMontree(o.stockage, o.utilisateurId, cle);
+    // T39b : une ferme est là, celle créée depuis ce téléphone n'est plus attendue (« creee »).
+    if (fermeId !== null) oublierFermeCreee(o.stockage, o.utilisateurId);
     rappel(
       fermeId === null
         ? { etat: 'sans-ferme' }
