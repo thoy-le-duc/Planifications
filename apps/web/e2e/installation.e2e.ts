@@ -1,4 +1,7 @@
-import { expect, test } from '@playwright/test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { chromium, expect, test, type BrowserContext, type Page } from '@playwright/test';
 
 /**
  * T40 — l'appli s'installe sur le téléphone (docs/backlog/T40-installer-appli.md).
@@ -10,6 +13,9 @@ import { expect, test } from '@playwright/test';
  *   2. le manifeste lu par Chromium (`Page.getAppManifest`) : sans erreur, `display` standalone,
  *      icônes PNG 192, 512 et maskable, chacune servie en `image/png` ;
  *   3. `apple-touch-icon` servi en PNG ; métas iOS dans la page.
+ *
+ * Profil persistant (dossier temporaire) : les contextes ordinaires de Playwright sont « privés »,
+ * et Chromium refuse d'y installer une appli (erreur `in-incognito`, sans rapport avec l'appli).
  */
 
 /** Temps laissé à l'appli pour enregistrer son service worker au repos, puis l'installer. */
@@ -22,7 +28,20 @@ interface IconeManifeste {
   readonly purpose?: string;
 }
 
-test('T40 : Chromium juge l’appli installable (manifeste, icônes, service worker)', async ({ page, context }) => {
+test('T40 : Chromium juge l’appli installable (manifeste, icônes, service worker)', async ({ baseURL, browserName, launchOptions }) => {
+  expect(browserName).toBe('chromium');
+  const profil = mkdtempSync(join(tmpdir(), 'planif-installation-'));
+  const context = await chromium.launchPersistentContext(profil, { ...launchOptions, ...(baseURL === undefined ? {} : { baseURL }) });
+  try {
+    const page = context.pages()[0] ?? (await context.newPage());
+    await verifierInstallable(page, context);
+  } finally {
+    await context.close();
+    rmSync(profil, { recursive: true, force: true });
+  }
+});
+
+async function verifierInstallable(page: Page, context: BrowserContext): Promise<void> {
   await page.goto('/');
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null, undefined, { timeout: DELAI_SERVICE_WORKER_MS });
 
@@ -64,4 +83,4 @@ test('T40 : Chromium juge l’appli installable (manifeste, icônes, service wor
   expect(reponse.headers()['content-type']).toContain('image/png');
   await expect(page.locator('meta[name="apple-mobile-web-app-capable"]')).toHaveAttribute('content', 'yes');
   await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute('content', /.+/);
-});
+}
