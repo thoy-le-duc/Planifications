@@ -187,7 +187,13 @@ describe('T39b — 2. attente bornée à 30 s', () => {
   });
 
   it.each([
-    ['première synchronisation', () => monter('connexion', surReessayer), 'premiere-synchro'],
+    [
+      'première synchronisation',
+      () => {
+        monter('connexion', surReessayer);
+      },
+      'premiere-synchro',
+    ],
     [
       'ferme créée, pas encore arrivée',
       () => {
