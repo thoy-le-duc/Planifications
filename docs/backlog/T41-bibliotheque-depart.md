@@ -18,8 +18,8 @@ Données : `packages/db/bibliotheque/depart.json` (10 familles, 35 espèces, 46 
 
 ## Critères d'acceptation
 
-- [ ] Test : chaque itinéraire du JSON passe `validerItineraire` après conversion ; familles et espèces cohérentes (toute espèce a sa famille, tout itinéraire son espèce).
-- [ ] Test d'intégration Postgres : migration appliquée deux fois → mêmes lignes, `ferme_id` NULL ; une ferme neuve les reçoit par la synchro (e2e:synchro si possible).
-- [ ] Test : « Adapter à ma ferme » crée une copie de la ferme avec les mêmes paramètres, modifiable, et la bibliothèque reste intacte.
-- [ ] Test : une série créée depuis un itinéraire de la bibliothèque a les bons paramètres.
-- [ ] `docs/modele-donnees.md` décrit la bibliothèque de départ et sa provenance. `pnpm verif` passe.
+- [x] Test : chaque itinéraire du JSON passe `validerItineraire` après conversion ; familles et espèces cohérentes (toute espèce a sa famille, tout itinéraire son espèce).
+- [x] Test d'intégration Postgres : migration appliquée deux fois → mêmes lignes, `ferme_id` NULL ; une ferme neuve les reçoit par la synchro (e2e:synchro si possible).
+- [x] Test : « Adapter à ma ferme » crée une copie de la ferme avec les mêmes paramètres, modifiable, et la bibliothèque reste intacte.
+- [x] Test : une série créée depuis un itinéraire de la bibliothèque a les bons paramètres.
+- [x] `docs/modele-donnees.md` décrit la bibliothèque de départ et sa provenance. `pnpm verif` passe.
