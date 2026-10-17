@@ -225,6 +225,13 @@
       "when": 1791567770195,
       "tag": "0031_debit_synchro",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792270915917,
+      "tag": "0032_bibliotheque_depart",
+      "breakpoints": true
     }
   ]
 }

@@ -306,6 +306,17 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
     setDepart({ ...d, numero: compteur.current });
   }
 
+  /**
+   * « Adapter pour ma ferme » (T24, T41) : formulaire en création sur la copie. Elle va sur
+   * l'espèce de la ferme quand la ferme a personnalisé l'espèce de la bibliothèque (T32g, même
+   * nom rapproché), sinon sur l'espèce de l'itinéraire.
+   */
+  function adapter(i: ItineraireLu): void {
+    const espece = especesTriees.find((e) => e.id === i.especeId);
+    const copie = espece?.fermeId === null ? deLaFerme.get(rapprocher(espece.nom)) : undefined;
+    ouvrir({ sorte: 'adaptation', itineraire: i, ...(copie === undefined ? {} : { especeId: copie }) });
+  }
+
   function ouvrirCroissance(especeId: string): void {
     setCroissance(especeId);
     if (Reglage !== null) return;
@@ -524,7 +535,7 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
                                 aria-label={`Adapter pour ma ferme : ${i.nom}`}
                                 className="itin-bouton-adapter"
                                 onClick={() => {
-                                  ouvrir({ sorte: 'adaptation', itineraire: i });
+                                  adapter(i);
                                 }}
                               >
                                 <Icone chemin={COPIE} taille={20} />
@@ -733,9 +744,7 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
           surFermer={() => {
             setDepart(null);
           }}
-          surAdapter={(i) => {
-            ouvrir({ sorte: 'adaptation', itineraire: i });
-          }}
+          surAdapter={adapter}
           surEnregistre={enregistre}
         />
       )}

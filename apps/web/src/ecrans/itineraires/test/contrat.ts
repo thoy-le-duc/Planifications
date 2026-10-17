@@ -48,7 +48,8 @@
  *     un bouton dont le nom commence par « Adapter pour ma ferme » ; aucun « Modifier ».
  *
  * « Adapter pour ma ferme » N'ÉCRIT RIEN : il ouvre le formulaire en création, prérempli avec la
- *   copie de l'itinéraire de la bibliothèque (même espèce, même variété, mêmes paramètres, travaux
+ *   copie de l'itinéraire de la bibliothèque (même espèce — T41 : celle de la ferme si elle a personnalisé
+ *   l'espèce de la bibliothèque, ../adapter-bibliotheque.test.tsx —, même variété, mêmes paramètres, travaux
  *   compris), nom « <nom> (ma ferme) » (coupé à 80 caractères au plus). L'enregistrement crée la
  *   copie dans la ferme, en une transaction, avec ce que le maraîcher a changé entre-temps. La
  *   ligne de la bibliothèque n'est jamais écrite.

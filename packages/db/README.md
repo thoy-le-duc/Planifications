@@ -15,6 +15,7 @@ await appliquerMigrations(process.env.DATABASE_URL); // rejouable : ne fait rien
 | `docker compose up -d` (racine) | Postgres 17 local, `wal_level=logical` |
 | `pnpm --filter @planif/db migrer` | Applique les migrations sur `DATABASE_URL` |
 | `pnpm --filter @planif/db generer` | Génère la migration après un changement de `src/schema.ts` |
+| `pnpm --filter @planif/db bibliotheque` | Réécrit le SQL de la migration de la bibliothèque de départ depuis le JSON (à ne faire que sur une migration pas encore fusionnée) |
 | `DATABASE_URL=… pnpm test` | Tests, y compris ceux d'intégration contre Postgres |
 
 Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un avertissement) et échouent en CI. La CI vérifie aussi que `drizzle-kit generate` conclut « No schema changes » et ne crée aucun fichier : un schéma modifié sans sa migration, ou un changement qui attend une réponse interactive (renommage de colonne), fait échouer la CI. Un renommage se génère en local, où drizzle-kit pose la question.
@@ -30,6 +31,8 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `src/valeurs.ts` | Valeurs des unions de T01, vérifiées à la compilation contre `@planif/core` |
 | `src/conversions.ts` | `ligneDepuisX` / `xDepuisLigne` pour Serie, Occupation, Emplacement, Evenement |
 | `src/migrations.ts` | `appliquerMigrations(url)` |
+| `src/bibliotheque.ts` | Bibliothèque de départ (T41) : `lireBibliothequeDepart`, `convertirBibliotheque` (JSON → lignes à `ferme_id` nul), `idBibliotheque` (md5 du nom), `sqlBibliotheque` (texte de la migration 0032) |
+| `bibliotheque/depart.json` | Données de la bibliothèque de départ, sources publiques citées (modèle de données, section 2) |
 | `migrations/0000_*.sql` | Généré par drizzle-kit : tables, contraintes, index |
 | `migrations/0001_*.sql` | Migration personnalisée (`drizzle-kit generate --custom`) : déclencheurs d'ajout seul, vues, publication `powersync` |
 | `migrations/0002_*.sql` | Migration personnalisée : fonction `est_date_calendaire`, déclencheur « remplacement du même type », vue `evenements_en_vigueur` (correction la plus récente) |
@@ -54,6 +57,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0028_*.sql` | Migration personnalisée (T28a) : déclencheurs « zone abritée sans contour », `batiment` dans la publication `powersync` |
 | `migrations/0029_*.sql` | Généré par drizzle-kit (T10t, Q27) : index unique partiel `emplacement_zone_code_actif_idx`, code d'emplacement unique par zone parmi les non supprimés et en service (`supprime_le IS NULL AND actif_au IS NULL`), sans casse ni espaces autour (`lower(trim(code))`). Aucune ligne réécrite : sur une base réelle, vérifier d'abord qu'elle ne rend rien : `SELECT ferme_id, zone_id, lower(trim(code)) AS code, count(*) FROM emplacement WHERE supprime_le IS NULL AND actif_au IS NULL GROUP BY 1, 2, 3 HAVING count(*) > 1;` (sinon la migration échoue : renommer ou retirer les doublons avec le maraîcher) |
 | `migrations/0030_*.sql` | Généré par drizzle-kit (T32a, Q32 option A) : `espece.profil_croissance` (jsonb nullable, sans défaut ; nul = profil par défaut du cœur) et son CHECK « nul ou objet ». Aucune ligne réécrite |
+| `migrations/0032_*.sql` | Migration de données (T41), écrite par `pnpm --filter @planif/db bibliotheque` depuis `bibliotheque/depart.json` : 10 familles, 35 espèces, 46 itinéraires à `ferme_id` nul, identifiants fixes, `ON CONFLICT (id) DO NOTHING`. Ne pas la modifier : une mise à jour des valeurs = une nouvelle migration |
 | `migrations/0031_*.sql` | Généré par drizzle-kit (T38a) : table `securite.debit_synchro` (débit de la synchro compté en base, plus en mémoire) et son index sur `maj_le`. Aucune ligne réécrite |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
@@ -145,7 +149,7 @@ Validés par le chef d'équipe le 2026-09-29.
 3. **Tableaux `uuid[]`** pour `emplacement.remplace` et `evenement.emplacement_ids`, plutôt que des tables de liaison : ils se lisent et se synchronisent avec leur ligne. Pas de clé étrangère sur leurs éléments.
 4. **Les identifiants du détail restent dans le jsonb** (`produitPhytoId` d'un traitement, `secteurIrrigationId` d'une irrigation) : pas de clé étrangère. La vue `traitements` joint le produit par une jointure externe.
 5. **Journal des modifications** : l'entité T01 a un champ `table` ; la colonne s'appelle `nom_table` (clé `nomTable`), `table` étant un mot réservé SQL. Elle contient le nom d'entité de T01 (`Serie`, `Emplacement`…).
-6. **`ferme_id` nul dans la bibliothèque de référence** (`famille`, `espece`, `variete`, `itineraire`, `produit_phyto`), alors que T01 type `fermeId` non nul sur ces entités (`LigneDeFerme`). Une ligne partagée n'appartient à aucune ferme ; il n'y a pas encore de conversion pour ces tables, et T01 devra admettre `fermeId: null` (ou une entité de bibliothèque distincte) quand on les écrira.
+6. **`ferme_id` nul dans la bibliothèque de référence** (`famille`, `espece`, `variete`, `itineraire`, `produit_phyto`), alors que T01 type `fermeId` non nul sur ces entités (`LigneDeFerme`). Une ligne partagée n'appartient à aucune ferme ; il n'y a pas encore de conversion pour ces tables, et T01 devra admettre `fermeId: null` (ou une entité de bibliothèque distincte) quand on les écrira. T41 : la bibliothèque de départ est écrite par une migration de données, en lignes snake_case (`src/bibliotheque.ts`), sans passer par les entités de T01.
 
 ## Correspondance entité ↔ ligne
 

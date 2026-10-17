@@ -812,7 +812,7 @@
       "categorie": "legume",
       "nom": "Melon sous chenille, plant maison",
       "mode": "plant_maison",
-      "typeAbri": "chenille",
+      "typeAbri": "plein_champ",
       "periodeUsage": {
         "debutSemaine": 18,
         "finSemaine": 23
