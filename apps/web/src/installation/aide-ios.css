@@ -1,0 +1,70 @@
+/* T40 — aide iPhone (AideIos.tsx), chargée avec elle, à la demande. */
+
+/* Aide iPhone : feuille en bas de l'écran, près du bouton Partager de Safari. */
+.installation-voile {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in srgb, var(--couleur-ombre) 45%, transparent);
+}
+
+.installation-aide {
+  width: 100%;
+  max-width: 560px;
+  max-height: 100%;
+  overflow: auto;
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  border-radius: var(--rayon-feuille) var(--rayon-feuille) 0 0;
+  padding: 22px 16px max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+}
+
+.installation-aide-titre {
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 24px;
+}
+
+.installation-etapes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+  font-size: 17px;
+}
+
+.installation-etapes li {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-m);
+}
+
+.installation-pictogramme {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.installation-aide-compris {
+  min-height: 56px;
+  border: 0;
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-weight: 700;
+  font-size: 17px;
+}

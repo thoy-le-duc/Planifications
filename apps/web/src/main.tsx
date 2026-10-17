@@ -4,6 +4,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App, avantPremierRendu } from './App.tsx';
 import { surveillerMorceauIntrouvable } from './rechargement.ts';
+// T40 : l'invitation à installer l'appli peut partir avant les écrans : retenue dès le démarrage.
+import './installation/capture.ts';
 
 const racine = document.getElementById('racine');
 if (!racine) throw new Error('Élément #racine introuvable');

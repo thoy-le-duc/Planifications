@@ -6,7 +6,7 @@ import { defineConfig, type Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { baliseCsp, type OptionsCsp } from './scripts/csp.ts';
-import { COULEURS } from './src/ui/jetons.ts';
+import { MANIFESTE } from './scripts/manifeste.ts';
 
 /**
  * Pages de mesure (T07) et de diagnostic (T10) : hors navigation, hors service worker, jamais
@@ -371,17 +371,10 @@ export default defineConfig(({ mode }) => {
         // T20 : pas d'enregistrement au load de la fenêtre ; src/serviceWorker.ts enregistre au
         // repos, après le premier affichage de l'appli.
         injectRegister: false,
-        includeAssets: ['icone.svg'],
-        manifest: {
-          name: 'Planifications',
-          short_name: 'Planif',
-          lang: 'fr',
-          start_url: '/',
-          display: 'standalone',
-          background_color: COULEURS.fond,
-          theme_color: COULEURS.foret,
-          icons: [{ src: 'icone.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
-        },
+        // Icônes du manifeste précachées d'office ; l'icône de l'écran d'accueil iPhone en plus (T40).
+        includeAssets: ['icone.svg', 'apple-touch-icon.png'],
+        // T40 : manifeste installable (icônes PNG 192, 512 et maskable), scripts/manifeste.ts.
+        manifest: MANIFESTE,
         workbox: {
           // Polices (T16) comprises : l'appli hors ligne garde ses polices. Base locale comprise
           // (T11) : PowerSync, son worker et son WASM (assets/sqlite/), la base s'ouvre hors ligne.

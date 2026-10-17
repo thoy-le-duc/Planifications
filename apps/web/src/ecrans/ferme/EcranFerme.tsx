@@ -47,6 +47,7 @@ import type * as ModuleExportType from '../export/index.ts';
 import type { EtatExport, InstantExport } from '../export/index.ts';
 import { AlerteOrange, BoutonSecondaire, CARTE } from '../../ui/elements.tsx';
 import { Confirmation } from '../../ui/confirmation.tsx';
+import { CarteInstallation } from '../../installation/index.ts';
 import { Apparence } from './Apparence.tsx';
 import { SaisiesRefusees, type VidangeArchivage } from './Refus.tsx';
 
@@ -579,6 +580,9 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
         />
       )}
       {(etatExport.etape === 'echec' || echecChargement) && <AlerteOrange>L’export n’a pas pu se faire. Réessayez ; si cela recommence, signalez-le.</AlerteOrange>}
+
+      {/* T40 : installer l'appli sur ce téléphone (rien si elle l'est déjà, ou si c'est impossible). */}
+      <CarteInstallation />
 
       <Carte titre="Apparence" idTitre={idApparence}>
         <Apparence idTitre={idApparence} />
