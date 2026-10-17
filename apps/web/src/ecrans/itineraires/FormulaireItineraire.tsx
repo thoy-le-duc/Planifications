@@ -45,7 +45,12 @@ export const MARQUE_ITINERAIRE_AFFICHE = 'planif:itineraire-affiche';
 
 export type DepartFormulaire =
   | { readonly sorte: 'creation' }
-  | { readonly sorte: 'adaptation'; readonly itineraire: ItineraireLu }
+  | {
+      readonly sorte: 'adaptation';
+      readonly itineraire: ItineraireLu;
+      /** T41 : espèce de la copie, celle de la ferme si elle a personnalisé l'espèce de la bibliothèque ; absente : celle de l'itinéraire. */
+      readonly especeId?: string;
+    }
   | { readonly sorte: 'modification'; readonly itineraire: ItineraireLu }
   | { readonly sorte: 'lecture'; readonly itineraire: ItineraireLu };
 
@@ -117,7 +122,13 @@ function saisieInitiale(depart: DepartFormulaire): Saisie {
   if (depart.sorte === 'creation') return saisieDepuis(PARAMETRES_NOUVEAUX, '', '');
   const it = depart.itineraire;
   const nom = depart.sorte === 'adaptation' ? nomAdapte(it.nom) : it.nom;
-  return saisieDepuis(it.parametres ?? { mode: it.mode }, nom, it.especeId);
+  return saisieDepuis(it.parametres ?? { mode: it.mode }, nom, especeDe(depart) ?? it.especeId);
+}
+
+/** Espèce imposée par le départ : celle de l'itinéraire, ou de la copie (T41) ; null en création libre. */
+function especeDe(depart: DepartFormulaire): string | null {
+  if (depart.sorte === 'creation') return null;
+  return depart.sorte === 'adaptation' ? (depart.especeId ?? depart.itineraire.especeId) : depart.itineraire.especeId;
 }
 
 /** Ligne d'origine (modification) telle que lue, pour savoir si les paramètres changent. */
@@ -520,6 +531,7 @@ function ConfirmationSeries({ series, occupe, surAppliquer, surSeul, surRevenir 
 export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, surFermer, surAdapter, surEnregistre }: ProprietesFormulaire): ReactElement {
   const lectureSeule = depart.sorte === 'lecture';
   const origine = depart.sorte === 'creation' ? null : depart.itineraire;
+  const especeImposee = especeDe(depart);
   const base = useMemo(() => origine?.parametres ?? (origine === null ? PARAMETRES_NOUVEAUX : { mode: origine.mode }), [origine]);
   const [saisie, setSaisie] = useState<Saisie>(() => saisieInitiale(depart));
   const [id] = useState(() => (depart.sorte === 'creation' || depart.sorte === 'adaptation' ? nouvelId(ctx.maintenant) : depart.itineraire.id));
@@ -559,14 +571,14 @@ export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, 
     const ligne: Ligne = {
       id,
       ferme_id: ctx.fermeId,
-      espece_id: origine?.especeId ?? saisie.especeId,
+      espece_id: especeImposee ?? saisie.especeId,
       variete_id: origine?.varieteId ?? null,
       nom: saisie.nom.trim(),
       mode: saisie.mode,
       parametres: JSON.stringify(p.valeur),
     };
     return ligneValidee(ligne, types);
-  }, [lectureSeule, saisie, base, id, ctx.fermeId, origine, types]);
+  }, [lectureSeule, saisie, base, id, ctx.fermeId, origine, especeImposee, types]);
 
   function changer(f: (s: Saisie) => Saisie): void {
     setErreur(null);
@@ -654,7 +666,7 @@ export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, 
 
   // ── Rendu ──────────────────────────────────────────────────────────────────────────────────
 
-  const nomEspece = especes.find((e) => e.id === (origine?.especeId ?? saisie.especeId))?.nom ?? 'Culture inconnue';
+  const nomEspece = especes.find((e) => e.id === (especeImposee ?? saisie.especeId))?.nom ?? 'Culture inconnue';
   const d = calcul.dates;
   const peutEnregistrer = construite?.ok === true && !occupe;
   const aide = construite !== null && !construite.ok ? construite.message : null;

@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "generer": "drizzle-kit generate",
-    "migrer": "node src/migrer.ts"
+    "migrer": "node src/migrer.ts",
+    "bibliotheque": "node src/ecrire-bibliotheque.ts"
   },
   "dependencies": {
     "@planif/core": "workspace:*",
