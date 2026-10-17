@@ -22,7 +22,9 @@
  *     carte, plus : jamais pendant une saisie (`enSaisie` vrai), et une fois fermé (ou une fois
  *     l'installation demandée), il ne revient plus sur ce téléphone (localStorage).
  */
-import { act, createElement, type ReactElement } from 'react';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { act, createElement, type ReactElement, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -32,10 +34,10 @@ interface Invitation extends Event {
 }
 
 interface ModuleCarte {
-  readonly CarteInstallation: () => ReactElement | null;
+  readonly CarteInstallation: () => ReactNode;
 }
 interface ModuleBandeau {
-  readonly BandeauInstallation: (p: { readonly enSaisie: boolean }) => ReactElement | null;
+  readonly BandeauInstallation: (p: { readonly enSaisie: boolean }) => ReactNode;
 }
 
 const UA_ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36';
@@ -136,10 +138,9 @@ describe('T40 : capture de beforeinstallprompt au démarrage', () => {
     expect((window as unknown as { __planifInvitation?: Event }).__planifInvitation).toBe(e);
   });
 
-  it('main.tsx importe la capture (JavaScript de démarrage)', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { fileURLToPath } = await import('node:url');
-    const main = readFileSync(fileURLToPath(new URL('../main.tsx', import.meta.url)), 'utf8');
+  it('main.tsx importe la capture (JavaScript de démarrage)', () => {
+    // Chemin par le dossier du test : sous happy-dom, `URL` n'est pas celui de Node (fileURLToPath le refuse).
+    const main = readFileSync(join(import.meta.dirname, '..', 'main.tsx'), 'utf8');
     expect(main).toMatch(/import\s+'\.\/installation\/capture\.ts'/);
   });
 });
