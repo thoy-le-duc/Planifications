@@ -14,7 +14,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { calculerDatesSerie, type DateCalendaire, type ParametresDatesSerie } from '@planif/core';
+import { calculerDatesSerie, type DateCalendaire } from '@planif/core';
 import type { ModuleSerie } from './test/contrat.ts';
 import { EMPLACEMENT, ESPECE, FERME, SAISON, SERIE_LAITUE } from './test/ferme-serie.ts';
 import {
@@ -139,7 +139,7 @@ describe('T41 : une série créée depuis un itinéraire de la bibliothèque', (
 
     const s = nouvelles()[0];
     if (s === undefined) return;
-    const d = calculerDatesSerie(PARAMETRES_MACHE as unknown as ParametresDatesSerie, { type: 'plantation', date: '2027-04-05' as DateCalendaire });
+    const d = calculerDatesSerie(PARAMETRES_MACHE, { type: 'plantation', date: '2027-04-05' as DateCalendaire });
     expect(s).toMatchObject({
       ferme_id: FERME,
       espece_id: ESPECE.mache,

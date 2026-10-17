@@ -12,7 +12,7 @@
  *
  * Exécution comme itineraire.integration.test.ts : DATABASE_URL (Postgres avec CREATEDB).
  */
-import { calculerDatesSerie, creerGenerateurId, type DateCalendaire, type ParametresDatesSerie } from '@planif/core';
+import { calculerDatesSerie, creerGenerateurId, type DateCalendaire } from '@planif/core';
 import { convertirBibliotheque, idBibliotheque, lireBibliothequeDepart } from '@planif/db';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { randomUUID } from 'node:crypto';
@@ -161,7 +161,7 @@ decrireAvecBase('T41')('T41 : la bibliothèque de départ face aux écritures de
       [CAROTTE, 'carotte', 'semis'],
     ] as const)('%s : acceptée, instantané = paramètres de la bibliothèque', async (nom, espece, ancre) => {
       const i = itineraireDe(nom);
-      const d = calculerDatesSerie(i.parametres as unknown as ParametresDatesSerie, { type: ancre, date: '2027-04-05' as DateCalendaire });
+      const d = calculerDatesSerie(i.parametres, { type: ancre, date: '2027-04-05' as DateCalendaire });
       const s: EcritureEnvoyee = {
         op: 'PUT',
         table: 'serie',

@@ -38,7 +38,7 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { calculerDatesSerie, validerItineraire, type DateCalendaire, type ParametresDatesSerie } from '@planif/core';
+import { calculerDatesSerie, validerItineraire, type DateCalendaire } from '@planif/core';
 import { describe, expect, it } from 'vitest';
 import * as db from './index.ts';
 import { CATEGORIES_ESPECE, MODES_ITINERAIRE, TYPES_ABRI, UNITES_RECOLTE } from './valeurs.ts';
@@ -303,7 +303,7 @@ describe('T41 : chaque itinéraire passe les règles du cœur après conversion'
       expect(p.alveolesParPlaque === null || (entier(p.alveolesParPlaque) && (p.alveolesParPlaque as number) > 0), 'alvéoles').toBe(true);
     }
     // Le moteur de dates de T02 calcule une série d'exemple (mise en place le 2027-04-05).
-    const dates = calculerDatesSerie(i.parametres as unknown as ParametresDatesSerie, {
+    const dates = calculerDatesSerie(i.parametres, {
       type: i.mode === 'semis_direct' ? 'semis' : 'plantation',
       date: '2027-04-05' as DateCalendaire,
     });

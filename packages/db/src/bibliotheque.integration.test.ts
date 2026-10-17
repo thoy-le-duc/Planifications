@@ -70,9 +70,8 @@ decrireAvecBase('T41 : bibliothèque de départ en base (PostgreSQL)', { timeout
 
   /** Sans horodatages : ce que la conversion décide. */
   const sansHorodatages = (l: Ligne): Ligne => {
-    const { cree_le: _c, modifie_le: _m, supprime_le: s, ...reste } = l;
-    expect(s, 'jamais supprimée').toBeNull();
-    return reste;
+    expect(l.supprime_le, 'jamais supprimée').toBeNull();
+    return Object.fromEntries(Object.entries(l).filter(([c]) => !['cree_le', 'modifie_le', 'supprime_le'].includes(c)));
   };
 
   const trier = <T extends { id: string }>(l: readonly T[]): T[] => [...l].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
