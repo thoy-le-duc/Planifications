@@ -17,9 +17,9 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : manifeste conforme (icônes 192/512/maskable présentes et servies, `display: standalone`), `apple-touch-icon` présent.
-- [ ] Test : `beforeinstallprompt` retenu → bouton visible → tap → `prompt()` appelé une fois ; après installation (`appinstalled`) le bouton disparaît.
-- [ ] Test : Safari iOS simulé → aide « Partager → Sur l'écran d'accueil ».
-- [ ] Test : appli déjà installée → ni carte ni bandeau ; bandeau fermé → ne revient pas.
-- [ ] e2e : critères d'installabilité de Chromium (manifeste valide, service worker) vérifiés.
-- [ ] `docs/mise-en-ligne.md` décrit le bouton. `pnpm verif` passe.
+- [x] Test : manifeste conforme (icônes 192/512/maskable présentes et servies, `display: standalone`), `apple-touch-icon` présent.
+- [x] Test : `beforeinstallprompt` retenu → bouton visible → tap → `prompt()` appelé une fois ; après installation (`appinstalled`) le bouton disparaît.
+- [x] Test : Safari iOS simulé → aide « Partager → Sur l'écran d'accueil ».
+- [x] Test : appli déjà installée → ni carte ni bandeau ; bandeau fermé → ne revient pas.
+- [x] e2e : critères d'installabilité de Chromium (manifeste valide, service worker) vérifiés.
+- [x] `docs/mise-en-ligne.md` décrit le bouton. `pnpm verif` passe.
