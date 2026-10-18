@@ -17,7 +17,7 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : empreinte de 0032 inchangée.
-- [ ] Test d'intégration Postgres : base migrée jusqu'à 0032, puis 0033 → l'itinéraire du melon est renommé, aucune ligne de ferme touchée, rejouable.
-- [ ] Test : JSON modifié sans migration → échec explicite.
-- [ ] `pnpm --filter @planif/db test` lance les tests du paquet ; `pnpm verif` passe.
+- [x] Test : empreinte de 0032 inchangée.
+- [x] Test d'intégration Postgres : base migrée jusqu'à 0032, puis 0033 → l'itinéraire du melon est renommé, aucune ligne de ferme touchée, rejouable.
+- [x] Test : JSON modifié sans migration → échec explicite.
+- [x] `pnpm --filter @planif/db test` lance les tests du paquet ; `pnpm verif` passe (typage, lint, tests avec Postgres, build verts ; e2e web non relancés : rien ne change côté web).
