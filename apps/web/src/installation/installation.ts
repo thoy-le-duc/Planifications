@@ -10,12 +10,17 @@
  *   - Rien si l'appli tourne déjà installée (`display-mode: standalone`, `navigator.standalone`),
  *     si elle vient d'être installée (`appinstalled`), ni sans moyen d'installer.
  *
+ * Après un refus (T40b), l'invitation est perdue mais la carte reste : le bouton montre alors
+ * l'aide du navigateur (menu ⋮, « Installer l'application »), ./AideAndroid.tsx, jusqu'à ce qu'une
+ * nouvelle invitation reprenne la main. Acceptée (ou `appinstalled`) : plus rien.
+ *
  * Bandeau d'Aujourd'hui : une fois fermé (ou l'installation demandée), il ne revient plus sur ce
  * téléphone (localStorage, CLE_BANDEAU).
  */
 import { useSyncExternalStore } from 'react';
 
-export type MoyenInstallation = 'invite' | 'ios' | 'aucun';
+/** `menu` : invitation refusée et pas encore renouvelée, le menu du navigateur reste (T40b). */
+export type MoyenInstallation = 'invite' | 'menu' | 'ios' | 'aucun';
 
 /** Bandeau d'installation d'Aujourd'hui fermé sur ce téléphone. */
 export const CLE_BANDEAU = 'planif.installation.bandeau-ferme';
@@ -27,6 +32,9 @@ const EVENEMENT_SERVIE = 'planif:invitation-servie';
 
 /** `appinstalled` reçu pendant ce chargement de l'appli. */
 let installee = false;
+
+/** T40b : l'invitation a été servie (la fenêtre s'est ouverte) sans installation constatée. */
+let servie = false;
 
 function dejaInstallee(): boolean {
   return installee || navigator.standalone === true || window.matchMedia(REQUETE_INSTALLEE).matches;
@@ -40,6 +48,7 @@ function surIos(): boolean {
 export function moyenInstallation(): MoyenInstallation {
   if (dejaInstallee()) return 'aucun';
   if (window.__planifInvitation) return 'invite';
+  if (servie) return 'menu';
   return surIos() ? 'ios' : 'aucun';
 }
 
@@ -76,10 +85,16 @@ export async function ouvrirInvitation(): Promise<boolean> {
   const invitation = window.__planifInvitation;
   if (!invitation) return false;
   window.__planifInvitation = null;
+  servie = true;
   dispatchEvent(new Event(EVENEMENT_SERVIE));
   try {
     await invitation.prompt();
-    return (await invitation.userChoice).outcome === 'accepted';
+    const accepte = (await invitation.userChoice).outcome === 'accepted';
+    if (accepte) {
+      installee = true;
+      dispatchEvent(new Event(EVENEMENT_SERVIE));
+    }
+    return accepte;
   } catch (e) {
     console.warn('Installation non proposée', e);
     return false;
