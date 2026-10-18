@@ -11,7 +11,8 @@
  * idBibliotheque(sorte: 'famille' | 'espece' | 'itineraire', cle: string): string
  *   Identifiant FIXE dérivé du nom : md5(`${sorte}:${cle}`) écrit en UUID (8-4-4-4-12, minuscules),
  *   comme `md5(…)::uuid` de Postgres (liste de départ des types d'intervention, migration 0016).
- *   Clés : le nom de la famille ; le nom de l'espèce ; `${espèce}:${nom de l'itinéraire}`.
+ *   Clés : le nom de la famille ; le nom de l'espèce ; `${espèce}:${nom de l'itinéraire}` (T41b : le
+ *   nom initial, `nomInitial`, quand la ligne a été renommée).
  *
  * convertirBibliotheque(source): LignesBibliotheque
  *   Lignes au format de la base (snake_case), toutes à `ferme_id` nul :
@@ -32,9 +33,9 @@
  *   espèces, puis itinéraires), séparés par `--> statement-breakpoint`.
  *
  * MIGRATION_BIBLIOTHEQUE_DEPART : le tag de la migration (`0032_bibliotheque_depart`), inscrite au
- *   journal de drizzle-kit ; son fichier SQL est exactement sqlBibliotheque(convertirBibliotheque(
- *   lireBibliothequeDepart())). Une mise à jour future des valeurs passe par une NOUVELLE migration
- *   (on ne modifie jamais une migration fusionnée).
+ *   journal de drizzle-kit. Une mise à jour des valeurs passe par une NOUVELLE migration (on ne
+ *   modifie jamais une migration fusionnée) : voir bibliotheque-suites.test.ts (T41b), qui fige
+ *   0032 et vérifie que le JSON courant est « 0032 + migrations de bibliothèque suivantes ».
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -132,7 +133,8 @@ describe('T41 : identifiants fixes, dérivés du nom', () => {
       source.especes.map((e) => [db.idBibliotheque('espece', e.nom), db.idBibliotheque('famille', e.famille)]),
     );
     expect(lignes.itineraires.map((i) => [i.id, i.espece_id])).toEqual(
-      source.itineraires.map((i) => [db.idBibliotheque('itineraire', `${i.espece}:${i.nom}`), db.idBibliotheque('espece', i.espece)]),
+      // T41b : un itinéraire renommé garde l'identifiant de son nom initial.
+      source.itineraires.map((i) => [db.idBibliotheque('itineraire', `${i.espece}:${i.nomInitial ?? i.nom}`), db.idBibliotheque('espece', i.espece)]),
     );
   });
 
@@ -314,15 +316,10 @@ describe('T41 : chaque itinéraire passe les règles du cœur après conversion'
 describe('T41 : la migration de données', () => {
   const dossier = new URL('../migrations/', import.meta.url);
 
-  it('inscrite au journal de drizzle-kit, dernière migration', () => {
+  it('inscrite au journal de drizzle-kit', () => {
     expect(db.MIGRATION_BIBLIOTHEQUE_DEPART).toBe('0032_bibliotheque_depart');
     const journal = JSON.parse(readFileSync(new URL('meta/_journal.json', dossier), 'utf8')) as { entries: { tag: string }[] };
     expect(journal.entries.map((e) => e.tag)).toContain(db.MIGRATION_BIBLIOTHEQUE_DEPART);
-  });
-
-  it('son SQL est exactement celui de la conversion du JSON (une valeur changée = une nouvelle migration)', () => {
-    const sql = readFileSync(new URL(`${db.MIGRATION_BIBLIOTHEQUE_DEPART}.sql`, dossier), 'utf8');
-    expect(sql).toBe(db.sqlBibliotheque(lignes));
   });
 
   it('trois INSERT rejouables (ON CONFLICT (id) DO NOTHING), familles puis espèces puis itinéraires, rien d’autre', () => {

@@ -10,6 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "generer": "drizzle-kit generate",
     "migrer": "node src/migrer.ts",
     "bibliotheque": "node src/ecrire-bibliotheque.ts"

@@ -232,6 +232,13 @@
       "when": 1792270915917,
       "tag": "0032_bibliotheque_depart",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792301476133,
+      "tag": "0033_bibliotheque_melon_plein_champ",
+      "breakpoints": true
     }
   ]
 }
