@@ -810,7 +810,8 @@
       "espece": "melon",
       "famille": "Cucurbitacées",
       "categorie": "legume",
-      "nom": "Melon sous chenille, plant maison",
+      "nom": "Melon, plein champ (chenille conseillée)",
+      "nomInitial": "Melon sous chenille, plant maison",
       "mode": "plant_maison",
       "typeAbri": "plein_champ",
       "periodeUsage": {
@@ -846,7 +847,7 @@
           "url": "https://pprod.ecophytopic.fr/sites/default/files/2024-03/23-027%20AGRECOMEL%20PBI%20melon%202023.pdf"
         }
       ],
-      "aVerifier": "Abri le plus courant selon la région : plein champ dans le Sud, chenille ailleurs."
+      "aVerifier": "Rangé en plein champ : la chenille (petit tunnel) reste conseillée hors du Sud pour avancer la récolte ; si vous la posez, adaptez l'abri et la période dans votre copie. Ancien nom : « Melon sous chenille, plant maison »."
     },
     {
       "espece": "ail",

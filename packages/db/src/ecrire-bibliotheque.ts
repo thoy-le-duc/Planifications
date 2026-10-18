@@ -1,16 +1,38 @@
 /**
- * `pnpm --filter @planif/db bibliotheque` : écrit le SQL de la migration de la bibliothèque de
- * départ (MIGRATION_BIBLIOTHEQUE_DEPART) depuis bibliotheque/depart.json. Le fichier de migration
- * doit d'abord exister (`drizzle-kit generate --custom`). Une migration fusionnée ne se réécrit
- * jamais : une nouvelle version des valeurs passe par une nouvelle migration.
+ * `pnpm --filter @planif/db bibliotheque <NNNN_nom>` : écrit la migration de bibliothèque
+ * `<NNNN_nom>` qui mène la base du dernier état (bibliotheque/etats/) au JSON courant
+ * (bibliotheque/depart.json), et son état (T41b). Pour une migration nouvelle, ajoute aussi son
+ * entrée au journal de drizzle et son instantané, comme `drizzle-kit generate --custom`.
+ *
+ * 0032_bibliotheque_depart est figée ; une migration fusionnée ne se réécrit jamais. Seule la
+ * dernière migration de bibliothèque, pas encore fusionnée, peut être réécrite sous son nom.
  */
-import { existsSync, writeFileSync } from 'node:fs';
-import { convertirBibliotheque, lireBibliothequeDepart, MIGRATION_BIBLIOTHEQUE_DEPART, sqlBibliotheque } from './bibliotheque.ts';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { depotBibliotheque, preparerMigrationBibliotheque, verifierBibliotheque } from './bibliotheque.ts';
 
-const fichier = new URL(`../migrations/${MIGRATION_BIBLIOTHEQUE_DEPART}.sql`, import.meta.url);
-if (!existsSync(fichier)) {
-  console.error(`Migration ${MIGRATION_BIBLIOTHEQUE_DEPART} absente : la créer d'abord avec drizzle-kit generate --custom.`);
+const migration = process.argv[2] ?? '';
+if (migration === '') {
+  console.error('Usage : pnpm --filter @planif/db bibliotheque <NNNN_nom> (numéro suivant du journal, par exemple 0034_bibliotheque_correction).');
   process.exit(1);
 }
-writeFileSync(fichier, sqlBibliotheque(convertirBibliotheque(lireBibliothequeDepart())));
-console.log(`Bibliothèque de départ écrite dans migrations/${MIGRATION_BIBLIOTHEQUE_DEPART}.sql.`);
+const r = preparerMigrationBibliotheque(migration, depotBibliotheque(), { maintenant: Date.now(), nouvelId: randomUUID });
+if (!r.ok) {
+  console.error(`Rien d'écrit : ${r.erreur}`);
+  process.exit(1);
+}
+const racine = new URL('../', import.meta.url);
+for (const f of r.fichiers) {
+  const chemin = fileURLToPath(new URL(f.chemin, racine));
+  mkdirSync(dirname(chemin), { recursive: true });
+  writeFileSync(chemin, f.contenu);
+  console.log(`écrit : packages/db/${f.chemin}`);
+}
+const erreurs = verifierBibliotheque(depotBibliotheque());
+if (erreurs.length > 0) {
+  console.error(erreurs.join('\n'));
+  process.exit(1);
+}
+console.log(`Migration ${migration} écrite ; bibliothèque à jour.`);

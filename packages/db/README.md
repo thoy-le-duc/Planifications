@@ -15,7 +15,8 @@ await appliquerMigrations(process.env.DATABASE_URL); // rejouable : ne fait rien
 | `docker compose up -d` (racine) | Postgres 17 local, `wal_level=logical` |
 | `pnpm --filter @planif/db migrer` | Applique les migrations sur `DATABASE_URL` |
 | `pnpm --filter @planif/db generer` | Génère la migration après un changement de `src/schema.ts` |
-| `pnpm --filter @planif/db bibliotheque` | Réécrit le SQL de la migration de la bibliothèque de départ depuis le JSON (à ne faire que sur une migration pas encore fusionnée) |
+| `pnpm --filter @planif/db bibliotheque <NNNN_nom>` | Écrit la migration de bibliothèque qui mène la base au JSON courant (T41b, procédure dans `docs/modele-donnees.md`) ; 0032 est figée |
+| `pnpm --filter @planif/db test` | Tests du paquet (Vitest) ; avec `DATABASE_URL`, aussi ceux d'intégration |
 | `DATABASE_URL=… pnpm test` | Tests, y compris ceux d'intégration contre Postgres |
 
 Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un avertissement) et échouent en CI. La CI vérifie aussi que `drizzle-kit generate` conclut « No schema changes » et ne crée aucun fichier : un schéma modifié sans sa migration, ou un changement qui attend une réponse interactive (renommage de colonne), fait échouer la CI. Un renommage se génère en local, où drizzle-kit pose la question.
@@ -31,8 +32,9 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `src/valeurs.ts` | Valeurs des unions de T01, vérifiées à la compilation contre `@planif/core` |
 | `src/conversions.ts` | `ligneDepuisX` / `xDepuisLigne` pour Serie, Occupation, Emplacement, Evenement |
 | `src/migrations.ts` | `appliquerMigrations(url)` |
-| `src/bibliotheque.ts` | Bibliothèque de départ (T41) : `lireBibliothequeDepart`, `convertirBibliotheque` (JSON → lignes à `ferme_id` nul), `idBibliotheque` (md5 du nom), `sqlBibliotheque` (texte de la migration 0032) |
+| `src/bibliotheque.ts` | Bibliothèque de départ (T41) : `lireBibliothequeDepart`, `convertirBibliotheque` (JSON → lignes à `ferme_id` nul), `idBibliotheque` (md5 du nom initial), `sqlBibliotheque` (texte de la migration 0032) ; mise à jour par nouvelle migration (T41b) : `sqlMiseAJourBibliotheque`, `verifierBibliotheque`, `preparerMigrationBibliotheque` |
 | `bibliotheque/depart.json` | Données de la bibliothèque de départ, sources publiques citées (modèle de données, section 2) |
+| `bibliotheque/etats/*.json` | État de la bibliothèque (lignes actives) après chaque migration de bibliothèque ; le dernier doit égaler la conversion du JSON |
 | `migrations/0000_*.sql` | Généré par drizzle-kit : tables, contraintes, index |
 | `migrations/0001_*.sql` | Migration personnalisée (`drizzle-kit generate --custom`) : déclencheurs d'ajout seul, vues, publication `powersync` |
 | `migrations/0002_*.sql` | Migration personnalisée : fonction `est_date_calendaire`, déclencheur « remplacement du même type », vue `evenements_en_vigueur` (correction la plus récente) |
@@ -57,7 +59,8 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0028_*.sql` | Migration personnalisée (T28a) : déclencheurs « zone abritée sans contour », `batiment` dans la publication `powersync` |
 | `migrations/0029_*.sql` | Généré par drizzle-kit (T10t, Q27) : index unique partiel `emplacement_zone_code_actif_idx`, code d'emplacement unique par zone parmi les non supprimés et en service (`supprime_le IS NULL AND actif_au IS NULL`), sans casse ni espaces autour (`lower(trim(code))`). Aucune ligne réécrite : sur une base réelle, vérifier d'abord qu'elle ne rend rien : `SELECT ferme_id, zone_id, lower(trim(code)) AS code, count(*) FROM emplacement WHERE supprime_le IS NULL AND actif_au IS NULL GROUP BY 1, 2, 3 HAVING count(*) > 1;` (sinon la migration échoue : renommer ou retirer les doublons avec le maraîcher) |
 | `migrations/0030_*.sql` | Généré par drizzle-kit (T32a, Q32 option A) : `espece.profil_croissance` (jsonb nullable, sans défaut ; nul = profil par défaut du cœur) et son CHECK « nul ou objet ». Aucune ligne réécrite |
-| `migrations/0032_*.sql` | Migration de données (T41), écrite par `pnpm --filter @planif/db bibliotheque` depuis `bibliotheque/depart.json` : 10 familles, 35 espèces, 46 itinéraires à `ferme_id` nul, identifiants fixes, `ON CONFLICT (id) DO NOTHING`. Ne pas la modifier : une mise à jour des valeurs = une nouvelle migration |
+| `migrations/0032_*.sql` | Migration de données (T41), écrite depuis `bibliotheque/depart.json` : 10 familles, 35 espèces, 46 itinéraires à `ferme_id` nul, identifiants fixes, `ON CONFLICT (id) DO NOTHING`. Figée (T41b, empreinte vérifiée) : une mise à jour des valeurs = une nouvelle migration |
+| `migrations/0033_*.sql` | Migration de bibliothèque (T41b), écrite par `pnpm --filter @planif/db bibliotheque 0033_bibliotheque_melon_plein_champ` : l'itinéraire du melon renommé « Melon, plein champ (chenille conseillée) », même identifiant |
 | `migrations/0031_*.sql` | Généré par drizzle-kit (T38a) : table `securite.debit_synchro` (débit de la synchro compté en base, plus en mémoire) et son index sur `maj_le`. Aucune ligne réécrite |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
