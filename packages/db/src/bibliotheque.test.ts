@@ -11,7 +11,8 @@
  * idBibliotheque(sorte: 'famille' | 'espece' | 'itineraire', cle: string): string
  *   Identifiant FIXE dérivé du nom : md5(`${sorte}:${cle}`) écrit en UUID (8-4-4-4-12, minuscules),
  *   comme `md5(…)::uuid` de Postgres (liste de départ des types d'intervention, migration 0016).
- *   Clés : le nom de la famille ; le nom de l'espèce ; `${espèce}:${nom de l'itinéraire}`.
+ *   Clés : le nom de la famille ; le nom de l'espèce ; `${espèce}:${nom de l'itinéraire}` (T41b : le
+ *   nom initial, `nomInitial`, quand la ligne a été renommée).
  *
  * convertirBibliotheque(source): LignesBibliotheque
  *   Lignes au format de la base (snake_case), toutes à `ferme_id` nul :
@@ -132,7 +133,8 @@ describe('T41 : identifiants fixes, dérivés du nom', () => {
       source.especes.map((e) => [db.idBibliotheque('espece', e.nom), db.idBibliotheque('famille', e.famille)]),
     );
     expect(lignes.itineraires.map((i) => [i.id, i.espece_id])).toEqual(
-      source.itineraires.map((i) => [db.idBibliotheque('itineraire', `${i.espece}:${i.nom}`), db.idBibliotheque('espece', i.espece)]),
+      // T41b : un itinéraire renommé garde l'identifiant de son nom initial.
+      source.itineraires.map((i) => [db.idBibliotheque('itineraire', `${i.espece}:${i.nomInitial ?? i.nom}`), db.idBibliotheque('espece', i.espece)]),
     );
   });
 
