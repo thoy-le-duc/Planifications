@@ -66,7 +66,7 @@ export function BandeauInstallation({ enSaisie }: ProprietesBandeauInstallation)
     fermerBandeau();
     setFerme(true);
   };
-  if (ferme || enSaisie || moyen === 'aucun') return aide;
+  if (ferme || enSaisie || moyen === 'aucun' || moyen === 'menu') return aide;
   return (
     <>
       <div aria-hidden="true" style={{ height: 104 }} />
