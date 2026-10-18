@@ -528,7 +528,6 @@ const DELAI_INSTANTANE_MS = 300;
 const AUCUN_MASQUE: Masques = new Map();
 const sansMasques = () => () => undefined;
 
-/** T13k : message des « Fait » d'avant la base abandonnés (0 : rien). */
 /**
  * T40 : le bandeau « Installer l'appli », dans le morceau de l'installation chargé à la demande
  * (src/installation/index.ts) : ni ce morceau ni ses dépendances statiques ne s'alourdissent.
@@ -550,6 +549,7 @@ function BandeauInstallation(p: ProprietesBandeauInstallation) {
   return Bandeau === null ? null : <Bandeau {...p} />;
 }
 
+/** T13k : message des « Fait » d'avant la base abandonnés (0 : rien). */
 function MessageAbandon({ nombre }: { readonly nombre: number }) {
   return nombre > 0 ? (
     <p role="status" className="auj-avis">

@@ -16,6 +16,6 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : refus → carte toujours là, le tap montre l'aide Android ; nouvel `beforeinstallprompt` → le tap rouvre la fenêtre du navigateur.
-- [ ] Test : acceptation → carte cachée.
-- [ ] Démarrage dans le budget (71,2 Kio) ; `pnpm typecheck`, `pnpm lint`, `pnpm test`, e2e `installation` verts.
+- [x] Test : refus → carte toujours là, le tap montre l'aide Android ; nouvel `beforeinstallprompt` → le tap rouvre la fenêtre du navigateur.
+- [x] Test : acceptation → carte cachée.
+- [x] Démarrage dans le budget (71,2 Kio) ; `pnpm typecheck`, `pnpm lint`, `pnpm test`, e2e `installation` verts.

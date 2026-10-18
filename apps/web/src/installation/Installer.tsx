@@ -1,7 +1,7 @@
 /**
  * T40 — le geste « Installer l'appli », commun à la carte de l'onglet Ferme et au bandeau
- * d'Aujourd'hui : fenêtre d'installation du navigateur (Android, Chrome), ou aide iPhone chargée
- * à la demande (./AideIos.tsx, jamais un import statique).
+ * d'Aujourd'hui : fenêtre d'installation du navigateur (Android, Chrome), ou aide iPhone / aide du menu
+ * du navigateur après un refus (./AideIos.tsx, ./AideAndroid.tsx, chargées à la demande).
  */
 import { useState, type ComponentType, type ReactNode } from 'react';
 import { ouvrirInvitation, useMoyenInstallation, type MoyenInstallation } from './installation.ts';
@@ -23,8 +23,8 @@ export function useInstallation(): Installation {
   const installer = () => {
     if (moyen === 'invite') {
       void ouvrirInvitation();
-    } else if (moyen === 'ios') {
-      import('./AideIos.tsx').then(
+    } else if (moyen === 'ios' || moyen === 'menu') {
+      (moyen === 'ios' ? import('./AideIos.tsx') : import('./AideAndroid.tsx')).then(
         (m) => {
           setAide(() => m.default);
         },
