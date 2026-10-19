@@ -6,7 +6,7 @@
  * zones, puis des planches en lot (« 10 planches P de 30 × 0,8 m »), chacune modifiable ensuite.
  * Règles : ./regles.ts ; écritures (une transaction par geste, annulable 10 s) : ./ecritures.ts.
  */
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
 import type { PorteDonnees } from '@planif/sync';
 import './parcellaire.css';
 import {
@@ -39,6 +39,7 @@ import {
   verifierSaison,
   verifierZone,
 } from './regles.ts';
+import type { ProprietesEcranVannes } from './vannes/EcranVannes.tsx';
 
 /** Durée du bandeau « Annuler » (comme T12, T13, T24). */
 export const DELAI_ANNULATION_MS = 10_000;
@@ -673,6 +674,25 @@ export function EcranParcellaire({ porte, fermeId, section, surFermer, surImport
   );
 
   const pret = saisons !== null && zones !== null && planches !== null;
+
+  // T57 : l'écran des vannes, chargé au premier tap sur « Vannes » (hors du morceau du parcellaire).
+  const [Vannes, setVannes] = useState<ComponentType<ProprietesEcranVannes> | null>(null);
+  const [vannesOuvertes, setVannesOuvertes] = useState(false);
+  function ouvrirVannes(): void {
+    setVannesOuvertes(true);
+    if (Vannes !== null) return;
+    import('./vannes/index.ts').then(
+      (m) => {
+        setVannes(() => m.EcranVannes);
+      },
+      (e: unknown) => {
+        console.error('Écran des vannes : chargement impossible', e);
+        setVannesOuvertes(false);
+        setEchec({ titre: 'Vannes indisponibles', texte: 'L’écran des vannes n’a pas pu s’ouvrir : réessayez.' });
+      },
+    );
+  }
+
   useEffect(() => {
     if (section === 'zones') titreZones.current?.focus();
     else titre.current?.focus();
@@ -760,7 +780,7 @@ export function EcranParcellaire({ porte, fermeId, section, surFermer, surImport
           data-testid="ecran-parcellaire"
           className="parc-feuille"
           onKeyDown={(e) => {
-            if (e.key === 'Escape' && formulaire === null && zoneOuverte === null) surFermer();
+            if (e.key === 'Escape' && formulaire === null && zoneOuverte === null && !vannesOuvertes) surFermer();
           }}
         >
           <div className="parc-tete">
@@ -873,6 +893,13 @@ export function EcranParcellaire({ porte, fermeId, section, surFermer, surImport
                   </button>
                 </section>
 
+                <section className="parc-section" aria-label="Vannes d’irrigation">
+                  <p className="parc-aide">Les vannes d’irrigation : déclarez-les d’un coup, puis dites ce que chacune arrose.</p>
+                  <button type="button" className="parc-bouton-secondaire" onClick={ouvrirVannes}>
+                    Vannes
+                  </button>
+                </section>
+
                 {surImporter !== undefined && (
                   <section className="parc-section" aria-label="Importer">
                     <p className="parc-aide">Vous avez déjà un tableur (parcellaire, cultures, séries) ? Importez-le d’un coup.</p>
@@ -944,6 +971,18 @@ export function EcranParcellaire({ porte, fermeId, section, surFermer, surImport
             setFormulaire(null);
           }}
           surEnregistre={enregistre}
+        />
+      )}
+
+      {vannesOuvertes && Vannes !== null && (
+        <Vannes
+          porte={porte}
+          fermeId={fermeId}
+          aujourdhui={() => jour}
+          maintenant={maintenant}
+          surFermer={() => {
+            setVannesOuvertes(false);
+          }}
         />
       )}
 
