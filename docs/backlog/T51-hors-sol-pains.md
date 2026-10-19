@@ -8,7 +8,7 @@
 
 ## Règle (modèle universel « contenants »)
 
-1. **Emplacement de sorte gouttière** : « nombre de pains » (contenants : pains, sacs, pots) remplace « nombre de places ». Par défaut = longueur arrondie (1 pain par mètre), modifiable. Les gouttières existantes : nombre de pains = ancien nombre de places / 12 arrondi ? **Non** — reprendre l'ancien nombre de places comme nombre de **trous** n'a pas de sens : migration = nombre de pains = longueur arrondie, l'ancien nombre de places est conservé en lecture (champ obsolète) jusqu'à décision de Théophane.
+1. **Emplacement de sorte gouttière** : « nombre de pains » (contenants : pains, sacs, pots) remplace « nombre de places ». Par défaut = longueur arrondie (1 pain par mètre), modifiable. Gouttières existantes : nombre de pains = longueur arrondie ; l'ancien « nombre de places » reste en base, en lecture seule, sans servir au calcul.
 2. **Nouvelle façon de compter la densité dans l'itinéraire : « en contenants »** (hors-sol) : trous par contenant (ex. 12) et, par trou, soit plants par trou (plant maison/acheté, défaut 1), soit graines par trou (semis direct, ex. 3 pour des haricots). Utilisable sur une gouttière ; sur une planche, refusée avec un message clair.
 3. **Calcul** : plants (ou poquets) d'une série = Σ sur ses gouttières de (pains × trous par pain) ; graines = poquets × graines par trou (puis germination et marge comme T05). Les autres façons de compter (écartement, mètre linéaire, volée) ne changent pas.
 4. **Bibliothèque** : ajouter un itinéraire « Fraise hors-sol en gouttière » (trous par pain 12 par défaut, à adapter par variété ; sources publiques) par une nouvelle migration de bibliothèque (T41b).
