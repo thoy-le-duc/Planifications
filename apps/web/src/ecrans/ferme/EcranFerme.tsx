@@ -56,7 +56,7 @@ import { Confirmation } from '../../ui/confirmation.tsx';
 import { CarteInstallation } from '../../installation/index.ts';
 import { Apparence } from './Apparence.tsx';
 import { SaisiesRefusees, type VidangeArchivage } from './Refus.tsx';
-import { prendreDemande } from '../demarrer/etapes.ts';
+import { demandeEnAttente, prendreDemande } from '../demarrer/etapes.ts';
 
 /** Marque de performance : les refus de synchro sont lus et dessinés (T10i, e2e/refus.e2e.ts). */
 export const MARQUE_REFUS_AFFICHES = 'planif:refus-affiches';
@@ -354,16 +354,23 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     );
   }
 
-  // T49 : demande du parcours guidé, prise une fois, dès que la base et la ferme sont là.
+  // T49 : demande du parcours guidé, lue à l'ouverture de l'écran et prise aussitôt (une fois).
+  // Base pas encore prête à ce moment-là : on le dit, et rien ne s'ouvrira plus tard par surprise.
+  const [demandeInitiale] = useState(() => {
+    const d = demandeEnAttente();
+    return d === 'saisons' || d === 'zones' || d === 'itineraires' || d === 'import' ? { cible: d, possible: itinerairesPossibles } : null;
+  });
   useEffect(() => {
-    if (!itinerairesPossibles) return;
-    const demande = prendreDemande('saisons', 'zones', 'itineraires', 'import');
-    if (demande === 'saisons' || demande === 'zones') ouvrirParcellaire(demande);
-    else if (demande === 'itineraires') ouvrirItineraires();
-    else if (demande === 'import') ouvrirImport();
-    // Les ouvertures ne dépendent que de la porte du contexte, déjà là.
+    if (demandeInitiale === null) return;
+    prendreDemande(demandeInitiale.cible);
+    if (!demandeInitiale.possible) return;
+    const c = demandeInitiale.cible;
+    if (c === 'saisons' || c === 'zones') ouvrirParcellaire(c);
+    else if (c === 'itineraires') ouvrirItineraires();
+    else ouvrirImport();
+    // Une fois, à l'ouverture de l'écran.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [itinerairesPossibles]);
+  }, []);
 
   // Éditeur de placement (T28b) : chargé au tap, montré avec la porte du contexte.
   const [EditeurPlacement, setEditeurPlacement] = useState<EditeurPlacementCharge | null>(null);
@@ -524,6 +531,9 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     <>
       {effacementEnAttente && <AlerteOrange>{ALERTE_EFFACEMENT}</AlerteOrange>}
       {refus !== null && <SaisiesRefusees refus={refus} archiver={archiverRefus} vidangeRef={vidangeRefus} />}
+      {demandeInitiale !== null && !demandeInitiale.possible && (
+        <AlerteOrange>Les données de ce téléphone ne sont pas encore prêtes : touchez l’étape voulue ci-dessous dans un instant.</AlerteOrange>
+      )}
       <Carte titre="Ma ferme">
         <Ligne
           nom="Saisons, zones et planches"

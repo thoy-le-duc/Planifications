@@ -580,21 +580,37 @@ const CarteAlerte = memo(function CarteAlerte({
  * lui, rien n'est montré). Un écran par utilisateur et par ferme (`key`) : l'instantané ne passe
  * jamais de l'un à l'autre, et l'arrivée de la base sur la même ferme ne redessine pas l'écran.
  */
+/** T49 : demande « serie » prise avant la base : on le dit (rien ne s'ouvre ensuite par surprise). */
+const AVIS_SERIE_AVANT_BASE = 'Les données de ce téléphone s’ouvrent : touchez « Nouvelle série » dans un instant pour planifier la série.';
+
 export function EcranPlan(p: ProprietesEcranPlan) {
   const { porte, utilisateurId } = p;
+  // T49 : « Planifier une première série » depuis Aujourd'hui : lue à l'ouverture, prise aussitôt.
+  const [serieDemandee] = useState(() => (demandeEnAttente() === 'serie' ? { porteLa: porte !== null } : null));
+  useEffect(() => {
+    if (serieDemandee !== null) prendreDemande('serie');
+  }, [serieDemandee]);
+  const avis = serieDemandee !== null && !serieDemandee.porteLa && porte === null ? <p role="status" className="attente">{AVIS_SERIE_AVANT_BASE}</p> : null;
   const [stockageDonne] = useState(() => p.stockage ?? stockageParDefaut());
   const stockage = utilisateurId === undefined ? null : stockageDonne;
   const fermeId = porte !== null ? p.fermeId : utilisateurId === undefined || stockage === null ? null : lireFermeMontree(stockage, utilisateurId);
-  if (fermeId === null) return <p className="attente">Ouverture des données de ce téléphone…</p>;
-  return <Ecran key={`${utilisateurId ?? ''}|${fermeId}`} {...p} porte={porte} fermeId={fermeId} stockage={stockage} />;
+  if (fermeId === null) return avis ?? <p className="attente">Ouverture des données de ce téléphone…</p>;
+  return (
+    <>
+      {avis}
+      <Ecran key={`${utilisateurId ?? ''}|${fermeId}`} {...p} porte={porte} fermeId={fermeId} stockage={stockage} serieAuDepart={serieDemandee?.porteLa === true} />
+    </>
+  );
 }
 
 interface ProprietesEcran extends Omit<ProprietesEcranPlan, 'fermeId' | 'stockage'> {
   readonly fermeId: string;
   readonly stockage: StockageInstantane | null;
+  /** T49 : ouvrir « Nouvelle série » dès l'ouverture (demande du parcours guidé, base prête). */
+  readonly serieAuDepart: boolean;
 }
 
-function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, stockage, surOnglet }: ProprietesEcran) {
+function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, stockage, surOnglet, serieAuDepart }: ProprietesEcran) {
   const [jour] = useState(aujourdhui);
   const [version, setVersion] = useState(0);
   const [saisons, setSaisons] = useState<SaisonPlan[] | null>(() => (porte === null ? null : saisonsEnCache(porte, fermeId)));
@@ -617,8 +633,8 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
     if (etaitSurInstantane.current && !surInstantane) setDetail(null);
     etaitSurInstantane.current = surInstantane;
   }, [surInstantane]);
-  // T49 : « Planifier une première série » depuis Aujourd'hui : le formulaire s'ouvre à l'arrivée (demande prise ci-dessous).
-  const [formulaire, setFormulaire] = useState<DepartSerie | null>(() => (porte !== null && demandeEnAttente() === 'serie' ? { sorte: 'creation' } : null));
+  // T49 : « Planifier une première série » depuis Aujourd'hui : le formulaire s'ouvre à l'arrivée.
+  const [formulaire, setFormulaire] = useState<DepartSerie | null>(() => (serieAuDepart && porte !== null ? { sorte: 'creation' } : null));
   const [annulable, setAnnulable] = useState<(SaisieSerieAnnulable & { readonly numero: number }) | null>(null);
   const numeroAnnulable = useRef(0);
   /** Annulation par le bandeau refusée : ce qui n'a pas pu être défait (message affiché). */
@@ -951,9 +967,6 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
       if (!lectureSeule) nouvelleSerie();
     } else if (surOnglet !== undefined) allerVers(c, surOnglet);
   };
-  useEffect(() => {
-    if (porte !== null) prendreDemande('serie');
-  }, [porte]);
   const fermerFormulaire = useCallback(() => {
     setFormulaire(null);
   }, []);

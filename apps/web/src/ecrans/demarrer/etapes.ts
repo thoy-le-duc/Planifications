@@ -50,20 +50,29 @@ export const SQL_DEMARRAGE = `SELECT
   EXISTS (SELECT 1 FROM serie WHERE ferme_id = ? AND supprime_le IS NULL) AS series`;
 export const TABLES_DEMARRAGE: readonly string[] = ['saison', 'emplacement', 'itineraire', 'serie'];
 
-let demande: CibleDemarrage | null = null;
+/**
+ * Durée de vie d'une demande : le temps d'un changement d'onglet. Au-delà (changement raté, écran
+ * qui n'arrive pas), elle est oubliée : elle n'ouvrira jamais un écran plus tard par surprise.
+ */
+export const DUREE_DEMANDE_MS = 5_000;
+
+let demande: { readonly cible: CibleDemarrage; readonly le: number } | null = null;
 
 /** Note où aller ; l'écran d'arrivée la prend à son ouverture (`prendreDemande`). */
 export function demander(c: CibleDemarrage): void {
-  demande = c;
+  demande = { cible: c, le: Date.now() };
 }
 
-/** La demande en attente, sans la prendre. */
-export const demandeEnAttente = (): CibleDemarrage | null => demande;
+/** La demande en attente (encore valable), sans la prendre. */
+export function demandeEnAttente(): CibleDemarrage | null {
+  if (demande !== null && Date.now() - demande.le > DUREE_DEMANDE_MS) demande = null;
+  return demande?.cible ?? null;
+}
 
 /** Prend la demande en attente si c'est l'une de `cibles` (elle est alors oubliée), sinon null. */
 export function prendreDemande(...cibles: readonly CibleDemarrage[]): CibleDemarrage | null {
-  if (demande === null || !cibles.includes(demande)) return null;
-  const c = demande;
+  const c = demandeEnAttente();
+  if (c === null || !cibles.includes(c)) return null;
   demande = null;
   return c;
 }

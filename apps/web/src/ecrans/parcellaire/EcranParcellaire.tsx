@@ -11,6 +11,8 @@ import type { PorteDonnees } from '@planif/sync';
 import './parcellaire.css';
 import {
   ajouterPlanches,
+  avertissementHorsService,
+  avertissementSaison,
   changerService,
   creerSaison,
   creerZone,
@@ -234,11 +236,22 @@ function FormulaireSaison({ ctx, saison, nomsPris, surFermer, surEnregistre }: P
     }
   }
 
-  function enregistrer(): void {
+  /** Avertissement montré (dates qui laissent des séries dehors) : le prochain tap enregistre quand même. */
+  const [averti, setAverti] = useState(false);
+
+  async function enregistrer(): Promise<void> {
     const v = verifierSaison({ nom, debut, fin });
     if (!v.ok) {
       setMessage(v.message);
       return;
+    }
+    if (saison !== null && !averti) {
+      const a = await avertissementSaison(ctx, saison.id, v.valeur).catch(() => null);
+      if (a !== null) {
+        setMessage(a);
+        setAverti(true);
+        return;
+      }
     }
     void faire(() => (saison === null ? creerSaison(ctx, v.valeur) : modifierSaison(ctx, saison.id, v.valeur)));
   }
@@ -246,6 +259,7 @@ function FormulaireSaison({ ctx, saison, nomsPris, surFermer, surEnregistre }: P
   const changer = (f: (v: string) => void) => (v: string) => {
     f(v);
     setMessage(null);
+    setAverti(false);
   };
   return (
     <Saisie titre={saison === null ? 'Nouvelle saison' : 'Modifier la saison'} surFermer={surFermer} message={message}>
@@ -255,8 +269,8 @@ function FormulaireSaison({ ctx, saison, nomsPris, surFermer, surEnregistre }: P
         <Champ etiquette="Fin" type="date" valeur={fin} surChange={changer(setFin)} />
       </div>
       <div className="parc-actions">
-        <button type="button" className="parc-bouton-principal" disabled={occupe} onClick={enregistrer}>
-          Enregistrer
+        <button type="button" className="parc-bouton-principal" disabled={occupe} onClick={() => void enregistrer()}>
+          {averti ? 'Enregistrer quand même' : 'Enregistrer'}
         </button>
         {saison !== null && (
           <button type="button" className="parc-bouton-danger" disabled={occupe} onClick={() => void faire(() => supprimerSaison(ctx, saison.id))}>
@@ -391,6 +405,20 @@ function FormulairePlanche({ ctx, planche, codesPris, surFermer, surEnregistre }
     void faire(() => modifierEmplacement(ctx, planche.id, v.valeur));
   }
 
+  /** Avertissement montré (planche encore occupée) : le prochain tap la met hors service quand même. */
+  const [averti, setAverti] = useState(false);
+  async function basculerService(): Promise<void> {
+    if (enService && !averti) {
+      const a = await avertissementHorsService(ctx, planche.id).catch(() => null);
+      if (a !== null) {
+        setMessage(a);
+        setAverti(true);
+        return;
+      }
+    }
+    await faire(() => changerService(ctx, planche.id, !enService));
+  }
+
   const changer = (f: (v: string) => void) => (v: string) => {
     f(v);
     setMessage(null);
@@ -409,8 +437,8 @@ function FormulairePlanche({ ctx, planche, codesPris, surFermer, surEnregistre }
         <button type="button" className="parc-bouton-principal" disabled={occupe} onClick={enregistrer}>
           Enregistrer
         </button>
-        <button type="button" className="parc-bouton-secondaire" disabled={occupe} onClick={() => void faire(() => changerService(ctx, planche.id, !enService))}>
-          {enService ? 'Mettre hors service' : 'Remettre en service'}
+        <button type="button" className="parc-bouton-secondaire" disabled={occupe} onClick={() => void basculerService()}>
+          {enService ? (averti ? 'Mettre hors service quand même' : 'Mettre hors service') : 'Remettre en service'}
         </button>
         <button type="button" className="parc-bouton-danger" disabled={occupe} onClick={() => void faire(() => supprimerEmplacement(ctx, planche.id))}>
           Supprimer la planche

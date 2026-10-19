@@ -160,6 +160,73 @@ async function verifierEmplacementLibre(lire: Lire, fermeId: string, ids: readon
     [fermeId, ...ids, aujourdhui],
   );
   if (n > 0) throw new EcritureRefusee(`${ids.length > 1 ? 'ces planches portent' : 'cette planche porte'} encore ${pluriel(n, 'culture', 'cultures')} : déplacez ou supprimez la série d’abord`);
+  // Comme le serveur : un assolement actif d'une saison pas terminée la retient aussi (celui d'une saison terminée est l'historique).
+  const assolements = await compter(
+    lire,
+    `SELECT COUNT(*) AS n FROM assolement a JOIN saison s ON s.id = a.saison_id
+     WHERE a.ferme_id = ? AND a.emplacement_id IN (${marques}) AND a.supprime_le IS NULL AND s.fin >= ?`,
+    [fermeId, ...ids, aujourdhui],
+  );
+  if (assolements > 0) {
+    throw new EcritureRefusee(
+      `${ids.length > 1 ? 'ces planches ont' : 'cette planche a'} encore ${pluriel(assolements, 'assolement', 'assolements')} prévu dans une saison pas terminée : retirez-le de l’assolement d’abord`,
+    );
+  }
+}
+
+/**
+ * Prolonger une saison terminée (sa fin passe d'avant le jour à ce jour ou après) remet son plan en
+ * cours : refusé, comme le serveur (T10t), tant que des assolements actifs de ce plan désignent une
+ * zone, un emplacement, une espèce ou une famille supprimés, ou une espèce changée de famille.
+ */
+async function verifierProlongation(lire: Lire, fermeId: string, id: string, finAvant: string, finApres: string, aujourdhui: string): Promise<void> {
+  if (!(finAvant < aujourdhui && aujourdhui <= finApres)) return;
+  const n = await compter(
+    lire,
+    `SELECT COUNT(*) AS n FROM assolement a
+       LEFT JOIN zone z ON z.id = a.zone_id
+       LEFT JOIN emplacement em ON em.id = a.emplacement_id
+       LEFT JOIN espece sp ON sp.id = a.espece_id
+       LEFT JOIN famille fa ON fa.id = a.famille_id
+     WHERE a.saison_id = ? AND a.ferme_id = ? AND a.supprime_le IS NULL
+       AND (z.supprime_le IS NOT NULL OR em.supprime_le IS NOT NULL OR sp.supprime_le IS NOT NULL OR fa.supprime_le IS NOT NULL
+            OR (sp.id IS NOT NULL AND sp.famille_id IS NOT a.famille_id))`,
+    [id, fermeId],
+  );
+  if (n > 0) throw new EcritureRefusee(`prolonger cette saison remettrait en cours ${pluriel(n, 'assolement', 'assolements')} sur un élément supprimé ou une espèce changée de famille`);
+}
+
+/**
+ * Avertissement avant de changer les dates d'une saison (rien n'est bloqué) : les séries prévues ou
+ * en cours de la saison dont la mise en place tomberait hors des nouvelles dates. null : rien à dire.
+ */
+export async function avertissementSaison(ctx: ContexteParcellaire, id: string, s: SaisieSaison): Promise<string | null> {
+  const n = await compter(
+    (sql, p) => ctx.porte.lire(sql, p),
+    `SELECT COUNT(*) AS n FROM serie WHERE ferme_id = ? AND saison_id = ? AND supprime_le IS NULL AND statut IN ('prevue', 'en_cours')
+       AND prevu_mise_en_place IS NOT NULL AND (prevu_mise_en_place < ? OR prevu_mise_en_place > ?)`,
+    [ctx.fermeId, id, s.debut, s.fin],
+  );
+  return n === 0 ? null : `Avec ces dates, ${pluriel(n, 'série', 'séries')} de cette saison ${n > 1 ? 'seraient mises' : 'serait mise'} en place hors de la saison. Elles restent dans la saison ; vérifiez-les dans Planches.`;
+}
+
+/**
+ * Avertissement avant la mise hors service (rien n'est bloqué) : les cultures en cours ou à venir
+ * qui occupent encore la planche. null : rien à dire.
+ */
+export async function avertissementHorsService(ctx: ContexteParcellaire, id: string): Promise<string | null> {
+  const n = await compter(
+    (sql, p) => ctx.porte.lire(sql, p),
+    `SELECT COUNT(*) AS n FROM occupation o
+       LEFT JOIN serie s ON s.id = o.serie_id
+       LEFT JOIN plantation p ON p.id = o.plantation_id
+     WHERE o.ferme_id = ? AND o.emplacement_id = ? AND o.supprime_le IS NULL
+       AND COALESCE(o.reel_au, o.prevu_au, '9999-12-31') >= ?
+       AND ((s.id IS NOT NULL AND s.supprime_le IS NULL AND s.statut IN ('prevue', 'en_cours'))
+         OR (p.id IS NOT NULL AND p.supprime_le IS NULL AND (p.date_arrachage IS NULL OR p.date_arrachage > ?)))`,
+    [ctx.fermeId, id, ctx.aujourdhui, ctx.aujourdhui],
+  );
+  return n === 0 ? null : `Cette planche porte encore ${pluriel(n, 'culture', 'cultures')} en cours ou à venir. Hors service, elle ne sera plus proposée pour les nouvelles séries ; les séries déjà posées restent dessus.`;
 }
 
 /** La zone `id` existe, non supprimée, dans la ferme. */
@@ -226,9 +293,10 @@ export async function modifierSaison(ctx: ContexteParcellaire, id: string, s: Sa
   const avant = await lireLigne(ctx, 'saison', id);
   const valeurs = changees(avant, { nom: s.nom, debut: s.debut, fin: s.fin });
   if (Object.keys(valeurs).length === 0) return null;
-  await ctx.porte.ecrireEnsemble([miseAJour('saison', id, valeurs, ctx.maintenant().toISOString())]);
+  const finAvant = String(avant.fin);
+  await ecrireVerifie(ctx, [miseAJour('saison', id, valeurs, ctx.maintenant().toISOString())], (lire) => verifierProlongation(lire, ctx.fermeId, id, finAvant, s.fin, ctx.aujourdhui));
   const anciennes = Object.fromEntries(Object.keys(valeurs).map((c) => [c, avant[c] ?? null]));
-  return { texte: `Saison ${s.nom} modifiée`, annuler: remettre(ctx, 'saison', id, anciennes) };
+  return { texte: `Saison ${s.nom} modifiée`, annuler: remettre(ctx, 'saison', id, anciennes, (lire) => verifierProlongation(lire, ctx.fermeId, id, s.fin, finAvant, ctx.aujourdhui)) };
 }
 
 export async function supprimerSaison(ctx: ContexteParcellaire, id: string): Promise<Enregistrement> {
