@@ -305,7 +305,7 @@ export function App() {
             // montrée, puis reçoit la porte (un écran par utilisateur et par ferme, clé posée par
             // l'écran). L'utilisateur de la session, pour l'instantané.
             donnees.ferme !== null || donnees.base === 'ouverture' ? (
-              <EcranDeLaFerme porte={donnees.ferme?.porte ?? null} fermeId={donnees.ferme?.fermeId ?? null} utilisateurId={session.utilisateurId} />
+              <EcranDeLaFerme porte={donnees.ferme?.porte ?? null} fermeId={donnees.ferme?.fermeId ?? null} utilisateurId={session.utilisateurId} surOnglet={setOnglet} />
             ) : (
               // Sans ferme : « Créer ma ferme » (T39) ; sinon la base n'a pas pu s'ouvrir.
               creation || <p className="attente">Les données de ce téléphone n’ont pas pu s’ouvrir. Rechargez l’appli ; si cela recommence, signalez-le.</p>

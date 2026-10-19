@@ -317,13 +317,32 @@ Pour chaque ligne : écris le nom **exactement** comme ci-dessous (majuscules, t
    - Si tu lis « Pas de réseau » : la première création demande du réseau. Le formulaire revient tout seul quand le téléphone capte.
 7. Saisis le nom de ta ferme (200 caractères au plus) et touche **Créer ma ferme**. Le fuseau horaire est Europe/Paris. Pour le changer, il n'y a pas encore d'écran : demande-le à Claude.
 8. Ce que tu dois voir : « Ferme créée, synchronisation… », puis, au bout de quelques secondes, ta ferme vide (sans les données de la démo) dans l'onglet **Aujourd'hui**. Tu en es le gérant. Si un message s'affiche à la place (« Pas de réseau », « Votre session a expiré », « Ce nom de ferme n'est pas accepté »), ce que tu as tapé reste dans le champ : corrige ou réessaie.
-9. Pour vérifier la synchro : ajoute une zone ou une planche, puis ouvre l'appli sur un autre appareil avec la même adresse courriel. Au bout de quelques secondes, la zone doit apparaître.
+9. Pour vérifier la synchro : ajoute une zone ou une planche (étape 8, ci-dessous), puis ouvre l'appli sur un autre appareil avec la même adresse courriel. Au bout de quelques secondes, la zone doit apparaître.
 10. Installe l'appli sur le téléphone : elle aura son icône sur l'écran d'accueil, s'ouvrira en plein écran, comme une application, et marchera aussi sans réseau. L'appli le propose elle-même :
     - **Android (Chrome)** : un bandeau « Installer l'appli » apparaît en bas de l'onglet **Aujourd'hui** (jamais pendant une saisie), et la carte **Installer sur ce téléphone** reste dans l'onglet **Ferme**. Touche **Installer l'appli**, puis **Installer** dans la fenêtre du navigateur. Le bouton n'apparaît qu'une fois que Chrome juge l'appli installable : si tu ne le vois pas à la première visite, recharge la page au bout de quelques secondes. Si tu refuses la fenêtre du navigateur, la carte reste : le bouton te rappelle alors le geste du navigateur (menu **⋮**, puis **Installer l'application**).
     - **iPhone (Safari)** : le même bouton ouvre une courte aide : touche **Partager** (le carré avec une flèche, en bas de Safari), puis **Sur l'écran d'accueil**, et **Ajouter**.
     - Une fois l'appli installée et ouverte depuis son icône, la carte et le bandeau ne s'affichent plus. Le bandeau fermé d'un tap (ou après un tap sur « Installer l'appli ») ne revient pas ; la carte de l'onglet **Ferme** reste là tant que l'appli n'est pas installée.
 
 Il n'y a pas de mot de passe : à chaque nouvelle connexion, un nouveau code arrive par courriel.
+
+---
+
+## Étape 8 — Démarrer sa ferme
+
+Une ferme neuve est vide : ni saison, ni planche, ni série. L'appli le dit et guide, sans tableur, même hors ligne. Compte une vingtaine de minutes pour une première saison utilisable.
+
+1. Ouvre l'onglet **Aujourd'hui**. Ce que tu dois voir : en haut, la carte **Démarrer votre ferme** avec quatre étapes (1. Créer la saison, 2. Ajouter zones et planches, 3. Choisir vos itinéraires, 4. Planifier une première série) et « 0/4 ». La même carte est en haut de l'onglet **Planches**. Chaque étape se coche toute seule quand elle est faite.
+   - Tu as déjà un tableur (Elzéard, Excel, CSV) ? Touche **Importer un tableur** en bas de la carte : l'import remplit saisons, zones, planches et séries d'un coup. Tu peux ensuite reprendre ici les étapes qui manquent.
+2. Touche **1. Créer la saison**. L'onglet **Ferme** s'ouvre sur **Ma ferme**. Touche **Créer la saison 2026** (l'année en cours) : la saison va du 1er janvier au 31 décembre. Pour d'autres dates, touche la saison, change **Début** ou **Fin**, puis **Enregistrer**. **Nouvelle saison** en ajoute une autre (2027 est proposée).
+3. Toujours dans **Ma ferme**, touche **Nouvelle zone** : un nom (« Tunnel 1 », « Champ du bas »), le type d'abri (plein champ, tunnel, serre, hors-sol), et, pour une chapelle ou un sous-îlot, **Dans la zone** (la zone qui la contient). **Enregistrer**.
+4. Touche la zone pour l'ouvrir, puis, dans **Ajouter des planches** : le nombre (10), le préfixe du code (« P », ou « T1-P »), la longueur et la largeur en mètres (30 et 0,8 ; la virgule marche). L'appli affiche les codes qu'elle va créer (« P1 à P10 ») ; touche **Ajouter les planches**. Ajouter de nouveau continue la numérotation (P11…). Deux zones peuvent avoir chacune leur « P1 ».
+5. Une planche se corrige en la touchant : code, sorte (planche, rang, gouttière avec son nombre de places), longueur, largeur. **Mettre hors service** la retire des nouvelles séries sans effacer son historique ; **Supprimer la planche** n'est possible que si aucune culture ne l'occupe. Une zone ou une saison ne se supprime que vide : l'appli dit ce qui la retient (« 2 planches », « 1 série »).
+6. Chaque enregistrement affiche un bandeau vert **Annuler** pendant 10 secondes : un tap défait tout le geste (les 10 planches d'un coup, par exemple).
+7. Reviens à **Aujourd'hui** : les étapes 1 et 2 sont cochées. L'étape 3 (**Choisir vos itinéraires**) est facultative : la bibliothèque propose déjà des itinéraires, et **Mes itinéraires** permet de les adapter à ta façon de cultiver.
+8. Touche **4. Planifier une première série** : l'onglet **Planches** s'ouvre sur **Nouvelle série**. Choisis la culture, garde l'itinéraire proposé, ajoute une planche, **Planifier la série**. Ce que tu dois voir : la série sur le plan des planches, ses travaux dans **Aujourd'hui**, et la carte **Démarrer votre ferme** disparaît.
+   - Tant qu'il manque une saison ou des planches, **Planches** et **Aujourd'hui** le disent avec un bouton qui mène à ce qui manque.
+
+Tout ce que tu crées ici se synchronise tout seul dès que le téléphone capte ; un équipier peut le faire aussi.
 
 Tes données t'appartiennent : l'export complet (JSON et CSV) se fait en un clic depuis l'appli, à tout moment.
 

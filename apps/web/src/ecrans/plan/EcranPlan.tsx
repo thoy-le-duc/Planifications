@@ -27,6 +27,8 @@ import type { DepartSerie, SaisieSerieAnnulable } from '../serie/index.ts';
 import { chargerVue3d, MARQUE_MODULE_3D, webglDisponible } from '../plan3d/entree.ts';
 import type { ProprietesVue3d } from '../plan3d/index.ts';
 import type { EditeurPlacementCharge } from '../ferme/EcranFerme.tsx';
+import { allerVers, Bandeau as BandeauDemarrer, EtatVide, useDemarrage } from '../demarrer/BandeauDemarrer.tsx';
+import { demandeEnAttente, prendreDemande, type CibleDemarrage } from '../demarrer/etapes.ts';
 import './plan.css';
 import { obtenirDebutDePlan, obtenirPlan, obtenirSaisons, planEnCache, saisonsEnCache, surChangement, type PlanLu } from './cache.ts';
 import {
@@ -61,6 +63,12 @@ export interface ProprietesEcranPlan {
   readonly utilisateurId?: string;
   /** T11g : où l'instantané est gardé ; par défaut localStorage. */
   readonly stockage?: StockageInstantane;
+  /**
+   * T49 : change d'onglet (App). Avec lui, une ferme sans série voit le bandeau « Démarrer votre
+   * ferme », et les états vides (sans saison, sans planche) mènent à l'onglet Ferme ; sans lui,
+   * comme avant.
+   */
+  readonly surOnglet?: (onglet: 'ferme' | 'planches') => void;
 }
 
 /**
@@ -586,7 +594,7 @@ interface ProprietesEcran extends Omit<ProprietesEcranPlan, 'fermeId' | 'stockag
   readonly stockage: StockageInstantane | null;
 }
 
-function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, stockage }: ProprietesEcran) {
+function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, stockage, surOnglet }: ProprietesEcran) {
   const [jour] = useState(aujourdhui);
   const [version, setVersion] = useState(0);
   const [saisons, setSaisons] = useState<SaisonPlan[] | null>(() => (porte === null ? null : saisonsEnCache(porte, fermeId)));
@@ -609,7 +617,8 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
     if (etaitSurInstantane.current && !surInstantane) setDetail(null);
     etaitSurInstantane.current = surInstantane;
   }, [surInstantane]);
-  const [formulaire, setFormulaire] = useState<DepartSerie | null>(null);
+  // T49 : « Planifier une première série » depuis Aujourd'hui : le formulaire s'ouvre à l'arrivée (demande prise ci-dessous).
+  const [formulaire, setFormulaire] = useState<DepartSerie | null>(() => (porte !== null && demandeEnAttente() === 'serie' ? { sorte: 'creation' } : null));
   const [annulable, setAnnulable] = useState<(SaisieSerieAnnulable & { readonly numero: number }) | null>(null);
   const numeroAnnulable = useRef(0);
   /** Annulation par le bandeau refusée : ce qui n'a pas pu être défait (message affiché). */
@@ -931,6 +940,20 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
     setDetail(null);
     setFormulaire({ sorte: 'modification', serieId });
   }, []);
+  // T49 : parcours guidé (lu après l'affichage, seulement si l'appli sait changer d'onglet).
+  const demarrage = useDemarrage(porte, fermeId, surOnglet !== undefined);
+  const nouvelleSerie = useCallback(() => {
+    setFormulaire({ sorte: 'creation', ...(saisonId === null ? {} : { saisonId }) });
+  }, [saisonId]);
+  /** Étape du parcours : la série s'ouvre ici, le reste dans l'onglet Ferme. */
+  const allerA = (c: CibleDemarrage) => {
+    if (c === 'serie') {
+      if (!lectureSeule) nouvelleSerie();
+    } else if (surOnglet !== undefined) allerVers(c, surOnglet);
+  };
+  useEffect(() => {
+    if (porte !== null) prendreDemande('serie');
+  }, [porte]);
   const fermerFormulaire = useCallback(() => {
     setFormulaire(null);
   }, []);
@@ -1060,8 +1083,27 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
   // T11g : base pas encore ouverte et aucun instantané de cette ferme : on le dit.
   if (porte === null && !surInstantane) return <p className="attente">Ouverture des données de ce téléphone…</p>;
   if (saisons !== null && saisons.length === 0) {
-    return <p className="attente">Aucune saison dans cette ferme pour l’instant : le plan s’affichera dès qu’il y en aura une.</p>;
+    if (surOnglet === undefined) return <p className="attente">Aucune saison dans cette ferme pour l’instant : le plan s’affichera dès qu’il y en aura une.</p>;
+    // T49 : le dire, et y mener.
+    return (
+      <div className="plan plan-demarrage">
+        {demarrage !== null && <BandeauDemarrer etat={demarrage} surAller={allerA} />}
+        <EtatVide
+          texte="Aucune saison dans cette ferme pour l’instant. Une saison regroupe les séries d’une année : créez-la, le plan des planches s’affichera ici."
+          bouton="Créer la saison"
+          surTap={() => {
+            allerVers('saisons', surOnglet);
+          }}
+        />
+        {formulaire !== null && porte !== null && (
+          <Suspense fallback={null}>
+            <FormulaireSerie porte={porte} fermeId={fermeId} depart={formulaire} aujourdhui={() => jour} surFermer={fermerFormulaire} surEnregistree={surEnregistree} />
+          </Suspense>
+        )}
+      </div>
+    );
   }
+  const sansPlanche = surOnglet !== undefined && lu?.complet === true && !lu.plan.lignes.some((l) => l.sorte === 'emplacement');
 
   const semaines = plan?.semaines ?? AUCUNE_SEMAINE;
   const largeur = LARGEUR_ETIQUETTE + semaines.length * LARGEUR_SEMAINE;
@@ -1073,6 +1115,16 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
   const en3d = vue3d.sorte === 'ouverte' && plan !== null;
   return (
     <div className="plan">
+      {!en3d && demarrage !== null && surOnglet !== undefined && <BandeauDemarrer etat={demarrage} surAller={allerA} />}
+      {!en3d && sansPlanche && (
+        <EtatVide
+          texte="Aucune planche dans cette ferme pour l’instant : ajoutez une zone et ses planches, elles s’afficheront ici."
+          bouton="Ajouter des planches"
+          surTap={() => {
+            allerA('zones');
+          }}
+        />
+      )}
       {!en3d && zonesPlan !== null && zonesPlan.zones.length > 0 && (
         <BandeZones zones={zonesPlan.zones} actif={Math.min(zoneActive, zonesPlan.zones.length - 1)} complet={lu?.complet === true} surPuce={allerAZone} />
       )}
@@ -1111,9 +1163,7 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
           type="button"
           className="plan-nouvelle"
           disabled={lectureSeule}
-          onClick={() => {
-            setFormulaire({ sorte: 'creation', ...(saisonId === null ? {} : { saisonId }) });
-          }}
+          onClick={nouvelleSerie}
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" aria-hidden="true">
             <path d="M12 5v14M5 12h14" />

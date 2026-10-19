@@ -31,6 +31,12 @@
  * import statique : ni l'entrée ni ce morceau ne le portent) et le montre avec la porte, la ferme
  * et l'utilisateur de la session. Lecture seule pour un équipier ou sur téléphone.
  *
+ * Ma ferme : saisons, zones, planches (T49) : une ligne en tête de l'écran, active comme « Mes
+ * itinéraires ». Un tap charge l'écran (`import('../parcellaire/index.ts')`, jamais un import
+ * statique) et le montre avec la porte du contexte ; « Importer un tableur » y mène à l'import.
+ * Le parcours guidé (Aujourd'hui, Planches) arrive ici par une demande (../demarrer/etapes.ts),
+ * prise à l'ouverture de l'écran : elle ouvre « Ma ferme », « Mes itinéraires » ou l'import.
+ *
  * Saisies refusées (T10i) : les refus de synchro de l'utilisateur (porte.surveillerRefus), en
  * tête de l'écran quand il y en a (./Refus.tsx). Marque MARQUE_REFUS_AFFICHES une fois par
  * ouverture, quand la liste est lue et dessinée (même vide).
@@ -50,6 +56,7 @@ import { Confirmation } from '../../ui/confirmation.tsx';
 import { CarteInstallation } from '../../installation/index.ts';
 import { Apparence } from './Apparence.tsx';
 import { SaisiesRefusees, type VidangeArchivage } from './Refus.tsx';
+import { prendreDemande } from '../demarrer/etapes.ts';
 
 /** Marque de performance : les refus de synchro sont lus et dessinés (T10i, e2e/refus.e2e.ts). */
 export const MARQUE_REFUS_AFFICHES = 'planif:refus-affiches';
@@ -101,6 +108,10 @@ const SANS_EXPORT: InstantExport = { id: 0, porte: null, fermeId: null, etat: { 
 /** L'écran des itinéraires (T24), chargé à la demande (morceau à part). */
 const chargerItineraires = () => import('../itineraires/index.ts');
 type ModuleItineraires = Awaited<ReturnType<typeof chargerItineraires>>;
+
+/** « Ma ferme : saisons, zones, planches » (T49), chargé à la demande (morceau à part). */
+const chargerParcellaire = () => import('../parcellaire/index.ts');
+type EcranParcellaireCharge = Awaited<ReturnType<typeof chargerParcellaire>>['EcranParcellaire'];
 
 /** L'écran d'import d'un tableur (T14b), chargé à la demande (morceau à part). */
 const chargerImport = () => import('../import/index.ts');
@@ -329,6 +340,31 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     );
   }
 
+  // Ma ferme (T49) : chargé au tap (ou à la demande du parcours guidé), montré avec la porte du contexte.
+  const [parcellaire, setParcellaire] = useState<{ readonly Ecran: EcranParcellaireCharge; readonly section: 'saisons' | 'zones' } | null>(null);
+  function ouvrirParcellaire(section: 'saisons' | 'zones'): void {
+    if (!itinerairesPossibles) return;
+    chargerParcellaire().then(
+      ({ EcranParcellaire: Ecran }) => {
+        setParcellaire({ Ecran, section });
+      },
+      (e: unknown) => {
+        console.error('Écran « Ma ferme » introuvable', e);
+      },
+    );
+  }
+
+  // T49 : demande du parcours guidé, prise une fois, dès que la base et la ferme sont là.
+  useEffect(() => {
+    if (!itinerairesPossibles) return;
+    const demande = prendreDemande('saisons', 'zones', 'itineraires', 'import');
+    if (demande === 'saisons' || demande === 'zones') ouvrirParcellaire(demande);
+    else if (demande === 'itineraires') ouvrirItineraires();
+    else if (demande === 'import') ouvrirImport();
+    // Les ouvertures ne dépendent que de la porte du contexte, déjà là.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itinerairesPossibles]);
+
   // Éditeur de placement (T28b) : chargé au tap, montré avec la porte du contexte.
   const [EditeurPlacement, setEditeurPlacement] = useState<EditeurPlacementCharge | null>(null);
   // Focus rendu au bouton d'ouverture une fois l'éditeur retiré (T28g).
@@ -488,6 +524,33 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     <>
       {effacementEnAttente && <AlerteOrange>{ALERTE_EFFACEMENT}</AlerteOrange>}
       {refus !== null && <SaisiesRefusees refus={refus} archiver={archiverRefus} vidangeRef={vidangeRefus} />}
+      <Carte titre="Ma ferme">
+        <Ligne
+          nom="Saisons, zones et planches"
+          detail="Créer la saison, les tunnels, serres et planches, à la main."
+          signe="›"
+          couleur="var(--couleur-foret)"
+          desactivee={!itinerairesPossibles}
+          surTap={() => {
+            ouvrirParcellaire('saisons');
+          }}
+        />
+      </Carte>
+      {parcellaire !== null && ouverte !== null && (
+        <parcellaire.Ecran
+          key={ouverte.fermeId}
+          porte={ouverte.porte}
+          fermeId={ouverte.fermeId}
+          section={parcellaire.section}
+          surFermer={() => {
+            setParcellaire(null);
+          }}
+          surImporter={() => {
+            setParcellaire(null);
+            ouvrirImport();
+          }}
+        />
+      )}
       <Carte titre="Ma façon de cultiver">
         <Ligne
           nom="Mes itinéraires"
