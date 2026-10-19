@@ -7,6 +7,8 @@ export * from './saisies/index.ts';
 export * from './saisies/stock.ts';
 export * from './saisies/serie.ts';
 export * from './saisies/itineraire.ts';
+// Traitements phyto (T52) : délai avant récolte, dose maximale, produits de la ferme, registre.
+export * from './phyto/index.ts';
 // Formats communs du serveur et de la porte (T28s) : identifiant, instant de suppression.
 export { identifiantNormalise, instantNormalise } from './saisies/formats.ts';
 export * from './export/index.ts';

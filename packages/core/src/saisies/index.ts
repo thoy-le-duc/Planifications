@@ -500,6 +500,10 @@ function lire(l: Objet): Lu<Evenement> {
   if (!remplacement.ok) return remplacement;
   const detail = lireDetail(type.valeur, l.detail);
   if (!detail.ok) return detail;
+  // T52 : la récolte est autorisée au plus tôt le jour du traitement (DAR ≥ 0).
+  if (type.valeur === 'traitement' && typeof detail.valeur.recolteAutoriseeLe === 'string' && detail.valeur.recolteAutoriseeLe < date.valeur) {
+    return echec(erreur('incoherent', 'detail.recolteAutoriseeLe', 'date de récolte autorisée avant le jour du traitement'));
+  }
 
   let culture: Evenement['culture'] = null;
   if (serieId.valeur !== null) culture = { sorte: 'serie', serieId: serieId.valeur as Id<'Serie'> };
