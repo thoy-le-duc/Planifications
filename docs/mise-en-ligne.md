@@ -10,7 +10,7 @@ Le résultat : l'appli sur une adresse du type `https://appli-ferme.vercel.app`,
 - Le dépôt GitHub est **public jusqu'au 1er novembre** : tout ce qui y est écrit est lisible par n'importe qui. Raison de plus pour ne rien y mettre.
 - Ne commence que lorsque Claude t'a dit que ce guide et la mise en place de Vercel (tickets T38a et T38b) sont **fusionnés dans `main`** : avant, le dépôt n'a pas encore le fichier `vercel.json` et l'étape 5 échouera.
 - Garde un **gestionnaire de mots de passe** (ou, à défaut, un carnet papier) ouvert : plusieurs valeurs seront à recopier plus tard.
-- Ordre à suivre : Neon, migrations, PowerSync, Brevo, Vercel, retour sur PowerSync, premier compte.
+- Ordre à suivre : Neon, migrations, secret GitHub des migrations automatiques, PowerSync, Brevo, Vercel, retour sur PowerSync, premier compte.
 
 ### Ce que tu vas manipuler
 
@@ -21,6 +21,7 @@ Le résultat : l'appli sur une adresse du type `https://appli-ferme.vercel.app`,
 | Brevo | l'envoi du code à 6 chiffres par courriel | UE |
 | Vercel | l'appli et l'API (Paris) | Paris |
 | GitHub Codespaces | un petit terminal dans le navigateur, une seule fois, pour préparer la base | navigateur |
+| GitHub Actions | applique seul les nouvelles migrations après chaque mise à jour (étape 2 bis) | serveurs de GitHub |
 
 ### Les variables, en un coup d'œil
 
@@ -77,13 +78,13 @@ Chaque variable est détaillée à l'étape où tu la poses. Ce tableau est la l
 18. Copie-la et enregistre-la sous le nom `Neon directe`.
 19. Pourquoi deux adresses : l'appli en ligne utilise la **pooled** (elle supporte beaucoup de petites connexions). Les migrations et la synchro ont besoin de la **directe**.
 
-Ces adresses contiennent ton mot de passe de base. Elles ne vont que dans ton gestionnaire, dans le terminal de l'étape 2, dans Vercel et dans PowerSync.
+Ces adresses contiennent ton mot de passe de base. Elles ne vont que dans ton gestionnaire, dans le terminal de l'étape 2, dans le secret GitHub de l'étape 2 bis, dans Vercel et dans PowerSync.
 
 ---
 
 ## Étape 2 — Migrations : créer les tables
 
-Les « migrations » créent les tables vides de ta ferme dans Neon. On les lance une seule fois (et à chaque mise à jour qui en apporte de nouvelles).
+Les « migrations » créent les tables vides de ta ferme dans Neon. On les lance ici **une seule fois**, à la première mise en ligne. Ensuite c'est **automatique** : après chaque mise à jour fusionnée dans `main`, GitHub applique lui-même les nouvelles migrations (étape 2 bis). Le terminal ne sert plus qu'**en secours**.
 
 **La voie que nous choisissons : GitHub Codespaces.** C'est un petit ordinateur prêté par GitHub, dans ton navigateur, qui a déjà tout ce qu'il faut. Rien à installer sur ton ordinateur, et on le supprime après. Le terminal reste chez toi : l'adresse de la base ne passe par aucune conversation et n'est écrite dans aucun fichier du dépôt.
 
@@ -154,6 +155,23 @@ PowerSync lit la base avec un compte à part, qui ne peut rien écrire. Cette pa
 ### Fermer Codespaces
 
 21. Ferme l'onglet. Pour libérer ta réserve gratuite : sur https://github.com/codespaces, clique sur les trois points à côté de ton codespace, puis **Delete**. L'adresse de la base disparaît avec lui.
+
+---
+
+## Étape 2 bis — Poser le secret DATABASE_URL_PRODUCTION : migrations automatiques
+
+Une fois ce secret posé, plus besoin de Codespaces après chaque mise à jour : dès que la CI de `main` est verte, le workflow GitHub **Migrations de production** applique les nouvelles migrations sur Neon. Sans ce secret, il ne fait rien (il reste vert, avec le message « secret DATABASE_URL_PRODUCTION absent »).
+
+Le secret est chiffré par GitHub : personne ne peut le relire, ni toi, ni Claude, ni les visiteurs du dépôt public. Il n'est donné qu'à ce workflow, jamais aux PR.
+
+1. Ouvre https://github.com/thoy-le-duc/Planifications/settings/secrets/actions (ou, sur la page du dépôt : onglet **Settings**, menu de gauche **Secrets and variables**, puis **Actions**).
+2. Clique sur le bouton vert **New repository secret**.
+3. **Name** : écris exactement `DATABASE_URL_PRODUCTION`.
+4. **Secret** : colle l'adresse **directe** de Neon (`Neon directe`, celle **sans** `-pooler`), depuis ton gestionnaire.
+5. Clique sur **Add secret**. Ce que tu dois voir : `DATABASE_URL_PRODUCTION` dans la liste **Repository secrets**, sans sa valeur.
+6. Vérification : onglet **Actions**, à gauche **Migrations de production**, bouton **Run workflow**, branche `main`, puis **Run workflow**. Au bout d'une à deux minutes, la ligne passe au vert ; en l'ouvrant, l'étape « Migrations » se termine par **`Migrations appliquées.`**
+
+Pour changer l'adresse (nouveau mot de passe Neon) : même page, crayon à côté de `DATABASE_URL_PRODUCTION`, colle la nouvelle, **Update secret**.
 
 ---
 
@@ -356,13 +374,18 @@ Tant que tu es seul à tester avec ta ferme, tu n'approcheras aucune de ces limi
 1. Ouvre le déploiement en rouge, descends tout en bas du journal et copie les dix dernières lignes (sans variable ni adresse de base).
 2. Transmets-les à Claude, avec le nom du projet. Cela vient presque toujours du code, pas de toi.
 
-**Les migrations échouent (étape 2).**
+**Le workflow « Migrations de production » est rouge (onglet Actions).**
+1. Ouvre-le : l'étape « Migrations » donne le message de l'erreur (jamais l'adresse). Rien d'autre n'a été tenté.
+2. Erreur de connexion ou d'authentification : le secret contient peut-être l'adresse pooled, une adresse tronquée ou un ancien mot de passe ; remplace-le (étape 2 bis), puis **Re-run jobs**.
+3. Autre erreur : transmets-la à Claude (le message, sans adresse). En attendant, l'appli continue de tourner sur l'ancienne version des tables.
+
+**Les migrations échouent (étape 2, à la main en secours).**
 1. `DATABASE_URL absente` : refais la saisie cachée (points 6 à 8).
 2. Erreur de connexion ou d'authentification : tu as peut-être collé l'adresse pooled ou une adresse tronquée ; recopie l'adresse **directe**.
 3. Tu peux relancer la commande sans risque : les migrations déjà passées ne sont pas rejouées.
 
 **J'ai collé un secret au mauvais endroit (conversation, ticket, fichier du dépôt).**
-1. Considère-le comme perdu et change-le tout de suite : mot de passe Neon (**Roles**, trois points, **Reset password**), clé SMTP Brevo (supprime-la et crée-en une autre), clés de signature (génère-en une nouvelle à l'étape 2).
+1. Considère-le comme perdu et change-le tout de suite : mot de passe Neon (**Roles**, trois points, **Reset password**), clé SMTP Brevo (supprime-la et crée-en une autre), clés de signature (génère-en une nouvelle à l'étape 2). Après un nouveau mot de passe Neon, remplace aussi le secret `DATABASE_URL_PRODUCTION` (étape 2 bis).
 2. Mets la nouvelle valeur dans Vercel et **Redeploy**. Un changement de `JWT_CLES_PRIVEES` déconnecte tout le monde : on se reconnecte avec un nouveau code.
 3. Un secret écrit dans le dépôt **public** reste visible dans l'historique même effacé : ne compte que sur le remplacement.
 
@@ -373,6 +396,7 @@ Tant que tu es seul à tester avec ta ferme, tu n'approcheras aucune de ces limi
 - **Jamais** de mot de passe, de clé ni d'adresse de base de données dans une conversation avec Claude, dans un ticket, dans une PR ou dans un fichier du dépôt. Claude n'en a jamais besoin : il te dit où cliquer, tu colles toi-même.
 - Le dépôt est **public jusqu'au 1er novembre** : tout y est lisible. Les secrets restent chez Vercel, Neon, PowerSync et Brevo, et dans ton gestionnaire de mots de passe.
 - Le terminal de l'étape 2 ne garde pas l'adresse de la base (saisie cachée, codespace supprimé ensuite).
+- Le secret `DATABASE_URL_PRODUCTION` (étape 2 bis) n'est lu que par le workflow **Migrations de production**, lancé seulement après une CI verte de `main` ou à la main ; jamais par une PR, ni depuis une copie (fork) du dépôt. GitHub masque sa valeur dans les journaux.
 - La clé `JWT_CLES_PRIVEES` signe les connexions : qui la possède peut se faire passer pour n'importe qui. Elle ne sort que de ton terminal vers Vercel.
 - L'utilisateur `powersync_role` ne peut que **lire** la base. S'il fuite, change son mot de passe dans Neon et dans PowerSync.
 - L'adresse `https://<appli>/api/.well-known/jwks.json` est publique par nature : elle ne contient que la partie publique des clés.

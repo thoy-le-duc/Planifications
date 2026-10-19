@@ -17,6 +17,6 @@
 
 ## Critères d'acceptation
 
-- [ ] Test (lecture du YAML) : déclencheurs exacts (workflow_run CI sur main + succès, workflow_dispatch), aucun `pull_request`, permissions `contents: read`, concurrency, secret lu par `secrets.DATABASE_URL_PRODUCTION`, aucune commande qui affiche la variable.
-- [ ] Test : sans secret, l'étape s'arrête proprement (script testé, ex. `scripts/migrer-production.sh` ou équivalent Node).
-- [ ] Doc mise à jour ; `pnpm verif` passe.
+- [x] Test (lecture du YAML) : déclencheurs exacts (workflow_run CI sur main + succès, workflow_dispatch), aucun `pull_request`, permissions `contents: read`, concurrency, secret lu par `secrets.DATABASE_URL_PRODUCTION`, aucune commande qui affiche la variable.
+- [x] Test : sans secret, l'étape s'arrête proprement (script testé, ex. `scripts/migrer-production.sh` ou équivalent Node).
+- [x] Doc mise à jour ; `pnpm verif` passe.
