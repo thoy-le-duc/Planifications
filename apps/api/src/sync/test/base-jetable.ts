@@ -167,7 +167,9 @@ export async function peuplerFerme(pool: pg.Pool, fermeId: string): Promise<Lign
     [l.emplacement, fermeId, zone],
   );
   await pool.query(
-    `INSERT INTO secteur_irrigation (id, ferme_id, numero_vanne, nom) VALUES ($1, $2, 12, 'Vanne 12')`,
+    // T57 : un numéro par ferme parmi les vannes non supprimées ; peuplée deux fois, la ferme a V12 puis V13.
+    `INSERT INTO secteur_irrigation (id, ferme_id, numero_vanne, nom)
+     SELECT $1, $2, n, 'Vanne ' || n FROM (SELECT GREATEST(12, COALESCE(MAX(numero_vanne), 0) + 1) AS n FROM secteur_irrigation WHERE ferme_id = $2 AND supprime_le IS NULL) t`,
     [l.secteurIrrigation, fermeId],
   );
   await pool.query(
