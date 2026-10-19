@@ -12,7 +12,8 @@
  * `<Plants>` (Plants.tsx), le nombre d'InstancedMesh est donc :
  *     (nombre de formes de plants présentes) + 1
  * (un par forme présente, plus UN maillage d'accessoires), jamais + 2. Ce maillage porte tous les
- * accessoires, sans recouvrement de rangs : son `count` = tuteurs + poteaux + fruits + balises.
+ * accessoires, sans recouvrement de rangs : son `count` = tuteurs + poteaux + fruits + balises
+ * (+ lignes de rang depuis T46, posées seulement avec un écart entre rangs saisi : voir ../rangs-3d.test.ts).
  * Les poteaux restent comptés par `nbPoteaux` (kiwi : un par plant ; gouttière : `piedsDeGouttiere`).
  * Le test lit la scène three de fiber (createRoot, rendu à la demande) : aucun WebGL.
  *

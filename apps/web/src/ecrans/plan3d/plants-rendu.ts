@@ -31,6 +31,7 @@ import {
   COULEUR_FRAISE_MURE_3D,
   COULEUR_FRUIT_GENERIQUE_MUR_3D,
   COULEUR_FRUIT_VERT_3D,
+  COULEUR_LIGNE_RANG_3D,
   COULEUR_TOMATE_MURE_3D,
 } from '../../ui/jetons.ts';
 import { hauteurRendue, type Scene, type SceneFiltree } from './scene.ts';
@@ -50,6 +51,13 @@ const PIED_GOUTTIERE_M = 1.2;
  * partagée, étirée en hauteur : un fuseau droit et fin (T37b, un seul maillage pour tous les accessoires).
  */
 const EPAISSEUR_POTEAU_M = 0.12;
+/**
+ * Ligne de rang (T46) : la double pyramide partagée, couchée le long du rang, fine et basse, posée sur la
+ * dalle sous les plants. Elle couvre cette part de la longueur de la planche (ses pointes restent dedans).
+ */
+const LIGNE_RANG_PART_LONGUEUR = 0.96;
+const LIGNE_RANG_HAUTEUR_M = 0.012;
+const LIGNE_RANG_LARGEUR_M = 0.025;
 /** Le feuillage est vert ; la couleur du filtre reste sur la planche (de loin, sur la masse). Décochée, la planche garde sa couleur estompée. */
 const VERT_FEUILLAGE = COULEUR_FEUILLAGE_3D;
 /** Bois des poteaux (pergola, pieds de gouttière). */
@@ -103,6 +111,8 @@ export interface BilanPlants {
   readonly fruits: number;
   /** Balises « à récolter » posées (T32e), en détail ou non. */
   readonly balises: number;
+  /** Lignes de rang posées (T46), planches en détail seulement. */
+  readonly lignesRangs: number;
   /** La planche active (visée par « Suivant ») est-elle en détail ? null : pas de planche active, ou sans plants. */
   readonly activeEnDetail: boolean | null;
 }
@@ -195,7 +205,7 @@ export class RenduPlants {
     else this.maillages.set(forme, m);
   }
 
-  /** Poteaux (pergola, pieds de gouttière) : le maillage des tuteurs, fruits et balises peut les porter aussi (T37b). */
+  /** Poteaux (pergola, pieds de gouttière) : le maillage des tuteurs, fruits et balises peut les porter aussi (T37b). Les lignes de rang (T46) suivent les poteaux dans ce maillage. */
   lierPoteaux(m: InstancedMesh | null): void {
     this.poteaux = m;
   }
@@ -397,6 +407,8 @@ export class RenduPlants {
     const comptes = new Map<FormePlant, number>();
     // Poteaux (pergola, pieds de gouttière) : posés après la boucle, derrière les tuteurs quand ils partagent leur maillage.
     const poteaux: { readonly x: number; readonly y: number; readonly z: number; readonly hauteur: number; readonly couleur: string }[] = [];
+    // Lignes de rang (T46) : posées derrière les poteaux, dans le même maillage.
+    const lignes: { readonly x: number; readonly y: number; readonly z: number; readonly angle: number; readonly longueur: number; readonly couleur: string }[] = [];
     let nbTuteurs = 0;
     let total = 0;
     // Planches dont les fruits se posent après la boucle : un maillage peut porter tuteurs, fruits et balises ensemble.
@@ -431,6 +443,7 @@ export class RenduPlants {
         }
         if (p.structureM > 0) poteaux.push({ x: pos.x, y, z: pos.z, hauteur: p.structureM, couleur: bois });
       }
+      for (const l of p.lignesRangs) lignes.push({ x: l.x, y, z: l.z, angle: v.angle, longueur: v.longueur * LIGNE_RANG_PART_LONGUEUR, couleur: f.estompe ? f.couleur : COULEUR_LIGNE_RANG_3D });
       if (p.fruitsParPlant > 0) avecFruits.push({ p, v, y, pale: f.estompe ? f.couleur : null });
       if (p.surelevationM > 0) {
         // Les pieds de la gouttière, du premier au dernier bout de la planche.
@@ -444,7 +457,7 @@ export class RenduPlants {
         }
       }
     });
-    // Rangs des maillages partagés : tuteurs d'abord, puis poteaux, puis fruits, puis balises.
+    // Rangs des maillages partagés : tuteurs d'abord, puis poteaux et lignes de rang, puis fruits, puis balises.
     const occupe = new Map<InstancedMesh, number>();
     if (this.tuteursMaillage !== null) occupe.set(this.tuteursMaillage, nbTuteurs);
     const debutPoteaux = this.poteaux === null ? 0 : (occupe.get(this.poteaux) ?? 0);
@@ -454,7 +467,9 @@ export class RenduPlants {
       // Le bois garde le ton sombre qu'avait sa géométrie, la géométrie partagée étant blanche.
       if (this.mettre(this.poteaux, debutPoteaux + nbPoteaux, t.x, t.y, t.z, 0, EPAISSEUR_POTEAU_M, t.hauteur, EPAISSEUR_POTEAU_M, this.melangeTuteur.set(t.couleur).multiplyScalar(TON_TUTEUR))) nbPoteaux += 1;
     }
-    if (this.poteaux !== null) occupe.set(this.poteaux, debutPoteaux + nbPoteaux);
+    let nbLignes = 0;
+    for (const l of lignes) if (this.mettre(this.poteaux, debutPoteaux + nbPoteaux + nbLignes, l.x, l.y, l.z, l.angle, l.longueur, LIGNE_RANG_HAUTEUR_M, LIGNE_RANG_LARGEUR_M, l.couleur)) nbLignes += 1;
+    if (this.poteaux !== null) occupe.set(this.poteaux, debutPoteaux + nbPoteaux + nbLignes);
     const debutFruits = this.fruitsMaillage === null ? 0 : (occupe.get(this.fruitsMaillage) ?? 0);
     let nbFruits = 0;
     for (const { p, v, y, pale } of avecFruits) nbFruits = this.poserFruits(p, v, y, pale ?? this.couleurFruit(p), debutFruits, nbFruits);
@@ -481,6 +496,6 @@ export class RenduPlants {
     for (const p of plants) if (p !== null) hauteurs[p.id] = Math.round(p.hauteurM * 100) / 100;
     const active = this.plancheActive === null ? -1 : scene.volumes.findIndex((v) => v.id === this.plancheActive);
     const activeEnDetail = active < 0 || (plants[active] ?? null) === null ? null : this.enDetail(active);
-    return { plants: total, formes, tuteurs: nbTuteurs, hauteurs: JSON.stringify(hauteurs), semaine: scene.semaine, fruits: nbFruits, balises: nbBalises, activeEnDetail };
+    return { plants: total, formes, tuteurs: nbTuteurs, hauteurs: JSON.stringify(hauteurs), semaine: scene.semaine, fruits: nbFruits, balises: nbBalises, lignesRangs: nbLignes, activeEnDetail };
   }
 }

@@ -46,17 +46,27 @@ function estTable(nom: string): nom is NomTableLocale {
 function jeuDuJour(jour: string): Jeu {
   const duJour = fermeDuJour(jour, { travaux: true });
   // T35b : le chou (sous tunnel) et la courgette (plein champ, PC-P03) sont plantés en quinconce, pour que la démo montre la disposition dans la 3D ;
-  // la même densité dans la série et dans son itinéraire (la série fige les paramètres de l'itinéraire).
-  const enQuinconce = (parametres: string | number | null | undefined): string => {
+  // T46 : la carotte (plein champ, PC-P01) est semée à 25 cm entre rangs, pour que la 3D montre l'écart saisi et ses lignes de rang.
+  // La même densité dans la série et dans son itinéraire (la série fige les paramètres de l'itinéraire).
+  const avecDensite = (parametres: string | number | null | undefined, ajout: object): string => {
     const p = JSON.parse(String(parametres ?? '{"densite":{}}')) as { densite: object };
-    return JSON.stringify({ ...p, densite: { ...p.densite, disposition: 'quinconce' } });
+    return JSON.stringify({ ...p, densite: { ...p.densite, ...ajout } });
   };
-  const quinconce: readonly unknown[] = [SERIE.chou, SERIE.courgette];
-  const itinerairesQuinconce: readonly unknown[] = (duJour.lignes.serie ?? []).filter((l) => quinconce.includes(l.id)).map((l) => l.itineraire_id);
+  const ajouts = new Map<unknown, object>([
+    [SERIE.chou, { disposition: 'quinconce' }],
+    [SERIE.courgette, { disposition: 'quinconce' }],
+    [SERIE.carotte, { ecartEntreRangsCm: 25 }],
+  ]);
+  const series = duJour.lignes.serie ?? [];
+  const ajoutsItineraire = new Map<unknown, object>(series.flatMap((l) => {
+    const a = ajouts.get(l.id);
+    return a === undefined ? [] : [[l.itineraire_id, a] as const];
+  }));
+  const modifier = (l: Ligne, a: object | undefined): Ligne => (a === undefined ? l : { ...l, parametres: avecDensite(l.parametres, a) });
   const lignes = {
     ...duJour.lignes,
-    serie: (duJour.lignes.serie ?? []).map((l) => (quinconce.includes(l.id) ? { ...l, parametres: enQuinconce(l.parametres) } : l)),
-    itineraire: (duJour.lignes.itineraire ?? []).map((l) => (itinerairesQuinconce.includes(l.id) ? { ...l, parametres: enQuinconce(l.parametres) } : l)),
+    serie: series.map((l) => modifier(l, ajouts.get(l.id))),
+    itineraire: (duJour.lignes.itineraire ?? []).map((l) => modifier(l, ajoutsItineraire.get(l.id))),
   };
   return { ...duJour, lignes };
 }

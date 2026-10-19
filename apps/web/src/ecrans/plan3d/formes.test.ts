@@ -2,7 +2,7 @@
  * T28c — formes de la vue 3D : le sol extrudé d'un contour en L garde sa forme (aire, sommets),
  * les géométries partagées sont celles qu'on attend. three seul, sans navigateur ni WebGL.
  */
-import type { BufferGeometry } from 'three';
+import { CircleGeometry, CylinderGeometry, Matrix4, TorusGeometry, type BufferGeometry } from 'three';
 import { describe, expect, it } from 'vitest';
 import { empreinteDe, geometrieArceau, geometrieBache, geometrieBout, geometriePlanche, geometrieSol, geometrieToit } from './formes.ts';
 import type { SocleScene } from './scene.ts';
@@ -163,4 +163,42 @@ describe('T29b : géométrie d’une planche', () => {
       expect(n.getY(i)).toBeGreaterThanOrEqual(0);
     }
   });
+});
+
+/**
+ * T46 (compaction du morceau 3D) — arceau, bâche et bout sont écrits à la main au lieu de
+ * TorusGeometry, CylinderGeometry et CircleGeometry : mêmes triangles (sommets, ordre d'enroulement
+ * à une rotation près), mêmes normales que les classes de three qu'ils remplacent.
+ */
+describe('T46 : arceau, bâche et bout identiques aux géométries de three', () => {
+  /** Triangles d'une géométrie (désindexée), chaque triangle ramené à sa rotation canonique, puis triés. */
+  function triangles(g: BufferGeometry, attribut: 'position' | 'normal'): string[] {
+    const plate = g.index === null ? g : g.toNonIndexed();
+    const pos = plate.getAttribute('position').array;
+    const val = plate.getAttribute(attribut).array;
+    const cle = (i: number): string => [0, 1, 2].map((k) => (Math.round((val[3 * i + k] ?? NaN) * 1e5) / 1e5 + 0).toFixed(5)).join(',');
+    const clePos = (i: number): string => [0, 1, 2].map((k) => (Math.round((pos[3 * i + k] ?? NaN) * 1e5) / 1e5 + 0).toFixed(5)).join(',');
+    const liste: string[] = [];
+    for (let t = 0; t < pos.length / 9; t += 1) {
+      const sommets = [0, 1, 2].map((k) => ({ p: clePos(3 * t + k), v: cle(3 * t + k) }));
+      // Rotation canonique : commence par le sommet de plus petite clé de position (l'enroulement est gardé).
+      const debut = sommets.reduce((m, s, k) => ((s.p < (sommets[m]?.p ?? '')) ? k : m), 0);
+      liste.push([0, 1, 2].map((k) => sommets[(debut + k) % 3]?.v ?? '').join(' | '));
+    }
+    return liste.sort();
+  }
+  const cas: readonly [string, () => BufferGeometry, () => BufferGeometry][] = [
+    ['arceau', geometrieArceau, () => new TorusGeometry(0.5, 0.008, 3, 8, Math.PI)],
+    ['bâche', geometrieBache, () => new CylinderGeometry(0.5, 0.5, 1, 10, 1, true, 0, Math.PI).applyMatrix4(new Matrix4().set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1))],
+    ['bout', geometrieBout, () => new CircleGeometry(0.5, 10, 0, Math.PI)],
+  ];
+  for (const [nom, notre, three] of cas) {
+    it(`${nom} : mêmes triangles et mêmes normales`, () => {
+      expect(triangles(notre(), 'position')).toEqual(triangles(three(), 'position'));
+      expect(triangles(notre(), 'normal')).toEqual(triangles(three(), 'normal'));
+      // Autant de sommets que three (indexée comme elle) : le rendu logiciel ne traite pas plus de sommets.
+      expect(notre().getAttribute('position').count).toBe(three().getAttribute('position').count);
+      expect(notre().index?.count).toBe(three().index?.count);
+    });
+  }
 });
