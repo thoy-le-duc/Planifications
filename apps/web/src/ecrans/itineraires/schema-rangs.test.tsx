@@ -9,7 +9,7 @@
  * apps/web/src/ecrans/itineraires/schema-rangs.ts — fonctions pures, sans React ni DOM :
  *
  *   type DispositionRangs = 'alignee' | 'quinconce'            // celui de @planif/core
- *   const LARGEUR_PLANCHE_DEFAUT_CM = 120                     // largeur inconnue : 1,2 m
+ *   const LARGEUR_PLANCHE_DEFAUT_CM = 75                      // largeur inconnue : 75 cm (T42b)
  *   interface EntreeSchemaRangs {
  *     readonly rangs: number;               // entier ≥ 1
  *     readonly ecartementCm: number;        // > 0, décimal permis (12,5 cm)
@@ -50,6 +50,7 @@
  * Les modules sont chargés par import dynamique (chemin tenu dans une variable) : le typage du
  * test ne dépend pas du code pas encore écrit.
  */
+import { readFileSync } from 'node:fs';
 import { act, createElement, type ComponentType } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -134,9 +135,10 @@ function verifierRang(g: GeometrieSchemaRangs, r: number, ecartement: number): v
 }
 
 describe('T35a : géométrie du schéma (fonctions pures)', () => {
-  it('largeur de planche inconnue : 1,2 m par défaut ; connue : la sienne', () => {
-    expect(schema().LARGEUR_PLANCHE_DEFAUT_CM).toBe(120);
-    expect(schema().geometrieSchemaRangs({ rangs: 2, ecartementCm: 30, disposition: 'alignee', largeurPlancheCm: null }).largeurCm).toBe(120);
+  // T42b (règle 5) : une seule largeur par défaut, 75 cm, celle des écarts (plus de 1,2 m).
+  it('largeur de planche inconnue : 75 cm par défaut ; connue : la sienne', () => {
+    expect(schema().LARGEUR_PLANCHE_DEFAUT_CM).toBe(75);
+    expect(schema().geometrieSchemaRangs({ rangs: 2, ecartementCm: 30, disposition: 'alignee', largeurPlancheCm: null }).largeurCm).toBe(75);
     expect(schema().geometrieSchemaRangs({ rangs: 2, ecartementCm: 30, disposition: 'alignee', largeurPlancheCm: 80 }).largeurCm).toBe(80);
   });
 
@@ -193,6 +195,16 @@ describe('T35a : géométrie du schéma (fonctions pures)', () => {
     const g = schema().geometrieSchemaRangs({ rangs: 2, ecartementCm: ecartement, disposition: 'quinconce', largeurPlancheCm: null });
     verifierRang(g, 1, ecartement);
     verifierRang(g, 2, ecartement);
+  });
+});
+
+describe('T42b : une seule largeur de planche par défaut', () => {
+  it('schéma et écarts partagent la même constante (75 cm), plus de 120 cm résiduel', async () => {
+    const m = (await import(/* @vite-ignore */ CHEMIN_SCHEMA)) as Readonly<Record<string, unknown>>;
+    const largeurs = Object.entries(m).filter(([nom]) => nom.startsWith('LARGEUR_PLANCHE'));
+    expect(largeurs).toEqual([['LARGEUR_PLANCHE_DEFAUT_CM', 75]]);
+    const texte = readFileSync(new URL(CHEMIN_SCHEMA, import.meta.url), 'utf8');
+    expect(texte).not.toMatch(/\b120\b|1,2 m/);
   });
 });
 

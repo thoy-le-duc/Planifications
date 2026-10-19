@@ -17,7 +17,7 @@
  *
  * Migration : `0034_bibliotheque_travaux`, écrite par `pnpm --filter @planif/db bibliotheque
  *   0034_bibliotheque_travaux` (mécanique de T41b), ne modifie que des itinéraires (aucune
- *   famille ni espèce, rien d'ajouté ni de retiré), et c'est la dernière migration de bibliothèque.
+ *   famille ni espèce, rien d'ajouté ni de retiré) ; T42b : 0035 la suit.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import {
@@ -110,10 +110,9 @@ describe('T42 : travaux prévus pour chacun des 46 itinéraires', () => {
     }
   });
 
-  it('éclaircissage : carottes et navet ; buttage : pomme de terre et poireau', () => {
-    for (const nom of ['Carotte de conservation, semis direct', 'Carotte botte, semis direct', 'Navet primeur (rabiole, Hakurei), semis direct']) {
-      expect(avecType(travauxDe(nom), 'éclaircissage').length, nom).toBeGreaterThan(0);
-    }
+  // T42b (règle 3) : plus d'éclaircissage sur la carotte et le navet semés graine à graine
+  // (bibliotheque-travaux-suites.test.ts).
+  it('buttage : pomme de terre et poireau', () => {
     for (const nom of ['Pomme de terre primeur, plant certifié', "Poireau d'automne-hiver, plant racines nues"]) {
       expect(avecType(travauxDe(nom), 'buttage').length, nom).toBeGreaterThan(0);
     }
@@ -200,8 +199,10 @@ describe('T42 : écartements des semis directs', () => {
 describe('T42 : la migration de bibliothèque 0034', () => {
   const etats = db.lireEtatsBibliotheque();
 
-  it('dernière migration de bibliothèque, au journal, dépôt à jour', () => {
-    expect(etats.at(-1)?.migration).toBe(MIGRATION_TRAVAUX);
+  // T42b : 0035_bibliotheque_travaux_suites la suit ; 0034 reste au journal, à sa place.
+  it('migration de bibliothèque après 0033, au journal, dépôt à jour', () => {
+    const i = etats.findIndex((e) => e.migration === MIGRATION_TRAVAUX);
+    expect(etats[i - 1]?.migration).toBe('0033_bibliotheque_melon_plein_champ');
     const journal = JSON.parse(readFileSync(new URL('../migrations/meta/_journal.json', import.meta.url), 'utf8')) as { entries: { idx: number; tag: string }[] };
     expect(journal.entries.find((e) => e.tag === MIGRATION_TRAVAUX)?.idx).toBe(34);
     expect(db.verifierBibliotheque(db.depotBibliotheque())).toEqual([]);

@@ -433,12 +433,12 @@
           "categorie": "entretien",
           "type": "désherbage",
           "repere": "mise_en_place",
-          "decalageJours": 21,
+          "decalageJours": 30,
           "repetition": {
-            "tousLesJours": 21,
-            "repereFin": "debut_recolte"
+            "tousLesJours": 45,
+            "repereFin": "fin_recolte"
           },
-          "outil": "binette",
+          "outil": "binette, trou et passe-pied",
           "produit": null,
           "tempsEstime": null
         }
@@ -461,7 +461,7 @@
           "url": "https://www.grab.fr/wp-content/uploads/2022/02/Fiche2MarPACAFertiAuberg2003.pdf"
         }
       ],
-      "aVerifier": "Rendement très dépendant du chauffage et de la durée de culture ; plant greffé possible. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement très dépendant du chauffage et de la durée de culture ; plant greffé possible. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
     },
     {
       "espece": "aubergine",
@@ -608,12 +608,12 @@
           "categorie": "entretien",
           "type": "désherbage",
           "repere": "mise_en_place",
-          "decalageJours": 21,
+          "decalageJours": 30,
           "repetition": {
-            "tousLesJours": 21,
-            "repereFin": "debut_recolte"
+            "tousLesJours": 45,
+            "repereFin": "fin_recolte"
           },
-          "outil": "binette",
+          "outil": "binette, trou et passe-pied",
           "produit": null,
           "tempsEstime": null
         }
@@ -636,7 +636,7 @@
           "url": "https://www.grab.fr/wp-content/uploads/2022/02/Fiche2MarPACAFertiAuberg2003.pdf"
         }
       ],
-      "aVerifier": "En plein champ au nord de la Loire, rendement nettement plus faible. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "En plein champ au nord de la Loire, rendement nettement plus faible. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
     },
     {
       "espece": "poivron",
@@ -770,12 +770,12 @@
           "categorie": "entretien",
           "type": "désherbage",
           "repere": "mise_en_place",
-          "decalageJours": 21,
+          "decalageJours": 30,
           "repetition": {
-            "tousLesJours": 21,
-            "repereFin": "debut_recolte"
+            "tousLesJours": 45,
+            "repereFin": "fin_recolte"
           },
-          "outil": "binette",
+          "outil": "binette, trou et passe-pied",
           "produit": null,
           "tempsEstime": null
         }
@@ -794,7 +794,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Durée avant récolte : poivron vert plus tôt, coloré 2-3 semaines plus tard. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Durée avant récolte : poivron vert plus tôt, coloré 2-3 semaines plus tard. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
     },
     {
       "espece": "poivron",
@@ -928,12 +928,12 @@
           "categorie": "entretien",
           "type": "désherbage",
           "repere": "mise_en_place",
-          "decalageJours": 21,
+          "decalageJours": 30,
           "repetition": {
-            "tousLesJours": 21,
-            "repereFin": "debut_recolte"
+            "tousLesJours": 45,
+            "repereFin": "fin_recolte"
           },
-          "outil": "binette",
+          "outil": "binette, trou et passe-pied",
           "produit": null,
           "tempsEstime": null
         }
@@ -952,7 +952,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement plein champ faible en zone fraîche ; à ajuster par région. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement plein champ faible en zone fraîche ; à ajuster par région. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
     },
     {
       "espece": "piment",
@@ -1086,12 +1086,12 @@
           "categorie": "entretien",
           "type": "désherbage",
           "repere": "mise_en_place",
-          "decalageJours": 21,
+          "decalageJours": 30,
           "repetition": {
-            "tousLesJours": 21,
-            "repereFin": "debut_recolte"
+            "tousLesJours": 45,
+            "repereFin": "fin_recolte"
           },
-          "outil": "binette",
+          "outil": "binette, trou et passe-pied",
           "produit": null,
           "tempsEstime": null
         }
@@ -1110,7 +1110,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement très variable selon le type (Cayenne, Espelette, habanero). Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement très variable selon le type (Cayenne, Espelette, habanero). Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
     },
     {
       "espece": "tomate",
@@ -1257,12 +1257,12 @@
           "categorie": "entretien",
           "type": "désherbage",
           "repere": "mise_en_place",
-          "decalageJours": 21,
+          "decalageJours": 30,
           "repetition": {
-            "tousLesJours": 21,
-            "repereFin": "debut_recolte"
+            "tousLesJours": 45,
+            "repereFin": "fin_recolte"
           },
-          "outil": "binette",
+          "outil": "binette, trou et passe-pied",
           "produit": null,
           "tempsEstime": null
         }
@@ -1293,7 +1293,7 @@
           "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2012/04/fiche_tomates.pdf"
         }
       ],
-      "aVerifier": "Rendement par plant greffé deux têtes : 6 à 12 kg selon durée et chauffage. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement par plant greffé deux têtes : 6 à 12 kg selon durée et chauffage. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
     },
     {
       "espece": "tomate",
@@ -1440,12 +1440,12 @@
           "categorie": "entretien",
           "type": "désherbage",
           "repere": "mise_en_place",
-          "decalageJours": 21,
+          "decalageJours": 30,
           "repetition": {
-            "tousLesJours": 21,
-            "repereFin": "debut_recolte"
+            "tousLesJours": 45,
+            "repereFin": "fin_recolte"
           },
-          "outil": "binette",
+          "outil": "binette, trou et passe-pied",
           "produit": null,
           "tempsEstime": null
         }
@@ -1472,7 +1472,7 @@
           "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2012/04/fiche_tomates.pdf"
         }
       ],
-      "aVerifier": "Plein champ : mildiou et cycle plus court, rendement souvent 2-3 kg/plant. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Plein champ : mildiou et cycle plus court, rendement souvent 2-3 kg/plant. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
     },
     {
       "espece": "pomme de terre",
@@ -1872,12 +1872,12 @@
           "categorie": "entretien",
           "type": "désherbage",
           "repere": "mise_en_place",
-          "decalageJours": 21,
+          "decalageJours": 30,
           "repetition": {
-            "tousLesJours": 21,
-            "repereFin": "debut_recolte"
+            "tousLesJours": 45,
+            "repereFin": "fin_recolte"
           },
-          "outil": "binette",
+          "outil": "binette, trou et passe-pied",
           "produit": null,
           "tempsEstime": null
         }
@@ -1900,7 +1900,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement selon type (long, mini) et taille ; souvent deux plantations successives. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement selon type (long, mini) et taille ; souvent deux plantations successives. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
     },
     {
       "espece": "courgette",
@@ -2873,19 +2873,9 @@
           "categorie": "entretien",
           "type": "autre",
           "repere": "mise_en_place",
-          "decalageJours": 0,
+          "decalageJours": 7,
           "repetition": null,
           "outil": "filet anti-insectes",
-          "produit": null,
-          "tempsEstime": null
-        },
-        {
-          "categorie": "entretien",
-          "type": "éclaircissage",
-          "repere": "mise_en_place",
-          "decalageJours": 30,
-          "repetition": null,
-          "outil": "à la main",
           "produit": null,
           "tempsEstime": null
         },
@@ -2929,7 +2919,7 @@
           "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Levée irrégulière en bio : rendement réel souvent 30 à 35 t/ha. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 50 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Levée irrégulière en bio : rendement réel souvent 30 à 35 t/ha. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 50 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Éclaircissage (T42b) : non prévu, le semis graine à graine à l'écartement donne déjà la densité voulue ; à ajouter seulement si la levée est trop dense (semoir mal réglé, graines doublées). Filet anti-insectes posé après le désherbage thermique de prélevée (vers J+7), jamais avant."
     },
     {
       "espece": "carotte",
@@ -2966,7 +2956,7 @@
           "categorie": "amendement",
           "type": "compost",
           "repere": "mise_en_place",
-          "decalageJours": -21,
+          "decalageJours": -35,
           "repetition": null,
           "outil": "épandeur",
           "produit": {
@@ -2979,22 +2969,22 @@
           "tempsEstime": null
         },
         {
-          "categorie": "couverture",
-          "type": "bâchage ou occultation",
+          "categorie": "travail_sol",
+          "type": "grelinette",
           "repere": "mise_en_place",
           "decalageJours": -28,
           "repetition": null,
-          "outil": "bâche d'ensilage",
+          "outil": "grelinette",
           "produit": null,
           "tempsEstime": null
         },
         {
-          "categorie": "travail_sol",
-          "type": "grelinette",
+          "categorie": "couverture",
+          "type": "bâchage ou occultation",
           "repere": "mise_en_place",
-          "decalageJours": -14,
+          "decalageJours": -21,
           "repetition": null,
-          "outil": "grelinette",
+          "outil": "bâche d'ensilage",
           "produit": null,
           "tempsEstime": null
         },
@@ -3022,19 +3012,9 @@
           "categorie": "entretien",
           "type": "autre",
           "repere": "mise_en_place",
-          "decalageJours": 0,
+          "decalageJours": 7,
           "repetition": null,
           "outil": "filet anti-insectes",
-          "produit": null,
-          "tempsEstime": null
-        },
-        {
-          "categorie": "entretien",
-          "type": "éclaircissage",
-          "repere": "mise_en_place",
-          "decalageJours": 25,
-          "repetition": null,
-          "outil": "à la main",
           "produit": null,
           "tempsEstime": null
         },
@@ -3078,7 +3058,7 @@
           "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Semis précoces (février) sous tunnel ou voile : durée plus longue. Écartement (T42) : 5 rangs, une graine tous les 2 cm, converti depuis 4 rangs à 70 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Semis précoces (février) sous tunnel ou voile : durée plus longue. Écartement (T42) : 5 rangs, une graine tous les 2 cm, converti depuis 4 rangs à 70 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Éclaircissage (T42b) : non prévu, le semis graine à graine à l'écartement donne déjà la densité voulue ; à ajouter seulement si la levée est trop dense (semoir mal réglé, graines doublées). Filet anti-insectes posé après le désherbage thermique de prélevée (vers J+7), jamais avant. Occultation après le travail du sol (compost, grelinette), pour ne pas remonter de graines d'adventices, puis préparation au râteau la veille du semis."
     },
     {
       "espece": "céleri branche",
@@ -4761,16 +4741,6 @@
         },
         {
           "categorie": "entretien",
-          "type": "éclaircissage",
-          "repere": "mise_en_place",
-          "decalageJours": 14,
-          "repetition": null,
-          "outil": "à la main",
-          "produit": null,
-          "tempsEstime": null
-        },
-        {
-          "categorie": "entretien",
           "type": "désherbage",
           "repere": "mise_en_place",
           "decalageJours": 10,
@@ -4801,7 +4771,7 @@
           "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Altise en été ; poids de la botte et densité à ajuster. Écartement (T42) : 4 rangs, une graine tous les 3 cm, converti depuis 40 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Altise en été ; poids de la botte et densité à ajuster. Écartement (T42) : 4 rangs, une graine tous les 3 cm, converti depuis 40 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Éclaircissage (T42b) : non prévu, le semis graine à graine à l'écartement donne déjà la densité voulue ; à ajouter seulement si la levée est trop dense (semoir mal réglé, graines doublées)."
     },
     {
       "espece": "radis",

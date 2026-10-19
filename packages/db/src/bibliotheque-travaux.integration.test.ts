@@ -4,10 +4,10 @@
  *
  *   - base migrée jusqu'à 0033 (la bibliothèque de T41 et T41b), une ferme a ses lignes et une
  *     copie d'un itinéraire de la bibliothèque (« Adapter pour ma ferme ») ;
- *   - toutes les migrations ensuite : les 46 itinéraires de la bibliothèque portent leurs travaux
- *     prévus et les nouveaux écartements (exactement la conversion du JSON), mêmes identifiants ;
+ *   - les migrations jusqu'à 0034 ensuite (T42b : 0035 a son propre test) : les 46 itinéraires de la bibliothèque portent leurs travaux
+ *     prévus et les nouveaux écartements (exactement l'état 0034), mêmes identifiants ;
  *     ni famille ni espèce réécrite ; aucune ligne de ferme touchée, copie comprise ;
- *   - rejouable : les migrations à nouveau, puis le SQL de 0034 deux fois, ne réécrivent rien.
+ *   - rejouable : les migrations jusqu'à 0034 à nouveau, puis le SQL de 0034 deux fois, ne réécrivent rien.
  *
  * Exécution comme bibliotheque-suites.integration.test.ts : DATABASE_URL (Postgres avec
  * CREATEDB) ; sans elle, sautés en local.
@@ -67,6 +67,7 @@ decrireAvecBase('T42 : travaux prévus et écartements, migration 0034 (PostgreS
   let c: pg.Client;
   const base = `t42_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
   let dossierPartiel = '';
+  let dossier34 = '';
   const ferme = randomUUID();
   const deLaFerme = { famille: randomUUID(), espece: randomUUID(), itineraire: randomUUID(), copie: randomUUID() };
   let fermeAvant: Instantane;
@@ -119,7 +120,9 @@ decrireAvecBase('T42 : travaux prévus et écartements, migration 0034 (PostgreS
     );
     fermeAvant = await fermeLignes();
     bibliothequeAvant = await bibliotheque();
-    await db.appliquerMigrations(urlDe(base));
+    // T42b : jusqu'à 0034 seulement ; 0035 (travaux corrigés) a son propre test.
+    dossier34 = migrationsJusquA(34);
+    await migrate(drizzle(c), { migrationsFolder: dossier34 });
   }, 120_000);
 
   afterAll(async () => {
@@ -127,10 +130,12 @@ decrireAvecBase('T42 : travaux prévus et écartements, migration 0034 (PostgreS
     await admin.query(`DROP DATABASE IF EXISTS ${base} WITH (FORCE)`);
     await admin.end();
     rmSync(dossierPartiel, { recursive: true, force: true });
+    rmSync(dossier34, { recursive: true, force: true });
   }, 60_000);
 
-  it('les 46 itinéraires de la bibliothèque : exactement la conversion du JSON (travaux, écartements), mêmes identifiants', async () => {
-    const attendu = db.convertirBibliotheque(db.lireBibliothequeDepart());
+  it('les 46 itinéraires de la bibliothèque : exactement l’état 0034 (travaux, écartements), mêmes identifiants', async () => {
+    const attendu = db.lireEtatsBibliotheque().find((e) => e.migration === MIGRATION_TRAVAUX)?.lignes;
+    if (attendu === undefined) throw new Error('état 0034 absent');
     const apres = await bibliotheque();
     expect(attendu.itineraires).toHaveLength(46);
     for (const i of attendu.itineraires) {
@@ -160,9 +165,9 @@ decrireAvecBase('T42 : travaux prévus et écartements, migration 0034 (PostgreS
     expect(await fermeLignes()).toEqual(fermeAvant);
   });
 
-  it('rejouable : les migrations à nouveau, puis le SQL de 0034 deux fois, ne réécrivent rien', async () => {
+  it('rejouable : les migrations jusqu’à 0034 à nouveau, puis le SQL de 0034 deux fois, ne réécrivent rien', async () => {
     const bib = await bibliotheque();
-    await db.appliquerMigrations(urlDe(base));
+    await migrate(drizzle(c), { migrationsFolder: dossier34 });
     const sql = readFileSync(new URL(`${MIGRATION_TRAVAUX}.sql`, DOSSIER), 'utf8');
     await jouer(sql);
     await jouer(sql);
