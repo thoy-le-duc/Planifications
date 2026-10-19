@@ -150,6 +150,21 @@ decrireAvecBase('T51')('T51 : gouttières en pains et densité en contenants', {
     expect((await ligne('emplacement', e.id))?.nombre_pains).toBe(28);
   });
 
+  it('gouttière changée en planche par un téléphone d’avant T51 (PATCH sans nombre_pains) : acceptée, ses pains effacés', async () => {
+    const e = gouttiere({ nombre_pains: 30, nombre_places: 120 });
+    expect(await lot([e])).toEqual({ refus: [] });
+    expect(await lot([{ op: 'PATCH', table: 'emplacement', id: e.id, donnees: { sorte: 'planche', nombre_places: null } }])).toEqual({ refus: [] });
+    expect(await ligne('emplacement', e.id)).toMatchObject({ sorte: 'planche', nombre_pains: null, nombre_places: null });
+  });
+
+  it('gouttière changée en planche avec un nombre de pains REÇU : refusée', async () => {
+    const e = gouttiere({ nombre_pains: 30 });
+    expect(await lot([e])).toEqual({ refus: [] });
+    const r = await lot([{ op: 'PATCH', table: 'emplacement', id: e.id, donnees: { sorte: 'planche', nombre_pains: 30 } }]);
+    expect(r.refus.map((x) => x.motif)).toEqual(['ecriture_invalide']);
+    expect((await ligne('emplacement', e.id))?.sorte).toBe('gouttiere');
+  });
+
   it.each([0, -1, 2.5, 'trente'])('nombre de pains %s : refusé, rien écrit, message en français', async (n) => {
     const e = gouttiere({ nombre_pains: n });
     const r = await lot([e]);
