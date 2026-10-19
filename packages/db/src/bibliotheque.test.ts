@@ -264,10 +264,15 @@ describe('T41 : conversion vers les lignes de la base', () => {
 
   it('ni sources, ni « à vérifier », ni famille ou catégorie dans les paramètres rangés en base', () => {
     for (const i of lignes.itineraires) {
-      // T42 : `categorie` est aussi une clé légitime des travaux prévus (catégorie d'intervention).
-      const texte = JSON.stringify({ ...i, parametres: sansTravaux(i.parametres) });
-      for (const cle of ['sources', 'aVerifier', 'famille', 'categorie', 'Pct', 'debutSemaine', 'ecartementCm"', '"kg":']) {
+      // T42b (règle 6) : tout est contrôlé, travaux prévus compris ; seule `categorie` (catégorie
+      // d'intervention, clé légitime d'un travail prévu) n'est cherchée que hors des travaux.
+      const texte = JSON.stringify(i);
+      for (const cle of ['sources', 'aVerifier', 'famille', 'Pct', 'debutSemaine', 'ecartementCm"', '"kg":']) {
         expect(texte.includes(cle), `${cle} dans ${i.nom}`).toBe(false);
+      }
+      expect(JSON.stringify({ ...i, parametres: sansTravaux(i.parametres) }).includes('categorie'), `categorie dans ${i.nom}`).toBe(false);
+      for (const t of i.parametres.travauxPrevus ?? []) {
+        expect(Object.keys(t).sort(), `clés d’un travail prévu de ${i.nom}`).toEqual(['categorie', 'decalageJours', 'outil', 'produit', 'repere', 'repetition', 'tempsEstime', 'type']);
       }
     }
   });

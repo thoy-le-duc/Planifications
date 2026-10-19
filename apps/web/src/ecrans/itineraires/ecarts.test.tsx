@@ -6,10 +6,10 @@
  *
  * ── API attendue (apps/web/src/ecrans/itineraires/schema-rangs.ts, fonctions pures) ──────────
  *
- *   const LARGEUR_PLANCHE_ECARTS_CM = 75      // largeur de planche quand la ferme n'en dit rien
+ *   const LARGEUR_PLANCHE_DEFAUT_CM = 75      // largeur de planche quand la ferme n'en dit rien (T42b : une seule)
  *   interface EcartsDensite {
  *     readonly rangs: number;
- *     readonly largeurPlancheCm: number;       // celle reçue, sinon LARGEUR_PLANCHE_ECARTS_CM
+ *     readonly largeurPlancheCm: number;       // celle reçue, sinon LARGEUR_PLANCHE_DEFAUT_CM
  *     readonly ecartEntreRangsCm: number | null;   // largeur / rangs (rangs au milieu de bandes égales) ; null à 1 rang
  *     readonly ecartEquivalentCm: number | null;   // au mètre linéaire : 100 / graines par mètre ; sinon null
  *   }
@@ -44,7 +44,7 @@ interface EcartsDensite {
 }
 
 interface ModuleEcarts {
-  readonly LARGEUR_PLANCHE_ECARTS_CM: number;
+  readonly LARGEUR_PLANCHE_DEFAUT_CM: number;
   ecartsDensite(densite: unknown, largeurPlancheCm: number | null): EcartsDensite | null;
   texteEcartsRangs(e: EcartsDensite): string;
   texteEcartEquivalent(e: EcartsDensite): string | null;
@@ -56,7 +56,7 @@ const charger = async (): Promise<ModuleEcarts> => (await import(/* @vite-ignore
 describe('T42 : écarts d’une densité (fonctions pures)', () => {
   it('planche de 75 cm par défaut ; écart entre rangs = largeur / rangs', async () => {
     const m = await charger();
-    expect(m.LARGEUR_PLANCHE_ECARTS_CM).toBe(75);
+    expect(m.LARGEUR_PLANCHE_DEFAUT_CM).toBe(75);
     const e = m.ecartsDensite({ facon: 'ecartement', rangsParPlanche: 3, ecartementSurRangCm: 30 }, null);
     expect(e).toEqual({ rangs: 3, largeurPlancheCm: 75, ecartEntreRangsCm: 25, ecartEquivalentCm: null });
     if (e === null) return;
