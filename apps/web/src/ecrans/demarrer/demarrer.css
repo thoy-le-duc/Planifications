@@ -1,0 +1,173 @@
+/*
+ * Bandeau « Démarrer votre ferme » et états vides qui guident (T49). Jetons seulement ; toute
+ * commande fait au moins 56 × 56 px ; à 360 px de large, rien ne déborde.
+ */
+
+.dem {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 14px 12px;
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: var(--ombre-carte);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dem-tete {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.dem-tete h2 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 21px;
+}
+
+.dem-compte {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.dem-etapes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dem-etape {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 12px 8px 10px;
+  border: 0;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.dem-etape:active {
+  background: var(--couleur-trait);
+}
+
+.dem-pastille {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--rayon-pastille);
+  border: 2px solid var(--couleur-tertiaire);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 17px;
+  color: var(--couleur-secondaire);
+}
+
+.dem-etape-prochaine .dem-pastille {
+  border-color: var(--couleur-foret);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.dem-etape-faite .dem-pastille {
+  border-color: var(--couleur-foret);
+  color: var(--couleur-foret);
+}
+
+.dem-textes {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dem-textes strong {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.dem-textes span {
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.dem-etape-faite .dem-textes strong {
+  color: var(--couleur-secondaire);
+}
+
+.dem-chevron {
+  flex-shrink: 0;
+  font-size: 22px;
+  color: var(--couleur-tertiaire);
+}
+
+.dem-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 2px 4px 0;
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+}
+
+.dem-bouton-import,
+.dem-bouton-vide {
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 16px;
+  border-radius: var(--rayon-bouton);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.dem-bouton-import {
+  border: 2px solid var(--couleur-trait);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+}
+
+/* État vide qui guide (Planches, Aujourd'hui) : le dire, et y mener d'un tap. */
+.dem-vide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 4px 4px 16px;
+}
+
+.dem-vide p {
+  margin: 0;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.dem-bouton-vide {
+  border: 0;
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 18px;
+  box-shadow: var(--ombre-basse);
+}

@@ -1,0 +1,399 @@
+/*
+ * « Ma ferme : saisons, zones, planches » (T49). Aucune couleur en dur : jetons seulement
+ * (src/ui/jetons.ts, variables CSS). Toute commande fait au moins 56 × 56 px (gants), textes au
+ * contraste AA ; à 360 px de large, rien ne déborde.
+ */
+
+.parc-voile {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  background: var(--couleur-fond);
+}
+
+.parc-voile-zone {
+  z-index: 32;
+}
+
+.parc-feuille {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  outline: none;
+}
+
+.parc-tete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: max(18px, env(safe-area-inset-top)) 16px 10px;
+}
+
+.parc-tete-textes {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.parc-surtitre {
+  font-family: var(--police-code);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.parc-tete h2 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 28px;
+  line-height: 1.05;
+  outline: none;
+}
+
+.parc-fermer {
+  flex-shrink: 0;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: var(--ombre-carte);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.parc-corps {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 12px 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.parc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.parc-section h3 {
+  margin: 0 4px;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 21px;
+  outline: none;
+}
+
+.parc-aide {
+  margin: 0 4px;
+  font-size: 15px;
+  color: var(--couleur-secondaire);
+  overflow-wrap: anywhere;
+}
+
+.parc-liste {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.parc-ligne {
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 14px 10px 16px;
+  border: 0;
+  border-left: 6px solid var(--couleur-foret);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  box-shadow: var(--ombre-carte);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.parc-ligne:active {
+  background: var(--couleur-trait);
+}
+
+.parc-ligne-hors {
+  border-left-color: var(--couleur-trait);
+}
+
+.parc-ligne-textes {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+
+.parc-ligne-textes strong {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.parc-ligne-textes span {
+  font-size: 14px;
+  color: var(--couleur-secondaire);
+}
+
+.parc-chevron {
+  flex-shrink: 0;
+  font-size: 22px;
+  color: var(--couleur-tertiaire);
+}
+
+.parc-bouton-principal,
+.parc-bouton-secondaire,
+.parc-bouton-danger {
+  min-width: 56px;
+  min-height: 60px;
+  padding: 0 16px;
+  border-radius: var(--rayon-bouton);
+  font-weight: 700;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.parc-bouton-principal {
+  border: 0;
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 18px;
+  box-shadow: var(--ombre-basse);
+}
+
+.parc-bouton-principal:disabled {
+  background: var(--couleur-trait);
+  color: var(--couleur-encre);
+  box-shadow: none;
+}
+
+.parc-bouton-secondaire {
+  border: 2px solid var(--couleur-trait);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+}
+
+.parc-bouton-danger {
+  border: 2px solid var(--couleur-trait);
+  background: var(--couleur-surface);
+  color: var(--couleur-conflit);
+}
+
+.parc-carte {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 12px;
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-surface);
+  box-shadow: var(--ombre-carte);
+  min-width: 0;
+}
+
+.parc-grille {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.parc-champ-bloc {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.parc-large {
+  grid-column: 1 / -1;
+}
+
+.parc-etiquette {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--couleur-secondaire);
+}
+
+.parc-champ {
+  display: block;
+  width: 100%;
+  min-width: 56px;
+  min-height: 56px;
+  padding: 0 12px;
+  border: 2px solid var(--couleur-tertiaire);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font: inherit;
+  font-size: 18px;
+}
+
+.parc-champ:focus-visible {
+  outline: 3px solid var(--couleur-foret);
+  outline-offset: 1px;
+  border-color: var(--couleur-foret);
+}
+
+.parc-erreur {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 6px solid var(--couleur-conflit);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-conflit);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+/* ── Feuille de saisie (bas de l'écran) ──────────────────────────────────────────────────── */
+
+.parc-voile-saisie {
+  position: fixed;
+  z-index: 34;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in srgb, var(--couleur-ombre) 45%, transparent);
+}
+
+.parc-saisie {
+  width: 100%;
+  max-width: 600px;
+  max-height: 92%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 16px max(20px, env(safe-area-inset-bottom));
+  border-radius: var(--rayon-feuille) var(--rayon-feuille) 0 0;
+  background: var(--couleur-surface);
+  overflow-wrap: anywhere;
+}
+
+.parc-saisie h3 {
+  margin: 0;
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 23px;
+  line-height: 1.15;
+  outline: none;
+}
+
+.parc-saisie .parc-champ {
+  background: var(--couleur-fond);
+}
+
+.parc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.parc-actions > button {
+  flex: 1 1 140px;
+}
+
+.parc-actions > .parc-bouton-principal {
+  flex-basis: 100%;
+}
+
+/* ── Bandeau « Annuler » ─────────────────────────────────────────────────────────────────── */
+
+.parc-bandeau {
+  position: fixed;
+  z-index: 40;
+  left: 12px;
+  right: 12px;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  max-width: 576px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--espace-m);
+  padding: 10px 10px 14px 16px;
+  overflow: hidden;
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  box-shadow: var(--ombre-basse);
+}
+
+.parc-bandeau-texte {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 15px;
+  color: var(--couleur-sur-foret-doux);
+  overflow-wrap: anywhere;
+}
+
+.parc-bandeau-texte strong {
+  font-size: 16px;
+  color: var(--couleur-sur-foret);
+}
+
+.parc-bandeau-annuler {
+  flex-shrink: 0;
+  min-width: 96px;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.parc-bandeau-echec {
+  background: var(--couleur-conflit);
+}
+
+.parc-bandeau-echec .parc-bandeau-texte,
+.parc-bandeau-echec .parc-bandeau-texte strong {
+  color: var(--couleur-surface);
+}
+
+.parc-bandeau-echec .parc-bandeau-annuler {
+  min-width: 56px;
+  color: var(--couleur-conflit);
+}
