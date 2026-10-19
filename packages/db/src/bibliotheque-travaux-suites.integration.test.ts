@@ -4,10 +4,11 @@
  *
  *   - base migrée jusqu'à 0034 (travaux prévus de T42), une ferme a ses lignes et une copie d'un
  *     itinéraire de la bibliothèque (« Adapter pour ma ferme ») ;
- *   - toutes les migrations ensuite : la bibliothèque est exactement la conversion du JSON, mêmes
- *     identifiants ; seuls les 11 itinéraires corrigés sont réécrits (les autres lignes de la
- *     bibliothèque gardent leur version de ligne) ; aucune ligne de ferme touchée, copie comprise ;
- *   - rejouable : les migrations à nouveau, puis le SQL de 0035 deux fois, ne réécrivent rien.
+ *   - les migrations jusqu'à 0035 ensuite (T43 : 0036 a son propre test) : la bibliothèque est
+ *     exactement l'état 0035, mêmes identifiants ; seuls les 11 itinéraires corrigés sont réécrits
+ *     (les autres lignes de la bibliothèque gardent leur version de ligne) ; aucune ligne de ferme
+ *     touchée, copie comprise ;
+ *   - rejouable : les migrations jusqu'à 0035 à nouveau, puis le SQL de 0035 deux fois, ne réécrivent rien.
  *
  * Exécution comme bibliotheque-suites.integration.test.ts : DATABASE_URL (Postgres avec
  * CREATEDB) ; sans elle, sautés en local.
@@ -68,6 +69,7 @@ decrireAvecBase('T42b : travaux corrigés, migration 0035 (PostgreSQL)', { timeo
   let c: pg.Client;
   const base = `t42b_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
   let dossierPartiel = '';
+  let dossier35 = '';
   const ferme = randomUUID();
   const deLaFerme = { famille: randomUUID(), espece: randomUUID(), itineraire: randomUUID(), copie: randomUUID() };
   let fermeAvant: Instantane;
@@ -120,7 +122,9 @@ decrireAvecBase('T42b : travaux corrigés, migration 0035 (PostgreSQL)', { timeo
     );
     fermeAvant = await fermeLignes();
     bibliothequeAvant = await bibliotheque();
-    await db.appliquerMigrations(urlDe(base));
+    // T43 : jusqu'à 0035 seulement ; 0036 (écart entre rangs) a son propre test.
+    dossier35 = migrationsJusquA(35);
+    await migrate(drizzle(c), { migrationsFolder: dossier35 });
   }, 120_000);
 
   afterAll(async () => {
@@ -128,10 +132,12 @@ decrireAvecBase('T42b : travaux corrigés, migration 0035 (PostgreSQL)', { timeo
     await admin.query(`DROP DATABASE IF EXISTS ${base} WITH (FORCE)`);
     await admin.end();
     rmSync(dossierPartiel, { recursive: true, force: true });
+    rmSync(dossier35, { recursive: true, force: true });
   }, 60_000);
 
-  it('la bibliothèque : exactement la conversion du JSON, mêmes identifiants', async () => {
-    const attendu = db.convertirBibliotheque(db.lireBibliothequeDepart());
+  it('la bibliothèque : exactement l’état 0035, mêmes identifiants', async () => {
+    const attendu = db.lireEtatsBibliotheque().find((e) => e.migration === MIGRATION_SUITES)?.lignes;
+    if (attendu === undefined) throw new Error('état 0035 absent');
     const apres = await bibliotheque();
     expect(attendu.itineraires).toHaveLength(46);
     for (const i of attendu.itineraires) {
@@ -173,9 +179,9 @@ decrireAvecBase('T42b : travaux corrigés, migration 0035 (PostgreSQL)', { timeo
     expect(await fermeLignes()).toEqual(fermeAvant);
   });
 
-  it('rejouable : les migrations à nouveau, puis le SQL de 0035 deux fois, ne réécrivent rien', async () => {
+  it('rejouable : les migrations jusqu’à 0035 à nouveau, puis le SQL de 0035 deux fois, ne réécrivent rien', async () => {
     const bib = await bibliotheque();
-    await db.appliquerMigrations(urlDe(base));
+    await migrate(drizzle(c), { migrationsFolder: dossier35 });
     const sql = readFileSync(new URL(`${MIGRATION_SUITES}.sql`, DOSSIER), 'utf8');
     await jouer(sql);
     await jouer(sql);

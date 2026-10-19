@@ -184,6 +184,7 @@ describe('T41 : conversion vers les lignes de la base', () => {
     }
   });
 
+  // T43 : chaque densité porte aussi son écart entre rangs (bibliotheque-ecart-rangs.test.ts).
   it('plant acheté (tomate greffée sous serre) : ParametresItineraire du cœur, sans clé de pépinière', () => {
     const i = lignes.itineraires.find((l) => l.nom === 'Tomate sous serre, plant greffé deux têtes');
     expect(i === undefined ? undefined : { ...i, parametres: sansTravaux(i.parametres) }).toEqual({
@@ -202,7 +203,7 @@ describe('T41 : conversion vers les lignes de la base', () => {
         margeSecurite: 10,
         rendementAttendu: { par: 'plant', quantite: 8, unite: 'kg' },
         perenne: null,
-        densite: { facon: 'ecartement', rangsParPlanche: 1, ecartementSurRangCm: 50 },
+        densite: { facon: 'ecartement', rangsParPlanche: 1, ecartementSurRangCm: 50, ecartEntreRangsCm: 120 },
       },
     });
   });
@@ -223,7 +224,7 @@ describe('T41 : conversion vers les lignes de la base', () => {
       margeSecurite: 15,
       rendementAttendu: { par: 'metre', quantite: 4, unite: 'kg' },
       perenne: null,
-      densite: { facon: 'ecartement', rangsParPlanche: 3, ecartementSurRangCm: 25, disposition: 'quinconce' },
+      densite: { facon: 'ecartement', rangsParPlanche: 3, ecartementSurRangCm: 25, disposition: 'quinconce', ecartEntreRangsCm: 25 },
     });
   });
 
@@ -238,7 +239,7 @@ describe('T41 : conversion vers les lignes de la base', () => {
       margeSecurite: 25,
       rendementAttendu: { par: 'metre', quantite: 0.8, unite: 'kg' },
       perenne: null,
-      densite: { facon: 'metre_lineaire', rangsParPlanche: 3, grainesParMetre: 60 },
+      densite: { facon: 'metre_lineaire', rangsParPlanche: 3, grainesParMetre: 60, ecartEntreRangsCm: 25 },
       grainesParPoquet: null,
     });
     const carotte = lignes.itineraires.find((l) => l.nom === 'Carotte de conservation, semis direct');
@@ -251,7 +252,7 @@ describe('T41 : conversion vers les lignes de la base', () => {
       margeSecurite: 20,
       rendementAttendu: { par: 'metre', quantite: 5, unite: 'kg' },
       perenne: null,
-      densite: { facon: 'ecartement', rangsParPlanche: 4, ecartementSurRangCm: 2 },
+      densite: { facon: 'ecartement', rangsParPlanche: 4, ecartementSurRangCm: 2, ecartEntreRangsCm: 18 },
       grainesParPoquet: 1,
     });
     const haricot = lignes.itineraires.find((l) => l.nom === 'Haricot grimpant, semis direct en poquets');
@@ -259,7 +260,7 @@ describe('T41 : conversion vers les lignes de la base', () => {
       mode: 'semis_direct',
       grainesParPoquet: 5,
     });
-    expect(haricot?.parametres.densite, 'rangs alignés : pas de clé disposition').toEqual({ facon: 'ecartement', rangsParPlanche: 2, ecartementSurRangCm: 40 });
+    expect(haricot?.parametres.densite, 'rangs alignés : pas de clé disposition').toEqual({ facon: 'ecartement', rangsParPlanche: 2, ecartementSurRangCm: 40, ecartEntreRangsCm: 40 });
   });
 
   it('ni sources, ni « à vérifier », ni famille ou catégorie dans les paramètres rangés en base', () => {

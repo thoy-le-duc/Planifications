@@ -61,8 +61,10 @@ export type SourceDensite =
       readonly rangsParPlanche: number;
       readonly ecartementCm: number;
       readonly disposition?: 'alignee' | 'quinconce';
+      /** T43 : écart entre rangs en cm (réglage du semoir ou du traceur). */
+      readonly ecartEntreRangsCm?: number;
     }
-  | { readonly facon: 'metre_lineaire'; readonly rangsParPlanche: number; readonly grainesParMetre: number }
+  | { readonly facon: 'metre_lineaire'; readonly rangsParPlanche: number; readonly grainesParMetre: number; readonly ecartEntreRangsCm?: number }
   | { readonly facon: 'volee'; readonly largeurSemeeCm: number; readonly doseGParM2: number };
 
 export interface SourceItineraire {
@@ -160,10 +162,13 @@ function obligatoire(v: number | null, champ: string, nom: string): number {
   return v;
 }
 
+/** T43 : l'écart entre rangs, recopié s'il est donné (absent : pas de clé, comme avant T43). */
+const entreRangs = (d: { readonly ecartEntreRangsCm?: number }): { ecartEntreRangsCm?: number } => (d.ecartEntreRangsCm === undefined ? {} : { ecartEntreRangsCm: d.ecartEntreRangsCm });
+
 /** Densité à l'écartement du cœur : la disposition n'est écrite qu'en quinconce sur plusieurs rangs (T35a, comme le formulaire). */
 function ecartement(d: Extract<SourceDensite, { facon: 'ecartement' }>): DensiteEcartement {
   const base = { facon: 'ecartement', rangsParPlanche: d.rangsParPlanche, ecartementSurRangCm: d.ecartementCm } as const;
-  return d.disposition === 'quinconce' && d.rangsParPlanche > 1 ? { ...base, disposition: 'quinconce' } : base;
+  return d.disposition === 'quinconce' && d.rangsParPlanche > 1 ? { ...base, disposition: 'quinconce', ...entreRangs(d) } : { ...base, ...entreRangs(d) };
 }
 
 function densite(d: SourceDensite): Densite {
@@ -171,7 +176,7 @@ function densite(d: SourceDensite): Densite {
     case 'ecartement':
       return ecartement(d);
     case 'metre_lineaire':
-      return { facon: 'metre_lineaire', rangsParPlanche: d.rangsParPlanche, grainesParMetre: d.grainesParMetre };
+      return { facon: 'metre_lineaire', rangsParPlanche: d.rangsParPlanche, grainesParMetre: d.grainesParMetre, ...entreRangs(d) };
     case 'volee':
       return { facon: 'volee', largeurSemeeCm: d.largeurSemeeCm, doseGParM2: d.doseGParM2 };
   }

@@ -52,6 +52,9 @@ export const PRECISION_ZONE_ABRITEE_SUPPRIMEE = 'cette zone est abritée par un 
 /** T35a : disposition des rangs inconnue dans la densité d'un itinéraire ou d'une série. */
 export const PRECISION_DISPOSITION_RANGS = 'la disposition des rangs se choisit entre alignés et en quinconce';
 
+/** T43 : écart entre rangs hors bornes ou de mauvaise forme dans la densité d'un itinéraire ou d'une série. */
+export const PRECISION_ECART_ENTRE_RANGS = 'l’écart entre rangs se donne en centimètres, de 5 à 200, pour des rangs (pas à la volée)';
+
 /** Message enregistré dans refus_synchro : seul 'ecriture_invalide' porte une précision. */
 export function messageRefus(refus: Refus): string {
   if (refus.motif !== 'ecriture_invalide') return MESSAGES[refus.motif];
@@ -188,6 +191,7 @@ export function precisionDuCoeur(erreur: ErreurSaisie): string {
   // Le champ d'une colonne ou d'une clé inconnue est le nom reçu : jamais affiché.
   if (erreur.code === 'colonne_inconnue' || erreur.code === 'cle_inconnue') return texte;
   if (erreur.champ === 'parametres.densite.disposition') return PRECISION_DISPOSITION_RANGS;
+  if (erreur.champ === 'parametres.densite.ecartEntreRangsCm') return PRECISION_ECART_ENTRE_RANGS;
   const libelle = libelleDuChamp(erreur.champ);
   return libelle === null ? texte : `${texte} (${libelle})`;
 }

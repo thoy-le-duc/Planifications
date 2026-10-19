@@ -508,7 +508,7 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
                               >
                                 <span className="itin-item-textes">
                                   <strong>{i.nom}</strong>
-                                  <span>{resumeItineraire(i)}</span>
+                                  <span>{resumeItineraire(i, largeurPlanche)}</span>
                                 </span>
                                 <span className="itin-item-action">
                                   Modifier
@@ -532,7 +532,7 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
                                     {i.nom}
                                     <em className="itin-pastille">Bibliothèque</em>
                                   </strong>
-                                  <span>{resumeItineraire(i)}</span>
+                                  <span>{resumeItineraire(i, largeurPlanche)}</span>
                                 </span>
                                 <span className="itin-item-action">
                                   Voir

@@ -10,6 +10,8 @@ import {
   calculerDatesSerie,
   CATEGORIES_AVEC_PRODUIT,
   datesTravailPrevu,
+  ECART_ENTRE_RANGS_MAX_CM,
+  ECART_ENTRE_RANGS_MIN_CM,
   lundiDeSemaine,
   semaineIso,
   validerItineraire,
@@ -24,6 +26,7 @@ import {
   type RepereTravail,
   type TravailPrevu,
 } from '@planif/core';
+import { texteDensite } from './schema-rangs.ts';
 
 export type Valeur = string | number | null;
 export type Ligne = Readonly<Record<string, Valeur>>;
@@ -184,6 +187,8 @@ export interface Saisie {
   readonly ecartement: string;
   /** T35a : rangs alignés (défaut, densité sans clé) ou en quinconce. */
   readonly disposition: DispositionRangs;
+  /** T43 : écart entre rangs en cm ; vide = pas de clé (l'écran montre l'écart calculé, « ≈ »). */
+  readonly ecartRangs: string;
   readonly grainesParMetre: string;
   readonly largeur: string;
   readonly dose: string;
@@ -283,6 +288,7 @@ export function saisieDepuis(parametres: Readonly<Objet>, nom: string, especeId:
     rangs: nombreTexte(densite.rangsParPlanche),
     ecartement: nombreTexte(densite.ecartementSurRangCm),
     disposition: densite.disposition === 'quinconce' ? 'quinconce' : 'alignee',
+    ecartRangs: nombreTexte(densite.ecartEntreRangsCm),
     grainesParMetre: nombreTexte(densite.grainesParMetre),
     largeur: nombreTexte(densite.largeurSemeeCm),
     dose: nombreTexte(densite.doseGParM2),
@@ -354,17 +360,31 @@ function densiteDe(s: Saisie): Lecture<Objet> {
   }
   const rangs = lireEntier(s.rangs);
   if (rangs === null) return manque('Rangs par planche : un nombre entier, plus grand que 0.');
+  // T43 : l'écart entre rangs, facultatif ; vide = pas de clé (comme avant T43).
+  const ecart = ecartRangsDe(s.ecartRangs);
+  if (!ecart.ok) return ecart;
+  const entreRangs = ecart.valeur === null ? {} : { ecartEntreRangsCm: ecart.valeur };
   if (facon === 'metre_lineaire') {
     const graines = decimalRequis(s.grainesParMetre, 'Graines par mètre');
     if (!graines.ok) return graines;
-    return ok({ facon, rangsParPlanche: rangs, grainesParMetre: graines.valeur });
+    return ok({ facon, rangsParPlanche: rangs, grainesParMetre: graines.valeur, ...entreRangs });
   }
   const ecartement = decimalRequis(s.ecartement, 'Écartement sur le rang');
   if (!ecartement.ok) return ecartement;
   // T35a : seul le quinconce s'écrit (alignés = densité sans clé, comme avant T35a) ; un seul
   // rang n'a pas de disposition.
   const disposition = s.disposition === 'quinconce' && rangs > 1 ? { disposition: s.disposition } : {};
-  return ok({ facon, rangsParPlanche: rangs, ecartementSurRangCm: ecartement.valeur, ...disposition });
+  return ok({ facon, rangsParPlanche: rangs, ecartementSurRangCm: ecartement.valeur, ...disposition, ...entreRangs });
+}
+
+/** T43 : écart entre rangs saisi : vide → null (pas de clé) ; nombre de 5 à 200 cm ; sinon ce qui ne va pas. */
+export function ecartRangsDe(v: string): Lecture<number | null> {
+  if (v.trim() === '') return ok(null);
+  const n = lireDecimal(v);
+  if (n === null || n < ECART_ENTRE_RANGS_MIN_CM || n > ECART_ENTRE_RANGS_MAX_CM) {
+    return manque(`Écart entre rangs : de ${String(ECART_ENTRE_RANGS_MIN_CM)} à ${String(ECART_ENTRE_RANGS_MAX_CM)} cm, ou laissé vide.`);
+  }
+  return ok(n);
 }
 
 /** Travail prévu tiré de la saisie (sans contrôle de la liste des types), ou ce qui manque. */
@@ -541,11 +561,17 @@ export function apercu(s: Saisie, periodeUsage: unknown, aujourdhui: string): Ap
   return { ancre, dates, travaux };
 }
 
-/** Résumé d'un itinéraire pour la liste : « Plant maison · pépinière 28 j · récolte à 49 j · 2 travaux ». */
-export function resumeItineraire(i: ItineraireLu): string {
+/**
+ * Résumé d'un itinéraire pour la liste : « Plant maison · 3 rangs à 30 cm · 30 cm sur le rang ·
+ * pépinière 28 j · récolte à 49 j · 2 travaux ». T43 : la densité, écart entre rangs compris
+ * (« ≈ » s'il est calculé sur `largeurPlancheCm`, la planche de la ferme, sinon 75 cm).
+ */
+export function resumeItineraire(i: ItineraireLu, largeurPlancheCm: number | null = null): string {
   const p = i.parametres;
   if (p === null) return 'Paramètres illisibles';
   const morceaux: string[] = [LIBELLES_MODES[MODES.find((m) => m === p.mode) ?? 'plant_maison']];
+  const densite = texteDensite(p.densite, largeurPlancheCm);
+  if (densite !== null) morceaux.push(densite);
   if (typeof p.dureePepiniereJours === 'number' && p.mode === 'plant_maison') morceaux.push(`pépinière ${String(p.dureePepiniereJours)} j`);
   if (typeof p.dureeAvantRecolteJours === 'number') morceaux.push(`récolte à ${String(p.dureeAvantRecolteJours)} j`);
   const n = Array.isArray(p.travauxPrevus) ? p.travauxPrevus.length : 0;
