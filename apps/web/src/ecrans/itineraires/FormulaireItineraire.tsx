@@ -38,7 +38,7 @@ import {
 } from './calculs.ts';
 import { lireSeriesAVenir, type SerieAVenir } from './donnees.ts';
 import { SchemaRangs } from './SchemaRangs.tsx';
-import { ecartsDensite, LARGEUR_PLANCHE_ECARTS_CM, texteEcartEquivalent, texteEcartsRangs } from './schema-rangs.ts';
+import { ecartsDensite, LARGEUR_PLANCHE_DEFAUT_CM, texteEcartEquivalent, texteEcartsRangs } from './schema-rangs.ts';
 import { creerItineraire, EcritureRefusee, modifierItineraire, nouvelId, ramener, supprimerItineraire, type ContexteEcriture } from './ecritures.ts';
 
 /** Marque de performance posée quand le formulaire est utilisable (champs et aperçu dessinés). */
@@ -558,7 +558,7 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
   }, []);
 
   // T35a : le schéma des rangs, dessiné dès que rangs et écartement sont lisibles. T42 : sur la
-  // largeur des planches de la ferme, sinon 75 cm (LARGEUR_PLANCHE_ECARTS_CM), comme les écarts.
+  // largeur des planches de la ferme, sinon 75 cm (LARGEUR_PLANCHE_DEFAUT_CM), comme les écarts.
   const rangsLus = lireEntier(saisie.rangs);
   const ecartementLu = lireDecimal(saisie.ecartement);
   // T42 : écart entre rangs (planche de la ferme, sinon 75 cm) et, au mètre linéaire, écart équivalent sur le rang.
@@ -901,7 +901,7 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
               </>
             )}
             {(saisie.mode !== 'semis_direct' || saisie.facon === 'ecartement') && rangsLus !== null && rangsLus <= RANGS_SCHEMA_MAX && ecartementLu !== null && (
-              <SchemaRangs rangs={rangsLus} ecartementCm={ecartementLu} disposition={saisie.disposition} largeurPlancheCm={largeurPlancheCm ?? LARGEUR_PLANCHE_ECARTS_CM} />
+              <SchemaRangs rangs={rangsLus} ecartementCm={ecartementLu} disposition={saisie.disposition} largeurPlancheCm={largeurPlancheCm ?? LARGEUR_PLANCHE_DEFAUT_CM} />
             )}
             {ecarts !== null && (
               <p className="itin-aide itin-ecarts">

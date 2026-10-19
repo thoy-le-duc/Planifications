@@ -6,8 +6,11 @@
  */
 import type { DispositionRangs } from '@planif/core';
 
-/** Largeur de planche dessinée quand l'itinéraire ne la connaît pas : 1,2 m. */
-export const LARGEUR_PLANCHE_DEFAUT_CM = 120;
+/**
+ * Largeur de planche quand la ferme n'en dit rien : 75 cm (planche permanente usuelle). Une seule
+ * valeur (T42b) pour le schéma des rangs et les écarts affichés.
+ */
+export const LARGEUR_PLANCHE_DEFAUT_CM = 75;
 
 /** Plants dessinés par rang : assez pour voir le motif, pas trop pour rester lisible. */
 const PLANTS_MIN = 3;
@@ -76,13 +79,10 @@ export function texteSchemaRangs(e: Pick<EntreeSchemaRangs, 'rangs' | 'ecartemen
 
 // ── Écarts d'une densité (T42) ─────────────────────────────────────────────────────────────
 
-/** Largeur de planche des écarts quand la ferme n'en dit rien : 75 cm (planche permanente usuelle). */
-export const LARGEUR_PLANCHE_ECARTS_CM = 75;
-
 /** Écart entre rangs et, au mètre linéaire, écart moyen équivalent entre graines sur le rang. */
 export interface EcartsDensite {
   readonly rangs: number;
-  /** Celle reçue, sinon LARGEUR_PLANCHE_ECARTS_CM. */
+  /** Celle reçue, sinon LARGEUR_PLANCHE_DEFAUT_CM. */
   readonly largeurPlancheCm: number;
   /** Largeur / rangs (rangs au milieu de bandes égales, comme le schéma) ; null à 1 rang. */
   readonly ecartEntreRangsCm: number | null;
@@ -107,7 +107,7 @@ export function ecartsDensite(densite: unknown, largeurPlancheCm: number | null)
     if (!positif(d.grainesParMetre)) return null;
     ecartEquivalentCm = 100 / d.grainesParMetre;
   }
-  const largeur = positif(largeurPlancheCm) ? largeurPlancheCm : LARGEUR_PLANCHE_ECARTS_CM;
+  const largeur = positif(largeurPlancheCm) ? largeurPlancheCm : LARGEUR_PLANCHE_DEFAUT_CM;
   return { rangs, largeurPlancheCm: largeur, ecartEntreRangsCm: rangs > 1 ? largeur / rangs : null, ecartEquivalentCm };
 }
 
