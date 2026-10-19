@@ -5,7 +5,7 @@
  * Internes au cœur : non exportés par @planif/core (sauf les constantes reprises par serie.ts).
  */
 import { estDateValide, type DateCalendaire } from '../dates/index.ts';
-import { DISPOSITIONS_RANGS, type Instant, type ModeItineraire, type ParametresItineraire } from '../domaine/index.ts';
+import { DISPOSITIONS_RANGS, ECART_ENTRE_RANGS_MAX_CM, ECART_ENTRE_RANGS_MIN_CM, type Instant, type ModeItineraire, type ParametresItineraire } from '../domaine/index.ts';
 import type { CodeErreurSaisie, ErreurSaisie } from './index.ts';
 import { octetsUtf8, texteJson } from './outils.ts';
 import { validerTravauxPrevus, type OptionsTravaux } from './travaux.ts';
@@ -135,6 +135,24 @@ function disposition(densite: unknown): ErreurSaisie | null {
 }
 
 /**
+ * T43 : l'écart entre rangs de la densité, s'il est donné : un nombre de 5 à 200 cm, sur une
+ * densité en rangs (écartement ou mètre linéaire). Absent, rien n'est ajouté (aucune ligne
+ * réécrite). Plus large que la planche n'est pas une règle : l'écran avertit seulement.
+ */
+function ecartEntreRangs(densite: unknown): ErreurSaisie | null {
+  if (!estObjet(densite) || densite.ecartEntreRangsCm === undefined) return null;
+  const champ = 'parametres.densite.ecartEntreRangsCm';
+  const v = densite.ecartEntreRangsCm;
+  const bornes = `de ${String(ECART_ENTRE_RANGS_MIN_CM)} à ${String(ECART_ENTRE_RANGS_MAX_CM)} cm`;
+  if (densite.facon !== 'ecartement' && densite.facon !== 'metre_lineaire') {
+    return erreur('champ_invalide', champ, 'écart entre rangs : seulement pour une densité en rangs (écartement ou mètre linéaire)');
+  }
+  if (typeof v !== 'number' || !Number.isFinite(v)) return erreur('champ_invalide', champ, `écart entre rangs : un nombre de centimètres attendu, ${bornes}`);
+  if (v < ECART_ENTRE_RANGS_MIN_CM || v > ECART_ENTRE_RANGS_MAX_CM) return erreur('hors_bornes', champ, `écart entre rangs ${bornes}`);
+  return null;
+}
+
+/**
  * L'instantané de l'itinéraire, lisible : un objet JSON de 8 192 octets au plus, avec ce que le
  * calcul des dates lit. Les autres clés (densité, marge…) sont gardées telles quelles : elles
  * appartiennent à l'itinéraire copié, pas aux dates.
@@ -160,7 +178,7 @@ export function lireParametres(v: unknown, options: OptionsParametres = {}): Lu<
     dureeJours(p, 'dureeAvantRecolteJours', 'durée avant récolte') ??
     dureeJours(p, 'fenetreRecolteJours', 'fenêtre de récolte');
   if (e !== null) return echec(e);
-  const d = disposition(p.densite);
+  const d = disposition(p.densite) ?? ecartEntreRangs(p.densite);
   if (d !== null) return echec(d);
   // Relu depuis le texte : une copie JSON pure, sans valeur non sérialisable (undefined…).
   const relus = JSON.parse(ecrit.texte) as Record<string, unknown>;

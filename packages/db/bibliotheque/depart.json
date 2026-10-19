@@ -10,7 +10,8 @@
       "periodeUsage : semaines ISO de mise en place, France tempérée.",
       "Ail : caïeux traités comme semis direct à l'écartement (1 caïeu par poquet).",
       "travauxPrevus (T42) : repères et décalages en jours depuis la mise en place ou la récolte ; compost en kg/m², engrais organique en g/m² ; types de la liste de départ.",
-      "Écartements (T42) : semis directs de graines comptables (carotte, radis, navet, épinard, haricot, pois) à l'écartement ; fines graines (mesclun, roquette, aneth, coriandre) au mètre linéaire."
+      "Écartements (T42) : semis directs de graines comptables (carotte, radis, navet, épinard, haricot, pois) à l'écartement ; fines graines (mesclun, roquette, aneth, coriandre) au mètre linéaire.",
+      "Écart entre rangs (T43) : valeur usuelle en cm pour le réglage du semoir ou du traceur, choisie pour que les rangs tiennent sur la planche de 75 cm ((rangs − 1) × écart ≤ 75 cm) ; un rang par planche : entraxe des planches, 120 cm. Tirée des fiches publiques déjà citées (semenciers, chambres d'agriculture, réseaux bio), arrondie."
     ]
   },
   "familles": [
@@ -308,7 +309,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 1,
         "ecartementCm": 50,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 120
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 60,
@@ -461,7 +463,7 @@
           "url": "https://www.grab.fr/wp-content/uploads/2022/02/Fiche2MarPACAFertiAuberg2003.pdf"
         }
       ],
-      "aVerifier": "Rendement très dépendant du chauffage et de la durée de culture ; plant greffé possible. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
+      "aVerifier": "Rendement très dépendant du chauffage et de la durée de culture ; plant greffé possible. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort). Écart entre rangs (T43) : 120 cm, un rang par planche, soit l'entraxe des planches (planche de 75 cm et passe-pied de 45 cm) ; à adapter à la largeur réelle des planches et des passe-pieds."
     },
     {
       "espece": "aubergine",
@@ -483,7 +485,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 1,
         "ecartementCm": 60,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 120
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 70,
@@ -636,7 +639,7 @@
           "url": "https://www.grab.fr/wp-content/uploads/2022/02/Fiche2MarPACAFertiAuberg2003.pdf"
         }
       ],
-      "aVerifier": "En plein champ au nord de la Loire, rendement nettement plus faible. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
+      "aVerifier": "En plein champ au nord de la Loire, rendement nettement plus faible. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort). Écart entre rangs (T43) : 120 cm, un rang par planche, soit l'entraxe des planches (planche de 75 cm et passe-pied de 45 cm) ; à adapter à la largeur réelle des planches et des passe-pieds."
     },
     {
       "espece": "poivron",
@@ -658,7 +661,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 45,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 75,
@@ -794,7 +798,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Durée avant récolte : poivron vert plus tôt, coloré 2-3 semaines plus tard. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
+      "aVerifier": "Durée avant récolte : poivron vert plus tôt, coloré 2-3 semaines plus tard. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort). Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "poivron",
@@ -816,7 +820,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 50,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 80,
@@ -952,7 +957,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement plein champ faible en zone fraîche ; à ajuster par région. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
+      "aVerifier": "Rendement plein champ faible en zone fraîche ; à ajuster par région. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort). Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "piment",
@@ -974,7 +979,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 45,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 80,
@@ -1110,7 +1116,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement très variable selon le type (Cayenne, Espelette, habanero). Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
+      "aVerifier": "Rendement très variable selon le type (Cayenne, Espelette, habanero). Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort). Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "tomate",
@@ -1132,7 +1138,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 1,
         "ecartementCm": 50,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 120
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 70,
@@ -1293,7 +1300,7 @@
           "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2012/04/fiche_tomates.pdf"
         }
       ],
-      "aVerifier": "Rendement par plant greffé deux têtes : 6 à 12 kg selon durée et chauffage. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
+      "aVerifier": "Rendement par plant greffé deux têtes : 6 à 12 kg selon durée et chauffage. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort). Écart entre rangs (T43) : 120 cm, un rang par planche, soit l'entraxe des planches (planche de 75 cm et passe-pied de 45 cm) ; à adapter à la largeur réelle des planches et des passe-pieds."
     },
     {
       "espece": "tomate",
@@ -1315,7 +1322,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 1,
         "ecartementCm": 40,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 120
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 65,
@@ -1472,7 +1480,7 @@
           "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2012/04/fiche_tomates.pdf"
         }
       ],
-      "aVerifier": "Plein champ : mildiou et cycle plus court, rendement souvent 2-3 kg/plant. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
+      "aVerifier": "Plein champ : mildiou et cycle plus court, rendement souvent 2-3 kg/plant. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort). Écart entre rangs (T43) : 120 cm, un rang par planche, soit l'entraxe des planches (planche de 75 cm et passe-pied de 45 cm) ; à adapter à la largeur réelle des planches et des passe-pieds."
     },
     {
       "espece": "pomme de terre",
@@ -1494,7 +1502,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 1,
         "ecartementCm": 30,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 120
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 90,
@@ -1589,7 +1598,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Une seule rangée par planche de 75 cm pour butter ; rendement 5 à 45 t/ha. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Une seule rangée par planche de 75 cm pour butter ; rendement 5 à 45 t/ha. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 120 cm, un rang par planche, soit l'entraxe des planches (planche de 75 cm et passe-pied de 45 cm) ; à adapter à la largeur réelle des planches et des passe-pieds."
     },
     {
       "espece": "gingembre",
@@ -1611,7 +1620,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 25,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 120,
@@ -1725,7 +1735,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Culture rare en France : références surtout nord-américaines, rendement et durée très incertains. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Culture rare en France : références surtout nord-américaines, rendement et durée très incertains. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "concombre",
@@ -1747,7 +1757,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 1,
         "ecartementCm": 40,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 120
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 45,
@@ -1900,7 +1911,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement selon type (long, mini) et taille ; souvent deux plantations successives. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort)."
+      "aVerifier": "Rendement selon type (long, mini) et taille ; souvent deux plantations successives. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Désherbage (T42b) : sous toile tissée, seulement au trou de plantation et au passe-pied, tous les 45 jours environ jusqu'à la fin de récolte (30 jours si l'enherbement est fort). Écart entre rangs (T43) : 120 cm, un rang par planche, soit l'entraxe des planches (planche de 75 cm et passe-pied de 45 cm) ; à adapter à la largeur réelle des planches et des passe-pieds."
     },
     {
       "espece": "courgette",
@@ -1922,7 +1933,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 1,
         "ecartementCm": 70,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 120
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 45,
@@ -2017,7 +2029,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Fenêtre de récolte limitée par l'oïdium ; rendement 3 à 6 kg/plant. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Fenêtre de récolte limitée par l'oïdium ; rendement 3 à 6 kg/plant. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 120 cm, un rang par planche, soit l'entraxe des planches (planche de 75 cm et passe-pied de 45 cm) ; à adapter à la largeur réelle des planches et des passe-pieds."
     },
     {
       "espece": "courge d'hiver",
@@ -2039,7 +2051,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 1,
         "ecartementCm": 80,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 120
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 100,
@@ -2134,7 +2147,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement 10 à 20 t/ha et 20 % de pertes au stockage ; ajuster selon variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement 10 à 20 t/ha et 20 % de pertes au stockage ; ajuster selon variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 120 cm, un rang par planche, soit l'entraxe des planches (planche de 75 cm et passe-pied de 45 cm) ; à adapter à la largeur réelle des planches et des passe-pieds."
     },
     {
       "espece": "melon",
@@ -2157,7 +2170,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 1,
         "ecartementCm": 60,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 120
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 75,
@@ -2262,7 +2276,7 @@
           "url": "https://www.grab.fr/wp-content/uploads/2022/02/Fiche2MarPACA-Ferti-melons-2004.pdf"
         }
       ],
-      "aVerifier": "Rangé en plein champ : la chenille (petit tunnel) reste conseillée hors du Sud pour avancer la récolte ; si vous la posez, adaptez l'abri et la période dans votre copie. Ancien nom : « Melon sous chenille, plant maison ». Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rangé en plein champ : la chenille (petit tunnel) reste conseillée hors du Sud pour avancer la récolte ; si vous la posez, adaptez l'abri et la période dans votre copie. Ancien nom : « Melon sous chenille, plant maison ». Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 120 cm, un rang par planche, soit l'entraxe des planches (planche de 75 cm et passe-pied de 45 cm) ; à adapter à la largeur réelle des planches et des passe-pieds."
     },
     {
       "espece": "ail",
@@ -2284,7 +2298,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 4,
         "ecartementCm": 12,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 20
       },
       "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 220,
@@ -2359,7 +2374,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Écartement et rendement au mètre peu documentés en source publique ; à confirmer. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Écartement et rendement au mètre peu documentés en source publique ; à confirmer. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 20 cm, 4 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "oignon",
@@ -2381,7 +2396,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 3,
         "ecartementCm": 25,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 25
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 75,
@@ -2456,7 +2472,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Nombre d'oignons par motte et poids vendu en botte à ajuster. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Nombre d'oignons par motte et poids vendu en botte à ajuster. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 25 cm, 3 rangs sur une planche de 75 cm (50 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "oignon",
@@ -2478,7 +2494,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 3,
         "ecartementCm": 6,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 25
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 130,
@@ -2557,7 +2574,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Plantation après mi-mars : montaison moindre ; rendement bio très variable. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Plantation après mi-mars : montaison moindre ; rendement bio très variable. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 25 cm, 3 rangs sur une planche de 75 cm (50 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "cébette",
@@ -2579,7 +2596,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 3,
         "ecartementCm": 20,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 25
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 50,
@@ -2654,7 +2672,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement compté par motte (une botte environ) ; espèce selon variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement compté par motte (une botte environ) ; espèce selon variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 25 cm, 3 rangs sur une planche de 75 cm (50 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "poireau",
@@ -2676,7 +2694,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 3,
         "ecartementCm": 12,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 25
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 120,
@@ -2780,7 +2799,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Pépinière en planche (pas de plaque) ; perte en pépinière à affiner. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Pépinière en planche (pas de plaque) ; perte en pépinière à affiner. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 25 cm, 3 rangs sur une planche de 75 cm (50 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "carotte",
@@ -2802,7 +2821,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 4,
         "ecartementCm": 2,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 18
       },
       "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 120,
@@ -2919,7 +2939,7 @@
           "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Levée irrégulière en bio : rendement réel souvent 30 à 35 t/ha. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 50 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Éclaircissage (T42b) : non prévu, le semis graine à graine à l'écartement donne déjà la densité voulue ; à ajouter seulement si la levée est trop dense (semoir mal réglé, graines doublées). Filet anti-insectes posé après le désherbage thermique de prélevée (vers J+7), jamais avant."
+      "aVerifier": "Levée irrégulière en bio : rendement réel souvent 30 à 35 t/ha. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 50 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Éclaircissage (T42b) : non prévu, le semis graine à graine à l'écartement donne déjà la densité voulue ; à ajouter seulement si la levée est trop dense (semoir mal réglé, graines doublées). Filet anti-insectes posé après le désherbage thermique de prélevée (vers J+7), jamais avant. Écart entre rangs (T43) : 18 cm, 4 rangs sur une planche de 75 cm (54 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "carotte",
@@ -2941,7 +2961,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 5,
         "ecartementCm": 2,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 15
       },
       "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 85,
@@ -3058,7 +3079,7 @@
           "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Semis précoces (février) sous tunnel ou voile : durée plus longue. Écartement (T42) : 5 rangs, une graine tous les 2 cm, converti depuis 4 rangs à 70 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Éclaircissage (T42b) : non prévu, le semis graine à graine à l'écartement donne déjà la densité voulue ; à ajouter seulement si la levée est trop dense (semoir mal réglé, graines doublées). Filet anti-insectes posé après le désherbage thermique de prélevée (vers J+7), jamais avant. Occultation après le travail du sol (compost, grelinette), pour ne pas remonter de graines d'adventices, puis préparation au râteau la veille du semis."
+      "aVerifier": "Semis précoces (février) sous tunnel ou voile : durée plus longue. Écartement (T42) : 5 rangs, une graine tous les 2 cm, converti depuis 4 rangs à 70 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Éclaircissage (T42b) : non prévu, le semis graine à graine à l'écartement donne déjà la densité voulue ; à ajouter seulement si la levée est trop dense (semoir mal réglé, graines doublées). Filet anti-insectes posé après le désherbage thermique de prélevée (vers J+7), jamais avant. Occultation après le travail du sol (compost, grelinette), pour ne pas remonter de graines d'adventices, puis préparation au râteau la veille du semis. Écart entre rangs (T43) : 15 cm, 5 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "céleri branche",
@@ -3080,7 +3101,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 30,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 90,
@@ -3171,7 +3193,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Pépinière longue et levée lente : perte en pépinière incertaine. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Pépinière longue et levée lente : perte en pépinière incertaine. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "fenouil",
@@ -3193,7 +3215,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 3,
         "ecartementCm": 20,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 25
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 50,
@@ -3264,7 +3287,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Montaison en jours longs ; poids du mini-fenouil à fixer selon vente. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Montaison en jours longs ; poids du mini-fenouil à fixer selon vente. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 25 cm, 3 rangs sur une planche de 75 cm (50 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "aneth",
@@ -3285,7 +3308,8 @@
       "densite": {
         "facon": "metre_lineaire",
         "rangsParPlanche": 3,
-        "grainesParMetre": 60
+        "grainesParMetre": 60,
+        "ecartEntreRangsCm": 25
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 45,
@@ -3366,7 +3390,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Montaison rapide l'été ; rendement en bottes par mètre peu documenté. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Montaison rapide l'été ; rendement en bottes par mètre peu documenté. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 25 cm, 3 rangs sur une planche de 75 cm (50 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "coriandre",
@@ -3387,7 +3411,8 @@
       "densite": {
         "facon": "metre_lineaire",
         "rangsParPlanche": 3,
-        "grainesParMetre": 80
+        "grainesParMetre": 80,
+        "ecartEntreRangsCm": 25
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 45,
@@ -3468,7 +3493,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Monte vite à graines en été ; éviter semis de juin-juillet. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Monte vite à graines en été ; éviter semis de juin-juillet. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 25 cm, 3 rangs sur une planche de 75 cm (50 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "basilic",
@@ -3490,7 +3515,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 3,
         "ecartementCm": 25,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 25
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 30,
@@ -3575,7 +3601,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement compté par motte de 3 plants ; mildiou du basilic fréquent. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement compté par motte de 3 plants ; mildiou du basilic fréquent. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 25 cm, 3 rangs sur une planche de 75 cm (50 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "bette",
@@ -3597,7 +3623,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 30,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 55,
@@ -3668,7 +3695,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement par plant sur une longue cueillette feuille à feuille : à confirmer. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement par plant sur une longue cueillette feuille à feuille : à confirmer. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "betterave",
@@ -3690,7 +3717,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 3,
         "ecartementCm": 25,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 25
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 60,
@@ -3765,7 +3793,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Plants par motte (glomérules) et calibre visé changent fortement le rendement. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Plants par motte (glomérules) et calibre visé changent fortement le rendement. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 25 cm, 3 rangs sur une planche de 75 cm (50 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "épinard",
@@ -3787,7 +3815,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 4,
         "ecartementCm": 2,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 20
       },
       "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 45,
@@ -3872,7 +3901,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Semis d'automne aussi possible ; monte en jours longs, éviter mai-juillet. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 60 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Semis d'automne aussi possible ; monte en jours longs, éviter mai-juillet. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 60 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 20 cm, 4 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "épinard",
@@ -3894,7 +3923,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 4,
         "ecartementCm": 2,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 20
       },
       "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 60,
@@ -3969,7 +3999,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Nombre de coupes et rendement d'hiver très dépendants de la lumière. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 60 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Nombre de coupes et rendement d'hiver très dépendants de la lumière. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 60 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 20 cm, 4 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "brocoli",
@@ -3991,7 +4021,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 40,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 65,
@@ -4110,7 +4141,7 @@
           "url": "https://fredon.fr/hauts-de-france/sites/default/files/fiches%20techniques/Publications/VETABIO/fiche_choux_0222_bat.pdf"
         }
       ],
-      "aVerifier": "Durée très variable selon variété (45 à 90 jours) ; jets secondaires inclus. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Durée très variable selon variété (45 à 90 jours) ; jets secondaires inclus. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "chou pommé",
@@ -4132,7 +4163,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 45,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 45
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 80,
@@ -4251,7 +4283,7 @@
           "url": "https://fredon.fr/hauts-de-france/sites/default/files/fiches%20techniques/Publications/VETABIO/fiche_choux_0222_bat.pdf"
         }
       ],
-      "aVerifier": "Durée de 50 à 150 jours selon type : choisir l'itinéraire par variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Durée de 50 à 150 jours selon type : choisir l'itinéraire par variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 45 cm, 2 rangs sur une planche de 75 cm (45 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "chou-fleur",
@@ -4273,7 +4305,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 50,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 45
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 80,
@@ -4392,7 +4425,7 @@
           "url": "https://fredon.fr/hauts-de-france/sites/default/files/fiches%20techniques/Publications/VETABIO/fiche_choux_0222_bat.pdf"
         }
       ],
-      "aVerifier": "Taux de pommes commercialisables souvent bas ; durée très variable selon variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Taux de pommes commercialisables souvent bas ; durée très variable selon variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 45 cm, 2 rangs sur une planche de 75 cm (45 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "chou kale",
@@ -4414,7 +4447,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 45,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 60,
@@ -4533,7 +4567,7 @@
           "url": "https://fredon.fr/hauts-de-france/sites/default/files/fiches%20techniques/Publications/VETABIO/fiche_choux_0222_bat.pdf"
         }
       ],
-      "aVerifier": "Rendement sur cueillette longue peu documenté en France. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement sur cueillette longue peu documenté en France. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "chou kale",
@@ -4555,7 +4589,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 40,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 60,
@@ -4650,7 +4685,7 @@
           "url": "https://fredon.fr/hauts-de-france/sites/default/files/fiches%20techniques/Publications/VETABIO/fiche_choux_0222_bat.pdf"
         }
       ],
-      "aVerifier": "Croissance quasi nulle en décembre-janvier : fenêtre et rendement à vérifier. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Croissance quasi nulle en décembre-janvier : fenêtre et rendement à vérifier. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "navet",
@@ -4672,7 +4707,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 4,
         "ecartementCm": 3,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 20
       },
       "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 40,
@@ -4771,7 +4807,7 @@
           "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Altise en été ; poids de la botte et densité à ajuster. Écartement (T42) : 4 rangs, une graine tous les 3 cm, converti depuis 40 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Éclaircissage (T42b) : non prévu, le semis graine à graine à l'écartement donne déjà la densité voulue ; à ajouter seulement si la levée est trop dense (semoir mal réglé, graines doublées)."
+      "aVerifier": "Altise en été ; poids de la botte et densité à ajuster. Écartement (T42) : 4 rangs, une graine tous les 3 cm, converti depuis 40 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Éclaircissage (T42b) : non prévu, le semis graine à graine à l'écartement donne déjà la densité voulue ; à ajouter seulement si la levée est trop dense (semoir mal réglé, graines doublées). Écart entre rangs (T43) : 20 cm, 4 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "radis",
@@ -4793,7 +4829,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 6,
         "ecartementCm": 4,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 12
       },
       "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 30,
@@ -4890,7 +4927,7 @@
           "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Cycle 3 à 5 semaines en plein champ, 6 à 10 sous abri en hiver. Écartement (T42) : 6 rangs, une graine tous les 4 cm, converti depuis 25 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Cycle 3 à 5 semaines en plein champ, 6 à 10 sous abri en hiver. Écartement (T42) : 6 rangs, une graine tous les 4 cm, converti depuis 25 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 12 cm, 6 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "roquette",
@@ -4911,7 +4948,8 @@
       "densite": {
         "facon": "metre_lineaire",
         "rangsParPlanche": 5,
-        "grainesParMetre": 150
+        "grainesParMetre": 150,
+        "ecartEntreRangsCm": 15
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 30,
@@ -5010,7 +5048,7 @@
           "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Densité au mètre et nombre de coupes peu documentés ; altise en été. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Densité au mètre et nombre de coupes peu documentés ; altise en été. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 15 cm, 5 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "roquette",
@@ -5031,7 +5069,8 @@
       "densite": {
         "facon": "metre_lineaire",
         "rangsParPlanche": 5,
-        "grainesParMetre": 150
+        "grainesParMetre": 150,
+        "ecartEntreRangsCm": 15
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 40,
@@ -5106,7 +5145,7 @@
           "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Repousse hivernale lente : nombre de coupes à vérifier. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Repousse hivernale lente : nombre de coupes à vérifier. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 15 cm, 5 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "laitue",
@@ -5128,7 +5167,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 3,
         "ecartementCm": 30,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 30
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 50,
@@ -5203,7 +5243,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Cycle de 35 à 65 jours selon saison : prévoir un itinéraire par saison. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Cycle de 35 à 65 jours selon saison : prévoir un itinéraire par saison. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 30 cm, 3 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "laitue",
@@ -5225,7 +5265,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 3,
         "ecartementCm": 25,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 25
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 45,
@@ -5300,7 +5341,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Écartement serré possible (20 cm) ; poids vendu à la pièce variable. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Écartement serré possible (20 cm) ; poids vendu à la pièce variable. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 25 cm, 3 rangs sur une planche de 75 cm (50 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "chicorée frisée",
@@ -5322,7 +5363,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 35,
-        "disposition": "quinconce"
+        "disposition": "quinconce",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 70,
@@ -5397,7 +5439,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Peu de fiches publiques chiffrées ; durée selon variété et date. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Peu de fiches publiques chiffrées ; durée selon variété et date. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le traceur ou le plantoir et sur les outils de binage."
     },
     {
       "espece": "mesclun",
@@ -5418,7 +5460,8 @@
       "densite": {
         "facon": "metre_lineaire",
         "rangsParPlanche": 6,
-        "grainesParMetre": 200
+        "grainesParMetre": 200,
+        "ecartEntreRangsCm": 12
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 30,
@@ -5499,7 +5542,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Mélange multi-familles ; rendement selon nombre de coupes. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Mélange multi-familles ; rendement selon nombre de coupes. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 12 cm, 6 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "mesclun",
@@ -5520,7 +5563,8 @@
       "densite": {
         "facon": "metre_lineaire",
         "rangsParPlanche": 6,
-        "grainesParMetre": 200
+        "grainesParMetre": 200,
+        "ecartEntreRangsCm": 12
       },
       "grainesParPoquet": null,
       "dureeAvantRecolteJours": 45,
@@ -5591,7 +5635,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Durée et nombre de coupes très dépendants de la lumière hivernale. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Durée et nombre de coupes très dépendants de la lumière hivernale. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 12 cm, 6 rangs sur une planche de 75 cm (60 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "haricot",
@@ -5613,7 +5657,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 5,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 60,
@@ -5692,7 +5737,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Levée sensible au froid (sol < 12 °C) ; rendement bio variable. Écartement (T42) : 2 rangs, une graine tous les 5 cm, converti depuis 20 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Levée sensible au froid (sol < 12 °C) ; rendement bio variable. Écartement (T42) : 2 rangs, une graine tous les 5 cm, converti depuis 20 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "haricot",
@@ -5714,7 +5759,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 40,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 40
       },
       "grainesParPoquet": 5,
       "dureeAvantRecolteJours": 70,
@@ -5799,7 +5845,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement selon durée de cueillette ; souvent cultivé sous tunnel aussi. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Rendement selon durée de cueillette ; souvent cultivé sous tunnel aussi. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 40 cm, 2 rangs sur une planche de 75 cm (40 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     },
     {
       "espece": "pois",
@@ -5821,7 +5867,8 @@
         "facon": "ecartement",
         "rangsParPlanche": 2,
         "ecartementCm": 2,
-        "disposition": "alignee"
+        "disposition": "alignee",
+        "ecartEntreRangsCm": 30
       },
       "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 75,
@@ -5902,7 +5949,7 @@
           "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Peu de références françaises publiques pour le mangetout ; rendement à confirmer. Écartement (T42) : 2 rangs, une graine tous les 2 cm, converti depuis 60 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
+      "aVerifier": "Peu de références françaises publiques pour le mangetout ; rendement à confirmer. Écartement (T42) : 2 rangs, une graine tous les 2 cm, converti depuis 60 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 30 cm, 2 rangs sur une planche de 75 cm (30 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
     }
   ]
 }
