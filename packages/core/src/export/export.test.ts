@@ -249,7 +249,8 @@ function gelerProfond<T>(v: T): T {
 }
 
 function cheminsAttendus(): string[] {
-  return ['ferme.json', 'LISEZMOI.txt', ...TABLES_ATTENDUES.map((t) => `${t}.csv`), ...TABLES_BIBLIOTHEQUE.map((t) => `bibliotheque/${t}.csv`)].sort();
+  // T52 : l'archive gagne le registre phyto (registre-phyto.csv, ./registre-phyto.test.ts).
+  return ['ferme.json', 'LISEZMOI.txt', 'registre-phyto.csv', ...TABLES_ATTENDUES.map((t) => `${t}.csv`), ...TABLES_BIBLIOTHEQUE.map((t) => `bibliotheque/${t}.csv`)].sort();
 }
 
 function description(table: string): DescriptionTable {
@@ -672,7 +673,10 @@ describe('T15 : LISEZMOI.txt', () => {
   it('un bloc par CSV, et une ligne « - colonne : description » pour chaque colonne', () => {
     const texte = fichier(m.construireExport({ fermeId: FERME_A, genereLe: GENERE_LE, tables: {} }), 'LISEZMOI.txt');
     const b = blocs(texte);
-    const csv = cheminsAttendus().filter((c) => c.endsWith('.csv'));
+    // T52 : registre-phyto.csv n'est pas une table (ses colonnes sont décrites dans son bloc,
+    // ./registre-phyto.test.ts) : il a son bloc, les colonnes contrôlées ici sont celles des tables.
+    expect(b.has('registre-phyto.csv'), 'bloc « ## registre-phyto.csv »').toBe(true);
+    const csv = cheminsAttendus().filter((c) => c.endsWith('.csv') && c !== 'registre-phyto.csv');
     // D'autres blocs (« ## ferme.json »…) sont permis ; chaque CSV a le sien.
     for (const chemin of csv) expect(b.has(chemin), `bloc « ## ${chemin} »`).toBe(true);
     for (const chemin of csv) {
