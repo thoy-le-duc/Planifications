@@ -20,7 +20,10 @@ export interface EmplacementConnu {
   readonly code: string;
   readonly sorte: string;
   readonly longueurM: number | null;
+  /** Ancien « nombre de places » d'une gouttière (avant T51, lecture seule). */
   readonly nombrePlaces: number | null;
+  /** T51 : pains d'une gouttière (null tant que le serveur ne les a pas rendus : 1 par mètre). */
+  readonly nombrePains?: number | null;
 }
 
 export interface EspeceConnue {

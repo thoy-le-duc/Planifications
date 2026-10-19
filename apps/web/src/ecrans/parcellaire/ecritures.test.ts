@@ -19,7 +19,7 @@ interface ModuleEcritures {
   creerZone(ctx: unknown, z: { nom: string; typeAbri: string; parenteId: string | null }): Promise<Enregistrement & { readonly id: string }>;
   modifierZone(ctx: unknown, id: string, z: { nom: string; typeAbri: string; parenteId: string | null }): Promise<Enregistrement | null>;
   ajouterPlanches(ctx: unknown, zoneId: string, lot: { codes: readonly string[]; longueurM: number; largeurM: number }): Promise<Enregistrement>;
-  modifierEmplacement(ctx: unknown, id: string, e: { code: string; sorte: string; longueurM: number; largeurM: number | null; nombrePlaces: number | null }): Promise<Enregistrement | null>;
+  modifierEmplacement(ctx: unknown, id: string, e: { code: string; sorte: string; longueurM: number; largeurM: number | null; nombrePains: number | null }): Promise<Enregistrement | null>;
   changerService(ctx: unknown, id: string, enService: boolean): Promise<Enregistrement | null>;
   supprimerEmplacement(ctx: unknown, id: string): Promise<Enregistrement>;
   modifierSaison(ctx: unknown, id: string, s: { nom: string; debut: string; fin: string }): Promise<Enregistrement | null>;
@@ -55,7 +55,7 @@ describe('T49 : écritures relues par la règle de ligne du serveur (validerStru
 
     const p3 = actifs(emplacements(b)).find((e) => e.code === 'P3');
     if (p3 === undefined) throw new Error('P3 absente');
-    await m.modifierEmplacement(ctx(), String(p3.id), { code: 'G1', sorte: 'gouttiere', longueurM: 30, largeurM: null, nombrePlaces: 120 });
+    await m.modifierEmplacement(ctx(), String(p3.id), { code: 'G1', sorte: 'gouttiere', longueurM: 30, largeurM: null, nombrePains: 30 });
     const hors = await m.changerService(ctx(), String(p3.id), false);
     await acceptePar('emplacement', emplacements(b));
     await hors?.annuler();
@@ -74,7 +74,7 @@ describe('T49 : écritures relues par la règle de ligne du serveur (validerStru
     await expect(m.ajouterPlanches(ctx(), tunnel.id, { codes: ['P3', ' p2 '], longueurM: 30, largeurM: 0.8 })).rejects.toThrow(/existe déjà dans cette zone/);
     expect(emplacements(b)).toHaveLength(avant);
     const p1 = actifs(emplacements(b)).find((e) => e.code === 'P1');
-    await expect(m.modifierEmplacement(ctx(), String(p1?.id), { code: 'P2', sorte: 'planche', longueurM: 30, largeurM: 0.8, nombrePlaces: null })).rejects.toBeInstanceOf(m.EcritureRefusee);
+    await expect(m.modifierEmplacement(ctx(), String(p1?.id), { code: 'P2', sorte: 'planche', longueurM: 30, largeurM: 0.8, nombrePains: null })).rejects.toBeInstanceOf(m.EcritureRefusee);
   });
 
   it('une zone ne se range pas dans l’une de ses sous-zones', async () => {

@@ -190,6 +190,7 @@ export function texteDensite(densite: unknown, largeurPlancheCm: number | null):
   if (typeof densite !== 'object' || densite === null) return null;
   const d = densite as Readonly<Record<string, unknown>>;
   if (d.facon === 'volee') return positif(d.doseGParM2) ? `à la volée · ${String(d.doseGParM2).replace('.', ',')} g/m²` : null;
+  if (d.facon === 'contenants') return texteContenants(d);
   const e = ecartsDensite(densite, largeurPlancheCm);
   if (e === null) return null;
   let rangs: string;
@@ -199,6 +200,16 @@ export function texteDensite(densite: unknown, largeurPlancheCm: number | null):
   if (d.facon === 'metre_lineaire') return `${rangs} · ${String(d.grainesParMetre).replace('.', ',')} graines/m`;
   if (!positif(d.ecartementSurRangCm)) return null;
   return `${rangs} · ${texteCm(d.ecartementSurRangCm)} sur le rang`;
+}
+
+/** T51 : « 12 trous par pain », « 12 trous par pain · 3 graines par trou » ; null si illisible. */
+function texteContenants(d: Readonly<Record<string, unknown>>): string | null {
+  const entier = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0;
+  if (!entier(d.trousParContenant)) return null;
+  const trous = `${String(d.trousParContenant)} trous par pain`;
+  if (entier(d.grainesParTrou)) return `${trous} · ${String(d.grainesParTrou)} graines par trou`;
+  if (entier(d.plantsParTrou) && d.plantsParTrou > 1) return `${trous} · ${String(d.plantsParTrou)} plants par trou`;
+  return trous;
 }
 
 /** « ≈ 2 cm entre graines sur le rang » ; null hors mètre linéaire. */

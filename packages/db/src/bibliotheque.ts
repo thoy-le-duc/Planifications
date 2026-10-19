@@ -17,6 +17,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type {
   CategorieEspece,
+  DensiteContenants,
   DensiteEcartement,
   Densite,
   ModeItineraire,
@@ -65,7 +66,9 @@ export type SourceDensite =
       readonly ecartEntreRangsCm?: number;
     }
   | { readonly facon: 'metre_lineaire'; readonly rangsParPlanche: number; readonly grainesParMetre: number; readonly ecartEntreRangsCm?: number }
-  | { readonly facon: 'volee'; readonly largeurSemeeCm: number; readonly doseGParM2: number };
+  | { readonly facon: 'volee'; readonly largeurSemeeCm: number; readonly doseGParM2: number }
+  /** T51 : hors-sol, trous par pain (plants par trou en plant, graines par trou en semis direct). */
+  | { readonly facon: 'contenants'; readonly trousParContenant: number; readonly plantsParTrou?: number; readonly grainesParTrou?: number };
 
 export interface SourceItineraire {
   readonly espece: string;
@@ -179,11 +182,25 @@ function densite(d: SourceDensite): Densite {
       return { facon: 'metre_lineaire', rangsParPlanche: d.rangsParPlanche, grainesParMetre: d.grainesParMetre, ...entreRangs(d) };
     case 'volee':
       return { facon: 'volee', largeurSemeeCm: d.largeurSemeeCm, doseGParM2: d.doseGParM2 };
+    case 'contenants':
+      return contenants(d);
   }
 }
 
-function densiteEcartement(d: SourceDensite, nom: string): DensiteEcartement {
-  if (d.facon !== 'ecartement') throw new Error(`bibliothèque de départ : « ${nom} » (plant) doit être à l'écartement`);
+/** T51 : densité en contenants du cœur, clés facultatives recopiées seulement si elles sont données. */
+function contenants(d: Extract<SourceDensite, { facon: 'contenants' }>): DensiteContenants {
+  return {
+    facon: 'contenants',
+    trousParContenant: d.trousParContenant,
+    ...(d.plantsParTrou === undefined ? {} : { plantsParTrou: d.plantsParTrou }),
+    ...(d.grainesParTrou === undefined ? {} : { grainesParTrou: d.grainesParTrou }),
+  };
+}
+
+/** Densité d'un plant : à l'écartement, ou en contenants sur une gouttière (T51). */
+function densitePlant(d: SourceDensite, nom: string): DensiteEcartement | DensiteContenants {
+  if (d.facon === 'contenants') return contenants(d);
+  if (d.facon !== 'ecartement') throw new Error(`bibliothèque de départ : « ${nom} » (plant) doit être à l'écartement ou en contenants`);
   return ecartement(d);
 }
 
@@ -208,7 +225,7 @@ function parametres(i: SourceItineraire): ParametresItineraire {
       return {
         mode: 'plant_maison',
         ...communs,
-        densite: densiteEcartement(i.densite, i.nom),
+        densite: densitePlant(i.densite, i.nom),
         dureePepiniereJours: obligatoire(i.dureePepiniereJours, 'dureePepiniereJours', i.nom),
         grainesParMotte: obligatoire(i.grainesParMotte, 'grainesParMotte', i.nom),
         plantsParMotte: obligatoire(i.plantsParMotte, 'plantsParMotte', i.nom),
@@ -216,7 +233,7 @@ function parametres(i: SourceItineraire): ParametresItineraire {
         alveolesParPlaque: i.alveolesParPlaque,
       };
     case 'plant_achete':
-      return { mode: 'plant_achete', ...communs, densite: densiteEcartement(i.densite, i.nom) };
+      return { mode: 'plant_achete', ...communs, densite: densitePlant(i.densite, i.nom) };
   }
 }
 

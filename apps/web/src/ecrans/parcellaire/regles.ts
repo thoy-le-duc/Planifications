@@ -3,17 +3,17 @@
  * horloge, ni DOM. Ce sont celles que le serveur rejoue à la synchro (apps/api/src/sync/
  * structure-lignes.ts, T10s : noms non vides de 200 caractères au plus, saison dans l'ordre,
  * dates de 1900 à 2100, longueur > 0 et ≤ 10 km, largeur > 0 et ≤ 1 000 m, gouttière ⇔ nombre
- * de places) et le code unique dans sa zone, sans casse ni espaces autour, parmi les emplacements
+ * de pains, T51) et le code unique dans sa zone, sans casse ni espaces autour, parmi les emplacements
  * en service (Q27). Une saisie refusée l'est ici, avec un message clair, avant toute écriture.
  */
-import { estDateValide } from '@planif/core';
+import { BORNES_CONTENANTS, estDateValide } from '@planif/core';
 
 export type Verdict<T> = { readonly ok: true; readonly valeur: T } | { readonly ok: false; readonly champ: string; readonly message: string };
 
 const refus = (champ: string, message: string) => ({ ok: false as const, champ, message });
 
 /** Plafonds du serveur (PLAFONDS_STRUCTURE). */
-export const PLAFONDS = { texte: 200, longueurM: 10_000, largeurM: 1_000, nombrePlaces: 1_000_000 } as const;
+export const PLAFONDS = { texte: 200, longueurM: 10_000, largeurM: 1_000, nombrePains: BORNES_CONTENANTS.painsMax } as const;
 /** Planches au plus par geste « Ajouter des planches » (une transaction, un envoi). */
 export const PLANCHES_PAR_LOT_MAX = 200;
 const DATE_MIN = '1900-01-01';
@@ -154,7 +154,8 @@ export interface SaisieEmplacement {
   readonly sorte: string;
   readonly longueur: string;
   readonly largeur: string;
-  readonly nombrePlaces: string;
+  /** T51 : pains (sacs, pots) d'une gouttière ; vide hors gouttière. */
+  readonly nombrePains: string;
 }
 
 export interface EmplacementVerifie {
@@ -162,7 +163,7 @@ export interface EmplacementVerifie {
   readonly sorte: Sorte;
   readonly longueurM: number;
   readonly largeurM: number | null;
-  readonly nombrePlaces: number | null;
+  readonly nombrePains: number | null;
 }
 
 /** `codesPris` : codes des AUTRES emplacements en service de la zone. */
@@ -183,13 +184,13 @@ export function verifierEmplacement(e: SaisieEmplacement, codesPris: readonly st
     if (!largeur.ok) return largeur;
     largeurM = largeur.valeur;
   }
-  let nombrePlaces: number | null = null;
+  let nombrePains: number | null = null;
   if (sorte === 'gouttiere') {
-    const n = lireNombre(e.nombrePlaces);
-    if (n === null || !Number.isInteger(n) || n < 1 || n > PLAFONDS.nombrePlaces) return refus('nombrePlaces', 'Nombre de places : obligatoire pour une gouttière, un nombre entier.');
-    nombrePlaces = n;
-  } else if (e.nombrePlaces.trim() !== '') {
-    return refus('nombrePlaces', 'Nombre de places : seulement pour une gouttière.');
+    const n = lireNombre(e.nombrePains);
+    if (n === null || !Number.isInteger(n) || n < 1 || n > PLAFONDS.nombrePains) return refus('nombrePains', 'Nombre de pains : obligatoire pour une gouttière, un nombre entier (1 pain ≈ 1 m).');
+    nombrePains = n;
+  } else if (e.nombrePains.trim() !== '') {
+    return refus('nombrePains', 'Nombre de pains : seulement pour une gouttière.');
   }
-  return { ok: true, valeur: { code, sorte, longueurM: longueur.valeur, largeurM, nombrePlaces } };
+  return { ok: true, valeur: { code, sorte, longueurM: longueur.valeur, largeurM, nombrePains } };
 }

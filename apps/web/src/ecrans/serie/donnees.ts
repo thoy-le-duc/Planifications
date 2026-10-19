@@ -81,8 +81,8 @@ function typeAbri(v: unknown): { readonly typeAbri?: TypeAbri } {
   return connu === undefined ? {} : { typeAbri: connu };
 }
 
-/** Planche proposée : de sorte « planche », active aujourd'hui ou plus tard. */
-const proposee = (l: LigneLocale, aujourdhui: string): boolean => l.sorte === 'planche' && (l.actif_au === null || texte(l.actif_au) > aujourdhui);
+/** Planche ou gouttière (T51) proposée : active aujourd'hui ou plus tard (le formulaire choisit la sorte selon l'itinéraire). */
+const proposee = (l: LigneLocale, aujourdhui: string): boolean => (l.sorte === 'planche' || l.sorte === 'gouttiere') && (l.actif_au === null || texte(l.actif_au) > aujourdhui);
 
 /** Toute la bibliothèque du formulaire, lue en une fois (requêtes en parallèle). */
 export async function lireBibliotheque(porte: PorteDonnees, fermeId: string, aujourdhui: string): Promise<Bibliotheque> {
@@ -115,8 +115,19 @@ export async function lireBibliotheque(porte: PorteDonnees, fermeId: string, auj
   for (const l of emplacements) {
     const e = versEmplacement(l);
     parEmplacement.set(e.id, e);
-    if (l.sorte !== 'planche') continue;
-    planches.push({ id: e.id, code: e.code, zoneId: e.zoneId, nomZone: nomsZones.get(e.zoneId) ?? '', longueurM: e.longueurM, proposee: proposee(l, aujourdhui), emplacement: e });
+    // T51 : planches et gouttières (une gouttière se remplit par pains) ; pas les rangs.
+    if (e.sorte === 'rang') continue;
+    planches.push({
+      id: e.id,
+      code: e.code,
+      sorte: e.sorte,
+      nombrePains: e.sorte === 'gouttiere' ? e.nombrePains : null,
+      zoneId: e.zoneId,
+      nomZone: nomsZones.get(e.zoneId) ?? '',
+      longueurM: e.longueurM,
+      proposee: proposee(l, aujourdhui),
+      emplacement: e,
+    });
   }
   planches.sort((a, b) => comparerNoms(a.code, b.code) || (a.id < b.id ? -1 : 1));
 

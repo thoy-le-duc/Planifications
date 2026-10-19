@@ -7,6 +7,7 @@
  */
 import {
   ajouterJours,
+  BORNES_CONTENANTS,
   calculerDatesSerie,
   CATEGORIES_AVEC_PRODUIT,
   datesTravailPrevu,
@@ -192,11 +193,24 @@ export interface Saisie {
   readonly grainesParMetre: string;
   readonly largeur: string;
   readonly dose: string;
+  /** T51 : densité en contenants (hors-sol) : trous par pain, plants ou graines par trou. */
+  readonly trous: string;
+  readonly plantsParTrou: string;
+  readonly grainesParTrou: string;
   readonly travaux: readonly SaisieTravail[];
 }
 
 const MODES: readonly ModeItineraire[] = ['semis_direct', 'plant_maison', 'plant_achete'];
-const FACONS: readonly FaconDensite[] = ['ecartement', 'metre_lineaire', 'volee'];
+const FACONS: readonly FaconDensite[] = ['ecartement', 'metre_lineaire', 'volee', 'contenants'];
+
+/**
+ * Façon de compter qui s'applique à la saisie : en semis direct, celle choisie ; un plant (maison
+ * ou acheté) se pose à l'écartement, ou dans les trous des pains (T51), jamais au mètre ni à la volée.
+ */
+export function faconDe(s: Pick<Saisie, 'mode' | 'facon'>): FaconDensite {
+  if (s.mode === 'semis_direct') return s.facon;
+  return s.facon === 'contenants' ? 'contenants' : 'ecartement';
+}
 export const REPERES: readonly { readonly valeur: RepereTravail; readonly libelle: string }[] = [
   { valeur: 'semis_pepiniere', libelle: 'semis en pépinière' },
   { valeur: 'mise_en_place', libelle: 'mise en place' },
@@ -284,7 +298,7 @@ export function saisieDepuis(parametres: Readonly<Objet>, nom: string, especeId:
     pepiniere: nombreTexte(parametres.dureePepiniereJours),
     avantRecolte: nombreTexte(parametres.dureeAvantRecolteJours),
     recolte: nombreTexte(parametres.fenetreRecolteJours),
-    facon: mode === 'semis_direct' ? facon : 'ecartement',
+    facon: faconDe({ mode, facon }),
     rangs: nombreTexte(densite.rangsParPlanche),
     ecartement: nombreTexte(densite.ecartementSurRangCm),
     disposition: densite.disposition === 'quinconce' ? 'quinconce' : 'alignee',
@@ -292,6 +306,10 @@ export function saisieDepuis(parametres: Readonly<Objet>, nom: string, especeId:
     grainesParMetre: nombreTexte(densite.grainesParMetre),
     largeur: nombreTexte(densite.largeurSemeeCm),
     dose: nombreTexte(densite.doseGParM2),
+    trous: nombreTexte(densite.trousParContenant),
+    // T51 : plants par trou absent = 1.
+    plantsParTrou: densite.plantsParTrou === undefined ? '1' : nombreTexte(densite.plantsParTrou),
+    grainesParTrou: nombreTexte(densite.grainesParTrou),
     travaux,
   };
 }
@@ -349,8 +367,29 @@ export function dureesDe(s: Saisie): ParametresDatesSerie | null {
 
 const CLES_DU_MODE = ['dureePepiniereJours', 'grainesParMotte', 'plantsParMotte', 'pertePepiniere', 'alveolesParPlaque', 'grainesParPoquet'];
 
+/** T51 : entier de 1 à `max` (trous, plants ou graines par trou), ou ce qui ne va pas. */
+function parTrou(v: string, libelle: string, max: number): Lecture<number> {
+  const n = lireEntier(v);
+  return n === null || n > max ? manque(`${libelle} : un nombre entier, de 1 à ${String(max)}.`) : ok(n);
+}
+
+/** T51 : densité en contenants ; plants par trou écrits seulement s'ils ne sont pas 1. */
+function densiteContenants(s: Saisie): Lecture<Objet> {
+  const trous = parTrou(s.trous, 'Trous par pain', BORNES_CONTENANTS.trousParContenantMax);
+  if (!trous.ok) return trous;
+  if (s.mode === 'semis_direct') {
+    const graines = parTrou(s.grainesParTrou, 'Graines par trou', BORNES_CONTENANTS.grainesParTrouMax);
+    if (!graines.ok) return graines;
+    return ok({ facon: 'contenants', trousParContenant: trous.valeur, grainesParTrou: graines.valeur });
+  }
+  const plants = parTrou(s.plantsParTrou, 'Plants par trou', BORNES_CONTENANTS.plantsParTrouMax);
+  if (!plants.ok) return plants;
+  return ok({ facon: 'contenants', trousParContenant: trous.valeur, ...(plants.valeur === 1 ? {} : { plantsParTrou: plants.valeur }) });
+}
+
 function densiteDe(s: Saisie): Lecture<Objet> {
-  const facon = s.mode === 'semis_direct' ? s.facon : 'ecartement';
+  const facon = faconDe(s);
+  if (facon === 'contenants') return densiteContenants(s);
   if (facon === 'volee') {
     const largeur = decimalRequis(s.largeur, 'Largeur semée');
     if (!largeur.ok) return largeur;

@@ -27,7 +27,9 @@ import {
   estDateValide,
   identifiantNormalise,
   instantNormalise,
+  BORNES_CONTENANTS,
   LIMITES_SAISIE,
+  painsParDefaut,
   TYPES_BATIMENT,
   validerContour,
   validerPlacement,
@@ -70,6 +72,7 @@ export const COLONNES_STRUCTURE: Readonly<Record<TableEcrite, readonly string[]>
     'longueur_m',
     'largeur_m',
     'nombre_places',
+    'nombre_pains',
     'actif_du',
     'actif_au',
     'remplace',
@@ -111,8 +114,10 @@ export const PLAFONDS_STRUCTURE = {
   largeurM: 1_000,
   /** Surface d'une zone (1 000 ha). */
   surfaceM2: 10_000_000,
-  /** Places d'une gouttière. */
+  /** Ancien « nombre de places » d'une gouttière (lecture seule depuis T51). */
   nombrePlaces: 1_000_000,
+  /** Pains (sacs, pots) d'une gouttière (T51) : le plafond du cœur. */
+  nombrePains: BORNES_CONTENANTS.painsMax,
   /** Délai de retour d'une famille ou d'une espèce (années). */
   delaiRetourAns: 100,
   /** Poids de mille graines (g). */
@@ -323,20 +328,29 @@ const LIRE: Readonly<Record<TableEcrite, (lire: Lecteurs, id: string, entree: Li
   },
   emplacement: (lire, id, entree) => {
     const sorte = lire.choix('sorte', SORTES_EMPLACEMENT);
+    const gouttiere = sorte === 'gouttiere';
+    // T51 : l'ancien nombre de places est facultatif, gardé tel quel, pour une gouttière seulement.
     const places = lire.entier('nombre_places', false, 1, PLAFONDS_STRUCTURE.nombrePlaces);
-    if ((sorte === 'gouttiere') !== (places !== null)) arreter('incoherent', 'nombre_places', 'nombre de places : pour une gouttière, et seulement elle');
+    if (!gouttiere && places !== null) arreter('incoherent', 'nombre_places', 'nombre de places : pour une gouttière, et seulement elle');
+    const painsRecus = lire.entier('nombre_pains', false, 1, PLAFONDS_STRUCTURE.nombrePains);
+    if (!gouttiere && painsRecus !== null) arreter('incoherent', 'nombre_pains', 'nombre de pains : pour une gouttière, et seulement elle');
     const du = lire.date('actif_du', true);
     const au = lire.date('actif_au', false);
     if (du !== null && au !== null && au < du) arreter('incoherent', 'actif_au', 'fin d’activité avant son début');
     const remplace = lire.identifiants('remplace', PLAFONDS_STRUCTURE.remplace);
     if (remplace.includes(id)) arreter('incoherent', 'remplace', 'un emplacement ne se remplace pas lui-même');
+    const zoneId = lire.id('zone_id', true);
+    const code = lire.texte('code', true);
+    const longueur = lire.positif('longueur_m', true, PLAFONDS_STRUCTURE.longueurM);
     return {
-      zone_id: lire.id('zone_id', true),
-      code: lire.texte('code', true),
+      zone_id: zoneId,
+      code,
       sorte,
-      longueur_m: lire.positif('longueur_m', true, PLAFONDS_STRUCTURE.longueurM),
+      longueur_m: longueur,
       largeur_m: lire.positif('largeur_m', false, PLAFONDS_STRUCTURE.largeurM),
       nombre_places: places,
+      // T51 : gouttière reçue sans pains (téléphone d'avant T51, import) : 1 pain par mètre.
+      nombre_pains: gouttiere ? (painsRecus ?? painsParDefaut(longueur ?? 0)) : null,
       actif_du: du,
       actif_au: au,
       remplace,

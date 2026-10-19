@@ -57,6 +57,7 @@ import type {
   AncreSerie,
   ArticleStock,
   Densite,
+  DensiteContenants,
   DensiteEcartement,
   DensiteMetreLineaire,
   DensiteVolee,
@@ -199,8 +200,9 @@ describe('unions discriminées', () => {
     expectTypeOf<Assolement['nature']>().toEqualTypeOf<NatureAssolement>();
   });
 
-  it('le discriminant restreint la variante : une gouttière a un nombre de places', () => {
-    expectTypeOf<Extract<Emplacement, { sorte: 'gouttiere' }>['nombrePlaces']>().toEqualTypeOf<number>();
+  it('le discriminant restreint la variante : une gouttière a un nombre de pains (T51), l’ancien nombre de places facultatif', () => {
+    expectTypeOf<Extract<Emplacement, { sorte: 'gouttiere' }>['nombrePains']>().toEqualTypeOf<number>();
+    expectTypeOf<Extract<Emplacement, { sorte: 'gouttiere' }>['nombrePlaces']>().toEqualTypeOf<number | null>();
     // Si la variante n'existait pas, Extract donnerait `never` et ces égalités échoueraient.
     expectTypeOf<Extract<Emplacement, { sorte: 'gouttiere' }>['sorte']>().toEqualTypeOf<'gouttiere'>();
     expectTypeOf<Extract<Evenement, { type: 'recolte' }>['type']>().toEqualTypeOf<'recolte'>();
@@ -332,9 +334,10 @@ describe('lien entre discriminant et contenu', () => {
 
   it('le mode d’un itinéraire contraint sa densité', () => {
     expectTypeOf<Extract<Itineraire, { mode: 'semis_direct' }>['densite']>().toEqualTypeOf<Densite>();
-    expectTypeOf<Extract<Itineraire, { mode: 'plant_maison' }>['densite']>().toEqualTypeOf<DensiteEcartement>();
-    expectTypeOf<Extract<Itineraire, { mode: 'plant_achete' }>['densite']>().toEqualTypeOf<DensiteEcartement>();
-    expectTypeOf<Densite['facon']>().toEqualTypeOf<'ecartement' | 'metre_lineaire' | 'volee'>();
+    // T51 : un plant se pose aussi dans les trous des pains (densité en contenants).
+    expectTypeOf<Extract<Itineraire, { mode: 'plant_maison' }>['densite']>().toEqualTypeOf<DensiteEcartement | DensiteContenants>();
+    expectTypeOf<Extract<Itineraire, { mode: 'plant_achete' }>['densite']>().toEqualTypeOf<DensiteEcartement | DensiteContenants>();
+    expectTypeOf<Densite['facon']>().toEqualTypeOf<'ecartement' | 'metre_lineaire' | 'volee' | 'contenants'>();
     expectTypeOf<Extract<Densite, { facon: 'ecartement' }>>().toEqualTypeOf<DensiteEcartement>();
     expectTypeOf<Extract<Densite, { facon: 'metre_lineaire' }>>().toEqualTypeOf<DensiteMetreLineaire>();
     expectTypeOf<Extract<Densite, { facon: 'volee' }>>().toEqualTypeOf<DensiteVolee>();
