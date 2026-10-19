@@ -359,6 +359,7 @@ describe('Emplacement ↔ table emplacement', () => {
     code: 'HS-G12',
     longueurM: 40,
     largeurM: 0.25,
+    nombrePains: 40,
     nombrePlaces: 320,
     remplace: [id<'Emplacement'>(44), id<'Emplacement'>(45)],
   };
@@ -374,6 +375,8 @@ describe('Emplacement ↔ table emplacement', () => {
 
     const g = ligneDepuisEmplacement(gouttiere);
     expect(g.nombrePlaces).toBe(320);
+    expect(g.nombrePains, 'T51 : pains de la gouttière').toBe(40);
+    expect(p.nombrePains).toBeNull();
     expect(g.remplace).toEqual([id(44), id(45)]);
   });
 

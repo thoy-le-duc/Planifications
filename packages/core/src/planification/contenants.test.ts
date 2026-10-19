@@ -44,7 +44,7 @@ import {
   type Pourcentage,
 } from '../index.ts';
 
-const pct = (n: number) => n as Pourcentage;
+const pct = (n: number): Pourcentage => n;
 
 const trous = (trousParContenant: number, plantsParTrou?: number): DensiteContenants =>
   plantsParTrou === undefined ? { facon: 'contenants', trousParContenant } : { facon: 'contenants', trousParContenant, plantsParTrou };

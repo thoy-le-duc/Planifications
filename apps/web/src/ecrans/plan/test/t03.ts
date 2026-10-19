@@ -27,7 +27,11 @@ export function versEmplacement(l: LigneLocale): Emplacement {
     placementYM: null,
     orientationDeg: null,
   };
-  if (l.sorte === 'gouttiere') return { ...commun, sorte: 'gouttiere', nombrePlaces: nombre(l.nombre_places) };
+  // T51 : une gouttière se remplit par pains (1 par mètre si la ligne n'en porte pas).
+  if (l.sorte === 'gouttiere') {
+    const pains = l.nombre_pains === null || l.nombre_pains === undefined ? Math.max(1, Math.round(commun.longueurM)) : nombre(l.nombre_pains);
+    return { ...commun, sorte: 'gouttiere', nombrePains: pains, nombrePlaces: l.nombre_places === null || l.nombre_places === undefined ? null : nombre(l.nombre_places) };
+  }
   return { ...commun, sorte: l.sorte === 'rang' ? 'rang' : 'planche' };
 }
 

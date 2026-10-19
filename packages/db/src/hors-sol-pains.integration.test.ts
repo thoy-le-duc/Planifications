@@ -93,7 +93,7 @@ describe('T51 : schéma Drizzle', () => {
   it('une migration après 0036 ajoute la colonne, une autre (de bibliothèque) la fraise hors-sol', () => {
     const apres = lireJournal().entries.filter((e) => e.idx > DERNIERE_AVANT_T51);
     const textes = apres.map((e) => readFileSync(new URL(`${e.tag}.sql`, DOSSIER), 'utf8'));
-    expect(textes.some((t) => /ADD COLUMN "nombre_pains" integer/.test(t))).toBe(true);
+    expect(textes.some((t) => t.includes('ADD COLUMN "nombre_pains" integer'))).toBe(true);
     expect(textes.some((t) => t.includes(ID_FRAISE))).toBe(true);
   });
 
@@ -178,7 +178,7 @@ decrireAvecBase('T51 : gouttières en pains (PostgreSQL)', { timeout: 120_000 },
          ($3, $4, $7, $8, 20, NULL, '2025-08-20', '9999-12-31')`,
       [occ.g30, occ.g12plein, occ.planche, ferme, ids.g30, ids.g12, ids.planche, plantation],
     );
-    xminPlanche = (await emplacementLu(ids.planche))?.xmin ?? '';
+    xminPlanche = (await c.query<{ xmin: string }>(`SELECT xmin::text FROM emplacement WHERE id = $1`, [ids.planche])).rows[0]?.xmin ?? '';
     xminOccPlanche = (await placesDe(occ.planche))?.xmin ?? '';
     await db.appliquerMigrations(urlDe(base));
   }, 180_000);

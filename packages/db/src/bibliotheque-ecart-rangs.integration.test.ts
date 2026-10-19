@@ -22,6 +22,7 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as db from './index.ts';
+import { sourceALEtat } from './test/bibliotheque-a-l-etat.ts';
 
 const URL_BASE = process.env.DATABASE_URL ?? '';
 const decrireAvecBase = URL_BASE === '' ? describe.skip : describe;
@@ -131,7 +132,8 @@ decrireAvecBase('T43 : écart entre rangs, migration 0036 (PostgreSQL)', { timeo
   }, 60_000);
 
   it('la bibliothèque : exactement la conversion du JSON, mêmes identifiants', async () => {
-    const attendu = db.convertirBibliotheque(db.lireBibliothequeDepart());
+    // T51 : les lignes de 0036 (0038 en ajoute d'autres, testées à part).
+    const attendu = db.convertirBibliotheque(sourceALEtat());
     const apres = await bibliotheque();
     expect(attendu.itineraires).toHaveLength(46);
     for (const i of attendu.itineraires) {
@@ -169,7 +171,13 @@ decrireAvecBase('T43 : écart entre rangs, migration 0036 (PostgreSQL)', { timeo
   it('ni famille ni espèce de la bibliothèque réécrite', async () => {
     const apres = await bibliotheque();
     for (const [cle, l] of bibliothequeAvant) if (!cle.startsWith('itineraire:')) expect(apres.get(cle), cle).toEqual(l);
-    expect([...apres.keys()].sort()).toEqual([...bibliothequeAvant.keys()].sort());
+    // T51 : seules s'ajoutent les lignes que les migrations de bibliothèque suivantes ajoutent.
+    const etats = db.lireEtatsBibliotheque();
+    const cles = (l: db.LignesBibliotheque | undefined): string[] =>
+      l === undefined ? [] : [...l.familles.map((x) => `famille:${x.id}`), ...l.especes.map((x) => `espece:${x.id}`), ...l.itineraires.map((x) => `itineraire:${x.id}`)];
+    const avant36 = new Set(cles(etats.find((e) => e.migration === MIGRATION_ECART)?.lignes));
+    const ajoutees = cles(etats.at(-1)?.lignes).filter((k) => !avant36.has(k));
+    expect([...apres.keys()].sort()).toEqual([...bibliothequeAvant.keys(), ...ajoutees].sort());
   });
 
   it('aucune ligne de ferme touchée, ni l’itinéraire du même nom, ni la copie faite par la ferme', async () => {

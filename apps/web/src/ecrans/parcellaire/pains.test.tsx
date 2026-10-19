@@ -135,7 +135,7 @@ describe('T51 : nombre de pains d’une gouttière', () => {
     expect(f.querySelector('input[aria-label="Nombre de places"]')).toBeNull();
     expect([...f.querySelectorAll('label')].map((l) => texte(l))).not.toContain('Nombre de pains');
     await remplir(liste('Sorte', f), 'gouttiere');
-    expect([...f.querySelectorAll('label')].some((l) => /Nombre de places/.test(texte(l)))).toBe(false);
+    expect([...f.querySelectorAll('label')].some((l) => texte(l).includes('Nombre de places'))).toBe(false);
   });
 
   it('vide ou non entier : refusé avec un message clair, rien d’écrit', async () => {

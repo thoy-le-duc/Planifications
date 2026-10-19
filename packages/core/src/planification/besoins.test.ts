@@ -557,9 +557,9 @@ describe('besoinsSerie — paramètres impossibles', () => {
 
 describe('typage des itinéraires', () => {
   it('refuse une dose à la volée sur un plant maison', () => {
+    // @ts-expect-error un plant maison se pose à l'écartement (ou en contenants, T51), pas à la volée.
     const incoherent: ItineraireBesoins = {
       mode: 'plant_maison',
-      // @ts-expect-error un plant maison se pose à l'écartement, pas à la volée.
       densite: { facon: 'volee', largeurSemeeCm: 80, doseMgParM2: 15_000 },
       grainesParMotte: 1,
       plantsParMotte: 1,
@@ -573,9 +573,9 @@ describe('typage des itinéraires', () => {
   });
 
   it('refuse un plant acheté compté au mètre linéaire', () => {
+    // @ts-expect-error un plant acheté se pose à l'écartement (ou en contenants, T51).
     const incoherent: ItineraireBesoins = {
       mode: 'plant_achete',
-      // @ts-expect-error un plant acheté se pose à l'écartement.
       densite: { facon: 'metre_lineaire', rangsParPlanche: 4, grainesParMetre: 60 },
       margeSecurite: 10,
     };

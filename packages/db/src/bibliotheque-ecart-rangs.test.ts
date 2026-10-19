@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs';
 import { validerItineraire } from '@planif/core';
 import { describe, expect, it } from 'vitest';
 import * as db from './index.ts';
+import { sourceALEtat } from './test/bibliotheque-a-l-etat.ts';
 
 const MIGRATION = '0036_bibliotheque_ecart_entre_rangs';
 const PRECEDENTE = '0035_bibliotheque_travaux_suites';
@@ -31,7 +32,8 @@ const PLANCHE_CM = 75;
 const PASSE_PIED_CM = 45;
 const FERME_TEST = '0192f0c1-4343-7000-8000-000000000099';
 
-const source = db.lireBibliothequeDepart();
+// T51 : les lignes de la bibliothèque de ce ticket (celles ajoutées depuis ont leurs tests).
+const source = sourceALEtat();
 const lignes = db.convertirBibliotheque(source);
 
 type Objet = Record<string, unknown>;
@@ -59,7 +61,7 @@ describe('T43 : écart entre rangs des 46 itinéraires (JSON)', () => {
 
   it.each(source.itineraires.map((i) => [i.nom, i] as const))('%s : cohérent avec ses rangs sur une planche de 75 cm', (_nom, i) => {
     const e = ecartSource(i) as number;
-    const rangs = i.densite.facon === 'volee' ? 0 : i.densite.rangsParPlanche;
+    const rangs = i.densite.facon === 'volee' || i.densite.facon === 'contenants' ? 0 : i.densite.rangsParPlanche;
     if (rangs === 1) {
       expect(e, '1 rang : entraxe des planches (planche + passe-pied)').toBe(PLANCHE_CM + PASSE_PIED_CM);
       return;
@@ -120,8 +122,10 @@ describe('T43 : la migration de bibliothèque 0036', () => {
     return e;
   };
 
-  it('dernière migration de bibliothèque, au journal (idx 36), dépôt à jour', () => {
-    expect(etats.at(-1)?.migration).toBe(MIGRATION);
+  // T51 : 0038_bibliotheque_fraise_hors_sol la suit ; 0036 reste au journal, à sa place.
+  it('migration de bibliothèque après 0035, au journal (idx 36), dépôt à jour', () => {
+    const i = etats.findIndex((e) => e.migration === MIGRATION);
+    expect(etats[i - 1]?.migration).toBe(PRECEDENTE);
     const journal = JSON.parse(readFileSync(new URL('../migrations/meta/_journal.json', import.meta.url), 'utf8')) as { entries: { idx: number; tag: string }[] };
     expect(journal.entries.find((e) => e.tag === MIGRATION)?.idx).toBe(36);
     expect(db.verifierBibliotheque(db.depotBibliotheque())).toEqual([]);

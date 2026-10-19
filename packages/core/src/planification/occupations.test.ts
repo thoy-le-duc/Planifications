@@ -147,7 +147,7 @@ function planche(code: string, longueurM: number): Emplacement {
   };
 }
 
-function gouttiere(code: string, nombrePlaces: number): Emplacement {
+function gouttiere(code: string, nombrePains: number): Emplacement {
   return {
     id: id<'Emplacement'>(code),
     fermeId: FERME,
@@ -157,7 +157,8 @@ function gouttiere(code: string, nombrePlaces: number): Emplacement {
     sorte: 'gouttiere',
     longueurM: 20,
     largeurM: null,
-    nombrePlaces,
+    nombrePains,
+    nombrePlaces: null,
     actifDu: d('2020-01-01'),
     actifAu: null,
     remplace: [],

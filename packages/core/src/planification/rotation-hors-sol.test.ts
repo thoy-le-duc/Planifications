@@ -107,7 +107,7 @@ function rang(code: string, z: Zone): Emplacement {
 }
 
 function gouttiere(code: string, z: Zone, remplace: readonly Emplacement[] = []): Emplacement {
-  return { ...commun(code, z, remplace), sorte: 'gouttiere', nombrePlaces: 120 };
+  return { ...commun(code, z, remplace), sorte: 'gouttiere', nombrePains: 30, nombrePlaces: 120 };
 }
 
 const SAISONS: readonly Saison[] = [2024, 2025, 2026].map((annee) => ({

@@ -76,14 +76,15 @@ decrireAvecBase('T41 : bibliothèque de départ en base (PostgreSQL)', { timeout
 
   const trier = <T extends { id: string }>(l: readonly T[]): T[] => [...l].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
-  it('après les migrations : 10 familles, 35 espèces, 46 itinéraires à ferme_id nul, exactement ceux de la conversion', async () => {
+  it('après les migrations : 11 familles, 36 espèces, 47 itinéraires à ferme_id nul (T51), exactement ceux de la conversion', async () => {
     const lues = await toutes();
     expect(lues.famille?.map(sansHorodatages)).toEqual(trier(attendu.familles));
     expect(lues.espece?.map(sansHorodatages)).toEqual(trier(attendu.especes));
     expect(lues.itineraire?.map(sansHorodatages)).toEqual(trier(attendu.itineraires));
-    expect(lues.famille).toHaveLength(10);
-    expect(lues.espece).toHaveLength(35);
-    expect(lues.itineraire).toHaveLength(46);
+    // T51 : 0038 ajoute Rosacées, fraise et « Fraise hors-sol en gouttière » aux lignes de T41.
+    expect(lues.famille).toHaveLength(11);
+    expect(lues.espece).toHaveLength(36);
+    expect(lues.itineraire).toHaveLength(47);
   });
 
   it('chaque itinéraire lu en base passe validerItineraire (paramètres jsonb relus sans perte)', async () => {
