@@ -99,6 +99,20 @@ export async function planVisibleDEmblee(page: Page): Promise<void> {
   expect(visible, 'hauteur du plan visible à l’ouverture (px)').toBeGreaterThanOrEqual(PLAN_VISIBLE_MIN_PX);
 }
 
+/**
+ * Relecture : d'ordinaire tout tient et seul le plan défile. Le contenu de la coquille
+ * (`overflow-y: auto` depuis T50) ne défile pas lui-même en portrait : pas de double défilement
+ * (un défilement extérieur sous un plan en `overscroll-behavior: contain` ne se gagne pas au doigt
+ * posé sur le plan).
+ */
+export async function contenuSansDefilement(page: Page): Promise<void> {
+  const reste = await page.evaluate(() => {
+    const c = document.querySelector('.coquille-contenu');
+    return c === null ? 0 : c.scrollHeight - c.clientHeight;
+  });
+  expect(reste, 'le contenu de Planches ne défile pas lui-même (seul le plan défile)').toBeLessThanOrEqual(1);
+}
+
 /** Le bandeau replié se voit en entier : rien ne le recouvre (la bande des zones le suit). */
 export async function bandeauEntier(page: Page): Promise<void> {
   const m = await page.evaluate(() => {

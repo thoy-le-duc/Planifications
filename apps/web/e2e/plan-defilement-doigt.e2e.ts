@@ -1,5 +1,5 @@
 import { test } from '@playwright/test';
-import { amorcerEtOuvrir, bandeauEntier, CAS, DELAI_AMORCAGE_MS, descendreJusquauBout, glisser, molette, PAS_PX, planVisibleDEmblee, sansDebordement, VUES } from './plan-defilement-outils.ts';
+import { amorcerEtOuvrir, bandeauEntier, CAS, contenuSansDefilement, DELAI_AMORCAGE_MS, descendreJusquauBout, glisser, molette, PAS_PX, planVisibleDEmblee, sansDebordement, VUES } from './plan-defilement-outils.ts';
 
 /**
  * T50 : Planches défile au doigt jusqu'à la dernière planche, téléphone simulé (écran tactile,
@@ -17,6 +17,7 @@ for (const cas of CAS) {
       await amorcerEtOuvrir(page, cas);
       await sansDebordement(page);
       await planVisibleDEmblee(page);
+      await contenuSansDefilement(page);
       if (cas.bandeau) await bandeauEntier(page);
       const cdp = await page.context().newCDPSession(page);
       await descendreJusquauBout(page, (x, y) => glisser(cdp, x, y, PAS_PX), titre);
