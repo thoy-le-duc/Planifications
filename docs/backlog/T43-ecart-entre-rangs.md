@@ -16,9 +16,9 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests cœur : valeur valide acceptée, hors bornes refusée, absente acceptée ; besoins en semences inchangés.
-- [ ] Test serveur : itinéraire avec la clé accepté, valeur hors bornes refusée avec message en français.
-- [ ] Tests d'écran : la liste, la lecture et le formulaire montrent l'écart entre rangs ; saisie et enregistrement ; « ≈ » quand il manque.
-- [ ] Test : copie « Adapter pour ma ferme » et série gardent la valeur.
-- [ ] Test d'intégration : migration de bibliothèque rejouable, aucune ligne de ferme touchée ; les 46 itinéraires ont une valeur.
-- [ ] Démarrage dans le budget ; `pnpm verif` passe.
+- [x] Tests cœur : valeur valide acceptée, hors bornes refusée, absente acceptée ; besoins en semences inchangés.
+- [x] Test serveur : itinéraire avec la clé accepté, valeur hors bornes refusée avec message en français.
+- [x] Tests d'écran : la liste, la lecture et le formulaire montrent l'écart entre rangs ; saisie et enregistrement ; « ≈ » quand il manque.
+- [x] Test : copie « Adapter pour ma ferme » et série gardent la valeur.
+- [x] Test d'intégration : migration de bibliothèque rejouable, aucune ligne de ferme touchée ; les 46 itinéraires ont une valeur.
+- [x] Démarrage dans le budget ; `pnpm verif` passe.

@@ -15,6 +15,7 @@ import {
   comparerNoms,
   dateCourte,
   dateLisible,
+  ecartRangsDe,
   egauxJson,
   LIBELLES_MODES,
   lireDecimal,
@@ -38,7 +39,7 @@ import {
 } from './calculs.ts';
 import { lireSeriesAVenir, type SerieAVenir } from './donnees.ts';
 import { SchemaRangs } from './SchemaRangs.tsx';
-import { ecartsDensite, LARGEUR_PLANCHE_DEFAUT_CM, texteEcartEquivalent, texteEcartsRangs } from './schema-rangs.ts';
+import { ecartsDensite, LARGEUR_PLANCHE_DEFAUT_CM, texteAvertissementEcart, texteEcartEquivalent, texteEcartsRangs } from './schema-rangs.ts';
 import { creerItineraire, EcritureRefusee, modifierItineraire, nouvelId, ramener, supprimerItineraire, type ContexteEcriture } from './ecritures.ts';
 
 /** Marque de performance posée quand le formulaire est utilisable (champs et aperçu dessinés). */
@@ -563,8 +564,15 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
   const ecartementLu = lireDecimal(saisie.ecartement);
   // T42 : écart entre rangs (planche de la ferme, sinon 75 cm) et, au mètre linéaire, écart équivalent sur le rang.
   const faconLue = saisie.mode === 'semis_direct' ? saisie.facon : 'ecartement';
-  const ecarts = ecartsDensite({ facon: faconLue, rangsParPlanche: rangsLus, grainesParMetre: lireDecimal(saisie.grainesParMetre) }, largeurPlancheCm ?? null);
+  // T43 : l'écart entre rangs saisi (de 5 à 200 cm), sinon celui de T42, calculé (« ≈ »).
+  const ecartRangsLu = ecartRangsDe(saisie.ecartRangs);
+  const ecartRangsSaisi = ecartRangsLu.ok ? ecartRangsLu.valeur : null;
+  const ecarts = ecartsDensite(
+    { facon: faconLue, rangsParPlanche: rangsLus, grainesParMetre: lireDecimal(saisie.grainesParMetre), ...(ecartRangsSaisi === null ? {} : { ecartEntreRangsCm: ecartRangsSaisi }) },
+    largeurPlancheCm ?? null,
+  );
   const ecartEquivalent = ecarts === null ? null : texteEcartEquivalent(ecarts);
+  const avertissementEcart = ecarts === null ? null : texteAvertissementEcart(ecarts);
 
   const calcul = useMemo(() => apercu(saisie, base.periodeUsage, aujourdhui), [saisie, base, aujourdhui]);
 
@@ -829,6 +837,18 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
                   }}
                 />
               )}
+              {(saisie.mode !== 'semis_direct' || saisie.facon !== 'volee') && (
+                <Champ
+                  libelle="Écart entre rangs (cm)"
+                  valeur={saisie.ecartRangs}
+                  desactive={lectureSeule}
+                  mode="decimal"
+                  suffixe="cm"
+                  surChanger={(v) => {
+                    changer((s) => ({ ...s, ecartRangs: v }));
+                  }}
+                />
+              )}
               {(saisie.mode !== 'semis_direct' || saisie.facon === 'ecartement') && (
                 <Champ
                   libelle="Écartement sur le rang (cm)"
@@ -901,12 +921,23 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
               </>
             )}
             {(saisie.mode !== 'semis_direct' || saisie.facon === 'ecartement') && rangsLus !== null && rangsLus <= RANGS_SCHEMA_MAX && ecartementLu !== null && (
-              <SchemaRangs rangs={rangsLus} ecartementCm={ecartementLu} disposition={saisie.disposition} largeurPlancheCm={largeurPlancheCm ?? LARGEUR_PLANCHE_DEFAUT_CM} />
+              <SchemaRangs
+                rangs={rangsLus}
+                ecartementCm={ecartementLu}
+                disposition={saisie.disposition}
+                largeurPlancheCm={largeurPlancheCm ?? LARGEUR_PLANCHE_DEFAUT_CM}
+                ecartEntreRangsCm={ecartRangsSaisi}
+              />
             )}
             {ecarts !== null && (
               <p className="itin-aide itin-ecarts">
                 <span data-testid="ecart-rangs">{texteEcartsRangs(ecarts)}</span>
                 {ecartEquivalent !== null && <span data-testid="ecart-equivalent">{ecartEquivalent}</span>}
+              </p>
+            )}
+            {avertissementEcart !== null && (
+              <p data-testid="ecart-avertissement" className="itin-aide itin-avertissement-ecart">
+                {avertissementEcart}
               </p>
             )}
           </section>

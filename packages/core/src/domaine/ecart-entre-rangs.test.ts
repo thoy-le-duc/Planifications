@@ -109,8 +109,8 @@ describe('T43 : écart entre rangs dans le domaine', () => {
   });
 
   it('ecartEntreRangsDe : la valeur saisie à l’écartement et au mètre linéaire ; absente ou à la volée → null', () => {
-    expect(m().ecartEntreRangsDe({ ...ECARTEMENT, ecartEntreRangsCm: 30 } as Densite)).toBe(30);
-    expect(m().ecartEntreRangsDe({ ...METRE_LINEAIRE, ecartEntreRangsCm: 15 } as Densite)).toBe(15);
+    expect(m().ecartEntreRangsDe({ ...ECARTEMENT, ecartEntreRangsCm: 30 })).toBe(30);
+    expect(m().ecartEntreRangsDe({ ...METRE_LINEAIRE, ecartEntreRangsCm: 15 })).toBe(15);
     expect(m().ecartEntreRangsDe(ECARTEMENT)).toBeNull();
     expect(m().ecartEntreRangsDe(METRE_LINEAIRE)).toBeNull();
     expect(m().ecartEntreRangsDe(VOLEE)).toBeNull();
