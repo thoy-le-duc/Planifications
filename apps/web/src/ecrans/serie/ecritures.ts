@@ -151,6 +151,16 @@ function ordreTrace(t: Pick<LigneEcrite, 'table' | 'id'>, valeurs: Readonly<Reco
 
 // ── Enregistrer ──────────────────────────────────────────────────────────────────────────────
 
+/** Place d'une occupation : des mètres sur une planche, des pains sur une gouttière (T51). */
+export type PlaceAEcrire =
+  | { readonly id: string; readonly unite: 'longueur'; readonly longueurM: number }
+  | { readonly id: string; readonly unite: 'pains'; readonly pains: number };
+
+/** Colonnes de la place d'une occupation. */
+function colonnesPlace(e: PlaceAEcrire): { readonly longueur_m: number | null; readonly nombre_places: number | null } {
+  return e.unite === 'longueur' ? { longueur_m: e.longueurM, nombre_places: null } : { longueur_m: null, nombre_places: e.pains };
+}
+
 export interface SerieAEcrire {
   readonly saisonId: string;
   readonly especeId: string;
@@ -161,9 +171,10 @@ export interface SerieAEcrire {
   readonly ancre: TypeAncreSerie;
   readonly ancreDate: string;
   readonly dates: DatesSerie;
-  /** Planches et longueurs (m). */
-  readonly emplacements: readonly { readonly id: string; readonly longueurM: number }[];
-  readonly longueurTotale: number;
+  /** Planches et longueurs (m), ou gouttières et pains occupés (T51). */
+  readonly emplacements: readonly PlaceAEcrire[];
+  /** Taille de la série : mètres de planche, ou (T51, en contenants) nombre de plants calculé. */
+  readonly taille: { readonly unite: 'longueur'; readonly longueurM: number } | { readonly unite: 'plants'; readonly nombrePlants: number };
   /** Texte JSON de la décision de rotation, ou null. */
   readonly rotationAcceptee: string | null;
 }
@@ -181,12 +192,12 @@ function colonnesSerie(s: SerieAEcrire): Record<string, Valeur> {
     prevu_mise_en_place: s.dates.miseEnPlace,
     prevu_debut_recolte: s.dates.debutRecolte,
     prevu_fin_recolte: s.dates.finRecolte,
-    longueur_m: s.longueurTotale,
-    nombre_plants: null,
+    longueur_m: s.taille.unite === 'longueur' ? s.taille.longueurM : null,
+    nombre_plants: s.taille.unite === 'plants' ? s.taille.nombrePlants : null,
   };
 }
 
-function nouvelleOccupation(ctx: ContexteEcriture, id: string, serieId: string, e: { readonly id: string; readonly longueurM: number }, d: DatesSerie, iso: string): Ligne {
+function nouvelleOccupation(ctx: ContexteEcriture, id: string, serieId: string, e: PlaceAEcrire, d: DatesSerie, iso: string): Ligne {
   return {
     id,
     ferme_id: ctx.fermeId,
@@ -194,8 +205,7 @@ function nouvelleOccupation(ctx: ContexteEcriture, id: string, serieId: string, 
     serie_id: serieId,
     plantation_id: null,
     evenement_id: null,
-    longueur_m: e.longueurM,
-    nombre_places: null,
+    ...colonnesPlace(e),
     position_m: null,
     prevu_du: d.miseEnPlace,
     prevu_au: d.finRecolte,
@@ -266,7 +276,7 @@ export async function modifierSerie(ctx: ContexteEcriture, serieId: string, s: S
       continue;
     }
     gardees.add(String(existante.id));
-    const apres: Ligne = { ...existante, longueur_m: e.longueurM, prevu_du: s.dates.miseEnPlace, prevu_au: s.dates.finRecolte };
+    const apres: Ligne = { ...existante, ...colonnesPlace(e), prevu_du: s.dates.miseEnPlace, prevu_au: s.dates.finRecolte };
     occupationValide(apres, lue, true);
     noter(trace('occupation', existante, extraire(apres, COLONNES_OCCUPATION)));
   }

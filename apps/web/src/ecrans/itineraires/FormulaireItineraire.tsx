@@ -29,6 +29,7 @@ import {
   REPERES,
   repereFinParDefaut,
   saisieDepuis,
+  faconDe,
   type EspeceLue,
   type ItineraireLu,
   type Ligne,
@@ -107,7 +108,10 @@ const FACONS: readonly { readonly valeur: FaconDensite; readonly libelle: string
   { valeur: 'ecartement', libelle: 'À l’écartement' },
   { valeur: 'metre_lineaire', libelle: 'Au mètre linéaire' },
   { valeur: 'volee', libelle: 'À la volée' },
+  { valeur: 'contenants', libelle: 'En contenants (hors-sol)' },
 ];
+/** T51 : un plant (maison ou acheté) se pose à l'écartement ou dans les trous des pains. */
+const FACONS_PLANT = FACONS.filter((f) => f.valeur === 'ecartement' || f.valeur === 'contenants');
 /** T35a : choix de la disposition, à partir de 2 rangs. */
 const DISPOSITIONS: readonly { readonly valeur: DispositionRangs; readonly libelle: string }[] = [
   { valeur: 'alignee', libelle: 'Alignés' },
@@ -563,7 +567,7 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
   const rangsLus = lireEntier(saisie.rangs);
   const ecartementLu = lireDecimal(saisie.ecartement);
   // T42 : écart entre rangs (planche de la ferme, sinon 75 cm) et, au mètre linéaire, écart équivalent sur le rang.
-  const faconLue = saisie.mode === 'semis_direct' ? saisie.facon : 'ecartement';
+  const faconLue = faconDe(saisie);
   // T43 : l'écart entre rangs saisi (de 5 à 200 cm), sinon celui de T42, calculé (« ≈ »).
   const ecartRangsLu = ecartRangsDe(saisie.ecartRangs);
   const ecartRangsSaisi = ecartRangsLu.ok ? ecartRangsLu.valeur : null;
@@ -604,9 +608,17 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
     changer((s) => ({ ...s, travaux: s.travaux.map((t) => (t.cle === cle ? f(t) : t)) }));
   }
 
+  /** T51 : un trou de plus ou de moins par pain, au doigt (au moins 1). */
+  const ajouterTrous = (delta: number) => () => {
+    changer((s) => {
+      const n = lireEntier(s.trous);
+      return { ...s, trous: String(Math.max(1, (n ?? 1) + delta)) };
+    });
+  };
+
   function choisirMode(mode: ModeItineraire): void {
-    // Plant acheté ou maison : des plants à l'écartement, jamais à la volée.
-    changer((s) => ({ ...s, mode, facon: mode === 'semis_direct' ? s.facon : 'ecartement' }));
+    // Plant acheté ou maison : des plants à l'écartement (ou en contenants, T51), jamais à la volée.
+    changer((s) => ({ ...s, mode, facon: faconDe({ mode, facon: s.facon }) }));
   }
 
   async function ecrireModification(seriesIds: readonly string[], ligne: Ligne): Promise<void> {
@@ -809,25 +821,65 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
           <section className="itin-carte">
             <span className="itin-etiquette itin-titre-carte">Densité</span>
             <div className="itin-grille">
-              {saisie.mode === 'semis_direct' && (
-                <Liste
-                  libelle="Façon"
-                  valeur={saisie.facon}
-                  desactive={lectureSeule}
-                  large
-                  surChanger={(v) => {
-                    const facon = FACONS.find((f) => f.valeur === v)?.valeur ?? 'ecartement';
-                    changer((s) => ({ ...s, facon }));
-                  }}
-                >
-                  {FACONS.map((f) => (
-                    <option key={f.valeur} value={f.valeur}>
-                      {f.libelle}
-                    </option>
-                  ))}
-                </Liste>
+              <Liste
+                libelle="Façon"
+                valeur={faconLue}
+                desactive={lectureSeule}
+                large
+                surChanger={(v) => {
+                  const facon = FACONS.find((f) => f.valeur === v)?.valeur ?? 'ecartement';
+                  changer((s) => ({ ...s, facon }));
+                }}
+              >
+                {(saisie.mode === 'semis_direct' ? FACONS : FACONS_PLANT).map((f) => (
+                  <option key={f.valeur} value={f.valeur}>
+                    {f.libelle}
+                  </option>
+                ))}
+              </Liste>
+              {faconLue === 'contenants' && (
+                <>
+                  <Champ
+                    libelle="Trous par pain"
+                    valeur={saisie.trous}
+                    desactive={lectureSeule}
+                    large
+                    surChanger={(v) => {
+                      changer((s) => ({ ...s, trous: v }));
+                    }}
+                  />
+                  {!lectureSeule && (
+                    <div className="itin-pas itin-large">
+                      <button type="button" className="itin-bouton-pas" aria-label="Un trou de moins" onClick={ajouterTrous(-1)}>
+                        −1
+                      </button>
+                      <button type="button" className="itin-bouton-pas" aria-label="Un trou de plus" onClick={ajouterTrous(1)}>
+                        +1
+                      </button>
+                    </div>
+                  )}
+                  {saisie.mode === 'semis_direct' ? (
+                    <Champ
+                      libelle="Graines par trou"
+                      valeur={saisie.grainesParTrou}
+                      desactive={lectureSeule}
+                      surChanger={(v) => {
+                        changer((s) => ({ ...s, grainesParTrou: v }));
+                      }}
+                    />
+                  ) : (
+                    <Champ
+                      libelle="Plants par trou"
+                      valeur={saisie.plantsParTrou}
+                      desactive={lectureSeule}
+                      surChanger={(v) => {
+                        changer((s) => ({ ...s, plantsParTrou: v }));
+                      }}
+                    />
+                  )}
+                </>
               )}
-              {(saisie.mode !== 'semis_direct' || saisie.facon !== 'volee') && (
+              {(faconLue === 'ecartement' || faconLue === 'metre_lineaire') && (
                 <Champ
                   libelle="Rangs par planche"
                   valeur={saisie.rangs}
@@ -837,7 +889,7 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
                   }}
                 />
               )}
-              {(saisie.mode !== 'semis_direct' || saisie.facon !== 'volee') && (
+              {(faconLue === 'ecartement' || faconLue === 'metre_lineaire') && (
                 <Champ
                   libelle="Écart entre rangs (cm)"
                   valeur={saisie.ecartRangs}
@@ -849,7 +901,7 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
                   }}
                 />
               )}
-              {(saisie.mode !== 'semis_direct' || saisie.facon === 'ecartement') && (
+              {faconLue === 'ecartement' && (
                 <Champ
                   libelle="Écartement sur le rang (cm)"
                   valeur={saisie.ecartement}
@@ -861,7 +913,7 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
                   }}
                 />
               )}
-              {saisie.mode === 'semis_direct' && saisie.facon === 'metre_lineaire' && (
+              {faconLue === 'metre_lineaire' && (
                 <Champ
                   libelle="Graines par mètre"
                   valeur={saisie.grainesParMetre}
@@ -872,7 +924,7 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
                   }}
                 />
               )}
-              {saisie.mode === 'semis_direct' && saisie.facon === 'volee' && (
+              {faconLue === 'volee' && (
                 <>
                   <Champ
                     libelle="Largeur semée (cm)"
@@ -896,7 +948,7 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
                 </>
               )}
             </div>
-            {(saisie.mode !== 'semis_direct' || saisie.facon === 'ecartement') && (rangsLus ?? 0) > 1 && (
+            {faconLue === 'ecartement' && (rangsLus ?? 0) > 1 && (
               <>
                 <span id={idDisposition} className="itin-etiquette">
                   Disposition des rangs
@@ -920,7 +972,7 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
                 </div>
               </>
             )}
-            {(saisie.mode !== 'semis_direct' || saisie.facon === 'ecartement') && rangsLus !== null && rangsLus <= RANGS_SCHEMA_MAX && ecartementLu !== null && (
+            {faconLue === 'ecartement' && rangsLus !== null && rangsLus <= RANGS_SCHEMA_MAX && ecartementLu !== null && (
               <SchemaRangs
                 rangs={rangsLus}
                 ecartementCm={ecartementLu}

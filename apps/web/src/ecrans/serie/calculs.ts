@@ -28,7 +28,9 @@ import {
   type Occupation,
   type ParametresItineraire,
   type SorteConflit,
+  type SorteEmplacement,
   type TypeAncreSerie,
+  verifierDensiteSurEmplacement,
 } from '@planif/core';
 import { NOMS_CONFLITS } from '../plan/calculs.ts';
 
@@ -67,13 +69,18 @@ export interface ItineraireLu {
   readonly parametresTexte: string;
 }
 
+/** Planche ou gouttière (T51) qu'une série peut occuper. */
 export interface PlancheLue {
   readonly id: string;
   readonly code: string;
+  /** 'planche' ou 'gouttiere' (T51) ; les rangs ne sont pas proposés. */
+  readonly sorte: SorteEmplacement;
+  /** T51 : pains (sacs, pots) d'une gouttière ; null pour une planche. */
+  readonly nombrePains: number | null;
   readonly zoneId: string;
   readonly nomZone: string;
   readonly longueurM: number;
-  /** Planche proposée dans « Ajouter une planche » (active, non supprimée). */
+  /** Proposée dans « Ajouter une planche » ou « Ajouter une gouttière » (active, non supprimée). */
   readonly proposee: boolean;
   readonly emplacement: Emplacement;
 }
@@ -96,7 +103,7 @@ export interface Bibliotheque {
   readonly varietes: readonly VarieteLue[];
   readonly familles: ReadonlyMap<string, FamilleLue>;
   readonly itineraires: readonly ItineraireLu[];
-  /** Toutes les planches de la ferme (non supprimées), triées par code. */
+  /** Toutes les planches et gouttières de la ferme (non supprimées), triées par code. */
   readonly planches: readonly PlancheLue[];
   readonly zones: ReadonlyMap<string, string>;
   readonly saisons: readonly SaisonLue[];
@@ -201,6 +208,14 @@ export function sommeLongueurs(longueurs: readonly number[]): number {
   return longueurs.reduce((s, l) => s + Math.round(l * 100), 0) / 100;
 }
 
+/** T51 : saisie d'un nombre de pains (« 30 ») → entier ≥ 0, ou null si ce n'en est pas un. */
+export function lirePains(saisie: string): number | null {
+  const t = saisie.trim();
+  if (!/^\d+$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
 /** Objet JSON lu depuis un texte, ou null. */
 export function objetJson(texte: string | null): Readonly<Record<string, unknown>> | null {
   if (texte === null) return null;
@@ -282,6 +297,12 @@ export function modeDe(parametres: Readonly<Record<string, unknown>> | null): Pa
   return m === 'semis_direct' || m === 'plant_maison' || m === 'plant_achete' ? m : null;
 }
 
+/** T51 : l'instantané se compte-t-il en contenants (trous par pain, sur des gouttières) ? */
+export function enContenants(parametres: Readonly<Record<string, unknown>> | null): boolean {
+  const d = parametres?.densite;
+  return typeof d === 'object' && d !== null && (d as Readonly<Record<string, unknown>>).facon === 'contenants';
+}
+
 /** Ancre proposée au choix de la culture : la plantation, sauf en semis direct. */
 export const ancreParDefaut = (mode: ParametresItineraire['mode'] | null): TypeAncreSerie => (mode === 'semis_direct' ? 'semis' : 'plantation');
 
@@ -296,7 +317,7 @@ export function etapeDeLAncre(ancre: TypeAncreSerie, mode: ParametresItineraire[
 
 export interface EmplacementSaisi {
   readonly id: string;
-  /** Texte du champ, en mètres. */
+  /** Texte du champ : mètres sur une planche ; sur une gouttière (T51), nombre de pains occupés. */
   readonly longueur: string;
 }
 
@@ -347,7 +368,12 @@ export interface AlerteAffichee {
 export interface Calcul {
   readonly ancreDate: DateCalendaire | null;
   readonly dates: DatesSerie | null;
+  /** Mètres de planche en tout (planches seulement). */
   readonly longueurTotale: number;
+  /** T51 : pains occupés en tout (gouttières seulement). */
+  readonly painsTotal: number;
+  /** T51 : en contenants, plants (ou poquets) calculés par le cœur, que la série porte ; sinon null. */
+  readonly nombrePlants: number | null;
   readonly besoins: readonly BesoinAffiche[];
   readonly conflits: readonly ConflitAffiche[];
   readonly alertes: readonly AlerteAffichee[];
@@ -360,6 +386,7 @@ export interface Calcul {
 const LIBELLES_BESOINS: Readonly<Record<string, (n: string) => string>> = {
   mottesEnPlace: (n) => `${n} mottes en place`,
   plants: (n) => `${n} plants`,
+  poquets: (n) => `${n} poquets`,
   plantsACommander: (n) => `${n} plants à commander`,
   mottesAPlanter: (n) => `${n} mottes à planter`,
   mottesASemer: (n) => `${n} mottes à semer`,
@@ -402,6 +429,7 @@ export function entreeBesoins(p: Readonly<Record<string, unknown>>, variete: Var
         return { mode: 'semis_direct', facon: 'ecartement', densite: d, grainesParPoquet: q.grainesParPoquet ?? 1, germination, margeSecurite: q.margeSecurite, pmgMg };
       }
       if (d.facon === 'metre_lineaire') return { mode: 'semis_direct', facon: 'metre_lineaire', densite: d, margeSecurite: q.margeSecurite, pmgMg };
+      if (d.facon === 'contenants') return { mode: 'semis_direct', facon: 'contenants', densite: d, germination, margeSecurite: q.margeSecurite, pmgMg };
       return {
         mode: 'semis_direct',
         facon: 'volee',
@@ -414,12 +442,13 @@ export function entreeBesoins(p: Readonly<Record<string, unknown>>, variete: Var
   }
 }
 
-function besoins(p: Readonly<Record<string, unknown>>, variete: VarieteLue | undefined, longueurM: number): BesoinAffiche[] {
+/** Besoins de T05 ; `etendue` : centimètres de planche, ou (T51, en contenants) nombre de pains. */
+function besoins(p: Readonly<Record<string, unknown>>, variete: VarieteLue | undefined, etendue: number): BesoinAffiche[] {
   const entree = entreeBesoins(p, variete);
-  if (entree === null || longueurM <= 0) return [];
+  if (entree === null || etendue <= 0) return [];
   let r: Readonly<Record<string, unknown>>;
   try {
-    r = besoinsSerie(entree, Math.round(longueurM * 100)) as unknown as Readonly<Record<string, unknown>>;
+    r = besoinsSerie(entree, etendue) as unknown as Readonly<Record<string, unknown>>;
   } catch {
     return [];
   }
@@ -442,15 +471,18 @@ function dates(p: Readonly<Record<string, unknown>>, ancre: TypeAncreSerie, date
   }
 }
 
-/** Occupation proposée sur une planche, telle que T03 la compare aux autres. */
-function occupationProposee(planche: PlancheLue, longueurM: number, d: DatesSerie): Occupation {
+/**
+ * Occupation proposée sur une planche (`quantite` en mètres) ou une gouttière (T51 : `quantite`
+ * en pains), telle que T03 la compare aux autres.
+ */
+function occupationProposee(planche: PlancheLue, quantite: number, d: DatesSerie): Occupation {
   return {
     id: `proposee-${planche.id}` as Id<'Occupation'>,
     fermeId: planche.emplacement.fermeId,
     supprimeLe: null,
     emplacementId: planche.emplacement.id,
     occupant: { sorte: 'serie', serieId: 'proposee' as Id<'Serie'> },
-    place: { unite: 'longueur', longueurM },
+    place: planche.sorte === 'gouttiere' ? { unite: 'places', nombrePlaces: quantite } : { unite: 'longueur', longueurM: quantite },
     positionM: null,
     prevuDu: d.miseEnPlace,
     prevuAu: d.finRecolte,
@@ -458,9 +490,9 @@ function occupationProposee(planche: PlancheLue, longueurM: number, d: DatesSeri
   };
 }
 
-function conflitsSur(ctx: ContexteCalcul, planche: PlancheLue, longueurM: number, d: DatesSerie): ConflitAffiche[] {
+function conflitsSur(ctx: ContexteCalcul, planche: PlancheLue, quantite: number, d: DatesSerie): ConflitAffiche[] {
   const autres = (ctx.bib.occupationsPar.get(planche.id) ?? []).filter((o) => !ctx.exclure.has(o.occupation.id));
-  const proposee = occupationProposee(planche, longueurM, d);
+  const proposee = occupationProposee(planche, quantite, d);
   const trouves = detecterConflits(planche.emplacement, [...autres.map((o) => o.occupation), proposee]);
   const libelles = new Map(autres.map((o) => [o.occupation.id as string, o.libelle]));
   return trouves
@@ -516,29 +548,58 @@ function alertesSur(ctx: ContexteCalcul, culture: ChoixCulture, planche: Planche
   });
 }
 
+/** Clés des besoins de T05 qui comptent les plants (ou poquets) en place, par ordre de préférence. */
+const CLES_PLANTS = ['plants', 'poquets', 'mottesEnPlace'];
+
+/** T51 : la façon de compter de l'itinéraire convient-elle aux emplacements choisis ? Ce qui ne va pas, sinon null. */
+function sorteRefusee(parametres: Readonly<Record<string, unknown>>, contenants: boolean, sortes: readonly SorteEmplacement[]): string | null {
+  for (const sorte of sortes) {
+    if (contenants) {
+      const e = verifierDensiteSurEmplacement(parametres as unknown as ParametresItineraire, sorte);
+      if (e !== null) return `${e.message.charAt(0).toUpperCase()}${e.message.slice(1)}.`;
+    } else if (sorte === 'gouttiere') {
+      return 'Une gouttière se compte en trous par pain : choisis un itinéraire en contenants, ou une planche.';
+    }
+  }
+  return null;
+}
+
 /** Tout ce que le formulaire affiche, recalculé à chaque changement de champ. */
 export function calculer(ctx: ContexteCalcul, s: Saisie): Calcul {
   const parametres = objetJson(s.parametresTexte);
   const ancreDate = s.ancreGardee ?? lundiDe(s.semaine);
   const d = parametres === null || ancreDate === null ? null : dates(parametres, s.ancre, ancreDate);
-  const longueurs = s.emplacements.map((e) => lireLongueur(e.longueur));
-  const valides = longueurs.every((l): l is number => l !== null && l > 0 && l <= 10_000);
-  const longueurTotale = sommeLongueurs(longueurs.map((l) => (l !== null && l > 0 ? l : 0)));
+  const contenants = enContenants(parametres);
+  const choisis = s.emplacements.map((e) => ({ e, planche: ctx.bib.planches.find((p) => p.id === e.id) }));
+  // Mètres sur une planche ; pains (entiers) sur une gouttière (T51).
+  const quantites = choisis.map(({ e, planche }) => (planche?.sorte === 'gouttiere' ? lirePains(e.longueur) : lireLongueur(e.longueur)));
+  const valides = quantites.every((q): q is number => q !== null && q > 0 && q <= 10_000);
+  const positives = (sorte: SorteEmplacement) => choisis.flatMap(({ planche }, i) => {
+    const q = quantites[i];
+    return (planche?.sorte ?? 'planche') === sorte && q !== null && q !== undefined && q > 0 ? [q] : [];
+  });
+  const longueurTotale = sommeLongueurs(positives('planche'));
+  const painsTotal = positives('gouttiere').reduce((t, n) => t + n, 0);
   const variete = s.culture?.varieteId == null ? undefined : ctx.bib.varietes.find((v) => v.id === s.culture?.varieteId);
 
   const conflits: ConflitAffiche[] = [];
   const alertes: AlerteAffichee[] = [];
   if (d !== null) {
     const annee = Number(d.miseEnPlace.slice(0, 4));
-    s.emplacements.forEach((e, i) => {
-      const planche = ctx.bib.planches.find((p) => p.id === e.id);
+    choisis.forEach(({ planche }, i) => {
       if (planche === undefined) return;
-      const l = longueurs[i];
-      if (l !== null && l !== undefined && l > 0) conflits.push(...conflitsSur(ctx, planche, l, d));
+      const q = quantites[i];
+      if (q !== null && q !== undefined && q > 0) conflits.push(...conflitsSur(ctx, planche, q, d));
       if (s.culture !== null) alertes.push(...alertesSur(ctx, s.culture, planche, annee));
     });
   }
 
+  const listeBesoins =
+    parametres === null || s.culture === null ? [] : besoins(parametres, variete, contenants ? painsTotal : Math.round(longueurTotale * 100));
+  const nombrePlants = contenants ? (CLES_PLANTS.map((c) => listeBesoins.find((b) => b.cle === c)).find((b) => b !== undefined)?.valeur ?? null) : null;
+  const sortes = choisis.flatMap(({ planche }) => (planche === undefined ? [] : [planche.sorte]));
+  const refusee = parametres === null ? null : sorteRefusee(parametres, contenants, sortes);
+  const lieu = contenants ? 'gouttière' : 'planche';
   const saison = d === null ? undefined : ctx.bib.saisons.find((x) => x.debut <= d.miseEnPlace && d.miseEnPlace <= x.fin);
   const manque =
     s.culture === null
@@ -550,15 +611,22 @@ export function calculer(ctx: ContexteCalcul, s: Saisie): Calcul {
           : d === null
             ? 'Cet itinéraire ne permet pas cette ancre.'
             : s.emplacements.length === 0
-              ? 'Ajoute une planche.'
-              : !valides
-                ? 'Donne une longueur à chaque planche.'
-                : null;
+              ? `Ajoute une ${lieu}.`
+              : (refusee ??
+                (!valides
+                  ? contenants
+                    ? 'Donne un nombre de pains entier à chaque gouttière.'
+                    : 'Donne une longueur à chaque planche.'
+                  : contenants && (nombrePlants === null || nombrePlants <= 0)
+                    ? 'Le nombre de plants ne se calcule pas : vérifie les trous par pain de l’itinéraire.'
+                    : null));
   return {
     ancreDate,
     dates: d,
     longueurTotale,
-    besoins: parametres === null || s.culture === null ? [] : besoins(parametres, variete, longueurTotale),
+    painsTotal,
+    nombrePlants,
+    besoins: listeBesoins,
     conflits,
     alertes,
     saisonId: saison?.id ?? null,

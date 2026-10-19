@@ -17,12 +17,14 @@ import {
   calculer,
   chercherCultures,
   culturesDe,
+  enContenants,
   etapeDeLAncre,
   itinerairePropose,
   itinerairesDe,
   libelleCulture,
   libelleDate,
   lireLongueur,
+  lirePains,
   lundiDe,
   modeDe,
   nombreLisible,
@@ -31,11 +33,12 @@ import {
   type AlerteAffichee,
   type Bibliotheque,
   type ChoixCulture,
+  type PlancheLue,
   type Saisie,
 } from './calculs.ts';
 import { entreeAnnulable, lireBibliotheque, lireEtatSerie, lireVarieteDeSerie, requeteHistorique, type EtatSerie, type Modification } from './donnees.ts';
 import { SelecteurSemaine } from './SelecteurSemaine.tsx';
-import { annulerEntree, creerSerie, defaireSerie, modifierSerie, SerieRefusee, supprimerSerieCreee, type ContexteEcriture, type SerieAEcrire } from './ecritures.ts';
+import { annulerEntree, creerSerie, defaireSerie, modifierSerie, SerieRefusee, supprimerSerieCreee, type ContexteEcriture, type PlaceAEcrire, type SerieAEcrire } from './ecritures.ts';
 
 /** Marque de performance posée quand le formulaire est utilisable (e2e/serie.e2e.ts). */
 export const MARQUE_SERIE_AFFICHEE = 'planif:serie-affichee';
@@ -149,7 +152,8 @@ function saisieInitiale(bib: Bibliotheque, depart: DepartSerie, etat: EtatSerie 
       ancre: s.ancre_type === 'semis' || s.ancre_type === 'debut_recolte' ? s.ancre_type : 'plantation',
       semaine: semaineDe(String(s.ancre_date)),
       ancreGardee: ancreHorsLundi(s.ancre_date),
-      emplacements: etat.occupations.filter((o) => o.supprime_le === null).map((o) => ({ id: String(o.emplacement_id), longueur: String(o.longueur_m ?? '') })),
+      // Mètres sur une planche ; pains sur une gouttière (T51).
+      emplacements: etat.occupations.filter((o) => o.supprime_le === null).map((o) => ({ id: String(o.emplacement_id), longueur: String(o.longueur_m ?? o.nombre_places ?? '') })),
     };
   }
   const creation: Extract<DepartSerie, { sorte: 'creation' }> = depart.sorte === 'creation' ? depart : { sorte: 'creation' };
@@ -161,8 +165,13 @@ function saisieInitiale(bib: Bibliotheque, depart: DepartSerie, etat: EtatSerie 
     ancre: 'plantation',
     semaine: creation.semaine ?? semaineParDefaut(bib, jour, creation.saisonId),
     ancreGardee: null,
-    emplacements: planche === undefined ? [] : [{ id: planche.id, longueur: String(planche.longueurM) }],
+    emplacements: planche === undefined ? [] : [{ id: planche.id, longueur: quantiteProposee(planche) }],
   };
+}
+
+/** Ce que le champ propose : la longueur d'une planche, les pains d'une gouttière (T51). */
+function quantiteProposee(p: PlancheLue): string {
+  return String(p.sorte === 'gouttiere' ? (p.nombrePains ?? p.longueurM) : p.longueurM);
 }
 
 /** Instant lisible d'une ligne d'historique : « 30 sept. 2026, 10:00 ». */
@@ -436,7 +445,7 @@ export function FormulaireSerie({
   function ajouterPlanche(id: string): void {
     const planche = bib?.planches.find((p) => p.id === id);
     if (planche === undefined) return;
-    changer((s) => (s.emplacements.some((e) => e.id === id) ? s : { ...s, emplacements: [...s.emplacements, { id, longueur: String(planche.longueurM) }] }));
+    changer((s) => (s.emplacements.some((e) => e.id === id) ? s : { ...s, emplacements: [...s.emplacements, { id, longueur: quantiteProposee(planche) }] }));
   }
 
   // ── Écrire ─────────────────────────────────────────────────────────────────────────────────
@@ -474,8 +483,12 @@ export function FormulaireSerie({
       ancre: saisie.ancre,
       ancreDate: calcul.ancreDate,
       dates: calcul.dates,
-      emplacements: saisie.emplacements.map((e) => ({ id: e.id, longueurM: lireLongueur(e.longueur) ?? 0 })),
-      longueurTotale: calcul.longueurTotale,
+      emplacements: saisie.emplacements.map((e): PlaceAEcrire => {
+        const gouttiere = bib?.planches.find((p) => p.id === e.id)?.sorte === 'gouttiere';
+        return gouttiere ? { id: e.id, unite: 'pains', pains: lirePains(e.longueur) ?? 0 } : { id: e.id, unite: 'longueur', longueurM: lireLongueur(e.longueur) ?? 0 };
+      }),
+      // T51 : une série en contenants porte ses plants calculés, pas de longueur.
+      taille: calcul.nombrePlants === null ? { unite: 'longueur', longueurM: calcul.longueurTotale } : { unite: 'plants', nombrePlants: calcul.nombrePlants },
       rotationAcceptee: rotation === undefined ? decisionEnCours() : rotation,
     };
   }
@@ -551,7 +564,11 @@ export function FormulaireSerie({
   const annee = calcul?.dates?.miseEnPlace.slice(0, 4) ?? saisie?.semaine.slice(0, 4) ?? '';
   const famille = saisie?.culture == null || bib === null ? null : bib.familles.get(bib.especes.find((e) => e.id === saisie.culture?.especeId)?.familleId ?? '');
   const choisies = new Set(saisie?.emplacements.map((e) => e.id) ?? []);
-  const proposees = bib?.planches.filter((p) => p.proposee && !choisies.has(p.id)) ?? [];
+  // T51 : un itinéraire en contenants se pose sur des gouttières ; les autres, sur des planches.
+  const contenants = enContenants(objetJson(saisie?.parametresTexte ?? null));
+  const sorteProposee = contenants ? 'gouttiere' : 'planche';
+  const lieu = contenants ? 'gouttière' : 'planche';
+  const proposees = bib?.planches.filter((p) => p.sorte === sorteProposee && p.proposee && !choisies.has(p.id)) ?? [];
   const zonesProposees = [...new Set(proposees.map((p) => p.nomZone))];
 
   let corps: ReactNode;
@@ -699,13 +716,14 @@ export function FormulaireSerie({
         {/* Planches */}
         <section className="serie-carte" aria-labelledby={idPlanches}>
           <span id={idPlanches} className="serie-etiquette">
-            Planches
+            {contenants ? 'Gouttières' : 'Planches'}
           </span>
-          {saisie.emplacements.length === 0 && <p className="serie-aide">Aucune planche choisie.</p>}
+          {saisie.emplacements.length === 0 && <p className="serie-aide">Aucune {lieu} choisie.</p>}
           <ul className="serie-planches">
             {saisie.emplacements.map((e) => {
               const planche = bib.planches.find((p) => p.id === e.id);
               const code = planche?.code ?? '?';
+              const gouttiere = planche?.sorte === 'gouttiere';
               return (
                 <li key={e.id} data-testid="emplacement-serie" data-emplacement={e.id} className="serie-planche">
                   <span className="serie-planche-nom">
@@ -715,10 +733,10 @@ export function FormulaireSerie({
                   <span className="serie-longueur">
                     <input
                       type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="any"
-                      aria-label={`Longueur ${code}`}
+                      inputMode={gouttiere ? 'numeric' : 'decimal'}
+                      min={gouttiere ? '1' : '0'}
+                      step={gouttiere ? '1' : 'any'}
+                      aria-label={gouttiere ? `Pains ${code}` : `Longueur ${code}`}
                       className="serie-champ serie-champ-longueur"
                       value={e.longueur}
                       onChange={(x) => {
@@ -726,7 +744,7 @@ export function FormulaireSerie({
                         changer((s) => ({ ...s, emplacements: s.emplacements.map((y) => (y.id === e.id ? { ...y, longueur } : y)) }));
                       }}
                     />
-                    <span aria-hidden="true">m</span>
+                    <span aria-hidden="true">{gouttiere ? 'pains' : 'm'}</span>
                   </span>
                   <button
                     type="button"
@@ -742,7 +760,7 @@ export function FormulaireSerie({
               );
             })}
           </ul>
-          <Etiquette htmlFor={idAjouter}>Ajouter une planche</Etiquette>
+          <Etiquette htmlFor={idAjouter}>Ajouter une {lieu}</Etiquette>
           <select
             id={idAjouter}
             className="serie-champ"
@@ -751,7 +769,7 @@ export function FormulaireSerie({
               ajouterPlanche(e.target.value);
             }}
           >
-            <option value="">Choisir une planche…</option>
+            <option value="">Choisir une {lieu}…</option>
             {zonesProposees.map((z) => (
               <optgroup key={z} label={z === '' ? 'Sans zone' : z}>
                 {proposees
@@ -797,6 +815,7 @@ export function FormulaireSerie({
             </ul>
           )}
           {calcul.longueurTotale > 0 && saisie.emplacements.length > 1 && <p className="serie-aide">{nombreLisible(calcul.longueurTotale)} m de planche en tout.</p>}
+          {calcul.painsTotal > 0 && saisie.emplacements.length > 1 && <p className="serie-aide">{nombreLisible(calcul.painsTotal)} pains en tout.</p>}
         </section>
 
         {calcul.conflits.map((c, i) => (
