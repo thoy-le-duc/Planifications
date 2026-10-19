@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { validerItineraire } from '@planif/core';
-import { messageRefus, refusDuCoeur } from './messages.ts';
+import { messageRefus, precisionDuCoeur, refusDuCoeur } from './messages.ts';
 import { jargon } from './test/jargon.ts';
 
 const uuid = (n: number): string => `0192f0c1-7a6e-7cc3-9b1e-${n.toString(16).padStart(12, '0')}`;
@@ -51,5 +51,15 @@ describe('T48 : trois messages pour l’écart entre rangs', () => {
   it('les trois sont différents, en français, sans jargon', () => {
     expect(new Set([horsBornes, nonNumerique, volee]).size).toBe(3);
     for (const m of [horsBornes, nonNumerique, volee]) expect(jargon(m)).toEqual([]);
+  });
+});
+
+describe('T48 : le message suit la raison typée, pas le texte du cœur', () => {
+  const champ = 'parametres.densite.ecartEntreRangsCm';
+  it('même texte de cœur, raisons différentes : messages différents', () => {
+    const a = precisionDuCoeur({ code: 'champ_invalide', champ, message: 'x', raison: 'volee' });
+    const b = precisionDuCoeur({ code: 'champ_invalide', champ, message: 'x', raison: 'non_numerique' });
+    expect(a).toMatch(/volée/);
+    expect(b).toMatch(/nombre/);
   });
 });
