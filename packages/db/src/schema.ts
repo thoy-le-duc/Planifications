@@ -301,10 +301,24 @@ export const secteurIrrigation = pgTable(
     nom: text('nom').notNull(),
     debitLitresHeure: decimal('debit_litres_heure'),
     adresseModbus: integer('adresse_modbus'),
+    /** T57 : position sur le plan, dans le repère de la ferme (mètres) ; les deux nulles : en tête de sa première planche. */
+    placementXM: decimal('placement_x_m'),
+    placementYM: decimal('placement_y_m'),
     ...horodatages(),
   },
   (t) => [
     verif('secteur_irrigation', 'debit_positif', sql`${t.debitLitresHeure} IS NULL OR ${t.debitLitresHeure} > 0`),
+    verif('secteur_irrigation', 'numero_valide', sql`${t.numeroVanne} >= 1 AND ${t.numeroVanne} <= 9999`),
+    verif('secteur_irrigation', 'placement_tout_ou_rien', sql`(${t.placementXM} IS NULL) = (${t.placementYM} IS NULL)`),
+    verif(
+      'secteur_irrigation',
+      'placement_distance',
+      sql`${t.placementXM} IS NULL OR ${t.placementYM} IS NULL OR ${t.placementXM} * ${t.placementXM} + ${t.placementYM} * ${t.placementYM} <= 25000000`,
+    ),
+    // T57 : un numéro de vanne par ferme parmi les vannes non supprimées (le serveur refuse proprement avant).
+    uniqueIndex('secteur_irrigation_numero_actif_idx')
+      .on(t.fermeId, t.numeroVanne)
+      .where(sql`${t.supprimeLe} IS NULL`),
   ],
 );
 
