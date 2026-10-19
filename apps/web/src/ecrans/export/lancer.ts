@@ -61,6 +61,8 @@ export async function lancerExport(o: OptionsLancerExport): Promise<ArchiveExpor
           o.avancement?.(a);
         };
   let archive: ArchiveExport | null = null;
+  /** Le worker de construction est tombé en cours d'export : la nouvelle tentative se fait sans aucun worker. */
+  let sansWorker = false;
   if (o.constructionEnWorker === true && o.compresseur === undefined) {
     try {
       // null : pas de worker (ou il ne s'est pas chargé), rien n'a été lu ; l'export se fait ci-dessous.
@@ -77,18 +79,29 @@ export async function lancerExport(o: OptionsLancerExport): Promise<ArchiveExpor
       // nouvelle tentative, au fil principal. La base se relit sans risque (lecture seule).
       if (!(erreur instanceof ErreurWorkerCompression) || o.signal?.aborted === true) throw erreur;
       console.warn(`Export : ${erreur.message} ; nouvelle tentative, construction au fil principal.`);
+      sansWorker = true;
     }
   }
-  archive ??= await exporterAuFilPrincipal(o, genereLe, jour, avancement);
+  archive ??= await exporterAuFilPrincipal(o, genereLe, jour, avancement, sansWorker);
   // Annulé au tout dernier moment : pas de téléchargement tardif.
   o.signal?.throwIfAborted();
   await o.telecharger(archive.nomFichier, archive.octets, o.signal);
   return archive;
 }
 
-/** Construction au fil principal ; compression dans le worker de compression s'il se charge (T16b, T15c). */
-async function exporterAuFilPrincipal(o: OptionsLancerExport, genereLe: string, jour: string, avancement: ((a: Avancement) => void) | undefined): Promise<ArchiveExport> {
-  const enWorker = o.compresseur === undefined ? compresseurEnWorker() : null;
+/**
+ * Construction au fil principal ; compression dans le worker de compression s'il se charge (T16b,
+ * T15c). `sansWorker` : nouvelle tentative après la chute du worker de construction (T47) ; une
+ * seule, entièrement au fil principal (compression par défaut).
+ */
+async function exporterAuFilPrincipal(
+  o: OptionsLancerExport,
+  genereLe: string,
+  jour: string,
+  avancement: ((a: Avancement) => void) | undefined,
+  sansWorker: boolean,
+): Promise<ArchiveExport> {
+  const enWorker = o.compresseur === undefined && !sansWorker ? compresseurEnWorker() : null;
   const exporter = (compresseur: Compresseur | undefined) =>
     exporterFerme(o.porte, {
       fermeId: o.fermeId,
