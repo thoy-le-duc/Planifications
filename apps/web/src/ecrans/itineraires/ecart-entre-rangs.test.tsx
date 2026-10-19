@@ -14,14 +14,14 @@
  *   ecartsDensite(densite, largeur)          // écart saisi s'il y en a un (même à 1 rang), sinon T42
  *   texteEcartsRangs(e)                      // saisi : « 3 rangs, 30 cm entre rangs (planche de 80 cm) » ;
  *                                            // sinon inchangé (« ≈ 27 cm ») ; 1 rang saisi :
- *                                            // « 1 rang, 120 cm entre rangs (planche de 80 cm) »
+ *                                            // « 1 rang, 120 cm entre planches (planche de 80 cm) » (T48)
  *   texteAvertissementEcart(e): string | null
  *     Écart saisi, 2 rangs ou plus, et (rangs − 1) × écart > largeur de planche (les rangs du bord
  *     sortiraient de la planche ; la marge raisonnable de la règle 1 est d'un écart) : un texte
  *     qui le dit ; sinon null. Jamais bloquant.
  *   texteDensite(densite, largeur): string | null    // résumé de la liste
  *     écartement : « 3 rangs à 30 cm · 30 cm sur le rang », sans écart : « 3 rangs à ≈ 27 cm · … » ;
- *     1 rang : « 1 rang · 50 cm sur le rang » (avec écart : « 1 rang, 120 cm entre rangs · … ») ;
+ *     1 rang : « 1 rang · 50 cm sur le rang » (avec écart : « 1 rang, 120 cm entre planches · … » (T48)) ;
  *     mètre linéaire : « 4 rangs à 15 cm · 50 graines/m » ; volée : « à la volée · 2 g/m² » ;
  *     null si illisible. Centimètres comme T42 (virgule, « ≈ » arrondi).
  *   EntreeSchemaRangs gagne `ecartEntreRangsCm?: number | null` : donné (2 rangs ou plus) et les
@@ -99,7 +99,7 @@ describe('T43 : écart entre rangs (fonctions pures)', () => {
     const un = m.ecartsDensite({ facon: 'ecartement', rangsParPlanche: 1, ecartementSurRangCm: 50, ecartEntreRangsCm: 120 }, PLANCHE);
     expect(un).toMatchObject({ rangs: 1, ecartEntreRangsCm: 120, ecartSaisi: true });
     if (un === null) return;
-    expect(m.texteEcartsRangs(un)).toBe('1 rang, 120 cm entre rangs (planche de 80 cm)');
+    expect(m.texteEcartsRangs(un)).toBe('1 rang, 120 cm entre planches (planche de 80 cm)');
     expect(m.texteAvertissementEcart(un), '1 rang : rien ne dépasse').toBeNull();
   });
 
@@ -122,7 +122,7 @@ describe('T43 : écart entre rangs (fonctions pures)', () => {
     expect(m.texteDensite({ facon: 'ecartement', rangsParPlanche: 3, ecartementSurRangCm: 30 }, PLANCHE)).toBe('3 rangs à ≈ 27 cm · 30 cm sur le rang');
     expect(m.texteDensite({ facon: 'ecartement', rangsParPlanche: 4, ecartementSurRangCm: 2, ecartEntreRangsCm: 15 }, null)).toBe('4 rangs à 15 cm · 2 cm sur le rang');
     expect(m.texteDensite({ facon: 'ecartement', rangsParPlanche: 1, ecartementSurRangCm: 50 }, PLANCHE)).toBe('1 rang · 50 cm sur le rang');
-    expect(m.texteDensite({ facon: 'ecartement', rangsParPlanche: 1, ecartementSurRangCm: 50, ecartEntreRangsCm: 120 }, PLANCHE)).toBe('1 rang, 120 cm entre rangs · 50 cm sur le rang');
+    expect(m.texteDensite({ facon: 'ecartement', rangsParPlanche: 1, ecartementSurRangCm: 50, ecartEntreRangsCm: 120 }, PLANCHE)).toBe('1 rang, 120 cm entre planches · 50 cm sur le rang');
     expect(m.texteDensite({ facon: 'metre_lineaire', rangsParPlanche: 4, grainesParMetre: 50, ecartEntreRangsCm: 15 }, PLANCHE)).toBe('4 rangs à 15 cm · 50 graines/m');
     expect(m.texteDensite({ facon: 'metre_lineaire', rangsParPlanche: 4, grainesParMetre: 50 }, PLANCHE)).toBe('4 rangs à ≈ 20 cm · 50 graines/m');
     expect(m.texteDensite({ facon: 'volee', largeurSemeeCm: 60, doseGParM2: 2.5 }, PLANCHE)).toBe('à la volée · 2,5 g/m²');

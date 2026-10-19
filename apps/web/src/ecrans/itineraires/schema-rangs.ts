@@ -145,7 +145,22 @@ export function texteEcartsRangs(e: EcartsDensite): string {
   const planche = `(planche de ${cmArrondis(e.largeurPlancheCm)})`;
   const rangs = `${String(e.rangs)} ${e.rangs > 1 ? 'rangs' : 'rang'}`;
   if (e.ecartEntreRangsCm === null) return `${rangs} ${planche}`;
-  return `${rangs}, ${ecartTexte(e)} entre rangs ${planche}`;
+  return `${rangs}, ${ecartTexte(e)} ${entreTexte(e.rangs)} ${planche}`;
+}
+
+/**
+ * T48 : à 1 rang, l'écart saisi est l'entraxe, la distance d'une planche à l'autre : « entre
+ * planches » ; à 2 rangs et plus « entre rangs ».
+ */
+export function entreTexte(rangs: number): string {
+  return rangs > 1 ? 'entre rangs' : 'entre planches';
+}
+
+/** T48 : aide du champ « Écart entre rangs » ; à 1 rang, elle dit ce que vaut l'écart. */
+export function texteAideEcart(rangs: number): string {
+  return rangs > 1
+    ? 'Distance entre deux rangs voisins, de 5 à 200 cm. Vide : rangs répartis sur la planche.'
+    : 'Pour un rang, l’écart vaut la distance d’une planche à l’autre (entraxe), de 5 à 200 cm.';
 }
 
 /** L'écart entre rangs affiché : saisi, tel quel (« 17,5 cm ») ; calculé, arrondi et « ≈ ». */
@@ -179,7 +194,7 @@ export function texteDensite(densite: unknown, largeurPlancheCm: number | null):
   if (e === null) return null;
   let rangs: string;
   if (e.ecartEntreRangsCm === null) rangs = '1 rang';
-  else if (e.rangs === 1) rangs = `1 rang, ${ecartTexte(e)} entre rangs`;
+  else if (e.rangs === 1) rangs = `1 rang, ${ecartTexte(e)} entre planches`;
   else rangs = `${String(e.rangs)} rangs à ${ecartTexte(e)}`;
   if (d.facon === 'metre_lineaire') return `${rangs} · ${String(d.grainesParMetre).replace('.', ',')} graines/m`;
   if (!positif(d.ecartementSurRangCm)) return null;

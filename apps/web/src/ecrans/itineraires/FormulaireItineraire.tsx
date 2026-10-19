@@ -39,7 +39,7 @@ import {
 } from './calculs.ts';
 import { lireSeriesAVenir, type SerieAVenir } from './donnees.ts';
 import { SchemaRangs } from './SchemaRangs.tsx';
-import { ecartsDensite, LARGEUR_PLANCHE_DEFAUT_CM, texteAvertissementEcart, texteEcartEquivalent, texteEcartsRangs } from './schema-rangs.ts';
+import { ecartsDensite, LARGEUR_PLANCHE_DEFAUT_CM, texteAvertissementEcart, texteAideEcart, texteEcartEquivalent, texteEcartsRangs } from './schema-rangs.ts';
 import { creerItineraire, EcritureRefusee, modifierItineraire, nouvelId, ramener, supprimerItineraire, type ContexteEcriture } from './ecritures.ts';
 
 /** Marque de performance posée quand le formulaire est utilisable (champs et aperçu dessinés). */
@@ -928,6 +928,11 @@ export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm,
                 largeurPlancheCm={largeurPlancheCm ?? LARGEUR_PLANCHE_DEFAUT_CM}
                 ecartEntreRangsCm={ecartRangsSaisi}
               />
+            )}
+            {ecarts !== null && (
+              <p data-testid="aide-ecart-rangs" className="itin-aide">
+                {texteAideEcart(ecarts.rangs)}
+              </p>
             )}
             {ecarts !== null && (
               <p className="itin-aide itin-ecarts">

@@ -145,10 +145,10 @@ function ecartEntreRangs(densite: unknown): ErreurSaisie | null {
   const v = densite.ecartEntreRangsCm;
   const bornes = `de ${String(ECART_ENTRE_RANGS_MIN_CM)} à ${String(ECART_ENTRE_RANGS_MAX_CM)} cm`;
   if (densite.facon !== 'ecartement' && densite.facon !== 'metre_lineaire') {
-    return erreur('champ_invalide', champ, 'écart entre rangs : seulement pour une densité en rangs (écartement ou mètre linéaire)');
+    return { ...erreur('champ_invalide', champ, 'écart entre rangs : seulement pour une densité en rangs (écartement ou mètre linéaire)'), raison: 'volee' };
   }
-  if (typeof v !== 'number' || !Number.isFinite(v)) return erreur('champ_invalide', champ, `écart entre rangs : un nombre de centimètres attendu, ${bornes}`);
-  if (v < ECART_ENTRE_RANGS_MIN_CM || v > ECART_ENTRE_RANGS_MAX_CM) return erreur('hors_bornes', champ, `écart entre rangs ${bornes}`);
+  if (typeof v !== 'number' || !Number.isFinite(v)) return { ...erreur('champ_invalide', champ, `écart entre rangs : un nombre de centimètres attendu, ${bornes}`), raison: 'non_numerique' };
+  if (v < ECART_ENTRE_RANGS_MIN_CM || v > ECART_ENTRE_RANGS_MAX_CM) return { ...erreur('hors_bornes', champ, `écart entre rangs ${bornes}`), raison: 'hors_bornes' };
   return null;
 }
 
