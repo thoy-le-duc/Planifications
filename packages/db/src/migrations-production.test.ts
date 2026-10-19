@@ -21,11 +21,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
+import { messageErreurNettoye } from './erreur-migration.ts';
 
 const RACINE = fileURLToPath(new URL('../../../', import.meta.url));
 const CHEMIN_WORKFLOW = `${RACINE}.github/workflows/migrations-production.yml`;
 const CHEMIN_CI = `${RACINE}.github/workflows/ci.yml`;
 const CHEMIN_SCRIPT = `${RACINE}scripts/migrer-production.sh`;
+const CHEMIN_GUIDE = `${RACINE}docs/mise-en-ligne.md`;
 const MESSAGE_ABSENT = 'secret DATABASE_URL_PRODUCTION absent : rien à faire, voir docs/mise-en-ligne.md';
 
 type Objet = Record<string, unknown>;
@@ -101,9 +103,22 @@ describe('T44 : workflow « Migrations de production »', () => {
     const condition = typeof job.if === 'string' ? job.if : '';
     expect(condition).toContain("github.event.workflow_run.conclusion == 'success'");
     expect(condition).toContain("github.event.workflow_run.head_branch == 'main'");
+    // Relecture : seule une CI lancée par un push sur main compte (pas un lancement à la main d'ailleurs).
+    expect(condition).toContain("github.event.workflow_run.event == 'push'");
     expect(condition).toContain('github.event.workflow_run.head_repository.full_name == github.repository');
     // Le lancement à la main ne vaut que depuis main.
     expect(condition).toContain("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'");
+  });
+
+  it('tourne dans l’environnement production (secret réservé à main)', () => {
+    // Relecture : un secret de dépôt serait lisible par tout workflow de toute branche poussée ;
+    // un secret d'environnement « production », limité à main, ne l'est que par les jobs de main.
+    for (const [, job] of jobs(workflow)) {
+      const environnement: unknown = job.environment;
+      const nom = typeof environnement === 'string' ? environnement : objet(environnement ?? {}, 'environment').name;
+      expect(nom).toBe('production');
+    }
+    expect(jobs(workflow).length).toBe(1);
   });
 
   it('a des permissions minimales : contents: read, nulle part élargies', () => {
@@ -216,7 +231,87 @@ describe('T44 : scripts/migrer-production.sh', () => {
       expect(sortie).not.toContain(MESSAGE_ABSENT);
       expect(sortie).not.toContain('motdepasse-t44-secret');
       expect(sortie).not.toContain(adresse);
+      expect(sortie).not.toContain('127.0.0.1');
     },
     90_000,
   );
+
+  const IDENTIFIANTS = ['utilisateur-t44', 'mdp-t44-secret'];
+
+  it(
+    'adresse mal formée : échec sans l’adresse, l’utilisateur ni le mot de passe',
+    () => {
+      const adresse = 'postgres://utilisateur-t44:mdp-t44-secret@:pas un port/base';
+      const { code, sortie } = lancer({ ...environnementSans(), DATABASE_URL_PRODUCTION: adresse });
+      expect(code).not.toBe(0);
+      expect(sortie).not.toContain(MESSAGE_ABSENT);
+      for (const morceau of [adresse, ...IDENTIFIANTS]) expect(sortie).not.toContain(morceau);
+    },
+    90_000,
+  );
+
+  it(
+    'hôte inconnu : échec avec le code, sans l’hôte, l’utilisateur ni le mot de passe',
+    () => {
+      const hote = 'hote-inconnu-t44.invalid';
+      const adresse = `postgres://utilisateur-t44:mdp-t44-secret@${hote}:5432/base`;
+      const { code, sortie } = lancer({ ...environnementSans(), DATABASE_URL_PRODUCTION: adresse });
+      expect(code).not.toBe(0);
+      expect(sortie).toContain('ENOTFOUND');
+      for (const morceau of [adresse, hote, ...IDENTIFIANTS]) expect(sortie).not.toContain(morceau);
+    },
+    90_000,
+  );
+});
+
+describe('T44 : messageErreurNettoye (migrer.ts en cas d’échec)', () => {
+  const url = 'postgres://utilisateur-t44:mdp%2Dt44@db.exemple-t44.eu:5432/base';
+
+  it('donne le code et le message, sans l’adresse, l’hôte, l’utilisateur ni le mot de passe', () => {
+    const erreur = Object.assign(new Error('getaddrinfo ENOTFOUND db.exemple-t44.eu (utilisateur-t44, mdp-t44)'), {
+      code: 'ENOTFOUND',
+      hostname: 'db.exemple-t44.eu',
+    });
+    const message = messageErreurNettoye(erreur, url);
+    expect(message).toContain('ENOTFOUND');
+    expect(message).toContain('getaddrinfo');
+    for (const morceau of [url, 'db.exemple-t44.eu', 'utilisateur-t44', 'mdp-t44', 'mdp%2Dt44']) {
+      expect(message).not.toContain(morceau);
+    }
+  });
+
+  it('masque une adresse postgres et une adresse IP glissées dans le message', () => {
+    const erreur = new Error('échec sur postgresql://autre:secret@10.1.2.3:6543/x puis connect ECONNREFUSED 10.1.2.3:5432');
+    const message = messageErreurNettoye(erreur, 'adresse mal formée utilisateur-t44');
+    expect(message).not.toContain('secret');
+    expect(message).not.toContain('10.1.2.3');
+    expect(message).toContain('ECONNREFUSED');
+  });
+
+  it('erreur SQL : garde le code Postgres', () => {
+    const erreur = Object.assign(new Error('relation "ferme" does not exist'), { code: '42P01' });
+    expect(messageErreurNettoye(erreur, url)).toBe('code 42P01 : relation "ferme" does not exist');
+  });
+
+  it('valeur qui n’est pas une erreur : message générique', () => {
+    expect(messageErreurNettoye('postgres://utilisateur-t44:x@h/b', url)).not.toContain('utilisateur-t44');
+  });
+});
+
+describe('T44 : guide de mise en ligne', () => {
+  const guide = lireTexte(CHEMIN_GUIDE);
+
+  it('pose le secret dans l’environnement production, limité à main', () => {
+    expect(guide).toContain('Environments');
+    expect(guide).toContain('Selected branches and tags');
+    expect(guide).toContain('Add environment secret');
+    expect(guide).not.toContain('New repository secret');
+  });
+
+  it('nomme l’étape du workflow exactement comme le YAML', () => {
+    const workflow = lireYaml(CHEMIN_WORKFLOW);
+    const etape = etapes(workflow).find((e) => e.run?.includes('migrer-production.sh'));
+    expect(etape?.name).toBeDefined();
+    expect(guide).toContain(`« ${etape?.name ?? ''} »`);
+  });
 });
