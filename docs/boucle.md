@@ -57,14 +57,14 @@ Un conflit sur `docs/journal.md` ou `docs/backlog/README.md` entre deux PR se r�
 
 ## Fusion
 
+**Remarques de relecture** (décision de Théophane, 2026-10-19, « on a perdu en efficacité ») : elles se corrigent **dans la PR du ticket, avant la fusion**, pas dans un ticket de suite ; seul un vrai hors-périmètre (autre écran, autre règle, autre fichier que ceux du ticket) devient un ticket. Les petites demandes d'une même zone (même écran, même module) sont **regroupées en un seul ticket** plutôt qu'un ticket chacune.
+
 Décision de Théophane (2026-09-29) : la boucle fusionne seule. Une PR est fusionnée par le chef d'équipe, méthode « merge » (commit de fusion), quand **toutes** ces conditions sont réunies :
 
 - la CI GitHub est verte sur le dernier commit de la PR : le job **« CI verte »** du workflow « CI », qui dépend de tous les jobs de vérification lancés en parallèle (T45), a conclu `success` ;
 - le relecteur n'a laissé aucun point bloquant ouvert ;
 - aucun commentaire de Théophane n'attend de réponse sur la PR ;
 - la PR vise `main` (une PR empilée attend que sa dépendance soit fusionnée, puis est redirigée vers `main`).
-
-**Remarques de relecture** (décision de Théophane, 2026-10-19, « on a perdu en efficacité ») : elles se corrigent **dans la PR du ticket, avant la fusion**, pas dans un ticket de suite ; seul un vrai hors-périmètre (autre écran, autre règle, autre fichier que ceux du ticket) devient un ticket. Les petites demandes d'une même zone (même écran, même module) sont **regroupées en un seul ticket** plutôt qu'un ticket chacune.
 
 Jamais de fusion avec une CI rouge ou en cours, jamais de push direct sur `main`, jamais de test désactivé pour passer. Une PR qui ne remplit pas ces conditions reste ouverte, en « en revue », et le journal dit pourquoi. Les conflits sur `docs/journal.md`, `docs/backlog/README.md` ou `docs/questions.md` se résolvent en gardant toutes les entrées. Après la fusion, vérifier que la CI de `main` reste verte ; sinon, la corriger avant tout nouveau ticket.
 
