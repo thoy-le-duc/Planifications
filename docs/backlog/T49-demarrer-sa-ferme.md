@@ -17,9 +17,9 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests : créer, modifier, supprimer une saison ; refus lisibles (dates incohérentes, nom vide).
-- [ ] Tests : créer une zone, ajouter 10 planches « P » de 30 × 0,8 m en un geste (codes P1…P10), refus d'un code en double dans la zone.
-- [ ] Tests : bandeau « Démarrer votre ferme » avec les étapes cochées selon l'état réel ; disparaît quand une série existe.
-- [ ] Tests : états vides de Planches et Aujourd'hui avec leur bouton.
-- [ ] e2e : ferme neuve → saison en un tap → zone + 10 planches → itinéraire de la bibliothèque → nouvelle série → elle apparaît dans Planches et ses travaux dans Aujourd'hui (si possible sur la pile de synchro, sinon base locale simulée).
-- [ ] Budgets (démarrage, temps d'affichage) tenus ; `pnpm verif` passe.
+- [x] Tests : créer, modifier, supprimer une saison ; refus lisibles (dates incohérentes, nom vide).
+- [x] Tests : créer une zone, ajouter 10 planches « P » de 30 × 0,8 m en un geste (codes P1…P10), refus d'un code en double dans la zone.
+- [x] Tests : bandeau « Démarrer votre ferme » avec les étapes cochées selon l'état réel ; disparaît quand une série existe.
+- [x] Tests : états vides de Planches et Aujourd'hui avec leur bouton.
+- [x] e2e : ferme neuve → saison en un tap → zone + 10 planches → itinéraire de la bibliothèque → nouvelle série → elle apparaît dans Planches et ses travaux dans Aujourd'hui (si possible sur la pile de synchro, sinon base locale simulée).
+- [x] Budgets (démarrage, temps d'affichage) tenus ; `pnpm verif` passe.
