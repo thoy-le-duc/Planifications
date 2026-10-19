@@ -189,16 +189,6 @@ function recolteDuJour(culture: CultureDePlanche, jour: DateCalendaire): { reado
     : { recolte: recoltePerenneA(culture.croissance.entree, jour), jaunissement: jaunissementPerenneA(culture.croissance.entree, jour) };
 }
 
-/**
- * Position en travers (m, depuis l'axe de la planche) de chaque rang. Sans écart saisi : au milieu de
- * bandes égales (T32b). Avec l'écart (T46) : à cet écart, centrés ; un rang qui sortirait de la planche
- * est resserré au bord, les autres gardent l'écart saisi.
- */
-function rangsEnTravers(largeur: number, rangs: number, ecartM: number | null): number[] {
-  const limite = Math.max(0, largeur / 2 - Math.min(MARGE_BORD_M, largeur / 4));
-  return Array.from({ length: rangs }, (_, r) => (ecartM === null ? ((r + 0.5) / rangs - 0.5) * largeur : Math.min(limite, Math.max(-limite, (r - (rangs - 1) / 2) * ecartM))));
-}
-
 /** Point de scène à `dx` le long du rang et `dz` en travers, depuis le centre de la planche. */
 const versScene = (v: VolumePlant, dx: number, dz: number): { x: number; z: number } => {
   const cos = Math.cos(v.angle);
@@ -217,9 +207,6 @@ function positionsDe(v: VolumePlant, dzs: readonly number[], parRang: number, qu
   return positions;
 }
 
-/** L'écart saisi (m) s'il est utilisable, sinon null (bandes égales). */
-const ecartSaisi = (c: CultureDePlanche): number | null => (c.ecartEntreRangsM !== undefined && Number.isFinite(c.ecartEntreRangsM) && c.ecartEntreRangsM > 0 ? c.ecartEntreRangsM : null);
-
 /** Les plants d'une planche pour ce jour, ou nul quand rien ne se dessine. */
 export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
   const { volume, culture, jour, horsSol } = entree;
@@ -231,12 +218,16 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
   if (auRepos && structureM === 0) return null;
 
   const ecart = culture.ecartementM > 0 ? culture.ecartementM : 0.3;
-  const ecartRangs = ecartSaisi(culture);
-  const saisis = culture.rangsParPlanche;
-  const rangs = ecartRangs !== null && saisis !== undefined && Number.isFinite(saisis) && saisis >= 1 ? Math.min(RANGS_MAX_SAISIS, Math.floor(saisis)) : Math.min(RANGS_MAX, Math.max(1, Math.round(volume.largeur / LARGEUR_PAR_RANG_M)));
+  // T46 : avec l'écart entre rangs saisi, les rangs de la densité (8 au plus) ; sans lui, la largeur décide (T32b).
+  const e = culture.ecartEntreRangsM ?? 0;
+  const n = culture.rangsParPlanche ?? 0;
+  const rangs = e > 0 && n >= 1 ? Math.min(RANGS_MAX_SAISIS, Math.floor(n)) : Math.min(RANGS_MAX, Math.max(1, Math.round(volume.largeur / LARGEUR_PAR_RANG_M)));
   const parRang = Math.max(1, Math.min(Math.floor(volume.longueur / ecart), Math.floor(PLANTS_MAX_PAR_PLANCHE / rangs)));
   const quinconce = culture.disposition === 'quinconce' && rangs > 1;
-  const dzs = rangsEnTravers(volume.largeur, rangs, ecartRangs);
+  // Position en travers de chaque rang : au milieu de bandes égales (T32b) ; avec l'écart saisi (T46), à cet écart et
+  // centrés, un rang qui sortirait de la planche resserré au bord (les autres gardent l'écart).
+  const limite = Math.max(0, volume.largeur / 2 - Math.min(MARGE_BORD_M, volume.largeur / 4));
+  const dzs = Array.from({ length: rangs }, (_, r) => (e > 0 ? Math.min(limite, Math.max(-limite, (r - (rangs - 1) / 2) * e)) : ((r + 0.5) / rangs - 0.5) * volume.largeur));
   const positions = positionsDe(volume, dzs, parRang, quinconce);
   const surelevationM = surelevationHorsSolM(culture.espece, horsSol);
   const { recolte, jaunissement } = recolteDuJour(culture, jour);
@@ -264,7 +255,7 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
     tailleFruitM: avecFruits ? TAILLE_FRUIT_MURE_M[typeFruit] * (PART_FRUIT_NAISSANT + (1 - PART_FRUIT_NAISSANT) * recolte.maturite) : 0,
     jaunissement,
     positions,
-    lignesRangs: ecartRangs === null || surelevationM > 0 ? [] : dzs.map((dz) => versScene(volume, 0, dz)),
+    lignesRangs: e > 0 && !surelevationM ? dzs.map((dz) => versScene(volume, 0, dz)) : [],
   };
 }
 

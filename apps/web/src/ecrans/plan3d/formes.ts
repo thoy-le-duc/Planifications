@@ -4,7 +4,7 @@
  * échelle par serre), un seul toit ; le sol de toutes les zones est UNE géométrie fusionnée.
  * Pas de React ici : ce fichier ne dépend que de three et de la scène (pure), et se teste sous Node.
  */
-import { BoxGeometry, BufferGeometry, CircleGeometry, CylinderGeometry, Float32BufferAttribute, Matrix4, ShapeUtils, TorusGeometry, Vector2 } from 'three';
+import { BoxGeometry, BufferGeometry, Float32BufferAttribute, ShapeUtils, Vector2 } from 'three';
 import { coinsRectScene, type PointScene, type SocleScene } from './scene.ts';
 
 /** Contour au sol d'un socle : son contour s'il en a un, sinon son rectangle (tourné). */
@@ -53,15 +53,39 @@ export function geometrieSol(empreintes: readonly (readonly PointScene[])[], epa
   return g;
 }
 
-/** Cyclique (x, y, z) → (z, x, y) : une rotation, l'axe du cylindre (y) devient z. */
-const AXE_Y_VERS_Z = new Matrix4().set(0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1);
+/**
+ * Géométrie non indexée à partir de ses sommets et de leurs normales. Arceau, bâche et bout sont écrits
+ * ici plutôt que pris à TorusGeometry, CylinderGeometry et CircleGeometry (T46) : mêmes triangles, et ces
+ * classes de three ne pèsent plus dans la vue 3D.
+ */
+function geometrieDe(positions: readonly number[], normales: readonly number[]): BufferGeometry {
+  const g = new BufferGeometry();
+  g.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  g.setAttribute('normal', new Float32BufferAttribute(normales, 3));
+  return g;
+}
 
 /**
  * Un arceau : demi-cercle de rayon 0,5 dans le plan x-y (de x = −0,5 à 0,5, jusqu'à y = 0,5), tube
  * fin. L'échelle (largeur, 2 × hauteur, ~) en fait l'arceau d'une chapelle.
  */
 export function geometrieArceau(): BufferGeometry {
-  return new TorusGeometry(0.5, 0.008, 3, 8, Math.PI);
+  // Le demi-tore de TorusGeometry(0,5, 0,008, 3, 8, π).
+  const positions: number[] = [];
+  const normales: number[] = [];
+  const sommet = (i: number, j: number): void => {
+    const u = (i * Math.PI) / 8;
+    const v = (j * 2 * Math.PI) / 3;
+    const n = [Math.cos(v) * Math.cos(u), Math.cos(v) * Math.sin(u), Math.sin(v)] as const;
+    positions.push(0.5 * Math.cos(u) + 0.008 * n[0], 0.5 * Math.sin(u) + 0.008 * n[1], 0.008 * n[2]);
+    normales.push(...n);
+  };
+  for (let j = 0; j < 3; j += 1) {
+    for (let i = 0; i < 8; i += 1) {
+      for (const [a, b] of [[i, j], [i + 1, j], [i + 1, j + 1], [i, j], [i + 1, j + 1], [i, j + 1]] as const) sommet(a, b);
+    }
+  }
+  return geometrieDe(positions, normales);
 }
 
 /**
@@ -69,14 +93,28 @@ export function geometrieArceau(): BufferGeometry {
  * 0,5), face extérieure en avant. Échelle (largeur, 2 × hauteur, profondeur).
  */
 export function geometrieBache(): BufferGeometry {
-  const g = new CylinderGeometry(0.5, 0.5, 1, 10, 1, true, 0, Math.PI);
-  g.applyMatrix4(AXE_Y_VERS_Z);
-  return g;
+  // Le demi-cylindre ouvert de CylinderGeometry(0,5, 0,5, 1, 10, 1, true, 0, π), son axe (y) tourné vers z.
+  const positions: number[] = [];
+  const normales: number[] = [];
+  for (let k = 0; k < 10; k += 1) {
+    for (const [a, z] of [[k, 0.5], [k, -0.5], [k + 1, 0.5], [k, -0.5], [k + 1, -0.5], [k + 1, 0.5]] as const) {
+      const t = (a * Math.PI) / 10;
+      positions.push(0.5 * Math.cos(t), 0.5 * Math.sin(t), z);
+      normales.push(Math.cos(t), Math.sin(t), 0);
+    }
+  }
+  return geometrieDe(positions, normales);
 }
 
-/** Le bout d'un tunnel : demi-disque de rayon 0,5 dans le plan x-y, face vers +z. */
+/**
+ * Le bout d'un tunnel : demi-disque de rayon 0,5 dans le plan x-y, face vers +z, en éventail de 10
+ * triangles (ceux de CircleGeometry).
+ */
 export function geometrieBout(): BufferGeometry {
-  return new CircleGeometry(0.5, 10, 0, Math.PI);
+  const positions: number[] = [];
+  const coin = (k: number): [number, number, number] => [0.5 * Math.cos((k * Math.PI) / 10), 0.5 * Math.sin((k * Math.PI) / 10), 0];
+  for (let k = 0; k < 10; k += 1) positions.push(0, 0, 0, ...coin(k), ...coin(k + 1));
+  return geometrieDe(positions, positions.map((_, i) => (i % 3 === 2 ? 1 : 0)));
 }
 
 /**
@@ -102,10 +140,7 @@ export function geometriePlanche(): BufferGeometry {
       normales.push(n[0] ?? 0, n[1] ?? 0, n[2] ?? 0);
     }
   }
-  const g = new BufferGeometry();
-  g.setAttribute('position', new Float32BufferAttribute(positions, 3));
-  g.setAttribute('normal', new Float32BufferAttribute(normales, 3));
-  return g;
+  return geometrieDe(positions, normales);
 }
 
 /** Les murs d'un volume simple : un cube unité, posé par l'échelle. */
