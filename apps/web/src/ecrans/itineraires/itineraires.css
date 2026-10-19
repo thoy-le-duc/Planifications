@@ -1215,3 +1215,11 @@ select.itin-liste {
 .itin-croissance-actions {
   flex-wrap: wrap;
 }
+
+/* T42 : écart entre rangs et écart équivalent sur le rang, sous la densité. */
+.itin-ecarts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 8px;
+}

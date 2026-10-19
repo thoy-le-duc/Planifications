@@ -71,6 +71,16 @@ const etat = (migration: string): db.LignesBibliotheque => {
   return e.lignes;
 };
 
+/**
+ * T42 : la dernière migration de bibliothèque et le numéro libre suivant, lus dans le dépôt (0033
+ * n'est plus la dernière depuis 0034_bibliotheque_travaux) ; les tests de la mécanique ne
+ * dépendent plus du nombre de migrations de bibliothèque déjà fusionnées.
+ */
+const DERNIERE = etats.at(-1)?.migration ?? '';
+const IDX_DERNIER_JOURNAL = Math.max(...depot.journal.entries.map((e) => e.idx));
+const SUIVANT = String(IDX_DERNIER_JOURNAL + 1).padStart(4, '0');
+const APRES_SUIVANT = String(IDX_DERNIER_JOURNAL + 2).padStart(4, '0');
+
 /** Instructions SQL sans commentaires, comme drizzle les découpe. */
 const instructions = (sql: string): string[] =>
   sql
@@ -107,10 +117,11 @@ describe('T41b : le JSON courant = 0032 + migrations de bibliothèque suivantes'
     expect(db.verifierBibliotheque(depot)).toEqual([]);
   });
 
-  it('les migrations de bibliothèque sont 0032 puis 0033 (melon), toutes au journal', () => {
-    expect(etats.map((e) => e.migration)).toEqual([db.MIGRATION_BIBLIOTHEQUE_DEPART, MIGRATION_MELON]);
+  it('les migrations de bibliothèque commencent par 0032 puis 0033 (melon), toutes au journal', () => {
+    expect(etats.map((e) => e.migration).slice(0, 2)).toEqual([db.MIGRATION_BIBLIOTHEQUE_DEPART, MIGRATION_MELON]);
     const journal = (JSON.parse(lire('migrations/meta/_journal.json')) as { entries: { idx: number; tag: string }[] }).entries;
     expect(journal.find((e) => e.tag === MIGRATION_MELON)?.idx).toBe(33);
+    for (const e of etats) expect(journal.some((x) => x.tag === e.migration), e.migration).toBe(true);
   });
 
   it('le dernier état est exactement la conversion du JSON courant', () => {
@@ -240,7 +251,8 @@ describe('T41b : sqlMiseAJourBibliotheque', () => {
       itineraires: s.itineraires.filter((i) => i.nom !== MELON_APRES),
     };
     const apres = db.convertirBibliotheque({ ...s, ...nouvelle });
-    const inst = instructions(db.sqlMiseAJourBibliotheque('0034_ajout', e33(), apres) ?? '');
+    // T42 : depuis le dernier état (le JSON courant), pas depuis 0033 : seuls l'ajout et le retrait changent.
+    const inst = instructions(db.sqlMiseAJourBibliotheque('0034_ajout', etat(DERNIERE), apres) ?? '');
     expect(inst.map((x) => /^(INSERT INTO|UPDATE) (\w+)/.exec(x)?.slice(1).join(' '))).toEqual(['INSERT INTO famille', 'INSERT INTO espece', 'UPDATE itineraire']);
     expect(inst[0]).toMatch(/WHERE famille\.ferme_id IS NULL/);
     expect(inst[1]).toMatch(/WHERE espece\.ferme_id IS NULL/);
@@ -268,7 +280,7 @@ describe('T41b : préparer une migration de bibliothèque (le script `bibliotheq
   });
 
   it('nom mal formé ou numéro qui ne suit pas le journal : refusé', () => {
-    for (const nom of ['melon', '34_melon', '0034-melon', '0034_Melon', '0035_melon']) {
+    for (const nom of ['melon', '34_melon', `${SUIVANT}-melon`, `${SUIVANT}_Melon`, `${APRES_SUIVANT}_melon`, '0034_melon']) {
       expect(db.preparerMigrationBibliotheque(nom, { ...depot, courant: modifie }, options).ok, nom).toBe(false);
     }
   });
@@ -278,37 +290,37 @@ describe('T41b : préparer une migration de bibliothèque (le script `bibliotheq
   });
 
   it('rien à écrire (JSON = dernier état) : refusé', () => {
-    const r = db.preparerMigrationBibliotheque('0034_rien', depot, options);
+    const r = db.preparerMigrationBibliotheque(`${SUIVANT}_rien`, depot, options);
     expect(r.ok ? '' : r.erreur).toMatch(/rien/i);
   });
 
   it('nouvelle migration : SQL, état, entrée du journal et instantané chaîné', () => {
-    const r = db.preparerMigrationBibliotheque('0034_bibliotheque_melon_fenetre', { ...depot, courant: modifie }, options);
+    const r = db.preparerMigrationBibliotheque(`${SUIVANT}_bibliotheque_melon_fenetre`, { ...depot, courant: modifie }, options);
     if (!r.ok) throw new Error(r.erreur);
     const fichiers = new Map(r.fichiers.map((f) => [f.chemin, f.contenu]));
     expect([...fichiers.keys()].sort()).toEqual([
-      'bibliotheque/etats/0034_bibliotheque_melon_fenetre.json',
-      'migrations/0034_bibliotheque_melon_fenetre.sql',
-      'migrations/meta/0034_snapshot.json',
+      `bibliotheque/etats/${SUIVANT}_bibliotheque_melon_fenetre.json`,
+      `migrations/${SUIVANT}_bibliotheque_melon_fenetre.sql`,
+      `migrations/meta/${SUIVANT}_snapshot.json`,
       'migrations/meta/_journal.json',
     ]);
-    expect(fichiers.get('migrations/0034_bibliotheque_melon_fenetre.sql')).toBe(
-      db.sqlMiseAJourBibliotheque('0034_bibliotheque_melon_fenetre', etat(MIGRATION_MELON), modifie),
+    expect(fichiers.get(`migrations/${SUIVANT}_bibliotheque_melon_fenetre.sql`)).toBe(
+      db.sqlMiseAJourBibliotheque(`${SUIVANT}_bibliotheque_melon_fenetre`, etat(DERNIERE), modifie),
     );
-    const etatEcrit = JSON.parse(fichiers.get('bibliotheque/etats/0034_bibliotheque_melon_fenetre.json') ?? '') as { migration: string } & db.LignesBibliotheque;
-    expect(etatEcrit).toEqual({ migration: '0034_bibliotheque_melon_fenetre', ...modifie });
+    const etatEcrit = JSON.parse(fichiers.get(`bibliotheque/etats/${SUIVANT}_bibliotheque_melon_fenetre.json`) ?? '') as { migration: string } & db.LignesBibliotheque;
+    expect(etatEcrit).toEqual({ migration: `${SUIVANT}_bibliotheque_melon_fenetre`, ...modifie });
     const journal = JSON.parse(fichiers.get('migrations/meta/_journal.json') ?? '') as { entries: { idx: number; tag: string; when: number; version: string; breakpoints: boolean }[] };
-    expect(journal.entries.at(-1)).toEqual({ idx: 34, version: '7', when: options.maintenant, tag: '0034_bibliotheque_melon_fenetre', breakpoints: true });
+    expect(journal.entries.at(-1)).toEqual({ idx: IDX_DERNIER_JOURNAL + 1, version: '7', when: options.maintenant, tag: `${SUIVANT}_bibliotheque_melon_fenetre`, breakpoints: true });
     expect(journal.entries.slice(0, -1)).toEqual((JSON.parse(lire('migrations/meta/_journal.json')) as typeof journal).entries);
-    const precedent = JSON.parse(lire('migrations/meta/0033_snapshot.json')) as Record<string, unknown>;
-    const instantane = JSON.parse(fichiers.get('migrations/meta/0034_snapshot.json') ?? '') as Record<string, unknown>;
+    const precedent = JSON.parse(lire(`migrations/meta/${String(IDX_DERNIER_JOURNAL).padStart(4, '0')}_snapshot.json`)) as Record<string, unknown>;
+    const instantane = JSON.parse(fichiers.get(`migrations/meta/${SUIVANT}_snapshot.json`) ?? '') as Record<string, unknown>;
     expect(instantane).toEqual({ ...precedent, id: options.nouvelId(), prevId: precedent.id });
   });
 
   it('la dernière migration de bibliothèque, pas encore fusionnée : réécrite depuis l’état précédent ; sur le dépôt, les mêmes fichiers', () => {
-    const r = db.preparerMigrationBibliotheque(MIGRATION_MELON, depot, options);
+    const r = db.preparerMigrationBibliotheque(DERNIERE, depot, options);
     if (!r.ok) throw new Error(r.erreur);
-    expect(r.fichiers.map((f) => f.chemin).sort()).toEqual([`bibliotheque/etats/${MIGRATION_MELON}.json`, `migrations/${MIGRATION_MELON}.sql`]);
+    expect(r.fichiers.map((f) => f.chemin).sort()).toEqual([`bibliotheque/etats/${DERNIERE}.json`, `migrations/${DERNIERE}.sql`]);
     for (const f of r.fichiers) expect(f.contenu, f.chemin).toBe(lire(f.chemin));
   });
 });

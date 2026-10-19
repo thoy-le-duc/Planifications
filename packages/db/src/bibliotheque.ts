@@ -22,6 +22,7 @@ import type {
   ModeItineraire,
   ParametresItineraire,
   RendementAttendu,
+  TravailPrevu,
   TypeAbri,
   UniteRecolte,
 } from '@planif/core';
@@ -85,6 +86,11 @@ export interface SourceItineraire {
   readonly fenetreRecolteJours: number;
   readonly margeSecuritePct: number;
   readonly rendementAttendu: { readonly par: 'metre' | 'plant'; readonly kg: number } | null;
+  /**
+   * Travaux prévus (T22, T42), au format du cœur, toutes les clés écrites ; absents : aucun travail
+   * (l'état 0032 n'en avait pas). Types de la liste de départ (TYPES_INTERVENTION_PAR_DEFAUT).
+   */
+  readonly travauxPrevus?: readonly TravailPrevu[];
   readonly sources: readonly { readonly titre: string; readonly url: string }[];
   readonly aVerifier: string;
 }
@@ -186,6 +192,7 @@ function parametres(i: SourceItineraire): ParametresItineraire {
     margeSecurite: i.margeSecuritePct,
     rendementAttendu: rendement,
     perenne: null,
+    ...(i.travauxPrevus === undefined ? {} : { travauxPrevus: i.travauxPrevus }),
   };
   switch (i.mode) {
     case 'semis_direct': {

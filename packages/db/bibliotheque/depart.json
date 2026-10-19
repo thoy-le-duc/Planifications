@@ -1,6 +1,6 @@
 {
   "meta": {
-    "version": "2026-10-17",
+    "version": "2026-10-19",
     "statut": "Valeurs usuelles arrondies, indépendantes, à valider par le maraîcher",
     "hypotheses": [
       "Planche permanente d'environ 75 cm de large et 30 m de long, passe-pied d'environ 45 cm.",
@@ -8,7 +8,9 @@
       "rendementAttendu 'par plant' = kg par plant, ou par motte pour les mottes multigraines.",
       "dureeAvantRecolteJours compte depuis la mise en place (plantation ou semis direct).",
       "periodeUsage : semaines ISO de mise en place, France tempérée.",
-      "Ail : caïeux traités comme semis direct à l'écartement (1 caïeu par poquet)."
+      "Ail : caïeux traités comme semis direct à l'écartement (1 caïeu par poquet).",
+      "travauxPrevus (T42) : repères et décalages en jours depuis la mise en place ou la récolte ; compost en kg/m², engrais organique en g/m² ; types de la liste de départ.",
+      "Écartements (T42) : semis directs de graines comptables (carotte, radis, navet, épinard, haricot, pois) à l'écartement ; fines graines (mesclun, roquette, aneth, coriandre) au mètre linéaire."
     ]
   },
   "familles": [
@@ -316,6 +318,131 @@
         "par": "plant",
         "kg": 3.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "toile tissée",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "palissage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "ficelle et clips",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "taille",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "effeuillage",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "fin_recolte"
+          },
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 50,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
@@ -324,9 +451,17 @@
         {
           "titre": "OptiAbriBio – rotations Solanacées/Cucurbitacées sous abris en bio (compte rendu)",
           "url": "https://orgprints.org/id/eprint/43816/1/CR_OptiAbriBio_Valo.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "GRAB – Fertilisation de l'aubergine sous abri en AB (fiche 2003)",
+          "url": "https://www.grab.fr/wp-content/uploads/2022/02/Fiche2MarPACAFertiAuberg2003.pdf"
         }
       ],
-      "aVerifier": "Rendement très dépendant du chauffage et de la durée de culture ; plant greffé possible."
+      "aVerifier": "Rendement très dépendant du chauffage et de la durée de culture ; plant greffé possible. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "aubergine",
@@ -358,6 +493,131 @@
         "par": "plant",
         "kg": 2.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "toile tissée",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "palissage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "ficelle et clips",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "taille",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "effeuillage",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "fin_recolte"
+          },
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 50,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
@@ -366,9 +626,17 @@
         {
           "titre": "OptiAbriBio – rotations Solanacées/Cucurbitacées sous abris en bio (compte rendu)",
           "url": "https://orgprints.org/id/eprint/43816/1/CR_OptiAbriBio_Valo.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "GRAB – Fertilisation de l'aubergine sous abri en AB (fiche 2003)",
+          "url": "https://www.grab.fr/wp-content/uploads/2022/02/Fiche2MarPACAFertiAuberg2003.pdf"
         }
       ],
-      "aVerifier": "En plein champ au nord de la Loire, rendement nettement plus faible."
+      "aVerifier": "En plein champ au nord de la Loire, rendement nettement plus faible. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "poivron",
@@ -400,6 +668,118 @@
         "par": "plant",
         "kg": 2.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "toile tissée",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "palissage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "ficelle",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "effeuillage",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "fin_recolte"
+          },
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 50,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
@@ -408,9 +788,13 @@
         {
           "titre": "OptiAbriBio – rotations Solanacées/Cucurbitacées sous abris en bio (compte rendu)",
           "url": "https://orgprints.org/id/eprint/43816/1/CR_OptiAbriBio_Valo.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Durée avant récolte : poivron vert plus tôt, coloré 2-3 semaines plus tard."
+      "aVerifier": "Durée avant récolte : poivron vert plus tôt, coloré 2-3 semaines plus tard. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "poivron",
@@ -442,6 +826,118 @@
         "par": "plant",
         "kg": 1.5
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "toile tissée",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "palissage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "ficelle",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "effeuillage",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "fin_recolte"
+          },
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 50,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
@@ -450,9 +946,13 @@
         {
           "titre": "Agrobio Bretagne – Fiche technique gestion des abris",
           "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2021/04/FICHE_TK_GESTION_ABRIS_WEB.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement plein champ faible en zone fraîche ; à ajuster par région."
+      "aVerifier": "Rendement plein champ faible en zone fraîche ; à ajuster par région. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "piment",
@@ -484,6 +984,118 @@
         "par": "plant",
         "kg": 0.8
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "toile tissée",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "palissage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "ficelle",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "effeuillage",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "fin_recolte"
+          },
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 50,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
@@ -492,9 +1104,13 @@
         {
           "titre": "Agrobio Bretagne – Fiche technique gestion des abris",
           "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2021/04/FICHE_TK_GESTION_ABRIS_WEB.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement très variable selon le type (Cayenne, Espelette, habanero)."
+      "aVerifier": "Rendement très variable selon le type (Cayenne, Espelette, habanero). Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "tomate",
@@ -526,6 +1142,131 @@
         "par": "plant",
         "kg": 8.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 120,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "toile tissée",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "palissage",
+          "repere": "mise_en_place",
+          "decalageJours": 7,
+          "repetition": {
+            "tousLesJours": 7,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "ficelle et clips",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "taille",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 7,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "effeuillage",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "fin_recolte"
+          },
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 50,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "GRAB – Bilan essai variétés tomate grappe sous abri bio 2021",
@@ -538,9 +1279,21 @@
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Tarn-et-Garonne – Fiche technico-économique tomate sous tunnel (2013)",
+          "url": "https://agri82.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Occitanie/FTE_tomate_tunnel_2013.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique tomates",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2012/04/fiche_tomates.pdf"
         }
       ],
-      "aVerifier": "Rendement par plant greffé deux têtes : 6 à 12 kg selon durée et chauffage."
+      "aVerifier": "Rendement par plant greffé deux têtes : 6 à 12 kg selon durée et chauffage. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "tomate",
@@ -572,6 +1325,131 @@
         "par": "plant",
         "kg": 4.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "toile tissée",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "palissage",
+          "repere": "mise_en_place",
+          "decalageJours": 7,
+          "repetition": {
+            "tousLesJours": 7,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "ficelle et clips",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "taille",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 7,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "effeuillage",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "fin_recolte"
+          },
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 50,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "GRAB – Bilan essai variétés tomate grappe sous abri bio 2021",
@@ -580,9 +1458,21 @@
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Tarn-et-Garonne – Fiche technico-économique tomate sous tunnel (2013)",
+          "url": "https://agri82.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Occitanie/FTE_tomate_tunnel_2013.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique tomates",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2012/04/fiche_tomates.pdf"
         }
       ],
-      "aVerifier": "Plein champ : mildiou et cycle plus court, rendement souvent 2-3 kg/plant."
+      "aVerifier": "Plein champ : mildiou et cycle plus court, rendement souvent 2-3 kg/plant. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "pomme de terre",
@@ -614,6 +1504,77 @@
         "par": "plant",
         "kg": 0.8
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "buttage",
+          "repere": "mise_en_place",
+          "decalageJours": 25,
+          "repetition": null,
+          "outil": "butteuse",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "buttage",
+          "repere": "mise_en_place",
+          "decalageJours": 40,
+          "repetition": null,
+          "outil": "butteuse",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture Corrèze – Fiche technique pomme de terre bio (2013)",
@@ -622,9 +1583,13 @@
         {
           "titre": "Chambre d'agriculture de l'Ain – Culture biologique de la pomme de terre (2013)",
           "url": "https://ain.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_pomme_de_terre_2013.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Une seule rangée par planche de 75 cm pour butter ; rendement 5 à 45 t/ha."
+      "aVerifier": "Une seule rangée par planche de 75 cm pour butter ; rendement 5 à 45 t/ha. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "gingembre",
@@ -656,6 +1621,96 @@
         "par": "plant",
         "kg": 0.4
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "buttage",
+          "repere": "mise_en_place",
+          "decalageJours": 45,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": 30,
+          "repetition": null,
+          "outil": "paille",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "UNH Extension – Ginger production in high tunnels",
@@ -664,9 +1719,13 @@
         {
           "titre": "University of Delaware Extension – Growing Baby Ginger",
           "url": "https://sites.udel.edu/weeklycropupdate?p=21228"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Culture rare en France : références surtout nord-américaines, rendement et durée très incertains."
+      "aVerifier": "Culture rare en France : références surtout nord-américaines, rendement et durée très incertains. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "concombre",
@@ -698,6 +1757,131 @@
         "par": "plant",
         "kg": 5.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "toile tissée",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "palissage",
+          "repere": "mise_en_place",
+          "decalageJours": 5,
+          "repetition": {
+            "tousLesJours": 7,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "ficelle et clips",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "taille",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 7,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "effeuillage",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "fin_recolte"
+          },
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 50,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
@@ -710,9 +1894,13 @@
         {
           "titre": "Agrobio Bretagne – Fiche technique gestion des abris",
           "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2021/04/FICHE_TK_GESTION_ABRIS_WEB.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement selon type (long, mini) et taille ; souvent deux plantations successives."
+      "aVerifier": "Rendement selon type (long, mini) et taille ; souvent deux plantations successives. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "courgette",
@@ -744,6 +1932,73 @@
         "par": "plant",
         "kg": 4.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "paillage biodégradable",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Agrobio Bretagne – Fiche technique courgette",
@@ -756,9 +2011,13 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Fenêtre de récolte limitée par l'oïdium ; rendement 3 à 6 kg/plant."
+      "aVerifier": "Fenêtre de récolte limitée par l'oïdium ; rendement 3 à 6 kg/plant. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "courge d'hiver",
@@ -790,6 +2049,73 @@
         "par": "plant",
         "kg": 2.5
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "paillage biodégradable",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture Haute-Garonne/Gers – Fiche courge (2022)",
@@ -802,9 +2128,13 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement 10 à 20 t/ha et 20 % de pertes au stockage ; ajuster selon variété."
+      "aVerifier": "Rendement 10 à 20 t/ha et 20 % de pertes au stockage ; ajuster selon variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "melon",
@@ -837,6 +2167,83 @@
         "par": "plant",
         "kg": 2.5
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "paillage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "paillage biodégradable",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "taille",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": null,
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
@@ -845,9 +2252,17 @@
         {
           "titre": "APREL / DEPHY – Fiche PBI melon sous abri (2023)",
           "url": "https://pprod.ecophytopic.fr/sites/default/files/2024-03/23-027%20AGRECOMEL%20PBI%20melon%202023.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "GRAB – Fertilisation du melon en AB (fiche 2004)",
+          "url": "https://www.grab.fr/wp-content/uploads/2022/02/Fiche2MarPACA-Ferti-melons-2004.pdf"
         }
       ],
-      "aVerifier": "Rangé en plein champ : la chenille (petit tunnel) reste conseillée hors du Sud pour avancer la récolte ; si vous la posez, adaptez l'abri et la période dans votre copie. Ancien nom : « Melon sous chenille, plant maison »."
+      "aVerifier": "Rangé en plein champ : la chenille (petit tunnel) reste conseillée hors du Sud pour avancer la récolte ; si vous la posez, adaptez l'abri et la période dans votre copie. Ancien nom : « Melon sous chenille, plant maison ». Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "ail",
@@ -879,6 +2294,57 @@
         "par": "metre",
         "kg": 1.6
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 30,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture Occitanie – BSV bilan ail 2021",
@@ -887,9 +2353,13 @@
         {
           "titre": "Chambre d'agriculture Dordogne – Bulletin maraîchage AB, septembre 2022",
           "url": "https://dordogne.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/CRANA_BIO/MARAICHAGE_AB_BULLETIN_SEPT_2022.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Écartement et rendement au mètre peu documentés en source publique ; à confirmer."
+      "aVerifier": "Écartement et rendement au mètre peu documentés en source publique ; à confirmer. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "oignon",
@@ -921,6 +2391,57 @@
         "par": "metre",
         "kg": 4.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture Occitanie – Fiche technico-économique oignon botte (2012)",
@@ -929,9 +2450,13 @@
         {
           "titre": "Chambre d'agriculture Auvergne-Rhône-Alpes – Culture biologique de l'oignon (2012)",
           "url": "https://aura.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Auvergne-Rhone-Alpes/AB_Culture_biologique_oignon_2012.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Nombre d'oignons par motte et poids vendu en botte à ajuster."
+      "aVerifier": "Nombre d'oignons par motte et poids vendu en botte à ajuster. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "oignon",
@@ -963,6 +2488,57 @@
         "par": "metre",
         "kg": 4.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture Auvergne-Rhône-Alpes – Culture biologique de l'oignon (2012)",
@@ -975,9 +2551,13 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Plantation après mi-mars : montaison moindre ; rendement bio très variable."
+      "aVerifier": "Plantation après mi-mars : montaison moindre ; rendement bio très variable. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "cébette",
@@ -1009,6 +2589,57 @@
         "par": "plant",
         "kg": 0.25
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture Occitanie – Fiche technico-économique oignon botte (2012)",
@@ -1017,9 +2648,13 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement compté par motte (une botte environ) ; espèce selon variété."
+      "aVerifier": "Rendement compté par motte (une botte environ) ; espèce selon variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "poireau",
@@ -1051,6 +2686,86 @@
         "par": "plant",
         "kg": 0.25
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "buttage",
+          "repere": "mise_en_place",
+          "decalageJours": 60,
+          "repetition": {
+            "tousLesJours": 30,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "butteuse",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture Charente-Maritime – Fiche technique poireau bio (2013)",
@@ -1059,9 +2774,13 @@
         {
           "titre": "Agrobio Bretagne – Fiche technique poireau (2019)",
           "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2020/12/FT-2019-Poireau-BD.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Pépinière en planche (pas de plaque) ; perte en pépinière à affiner."
+      "aVerifier": "Pépinière en planche (pas de plaque) ; perte en pépinière à affiner. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "carotte",
@@ -1080,11 +2799,12 @@
       "plantsParMotte": null,
       "pertePepinierePct": null,
       "densite": {
-        "facon": "metre_lineaire",
+        "facon": "ecartement",
         "rangsParPlanche": 4,
-        "grainesParMetre": 50
+        "ecartementCm": 2,
+        "disposition": "alignee"
       },
-      "grainesParPoquet": null,
+      "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 120,
       "fenetreRecolteJours": 60,
       "margeSecuritePct": 20,
@@ -1092,6 +2812,97 @@
         "par": "metre",
         "kg": 5.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "faux semis",
+          "repere": "mise_en_place",
+          "decalageJours": -10,
+          "repetition": null,
+          "outil": "herse étrille",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 5,
+          "repetition": null,
+          "outil": "désherbeur thermique",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "autre",
+          "repere": "mise_en_place",
+          "decalageJours": 0,
+          "repetition": null,
+          "outil": "filet anti-insectes",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "éclaircissage",
+          "repere": "mise_en_place",
+          "decalageJours": 30,
+          "repetition": null,
+          "outil": "à la main",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "FRAB AURA – Fiche pratique remarquable carotte",
@@ -1104,9 +2915,21 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique carotte",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2010/09/Carotte.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Creuse – Bulletin maraîchage, filets anti-insectes (mai 2020)",
+          "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Levée irrégulière en bio : rendement réel souvent 30 à 35 t/ha."
+      "aVerifier": "Levée irrégulière en bio : rendement réel souvent 30 à 35 t/ha. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 50 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "carotte",
@@ -1125,11 +2948,12 @@
       "plantsParMotte": null,
       "pertePepinierePct": null,
       "densite": {
-        "facon": "metre_lineaire",
-        "rangsParPlanche": 4,
-        "grainesParMetre": 70
+        "facon": "ecartement",
+        "rangsParPlanche": 5,
+        "ecartementCm": 2,
+        "disposition": "alignee"
       },
-      "grainesParPoquet": null,
+      "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 85,
       "fenetreRecolteJours": 21,
       "margeSecuritePct": 25,
@@ -1137,6 +2961,97 @@
         "par": "metre",
         "kg": 4.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "couverture",
+          "type": "bâchage ou occultation",
+          "repere": "mise_en_place",
+          "decalageJours": -28,
+          "repetition": null,
+          "outil": "bâche d'ensilage",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 5,
+          "repetition": null,
+          "outil": "désherbeur thermique",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "autre",
+          "repere": "mise_en_place",
+          "decalageJours": 0,
+          "repetition": null,
+          "outil": "filet anti-insectes",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "éclaircissage",
+          "repere": "mise_en_place",
+          "decalageJours": 25,
+          "repetition": null,
+          "outil": "à la main",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 21,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Ecophytopic – Produire des carottes bottes bio toute l'année sur compost de déchets verts",
@@ -1149,9 +3064,21 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "Agrobio Bretagne – Fiche technique carotte",
+          "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2010/09/Carotte.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Creuse – Bulletin maraîchage, filets anti-insectes (mai 2020)",
+          "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Semis précoces (février) sous tunnel ou voile : durée plus longue."
+      "aVerifier": "Semis précoces (février) sous tunnel ou voile : durée plus longue. Écartement (T42) : 5 rangs, une graine tous les 2 cm, converti depuis 4 rangs à 70 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "céleri branche",
@@ -1183,6 +3110,73 @@
         "par": "plant",
         "kg": 0.8
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "GRAB / Réf'Bio PACA – Dossier céleri branche (2023)",
@@ -1191,9 +3185,13 @@
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Pépinière longue et levée lente : perte en pépinière incertaine."
+      "aVerifier": "Pépinière longue et levée lente : perte en pépinière incertaine. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "fenouil",
@@ -1225,13 +3223,68 @@
         "par": "plant",
         "kg": 0.2
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "GRAB / Réf'Bio PACA – Dossier fenouil sous abris (2025)",
           "url": "https://www.grab.fr/wp-content/uploads/2025/07/RefBio2025-dossier-fenouil-abris.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Montaison en jours longs ; poids du mini-fenouil à fixer selon vente."
+      "aVerifier": "Montaison en jours longs ; poids du mini-fenouil à fixer selon vente. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "aneth",
@@ -1262,13 +3315,78 @@
         "par": "metre",
         "kg": 0.8
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "faux semis",
+          "repere": "mise_en_place",
+          "decalageJours": -10,
+          "repetition": null,
+          "outil": "herse étrille",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Herb Growing Guide Comparison Chart",
           "url": "https://johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw80b19107/assets/information/herb-growing-guide-comparison-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Montaison rapide l'été ; rendement en bottes par mètre peu documenté."
+      "aVerifier": "Montaison rapide l'été ; rendement en bottes par mètre peu documenté. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "coriandre",
@@ -1299,13 +3417,78 @@
         "par": "metre",
         "kg": 0.8
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "faux semis",
+          "repere": "mise_en_place",
+          "decalageJours": -10,
+          "repetition": null,
+          "outil": "herse étrille",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Herb Growing Guide Comparison Chart",
           "url": "https://johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw80b19107/assets/information/herb-growing-guide-comparison-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Monte vite à graines en été ; éviter semis de juin-juillet."
+      "aVerifier": "Monte vite à graines en été ; éviter semis de juin-juillet. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "basilic",
@@ -1337,6 +3520,67 @@
         "par": "plant",
         "kg": 0.5
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "taille",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": null,
+          "outil": "à la main",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "binette",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Dolly Organic Basil, informations de culture",
@@ -1345,9 +3589,13 @@
         {
           "titre": "Johnny's Selected Seeds – Herb Growing Guide Comparison Chart",
           "url": "https://johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw80b19107/assets/information/herb-growing-guide-comparison-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement compté par motte de 3 plants ; mildiou du basilic fréquent."
+      "aVerifier": "Rendement compté par motte de 3 plants ; mildiou du basilic fréquent. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "bette",
@@ -1379,13 +3627,68 @@
         "par": "plant",
         "kg": 1.5
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Bright Lights Swiss Chard, informations de culture",
           "url": "https://www.johnnyseeds.com/vegetables/swiss-chard/bright-lights-swiss-chard-seed-703D.html"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement par plant sur une longue cueillette feuille à feuille : à confirmer."
+      "aVerifier": "Rendement par plant sur une longue cueillette feuille à feuille : à confirmer. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "betterave",
@@ -1417,6 +3720,57 @@
         "par": "metre",
         "kg": 2.5
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture Corrèze – Fiche technique betterave rouge bio (2013)",
@@ -1425,9 +3779,13 @@
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Plants par motte (glomérules) et calibre visé changent fortement le rendement."
+      "aVerifier": "Plants par motte (glomérules) et calibre visé changent fortement le rendement. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "épinard",
@@ -1446,11 +3804,12 @@
       "plantsParMotte": null,
       "pertePepinierePct": null,
       "densite": {
-        "facon": "metre_lineaire",
+        "facon": "ecartement",
         "rangsParPlanche": 4,
-        "grainesParMetre": 60
+        "ecartementCm": 2,
+        "disposition": "alignee"
       },
-      "grainesParPoquet": null,
+      "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 45,
       "fenetreRecolteJours": 21,
       "margeSecuritePct": 25,
@@ -1458,6 +3817,67 @@
         "par": "metre",
         "kg": 1.8
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "faux semis",
+          "repere": "mise_en_place",
+          "decalageJours": -10,
+          "repetition": null,
+          "outil": "herse étrille",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Agrobio Bretagne – Fiche technique épinard",
@@ -1466,9 +3886,13 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Semis d'automne aussi possible ; monte en jours longs, éviter mai-juillet."
+      "aVerifier": "Semis d'automne aussi possible ; monte en jours longs, éviter mai-juillet. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 60 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "épinard",
@@ -1487,11 +3911,12 @@
       "plantsParMotte": null,
       "pertePepinierePct": null,
       "densite": {
-        "facon": "metre_lineaire",
+        "facon": "ecartement",
         "rangsParPlanche": 4,
-        "grainesParMetre": 60
+        "ecartementCm": 2,
+        "disposition": "alignee"
       },
-      "grainesParPoquet": null,
+      "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 60,
       "fenetreRecolteJours": 100,
       "margeSecuritePct": 20,
@@ -1499,6 +3924,57 @@
         "par": "metre",
         "kg": 2.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "APREL / GRAB – Fiche technique épinard bio sous abri (2008)",
@@ -1507,9 +3983,13 @@
         {
           "titre": "Agrobio Bretagne – Fiche technique épinard",
           "url": "https://www.agrobio-bretagne.org/wp-content/uploads/2010/09/Epinard.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Nombre de coupes et rendement d'hiver très dépendants de la lumière."
+      "aVerifier": "Nombre de coupes et rendement d'hiver très dépendants de la lumière. Écartement (T42) : 4 rangs, une graine tous les 2 cm, converti depuis 60 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "brocoli",
@@ -1541,6 +4021,93 @@
         "par": "plant",
         "kg": 0.4
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "autre",
+          "repere": "mise_en_place",
+          "decalageJours": 0,
+          "repetition": null,
+          "outil": "filet anti-insectes",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "buttage",
+          "repere": "mise_en_place",
+          "decalageJours": 30,
+          "repetition": null,
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture des Bouches-du-Rhône – Fiche culturale choux (2013)",
@@ -1549,9 +4116,21 @@
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "GRAB – Protection des choux en AB, PACA (2022)",
+          "url": "https://www.grab.fr/wp-content/uploads/2022/06/ProtectionChouAB_PACA2022.pdf"
+        },
+        {
+          "titre": "FREDON Hauts-de-France – Fiche Vetabio choux (2022)",
+          "url": "https://fredon.fr/hauts-de-france/sites/default/files/fiches%20techniques/Publications/VETABIO/fiche_choux_0222_bat.pdf"
         }
       ],
-      "aVerifier": "Durée très variable selon variété (45 à 90 jours) ; jets secondaires inclus."
+      "aVerifier": "Durée très variable selon variété (45 à 90 jours) ; jets secondaires inclus. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "chou pommé",
@@ -1583,6 +4162,93 @@
         "par": "plant",
         "kg": 1.2
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "autre",
+          "repere": "mise_en_place",
+          "decalageJours": 0,
+          "repetition": null,
+          "outil": "filet anti-insectes",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "buttage",
+          "repere": "mise_en_place",
+          "decalageJours": 30,
+          "repetition": null,
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture Auvergne-Rhône-Alpes – Culture biologique des choux (2013)",
@@ -1591,9 +4257,21 @@
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "GRAB – Protection des choux en AB, PACA (2022)",
+          "url": "https://www.grab.fr/wp-content/uploads/2022/06/ProtectionChouAB_PACA2022.pdf"
+        },
+        {
+          "titre": "FREDON Hauts-de-France – Fiche Vetabio choux (2022)",
+          "url": "https://fredon.fr/hauts-de-france/sites/default/files/fiches%20techniques/Publications/VETABIO/fiche_choux_0222_bat.pdf"
         }
       ],
-      "aVerifier": "Durée de 50 à 150 jours selon type : choisir l'itinéraire par variété."
+      "aVerifier": "Durée de 50 à 150 jours selon type : choisir l'itinéraire par variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "chou-fleur",
@@ -1625,6 +4303,93 @@
         "par": "plant",
         "kg": 1.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "autre",
+          "repere": "mise_en_place",
+          "decalageJours": 0,
+          "repetition": null,
+          "outil": "filet anti-insectes",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "buttage",
+          "repere": "mise_en_place",
+          "decalageJours": 30,
+          "repetition": null,
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture Auvergne-Rhône-Alpes – Culture biologique des choux (2013)",
@@ -1633,9 +4398,21 @@
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "GRAB – Protection des choux en AB, PACA (2022)",
+          "url": "https://www.grab.fr/wp-content/uploads/2022/06/ProtectionChouAB_PACA2022.pdf"
+        },
+        {
+          "titre": "FREDON Hauts-de-France – Fiche Vetabio choux (2022)",
+          "url": "https://fredon.fr/hauts-de-france/sites/default/files/fiches%20techniques/Publications/VETABIO/fiche_choux_0222_bat.pdf"
         }
       ],
-      "aVerifier": "Taux de pommes commercialisables souvent bas ; durée très variable selon variété."
+      "aVerifier": "Taux de pommes commercialisables souvent bas ; durée très variable selon variété. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "chou kale",
@@ -1667,6 +4444,93 @@
         "par": "plant",
         "kg": 0.8
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "autre",
+          "repere": "mise_en_place",
+          "decalageJours": 0,
+          "repetition": null,
+          "outil": "filet anti-insectes",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "buttage",
+          "repere": "mise_en_place",
+          "decalageJours": 30,
+          "repetition": null,
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Darkibor Organic (F1) Kale, informations de culture",
@@ -1675,9 +4539,21 @@
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "GRAB – Protection des choux en AB, PACA (2022)",
+          "url": "https://www.grab.fr/wp-content/uploads/2022/06/ProtectionChouAB_PACA2022.pdf"
+        },
+        {
+          "titre": "FREDON Hauts-de-France – Fiche Vetabio choux (2022)",
+          "url": "https://fredon.fr/hauts-de-france/sites/default/files/fiches%20techniques/Publications/VETABIO/fiche_choux_0222_bat.pdf"
         }
       ],
-      "aVerifier": "Rendement sur cueillette longue peu documenté en France."
+      "aVerifier": "Rendement sur cueillette longue peu documenté en France. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "chou kale",
@@ -1709,13 +4585,92 @@
         "par": "plant",
         "kg": 0.6
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 3,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "fertilisation",
+          "type": "engrais",
+          "repere": "mise_en_place",
+          "decalageJours": -7,
+          "repetition": null,
+          "outil": null,
+          "produit": {
+            "nom": "engrais organique NPK",
+            "quantite": {
+              "valeur": 100,
+              "unite": "g/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Darkibor Organic (F1) Kale, informations de culture",
           "url": "https://www.johnnyseeds.com/vegetables/kale/darkibor-organic-f1-kale-seed-3658G.html"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "GRAB – Protection des choux en AB, PACA (2022)",
+          "url": "https://www.grab.fr/wp-content/uploads/2022/06/ProtectionChouAB_PACA2022.pdf"
+        },
+        {
+          "titre": "FREDON Hauts-de-France – Fiche Vetabio choux (2022)",
+          "url": "https://fredon.fr/hauts-de-france/sites/default/files/fiches%20techniques/Publications/VETABIO/fiche_choux_0222_bat.pdf"
         }
       ],
-      "aVerifier": "Croissance quasi nulle en décembre-janvier : fenêtre et rendement à vérifier."
+      "aVerifier": "Croissance quasi nulle en décembre-janvier : fenêtre et rendement à vérifier. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "navet",
@@ -1734,11 +4689,12 @@
       "plantsParMotte": null,
       "pertePepinierePct": null,
       "densite": {
-        "facon": "metre_lineaire",
+        "facon": "ecartement",
         "rangsParPlanche": 4,
-        "grainesParMetre": 40
+        "ecartementCm": 3,
+        "disposition": "alignee"
       },
-      "grainesParPoquet": null,
+      "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 40,
       "fenetreRecolteJours": 14,
       "margeSecuritePct": 20,
@@ -1746,6 +4702,87 @@
         "par": "metre",
         "kg": 2.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "faux semis",
+          "repere": "mise_en_place",
+          "decalageJours": -10,
+          "repetition": null,
+          "outil": "herse étrille",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "autre",
+          "repere": "mise_en_place",
+          "decalageJours": 0,
+          "repetition": null,
+          "outil": "filet anti-insectes",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "éclaircissage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": null,
+          "outil": "à la main",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 10,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Hakurei (F1) Turnip, informations de culture",
@@ -1754,9 +4791,17 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Creuse – Bulletin maraîchage, filets anti-insectes (mai 2020)",
+          "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Altise en été ; poids de la botte et densité à ajuster."
+      "aVerifier": "Altise en été ; poids de la botte et densité à ajuster. Écartement (T42) : 4 rangs, une graine tous les 3 cm, converti depuis 40 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "radis",
@@ -1775,11 +4820,12 @@
       "plantsParMotte": null,
       "pertePepinierePct": null,
       "densite": {
-        "facon": "metre_lineaire",
+        "facon": "ecartement",
         "rangsParPlanche": 6,
-        "grainesParMetre": 25
+        "ecartementCm": 4,
+        "disposition": "alignee"
       },
-      "grainesParPoquet": null,
+      "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 30,
       "fenetreRecolteJours": 10,
       "margeSecuritePct": 25,
@@ -1787,6 +4833,67 @@
         "par": "metre",
         "kg": 2.4
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "autre",
+          "repere": "mise_en_place",
+          "decalageJours": 0,
+          "repetition": null,
+          "outil": "filet anti-insectes",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 10,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "GRAB / Réf'Bio PACA – Dossier radis sous abris (2024)",
@@ -1799,9 +4906,21 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Pays de la Loire – Protection du radis contre l'altise par filets (2021)",
+          "url": "https://extranet-cddl-gdm.chambres-agriculture.fr/fileadmin/user_upload/Pays_de_la_Loire/184_Extr-cddl-gdm/RUBR-Experimentations-essais/PAMAL_CR_2021_Protectio_culture_radis_contre_altise_avec_filets_anti_insectes.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Creuse – Bulletin maraîchage, filets anti-insectes (mai 2020)",
+          "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Cycle 3 à 5 semaines en plein champ, 6 à 10 sous abri en hiver."
+      "aVerifier": "Cycle 3 à 5 semaines en plein champ, 6 à 10 sous abri en hiver. Écartement (T42) : 6 rangs, une graine tous les 4 cm, converti depuis 25 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "roquette",
@@ -1832,6 +4951,77 @@
         "par": "metre",
         "kg": 1.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "faux semis",
+          "repere": "mise_en_place",
+          "decalageJours": -10,
+          "repetition": null,
+          "outil": "herse étrille",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "autre",
+          "repere": "mise_en_place",
+          "decalageJours": 0,
+          "repetition": null,
+          "outil": "filet anti-insectes",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 10,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "GRAB – DIVERMABIO, variétés de roquette sous abris (2019)",
@@ -1840,9 +5030,17 @@
         {
           "titre": "Agrobio Bretagne – Fiche technique mesclun",
           "url": "https://www.agrobio-bretagne.org/voy_content/uploads/2021/12/Web_32-MESCLUN.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Creuse – Bulletin maraîchage, filets anti-insectes (mai 2020)",
+          "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Densité au mètre et nombre de coupes peu documentés ; altise en été."
+      "aVerifier": "Densité au mètre et nombre de coupes peu documentés ; altise en été. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "roquette",
@@ -1873,13 +5071,72 @@
         "par": "metre",
         "kg": 1.0
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "GRAB – DIVERMABIO, variétés de roquette sous abris (2019)",
           "url": "https://www.grab.fr/wp-content/uploads/2020/09/L19-01107-2-DIVERMABIO-vari%C3%A9t%C3%A9s-roquette-sous-abris.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture Creuse – Bulletin maraîchage, filets anti-insectes (mai 2020)",
+          "url": "https://creuse.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Nouvelle-Aquitaine/BULLETIN_MARAICHAGE-LEGUMES_-_FILETS_-_MAI_2020.pdf"
         }
       ],
-      "aVerifier": "Repousse hivernale lente : nombre de coupes à vérifier."
+      "aVerifier": "Repousse hivernale lente : nombre de coupes à vérifier. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "laitue",
@@ -1911,6 +5168,57 @@
         "par": "plant",
         "kg": 0.4
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 10,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture de l'Ain – Culture biologique des laitues (2013)",
@@ -1919,9 +5227,13 @@
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Cycle de 35 à 65 jours selon saison : prévoir un itinéraire par saison."
+      "aVerifier": "Cycle de 35 à 65 jours selon saison : prévoir un itinéraire par saison. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "laitue",
@@ -1953,6 +5265,57 @@
         "par": "plant",
         "kg": 0.2
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 10,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Chambre d'agriculture de l'Ain – Culture biologique des laitues (2013)",
@@ -1961,9 +5324,13 @@
         {
           "titre": "Johnny's Selected Seeds – Transplanted Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dw7f1a45a2/assets/information/vegetables-transplanted-crop-seed-plants-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Écartement serré possible (20 cm) ; poids vendu à la pièce variable."
+      "aVerifier": "Écartement serré possible (20 cm) ; poids vendu à la pièce variable. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "chicorée frisée",
@@ -1995,6 +5362,57 @@
         "par": "plant",
         "kg": 0.5
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 2,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
@@ -2003,9 +5421,13 @@
         {
           "titre": "GRAB / Réf'Bio PACA – Dossier céleri branche (2023)",
           "url": "https://www.grab.fr/wp-content/uploads/2023/08/RefBio-Maraich_Dossier-celeri-branchePACA_juillet-aout2023.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Peu de fiches publiques chiffrées ; durée selon variété et date."
+      "aVerifier": "Peu de fiches publiques chiffrées ; durée selon variété et date. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "mesclun",
@@ -2036,13 +5458,78 @@
         "par": "metre",
         "kg": 1.2
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "faux semis",
+          "repere": "mise_en_place",
+          "decalageJours": -10,
+          "repetition": null,
+          "outil": "herse étrille",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 10,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Agrobio Bretagne – Fiche technique mesclun",
           "url": "https://www.agrobio-bretagne.org/voy_content/uploads/2021/12/Web_32-MESCLUN.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Mélange multi-familles ; rendement selon nombre de coupes."
+      "aVerifier": "Mélange multi-familles ; rendement selon nombre de coupes. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "mesclun",
@@ -2073,13 +5560,68 @@
         "par": "metre",
         "kg": 1.2
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Agrobio Bretagne – Fiche technique mesclun",
           "url": "https://www.agrobio-bretagne.org/voy_content/uploads/2021/12/Web_32-MESCLUN.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Durée et nombre de coupes très dépendants de la lumière hivernale."
+      "aVerifier": "Durée et nombre de coupes très dépendants de la lumière hivernale. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "haricot",
@@ -2098,11 +5640,12 @@
       "plantsParMotte": null,
       "pertePepinierePct": null,
       "densite": {
-        "facon": "metre_lineaire",
+        "facon": "ecartement",
         "rangsParPlanche": 2,
-        "grainesParMetre": 20
+        "ecartementCm": 5,
+        "disposition": "alignee"
       },
-      "grainesParPoquet": null,
+      "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 60,
       "fenetreRecolteJours": 21,
       "margeSecuritePct": 20,
@@ -2110,6 +5653,57 @@
         "par": "metre",
         "kg": 1.3
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Agrobio Bretagne – Fiche technique haricot",
@@ -2122,9 +5716,13 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Levée sensible au froid (sol < 12 °C) ; rendement bio variable."
+      "aVerifier": "Levée sensible au froid (sol < 12 °C) ; rendement bio variable. Écartement (T42) : 2 rangs, une graine tous les 5 cm, converti depuis 20 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "haricot",
@@ -2156,6 +5754,67 @@
         "par": "metre",
         "kg": 2.5
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "palissage",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "filet à ramer",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 10,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Agrobio Bretagne – Fiche technique haricot",
@@ -2164,9 +5823,13 @@
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Rendement selon durée de cueillette ; souvent cultivé sous tunnel aussi."
+      "aVerifier": "Rendement selon durée de cueillette ; souvent cultivé sous tunnel aussi. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     },
     {
       "espece": "pois",
@@ -2185,11 +5848,12 @@
       "plantsParMotte": null,
       "pertePepinierePct": null,
       "densite": {
-        "facon": "metre_lineaire",
+        "facon": "ecartement",
         "rangsParPlanche": 2,
-        "grainesParMetre": 60
+        "ecartementCm": 2,
+        "disposition": "alignee"
       },
-      "grainesParPoquet": null,
+      "grainesParPoquet": 1,
       "dureeAvantRecolteJours": 75,
       "fenetreRecolteJours": 21,
       "margeSecuritePct": 20,
@@ -2197,13 +5861,78 @@
         "par": "metre",
         "kg": 0.8
       },
+      "travauxPrevus": [
+        {
+          "categorie": "amendement",
+          "type": "compost",
+          "repere": "mise_en_place",
+          "decalageJours": -21,
+          "repetition": null,
+          "outil": "épandeur",
+          "produit": {
+            "nom": "compost mûr",
+            "quantite": {
+              "valeur": 1,
+              "unite": "kg/m²"
+            }
+          },
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "grelinette",
+          "repere": "mise_en_place",
+          "decalageJours": -14,
+          "repetition": null,
+          "outil": "grelinette",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "travail_sol",
+          "type": "préparation de planche",
+          "repere": "mise_en_place",
+          "decalageJours": -1,
+          "repetition": null,
+          "outil": "râteau",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "palissage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": null,
+          "outil": "filet à ramer",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "désherbage",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "debut_recolte"
+          },
+          "outil": "houe maraîchère",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
       "sources": [
         {
           "titre": "Johnny's Selected Seeds – Direct-Seeded Vegetable Crops Chart (2026)",
           "url": "https://www.johnnyseeds.com/on/demandware.static/-/Library-Sites-JSSSharedLibrary/default/dwfaed60b0/assets/information/vegetables-direct-seeded-crop-seed-quantity-yield-chart.pdf"
+        },
+        {
+          "titre": "Chambre d'agriculture PACA – Fertilisation en maraîchage biologique (fiche n°8)",
+          "url": "https://www.paca.chambres-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Provence-Alpes-Cote_d_Azur/agriculture_biologique/Fertilisation_en_maraichage.pdf"
         }
       ],
-      "aVerifier": "Peu de références françaises publiques pour le mangetout ; rendement à confirmer."
+      "aVerifier": "Peu de références françaises publiques pour le mangetout ; rendement à confirmer. Écartement (T42) : 2 rangs, une graine tous les 2 cm, converti depuis 60 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés."
     }
   ]
 }

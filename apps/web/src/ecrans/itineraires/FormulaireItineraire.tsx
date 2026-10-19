@@ -38,6 +38,7 @@ import {
 } from './calculs.ts';
 import { lireSeriesAVenir, type SerieAVenir } from './donnees.ts';
 import { SchemaRangs } from './SchemaRangs.tsx';
+import { ecartsDensite, LARGEUR_PLANCHE_ECARTS_CM, texteEcartEquivalent, texteEcartsRangs } from './schema-rangs.ts';
 import { creerItineraire, EcritureRefusee, modifierItineraire, nouvelId, ramener, supprimerItineraire, type ContexteEcriture } from './ecritures.ts';
 
 /** Marque de performance posée quand le formulaire est utilisable (champs et aperçu dessinés). */
@@ -65,6 +66,8 @@ export interface ProprietesFormulaire {
   readonly depart: DepartFormulaire;
   readonly especes: readonly EspeceLue[];
   readonly types: readonly TypeLu[];
+  /** T42 : largeur des planches de la ferme (cm) ; absente ou null : 75 cm pour les écarts. */
+  readonly largeurPlancheCm?: number | null;
   readonly ctx: ContexteEcriture;
   readonly aujourdhui: string;
   readonly surFermer: () => void;
@@ -528,7 +531,7 @@ function ConfirmationSeries({ series, occupe, surAppliquer, surSeul, surRevenir 
 
 // ── Formulaire ───────────────────────────────────────────────────────────────────────────────
 
-export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, surFermer, surAdapter, surEnregistre }: ProprietesFormulaire): ReactElement {
+export function FormulaireItineraire({ depart, especes, types, largeurPlancheCm, ctx, aujourdhui, surFermer, surAdapter, surEnregistre }: ProprietesFormulaire): ReactElement {
   const lectureSeule = depart.sorte === 'lecture';
   const origine = depart.sorte === 'creation' ? null : depart.itineraire;
   const especeImposee = especeDe(depart);
@@ -554,10 +557,14 @@ export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, 
     performance.mark(MARQUE_ITINERAIRE_AFFICHE);
   }, []);
 
-  // T35a : le schéma des rangs, dessiné dès que rangs et écartement sont lisibles. La largeur de
-  // planche n'est pas connue de l'itinéraire : 1,2 m par défaut (LARGEUR_PLANCHE_DEFAUT_CM).
+  // T35a : le schéma des rangs, dessiné dès que rangs et écartement sont lisibles. T42 : sur la
+  // largeur des planches de la ferme, sinon 75 cm (LARGEUR_PLANCHE_ECARTS_CM), comme les écarts.
   const rangsLus = lireEntier(saisie.rangs);
   const ecartementLu = lireDecimal(saisie.ecartement);
+  // T42 : écart entre rangs (planche de la ferme, sinon 75 cm) et, au mètre linéaire, écart équivalent sur le rang.
+  const faconLue = saisie.mode === 'semis_direct' ? saisie.facon : 'ecartement';
+  const ecarts = ecartsDensite({ facon: faconLue, rangsParPlanche: rangsLus, grainesParMetre: lireDecimal(saisie.grainesParMetre) }, largeurPlancheCm ?? null);
+  const ecartEquivalent = ecarts === null ? null : texteEcartEquivalent(ecarts);
 
   const calcul = useMemo(() => apercu(saisie, base.periodeUsage, aujourdhui), [saisie, base, aujourdhui]);
 
@@ -894,7 +901,13 @@ export function FormulaireItineraire({ depart, especes, types, ctx, aujourdhui, 
               </>
             )}
             {(saisie.mode !== 'semis_direct' || saisie.facon === 'ecartement') && rangsLus !== null && rangsLus <= RANGS_SCHEMA_MAX && ecartementLu !== null && (
-              <SchemaRangs rangs={rangsLus} ecartementCm={ecartementLu} disposition={saisie.disposition} largeurPlancheCm={null} />
+              <SchemaRangs rangs={rangsLus} ecartementCm={ecartementLu} disposition={saisie.disposition} largeurPlancheCm={largeurPlancheCm ?? LARGEUR_PLANCHE_ECARTS_CM} />
+            )}
+            {ecarts !== null && (
+              <p className="itin-aide itin-ecarts">
+                <span data-testid="ecart-rangs">{texteEcartsRangs(ecarts)}</span>
+                {ecartEquivalent !== null && <span data-testid="ecart-equivalent">{ecartEquivalent}</span>}
+              </p>
             )}
           </section>
 

@@ -25,6 +25,21 @@ export function requeteEspeces(fermeId: string): RequeteSurveillee<EspeceLue> {
   };
 }
 
+/**
+ * T42 : largeur de planche de la ferme, en cm : la plus fréquente parmi ses planches actives qui
+ * en ont une (la plus étroite à égalité) ; aucune ligne si la ferme n'en dit rien.
+ */
+export function requeteLargeurPlanche(fermeId: string): RequeteSurveillee<number | null> {
+  return {
+    sql: `SELECT largeur_m FROM emplacement
+      WHERE ferme_id = ? AND sorte = 'planche' AND supprime_le IS NULL AND actif_au IS NULL AND largeur_m > 0
+      GROUP BY largeur_m ORDER BY COUNT(*) DESC, largeur_m LIMIT 1`,
+    parametres: [fermeId],
+    tables: ['emplacement'],
+    convertir: (l) => (typeof l.largeur_m === 'number' && Number.isFinite(l.largeur_m) && l.largeur_m > 0 ? Math.round(l.largeur_m * 1000) / 10 : null),
+  };
+}
+
 export function requeteTypes(fermeId: string): RequeteSurveillee<TypeLu | null> {
   return {
     sql: 'SELECT id, ferme_id, categorie, libelle, masque FROM type_intervention WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL',
