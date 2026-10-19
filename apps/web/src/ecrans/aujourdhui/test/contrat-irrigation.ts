@@ -22,7 +22,8 @@
 import type { PorteDonnees } from '@planif/sync';
 import type { ComponentType } from 'react';
 
-export const CHEMIN_SAISIE_IRRIGATION = '../SaisieIrrigation.tsx';
+/** Relatif aux tests qui l'importent (aujourdhui/*.test.tsx), pas à ce fichier. */
+export const CHEMIN_SAISIE_IRRIGATION = './SaisieIrrigation.tsx';
 
 export interface ProprietesSaisieIrrigation {
   readonly porte: PorteDonnees;

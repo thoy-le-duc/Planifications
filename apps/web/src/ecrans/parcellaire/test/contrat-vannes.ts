@@ -31,7 +31,8 @@
 import type { PorteDonnees } from '@planif/sync';
 import type { ComponentType } from 'react';
 
-export const CHEMIN_VANNES = '../vannes/index.ts';
+/** Relatif aux tests qui l'importent (parcellaire/*.test.tsx), pas à ce fichier. */
+export const CHEMIN_VANNES = './vannes/index.ts';
 
 export interface ProprietesEcranVannes {
   readonly porte: PorteDonnees;
