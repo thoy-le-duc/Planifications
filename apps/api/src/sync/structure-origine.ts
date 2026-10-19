@@ -84,13 +84,14 @@ export function fermesDesOrigines(ecritures: readonly { readonly op: string | nu
     .filter((f) => fermes.has(f));
 }
 
-/** La ferme a-t-elle un placement (bâtiment, zone avec contour, emplacement placé, non supprimés) ? */
+/** La ferme a-t-elle un placement (bâtiment, zone avec contour, emplacement ou vanne placés (T57), non supprimés) ? */
 async function aUnPlacement(tx: TransactionDb, fermeId: string): Promise<boolean> {
   const r = await tx.execute<{ existe: boolean }>(
     sql`SELECT (
           EXISTS (SELECT 1 FROM batiment WHERE ferme_id = ${fermeId}::uuid AND supprime_le IS NULL)
           OR EXISTS (SELECT 1 FROM zone WHERE ferme_id = ${fermeId}::uuid AND supprime_le IS NULL AND contour IS NOT NULL)
           OR EXISTS (SELECT 1 FROM emplacement WHERE ferme_id = ${fermeId}::uuid AND supprime_le IS NULL AND placement_x_m IS NOT NULL)
+          OR EXISTS (SELECT 1 FROM secteur_irrigation WHERE ferme_id = ${fermeId}::uuid AND supprime_le IS NULL AND placement_x_m IS NOT NULL)
         ) AS existe`,
   );
   return r.rows[0]?.existe === true;

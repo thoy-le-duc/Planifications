@@ -87,6 +87,7 @@ import type { Refus } from './motifs.ts';
 import { visibleParLaFerme, type TransactionDb } from './references.ts';
 import {
   COLONNES_PLACEMENT_EMPLACEMENT,
+  COLONNES_PLACEMENT_VANNE,
   COLONNES_STRUCTURE,
   validerStructure,
   type Ligne,
@@ -96,7 +97,9 @@ import {
 
 export { estTableStructure, TABLES_STRUCTURE } from './structure-lignes.ts';
 
-const NOM_ENTITE: Readonly<Record<TableEcrite, 'Zone' | 'Emplacement' | 'Famille' | 'Espece' | 'Variete' | 'Saison' | 'Assolement' | 'Batiment'>> = {
+const NOM_ENTITE: Readonly<
+  Record<TableEcrite, 'Zone' | 'Emplacement' | 'Famille' | 'Espece' | 'Variete' | 'Saison' | 'Assolement' | 'Batiment' | 'SecteurIrrigation' | 'SecteurEmplacement'>
+> = {
   zone: 'Zone',
   emplacement: 'Emplacement',
   famille: 'Famille',
@@ -105,6 +108,8 @@ const NOM_ENTITE: Readonly<Record<TableEcrite, 'Zone' | 'Emplacement' | 'Famille
   saison: 'Saison',
   assolement: 'Assolement',
   batiment: 'Batiment',
+  secteur_irrigation: 'SecteurIrrigation',
+  secteur_emplacement: 'SecteurEmplacement',
 };
 
 /** Statuts d'une série qui occupe encore sa place et sa culture (décision du chef). */
@@ -144,6 +149,7 @@ function estPlacee(table: TableEcrite, l: Ligne): boolean {
     case 'zone':
       return l.contour !== null;
     case 'emplacement':
+    case 'secteur_irrigation':
       return l.placement_x_m !== null;
     default:
       return false;
@@ -171,6 +177,9 @@ function touchePlacement(table: TableEcrite, l: Ligne, avant: Ligne | null): boo
       const place = l.placement_x_m != null || avant?.placement_x_m != null;
       return place && !memeValeur(l.zone_id, avant?.zone_id);
     }
+    case 'secteur_irrigation':
+      // T57 : poser, déplacer ou retirer une vanne du plan.
+      return COLONNES_PLACEMENT_VANNE.some((c) => !memeValeur(l[c], avant?.[c]));
     default:
       return false;
   }
@@ -265,9 +274,12 @@ async function deLaFerme(tx: TransactionDb, table: TableEcrite, id: string, ferm
  * si `bibliotheque`), verrouillée (FOR SHARE) ; undefined si elle n'existe pas OU si elle est
  * d'une autre ferme (T10d), même une autre ferme du même utilisateur.
  */
+/** Tables qu'une ligne de structure peut désigner. */
+type TableReferencee = 'zone' | 'emplacement' | 'famille' | 'espece' | 'saison' | 'secteur_irrigation';
+
 async function reference(
   tx: TransactionDb,
-  table: 'zone' | 'emplacement' | 'famille' | 'espece' | 'saison',
+  table: TableReferencee,
   id: string,
   fermeId: string,
   bibliotheque: boolean,
@@ -283,7 +295,7 @@ async function reference(
 /** Référence obligatoirement active : null si elle l'est, sinon le refus (« <libellé> introuvable » ou « … supprimé(e) »). */
 async function active(
   tx: TransactionDb,
-  table: 'zone' | 'emplacement' | 'famille' | 'espece' | 'saison',
+  table: TableReferencee,
   id: string,
   fermeId: string,
   bibliotheque: boolean,
@@ -465,8 +477,20 @@ async function verifierLibre(tx: TransactionDb, table: TableEcrite, id: string, 
       const n = await compter(tx, assolementsActifs('saison_id', id, fermeId, maintenant, false));
       return n > 0 ? invalide(`le plan de cette saison contient encore ${quantite(n, 'assolement', 'assolements')} : videz-le d’abord`, fermeId) : null;
     }
+    case 'secteur_irrigation': {
+      // T57 : une vanne qui arrose encore (lien non supprimé, sans fin ou fini aujourd'hui ou après,
+      // jour du fuseau de la ferme) ne se supprime pas ; un lien fermé ou supprimé plus haut dans le
+      // même lot ne la retient plus.
+      const n = await compter(
+        tx,
+        sql`SELECT 1 FROM secteur_emplacement se WHERE se.secteur_irrigation_id = ${id}::uuid AND se.ferme_id = ${fermeId}::uuid
+              AND se.supprime_le IS NULL AND (se.au IS NULL OR se.au >= ${jourDeLaFerme(fermeId, maintenant)})`,
+      );
+      return n > 0 ? invalide(`cette vanne arrose encore ${quantite(n, 'emplacement', 'emplacements')} : retirez-les d’abord`, fermeId) : null;
+    }
     case 'assolement':
     case 'batiment':
+    case 'secteur_emplacement':
       // Supprimer le bâtiment d'une zone : la zone et ses planches restent, la zone redevient « pas placée ».
       return null;
   }
@@ -491,7 +515,7 @@ async function verifierEnBase(tx: TransactionDb, table: TableEcrite, l: Ligne, a
   };
   const verifier = async (
     c: string,
-    cible: 'zone' | 'emplacement' | 'famille' | 'espece' | 'saison',
+    cible: TableReferencee,
     bibliotheque: boolean,
     libelle: string,
     supprimee: string,
@@ -606,6 +630,37 @@ async function verifierEnBase(tx: TransactionDb, table: TableEcrite, l: Ligne, a
     }
     case 'famille':
       break;
+    case 'secteur_irrigation': {
+      // T57 : un numéro de vanne par ferme parmi les vannes non supprimées (comme l'index
+      // secteur_irrigation_numero_actif_idx, dernier rempart) : à la création, au rétablissement, ou
+      // quand le numéro change. Une vanne supprimée plus haut dans le même lot libère le sien.
+      if (l.supprime_le === null && change('numero_vanne')) {
+        const pris = await existe(
+          tx,
+          sql`SELECT 1 FROM secteur_irrigation s WHERE s.ferme_id = ${f}::uuid AND s.numero_vanne = ${Number(l.numero_vanne)}
+                AND s.supprime_le IS NULL AND s.id <> ${String(l.id)}::uuid`,
+        );
+        if (pris) refus = invalide('ce numéro de vanne existe déjà : choisissez-en un autre', f);
+      }
+      break;
+    }
+    case 'secteur_emplacement': {
+      refus =
+        (await verifier('secteur_irrigation_id', 'secteur_irrigation', false, 'vanne', 'vanne supprimée')) ??
+        (await verifier('emplacement_id', 'emplacement', false, 'emplacement', 'emplacement supprimé'));
+      // T57 : deux liens non supprimés de la même vanne au même emplacement ne se chevauchent pas.
+      const touche = ['secteur_irrigation_id', 'emplacement_id', 'du', 'au'].some(change);
+      if (refus === null && l.supprime_le === null && touche) {
+        const chevauche = await existe(
+          tx,
+          sql`SELECT 1 FROM secteur_emplacement se WHERE se.ferme_id = ${f}::uuid AND se.id <> ${String(l.id)}::uuid AND se.supprime_le IS NULL
+                AND se.secteur_irrigation_id = ${String(l.secteur_irrigation_id)}::uuid AND se.emplacement_id = ${String(l.emplacement_id)}::uuid
+                AND se.du <= COALESCE(${valeur('au')}::date, 'infinity'::date) AND COALESCE(se.au, 'infinity'::date) >= ${String(l.du)}::date`,
+        );
+        if (chevauche) refus = invalide('cet emplacement est déjà arrosé par cette vanne sur cette période', f);
+      }
+      break;
+    }
   }
   if (refus !== null) return refus;
   const suppression = avant !== null && avant.supprime_le == null && l.supprime_le !== null;

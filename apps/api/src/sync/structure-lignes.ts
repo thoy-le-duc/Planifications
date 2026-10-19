@@ -28,9 +28,11 @@ import {
   identifiantNormalise,
   instantNormalise,
   LIMITES_SAISIE,
+  PLAFONDS_VANNES,
   TYPES_BATIMENT,
   validerContour,
   validerPlacement,
+  validerPositionVanne,
   validerProfilCroissance,
   type CodeErreurSaisie,
   type ErreurCroissance,
@@ -41,11 +43,24 @@ import { CATEGORIES_ESPECE, NATURES_ASSOLEMENT, SORTES_EMPLACEMENT, TYPES_ABRI, 
 
 /** Tables du parcellaire et du catalogue de T10s. */
 export type TableStructure = 'zone' | 'emplacement' | 'famille' | 'espece' | 'variete' | 'saison' | 'assolement';
-/** Tables écrites par le téléphone par cette voie : celles de T10s, et les bâtiments (T28s). */
-export type TableEcrite = TableStructure | 'batiment';
+/** Vannes d'irrigation et liens datés vanne ↔ emplacement (T57). */
+export type TableIrrigation = 'secteur_irrigation' | 'secteur_emplacement';
+/** Tables écrites par le téléphone par cette voie : celles de T10s, les bâtiments (T28s) et les vannes (T57). */
+export type TableEcrite = TableStructure | 'batiment' | TableIrrigation;
 
-/** Tables du parcellaire et du catalogue ouvertes au téléphone (T10s), et les bâtiments (T28s). */
-export const TABLES_STRUCTURE: ReadonlySet<string> = new Set<TableEcrite>(['zone', 'emplacement', 'famille', 'espece', 'variete', 'saison', 'assolement', 'batiment']);
+/** Tables du parcellaire et du catalogue ouvertes au téléphone (T10s), les bâtiments (T28s) et les vannes (T57). */
+export const TABLES_STRUCTURE: ReadonlySet<string> = new Set<TableEcrite>([
+  'zone',
+  'emplacement',
+  'famille',
+  'espece',
+  'variete',
+  'saison',
+  'assolement',
+  'batiment',
+  'secteur_irrigation',
+  'secteur_emplacement',
+]);
 
 export const estTableStructure = (table: string): table is TableEcrite => TABLES_STRUCTURE.has(table);
 
@@ -57,6 +72,8 @@ export const CONTOUR_CARACTERES_MAX = 16_384;
 
 /** Colonnes du placement réel (T28a, Q31) : les écrire est réservé au gérant (T28s). */
 export const COLONNES_PLACEMENT_EMPLACEMENT = ['placement_x_m', 'placement_y_m', 'orientation_deg'] as const;
+/** T57 : position d'une vanne sur le plan (repère de la ferme) : un placement, réservé au gérant. */
+export const COLONNES_PLACEMENT_VANNE = ['placement_x_m', 'placement_y_m'] as const;
 
 /** Colonnes écrites (sans cree_le ni modifie_le, remplies par le serveur). */
 export const COLONNES_STRUCTURE: Readonly<Record<TableEcrite, readonly string[]>> = {
@@ -94,6 +111,9 @@ export const COLONNES_STRUCTURE: Readonly<Record<TableEcrite, readonly string[]>
   saison: ['id', 'ferme_id', 'nom', 'debut', 'fin', 'supprime_le'],
   assolement: ['id', 'ferme_id', 'saison_id', 'zone_id', 'emplacement_id', 'famille_id', 'espece_id', 'nature', 'source_import', 'supprime_le'],
   batiment: ['id', 'ferme_id', 'nom', 'type', 'longueur_m', 'largeur_m', 'hauteur_m', 'centre_x_m', 'centre_y_m', 'orientation_deg', 'zone_id', 'supprime_le'],
+  // T57 : l'adresse Modbus (phase 3) n'est pas écrite par le téléphone.
+  secteur_irrigation: ['id', 'ferme_id', 'numero_vanne', 'nom', 'debit_litres_heure', ...COLONNES_PLACEMENT_VANNE, 'supprime_le'],
+  secteur_emplacement: ['id', 'ferme_id', 'secteur_irrigation_id', 'emplacement_id', 'du', 'au', 'supprime_le'],
 };
 
 /** Colonnes tolérées et ignorées (remplies par le serveur). */
@@ -398,6 +418,22 @@ const LIRE: Readonly<Record<TableEcrite, (lire: Lecteurs, id: string, entree: Li
     ...placement(validerPlacement({ table: 'batiment', ligne: entree })),
     zone_id: lire.id('zone_id', false),
   }),
+  // T57 : une vanne (règles du cœur : numéro, nom, débit, position).
+  secteur_irrigation: (lire, _id, entree) => {
+    const numero = lire.entier('numero_vanne', true, 1, PLAFONDS_VANNES.numeroMax);
+    const nom = lire.texte('nom', true);
+    const debit = lire.positif('debit_litres_heure', false, PLAFONDS_VANNES.debitLitresHeureMax);
+    const position = validerPositionVanne(entree.placement_x_m, entree.placement_y_m);
+    if (!position.ok) arreter('champ_invalide', 'placement_x_m', position.message);
+    return { numero_vanne: numero, nom, debit_litres_heure: debit, placement_x_m: position.valeur?.x ?? null, placement_y_m: position.valeur?.y ?? null };
+  },
+  // T57 : un lien daté vanne ↔ emplacement, du `du` au `au` compris.
+  secteur_emplacement: (lire) => {
+    const du = lire.date('du', true);
+    const au = lire.date('au', false);
+    if (du !== null && au !== null && au < du) arreter('incoherent', 'au', 'fin du lien avant son début');
+    return { secteur_irrigation_id: lire.id('secteur_irrigation_id', true), emplacement_id: lire.id('emplacement_id', true), du, au };
+  },
 };
 
 /** Valeur d'une règle du placement (cœur), ou arrêt de la lecture sur son erreur. */
