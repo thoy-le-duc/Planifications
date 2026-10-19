@@ -15,6 +15,6 @@
 
 ## Critères d'acceptation
 
-- [ ] Note de mesure (`docs/mesures/T47.md`) : 20 passages avant/après, cause attribuée.
-- [ ] Correction de l'appli ou de la sonde, justifiée par la mesure ; budgets inchangés.
-- [ ] 20 passages locaux consécutifs verts ; `pnpm verif` passe.
+- [x] Note de mesure (`docs/mesures/T47.md`) : 20 passages avant/après, cause attribuée.
+- [x] Correction de l'appli ou de la sonde, justifiée par la mesure ; budgets inchangés.
+- [ ] 20 passages locaux consécutifs verts ; `pnpm verif` passe. **Non atteint** : 18 sur 20 (avant : 12 sur 20). Un rouge vient du retour sur l'onglet Ferme (rendu d'`EcranFerme`, 57 ms, cause distincte de l'export, déjà présente avant : ticket à part), un autre (496 ms) n'est pas attribué. Voir `docs/mesures/T47.md`.
