@@ -35,7 +35,8 @@
  * (e2e/refus.e2e.ts).
  *
  * T49 — `?jeu=ferme-neuve` : une ferme neuve, ni saison, ni zone, ni planche, ni série
- * (src/ecrans/parcellaire/test/ferme-neuve.ts), dans la base de SON utilisateur de test
+ * (src/ecrans/parcellaire/test/ferme-neuve.ts) ; T50 : `&zones=Z&planches=P&series=S` y ajoute la
+ * saison de l'année, Z zones de P planches et S séries, dans la base de SON utilisateur de test
  * (e2e/demarrer-ferme.e2e.ts).
  *
  * Garde-fous : seule la base de l'utilisateur du jeu (identifiant de test, jamais un vrai compte)
@@ -181,9 +182,15 @@ async function amorcerPlacement(parametres: URLSearchParams): Promise<Amorcage> 
 }
 
 /** T49 : la ferme neuve (rien que la ferme, son gérant et la bibliothèque commune). */
-async function amorcerFermeNeuve(): Promise<Amorcage> {
-  const ferme = fermeNeuve();
-  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermeNeuve(base));
+async function amorcerFermeNeuve(parametres: URLSearchParams): Promise<Amorcage> {
+  // T50 : `zones=Z&planches=P&series=S` : la saison de l'année, Z zones de P planches, S séries.
+  const nombre = (cle: string) => {
+    const n = Number(parametres.get(cle) ?? '0');
+    return Number.isInteger(n) && n >= 0 ? n : 0;
+  };
+  const options = { zones: nombre('zones'), planches: nombre('planches'), series: nombre('series') };
+  const ferme = fermeNeuve(options);
+  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermeNeuve(base, options));
   return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
 }
 
@@ -200,7 +207,7 @@ function amorcer(): Promise<Amorcage> {
   if (jeu === 'refus') return amorcerRefus(parametres.get('date') ?? '');
   if (jeu === 'import') return amorcerImport();
   if (jeu === 'placement') return amorcerPlacement(parametres);
-  if (jeu === 'ferme-neuve') return amorcerFermeNeuve();
+  if (jeu === 'ferme-neuve') return amorcerFermeNeuve(parametres);
   return Promise.reject(new Error(`jeu inconnu : « ${jeu} »`));
 }
 
