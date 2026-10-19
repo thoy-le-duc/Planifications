@@ -8,11 +8,48 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# T45 : jobs parallèles, chacun avec son installation et son cache pnpm, puis un job final
+# « CI verte » qui dépend de tous. Le workflow des migrations de production (T44) suit la
+# conclusion globale du workflow « CI » : success seulement si tous les jobs sont verts.
+# Les commandes sont celles de l'ancien job unique (liste figée dans
+# packages/db/src/ci-parallele.test.ts) ; `pnpm verif` en local est inchangé.
+
 jobs:
-  verifications:
-    name: Typage, lint, tests, build, budgets
+  typage-lint:
+    name: Typage, lint, schéma
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typage strict
+        run: pnpm typecheck
+      - name: Lint (aucun any)
+        run: pnpm lint
+      - name: Schéma et migrations synchronisés
+        run: |
+          # </dev/null : une question interactive (renommage de colonne ?) échoue au lieu d'attendre.
+          sortie="$(pnpm --filter @planif/db exec drizzle-kit generate </dev/null 2>&1)" || true
+          echo "$sortie"
+          if ! grep -q "No schema changes" <<<"$sortie"; then
+            echo "::error::drizzle-kit generate n'a pas conclu « No schema changes » : schéma et migrations désynchronisés, ou question interactive (renommage)."
+            exit 1
+          fi
+          if [ -n "$(git status --porcelain -- packages/db/migrations)" ]; then
+            echo "::error::Le schéma Drizzle a changé sans migration : lancer pnpm --filter @planif/db generer et versionner le résultat."
+            git status --porcelain -- packages/db/migrations
+            exit 1
+          fi
+
+  tests:
+    name: Tests unitaires et d'intégration (Postgres, PowerSync)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     # Pas de bloc `services:` pour Postgres : il n'y prend pas d'options de commande, et le service
     # PowerSync exige wal_level=logical (tests des règles de synchro, T10). Postgres est lancé par
     # `docker run` ci-dessous.
@@ -20,10 +57,9 @@ jobs:
       # Tests d'intégration de @planif/db (T08) : sans cette URL, ils échouent en CI.
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
       # Version figée : une nouvelle version du service se teste et s'adopte par une PR, pas en silence.
-      # Lue par les tests des règles de synchro et par docker compose (pnpm e2e:synchro).
+      # Lue par les tests des règles de synchro.
       POWERSYNC_IMAGE: journeyapps/powersync-service:1.26.1
-      # Nom local de l'image officielle Postgres, tirée d'avance ci-dessous depuis l'un des miroirs ;
-      # lue par docker-compose.yml pour pnpm e2e:synchro (qui la trouve alors sur la machine).
+      # Nom local de l'image officielle Postgres, tirée d'avance ci-dessous depuis l'un des miroirs.
       POSTGRES_IMAGE: postgres:17
     steps:
       - name: Images Docker (Postgres 17, PowerSync), tirées d'avance avec replis
@@ -59,26 +95,28 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Typage strict
-        run: pnpm typecheck
-      - name: Lint (aucun any)
-        run: pnpm lint
-      - name: Schéma et migrations synchronisés
-        run: |
-          # </dev/null : une question interactive (renommage de colonne ?) échoue au lieu d'attendre.
-          sortie="$(pnpm --filter @planif/db exec drizzle-kit generate </dev/null 2>&1)" || true
-          echo "$sortie"
-          if ! grep -q "No schema changes" <<<"$sortie"; then
-            echo "::error::drizzle-kit generate n'a pas conclu « No schema changes » : schéma et migrations désynchronisés, ou question interactive (renommage)."
-            exit 1
-          fi
-          if [ -n "$(git status --porcelain -- packages/db/migrations)" ]; then
-            echo "::error::Le schéma Drizzle a changé sans migration : lancer pnpm --filter @planif/db generer et versionner le résultat."
-            git status --porcelain -- packages/db/migrations
-            exit 1
-          fi
       - name: Tests unitaires et d'intégration
         run: pnpm test
+
+  e2e-temps:
+    # Le jeu `pnpm e2e` (≈ 15 min d'un bloc avant T45) est découpé en 4 parts sur 4 machines.
+    # Chaque part garde ses conditions : un navigateur à la fois (workers: 1), CPU ralenti ×4,
+    # mêmes budgets. Les parts ne se gênent pas : chacune a sa machine.
+    name: Build, budget, e2e temps et hors ligne (part ${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Build
         run: pnpm build
       - name: Build des essais (appli de production et pages de test, servi par pnpm e2e)
@@ -88,10 +126,81 @@ jobs:
       - name: Installation de Chromium
         run: pnpm --filter @planif/web exec playwright install --with-deps chromium
       - name: Budgets de temps d'affichage et hors-ligne
-        run: pnpm e2e
+        run: pnpm e2e --shard=${{ matrix.shard }}/4
+
+  demo:
+    name: Démo en ligne (build et e2e)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Build de la démo en ligne (Vercel)
         run: pnpm build:demo
+      - name: Installation de Chromium
+        run: pnpm --filter @planif/web exec playwright install --with-deps chromium
       - name: Démo en ligne de bout en bout (sans serveur, hors ligne)
         run: pnpm e2e:demo
+
+  synchro:
+    name: Synchro de bout en bout (Postgres, PowerSync, API, deux navigateurs)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Version figée, lue par docker compose (pnpm e2e:synchro).
+      POWERSYNC_IMAGE: journeyapps/powersync-service:1.26.1
+      # Lue par docker-compose.yml pour pnpm e2e:synchro (qui la trouve alors sur la machine).
+      POSTGRES_IMAGE: postgres:17
+    steps:
+      - name: Images Docker (Postgres 17, PowerSync), tirées d'avance avec replis
+        # Mêmes replis que dans le job « tests » (Docker Hub limité, « toomanyrequests »).
+        run: |
+          tirer() {
+            for essai in 1 2 3; do
+              for source in "$1" "public.ecr.aws/docker/library/$1" "mirror.gcr.io/library/$1" "mirror.gcr.io/$1"; do
+                if docker pull -q "$source"; then
+                  [ "$source" = "$1" ] || docker tag "$source" "$1"
+                  return 0
+                fi
+              done
+              sleep $((essai * 20))
+            done
+            return 1
+          }
+          tirer "$POSTGRES_IMAGE"
+          tirer "$POWERSYNC_IMAGE"
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Installation de Chromium
+        run: pnpm --filter @planif/web exec playwright install --with-deps chromium
       - name: Synchro de bout en bout (Postgres, PowerSync, API, deux navigateurs)
         run: pnpm e2e:synchro
+
+  ci-verte:
+    # C'est ce job que regarde la boucle (Fusion, docs/boucle.md). always() : il tourne même
+    # quand un job a échoué, pour conclure rouge au lieu d'être sauté.
+    name: CI verte
+    needs: [typage-lint, tests, e2e-temps, demo, synchro]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Tous les jobs sont verts
+        env:
+          RESULTATS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Résultats : $RESULTATS"
+          [ -n "$RESULTATS" ] || exit 1
+          for resultat in $RESULTATS; do
+            [ "$resultat" = success ] || exit 1
+          done

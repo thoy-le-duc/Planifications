@@ -17,7 +17,7 @@
 
 ## Critères d'acceptation
 
-- [ ] Test (lecture du YAML) : jobs parallèles présents, chacun avec ses étapes ; job final qui dépend de tous ; même ensemble de commandes qu'avant (aucune vérification perdue).
-- [ ] Le workflow des migrations de production se déclenche toujours sur la CI verte de main (test de T44 vert).
+- [x] Test (lecture du YAML) : jobs parallèles présents, chacun avec ses étapes ; job final qui dépend de tous ; même ensemble de commandes qu'avant (aucune vérification perdue). `packages/db/src/ci-parallele.test.ts`.
+- [x] Le workflow des migrations de production se déclenche toujours sur la CI verte de main (test de T44 vert).
 - [ ] Durée de la CI de la PR mesurée et notée (cible ≤ 15 min).
-- [ ] `pnpm verif` passe en local.
+- [x] `pnpm verif` passe en local : inchangé (`package.json` non touché) ; typage, lint et tests relancés en local, e2e par la CI de la PR.

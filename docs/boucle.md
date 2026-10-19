@@ -43,10 +43,10 @@ Déroulé d'un ticket : testeur → développeur → relecteur → corrections d
 
 **Sobriété** (décision de Théophane, 2026-10-01) : économiser les jetons sans rogner sur ce qui garde `main` vert.
 
-- **Deux passages de relecture au plus par ticket** : une relecture, puis une contre-relecture des correctifs. Ce que le second passage trouve encore part dans un ticket de suite, sauf s'il touche au stock, à la sécurité ou à l'isolement entre fermes : là, on continue jusqu'à zéro faille.
+- **Deux passages de relecture au plus par ticket** : une relecture, puis une contre-relecture des correctifs. Ce que le second passage trouve encore se corrige dans la même PR, avant la fusion (voir « Fusion ») ; seul un vrai hors-périmètre part dans un ticket de suite. Stock, sécurité, isolement entre fermes : on continue jusqu'à zéro faille.
 - **Modèle léger pour les tickets sans risque** : testeur, développeur et relecteur peuvent tourner sur un modèle plus léger (Sonnet) pour un ticket qui ne touche ni la synchro, ni le stock, ni l'annulation, ni les données d'une autre ferme. Le chef le note dans la PR. En cas de doute, modèle complet.
 - **Suivi des PR léger** : le chef vérifie la CI par un point de contrôle programmé plutôt qu'en s'abonnant à chaque événement de la PR.
-- **Tickets petits et bornés** : un ticket = une règle ou un écran ; les cas limites qu'on découvre deviennent des tickets de suite plutôt que d'agrandir le ticket en cours.
+- **Tickets petits et bornés** : un ticket = une règle ou un écran ; les cas limites qu'on découvre **hors du périmètre** deviennent des tickets de suite plutôt que d'agrandir le ticket en cours, et les petites demandes d'une même zone sont regroupées en un seul ticket (voir « Fusion »).
 - **Jeux e2e** : lancer `pnpm e2e` ou `pnpm e2e:demo` tels quels ; ne jamais les envelopper dans `scripts/verrou-e2e.sh` (ils prennent déjà le verrou).
 - **On ne coupe jamais** : les tests écrits d'abord, la relecture, `pnpm verif` avant la PR.
 - **Choix des modèles** (décision de Théophane, 2026-10-07) : Haiku pour le mécanique (captures, suivi de CI, journal, `etat.json`, page de suivi, première relecture des tickets sans risque) ; Sonnet pour le développeur des tickets d'interface et le testeur des tickets sans données ; Opus pour tout ce qui touche la base, la synchro, l'isolement entre fermes, le stock, la sécurité, et leurs tests et relectures. Les tests restent l'arbitre, quel que soit le modèle.
@@ -59,10 +59,12 @@ Un conflit sur `docs/journal.md` ou `docs/backlog/README.md` entre deux PR se r�
 
 Décision de Théophane (2026-09-29) : la boucle fusionne seule. Une PR est fusionnée par le chef d'équipe, méthode « merge » (commit de fusion), quand **toutes** ces conditions sont réunies :
 
-- la CI GitHub est verte sur le dernier commit de la PR ;
+- la CI GitHub est verte sur le dernier commit de la PR : le job **« CI verte »** du workflow « CI », qui dépend de tous les jobs de vérification lancés en parallèle (T45), a conclu `success` ;
 - le relecteur n'a laissé aucun point bloquant ouvert ;
 - aucun commentaire de Théophane n'attend de réponse sur la PR ;
 - la PR vise `main` (une PR empilée attend que sa dépendance soit fusionnée, puis est redirigée vers `main`).
+
+**Remarques de relecture** (décision de Théophane, 2026-10-19, « on a perdu en efficacité ») : elles se corrigent **dans la PR du ticket, avant la fusion**, pas dans un ticket de suite ; seul un vrai hors-périmètre (autre écran, autre règle, autre fichier que ceux du ticket) devient un ticket. Les petites demandes d'une même zone (même écran, même module) sont **regroupées en un seul ticket** plutôt qu'un ticket chacune.
 
 Jamais de fusion avec une CI rouge ou en cours, jamais de push direct sur `main`, jamais de test désactivé pour passer. Une PR qui ne remplit pas ces conditions reste ouverte, en « en revue », et le journal dit pourquoi. Les conflits sur `docs/journal.md`, `docs/backlog/README.md` ou `docs/questions.md` se résolvent en gardant toutes les entrées. Après la fusion, vérifier que la CI de `main` reste verte ; sinon, la corriger avant tout nouveau ticket.
 
@@ -72,7 +74,7 @@ Décision de Théophane (2026-10-05) : chaque semaine, la boucle laisse **au moi
 
 - **Pas de plafond en nombre de tickets** (décision de Théophane du 2026-10-09, travail de nuit autorisé) : la jauge seule fait foi. Repère mesuré : 25 tickets ≈ 34 % de la limite (vendredi 9 octobre 12 h 40), soit environ 1,2 % par ticket avec la répartition des modèles ci-dessus. Au-delà de **30 tickets depuis la dernière valeur de jauge connue**, demander la jauge à Théophane avant d'en lancer d'autres. Compter : `git log origin/main --merges --since=<mercredi 10 h> --grep "ticket/"` et les PR `ticket/…` encore ouvertes.
 - **Aucun nouveau ticket du mardi 10 h au mercredi 10 h** : les fenêtres de ce créneau surveillent et fusionnent seulement les PR déjà ouvertes.
-- **Jauge donnée par Théophane** : elle prime sur le compte de tickets. Si elle dépasse 70 % avant mardi, plus de nouveau ticket jusqu'au mercredi 10 h. Dernière valeur connue : 34 % le vendredi 9 octobre 2026 à 12 h 40 (25 tickets faits depuis le mercredi 7 octobre à 10 h).
+- **Jauge donnée par Théophane** : elle prime sur le compte de tickets. Si elle dépasse 70 % avant mardi, plus de nouveau ticket jusqu'au mercredi 10 h. Dernière valeur connue : **20 % le lundi 19 octobre 2026** (semaine du mercredi 14 octobre 10 h). Repère précédent : 34 % le vendredi 9 octobre 2026 à 12 h 40 (25 tickets faits depuis le mercredi 7 octobre à 10 h).
 - **Économies systématiques** : Sonnet pour le testeur et le relecteur des tickets sans risque (ni stock, ni synchro, ni sécurité, ni isolement entre fermes) ; une fenêtre sans ticket s'arrête après la surveillance des PR, sans relancer d'agent.
 - **Fréquence** : la routine tourne deux fois par jour (7 h 17 et 17 h 17, heure de Paris).
 
