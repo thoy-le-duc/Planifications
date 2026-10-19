@@ -382,7 +382,7 @@ describe('T49 (relecture) : avertir avant de confirmer', () => {
     const f = dialogueOuEchec('Modifier P1');
     b.remiseAZero();
     await toucher(bouton('Mettre hors service', f));
-    await attendre(() => /culture/.test(texte(f.querySelector('[role="alert"]'))), 'avertissement : la planche porte une culture');
+    await attendre(() => texte(f.querySelector('[role="alert"]')).includes('culture'), 'avertissement : la planche porte une culture');
     expect(b.transactions()).toBe(0);
     expect(actifs(emplacements(b))[0]?.actif_au).toBeNull();
     await toucher(bouton('Mettre hors service quand même', f));
@@ -397,7 +397,7 @@ describe('T49 (relecture) : avertir avant de confirmer', () => {
     recevoirSerie(String(saisons(b)[0]?.id), '2026-05-04', null);
     await toucher(bouton('Modifier la saison 2026'));
     const d = await saisirSaison('Modifier la saison', { fin: '2026-03-31' });
-    await attendre(() => /1 série/.test(texte(d.querySelector('[role="alert"]'))), 'avertissement : 1 série hors de la saison');
+    await attendre(() => texte(d.querySelector('[role="alert"]')).includes('1 série'), 'avertissement : 1 série hors de la saison');
     expect(b.transactions()).toBe(0);
     expect(saisons(b)[0]?.fin).toBe('2026-12-31');
     await toucher(bouton('Enregistrer quand même', d));

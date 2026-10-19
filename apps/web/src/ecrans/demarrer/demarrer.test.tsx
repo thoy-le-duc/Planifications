@@ -26,7 +26,7 @@ const CHEMIN_FERME = '../ferme/EcranFerme.tsx';
 
 type Onglet = 'ferme' | 'planches';
 interface ProprietesEcran {
-  readonly porte: Banc['porte'];
+  readonly porte: Banc['porte'] | null;
   readonly fermeId: string;
   readonly aujourdhui?: () => string;
   readonly surOnglet?: (o: Onglet) => void;
@@ -287,7 +287,7 @@ describe('T49 : Aujourd’hui — sans série, dire quoi faire', () => {
       [id(0xc6), FERME, PLANCHE, id(0xc5), AUJOURDHUI, ISO, ISO],
     );
     await rendreJour();
-    await attendre(() => [...conteneur.querySelectorAll('[data-testid="tache"]')].some((t) => /Batavia/.test(texte(t))), 'tâche « Batavia »', 600);
+    await attendre(() => [...conteneur.querySelectorAll('[data-testid="tache"]')].some((t) => texte(t).includes('Batavia')), 'tâche « Batavia »', 600);
     expect(bandeau()).toBeNull();
     expect(texte(conteneur)).not.toMatch(/Aucune série/);
   });
@@ -349,7 +349,7 @@ describe('T49 : onglet Ferme — la demande ouvre l’écran qui fait l’étape
       );
     etapes.demander('saisons');
     await rendreAvec('ouverture', false);
-    await attendre(() => /pas encore prêtes/.test(texte(conteneur)), 'la demande est dite');
+    await attendre(() => texte(conteneur).includes('pas encore prêtes'), 'la demande est dite');
     expect(etapes.prendreDemande('saisons'), 'demande prise').toBeNull();
     await rendreAvec('prete', true);
     for (let k = 0; k < 50; k++) await attendre(() => true, '');
@@ -362,9 +362,9 @@ describe('T49 (relecture) : Planches, demande « serie » avant la base', () => 
     recevoirSaison();
     recevoirPlanche();
     etapes.demander('serie');
-    const rendrePlan = (porte: Banc['porte'] | null) => rendre(createElement(plan.EcranPlan, { porte: porte as Banc['porte'], fermeId: FERME, aujourdhui: () => AUJOURDHUI, surOnglet }));
+    const rendrePlan = (porte: Banc['porte'] | null) => rendre(createElement(plan.EcranPlan, { porte, fermeId: FERME, aujourdhui: () => AUJOURDHUI, surOnglet }));
     await rendrePlan(null);
-    await attendre(() => /Nouvelle série/.test(texte(conteneur)), 'la demande est dite');
+    await attendre(() => texte(conteneur).includes('Nouvelle série'), 'la demande est dite');
     expect(etapes.prendreDemande('serie')).toBeNull();
     await rendrePlan(b.porte);
     await attendre(() => conteneur.querySelector('[data-testid="plan-defilement"]') !== null, 'plan affiché', 600);
