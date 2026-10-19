@@ -290,6 +290,23 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q44 — Engrais, phyto et suite du jumeau 3D (posée le 2026-10-19)
+
+Demande de Théophane : « avance la 3D aussi, on est en mode jumeau numérique ; penser aux engrais, phyto et traitements ». Arbitrage de Claude : le **registre phyto d'abord** (obligation légale, sert tous les jours, schéma déjà prêt), puis la base publique e-phy, puis le cahier de fertilisation ; en 3D, les traitements et le délai avant récolte visibles, pour que personne ne récolte une planche traitée. Tickets T52 à T55.
+
+Questions :
+
+1. Fertilisation : l'exploitation est-elle en **zone vulnérable nitrates** (plan prévisionnel et cahier obligatoires, plafond de 170 kg N/ha) ? Faut-il un plan prévisionnel, ou le cahier des apports suffit-il pour commencer ?
+2. Fertirrigation des fraises hors-sol : les apports passent-ils par les vannes (solution nutritive, EC, pH) ? Si oui, c'est un autre ticket, à coupler plus tard aux 60 vannes.
+3. Jumeau 3D, après T55 : qu'est-ce qui servirait le plus au quotidien ? Les **vannes d'irrigation** placées et leur état, l'**état des serres** (ouvrants, chauffage), la **timeline** de la saison en lecture rapide, ou autre chose ?
+
+Réponses (2026-10-19) :
+1. **Zone vulnérable** : « je crois pas, mais on doit pouvoir y répondre pour d'autres cas ». La zone vulnérable devient une **option de la ferme** : quand elle est cochée, le plan prévisionnel et l'alerte de plafond apparaissent (T54).
+2. **Fertirrigation** : « les deux, et parfois on fait de la fertirrigation sur pleine terre aussi ». Elle passe par les vannes, en hors-sol **et** en pleine terre, à côté des apports solides. Ticket T56.
+3. **Jumeau 3D** : tout est retenu : **vannes d'irrigation** (T57), **état des serres** (T58), **déroulé de la saison** (T59), **consignes par ouvrier** (T60), et en plus **les chemins et l'endroit où les outils sont rangés** (T61).
+
+Ordre arbitré par Claude : T52, T55, T60, T57, T56, T53, T54, T58, T59, T61. On commence par ce qui sert chaque jour et évite une erreur au champ (phyto, consignes, vannes), et le spectaculaire vient ensuite.
+
 ### Q42 — Backlog vide : quelle suite ? (posée le 2026-10-14, après T11h)
 
 Question : tous les tickets spécifiés sont faits (dernier : T11h). Sur quoi préparer les suivants : retours d'usage sur la ferme (phase 1), journal vocal (phase 2), agent et serveur MCP, ou import Elzéard / Qrop ?

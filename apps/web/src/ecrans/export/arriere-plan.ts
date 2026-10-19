@@ -137,6 +137,9 @@ export const exportEnFond = {
           fermeId,
           maintenant: () => new Date(),
           telecharger: telechargerDansLeNavigateur,
+          // T47 : la construction de l'archive dans le worker ; ses ramasse-miettes ne gèlent
+          // plus l'écran (mesuré : 35 à 145 ms au fil principal, CPU ×4).
+          constructionEnWorker: true,
           signal,
           avancement: ({ fait, total }) => {
             if (!signal.aborted) poser(id, { etat: { etape: 'en_cours', fait, total } });
