@@ -5,6 +5,10 @@
  */
 import { exporterFerme, type ArchiveExport, type Avancement, type Compresseur, type PorteDonnees } from '@planif/sync/export';
 import { compresseurEnWorker, ErreurWorkerCompression } from './compression.ts';
+import { construireEnWorker } from './construction.ts';
+import { rendreLaMain } from './rendre-la-main.ts';
+
+export { rendreLaMain };
 
 export interface OptionsLancerExport {
   readonly porte: PorteDonnees;
@@ -24,6 +28,13 @@ export interface OptionsLancerExport {
    * sans Worker celui d'`exporterFerme`.
    */
   readonly compresseur?: Compresseur;
+  /**
+   * T47 : toute la construction de l'archive (lignes, CSV, ferme.json, ZIP, compression) dans le
+   * worker de l'export (./construction.ts) ; le fil principal ne fait que lire les pages de la
+   * base et les lui passer. Sans worker, ou s'il tombe : construction au fil principal, comme
+   * avant. Ignoré si `compresseur` est donné.
+   */
+  readonly constructionEnWorker?: boolean;
 }
 
 const deux = (n: number): string => String(n).padStart(2, '0');
@@ -36,7 +47,8 @@ export function jourLocal(d: Date): string {
 /** Construit l'archive de la ferme et la donne à `telecharger`, une fois. */
 export async function lancerExport(o: OptionsLancerExport): Promise<ArchiveExport> {
   const quand = o.maintenant();
-  const enWorker = o.compresseur === undefined ? compresseurEnWorker() : null;
+  const genereLe = quand.toISOString();
+  const jour = jourLocal(quand);
   // Barre d'avancement : jamais en recul, même si l'export recommence sans le worker.
   const vu = { fait: 0, total: 0 };
   const avancement =
@@ -48,58 +60,73 @@ export async function lancerExport(o: OptionsLancerExport): Promise<ArchiveExpor
           vu.total = a.total;
           o.avancement?.(a);
         };
-  const exporter = (compresseur: Compresseur | undefined) =>
-    exporterFerme(o.porte, {
-      fermeId: o.fermeId,
-      genereLe: quand.toISOString(),
-      jour: jourLocal(quand),
-      ...(compresseur === undefined ? {} : { compresseur }),
-      ...(avancement === undefined ? {} : { avancement }),
-      ...(o.signal === undefined ? {} : { signal: o.signal }),
-    });
-  let archive: ArchiveExport;
-  try {
-    archive = await exporter(o.compresseur ?? enWorker?.compresseur);
-  } catch (erreur: unknown) {
-    // Le worker de compression a lâché (pas la base, pas une annulation) : une seule nouvelle
-    // tentative, compression au fil principal. La base se relit sans risque (lecture seule).
-    if (!(erreur instanceof ErreurWorkerCompression) || o.signal?.aborted === true) throw erreur;
-    enWorker?.fermer();
-    console.warn(`Export : ${erreur.message} ; nouvelle tentative sans le worker.`);
-    archive = await exporter(undefined);
-  } finally {
-    enWorker?.fermer();
+  let archive: ArchiveExport | null = null;
+  /** Le worker de construction est tombé en cours d'export : la nouvelle tentative se fait sans aucun worker. */
+  let sansWorker = false;
+  if (o.constructionEnWorker === true && o.compresseur === undefined) {
+    try {
+      // null : pas de worker (ou il ne s'est pas chargé), rien n'a été lu ; l'export se fait ci-dessous.
+      archive = await construireEnWorker({
+        porte: o.porte,
+        fermeId: o.fermeId,
+        genereLe,
+        jour,
+        ...(avancement === undefined ? {} : { avancement }),
+        ...(o.signal === undefined ? {} : { signal: o.signal }),
+      });
+    } catch (erreur: unknown) {
+      // Le worker a lâché en cours d'export (pas la base, pas une annulation) : une seule
+      // nouvelle tentative, au fil principal. La base se relit sans risque (lecture seule).
+      if (!(erreur instanceof ErreurWorkerCompression) || o.signal?.aborted === true) throw erreur;
+      console.warn(`Export : ${erreur.message} ; nouvelle tentative, construction au fil principal.`);
+      sansWorker = true;
+    }
   }
+  archive ??= await exporterAuFilPrincipal(o, genereLe, jour, avancement, sansWorker);
   // Annulé au tout dernier moment : pas de téléchargement tardif.
   o.signal?.throwIfAborted();
   await o.telecharger(archive.nomFichier, archive.octets, o.signal);
   return archive;
 }
 
+/**
+ * Construction au fil principal ; compression dans le worker de compression s'il se charge (T16b,
+ * T15c). `sansWorker` : nouvelle tentative après la chute du worker de construction (T47) ; une
+ * seule, entièrement au fil principal (compression par défaut).
+ */
+async function exporterAuFilPrincipal(
+  o: OptionsLancerExport,
+  genereLe: string,
+  jour: string,
+  avancement: ((a: Avancement) => void) | undefined,
+  sansWorker: boolean,
+): Promise<ArchiveExport> {
+  const enWorker = o.compresseur === undefined && !sansWorker ? compresseurEnWorker() : null;
+  const exporter = (compresseur: Compresseur | undefined) =>
+    exporterFerme(o.porte, {
+      fermeId: o.fermeId,
+      genereLe,
+      jour,
+      ...(compresseur === undefined ? {} : { compresseur }),
+      ...(avancement === undefined ? {} : { avancement }),
+      ...(o.signal === undefined ? {} : { signal: o.signal }),
+    });
+  try {
+    return await exporter(o.compresseur ?? enWorker?.compresseur);
+  } catch (erreur: unknown) {
+    // Le worker de compression a lâché (pas la base, pas une annulation) : une seule nouvelle
+    // tentative, compression au fil principal. La base se relit sans risque (lecture seule).
+    if (!(erreur instanceof ErreurWorkerCompression) || o.signal?.aborted === true) throw erreur;
+    enWorker?.fermer();
+    console.warn(`Export : ${erreur.message} ; nouvelle tentative sans le worker.`);
+    return await exporter(undefined);
+  } finally {
+    enWorker?.fermer();
+  }
+}
+
 /** Taille d'une tranche du Blob : sa copie reste bien sous 50 ms, CPU ×4, sur un téléphone moyen. */
 const TRANCHE_BLOB = 256 * 1024;
-
-/**
- * Rend la main à la boucle d'événements (une vraie tâche : le rendu et les saisies passent).
- * MessageChannel, comme le rendeur du cœur (@planif/core) : un message par tâche, sans le délai
- * des minuteries, que le navigateur étire jusqu'à une seconde ou plus dans un onglet caché (T15e :
- * l'export continue en arrière-plan). Un canal par appel, fermé à la réception : rien ne reste
- * ouvert. Sans MessageChannel : setTimeout.
- */
-export function rendreLaMain(): Promise<void> {
-  return new Promise<void>((ok) => {
-    if (typeof MessageChannel !== 'function') {
-      setTimeout(ok, 0);
-      return;
-    }
-    const canal = new MessageChannel();
-    canal.port1.onmessage = () => {
-      canal.port1.close();
-      ok();
-    };
-    canal.port2.postMessage(0);
-  });
-}
 
 /**
  * Téléchargement dans le navigateur : Blob ZIP et lien `download`, sans réseau.
