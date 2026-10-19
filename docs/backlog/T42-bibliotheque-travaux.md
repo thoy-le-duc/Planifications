@@ -15,8 +15,8 @@
 
 ## Critères d'acceptation
 
-- [ ] Test : les 46 itinéraires ont au moins 3 travaux prévus, tous valides pour le cœur (produit et quantité en fertilisation et amendement, repères connus, libellés de la liste de départ).
-- [ ] Test : carotte, radis, navet, épinard, haricot, pois sont à l'écartement avec rangs, écartement et graines par poquet.
-- [ ] Test d'intégration : la migration met à jour la bibliothèque, aucune ligne de ferme touchée, rejouable.
-- [ ] Test d'écran : l'écart entre rangs et l'écart équivalent sur le rang s'affichent.
-- [ ] Aucune trace de Masterclass ; `pnpm verif` passe.
+- [x] Test : les 46 itinéraires ont au moins 3 travaux prévus, tous valides pour le cœur (produit et quantité en fertilisation et amendement, repères connus, libellés de la liste de départ).
+- [x] Test : carotte, radis, navet, épinard, haricot, pois sont à l'écartement avec rangs, écartement et graines par poquet.
+- [x] Test d'intégration : la migration met à jour la bibliothèque, aucune ligne de ferme touchée, rejouable.
+- [x] Test d'écran : l'écart entre rangs et l'écart équivalent sur le rang s'affichent.
+- [x] Aucune trace de Masterclass ; `pnpm verif` passe.

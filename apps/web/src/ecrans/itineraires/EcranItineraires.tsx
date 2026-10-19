@@ -12,7 +12,7 @@ import { validerTypeIntervention, type CategorieIntervention } from '@planif/cor
 import type { PorteDonnees } from '@planif/sync';
 import './itineraires.css';
 import { CATEGORIES, cleType, comparerNoms, resumeItineraire, typesUtilises, type EspeceLue, type ItineraireLu, type TypeLu } from './calculs.ts';
-import { requeteEspeces, requeteItineraires, requeteTypes } from './donnees.ts';
+import { requeteEspeces, requeteItineraires, requeteLargeurPlanche, requeteTypes } from './donnees.ts';
 import { ajouterType, EcritureRefusee, modifierType, nouvelId, ramener, supprimerType, type ContexteEcriture } from './ecritures.ts';
 import { CROIX, FormulaireItineraire, garderLeFocus, type DepartFormulaire, type SaisieAnnulable } from './FormulaireItineraire.tsx';
 
@@ -219,6 +219,7 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
   const [nouveau, setNouveau] = useState('');
   const [messageType, setMessageType] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
+  const [largeurPlanche, setLargeurPlanche] = useState<number | null>(null);
   const idTitre = useId();
   const idItineraires = useId();
   const idTypes = useId();
@@ -233,6 +234,14 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
   // Listes surveillées : l'écran suit ses écritures et celles de la synchro.
   useEffect(() => porte.surveiller(requeteItineraires(fermeId), setItineraires), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteEspeces(fermeId), setEspeces), [porte, fermeId]);
+  // T42 : largeur des planches de la ferme, pour l'écart entre rangs du formulaire (null : 75 cm).
+  useEffect(
+    () =>
+      porte.surveiller(requeteLargeurPlanche(fermeId), (l) => {
+        setLargeurPlanche(l[0] ?? null);
+      }),
+    [porte, fermeId],
+  );
   useEffect(
     () =>
       porte.surveiller(requeteTypes(fermeId), (l) => {
@@ -739,6 +748,7 @@ export function EcranItineraires({ porte, fermeId, utilisateurId, surFermer, auj
           depart={depart}
           especes={especesTriees}
           types={listeTypes}
+          largeurPlancheCm={largeurPlanche}
           ctx={ctx}
           aujourdhui={jour}
           surFermer={() => {

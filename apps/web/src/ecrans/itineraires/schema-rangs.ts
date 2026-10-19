@@ -73,3 +73,58 @@ export function texteSchemaRangs(e: Pick<EntreeSchemaRangs, 'rangs' | 'ecartemen
   if (e.rangs <= 1) return `1 rang, ${plant}`;
   return `${String(e.rangs)} rangs ${e.disposition === 'quinconce' ? 'en quinconce' : 'alignés'}, ${plant}`;
 }
+
+// ── Écarts d'une densité (T42) ─────────────────────────────────────────────────────────────
+
+/** Largeur de planche des écarts quand la ferme n'en dit rien : 75 cm (planche permanente usuelle). */
+export const LARGEUR_PLANCHE_ECARTS_CM = 75;
+
+/** Écart entre rangs et, au mètre linéaire, écart moyen équivalent entre graines sur le rang. */
+export interface EcartsDensite {
+  readonly rangs: number;
+  /** Celle reçue, sinon LARGEUR_PLANCHE_ECARTS_CM. */
+  readonly largeurPlancheCm: number;
+  /** Largeur / rangs (rangs au milieu de bandes égales, comme le schéma) ; null à 1 rang. */
+  readonly ecartEntreRangsCm: number | null;
+  /** Au mètre linéaire : 100 / graines par mètre ; null sinon. */
+  readonly ecartEquivalentCm: number | null;
+}
+
+const positif = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0;
+
+/**
+ * Écarts d'une densité à l'écartement ou au mètre linéaire (rangs entiers ≥ 1) ; null à la volée
+ * ou si la densité est illisible. Affichage seulement : le nombre de plants reste calculé par le cœur.
+ */
+export function ecartsDensite(densite: unknown, largeurPlancheCm: number | null): EcartsDensite | null {
+  if (typeof densite !== 'object' || densite === null) return null;
+  const d = densite as Readonly<Record<string, unknown>>;
+  if (d.facon !== 'ecartement' && d.facon !== 'metre_lineaire') return null;
+  const rangs = d.rangsParPlanche;
+  if (typeof rangs !== 'number' || !Number.isInteger(rangs) || rangs < 1) return null;
+  let ecartEquivalentCm: number | null = null;
+  if (d.facon === 'metre_lineaire') {
+    if (!positif(d.grainesParMetre)) return null;
+    ecartEquivalentCm = 100 / d.grainesParMetre;
+  }
+  const largeur = positif(largeurPlancheCm) ? largeurPlancheCm : LARGEUR_PLANCHE_ECARTS_CM;
+  return { rangs, largeurPlancheCm: largeur, ecartEntreRangsCm: rangs > 1 ? largeur / rangs : null, ecartEquivalentCm };
+}
+
+/** Centimètres arrondis : à l'unité à partir de 10 cm, au dixième en dessous (« 27 cm », « 0,7 cm »). */
+function cmArrondis(cm: number): string {
+  const v = cm >= 10 ? Math.round(cm) : Math.round(cm * 10) / 10;
+  return texteCm(v);
+}
+
+/** « 3 rangs, ≈ 25 cm entre rangs (planche de 75 cm) », « 1 rang (planche de 75 cm) ». */
+export function texteEcartsRangs(e: EcartsDensite): string {
+  const planche = `(planche de ${cmArrondis(e.largeurPlancheCm)})`;
+  if (e.ecartEntreRangsCm === null) return `${String(e.rangs)} rang ${planche}`;
+  return `${String(e.rangs)} rangs, ≈ ${cmArrondis(e.ecartEntreRangsCm)} entre rangs ${planche}`;
+}
+
+/** « ≈ 2 cm entre graines sur le rang » ; null hors mètre linéaire. */
+export function texteEcartEquivalent(e: EcartsDensite): string | null {
+  return e.ecartEquivalentCm === null ? null : `≈ ${cmArrondis(e.ecartEquivalentCm)} entre graines sur le rang`;
+}

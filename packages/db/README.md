@@ -61,6 +61,7 @@ Sans `DATABASE_URL`, les tests d'intégration sont sautés en local (avec un ave
 | `migrations/0030_*.sql` | Généré par drizzle-kit (T32a, Q32 option A) : `espece.profil_croissance` (jsonb nullable, sans défaut ; nul = profil par défaut du cœur) et son CHECK « nul ou objet ». Aucune ligne réécrite |
 | `migrations/0032_*.sql` | Migration de données (T41), écrite depuis `bibliotheque/depart.json` : 10 familles, 35 espèces, 46 itinéraires à `ferme_id` nul, identifiants fixes, `ON CONFLICT (id) DO NOTHING`. Figée (T41b, empreinte vérifiée) : une mise à jour des valeurs = une nouvelle migration |
 | `migrations/0033_*.sql` | Migration de bibliothèque (T41b), écrite par `pnpm --filter @planif/db bibliotheque 0033_bibliotheque_melon_plein_champ` : l'itinéraire du melon renommé « Melon, plein champ (chenille conseillée) », même identifiant |
+| `migrations/0034_*.sql` | Migration de bibliothèque (T42), écrite par `pnpm --filter @planif/db bibliotheque 0034_bibliotheque_travaux` : travaux prévus des 46 itinéraires, semis directs de graines comptables à l'écartement ; mêmes identifiants, seules les lignes de la bibliothèque |
 | `migrations/0031_*.sql` | Généré par drizzle-kit (T38a) : table `securite.debit_synchro` (débit de la synchro compté en base, plus en mémoire) et son index sur `maj_le`. Aucune ligne réécrite |
 
 Ne jamais modifier une migration déjà fusionnée : on en ajoute une nouvelle.
