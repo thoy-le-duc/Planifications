@@ -145,10 +145,16 @@ export interface Rang extends EmplacementCommun {
   readonly sorte: 'rang';
 }
 
-/** Gouttière hors-sol : elle se remplit par places, pas par mètres. */
+/**
+ * Gouttière hors-sol : elle se remplit par contenants (pains, sacs, pots), pas par mètres (T51).
+ * Une occupation d'une gouttière compte des pains (`PlaceOccupee` « places »).
+ */
 export interface Gouttiere extends EmplacementCommun {
   readonly sorte: 'gouttiere';
-  readonly nombrePlaces: number;
+  /** Pains (ou sacs, pots) posés sur la gouttière ; par défaut, 1 par mètre (`painsParDefaut`). */
+  readonly nombrePains: number;
+  /** Ancien « nombre de places » (avant T51) : gardé en lecture seule, ne sert à aucun calcul. */
+  readonly nombrePlaces: number | null;
 }
 
 export type Emplacement = Planche | Rang | Gouttiere;
@@ -240,7 +246,7 @@ export interface PeriodeSemaines {
   readonly semaineFin: number;
 }
 
-export type FaconDensite = 'ecartement' | 'metre_lineaire' | 'volee';
+export type FaconDensite = 'ecartement' | 'metre_lineaire' | 'volee' | 'contenants';
 
 /** Plants (ou mottes) posés à intervalle régulier sur chaque rang. */
 export interface DensiteEcartement {
@@ -269,7 +275,19 @@ export interface DensiteVolee {
   readonly doseGParM2: Grammes;
 }
 
-export type Densite = DensiteEcartement | DensiteMetreLineaire | DensiteVolee;
+/**
+ * Hors-sol (T51) : trous par contenant (pain, sac, pot) ; la place se compte en contenants sur
+ * une gouttière. Plant maison ou acheté : plants posés par trou (absent = 1) ; semis direct :
+ * graines semées par trou (obligatoire). Bornes : `BORNES_CONTENANTS`.
+ */
+export interface DensiteContenants {
+  readonly facon: 'contenants';
+  readonly trousParContenant: number;
+  readonly plantsParTrou?: number;
+  readonly grainesParTrou?: number;
+}
+
+export type Densite = DensiteEcartement | DensiteMetreLineaire | DensiteVolee | DensiteContenants;
 
 export interface RendementAttendu {
   readonly par: 'metre' | 'plant';
@@ -347,8 +365,8 @@ export interface ParametresSemisDirect extends ParametresCommuns {
 /** Plant élevé à la ferme en pépinière, en mottes. */
 export interface ParametresPlantMaison extends ParametresCommuns {
   readonly mode: 'plant_maison';
-  /** Des mottes se posent à l'écartement : pas de dose à la volée sur un plant maison. */
-  readonly densite: DensiteEcartement;
+  /** Des mottes se posent à l'écartement, ou dans les trous des pains (T51) : pas de dose à la volée. */
+  readonly densite: DensiteEcartement | DensiteContenants;
   readonly dureePepiniereJours: Jours;
   readonly grainesParMotte: number;
   readonly plantsParMotte: number;
@@ -359,7 +377,7 @@ export interface ParametresPlantMaison extends ParametresCommuns {
 /** Plant acheté : pas de pépinière à la ferme. */
 export interface ParametresPlantAchete extends ParametresCommuns {
   readonly mode: 'plant_achete';
-  readonly densite: DensiteEcartement;
+  readonly densite: DensiteEcartement | DensiteContenants;
 }
 
 /** Paramètres techniques d'un itinéraire, discriminés par le mode : ce que la série fige. */
@@ -464,7 +482,7 @@ export type OccupantEmplacement =
   /** Couverture longue (bâche, occultation, solarisation) : elle réserve l'emplacement. */
   | { readonly sorte: 'couverture'; readonly evenementId: Id<'Evenement'> };
 
-/** Place prise : mètres sur une planche ou un rang, places dans une gouttière. */
+/** Place prise : mètres sur une planche ou un rang ; sur une gouttière, des pains (T51 ; « places » avant). */
 export type PlaceOccupee =
   | { readonly unite: 'longueur'; readonly longueurM: Metres }
   | { readonly unite: 'places'; readonly nombrePlaces: number };

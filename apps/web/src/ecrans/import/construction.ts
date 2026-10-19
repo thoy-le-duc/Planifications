@@ -15,6 +15,7 @@ import {
   creerGenerateurId,
   ecartEnJours,
   FAMILLES_PAR_DEFAUT,
+  painsParDefaut,
   validerItineraire,
   validerOccupation,
   validerSerie,
@@ -89,6 +90,17 @@ export const COLONNES: Readonly<Record<string, readonly string[]>> = {
 
 
 /** Plafonds du parcellaire (serveur, T10s) et des séries (cœur, Q21). */
+/**
+ * T51 : pains qu'une série importée occupe sur une gouttière : toute la gouttière (ses pains, 1 par
+ * mètre s'ils ne sont pas encore connus) ; avec un nombre de plants et l'ancien nombre de places,
+ * la même part que la migration 0037 : max(1, min(pains, arrondi(plants × pains ÷ places))).
+ */
+function painsOccupes(e: EmplacementConnu, nombrePlants: number | null): number {
+  const pains = e.nombrePains ?? painsParDefaut(e.longueurM ?? 0);
+  if (nombrePlants === null || e.nombrePlaces === null || e.nombrePlaces <= 0) return pains;
+  return Math.max(1, Math.min(pains, Math.round((nombrePlants * pains) / e.nombrePlaces)));
+}
+
 const PLAFONDS = { longueurM: 10_000, largeurM: 1_000, surfaceM2: 10_000_000, nombrePlaces: 1_000_000, texte: 200 } as const;
 
 /** Délais de retour d'une famille créée par l'import, quand la bibliothèque n'en a pas de même nom (modifiables ensuite). */
@@ -819,7 +831,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
         if (!rs.ok) throw new Refus(`Série refusée : ${rs.erreur.message}.`, null);
         const groupe: OrdreEcriture[] = [inserer('serie', serie)];
         if (emplacement !== null) {
-          const gouttiere = emplacement.sorte === 'gouttiere' && emplacement.nombrePlaces !== null;
+          const gouttiere = emplacement.sorte === 'gouttiere';
           const occupation = {
             id: nouvelId<'Occupation'>(),
             ferme_id: ferme,
@@ -828,7 +840,7 @@ export function construire(plan: PlanImport, e: EntreeConstruction): { readonly 
             plantation_id: null,
             evenement_id: null,
             longueur_m: gouttiere ? null : (longueur ?? emplacement.longueurM),
-            nombre_places: gouttiere ? (nombrePlants ?? emplacement.nombrePlaces) : null,
+            nombre_places: gouttiere ? painsOccupes(emplacement, nombrePlants) : null,
             position_m: null,
             prevu_du: dates.miseEnPlace,
             prevu_au: dates.finRecolte,

@@ -42,12 +42,14 @@ import { readFileSync } from 'node:fs';
 import { calculerDatesSerie, validerItineraire, type DateCalendaire } from '@planif/core';
 import { describe, expect, it } from 'vitest';
 import * as db from './index.ts';
+import { sourceALEtat } from './test/bibliotheque-a-l-etat.ts';
 import { CATEGORIES_ESPECE, MODES_ITINERAIRE, TYPES_ABRI, UNITES_RECOLTE } from './valeurs.ts';
 
 /** Ferme fictive : validerItineraire exige une ferme (le téléphone n'écrit jamais dans la bibliothèque). */
 const FERME_TEST = '0192f0c1-4141-7000-8000-000000000001';
 
-const source = db.lireBibliothequeDepart();
+// T51 : les lignes de la bibliothèque de ce ticket (celles ajoutées depuis ont leurs tests).
+const source = sourceALEtat();
 const lignes = db.convertirBibliotheque(source);
 
 const uuidMd5 = (texte: string): string => {
@@ -145,7 +147,7 @@ describe('T41 : identifiants fixes, dérivés du nom', () => {
   });
 
   it('la conversion est déterministe (deux appels, mêmes lignes)', () => {
-    expect(db.convertirBibliotheque(db.lireBibliothequeDepart())).toEqual(lignes);
+    expect(db.convertirBibliotheque(sourceALEtat())).toEqual(lignes);
   });
 });
 

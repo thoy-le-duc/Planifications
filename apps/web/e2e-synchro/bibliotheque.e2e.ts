@@ -8,12 +8,12 @@
  * ferme depuis l'appli (comme creer-ferme.e2e.ts).
  *
  * Attendu :
- *   1. Ferme → « Mes itinéraires » : les 46 itinéraires de la bibliothèque (data-origine
+ *   1. Ferme → « Mes itinéraires » : les 47 itinéraires de la bibliothèque (data-origine
  *      "bibliotheque"), dont « Tomate sous serre, plant greffé deux têtes » ;
  *   2. « Adapter pour ma ferme » sur cet itinéraire puis « Enregistrer » : la copie apparaît côté
  *      ferme ; une fois la synchro faite (« À jour » : plus rien en attente), elle est toujours là après rechargement (le serveur
  *      l'a acceptée : une écriture refusée disparaîtrait du téléphone), et la bibliothèque compte
- *      toujours 46 itinéraires.
+ *      toujours 47 itinéraires.
  */
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +26,7 @@ const SERVICES = API_URL !== '' && (process.env.POWERSYNC_URL ?? '') !== '';
 const EN_CI = Boolean(process.env.CI);
 const SCRIPT_AMORCAGE = fileURLToPath(new URL('../../api/src/sync/test/amorcer-e2e.ts', import.meta.url));
 
-const ITINERAIRES_DE_DEPART = 46;
+const ITINERAIRES_DE_DEPART = 47;
 const TOMATE_SERRE = 'Tomate sous serre, plant greffé deux têtes';
 
 const navigation = (page: Page) => page.getByRole('navigation', { name: 'Navigation principale' });
@@ -51,7 +51,7 @@ test.describe('T41 : la bibliothèque de départ arrive sur une ferme neuve, de 
     compteNeuf = (JSON.parse(sortie) as { compteNeuf: SessionConnexion }).compteNeuf;
   });
 
-  test('ferme neuve → 46 itinéraires de la bibliothèque ; « Adapter pour ma ferme » → copie acceptée par le serveur', async ({ browser }) => {
+  test('ferme neuve → 47 itinéraires de la bibliothèque ; « Adapter pour ma ferme » → copie acceptée par le serveur', async ({ browser }) => {
     const contexte = await browser.newContext();
     try {
       await contexte.addInitScript(

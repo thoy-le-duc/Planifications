@@ -111,11 +111,12 @@ decrireAvecBase('T41')('T41 : la bibliothèque de départ face aux écritures de
   }
 
   describe('la bibliothèque est en base, à ferme_id nul, dès les migrations', () => {
-    it('46 itinéraires, 35 espèces, 10 familles : ce qu’une ferme neuve reçoit (flux *_reference de powersync/sync-config.yaml)', async () => {
+    // T51 : 0038 ajoute Rosacées, fraise et « Fraise hors-sol en gouttière ».
+    it('47 itinéraires, 36 espèces, 11 familles : ce qu’une ferme neuve reçoit (flux *_reference de powersync/sync-config.yaml)', async () => {
       const n = async (table: string) => (await base.pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM ${table} WHERE ferme_id IS NULL AND supprime_le IS NULL`)).rows[0]?.n;
-      expect(await n('itineraire')).toBe(46);
-      expect(await n('espece')).toBe(35);
-      expect(await n('famille')).toBe(10);
+      expect(await n('itineraire')).toBe(47);
+      expect(await n('espece')).toBe(36);
+      expect(await n('famille')).toBe(11);
     });
   });
 

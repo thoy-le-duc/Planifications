@@ -11,7 +11,8 @@
       "Ail : caïeux traités comme semis direct à l'écartement (1 caïeu par poquet).",
       "travauxPrevus (T42) : repères et décalages en jours depuis la mise en place ou la récolte ; compost en kg/m², engrais organique en g/m² ; types de la liste de départ.",
       "Écartements (T42) : semis directs de graines comptables (carotte, radis, navet, épinard, haricot, pois) à l'écartement ; fines graines (mesclun, roquette, aneth, coriandre) au mètre linéaire.",
-      "Écart entre rangs (T43) : valeur usuelle en cm pour le réglage du semoir ou du traceur, choisie pour que les rangs tiennent sur la planche de 75 cm ((rangs − 1) × écart ≤ 75 cm) ; un rang par planche : entraxe des planches, 120 cm. Tirée des fiches publiques déjà citées (semenciers, chambres d'agriculture, réseaux bio), arrondie."
+      "Écart entre rangs (T43) : valeur usuelle en cm pour le réglage du semoir ou du traceur, choisie pour que les rangs tiennent sur la planche de 75 cm ((rangs − 1) × écart ≤ 75 cm) ; un rang par planche : entraxe des planches, 120 cm. Tirée des fiches publiques déjà citées (semenciers, chambres d'agriculture, réseaux bio), arrondie.",
+      "Hors-sol (T51) : densité « en contenants » : trous par pain (1 pain ≈ 1 m de gouttière) et plants (ou graines) par trou ; le nombre de plants d'une série est la somme, sur ses gouttières, de pains × trous × plants par trou. Trous par pain selon la variété (Gariguette 12, Manon ou Dream 10, à adapter)."
     ]
   },
   "familles": [
@@ -74,6 +75,12 @@
       "delaiRetourMinAnnees": 3,
       "delaiRetourConseilleAnnees": 4,
       "remarque": "Gingembre. Peu de références en France ; prudence (pourritures du rhizome)."
+    },
+    {
+      "nom": "Rosacées",
+      "delaiRetourMinAnnees": 3,
+      "delaiRetourConseilleAnnees": 4,
+      "remarque": "Fraisier. En pleine terre, ne pas replanter au même endroit avant 3 à 4 ans ; en hors-sol (gouttières, pains de substrat), pas de rotation."
     }
   ],
   "especes": [
@@ -285,6 +292,12 @@
       "nom": "épinard",
       "famille": "Amaranthacées",
       "categorie": "legume",
+      "uniteRecolte": "kg"
+    },
+    {
+      "nom": "fraise",
+      "famille": "Rosacées",
+      "categorie": "petit_fruit",
       "uniteRecolte": "kg"
     }
   ],
@@ -5950,6 +5963,74 @@
         }
       ],
       "aVerifier": "Peu de références françaises publiques pour le mangetout ; rendement à confirmer. Écartement (T42) : 2 rangs, une graine tous les 2 cm, converti depuis 60 graines/m ; à régler sur le semoir. Travaux prévus (T42) : calendrier type en bio sur planche permanente (compost en kg/m², engrais organique en g/m², répétitions indicatives), à adapter au sol, à l'analyse et à la ferme ; temps de travail non renseignés. Écart entre rangs (T43) : 30 cm, 2 rangs sur une planche de 75 cm (30 cm d'un rang du bord à l'autre) ; à régler sur le semoir et sur les outils de binage."
+    },
+    {
+      "espece": "fraise",
+      "famille": "Rosacées",
+      "categorie": "petit_fruit",
+      "nom": "Fraise hors-sol en gouttière",
+      "mode": "plant_achete",
+      "typeAbri": "hors_sol",
+      "periodeUsage": {
+        "debutSemaine": 2,
+        "finSemaine": 10
+      },
+      "dureePepiniereJours": null,
+      "alveolesParPlaque": null,
+      "grainesParMotte": null,
+      "plantsParMotte": null,
+      "pertePepinierePct": null,
+      "densite": {
+        "facon": "contenants",
+        "trousParContenant": 12
+      },
+      "grainesParPoquet": null,
+      "dureeAvantRecolteJours": 65,
+      "fenetreRecolteJours": 75,
+      "margeSecuritePct": 5,
+      "rendementAttendu": {
+        "par": "plant",
+        "kg": 0.5
+      },
+      "travauxPrevus": [
+        {
+          "categorie": "entretien",
+          "type": "taille",
+          "repere": "mise_en_place",
+          "decalageJours": 14,
+          "repetition": {
+            "tousLesJours": 14,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        },
+        {
+          "categorie": "entretien",
+          "type": "effeuillage",
+          "repere": "debut_recolte",
+          "decalageJours": 0,
+          "repetition": {
+            "tousLesJours": 21,
+            "repereFin": "fin_recolte"
+          },
+          "outil": "sécateur",
+          "produit": null,
+          "tempsEstime": null
+        }
+      ],
+      "sources": [
+        {
+          "titre": "Réussir Fruits et Légumes – Essai CTIFL Balandran : densité des fraisiers augmentée par la superposition des gouttières (2020)",
+          "url": "https://www.reussir.fr/fruits-legumes/dans-cette-serre-la-densite-des-fraisiers-est-augmentee-grace-a-la-superposition-des-gouttieres-de"
+        },
+        {
+          "titre": "Chambre d'agriculture d'Occitanie – Itinéraire technique fraise non remontante Gariguette (2012)",
+          "url": "https://occitanie.chambre-agriculture.fr/fileadmin/user_upload/National/FAL_commun/publications/Occitanie/ITK-FraiseNonRemontante-Gariguette-2012.pdf"
+        }
+      ],
+      "aVerifier": "Hors-sol (T51) : 12 trous par pain d'environ 1 m (Gariguette) ; 10 pour Manon ou Dream : à adapter à la variété et au pain (l'essai CTIFL de référence compte environ 10 plants par mètre de gouttière). Plants frigo plantés en janvier-février sous serre, récolte environ 65 jours après, sur 10 à 11 semaines ; rendement 0,4 à 0,6 kg par plant selon la variété et le chauffage. Travaux prévus : retrait des stolons (taille) tous les 14 jours et effeuillage pendant la récolte ; fertirrigation non comptée ici. Écart entre rangs (T43) : sans objet en gouttière."
     }
   ]
 }

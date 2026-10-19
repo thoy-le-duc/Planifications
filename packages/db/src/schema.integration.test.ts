@@ -1414,6 +1414,7 @@ decrireAvecBase('T08 : schéma PostgreSQL', { timeout: 30_000 }, () => {
           code: 'HS-G12',
           longueurM: 40,
           largeurM: 0.25,
+          nombrePains: 40,
           nombrePlaces: 320,
           remplace: [idDe<'Emplacement'>(b.planche), idDe<'Emplacement'>(randomUUID())],
         },

@@ -174,11 +174,11 @@ describe('lireCsv', () => {
     expect(csv.lignes[2]?.[6]).toBe('hernie, à surveiller');
   });
 
-  it('export T15 : BOM, « ; », 17 colonnes (14, plus le placement de T28a)', async () => {
+  it('export T15 : BOM, « ; », 18 colonnes (14, plus le placement de T28a, plus les pains de T51)', async () => {
     const csv = m.lireCsv(await lireFixture('t15-emplacement.csv'));
     expect(csv).toMatchObject({ encodage: 'utf-8', bom: true, separateur: ';' });
     expect(csv.lignes[0]?.[0]).toBe('id');
-    expect(csv.lignes.every((l) => l.length === 17)).toBe(true);
+    expect(csv.lignes.every((l) => l.length === 18)).toBe(true);
   });
 
   it('fichier texte : pas d’erreur', async () => {

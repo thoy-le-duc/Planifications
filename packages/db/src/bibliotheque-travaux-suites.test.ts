@@ -22,11 +22,13 @@ import { readFileSync } from 'node:fs';
 import type { TravailPrevu } from '@planif/core';
 import { describe, expect, it } from 'vitest';
 import * as db from './index.ts';
+import { sourceALEtat } from './test/bibliotheque-a-l-etat.ts';
 
 const MIGRATION = '0035_bibliotheque_travaux_suites';
 const PRECEDENTE = '0034_bibliotheque_travaux';
 
-const source = db.lireBibliothequeDepart();
+// T51 : les lignes de la bibliothèque de ce ticket (celles ajoutées depuis ont leurs tests).
+const source = sourceALEtat();
 const lignes = db.convertirBibliotheque(source);
 
 const plat = (t: string): string =>

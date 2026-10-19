@@ -8,12 +8,18 @@
  *
  * Le type d'entrée est local : l'appelant (T12) assemble l'itinéraire figé de la série et la
  * variété, et convertit grammes et mètres en entiers au bord.
+ *
+ * T51 : une densité « en contenants » (hors-sol) compte des pains, pas des centimètres :
+ * l'étendue passée à `besoinsSerie` est alors le nombre de contenants de la série (Σ des pains
+ * de ses gouttières, `sommeContenants`). Poquets (ou mottes, ou plants) = contenants × trous ×
+ * plants par trou.
  */
 import { semaineIso } from '../dates/index.ts';
 import type { DateCalendaire, SemaineIso } from '../dates/index.ts';
-import { verifierExhaustif } from '../domaine/index.ts';
+import { plantsParTrouDe, verifierExhaustif } from '../domaine/index.ts';
 import type {
   Centimetres,
+  DensiteContenants,
   DensiteEcartement,
   DensiteMetreLineaire,
   Id,
@@ -42,6 +48,16 @@ export interface SemisDirectEcartement {
   readonly pmgMg: number | null;
 }
 
+/** T51 : semis direct dans les trous des pains ; graines par trou dans la densité. */
+export interface SemisDirectContenants {
+  readonly mode: 'semis_direct';
+  readonly facon: 'contenants';
+  readonly densite: DensiteContenants;
+  readonly germination: Pourcentage;
+  readonly margeSecurite: Pourcentage;
+  readonly pmgMg: number | null;
+}
+
 /** La densité au mètre linéaire compte déjà la germination. */
 export interface SemisDirectMetreLineaire {
   readonly mode: 'semis_direct';
@@ -60,7 +76,7 @@ export interface SemisDirectVolee {
 
 export interface PlantMaisonBesoins {
   readonly mode: 'plant_maison';
-  readonly densite: DensiteEcartement;
+  readonly densite: DensiteEcartement | DensiteContenants;
   readonly grainesParMotte: number;
   readonly plantsParMotte: number;
   readonly germination: Pourcentage;
@@ -72,7 +88,7 @@ export interface PlantMaisonBesoins {
 
 export interface PlantAcheteBesoins {
   readonly mode: 'plant_achete';
-  readonly densite: DensiteEcartement;
+  readonly densite: DensiteEcartement | DensiteContenants;
   readonly margeSecurite: Pourcentage;
 }
 
@@ -83,6 +99,7 @@ export interface PlantAcheteBesoins {
  */
 export type ItineraireBesoins =
   | SemisDirectEcartement
+  | SemisDirectContenants
   | SemisDirectMetreLineaire
   | SemisDirectVolee
   | PlantMaisonBesoins
@@ -101,6 +118,14 @@ export interface BesoinsSemisEcartement extends PoidsFacultatif {
   readonly mode: 'semis_direct';
   readonly facon: 'ecartement';
   readonly plants: number;
+  readonly graines: number;
+}
+
+/** T51 : poquets = trous des pains ; graines avec germination et marge. */
+export interface BesoinsSemisContenants extends PoidsFacultatif {
+  readonly mode: 'semis_direct';
+  readonly facon: 'contenants';
+  readonly poquets: number;
   readonly graines: number;
 }
 
@@ -135,6 +160,7 @@ export interface BesoinsPlantAchete {
 
 export type BesoinsSerie =
   | BesoinsSemisEcartement
+  | BesoinsSemisContenants
   | BesoinsSemisMetreLineaire
   | BesoinsSemisVolee
   | BesoinsPlantMaison
@@ -187,7 +213,7 @@ function exigerPourcentage(valeur: Pourcentage, nom: string, min: number, max: n
 }
 
 function controlerCommun(itineraire: ItineraireBesoins, longueurCm: number): void {
-  exigerEntier(longueurCm, 'longueur (cm)', 0);
+  exigerEntier(longueurCm, enContenants(itineraire) ? 'contenants' : 'longueur (cm)', 0);
   exigerEntier(itineraire.margeSecurite, 'marge de sécurité (%)', 0);
 }
 
@@ -199,8 +225,31 @@ function controlerPmg(pmgMg: number | null): void {
 // Façons de compter
 // ---------------------------------------------------------------------------------------------
 
-/** Plants (ou mottes) en place : ⌊longueur ÷ écartement⌋ × rangs. */
-function placesEnPlace(densite: DensiteEcartement, longueurCm: number): number {
+/** La densité de l'itinéraire se compte-t-elle en contenants (l'étendue est alors un nombre de pains) ? */
+function enContenants(it: ItineraireBesoins): boolean {
+  return it.densite.facon === 'contenants';
+}
+
+/** T51 : trous des contenants : contenants × trous par contenant. */
+function trousEnPlace(densite: DensiteContenants, contenants: number): number {
+  exigerEntier(densite.trousParContenant, 'trous par contenant', 1);
+  return versNombre(produit(contenants, densite.trousParContenant));
+}
+
+/**
+ * Plants (ou mottes) en place : ⌊longueur ÷ écartement⌋ × rangs ; en contenants (T51),
+ * contenants × trous × plants par trou.
+ */
+function placesEnPlace(densite: DensiteEcartement | DensiteContenants, etendue: number): number {
+  if (densite.facon === 'contenants') {
+    const plantsParTrou = plantsParTrouDe(densite);
+    exigerEntier(plantsParTrou, 'plants par trou', 1);
+    return versNombre(produit(trousEnPlace(densite, etendue), plantsParTrou));
+  }
+  return placesSurRangs(densite, etendue);
+}
+
+function placesSurRangs(densite: DensiteEcartement, longueurCm: number): number {
   exigerEntier(densite.ecartementSurRangCm, 'écartement sur le rang (cm)', 1);
   exigerEntier(densite.rangsParPlanche, 'rangs par planche', 1);
   const placesParRang = diviserArrondiBas(BigInt(longueurCm), BigInt(densite.ecartementSurRangCm));
@@ -230,6 +279,17 @@ function besoinsSemisEcartement(it: SemisDirectEcartement, longueurCm: number): 
     produit(it.germination, 100),
   );
   return { mode: 'semis_direct', facon: 'ecartement', plants, graines, ...avecPoids(graines, it.pmgMg) };
+}
+
+function besoinsSemisContenants(it: SemisDirectContenants, contenants: number): BesoinsSemisContenants {
+  const grainesParTrou = it.densite.grainesParTrou;
+  if (grainesParTrou === undefined) throw new RangeError('graines par trou manquantes (semis direct en contenants)');
+  exigerEntier(grainesParTrou, 'graines par trou', 1);
+  exigerPourcentage(it.germination, 'germination', 1, 100);
+  controlerPmg(it.pmgMg);
+  const poquets = trousEnPlace(it.densite, contenants);
+  const graines = diviserArrondiHaut(produit(poquets, grainesParTrou, 100, 100 + it.margeSecurite), produit(it.germination, 100));
+  return { mode: 'semis_direct', facon: 'contenants', poquets, graines, ...avecPoids(graines, it.pmgMg) };
 }
 
 function besoinsSemisMetreLineaire(it: SemisDirectMetreLineaire, longueurCm: number): BesoinsSemisMetreLineaire {
@@ -287,13 +347,15 @@ function besoinsPlantAchete(it: PlantAcheteBesoins, longueurCm: number): Besoins
   return { mode: 'plant_achete', plants, plantsACommander: avecMarge(plants, it.margeSecurite) };
 }
 
-type SemisDirectBesoins = SemisDirectEcartement | SemisDirectMetreLineaire | SemisDirectVolee;
-type BesoinsSemisDirect = BesoinsSemisEcartement | BesoinsSemisMetreLineaire | BesoinsSemisVolee;
+type SemisDirectBesoins = SemisDirectEcartement | SemisDirectContenants | SemisDirectMetreLineaire | SemisDirectVolee;
+type BesoinsSemisDirect = BesoinsSemisEcartement | BesoinsSemisContenants | BesoinsSemisMetreLineaire | BesoinsSemisVolee;
 
 function besoinsSemisDirect(it: SemisDirectBesoins, longueurCm: number): BesoinsSemisDirect {
   switch (it.facon) {
     case 'ecartement':
       return besoinsSemisEcartement(it, longueurCm);
+    case 'contenants':
+      return besoinsSemisContenants(it, longueurCm);
     case 'metre_lineaire':
       return besoinsSemisMetreLineaire(it, longueurCm);
     case 'volee':
@@ -303,7 +365,10 @@ function besoinsSemisDirect(it: SemisDirectBesoins, longueurCm: number): Besoins
   }
 }
 
-/** Besoins d'une série de `longueurCm` centimètres conduite selon `itineraire`. */
+/**
+ * Besoins d'une série de `longueurCm` centimètres conduite selon `itineraire` ; pour une densité
+ * en contenants (T51), `longueurCm` est le nombre de contenants (pains) de la série.
+ */
 export function besoinsSerie(itineraire: ItineraireBesoins, longueurCm: number): BesoinsSerie {
   controlerCommun(itineraire, longueurCm);
   switch (itineraire.mode) {
@@ -377,6 +442,7 @@ function poidsDe(b: PoidsFacultatif): Apport {
 function apportSemisDirect(b: BesoinsSemisDirect): Apport {
   switch (b.facon) {
     case 'ecartement':
+    case 'contenants':
     case 'metre_lineaire':
       return { graines: b.graines, ...poidsDe(b) };
     case 'volee':

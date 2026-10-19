@@ -76,6 +76,7 @@ describe('T10s : plafonds de PLAFONDS_STRUCTURE, juste dessous et juste dessus',
       largeurM: 1_000,
       surfaceM2: 10_000_000,
       nombrePlaces: 1_000_000,
+      nombrePains: 1_000_000,
       delaiRetourAns: 100,
       poidsMilleGrainesG: 100_000,
       remplace: 200,
@@ -150,11 +151,11 @@ describe('T10s : plafonds de PLAFONDS_STRUCTURE, juste dessous et juste dessus',
   });
 });
 
-describe('T10s : gouttière ⇔ nombre de places', () => {
-  it('gouttière avec places : acceptée ; sans places : refusée', () => {
+describe('T10s : gouttière ⇔ nombre de places (T51 : facultatif, les pains comptent)', () => {
+  it('gouttière avec ou sans places : acceptée (T51 : l’ancien nombre de places est facultatif)', () => {
     accepte('emplacement', { sorte: 'gouttiere', nombre_places: 40 });
-    refuse('emplacement', { sorte: 'gouttiere', nombre_places: null }, 'incoherent', 'nombre_places');
-    refuse('emplacement', { sorte: 'gouttiere', nombre_places: undefined }, 'incoherent', 'nombre_places');
+    accepte('emplacement', { sorte: 'gouttiere', nombre_places: null });
+    accepte('emplacement', { sorte: 'gouttiere', nombre_places: undefined });
   });
 
   it.each(['planche', 'rang'])('%s avec un nombre de places : refusé ; sans : accepté', (sorte) => {

@@ -65,9 +65,9 @@ describe('aller-retour avec l’export T15', () => {
     const h = { cree_le: '2026-09-01T06:00:00.000Z', modifie_le: '2026-09-01T06:00:00.000Z', supprime_le: null };
     const commun = { ferme_id: F, actif_du: '2026-01-01', actif_au: null, remplace: '[]', ...h };
     const emplacement = [
-      { id: '0192f0c1-7a6e-7cc3-a000-000000000101', zone_id: Z1, code: 'T1-P01', sorte: 'planche', longueur_m: 30, largeur_m: 0.8, nombre_places: null, ...commun },
-      { id: '0192f0c1-7a6e-7cc3-a000-000000000102', zone_id: Z1, code: 'T1-P02', sorte: 'planche', longueur_m: 25.5, largeur_m: 0.8, nombre_places: null, ...commun },
-      { id: '0192f0c1-7a6e-7cc3-a000-000000000103', zone_id: Z2, code: 'HS-G01', sorte: 'gouttiere', longueur_m: 12, largeur_m: null, nombre_places: 96, ...commun },
+      { id: '0192f0c1-7a6e-7cc3-a000-000000000101', zone_id: Z1, code: 'T1-P01', sorte: 'planche', longueur_m: 30, largeur_m: 0.8, nombre_places: null, nombre_pains: null, ...commun },
+      { id: '0192f0c1-7a6e-7cc3-a000-000000000102', zone_id: Z1, code: 'T1-P02', sorte: 'planche', longueur_m: 25.5, largeur_m: 0.8, nombre_places: null, nombre_pains: null, ...commun },
+      { id: '0192f0c1-7a6e-7cc3-a000-000000000103', zone_id: Z2, code: 'HS-G01', sorte: 'gouttiere', longueur_m: 12, largeur_m: null, nombre_places: 96, nombre_pains: 12, ...commun },
     ];
     const exporte = preparerExport({ fermeId: F, genereLe: '2026-09-29T06:30:00.000Z', tables: { emplacement } }).fichiers.find((f) => f.chemin === 'emplacement.csv');
     expect(utf8(exporte?.contenu ?? '')).toStrictEqual(await lireFixture('t15-emplacement.csv'));

@@ -50,6 +50,7 @@ const COLONNES: Readonly<Record<Table, readonly string[]>> = {
     'longueur_m',
     'largeur_m',
     'nombre_places',
+    'nombre_pains',
     'actif_du',
     'actif_au',
     'remplace',
@@ -380,6 +381,7 @@ export async function ajouterPlanches(ctx: ContexteParcellaire, zoneId: string, 
       longueur_m: lot.longueurM,
       largeur_m: lot.largeurM,
       nombre_places: null,
+      nombre_pains: null,
       actif_du: du,
       actif_au: null,
       remplace: '[]',
@@ -416,7 +418,16 @@ function codeLibreApres(ctx: ContexteParcellaire, avant: Ligne, valeurs: Readonl
 
 export async function modifierEmplacement(ctx: ContexteParcellaire, id: string, e: EmplacementVerifie): Promise<Enregistrement | null> {
   const avant = await lireLigne(ctx, 'emplacement', id);
-  const valeurs = changees(avant, { code: e.code, sorte: e.sorte, longueur_m: e.longueurM, largeur_m: e.largeurM, nombre_places: e.nombrePlaces });
+  // T51 : une gouttière se compte en pains ; son ancien nombre de places reste tel quel (lecture
+  // seule), et s'efface seulement quand elle cesse d'être une gouttière.
+  const valeurs = changees(avant, {
+    code: e.code,
+    sorte: e.sorte,
+    longueur_m: e.longueurM,
+    largeur_m: e.largeurM,
+    nombre_pains: e.nombrePains,
+    ...(e.sorte === 'gouttiere' ? {} : { nombre_places: null }),
+  });
   if (Object.keys(valeurs).length === 0) return null;
   await ecrireVerifie(ctx, [miseAJour('emplacement', id, valeurs, ctx.maintenant().toISOString())], codeLibreApres(ctx, avant, valeurs));
   const anciennes = Object.fromEntries(Object.keys(valeurs).map((c) => [c, avant[c] ?? null]));
