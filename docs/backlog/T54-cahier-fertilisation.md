@@ -2,7 +2,7 @@
 
 **Objectif** : demande de Théophane (2026-10-19). Les apports (compost, fumier, engrais) se saisissent déjà comme interventions « fertilisation » ou « amendement » avec produit et quantité, et figurent dans les travaux prévus. Il manque : la **composition** des produits (N, P₂O₅, K₂O en %), le **bilan** des unités apportées par planche et par saison, et le **cahier de fertilisation** exportable (exigé en zone vulnérable nitrates, utile au contrôle bio).
 
-**Dépend de** : T22 (travaux prévus), T10 (journal), T15 (export) ; réponse à Q44 (points 1 et 2)
+**Dépend de** : T22 (travaux prévus), T10 (journal), T15 (export) ; Q44 répondue
 **Périmètre** : `packages/core` (calcul du bilan), `packages/db` (produits fertilisants, migration), `apps/api/src/sync/**`, `apps/web/src/ecrans/ferme/**`, `apps/web/src/ecrans/aujourdhui/**` (choix du produit dans la saisie), `apps/web/src/ecrans/export/**`, tests, `docs/modele-donnees.md`
 **Priorité** : moyenne, après T52. **Modèle** : Opus (migration, synchro).
 
@@ -13,10 +13,13 @@
 3. **Bilan** (cœur, testé) : unités N/P/K = quantité × teneur, ramenées en kg/ha et totalisées par emplacement et par saison. Seuls les apports réalisés comptent ; les prévus s'affichent à part.
 4. Vue « Fertilisation » sur la fiche d'une planche et cahier dans l'onglet Ferme ; export `cahier-fertilisation.csv`.
 5. Aucune préconisation de dose par l'IA ni par le code dans ce ticket : on mesure ce qui a été apporté.
+6. **Zone vulnérable nitrates** (Q44) : option de la ferme, décochée par défaut. Cochée, elle affiche un **plan prévisionnel** par planche et par saison (apports prévus, issus des travaux prévus) et une alerte non bloquante quand l'azote d'origine organique dépasse **170 kg N/ha** sur l'année. Décochée, rien de tout cela n'apparaît.
+7. Les apports par fertirrigation (T56) entrent dans le même bilan.
 
 ## Critères d'acceptation
 
 - [ ] Tests cœur : 2 t de compost à 1 % N sur 100 m² → 20 kg N, soit 2 000 kg N/ha ; teneur absente → apport compté sans unités.
 - [ ] Migration testée en intégration, rejouable ; interventions existantes intactes.
 - [ ] Tests d'écran : choix du produit au doigt ; bilan affiché sur la planche.
+- [ ] Tests : option zone vulnérable décochée → ni plan ni alerte ; cochée, 180 kg N/ha organique → alerte, 160 → rien.
 - [ ] Export : `cahier-fertilisation.csv` ; `pnpm verif` passe.
