@@ -349,3 +349,59 @@ describe('T49 : zones et planches', () => {
     expect(b.transactions()).toBe(0);
   });
 });
+
+describe('T49 (relecture) : avertir avant de confirmer', () => {
+  const ISO = MAINTENANT.toISOString();
+  const SERIE = '0192f0c1-4949-7000-8000-0000000000f2';
+  function recevoirSerie(saisonId: string, miseEnPlace: string, emplacementId: string | null): void {
+    b.base.recevoir(
+      `INSERT INTO serie (id, ferme_id, saison_id, espece_id, variete_id, itineraire_id, parametres, ancre_type, ancre_date, prevu_mise_en_place, prevu_fin_recolte, longueur_m, statut, cree_le, modifie_le, supprime_le)
+       VALUES (?, ?, ?, '0192f0c1-4949-7000-8000-000000000040', NULL, NULL, '{}', 'plantation', ?, ?, '2026-12-15', 30, 'prevue', ?, ?, NULL)`,
+      [SERIE, FERME, saisonId, miseEnPlace, miseEnPlace, ISO, ISO],
+    );
+    if (emplacementId !== null) {
+      b.base.recevoir(
+        `INSERT INTO occupation (id, ferme_id, emplacement_id, serie_id, plantation_id, evenement_id, longueur_m, nombre_places, position_m, prevu_du, prevu_au, reel_du, reel_au, cree_le, modifie_le, supprime_le)
+         VALUES ('0192f0c1-4949-7000-8000-0000000000f3', ?, ?, ?, NULL, NULL, 30, NULL, NULL, ?, '2026-12-15', NULL, NULL, ?, ?, NULL)`,
+        [FERME, emplacementId, SERIE, miseEnPlace, ISO, ISO],
+      );
+    }
+  }
+
+  it('mettre hors service une planche occupée : avertissement, rien d’écrit ; « quand même » la met hors service', async () => {
+    await ouvrir();
+    await toucher(bouton('Créer la saison 2026'));
+    await attendre(() => saisons(b).length === 1, 'saison');
+    const tunnel = await creerZone('Tunnel 1', 'tunnel');
+    const d = await ouvrirZone('Tunnel 1');
+    await ajouterPlanches(d, '1', 'P', '30', '0,8');
+    await attendre(() => codesActifs(tunnel).length === 1, 'P1');
+    const p1 = String(actifs(emplacements(b))[0]?.id);
+    recevoirSerie(String(saisons(b)[0]?.id), '2026-11-02', p1);
+    await toucher(bouton('Modifier P1', d));
+    const f = dialogueOuEchec('Modifier P1');
+    b.remiseAZero();
+    await toucher(bouton('Mettre hors service', f));
+    await attendre(() => /culture/.test(texte(f.querySelector('[role="alert"]'))), 'avertissement : la planche porte une culture');
+    expect(b.transactions()).toBe(0);
+    expect(actifs(emplacements(b))[0]?.actif_au).toBeNull();
+    await toucher(bouton('Mettre hors service quand même', f));
+    await attendre(() => actifs(emplacements(b))[0]?.actif_au === AUJOURDHUI, 'hors service');
+    expect(b.transactions()).toBe(1);
+  });
+
+  it('raccourcir une saison qui laisse une série dehors : avertissement, rien d’écrit ; « quand même » enregistre', async () => {
+    await ouvrir();
+    await toucher(bouton('Créer la saison 2026'));
+    await attendre(() => saisons(b).length === 1, 'saison');
+    recevoirSerie(String(saisons(b)[0]?.id), '2026-05-04', null);
+    await toucher(bouton('Modifier la saison 2026'));
+    const d = await saisirSaison('Modifier la saison', { fin: '2026-03-31' });
+    await attendre(() => /1 série/.test(texte(d.querySelector('[role="alert"]'))), 'avertissement : 1 série hors de la saison');
+    expect(b.transactions()).toBe(0);
+    expect(saisons(b)[0]?.fin).toBe('2026-12-31');
+    await toucher(bouton('Enregistrer quand même', d));
+    await attendre(() => saisons(b)[0]?.fin === '2026-03-31', 'saison raccourcie');
+    expect(b.transactions()).toBe(1);
+  });
+});

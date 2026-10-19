@@ -9,7 +9,7 @@
  */
 import { act, createElement, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionConnexion } from '../../connexion/session.ts';
 import { ContexteFerme } from '../../donnees/contexte.ts';
 import type { EtatBase, PoigneeDonnees } from '../../donnees/etat-appli.ts';
@@ -149,6 +149,17 @@ describe('T49 : étapes (pur)', () => {
 
     const fini = etapes.etapesDemarrage({ saisons: 1, planches: 1, itineraires: 0, series: 1 });
     expect(fini.visible, 'une série existe : le bandeau disparaît').toBe(false);
+  });
+
+  it('relecture : une demande trop ancienne (changement d’onglet raté) est oubliée', () => {
+    vi.useFakeTimers();
+    try {
+      etapes.demander('zones');
+      vi.advanceTimersByTime(10_000);
+      expect(etapes.prendreDemande('zones')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('demande de navigation : prise une seule fois, par l’écran qu’elle concerne', () => {
@@ -325,5 +336,39 @@ describe('T49 : onglet Ferme — la demande ouvre l’écran qui fait l’étape
     etapes.demander('import');
     await rendreFerme();
     await attendre(() => dialogue('Importer un tableur') !== undefined, 'import ouvert par la demande', 2000);
+  });
+
+  it('relecture : demande prise avant que la base soit prête : dite, prise, et rien ne s’ouvre plus tard', async () => {
+    const rendreAvec = (etatBase: EtatBase, avecFerme: boolean) =>
+      rendre(
+        createElement(
+          ContexteFerme,
+          { value: avecFerme ? { porte: b.porte, fermeId: FERME } : null },
+          createElement(ferme.default, { session: SESSION, baseLocale: POIGNEE, surDeconnecte: () => undefined, etatBase }),
+        ),
+      );
+    etapes.demander('saisons');
+    await rendreAvec('ouverture', false);
+    await attendre(() => /pas encore prêtes/.test(texte(conteneur)), 'la demande est dite');
+    expect(etapes.prendreDemande('saisons'), 'demande prise').toBeNull();
+    await rendreAvec('prete', true);
+    for (let k = 0; k < 50; k++) await attendre(() => true, '');
+    expect(dialogue('Ma ferme'), 'rien ne s’ouvre par surprise').toBeUndefined();
+  });
+});
+
+describe('T49 (relecture) : Planches, demande « serie » avant la base', () => {
+  it('base pas prête : dite, prise ; la porte arrivée, le formulaire ne s’ouvre pas tout seul', async () => {
+    recevoirSaison();
+    recevoirPlanche();
+    etapes.demander('serie');
+    const rendrePlan = (porte: Banc['porte'] | null) => rendre(createElement(plan.EcranPlan, { porte: porte as Banc['porte'], fermeId: FERME, aujourdhui: () => AUJOURDHUI, surOnglet }));
+    await rendrePlan(null);
+    await attendre(() => /Nouvelle série/.test(texte(conteneur)), 'la demande est dite');
+    expect(etapes.prendreDemande('serie')).toBeNull();
+    await rendrePlan(b.porte);
+    await attendre(() => conteneur.querySelector('[data-testid="plan-defilement"]') !== null, 'plan affiché', 600);
+    for (let k = 0; k < 50; k++) await attendre(() => true, '');
+    expect(dialogue('Nouvelle série')).toBeUndefined();
   });
 });
