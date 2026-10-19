@@ -1,0 +1,52 @@
+name: Migrations de production
+
+# T44 : applique les migrations sur la base Neon de production, sans Codespaces.
+# Seulement après une CI verte de main, ou à la main depuis main (secours). Jamais sur une PR :
+# le dépôt est public, une PR (ou un fork) ne doit jamais approcher le secret.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Une migration à la fois ; celle en cours n'est jamais annulée (elle irait au bout de toute façon).
+concurrency:
+  group: migrations-production
+  cancel-in-progress: false
+
+jobs:
+  migrer:
+    name: Appliquer les migrations sur la base de production
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    # Le secret DATABASE_URL_PRODUCTION est un secret de l'environnement « production », réservé
+    # à la branche main (Settings → Environments) : un job d'une autre branche ne le reçoit pas,
+    # même si son fichier de workflow a perdu la garde ci-dessus.
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Le commit que la CI vient de valider (workflow_run), ou main (lancement à la main).
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Migrations, ou arrêt propre si le secret est absent
+        env:
+          DATABASE_URL_PRODUCTION: ${{ secrets.DATABASE_URL_PRODUCTION }}
+        run: bash scripts/migrer-production.sh

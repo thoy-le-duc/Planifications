@@ -66,7 +66,7 @@ Décision de Théophane (2026-09-29) : la boucle fusionne seule. Une PR est fusi
 - aucun commentaire de Théophane n'attend de réponse sur la PR ;
 - la PR vise `main` (une PR empilée attend que sa dépendance soit fusionnée, puis est redirigée vers `main`).
 
-Jamais de fusion avec une CI rouge ou en cours, jamais de push direct sur `main`, jamais de test désactivé pour passer. Une PR qui ne remplit pas ces conditions reste ouverte, en « en revue », et le journal dit pourquoi. Les conflits sur `docs/journal.md`, `docs/backlog/README.md` ou `docs/questions.md` se résolvent en gardant toutes les entrées. Après la fusion, vérifier que la CI de `main` reste verte ; sinon, la corriger avant tout nouveau ticket.
+Jamais de fusion avec une CI rouge ou en cours, jamais de push direct sur `main`, jamais de test désactivé pour passer. Une PR qui ne remplit pas ces conditions reste ouverte, en « en revue », et le journal dit pourquoi. Les conflits sur `docs/journal.md`, `docs/backlog/README.md` ou `docs/questions.md` se résolvent en gardant toutes les entrées. Après la fusion, vérifier que la CI de `main` reste verte ; sinon, la corriger avant tout nouveau ticket. Si la PR apporte une migration (`packages/db/migrations/`), vérifier ensuite que le workflow **Migrations de production** (T44), lancé seul après la CI verte de `main`, est vert lui aussi ; rouge, le noter au journal et dans `docs/questions.md` avant tout nouveau ticket qui touche la base. Vert avec « secret DATABASE_URL_PRODUCTION absent » : rien n'a été appliqué, le rappeler à Théophane (étape 2 bis de `docs/mise-en-ligne.md`). La boucle n'a jamais la valeur du secret et ne relance jamais `migrer` sur la production elle-même.
 
 ## Budget
 
