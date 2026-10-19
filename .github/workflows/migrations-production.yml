@@ -24,9 +24,14 @@ jobs:
     if: >-
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository)
+    # Le secret DATABASE_URL_PRODUCTION est un secret de l'environnement « production », réservé
+    # à la branche main (Settings → Environments) : un job d'une autre branche ne le reçoit pas,
+    # même si son fichier de workflow a perdu la garde ci-dessus.
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

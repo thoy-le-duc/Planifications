@@ -78,7 +78,7 @@ Chaque variable est détaillée à l'étape où tu la poses. Ce tableau est la l
 18. Copie-la et enregistre-la sous le nom `Neon directe`.
 19. Pourquoi deux adresses : l'appli en ligne utilise la **pooled** (elle supporte beaucoup de petites connexions). Les migrations et la synchro ont besoin de la **directe**.
 
-Ces adresses contiennent ton mot de passe de base. Elles ne vont que dans ton gestionnaire, dans le terminal de l'étape 2, dans le secret GitHub de l'étape 2 bis, dans Vercel et dans PowerSync.
+Ces adresses contiennent ton mot de passe de base. Elles ne vont que dans ton gestionnaire, dans le terminal de l'étape 2, dans le secret de l'environnement GitHub `production` (étape 2 bis), dans Vercel et dans PowerSync.
 
 ---
 
@@ -162,16 +162,19 @@ PowerSync lit la base avec un compte à part, qui ne peut rien écrire. Cette pa
 
 Une fois ce secret posé, plus besoin de Codespaces après chaque mise à jour : dès que la CI de `main` est verte, le workflow GitHub **Migrations de production** applique les nouvelles migrations sur Neon. Sans ce secret, il ne fait rien (il reste vert, avec le message « secret DATABASE_URL_PRODUCTION absent »).
 
-Le secret est chiffré par GitHub : personne ne peut le relire, ni toi, ni Claude, ni les visiteurs du dépôt public. Il n'est donné qu'à ce workflow, jamais aux PR.
+Le secret est chiffré par GitHub : personne ne peut le relire, ni toi, ni Claude, ni les visiteurs du dépôt public. On le range dans un **environnement** nommé `production`, réservé à la branche `main` : il n'est donné qu'aux tâches qui tournent sur `main`, dans l'environnement `production`, jamais à une autre branche ni à une PR. (Un secret « de dépôt » ordinaire serait lisible par n'importe quelle branche poussée : c'est pour cela qu'on ne l'utilise pas.)
 
-1. Ouvre https://github.com/thoy-le-duc/Planifications/settings/secrets/actions (ou, sur la page du dépôt : onglet **Settings**, menu de gauche **Secrets and variables**, puis **Actions**).
-2. Clique sur le bouton vert **New repository secret**.
-3. **Name** : écris exactement `DATABASE_URL_PRODUCTION`.
-4. **Secret** : colle l'adresse **directe** de Neon (`Neon directe`, celle **sans** `-pooler`), depuis ton gestionnaire.
-5. Clique sur **Add secret**. Ce que tu dois voir : `DATABASE_URL_PRODUCTION` dans la liste **Repository secrets**, sans sa valeur.
-6. Vérification : onglet **Actions**, à gauche **Migrations de production**, bouton **Run workflow**, branche `main`, puis **Run workflow**. Au bout d'une à deux minutes, la ligne passe au vert ; en l'ouvrant, l'étape « Migrations » se termine par **`Migrations appliquées.`**
+1. Ouvre https://github.com/thoy-le-duc/Planifications/settings/environments (ou, sur la page du dépôt : onglet **Settings**, menu de gauche **Environments**).
+2. Clique sur **New environment**, écris `production`, puis **Configure environment**. Si `production` est déjà dans la liste (créé tout seul par un premier lancement du workflow), clique simplement dessus.
+3. Rubrique **Deployment branches and tags** : choisis **Selected branches and tags**, puis **Add deployment branch or tag rule**, écris `main`, et **Add rule**. Ce que tu dois voir : une seule règle, `main`.
+4. Facultatif : coche **Required reviewers** et ajoute-toi. Chaque migration attendra alors ton clic **Approve and deploy** dans l'onglet **Actions** (plus sûr, mais moins automatique). Puis **Save protection rules**.
+5. Plus bas, rubrique **Environment secrets** : clique sur **Add environment secret**.
+6. **Name** : écris exactement `DATABASE_URL_PRODUCTION`.
+7. **Value** : colle l'adresse **directe** de Neon (`Neon directe`, celle **sans** `-pooler`), depuis ton gestionnaire.
+8. Clique sur **Add secret**. Ce que tu dois voir : `DATABASE_URL_PRODUCTION` dans la liste **Environment secrets**, sans sa valeur.
+9. Vérification : onglet **Actions**, à gauche **Migrations de production**, bouton **Run workflow**, branche `main`, puis **Run workflow**. Au bout d'une à deux minutes, la ligne passe au vert ; en l'ouvrant, l'étape « Migrations, ou arrêt propre si le secret est absent » se termine par **`Migrations appliquées.`**
 
-Pour changer l'adresse (nouveau mot de passe Neon) : même page, crayon à côté de `DATABASE_URL_PRODUCTION`, colle la nouvelle, **Update secret**.
+Pour changer l'adresse (nouveau mot de passe Neon) : même page **Environments** → `production`, crayon à côté de `DATABASE_URL_PRODUCTION`, colle la nouvelle, **Update secret**.
 
 ---
 
@@ -375,7 +378,7 @@ Tant que tu es seul à tester avec ta ferme, tu n'approcheras aucune de ces limi
 2. Transmets-les à Claude, avec le nom du projet. Cela vient presque toujours du code, pas de toi.
 
 **Le workflow « Migrations de production » est rouge (onglet Actions).**
-1. Ouvre-le : l'étape « Migrations » donne le message de l'erreur (jamais l'adresse). Rien d'autre n'a été tenté.
+1. Ouvre-le : l'étape « Migrations, ou arrêt propre si le secret est absent » donne le code et le message de l'erreur (jamais l'adresse, l'hôte ni l'utilisateur). Rien d'autre n'a été tenté.
 2. Erreur de connexion ou d'authentification : le secret contient peut-être l'adresse pooled, une adresse tronquée ou un ancien mot de passe ; remplace-le (étape 2 bis), puis **Re-run jobs**.
 3. Autre erreur : transmets-la à Claude (le message, sans adresse). En attendant, l'appli continue de tourner sur l'ancienne version des tables.
 
@@ -396,7 +399,7 @@ Tant que tu es seul à tester avec ta ferme, tu n'approcheras aucune de ces limi
 - **Jamais** de mot de passe, de clé ni d'adresse de base de données dans une conversation avec Claude, dans un ticket, dans une PR ou dans un fichier du dépôt. Claude n'en a jamais besoin : il te dit où cliquer, tu colles toi-même.
 - Le dépôt est **public jusqu'au 1er novembre** : tout y est lisible. Les secrets restent chez Vercel, Neon, PowerSync et Brevo, et dans ton gestionnaire de mots de passe.
 - Le terminal de l'étape 2 ne garde pas l'adresse de la base (saisie cachée, codespace supprimé ensuite).
-- Le secret `DATABASE_URL_PRODUCTION` (étape 2 bis) n'est lu que par le workflow **Migrations de production**, lancé seulement après une CI verte de `main` ou à la main ; jamais par une PR, ni depuis une copie (fork) du dépôt. GitHub masque sa valeur dans les journaux.
+- Le secret `DATABASE_URL_PRODUCTION` (étape 2 bis) est un secret de l'environnement `production`, réservé à `main` : il n'est donné qu'aux tâches qui tournent sur `main`, dans cet environnement (le workflow **Migrations de production**, lancé après une CI verte de `main` ou à la main) ; jamais à une autre branche, à une PR ni à une copie (fork) du dépôt. GitHub masque sa valeur dans les journaux, et `migrer` n'affiche en cas d'erreur ni l'adresse, ni l'hôte, ni l'utilisateur.
 - La clé `JWT_CLES_PRIVEES` signe les connexions : qui la possède peut se faire passer pour n'importe qui. Elle ne sort que de ton terminal vers Vercel.
 - L'utilisateur `powersync_role` ne peut que **lire** la base. S'il fuite, change son mot de passe dans Neon et dans PowerSync.
 - L'adresse `https://<appli>/api/.well-known/jwks.json` est publique par nature : elle ne contient que la partie publique des clés.
