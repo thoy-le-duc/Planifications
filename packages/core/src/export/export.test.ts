@@ -378,6 +378,8 @@ describe('T15 : CSV lisibles par Excel en français', () => {
     for (const f of fichiers.filter((x) => x.chemin.endsWith('.csv'))) {
       expect(f.contenu.startsWith(BOM), f.chemin).toBe(true);
       expect(f.contenu.endsWith('\r\n'), f.chemin).toBe(true);
+      // T52 : registre-phyto.csv n'est pas une table ; son en-tête (COLONNES_REGISTRE_PHYTO) est vérifié par ./registre-phyto.test.ts.
+      if (f.chemin === 'registre-phyto.csv') continue;
       const table = tableDe(f.chemin.replace(/\.csv$/, ''));
       expect(f.contenu.slice(1).split('\r\n')[0], f.chemin).toBe(Object.keys(description(table).colonnes).join(';'));
     }
