@@ -14,7 +14,7 @@
  * l'ordre inverse ; annuler une création est une suppression douce (le serveur n'accepte pas de
  * DELETE). Les messages de rejet sont en français (ceux du cœur pour ses règles).
  */
-import { identifiantNormalise, instantNormalise, TAILLE_MAX_PAR_LOT, TYPES_BATIMENT, validerPlacement } from '@planif/core';
+import { identifiantNormalise, instantNormalise, TAILLE_MAX_PAR_LOT, TYPES_BATIMENT, validerPlacement, validerPositionVanne } from '@planif/core';
 import type { BaseLocale, ChangementPlacement, PointPlacement, TransactionLocale, ValeursBatiment } from './types.ts';
 
 export const SEUL_LE_GERANT = 'Seul le gérant peut placer les éléments de la ferme.';
@@ -77,8 +77,9 @@ async function aUnPlacement(tx: TransactionLocale, ctx: ContextePlacement): Prom
     tx,
     `SELECT (EXISTS (SELECT 1 FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL)
           OR EXISTS (SELECT 1 FROM zone WHERE ferme_id = ? AND supprime_le IS NULL AND contour IS NOT NULL)
-          OR EXISTS (SELECT 1 FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND placement_x_m IS NOT NULL)) AS existe`,
-    [ctx.fermeId, ctx.fermeId, ctx.fermeId],
+          OR EXISTS (SELECT 1 FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND placement_x_m IS NOT NULL)
+          OR EXISTS (SELECT 1 FROM secteur_irrigation WHERE ferme_id = ? AND supprime_le IS NULL AND placement_x_m IS NOT NULL)) AS existe`,
+    [ctx.fermeId, ctx.fermeId, ctx.fermeId, ctx.fermeId],
   );
   return p?.existe === 1;
 }
@@ -188,6 +189,23 @@ async function placerEmplacement(
   return { sorte: 'emplacement', id, placement: place ? { x: e.x as number, y: e.y as number, orientation_deg: e.o as number } : null };
 }
 
+/** T57 : pose (ou retire du plan) une vanne de la ferme, non supprimée ; position validée par le cœur. */
+async function placerVanne(tx: TransactionLocale, ctx: ContextePlacement, id: string, position: { readonly x: number; readonly y: number } | null): Promise<ChangementPlacement> {
+  const [v] = await lire<{ ferme_id: unknown; x: unknown; y: unknown; supprime_le: unknown }>(
+    tx,
+    'SELECT ferme_id, placement_x_m AS x, placement_y_m AS y, supprime_le FROM secteur_irrigation WHERE id = ?',
+    [id],
+  );
+  if (v?.ferme_id !== ctx.fermeId) throw new Error('Vanne introuvable dans cette ferme.');
+  if (v.supprime_le !== null) throw new Error('Cette vanne est supprimée.');
+  const r = validerPositionVanne(position?.x ?? null, position?.y ?? null);
+  if (!r.ok) throw new Error(`${r.message.charAt(0).toUpperCase()}${r.message.slice(1)}.`);
+  if (r.valeur !== null) await exigerOrigine(tx, ctx);
+  await tx.execute('UPDATE secteur_irrigation SET placement_x_m = ?, placement_y_m = ?, modifie_le = ? WHERE id = ?', [r.valeur?.x ?? null, r.valeur?.y ?? null, ctx.maintenant().toISOString(), id]);
+  const placee = typeof v.x === 'number' && typeof v.y === 'number';
+  return { sorte: 'vanne', id, position: placee ? { x: v.x as number, y: v.y as number } : null };
+}
+
 const coordonnee = (v: unknown, borne: number): v is number => typeof v === 'number' && Number.isFinite(v) && v >= -borne && v <= borne;
 
 async function placerOrigine(
@@ -230,6 +248,8 @@ function appliquer(tx: TransactionLocale, ctx: ContextePlacement, c: ChangementP
       return placerEmplacement(tx, ctx, id, c.placement);
     case 'origine':
       return placerOrigine(tx, ctx, c.origine);
+    case 'vanne':
+      return placerVanne(tx, ctx, id, c.position);
   }
   return Promise.reject(new Error('Changement de placement inconnu.'));
 }
