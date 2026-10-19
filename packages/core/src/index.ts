@@ -6,6 +6,7 @@ export * from './domaine/index.ts';
 export * from './saisies/index.ts';
 export * from './saisies/stock.ts';
 export * from './saisies/serie.ts';
+export * from './saisies/contenants.ts';
 export * from './saisies/itineraire.ts';
 // Formats communs du serveur et de la porte (T28s) : identifiant, instant de suppression.
 export { identifiantNormalise, instantNormalise } from './saisies/formats.ts';
@@ -67,7 +68,9 @@ export {
 export {
   besoinsSerie,
   type BesoinsSerie,
+  type BesoinsSemisContenants,
   type ItineraireBesoins,
+  type SemisDirectContenants,
 } from './planification/besoins.ts';
 export {
   alertesRotation,
