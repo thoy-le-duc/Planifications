@@ -239,6 +239,13 @@
       "when": 1792301476133,
       "tag": "0033_bibliotheque_melon_plein_champ",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792398015406,
+      "tag": "0034_bibliotheque_travaux",
+      "breakpoints": true
     }
   ]
 }
