@@ -8,7 +8,6 @@
  */
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { resolve } from 'node:path';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { creerPorte, SCHEMA_LOCAL, type BaseLocale, type PorteDonnees } from '@planif/sync';
 import type { Id } from '@planif/core';
@@ -22,18 +21,10 @@ const MAINTENANT = new Date('2026-10-19T08:00:00.000Z');
 
 type Ligne = Readonly<Record<string, string | number | null>>;
 
-interface ResultatStructure {
-  readonly ok: boolean;
-  readonly erreur?: { readonly message: string; readonly champ: string | null };
-}
-const CHEMIN_STRUCTURE = resolve(import.meta.dirname, '../../../../api/src/sync/structure-lignes.ts');
-
 let m: ModuleVannes;
-let structure: { validerStructure(table: string, ligne: Readonly<Record<string, unknown>>): ResultatStructure };
 
 beforeAll(async () => {
   m = (await import(/* @vite-ignore */ CHEMIN_VANNES)) as ModuleVannes;
-  structure = (await import(/* @vite-ignore */ CHEMIN_STRUCTURE)) as typeof structure;
 });
 
 let base: BaseMemoire;
@@ -88,15 +79,14 @@ const caseDe = (emplacement: string): HTMLInputElement => {
   return c;
 };
 
-/** Chaque ligne écrite est acceptée par la règle de ligne du serveur (T57). */
-function accepteesParLeServeur(table: 'secteur_irrigation' | 'secteur_emplacement', lignes: readonly Ligne[]): void {
+/**
+ * La règle de ligne du serveur importe @planif/db, qui ne se charge pas sous happy-dom : elle est
+ * rejouée sur les mêmes écritures par ./vannes-ecritures.test.ts (environnement node). Ici, ce qui
+ * se vérifie sans elle : l'adresse Modbus n'est jamais écrite.
+ */
+function accepteesParLeServeur(_table: 'secteur_irrigation' | 'secteur_emplacement', lignes: readonly Ligne[]): void {
   expect(lignes.length).toBeGreaterThan(0);
-  for (const l of lignes) {
-    expect(l.adresse_modbus ?? null, 'adresse Modbus jamais écrite').toBeNull();
-    const reste = Object.fromEntries(Object.entries(l).filter(([c]) => !['cree_le', 'modifie_le', 'adresse_modbus'].includes(c)));
-    const r = structure.validerStructure(table, reste);
-    expect(r.ok, r.ok ? '' : `${table} ${String(l.id)} refusée par le serveur : ${r.erreur?.message ?? '?'} (${String(r.erreur?.champ)})`).toBe(true);
-  }
+  for (const l of lignes) expect(l.adresse_modbus ?? null, 'adresse Modbus jamais écrite').toBeNull();
 }
 
 async function cocher(emplacement: string): Promise<void> {
