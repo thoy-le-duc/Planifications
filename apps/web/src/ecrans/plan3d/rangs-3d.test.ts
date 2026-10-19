@@ -8,9 +8,10 @@
  *   CultureDePlanche.rangsParPlanche?: number    rangs de la densité ; lu seulement avec l'écart saisi
  *     (sans écart, le nombre de rangs de la 3D reste celui de T32b : un tous les 0,5 m, 3 au plus).
  *   plantsDePlanche :
- *     - avec l'écart : les rangs sont à cet écart, CENTRÉS sur la planche ; trop larges pour la
- *       planche, les rangs du bord sont resserrés au bord (les rangs du milieu gardent l'écart) et
- *       aucun plant ne sort du rectangle de la planche ; en quinconce, rangs pairs décalés d'un demi-pas ;
+ *     - avec l'écart : TOUS les rangs de la densité (jusqu'à PLANTS_MAX_PAR_PLANCHE, un plant par rang
+ *       au moins), à cet écart, CENTRÉS sur la planche ; trop larges pour la largeur utile, ils sont
+ *       TOUS resserrés régulièrement (aucun doublon), et ni le centre ni le feuillage d'aucun plant ne
+ *       sort de la planche (emprise : |dz| + echelleHorizontale / 2) ; en quinconce, rangs pairs décalés d'un demi-pas ;
  *     - sans l'écart : positions identiques à celles d'avant T46 ;
  *     - PlantsPlanche.lignesRangs : le centre de chaque ligne de rang (sillon, goutte-à-goutte),
  *       une par rang, à la position en travers des plants du rang ; vide sans écart saisi et sur
@@ -120,20 +121,41 @@ describe('T46 : les rangs à l’écart saisi, centrés sur la planche', () => {
 });
 
 describe('T46 : écart trop grand → jamais hors de la planche', () => {
-  it('4 rangs à 50 cm sur 75 cm : les rangs du milieu gardent l’écart, ceux du bord sont resserrés au bord', () => {
+  it('4 rangs à 50 cm sur 75 cm : tous les rangs resserrés régulièrement, centrés, feuillage dans la planche', () => {
     const v = volume();
     const p = poser(v, culture({ ecartEntreRangsM: 0.5, rangsParPlanche: 4 }));
     const dz = rangsDz(v, p.positions);
     expect(dz).toHaveLength(4);
-    for (const z of dz) expect(Math.abs(z)).toBeLessThanOrEqual(0.375 + 1e-9);
-    expect((dz[2] ?? NaN) - (dz[1] ?? NaN)).toBeCloseTo(0.5, 6);
-    // Symétrique : centré.
+    const pas = (dz[1] ?? NaN) - (dz[0] ?? NaN);
+    expect(pas).toBeGreaterThan(0);
+    expect(pas).toBeLessThan(0.5);
+    dz.slice(1).forEach((z, k) => {
+      expect(z - (dz[k] ?? NaN), `pas ${String(k + 1)}`).toBeCloseTo(pas, 6);
+    });
     expect((dz[0] ?? NaN) + (dz[3] ?? NaN)).toBeCloseTo(0, 6);
+    for (const z of dz) expect(Math.abs(z) + p.echelleHorizontale / 2).toBeLessThanOrEqual(0.375 + 1e-9);
+  });
+
+  it('un écart qui tient garde l’écart saisi, même au ras du bord', () => {
+    const v = volume();
+    const dz = rangsDz(v, poser(v, culture({ ecartEntreRangsM: 0.24, rangsParPlanche: 3 })).positions);
+    expect((dz[1] ?? NaN) - (dz[0] ?? NaN)).toBeCloseTo(0.24, 6);
+    expect((dz[2] ?? NaN) - (dz[1] ?? NaN)).toBeCloseTo(0.24, 6);
+  });
+
+  it('tous les rangs de la densité sont dessinés (12, 16, 20), un plant par rang au moins', () => {
+    const v = volume({ largeur: 1.2, longueur: 10 });
+    for (const n of [12, 16, 20]) {
+      const p = poser(v, culture({ ecartEntreRangsM: 0.05, ecartementM: 0.05, rangsParPlanche: n }));
+      expect(rangsDz(v, p.positions), `${String(n)} rangs`).toHaveLength(n);
+      expect(p.lignesRangs).toHaveLength(n);
+      expect(p.nombre).toBeLessThanOrEqual(20);
+    }
   });
 
   it('balayage : aucun plant ni aucune ligne de rang hors du rectangle, toutes tailles, tous angles', () => {
     let testes = 0;
-    for (const largeur of [0.2, 0.4, 0.75, 1.2, 2]) for (const longueur of [0.3, 1, 3, 25]) for (const angle of [0, 0.7, -2.1]) for (const ecart of [0.05, 0.18, 0.5, 1.2, 2]) for (const rangs of [1, 2, 4, 7, 12]) for (const disposition of ['alignee', 'quinconce'] as const) {
+    for (const largeur of [0.2, 0.4, 0.75, 1.2, 2]) for (const longueur of [0.3, 1, 3, 25]) for (const angle of [0, 0.7, -2.1]) for (const ecart of [0.05, 0.18, 0.5, 1.2, 2]) for (const rangs of [1, 2, 4, 7, 12, 20]) for (const disposition of ['alignee', 'quinconce'] as const) {
       const v = volume({ largeur, longueur, angle, x: -7.5, z: 3.25 });
       const p = plantsDePlanche({ volume: v, culture: culture({ ecartEntreRangsM: ecart, rangsParPlanche: rangs, disposition }), jour: JOUR, horsSol: false });
       if (p === null) continue;
@@ -145,8 +167,14 @@ describe('T46 : écart trop grand → jamais hors de la planche', () => {
         expect(Math.abs(q.dx), `${ou} : dx`).toBeLessThanOrEqual(longueur / 2 + 1e-9);
         expect(Math.abs(q.dz), `${ou} : dz`).toBeLessThanOrEqual(largeur / 2 + 1e-9);
       }
+      // Emprise du feuillage en travers : le rang du bord ne déborde pas de la planche.
+      for (const q of locales(v, p.positions)) expect(Math.abs(q.dz) + p.echelleHorizontale / 2, `${ou} : emprise`).toBeLessThanOrEqual(largeur / 2 + 1e-9);
+      // Aucun doublon : deux plants (ou deux lignes) ne sont jamais au même endroit.
+      const cles = (l: readonly { readonly x: number; readonly z: number }[]) => l.map((q) => `${q.x.toFixed(6)},${q.z.toFixed(6)}`);
+      expect(new Set(cles(p.positions)).size, `${ou} : doublons de plants`).toBe(p.positions.length);
+      expect(new Set(cles(p.lignesRangs)).size, `${ou} : doublons de lignes`).toBe(p.lignesRangs.length);
     }
-    expect(testes).toBeGreaterThan(1000);
+    expect(testes).toBeGreaterThan(1200);
   });
 
   it('rangs absurdes (0, négatif, non entier, énorme) : l’affichage ne plante pas', () => {
