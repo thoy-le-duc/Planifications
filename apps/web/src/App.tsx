@@ -20,7 +20,7 @@
  * son bandeau « Export en cours » s'affiche en tête des autres onglets, et son démontage (fin de
  * la session connectée) arrête l'export.
  */
-import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { lireSession, stockageNavigateur, surveillerSession, type SessionConnexion } from './connexion/session.ts';
 import './connexion/connexion.css';
 import { ContexteFerme } from './donnees/contexte.ts';
@@ -315,7 +315,17 @@ export function App() {
           )}
         </ContexteFerme>
       </div>
-      <BarreNavigation actif={onglet} surChoix={setOnglet} pastilleFerme={pastilleRefus} />
+      <BarreNavigation
+        actif={onglet}
+        // T47 : l'écran du nouvel onglet se dessine en transition, par tranches, et plus d'un bloc
+        // dans le tap (mesuré : 55 à 57 ms, CPU ×4, au retour sur Ferme pendant un export).
+        surChoix={(o) => {
+          startTransition(() => {
+            setOnglet(o);
+          });
+        }}
+        pastilleFerme={pastilleRefus}
+      />
     </main>
   );
 }
