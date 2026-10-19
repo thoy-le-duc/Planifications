@@ -348,14 +348,15 @@ const sqlSeriesPage = (premiere: boolean) => `SELECT ${COLONNES_SERIE.replace('s
  * par identifiant, et seulement ceux de la ferme affichée. Une ligne d'une autre ferme présente
  * dans la base locale (utilisateur membre de deux fermes), référencée par erreur, ne prête jamais
  * son nom à la journée : la culture s'affiche alors sans (« Culture », sans variété, sans
- * famille, sans cet emplacement).
+ * famille, sans cet emplacement). T49 : une ligne de la bibliothèque commune (`ferme_id` nul,
+ * T41 : série créée directement sur un itinéraire de la bibliothèque) prête son nom.
  */
 
 /** Espèces des séries lues (liste JSON, puis la ferme), avec le nom de leur famille. */
 const SQL_ESPECES = `SELECT e.id, e.nom, e.unite_recolte, f.nom AS famille FROM espece e
-  LEFT JOIN famille f ON f.id = e.famille_id AND f.ferme_id = e.ferme_id
-  WHERE e.id IN (${DANS}) AND e.ferme_id = ?`;
-const SQL_VARIETES = `SELECT id, nom FROM variete WHERE id IN (${DANS}) AND ferme_id = ?`;
+  LEFT JOIN famille f ON f.id = e.famille_id AND (f.ferme_id = e.ferme_id OR f.ferme_id IS NULL)
+  WHERE e.id IN (${DANS}) AND (e.ferme_id = ? OR e.ferme_id IS NULL)`;
+const SQL_VARIETES = `SELECT id, nom FROM variete WHERE id IN (${DANS}) AND (ferme_id = ? OR ferme_id IS NULL)`;
 
 /**
  * Campagnes jointes à leur plantation ; `filtre` sur l'alias `c`. Une campagne dont la
@@ -366,9 +367,9 @@ const sqlCampagnes = (filtre: string) => `SELECT c.id, c.debut_recolte_prevu, c.
     p.date_arrachage, p.espece_id, p.variete_id, e.nom AS espece, e.unite_recolte, f.nom AS famille, v.nom AS variete
   FROM campagne c
   JOIN plantation p ON p.id = c.plantation_id AND p.ferme_id = c.ferme_id
-  LEFT JOIN espece e ON e.id = p.espece_id AND e.ferme_id = c.ferme_id
-  LEFT JOIN famille f ON f.id = e.famille_id AND f.ferme_id = c.ferme_id
-  LEFT JOIN variete v ON v.id = p.variete_id AND v.ferme_id = c.ferme_id
+  LEFT JOIN espece e ON e.id = p.espece_id AND (e.ferme_id = c.ferme_id OR e.ferme_id IS NULL)
+  LEFT JOIN famille f ON f.id = e.famille_id AND (f.ferme_id = c.ferme_id OR f.ferme_id IS NULL)
+  LEFT JOIN variete v ON v.id = p.variete_id AND (v.ferme_id = c.ferme_id OR v.ferme_id IS NULL)
   WHERE c.ferme_id = ? AND c.supprime_le IS NULL AND p.supprime_le IS NULL AND ${filtre}`;
 
 /**
