@@ -196,6 +196,9 @@ describe('T46 : arceau, bâche et bout identiques aux géométries de three', ()
     it(`${nom} : mêmes triangles et mêmes normales`, () => {
       expect(triangles(notre(), 'position')).toEqual(triangles(three(), 'position'));
       expect(triangles(notre(), 'normal')).toEqual(triangles(three(), 'normal'));
+      // Autant de sommets que three (indexée comme elle) : le rendu logiciel ne traite pas plus de sommets.
+      expect(notre().getAttribute('position').count).toBe(three().getAttribute('position').count);
+      expect(notre().index?.count).toBe(three().index?.count);
     });
   }
 });
