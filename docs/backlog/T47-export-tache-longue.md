@@ -3,7 +3,7 @@
 **Objectif** : l'e2e `apps/web/e2e/export-arriere-plan.e2e.ts` (T15e) échoue par intermittence en CI à l'étape « export de référence, sans changer d'onglet » : `tâche longue pendant l'export de référence`, 249 ms pour une limite de 50 ms (CI de la PR #202, 2026-10-19, part 1/4, runners passant à Ubuntu 26 ; un précédent à 52 ms le 14 octobre). Un échec intermittent n'est pas du bruit tant qu'il n'est pas expliqué (règle de la boucle) : trouver la cause.
 
 **Dépend de** : T15d, T15e, T31 (tests de temps fiables)
-**Périmètre** : `apps/web/src/ecrans/ferme/export/**`, `apps/web/e2e/export-arriere-plan.e2e.ts`, `apps/web/e2e/outils.ts` (sonde des tâches longues), tests
+**Périmètre** : `apps/web/src/ecrans/export/**`, `apps/web/e2e/export-arriere-plan.e2e.ts`, `apps/web/e2e/outils.ts` (sonde des tâches longues), tests
 **Priorité** : normale.
 
 ## Règle
