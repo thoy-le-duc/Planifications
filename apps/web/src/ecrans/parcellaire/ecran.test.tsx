@@ -4,16 +4,17 @@
  * Vrai écran dans un DOM simulé (happy-dom), porte sur la base mémoire d'une ferme NEUVE
  * (./test/ferme-neuve.ts : aucune saison, aucune zone, aucune planche). Contrat : ./test/contrat.ts.
  *
- * Chaque ligne écrite passe la règle de ligne du serveur (validerStructure, T10s) ; chaque
- * enregistrement est UNE transaction locale (un envoi, tout ou rien), annulable par le bandeau ;
- * un refus ne passe rien à la base.
+ * Chaque enregistrement est UNE transaction locale (un envoi, tout ou rien), annulable par le
+ * bandeau ; un refus ne passe rien à la base. Que chaque ligne écrite passe la règle de ligne du
+ * serveur (validerStructure, T10s) est vérifié par ./ecritures.test.ts : la règle du serveur
+ * importe @planif/db, qui ne se charge pas sous happy-dom (import.meta.url n'y est pas un fichier).
  */
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { ModuleParcellaire, ProprietesEcranParcellaire } from './test/contrat.ts';
 import { FERME } from './test/ferme-neuve.ts';
-import { acceptePar, actifs, AUJOURDHUI, creerBanc, emplacements, lire, MAINTENANT, saisons, zones, type Banc } from './test/outils.ts';
+import { actifs, AUJOURDHUI, creerBanc, emplacements, lire, MAINTENANT, saisons, zones, type Banc } from './test/outils.ts';
 import { attendre, bouton, champ, dialogue, dialogueOuEchec, liste, region, remplir, texte, toucher, aBouton } from '../itineraires/test/outils.ts';
 
 const CHEMIN = './index.ts';
@@ -135,7 +136,6 @@ describe('T49 : saisons', () => {
     expect(b.transactions()).toBe(1);
     const [saison] = saisons(b);
     expect(saison).toMatchObject({ ferme_id: FERME, nom: '2026', debut: '2026-01-01', fin: '2026-12-31', supprime_le: null });
-    await acceptePar('saison', saisons(b));
     await attendre(() => document.querySelector(`[data-testid="saison"][data-saison="${String(saison?.id)}"]`) !== null, 'saison listée');
     expect(aBouton('Créer la saison 2026'), 'la proposition disparaît').toBe(false);
 
@@ -168,7 +168,6 @@ describe('T49 : saisons', () => {
     await attendre(() => dialogue('Nouvelle saison') === undefined, 'dialogue fermé');
     expect(b.transactions()).toBe(1);
     expect(saisons(b).find((x) => x.nom === 'Hiver 2027')).toMatchObject({ debut: '2027-01-01', fin: '2027-03-31', supprime_le: null });
-    await acceptePar('saison', saisons(b));
   });
 
   it('modifier une saison (nom, fin) ; « Annuler » ramène les valeurs d’avant', async () => {
@@ -180,7 +179,6 @@ describe('T49 : saisons', () => {
     await attendre(() => dialogue('Modifier la saison') === undefined, 'dialogue fermé');
     expect(b.transactions()).toBe(1);
     expect(saisons(b)[0]).toMatchObject({ nom: 'Saison 2026', debut: '2026-01-01', fin: '2027-02-28' });
-    await acceptePar('saison', saisons(b));
     await annulerParLeBandeau();
     await attendre(() => saisons(b)[0]?.nom === '2026', 'nom ramené');
     expect(saisons(b)[0]).toMatchObject({ nom: '2026', fin: '2026-12-31', supprime_le: null });
@@ -213,7 +211,6 @@ describe('T49 : saisons', () => {
     await toucher(bouton('Supprimer la saison', d));
     await attendre(() => saisons(b)[0]?.supprime_le !== null, 'saison supprimée (douce)');
     expect(b.transactions()).toBe(1);
-    await acceptePar('saison', saisons(b));
     await annulerParLeBandeau();
     await attendre(() => saisons(b)[0]?.supprime_le === null, 'saison rétablie');
   });
@@ -235,7 +232,6 @@ describe('T49 : zones et planches', () => {
     expect(zones(b)[0]).toMatchObject({ id: tunnel, ferme_id: FERME, nom: 'Tunnel 1', type_abri: 'tunnel', zone_parente_id: null, supprime_le: null });
     const chapelle = await creerZone('Chapelle A', 'tunnel', tunnel);
     expect(zones(b).find((z) => z.id === chapelle)).toMatchObject({ zone_parente_id: tunnel });
-    await acceptePar('zone', zones(b));
     expect(document.querySelector(`[data-testid="zone"][data-zone="${tunnel}"]`)).not.toBeNull();
   });
 
@@ -251,7 +247,6 @@ describe('T49 : zones et planches', () => {
       expect(e).toMatchObject({ ferme_id: FERME, zone_id: tunnel, sorte: 'planche', longueur_m: 30, largeur_m: 0.8, nombre_places: null, actif_au: null, remplace: '[]' });
       expect(String(e.actif_du) <= AUJOURDHUI, 'en service dès aujourd’hui').toBe(true);
     }
-    await acceptePar('emplacement', emplacements(b));
     await attendre(() => d.querySelectorAll('[data-testid="planche"]').length === 10, '10 planches listées dans la zone');
 
     await ajouterPlanches(d, '3', 'P', '25', '1');
@@ -296,7 +291,6 @@ describe('T49 : zones et planches', () => {
     await toucher(bouton('Mettre hors service', f));
     await attendre(() => actifs(emplacements(b)).find((e) => e.id === p3.id)?.actif_au === AUJOURDHUI, 'hors service aujourd’hui');
     expect(b.transactions()).toBe(1);
-    await acceptePar('emplacement', emplacements(b));
 
     // P1 dans une autre zone : permis.
     d = await ouvrirZone('Champ 2');
@@ -331,7 +325,6 @@ describe('T49 : zones et planches', () => {
     await toucher(bouton('Supprimer la zone', dialogueOuEchec('Modifier la zone')));
     await attendre(() => zones(b)[0]?.supprime_le !== null, 'zone supprimée (douce)');
     expect(b.transactions()).toBe(1);
-    await acceptePar('zone', zones(b));
     expect(lire(b, 'SELECT COUNT(*) AS n FROM zone')[0]?.n, 'jamais de DELETE').toBe(1);
   });
 

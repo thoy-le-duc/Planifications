@@ -4,6 +4,7 @@
  * écrite (`validerStructure` d'apps/api/src/sync/structure-lignes.ts, chargé par un chemin tenu
  * dans une variable : le typage de l'appli web ne dépend pas de l'API).
  */
+import { resolve } from 'node:path';
 import { expect } from 'vitest';
 import { creerPorte, SCHEMA_LOCAL, type BaseLocale, type PorteDonnees } from '@planif/sync';
 import type { Id } from '@planif/core';
@@ -60,7 +61,8 @@ interface ResultatStructure {
 interface ModuleStructure {
   validerStructure(table: 'saison' | 'zone' | 'emplacement', ligne: Readonly<Record<string, unknown>>): ResultatStructure;
 }
-const CHEMIN_STRUCTURE = '../../../../../api/src/sync/structure-lignes.ts';
+/** Adresse absolue : le fichier est hors de la racine de l'appli web (apps/web). */
+const CHEMIN_STRUCTURE = resolve(import.meta.dirname, '../../../../../api/src/sync/structure-lignes.ts');
 let structure: ModuleStructure | undefined;
 
 /** Chaque ligne est acceptée par la règle de ligne du serveur (T10s). */
