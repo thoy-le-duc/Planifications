@@ -249,6 +249,8 @@ export interface DensiteEcartement {
   readonly ecartementSurRangCm: Centimetres;
   /** T35a : rangs alignés ou en quinconce ; absente → alignés (voir `dispositionDe`). */
   readonly disposition?: DispositionRangs;
+  /** T43 : écart entre rangs choisi (semoir, traceur), de 5 à 200 cm ; absent → calculé à l'écran (« ≈ »). */
+  readonly ecartEntreRangsCm?: Centimetres;
 }
 
 /** Semis en ligne : graines par mètre de rang (la germination est déjà comptée). */
@@ -256,6 +258,8 @@ export interface DensiteMetreLineaire {
   readonly facon: 'metre_lineaire';
   readonly rangsParPlanche: number;
   readonly grainesParMetre: number;
+  /** T43 : écart entre rangs choisi, de 5 à 200 cm ; absent → calculé à l'écran (« ≈ »). */
+  readonly ecartEntreRangsCm?: Centimetres;
 }
 
 /** Semis à la volée : dose sur la largeur semée. */

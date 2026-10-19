@@ -15,7 +15,7 @@
  *      désherbage au trou de plantation et au passe-pied, tous les 30 à 45 jours.
  *
  * Migration : `0035_bibliotheque_travaux_suites`, écrite par `pnpm --filter @planif/db
- *   bibliotheque 0035_bibliotheque_travaux_suites`, dernière migration de bibliothèque, ne modifie
+ *   bibliotheque 0035_bibliotheque_travaux_suites` (T43 : 0036 la suit), ne modifie
  *   que les 11 itinéraires concernés (rien d'ajouté ni de retiré, ni famille ni espèce).
  */
 import { readFileSync } from 'node:fs';
@@ -176,8 +176,10 @@ describe('T42b : la migration de bibliothèque 0035', () => {
     return e;
   };
 
-  it('dernière migration de bibliothèque, au journal (idx 35), dépôt à jour', () => {
-    expect(etats.at(-1)?.migration).toBe(MIGRATION);
+  // T43 : 0036_bibliotheque_ecart_entre_rangs la suit ; 0035 reste au journal, à sa place.
+  it('migration de bibliothèque après 0034, au journal (idx 35), dépôt à jour', () => {
+    const i = etats.findIndex((e) => e.migration === MIGRATION);
+    expect(etats[i - 1]?.migration).toBe(PRECEDENTE);
     const journal = JSON.parse(readFileSync(new URL('../migrations/meta/_journal.json', import.meta.url), 'utf8')) as { entries: { idx: number; tag: string }[] };
     expect(journal.entries.find((e) => e.tag === MIGRATION)?.idx).toBe(35);
     expect(db.verifierBibliotheque(db.depotBibliotheque())).toEqual([]);

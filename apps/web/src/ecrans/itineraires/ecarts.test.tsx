@@ -41,6 +41,7 @@ interface EcartsDensite {
   readonly largeurPlancheCm: number;
   readonly ecartEntreRangsCm: number | null;
   readonly ecartEquivalentCm: number | null;
+  readonly ecartSaisi: boolean;
 }
 
 interface ModuleEcarts {
@@ -58,7 +59,8 @@ describe('T42 : écarts d’une densité (fonctions pures)', () => {
     const m = await charger();
     expect(m.LARGEUR_PLANCHE_DEFAUT_CM).toBe(75);
     const e = m.ecartsDensite({ facon: 'ecartement', rangsParPlanche: 3, ecartementSurRangCm: 30 }, null);
-    expect(e).toEqual({ rangs: 3, largeurPlancheCm: 75, ecartEntreRangsCm: 25, ecartEquivalentCm: null });
+    // T43 : `ecartSaisi` dit si l'écart vient de la densité (ecartEntreRangsCm) ou du calcul de T42.
+    expect(e).toEqual({ rangs: 3, largeurPlancheCm: 75, ecartEntreRangsCm: 25, ecartEquivalentCm: null, ecartSaisi: false });
     if (e === null) return;
     expect(m.texteEcartsRangs(e)).toBe('3 rangs, ≈ 25 cm entre rangs (planche de 75 cm)');
     expect(m.texteEcartEquivalent(e)).toBeNull();
@@ -84,7 +86,7 @@ describe('T42 : écarts d’une densité (fonctions pures)', () => {
   it('au mètre linéaire : écart moyen équivalent entre graines sur le rang', async () => {
     const m = await charger();
     const carotte = m.ecartsDensite({ facon: 'metre_lineaire', rangsParPlanche: 4, grainesParMetre: 50 }, null);
-    expect(carotte).toEqual({ rangs: 4, largeurPlancheCm: 75, ecartEntreRangsCm: 18.75, ecartEquivalentCm: 2 });
+    expect(carotte).toEqual({ rangs: 4, largeurPlancheCm: 75, ecartEntreRangsCm: 18.75, ecartEquivalentCm: 2, ecartSaisi: false });
     if (carotte === null) return;
     expect(m.texteEcartsRangs(carotte)).toBe('4 rangs, ≈ 19 cm entre rangs (planche de 75 cm)');
     expect(m.texteEcartEquivalent(carotte)).toBe('≈ 2 cm entre graines sur le rang');

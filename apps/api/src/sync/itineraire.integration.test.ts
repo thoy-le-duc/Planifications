@@ -1473,4 +1473,59 @@ decrireAvecBase('T23')('T23 : POST /sync/upload accepte les itinéraires et les 
       await refuseEnEntier([fautive], fautive, 'ecriture_invalide');
     });
   });
+
+  // ── T43 : écart entre rangs (docs/backlog/T43-ecart-entre-rangs.md) ─────────────────────────
+  // parametres.densite.ecartEntreRangsCm : facultatif, de 5 à 200 cm, à l'écartement ou au mètre
+  // linéaire. Clé du jsonb `parametres` : aucune migration de schéma. Le serveur rejoue
+  // validerItineraire / validerSerie du cœur : hors bornes → 'ecriture_invalide', message en
+  // français dans refus_synchro. Un téléphone qui ne connaît pas la clé n'envoie rien de nouveau.
+
+  describe('T43 : écart entre rangs', () => {
+    const avecDensite = (densite: Record<string, unknown>): string => JSON.stringify({ ...BATAVIA, densite, travauxPrevus: [GRELINETTE] });
+
+    it('itinéraire avec un écart entre rangs de 30 cm : accepté, rangé tel quel dans le jsonb', async () => {
+      const densite = { ...BATAVIA.densite, disposition: 'quinconce', ecartEntreRangsCm: 30 };
+      const i = await itineraireAccepte({ parametres: avecDensite(densite) });
+      const l = await ligne('itineraire', i.id);
+      expect((l?.parametres as Record<string, unknown> | undefined)?.densite).toEqual(densite);
+    });
+
+    it('sans écart entre rangs (téléphone d’avant T43) : accepté, rien n’est ajouté à la densité', async () => {
+      const i = await itineraireAccepte({ parametres: avecDensite(BATAVIA.densite) });
+      const l = await ligne('itineraire', i.id);
+      expect((l?.parametres as Record<string, unknown> | undefined)?.densite).toStrictEqual(BATAVIA.densite);
+    });
+
+    it('PATCH : écart posé, changé puis retiré : acceptés', async () => {
+      const i = await itineraireAccepte();
+      await accepte([patch('itineraire', i.id, { parametres: avecDensite({ ...BATAVIA.densite, ecartEntreRangsCm: 25 }) })]);
+      await accepte([patch('itineraire', i.id, { parametres: avecDensite({ ...BATAVIA.densite, ecartEntreRangsCm: 27.5 }) })]);
+      await accepte([patch('itineraire', i.id, { parametres: avecDensite(BATAVIA.densite) })]);
+      expect((await historique(i.id)).map((x) => x.operation)).toEqual(['creation', 'modification', 'modification', 'modification']);
+    });
+
+    it('hors bornes à la création (2 cm) : ecriture_invalide, rien d’écrit, message en français', async () => {
+      const i = putItineraire({ parametres: avecDensite({ ...BATAVIA.densite, ecartEntreRangsCm: 2 }) });
+      await refuseEnEntier([i], i, 'ecriture_invalide');
+      const [refus] = await refusSynchro(i.id);
+      expect(refus?.message).toMatch(/écart entre (les )?rangs/i);
+      expect(refus?.message).toMatch(/5/);
+      expect(refus?.message).toMatch(/200/);
+    });
+
+    it('hors bornes par PATCH (250 cm) : ecriture_invalide, la ligne ne change pas', async () => {
+      const i = await itineraireAccepte();
+      const fautive = patch('itineraire', i.id, { parametres: avecDensite({ ...BATAVIA.densite, ecartEntreRangsCm: 250 }) });
+      await refuseEnEntier([fautive], fautive, 'ecriture_invalide');
+      const [refus] = await refusSynchro(i.id);
+      expect(refus?.message).toMatch(/écart entre (les )?rangs/i);
+    });
+
+    it('instantané d’une série avec l’écart : accepté ; hors bornes : refusé', async () => {
+      const i = await itineraireAccepte();
+      await accepte([putSerie(i.id, avecDensite({ ...BATAVIA.densite, ecartEntreRangsCm: 30 }))]);
+      const fautive = putSerie(i.id, avecDensite({ ...BATAVIA.densite, ecartEntreRangsCm: 0 }));
+      await refuseEnEntier([fautive], fautive, 'ecriture_invalide');
+    });
+  });
 });
