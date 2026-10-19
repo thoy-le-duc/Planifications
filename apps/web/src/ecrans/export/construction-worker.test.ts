@@ -294,7 +294,7 @@ describe('T47 : construction de l’archive dans le worker de l’export', () =>
     expect(contenu(r.octets)).toEqual(ref);
   }, 30_000);
 
-  it('le worker tombe en cours d’export : l’export recommence une fois sans lui, une seule archive', async () => {
+  it('le worker tombe en cours d’export : l’export recommence une fois au fil principal, sans aucun worker, une seule archive', async () => {
     const ref = await reference();
     await brancherWorker({ tombeApresPages: 2 });
     const avertissements = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -302,6 +302,8 @@ describe('T47 : construction de l’archive dans le worker de l’export', () =>
     expect(r.telechargements).toBe(1);
     expect(contenu(r.octets)).toEqual(ref);
     expect(avertissements).toHaveBeenCalled();
+    // Relecture : UNE nouvelle tentative, au fil principal, sans autre worker (ni de compression).
+    expect(noms, 'aucun worker de compression pour la nouvelle tentative').toEqual(['construction-export']);
   }, 30_000);
 
   it('annulation pendant l’export : rejet AbortError, rien téléchargé, worker arrêté', async () => {
