@@ -199,6 +199,9 @@ export const COULEUR_BOIS_3D = '#8A6A48';
 /** Vue 3D (T32e) : feuillage qui jaunit en fin de récolte (le vert du feuillage tire vers cette teinte). */
 export const COULEUR_FEUILLAGE_JAUNI_3D = '#C9B440';
 
+/** Vue 3D (T46) : ligne de rang (sillon, goutte-à-goutte) sous les plants, sombre et discrète sur la dalle. */
+export const COULEUR_LIGNE_RANG_3D = '#3A3F38';
+
 /** Vue 3D (T32e) : fruit encore vert, en formation (tous types). */
 export const COULEUR_FRUIT_VERT_3D = '#C4DE7A';
 /** Vue 3D (T32e) : courgette mûre, jaune d'or : seule teinte qui se détache du feuillage vert et du sol sombre (courgette jaune). */

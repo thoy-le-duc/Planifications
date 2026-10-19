@@ -85,6 +85,10 @@ export const LARGEUR_VISIBLE_PX = 4;
 /** Rang de plants tous les tant de mètres de largeur de planche. */
 const LARGEUR_PAR_RANG_M = 0.5;
 const RANGS_MAX = 3;
+/** Rangs au plus quand l'écart est saisi (T46) : au-delà, il ne resterait que deux plants par rang. */
+const RANGS_MAX_SAISIS = 8;
+/** Écart entre rangs saisi qui déborde : les rangs du bord sont resserrés à tant du bord de la planche (m), au plus un quart de sa largeur. */
+const MARGE_BORD_M = 0.05;
 /** Un plant étiré le long du rang ne couvre pas plus de tant d'écartements. */
 const PAS_MAX_ECARTEMENTS = 12;
 /** Pieds d'une gouttière surélevée : un tous les 3 m environ, aux deux bouts au moins, 6 au plus. */
@@ -110,6 +114,10 @@ export interface CultureDePlanche {
   readonly ecartementM: number;
   /** Rangs alignés (défaut) ou en quinconce (T35b) : lu dans l'itinéraire de la série. */
   readonly disposition?: 'alignee' | 'quinconce';
+  /** T46 : écart entre rangs saisi (m, T43) ; absent → rangs en bandes égales sur la largeur de la planche. */
+  readonly ecartEntreRangsM?: number;
+  /** T46 : rangs de la densité, lus seulement avec l'écart saisi (sans lui, la largeur décide, comme en T32b). */
+  readonly rangsParPlanche?: number;
 }
 
 export interface EntreePlants {
@@ -152,6 +160,8 @@ export interface PlantsPlanche {
   readonly jaunissement: number;
   /** Coordonnées de scène, toutes dans le rectangle de la planche. */
   readonly positions: readonly { readonly x: number; readonly z: number }[];
+  /** T46 : centre de chaque ligne de rang (sillon, goutte-à-goutte), le long de la planche ; vide sans écart saisi ou sur une gouttière. */
+  readonly lignesRangs: readonly { readonly x: number; readonly z: number }[];
 }
 
 export interface GroupeInstances {
@@ -179,22 +189,36 @@ function recolteDuJour(culture: CultureDePlanche, jour: DateCalendaire): { reado
     : { recolte: recoltePerenneA(culture.croissance.entree, jour), jaunissement: jaunissementPerenneA(culture.croissance.entree, jour) };
 }
 
-/** Positions des plants sur `rangs` rangs, `parRang` par rang, régulièrement répartis sur la longueur. */
-function positionsDe(v: VolumePlant, rangs: number, parRang: number, quinconce: boolean): { x: number; z: number }[] {
+/**
+ * Position en travers (m, depuis l'axe de la planche) de chaque rang. Sans écart saisi : au milieu de
+ * bandes égales (T32b). Avec l'écart (T46) : à cet écart, centrés ; un rang qui sortirait de la planche
+ * est resserré au bord, les autres gardent l'écart saisi.
+ */
+function rangsEnTravers(largeur: number, rangs: number, ecartM: number | null): number[] {
+  const limite = Math.max(0, largeur / 2 - Math.min(MARGE_BORD_M, largeur / 4));
+  return Array.from({ length: rangs }, (_, r) => (ecartM === null ? ((r + 0.5) / rangs - 0.5) * largeur : Math.min(limite, Math.max(-limite, (r - (rangs - 1) / 2) * ecartM))));
+}
+
+/** Point de scène à `dx` le long du rang et `dz` en travers, depuis le centre de la planche. */
+const versScene = (v: VolumePlant, dx: number, dz: number): { x: number; z: number } => {
   const cos = Math.cos(v.angle);
   const sin = Math.sin(v.angle);
+  return { x: v.x + dx * cos + dz * sin, z: v.z - dx * sin + dz * cos };
+};
+
+/** Positions des plants sur les rangs `dzs`, `parRang` par rang, régulièrement répartis sur la longueur. */
+function positionsDe(v: VolumePlant, dzs: readonly number[], parRang: number, quinconce: boolean): { x: number; z: number }[] {
   // Quinconce : le pas se réduit d'un demi-pas pour que les rangs pairs, décalés d'un demi-pas, restent dans la planche.
   const pas = v.longueur / (parRang + (quinconce ? 0.5 : 0));
   const positions: { x: number; z: number }[] = [];
-  for (let r = 0; r < rangs; r += 1) {
-    const dz = ((r + 0.5) / rangs - 0.5) * v.largeur;
-    for (let k = 0; k < parRang; k += 1) {
-      const dx = (k + 0.5 + (quinconce && r % 2 === 1 ? 0.5 : 0)) * pas - v.longueur / 2;
-      positions.push({ x: v.x + dx * cos + dz * sin, z: v.z - dx * sin + dz * cos });
-    }
-  }
+  dzs.forEach((dz, r) => {
+    for (let k = 0; k < parRang; k += 1) positions.push(versScene(v, (k + 0.5 + (quinconce && r % 2 === 1 ? 0.5 : 0)) * pas - v.longueur / 2, dz));
+  });
   return positions;
 }
+
+/** L'écart saisi (m) s'il est utilisable, sinon null (bandes égales). */
+const ecartSaisi = (c: CultureDePlanche): number | null => (c.ecartEntreRangsM !== undefined && Number.isFinite(c.ecartEntreRangsM) && c.ecartEntreRangsM > 0 ? c.ecartEntreRangsM : null);
 
 /** Les plants d'une planche pour ce jour, ou nul quand rien ne se dessine. */
 export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
@@ -207,10 +231,14 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
   if (auRepos && structureM === 0) return null;
 
   const ecart = culture.ecartementM > 0 ? culture.ecartementM : 0.3;
-  const rangs = Math.min(RANGS_MAX, Math.max(1, Math.round(volume.largeur / LARGEUR_PAR_RANG_M)));
+  const ecartRangs = ecartSaisi(culture);
+  const saisis = culture.rangsParPlanche;
+  const rangs = ecartRangs !== null && saisis !== undefined && Number.isFinite(saisis) && saisis >= 1 ? Math.min(RANGS_MAX_SAISIS, Math.floor(saisis)) : Math.min(RANGS_MAX, Math.max(1, Math.round(volume.largeur / LARGEUR_PAR_RANG_M)));
   const parRang = Math.max(1, Math.min(Math.floor(volume.longueur / ecart), Math.floor(PLANTS_MAX_PAR_PLANCHE / rangs)));
   const quinconce = culture.disposition === 'quinconce' && rangs > 1;
-  const positions = positionsDe(volume, rangs, parRang, quinconce);
+  const dzs = rangsEnTravers(volume.largeur, rangs, ecartRangs);
+  const positions = positionsDe(volume, dzs, parRang, quinconce);
+  const surelevationM = surelevationHorsSolM(culture.espece, horsSol);
   const { recolte, jaunissement } = recolteDuJour(culture, jour);
   const typeFruit = typeDeFruit(culture.espece);
   const enFormation = recolte.phase === 'fruits-en-formation';
@@ -225,7 +253,7 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
     echelleVerticale: auRepos ? 0 : Math.max(etat.hauteurM, HAUTEUR_PLANT_MINIMAL_M),
     echelleHorizontale: ecart * REMPLISSAGE_ADULTE * (REMPLISSAGE_JEUNE + (1 - REMPLISSAGE_JEUNE) * adulte),
     structureM,
-    surelevationM: surelevationHorsSolM(culture.espece, horsSol),
+    surelevationM,
     couleur: volume.couleur,
     pasM: Math.min(volume.longueur / (parRang + (quinconce ? 0.5 : 0)), PAS_MAX_ECARTEMENTS * ecart),
     nombre: positions.length,
@@ -236,6 +264,7 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
     tailleFruitM: avecFruits ? TAILLE_FRUIT_MURE_M[typeFruit] * (PART_FRUIT_NAISSANT + (1 - PART_FRUIT_NAISSANT) * recolte.maturite) : 0,
     jaunissement,
     positions,
+    lignesRangs: ecartRangs === null || surelevationM > 0 ? [] : dzs.map((dz) => versScene(volume, 0, dz)),
   };
 }
 

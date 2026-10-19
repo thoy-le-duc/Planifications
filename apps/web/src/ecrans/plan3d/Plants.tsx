@@ -3,7 +3,7 @@
  * géométries partagées de ./geometries-plants.ts), plus UN seul pour les tuteurs, les poteaux (pergola du
  * kiwi, pieds de la gouttière hors-sol, T37b), les fruits et les balises « à récolter » (T32e : la même
  * double pyramide de 1 m, étirée et teintée par instance ; un seul appel de dessin pour les quatre, les
- * garde-fous de T29b sont tenus au téléphone). Ce que dessine chaque plant (forme, hauteur du jour, positions) vient de
+ * garde-fous de T29b sont tenus au téléphone ; les lignes de rang de T46 y passent aussi). Ce que dessine chaque plant (forme, hauteur du jour, positions) vient de
  * ./plants.ts, qui lit la croissance de T32a : aucun calcul de croissance ici. Le travail impératif (niveau
  * de détail, pose des instances) est dans ./plants-rendu.ts.
  *
@@ -54,7 +54,8 @@ export function Plants({
   // Tuteurs, poteaux (T37b), fruits et balises (T32e) : un seul maillage (une seule double pyramide), de la taille de ce qui peut s'y poser.
   const nbAccessoires = useMemo(() => {
     const fruits = Math.min(FRUITS_MAX_TOTAL, plants.reduce((n, p) => n + (p === null ? 0 : p.nombre * p.fruitsParPlant), 0));
-    return Math.min(nbTuteurs, PLANTS_MAX_TOTAL) + nbPoteaux + fruits + plants.reduce((n, p) => n + (p !== null && seRecolte(p) ? 1 : 0), 0);
+    const lignes = plants.reduce((n, p) => n + (p === null ? 0 : p.lignesRangs.length), 0);
+    return Math.min(nbTuteurs, PLANTS_MAX_TOTAL) + nbPoteaux + lignes + fruits + plants.reduce((n, p) => n + (p !== null && seRecolte(p) ? 1 : 0), 0);
   }, [plants, nbTuteurs, nbPoteaux]);
   useEffect(
     () => () => {

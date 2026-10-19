@@ -16,6 +16,9 @@ export const ECARTEMENT_PAR_DEFAUT_M = 0.3;
 /** Bornes de l'écartement lu : ni nul, ni plus large qu'une serre. */
 const ECARTEMENT_MIN_M = 0.05;
 const ECARTEMENT_MAX_M = 6;
+/** Bornes de l'écart entre rangs saisi (cm), celles du cœur (ECART_ENTRE_RANGS_MIN_CM / MAX_CM, T43), recopiées pour ne pas tirer le cœur dans la vue 3D. */
+const ECART_RANGS_MIN_CM = 5;
+const ECART_RANGS_MAX_CM = 200;
 
 interface Campagne {
   readonly debut: DateCalendaire | null;
@@ -29,6 +32,8 @@ export interface CultureLue {
   readonly ecartementM: number;
   /** T35b : lue dans la densité de l'itinéraire de la série ; absente ou inconnue → alignés. */
   readonly disposition?: 'quinconce';
+  /** T46 : écart entre rangs saisi (m) et rangs de la densité de la série ; absents → bandes égales. */
+  readonly rangs?: { readonly ecartM: number; readonly nombre?: number };
   readonly annuelle: DatesCroissance | null;
   readonly perenne: { readonly datePlantation: DateCalendaire; readonly dateArrachage: DateCalendaire | null; readonly campagnes: ReadonlyMap<number, Campagne> } | null;
 }
@@ -55,6 +60,8 @@ interface DensiteLue {
   readonly ecartementSurRangCm?: unknown;
   readonly grainesParMetre?: unknown;
   readonly disposition?: unknown;
+  readonly ecartEntreRangsCm?: unknown;
+  readonly rangsParPlanche?: unknown;
 }
 
 /** La densité des paramètres figés de la série, ou nulle si illisible. */
@@ -71,6 +78,15 @@ export function ecartementDe(parametres: string | number | null | undefined): nu
   const densite = densiteDe(parametres);
   const m = densite?.facon === 'ecartement' && typeof densite.ecartementSurRangCm === 'number' ? densite.ecartementSurRangCm / 100 : densite?.facon === 'metre_lineaire' && typeof densite.grainesParMetre === 'number' && densite.grainesParMetre > 0 ? 1 / densite.grainesParMetre : ECARTEMENT_PAR_DEFAUT_M;
   return Number.isFinite(m) ? Math.min(ECARTEMENT_MAX_M, Math.max(ECARTEMENT_MIN_M, m)) : ECARTEMENT_PAR_DEFAUT_M;
+}
+
+/** L'écart entre rangs saisi (T43) et les rangs de la densité, ou null : absent, hors bornes, à la volée ou illisible. */
+function rangsDe(densite: DensiteLue | null): { readonly ecartM: number; readonly nombre?: number } | null {
+  if (densite === null || densite.facon === 'volee') return null;
+  const cm = densite.ecartEntreRangsCm;
+  if (typeof cm !== 'number' || !(cm >= ECART_RANGS_MIN_CM && cm <= ECART_RANGS_MAX_CM)) return null;
+  const n = densite.rangsParPlanche;
+  return typeof n === 'number' && Number.isInteger(n) && n >= 1 ? { ecartM: cm / 100, nombre: n } : { ecartM: cm / 100 };
 }
 
 /** Les lignes lues → cultures par occupation et emplacements hors-sol. Pur. */
@@ -95,10 +111,13 @@ export function construireCultures(lignes: LignesPlants): CulturesLues {
       parOccupation.set(String(o.id), { ...base, ecartementM: ECARTEMENT_PAR_DEFAUT_M, annuelle: null, perenne: { datePlantation, dateArrachage: dateOuNulle(o.p_arrachage), campagnes: campagnes.get(plantation) ?? new Map<number, Campagne>() } });
       continue;
     }
+    const densite = densiteDe(o.s_parametres);
+    const rangs = rangsDe(densite);
     parOccupation.set(String(o.id), {
       ...base,
       ecartementM: ecartementDe(o.s_parametres),
-      ...(densiteDe(o.s_parametres)?.disposition === 'quinconce' ? { disposition: 'quinconce' as const } : {}),
+      ...(densite?.disposition === 'quinconce' ? { disposition: 'quinconce' as const } : {}),
+      ...(rangs === null ? {} : { rangs }),
       annuelle: {
         miseEnPlace: { prevue: dateOuNulle(o.s_mise_en_place) ?? dateOuNulle(o.prevu_du), reelle: dateOuNulle(o.reel_du) },
         debutRecolte: { prevue: dateOuNulle(o.s_debut_recolte), reelle: null },
@@ -141,7 +160,8 @@ function campagneAu(campagnes: ReadonlyMap<number, Campagne>, jour: DateCalendai
 /** La culture de la semaine dont le lundi est `jour`. Une pérenne sans campagne en cours suit son cycle annuel. */
 export function cultureAu(c: CultureLue, jour: DateCalendaire): CultureDePlanche {
   if (c.perenne === null) {
-    return { espece: c.espece, profil: c.profil, ecartementM: c.ecartementM, disposition: c.disposition ?? 'alignee', croissance: { sorte: 'annuelle', dates: c.annuelle ?? { miseEnPlace: { prevue: null, reelle: null }, debutRecolte: { prevue: null, reelle: null }, finRecolte: { prevue: null, reelle: null }, arrachage: { prevue: null, reelle: null } } } };
+    const rangs = c.rangs === undefined ? {} : { ecartEntreRangsM: c.rangs.ecartM, ...(c.rangs.nombre === undefined ? {} : { rangsParPlanche: c.rangs.nombre }) };
+    return { espece: c.espece, profil: c.profil, ecartementM: c.ecartementM, disposition: c.disposition ?? 'alignee', ...rangs, croissance: { sorte: 'annuelle', dates: c.annuelle ?? { miseEnPlace: { prevue: null, reelle: null }, debutRecolte: { prevue: null, reelle: null }, finRecolte: { prevue: null, reelle: null }, arrachage: { prevue: null, reelle: null } } } };
   }
   return {
     espece: c.espece,
