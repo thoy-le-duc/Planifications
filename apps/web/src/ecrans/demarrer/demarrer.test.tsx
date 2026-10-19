@@ -262,6 +262,25 @@ describe('T49 : Aujourd’hui — sans série, dire quoi faire', () => {
     expect(etapes.prendreDemande('serie')).toBe('serie');
   });
 
+  it('une série sur une espèce de la bibliothèque (T41) : la tâche porte son nom, plus de bandeau ni d’état vide', async () => {
+    recevoirSaison();
+    recevoirPlanche();
+    b.base.recevoir(
+      `INSERT INTO serie (id, ferme_id, saison_id, espece_id, variete_id, itineraire_id, parametres, ancre_type, ancre_date, prevu_semis_pepiniere, prevu_mise_en_place, prevu_debut_recolte, prevu_fin_recolte, longueur_m, nombre_plants, statut, rotation_acceptee, cree_le, modifie_le, supprime_le)
+       VALUES (?, ?, ?, ?, NULL, ?, ?, 'plantation', ?, '2026-09-28', ?, '2026-11-16', '2026-11-30', 30, NULL, 'prevue', NULL, ?, ?, NULL)`,
+      [id(0xc5), FERME, SAISON, ESPECE_BIBLIOTHEQUE, ITINERAIRE_BIBLIOTHEQUE, JSON.stringify(PARAMETRES_BIBLIOTHEQUE), AUJOURDHUI, AUJOURDHUI, ISO, ISO],
+    );
+    b.base.recevoir(
+      `INSERT INTO occupation (id, ferme_id, emplacement_id, serie_id, plantation_id, evenement_id, longueur_m, nombre_places, position_m, prevu_du, prevu_au, reel_du, reel_au, cree_le, modifie_le, supprime_le)
+       VALUES (?, ?, ?, ?, NULL, NULL, 30, NULL, NULL, ?, '2026-11-30', NULL, NULL, ?, ?, NULL)`,
+      [id(0xc6), FERME, PLANCHE, id(0xc5), AUJOURDHUI, ISO, ISO],
+    );
+    await rendreJour();
+    await attendre(() => [...conteneur.querySelectorAll('[data-testid="tache"]')].some((t) => /Batavia/.test(texte(t))), 'tâche « Batavia »', 600);
+    expect(bandeau()).toBeNull();
+    expect(texte(conteneur)).not.toMatch(/Aucune série/);
+  });
+
   it('une étape du bandeau mène à son onglet (itinéraires → Ferme)', async () => {
     await rendreJour();
     await attendre(() => etape('itineraires') !== null, 'bandeau');
