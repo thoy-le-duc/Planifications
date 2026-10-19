@@ -724,6 +724,32 @@
   }
 }
 
+/* T50 : au téléphone, la barre d'outils tient sur UNE ligne (Pixel 7, iPhone : 390 à 412 px) pour
+   laisser sa hauteur au plan : « Saison » et le texte de « Voir en 3D » sont masqués à l'œil mais
+   restent lus (nom accessible inchangé) ; l'icône 3D et l'année suffisent au doigt. Plus étroit
+   encore (360 px), « Nouvelle série » passe à la ligne plutôt que de dépasser. */
+@media (max-width: 599px) {
+  .plan-outils {
+    position: relative;
+  }
+
+  .plan-outils > label,
+  .plan-outil-texte {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .plan-voir-3d {
+    min-width: 56px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
 /* Repli de la 3D sur la 2D (WebGL absent, trop lente) : message au-dessus du plan. */
 .plan-repli-3d {
   margin: 0;
