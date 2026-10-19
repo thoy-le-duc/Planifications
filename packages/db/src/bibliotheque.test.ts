@@ -70,6 +70,12 @@ const plat = (t: string): string =>
 
 type Objet = Readonly<Record<string, unknown>>;
 
+/** T42 : les paramètres sans les travaux prévus (vérifiés par bibliotheque-travaux.test.ts). */
+const sansTravaux = (p: object | undefined): object | undefined => {
+  if (p === undefined) return undefined;
+  return Object.fromEntries(Object.entries(p).filter(([cle]) => cle !== 'travauxPrevus'));
+};
+
 describe('T41 : le JSON de la bibliothèque de départ', () => {
   it('10 familles, 35 espèces, 46 itinéraires', () => {
     expect(source.familles).toHaveLength(10);
@@ -180,7 +186,7 @@ describe('T41 : conversion vers les lignes de la base', () => {
 
   it('plant acheté (tomate greffée sous serre) : ParametresItineraire du cœur, sans clé de pépinière', () => {
     const i = lignes.itineraires.find((l) => l.nom === 'Tomate sous serre, plant greffé deux têtes');
-    expect(i).toEqual({
+    expect(i === undefined ? undefined : { ...i, parametres: sansTravaux(i.parametres) }).toEqual({
       id: db.idBibliotheque('itineraire', 'tomate:Tomate sous serre, plant greffé deux têtes'),
       ferme_id: null,
       espece_id: db.idBibliotheque('espece', 'tomate'),
@@ -203,7 +209,7 @@ describe('T41 : conversion vers les lignes de la base', () => {
 
   it('plant maison (oignon frais en mottes) : pépinière, mottes, perte et plaques', () => {
     const i = lignes.itineraires.find((l) => l.nom === 'Oignon frais (botte ou primeur), mottes');
-    expect(i?.parametres).toEqual({
+    expect(sansTravaux(i?.parametres)).toEqual({
       mode: 'plant_maison',
       periodeUsage: { semaineDebut: 10, semaineFin: 15 },
       typeAbri: 'plein_champ',
@@ -221,9 +227,22 @@ describe('T41 : conversion vers les lignes de la base', () => {
     });
   });
 
-  it('semis direct : au mètre linéaire (carotte), à l’écartement en poquets (haricot grimpant)', () => {
+  it('semis direct : au mètre linéaire (aneth), à l’écartement (carotte depuis T42, haricot grimpant en poquets)', () => {
+    const aneth = lignes.itineraires.find((l) => l.nom === 'Aneth, semis direct');
+    expect(sansTravaux(aneth?.parametres)).toEqual({
+      mode: 'semis_direct',
+      periodeUsage: { semaineDebut: 15, semaineFin: 32 },
+      typeAbri: 'plein_champ',
+      dureeAvantRecolteJours: 45,
+      fenetreRecolteJours: 21,
+      margeSecurite: 25,
+      rendementAttendu: { par: 'metre', quantite: 0.8, unite: 'kg' },
+      perenne: null,
+      densite: { facon: 'metre_lineaire', rangsParPlanche: 3, grainesParMetre: 60 },
+      grainesParPoquet: null,
+    });
     const carotte = lignes.itineraires.find((l) => l.nom === 'Carotte de conservation, semis direct');
-    expect(carotte?.parametres).toEqual({
+    expect(sansTravaux(carotte?.parametres)).toEqual({
       mode: 'semis_direct',
       periodeUsage: { semaineDebut: 20, semaineFin: 26 },
       typeAbri: 'plein_champ',
@@ -232,8 +251,8 @@ describe('T41 : conversion vers les lignes de la base', () => {
       margeSecurite: 20,
       rendementAttendu: { par: 'metre', quantite: 5, unite: 'kg' },
       perenne: null,
-      densite: { facon: 'metre_lineaire', rangsParPlanche: 4, grainesParMetre: 50 },
-      grainesParPoquet: null,
+      densite: { facon: 'ecartement', rangsParPlanche: 4, ecartementSurRangCm: 2 },
+      grainesParPoquet: 1,
     });
     const haricot = lignes.itineraires.find((l) => l.nom === 'Haricot grimpant, semis direct en poquets');
     expect(haricot?.parametres).toMatchObject({
@@ -245,7 +264,8 @@ describe('T41 : conversion vers les lignes de la base', () => {
 
   it('ni sources, ni « à vérifier », ni famille ou catégorie dans les paramètres rangés en base', () => {
     for (const i of lignes.itineraires) {
-      const texte = JSON.stringify(i);
+      // T42 : `categorie` est aussi une clé légitime des travaux prévus (catégorie d'intervention).
+      const texte = JSON.stringify({ ...i, parametres: sansTravaux(i.parametres) });
       for (const cle of ['sources', 'aVerifier', 'famille', 'categorie', 'Pct', 'debutSemaine', 'ecartementCm"', '"kg":']) {
         expect(texte.includes(cle), `${cle} dans ${i.nom}`).toBe(false);
       }

@@ -69,6 +69,18 @@ decrireAvecBase('T41b : mise à jour de la bibliothèque par nouvelle migration 
   let c: pg.Client;
   const base = `t41b_${randomUUID().replaceAll('-', '').slice(0, 16)}`;
   let dossierPartiel = '';
+  // T42 : la base de T41b s'arrête à 0033 ; 0034 (travaux prévus) réécrit les 46 itinéraires et a
+  // son propre test (bibliotheque-travaux.integration.test.ts).
+  let dossierJusqua33 = '';
+  async function migrerJusqua33(): Promise<void> {
+    const client = new pg.Client({ connectionString: urlDe(base) });
+    await client.connect();
+    try {
+      await migrate(drizzle(client), { migrationsFolder: dossierJusqua33 });
+    } finally {
+      await client.end();
+    }
+  }
   const ferme = randomUUID();
   const deLaFerme = { famille: randomUUID(), espece: randomUUID(), itineraire: randomUUID(), copie: randomUUID() };
   let fermeAvant: Instantane;
@@ -100,6 +112,7 @@ decrireAvecBase('T41b : mise à jour de la bibliothèque par nouvelle migration 
     await admin.query(`CREATE DATABASE ${base}`);
     // 1. La base telle que T41 l'a laissée (production de Théophane) : migrée jusqu'à 0032.
     dossierPartiel = migrationsJusquA(32);
+    dossierJusqua33 = migrationsJusquA(33);
     const avant = new pg.Client({ connectionString: urlDe(base) });
     await avant.connect();
     try {
@@ -127,8 +140,8 @@ decrireAvecBase('T41b : mise à jour de la bibliothèque par nouvelle migration 
     );
     fermeAvant = await fermeLignes();
     bibliothequeAvant = await bibliotheque();
-    // 3. Le déploiement suivant : toutes les migrations, donc 0033.
-    await db.appliquerMigrations(urlDe(base));
+    // 3. Le déploiement suivant : les migrations jusqu'à 0033 (T42 : 0034 a son propre test).
+    await migrerJusqua33();
   }, 120_000);
 
   afterAll(async () => {
@@ -136,6 +149,7 @@ decrireAvecBase('T41b : mise à jour de la bibliothèque par nouvelle migration 
     await admin.query(`DROP DATABASE IF EXISTS ${base} WITH (FORCE)`);
     await admin.end();
     rmSync(dossierPartiel, { recursive: true, force: true });
+    rmSync(dossierJusqua33, { recursive: true, force: true });
   }, 60_000);
 
   describe('0032 puis 0033 (le melon)', () => {
@@ -162,15 +176,16 @@ decrireAvecBase('T41b : mise à jour de la bibliothèque par nouvelle migration 
       expect(await fermeLignes()).toEqual(fermeAvant);
     });
 
-    it('la base suit exactement le dernier état (le JSON courant)', async () => {
-      const attendu = db.convertirBibliotheque(db.lireBibliothequeDepart());
+    it('la base suit exactement l’état 0033', async () => {
+      const attendu = db.lireEtatsBibliotheque().find((e) => e.migration === MIGRATION_MELON)?.lignes;
+      if (attendu === undefined) throw new Error('état 0033 absent');
       const apres = await bibliotheque();
       for (const i of attendu.itineraires) expect(apres.get(`itineraire:${i.id}`)?.ligne, i.nom).toMatchObject({ nom: i.nom, mode: i.mode, parametres: i.parametres, supprime_le: null });
     });
 
     it('rejouable : les migrations à nouveau, puis le SQL de 0033 deux fois, ne réécrivent rien', async () => {
       const bib = await bibliotheque();
-      await db.appliquerMigrations(urlDe(base));
+      await migrerJusqua33();
       const sql = readFileSync(new URL(`${MIGRATION_MELON}.sql`, DOSSIER), 'utf8');
       await jouer(sql);
       await jouer(sql);
@@ -181,7 +196,7 @@ decrireAvecBase('T41b : mise à jour de la bibliothèque par nouvelle migration 
 
   describe('la mécanique sur une vraie base', () => {
     const etats = (): db.LignesBibliotheque => {
-      const e = db.lireEtatsBibliotheque().at(-1);
+      const e = db.lireEtatsBibliotheque().find((x) => x.migration === MIGRATION_MELON);
       if (e === undefined) throw new Error('aucun état');
       return e.lignes;
     };
