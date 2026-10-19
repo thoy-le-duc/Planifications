@@ -85,10 +85,6 @@ export const LARGEUR_VISIBLE_PX = 4;
 /** Rang de plants tous les tant de mètres de largeur de planche. */
 const LARGEUR_PAR_RANG_M = 0.5;
 const RANGS_MAX = 3;
-/** Rangs au plus quand l'écart est saisi (T46) : au-delà, il ne resterait que deux plants par rang. */
-const RANGS_MAX_SAISIS = 8;
-/** Écart entre rangs saisi qui déborde : les rangs du bord sont resserrés à tant du bord de la planche (m), au plus un quart de sa largeur. */
-const MARGE_BORD_M = 0.05;
 /** Un plant étiré le long du rang ne couvre pas plus de tant d'écartements. */
 const PAS_MAX_ECARTEMENTS = 12;
 /** Pieds d'une gouttière surélevée : un tous les 3 m environ, aux deux bouts au moins, 6 au plus. */
@@ -218,16 +214,19 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
   if (auRepos && structureM === 0) return null;
 
   const ecart = culture.ecartementM > 0 ? culture.ecartementM : 0.3;
-  // T46 : avec l'écart entre rangs saisi, les rangs de la densité (8 au plus) ; sans lui, la largeur décide (T32b).
+  // T46 : avec l'écart entre rangs saisi, tous les rangs de la densité (un plant par rang au moins, donc
+  // PLANTS_MAX_PAR_PLANCHE rangs au plus) ; sans lui, la largeur décide (T32b).
   const e = culture.ecartEntreRangsM ?? 0;
   const n = culture.rangsParPlanche ?? 0;
-  const rangs = e > 0 && n >= 1 ? Math.min(RANGS_MAX_SAISIS, Math.floor(n)) : Math.min(RANGS_MAX, Math.max(1, Math.round(volume.largeur / LARGEUR_PAR_RANG_M)));
+  const rangs = e > 0 && n >= 1 ? Math.min(PLANTS_MAX_PAR_PLANCHE, Math.floor(n)) : Math.min(RANGS_MAX, Math.max(1, Math.round(volume.largeur / LARGEUR_PAR_RANG_M)));
   const parRang = Math.max(1, Math.min(Math.floor(volume.longueur / ecart), Math.floor(PLANTS_MAX_PAR_PLANCHE / rangs)));
   const quinconce = culture.disposition === 'quinconce' && rangs > 1;
+  // Largeur adulte d'un plant en travers. T46 : pas plus que l'écart entre rangs ni qu'une bande de la planche.
+  const largeurAdulte = (e > 0 ? Math.min(ecart, e, volume.largeur / rangs) : ecart) * REMPLISSAGE_ADULTE;
   // Position en travers de chaque rang : au milieu de bandes égales (T32b) ; avec l'écart saisi (T46), à cet écart et
-  // centrés, un rang qui sortirait de la planche resserré au bord (les autres gardent l'écart).
-  const limite = Math.max(0, volume.largeur / 2 - Math.min(MARGE_BORD_M, volume.largeur / 4));
-  const dzs = Array.from({ length: rangs }, (_, r) => (e > 0 ? Math.min(limite, Math.max(-limite, (r - (rangs - 1) / 2) * e)) : ((r + 0.5) / rangs - 0.5) * volume.largeur));
+  // centrés ; quand ils ne tiennent pas, tous resserrés régulièrement pour que le feuillage du bord reste sur la planche.
+  const pas = rangs > 1 ? Math.min(e, (volume.largeur - largeurAdulte) / (rangs - 1)) : 0;
+  const dzs = Array.from({ length: rangs }, (_, r) => (e > 0 ? (r - (rangs - 1) / 2) * pas : ((r + 0.5) / rangs - 0.5) * volume.largeur));
   const positions = positionsDe(volume, dzs, parRang, quinconce);
   const surelevationM = surelevationHorsSolM(culture.espece, horsSol);
   const { recolte, jaunissement } = recolteDuJour(culture, jour);
@@ -242,8 +241,7 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
     stade: etat.stade,
     hauteurM: etat.hauteurM,
     echelleVerticale: auRepos ? 0 : Math.max(etat.hauteurM, HAUTEUR_PLANT_MINIMAL_M),
-    // T46 : un plant n'est pas plus large que l'écart entre rangs saisi : les rangs restent distincts.
-    echelleHorizontale: (e > 0 ? Math.min(ecart, e) : ecart) * REMPLISSAGE_ADULTE * (REMPLISSAGE_JEUNE + (1 - REMPLISSAGE_JEUNE) * adulte),
+    echelleHorizontale: largeurAdulte * (REMPLISSAGE_JEUNE + (1 - REMPLISSAGE_JEUNE) * adulte),
     structureM,
     surelevationM,
     couleur: volume.couleur,

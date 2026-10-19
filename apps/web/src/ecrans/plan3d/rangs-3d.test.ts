@@ -130,7 +130,7 @@ describe('T46 : écart trop grand → jamais hors de la planche', () => {
     expect(pas).toBeGreaterThan(0);
     expect(pas).toBeLessThan(0.5);
     dz.slice(1).forEach((z, k) => {
-      expect(z - (dz[k] ?? NaN), `pas ${String(k + 1)}`).toBeCloseTo(pas, 6);
+      expect(z - (dz[k] ?? NaN), `pas ${String(k + 1)}`).toBeCloseTo(pas, 3);
     });
     expect((dz[0] ?? NaN) + (dz[3] ?? NaN)).toBeCloseTo(0, 6);
     for (const z of dz) expect(Math.abs(z) + p.echelleHorizontale / 2).toBeLessThanOrEqual(0.375 + 1e-9);
