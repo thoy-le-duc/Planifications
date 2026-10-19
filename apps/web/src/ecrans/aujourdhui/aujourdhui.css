@@ -81,7 +81,41 @@
 
 .auj-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--espace-s);
+}
+
+/* T52 : « Traitement », sur sa propre ligne sous « Noter une récolte » (rien ne déborde à 360 px). */
+.auj-traitement {
+  flex: 1 0 100%;
+  order: 3;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.auj-traitement:disabled {
+  border-color: var(--couleur-trait);
+  color: var(--couleur-secondaire);
+}
+
+/* T52 : alerte de délai avant récolte (carte de début de récolte, récolte). */
+.auj-alerte-dar {
+  display: block;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-left: 5px solid var(--couleur-conflit);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-conflit);
+  font-weight: 700;
+  font-size: 15px;
+  overflow-wrap: anywhere;
 }
 
 .auj-noter {
@@ -835,4 +869,34 @@
   .auj-touche {
     min-height: 56px;
   }
+}
+
+/* T52 : confirmation d'une récolte sous délai avant récolte. */
+.auj-confirmation-dar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-s);
+  padding: var(--espace-l);
+  border: 2px solid var(--couleur-conflit);
+  border-radius: var(--rayon-carte);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  overflow-wrap: anywhere;
+}
+
+.auj-confirmation-dar strong {
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 21px;
+}
+
+.auj-confirmation-non {
+  min-height: 56px;
+  padding: 0 16px;
+  border: 2px solid var(--couleur-trait);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 17px;
 }
