@@ -96,13 +96,13 @@ describe('T49 : planches en lot', () => {
 });
 
 describe('T49 : une planche', () => {
-  const planche = { code: 'P3', sorte: 'planche', longueur: '30', largeur: '0,8', nombrePlaces: '' } as const;
+  const planche = { code: 'P3', sorte: 'planche', longueur: '30', largeur: '0,8', nombrePains: '' } as const;
 
-  it('valide : code rogné, largeur facultative, gouttière avec son nombre de places', () => {
-    expect(r.verifierEmplacement({ ...planche, code: ' P3 ' }, ['P1'])).toEqual({ ok: true, valeur: { code: 'P3', sorte: 'planche', longueurM: 30, largeurM: 0.8, nombrePlaces: null } });
+  it('valide : code rogné, largeur facultative, gouttière avec son nombre de pains', () => {
+    expect(r.verifierEmplacement({ ...planche, code: ' P3 ' }, ['P1'])).toEqual({ ok: true, valeur: { code: 'P3', sorte: 'planche', longueurM: 30, largeurM: 0.8, nombrePains: null } });
     expect(r.verifierEmplacement({ ...planche, largeur: '' }, [])).toMatchObject({ ok: true, valeur: { largeurM: null } });
-    expect(r.verifierEmplacement({ ...planche, sorte: 'gouttiere', nombrePlaces: '120' }, [])).toMatchObject({ ok: true, valeur: { sorte: 'gouttiere', nombrePlaces: 120 } });
-    expect(r.verifierEmplacement({ ...planche, sorte: 'rang', nombrePlaces: '' }, [])).toMatchObject({ ok: true, valeur: { sorte: 'rang', nombrePlaces: null } });
+    expect(r.verifierEmplacement({ ...planche, sorte: 'gouttiere', nombrePains: '30' }, [])).toMatchObject({ ok: true, valeur: { sorte: 'gouttiere', nombrePains: 30 } });
+    expect(r.verifierEmplacement({ ...planche, sorte: 'rang', nombrePains: '' }, [])).toMatchObject({ ok: true, valeur: { sorte: 'rang', nombrePains: null } });
   });
 
   it('refus d’un code en double dans la zone (sans casse ni espaces autour)', () => {
@@ -111,12 +111,12 @@ describe('T49 : une planche', () => {
     if (!v.ok) expect(v.message).toMatch(/existe déjà dans cette zone/);
   });
 
-  it('refus lisibles : code vide, longueur nulle, gouttière sans places, places hors gouttière, sorte inconnue', () => {
+  it('refus lisibles : code vide, longueur nulle, gouttière sans pains, pains hors gouttière, sorte inconnue', () => {
     expect(r.verifierEmplacement({ ...planche, code: ' ' }, [])).toMatchObject({ ok: false, champ: 'code' });
     expect(r.verifierEmplacement({ ...planche, longueur: '0' }, [])).toMatchObject({ ok: false, champ: 'longueur' });
-    expect(r.verifierEmplacement({ ...planche, sorte: 'gouttiere', nombrePlaces: '' }, [])).toMatchObject({ ok: false, champ: 'nombrePlaces' });
-    expect(r.verifierEmplacement({ ...planche, sorte: 'gouttiere', nombrePlaces: '1,5' }, [])).toMatchObject({ ok: false, champ: 'nombrePlaces' });
-    expect(r.verifierEmplacement({ ...planche, sorte: 'planche', nombrePlaces: '12' }, [])).toMatchObject({ ok: false, champ: 'nombrePlaces' });
+    expect(r.verifierEmplacement({ ...planche, sorte: 'gouttiere', nombrePains: '' }, [])).toMatchObject({ ok: false, champ: 'nombrePains' });
+    expect(r.verifierEmplacement({ ...planche, sorte: 'gouttiere', nombrePains: '1,5' }, [])).toMatchObject({ ok: false, champ: 'nombrePains' });
+    expect(r.verifierEmplacement({ ...planche, sorte: 'planche', nombrePains: '12' }, [])).toMatchObject({ ok: false, champ: 'nombrePains' });
     expect(r.verifierEmplacement({ ...planche, sorte: 'bac' }, [])).toMatchObject({ ok: false, champ: 'sorte' });
   });
 
