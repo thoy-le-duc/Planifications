@@ -14,7 +14,8 @@
  *     - sans l'écart : positions identiques à celles d'avant T46 ;
  *     - PlantsPlanche.lignesRangs : le centre de chaque ligne de rang (sillon, goutte-à-goutte),
  *       une par rang, à la position en travers des plants du rang ; vide sans écart saisi et sur
- *       une gouttière hors-sol (la ligne serait sous la gouttière).
+ *       une gouttière hors-sol (la ligne serait sous la gouttière) ;
+ *     - PlantsPlanche.echelleHorizontale ne dépasse pas l’écart entre rangs saisi (rangs distincts).
  * ./donnees-plants.ts
  *   cultureAu(c, jour).ecartEntreRangsM / rangsParPlanche : lus dans la densité figée de la série
  *     (`densite.ecartEntreRangsCm`, de 5 à 200 cm, et `densite.rangsParPlanche`, entier ≥ 1) ;
@@ -185,6 +186,14 @@ describe('T46 : quinconce conservé avec un écart saisi', () => {
 });
 
 describe('T46 : lignes de rang (sillon, goutte-à-goutte)', () => {
+  it('un plant n’est pas plus large que l’écart entre rangs : deux rangs voisins ne se touchent pas', () => {
+    const v = volume();
+    const serre = poser(v, culture({ ecartementM: 0.3, ecartEntreRangsM: 0.18, rangsParPlanche: 4 }));
+    expect(serre.echelleHorizontale).toBeLessThan(0.18);
+    // Sans écart saisi, rien ne change.
+    expect(poser(v, culture({ ecartementM: 0.3 })).echelleHorizontale).toBeCloseTo(poser(v, culture({ ecartementM: 0.3, rangsParPlanche: 4 })).echelleHorizontale, 9);
+  });
+
   it('une ligne par rang, à la position en travers des plants du rang', () => {
     const v = volume({ angle: 0.4 });
     const p = poser(v, culture({ ecartEntreRangsM: 0.18, rangsParPlanche: 4 }));

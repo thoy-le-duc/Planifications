@@ -242,7 +242,8 @@ export function plantsDePlanche(entree: EntreePlants): PlantsPlanche | null {
     stade: etat.stade,
     hauteurM: etat.hauteurM,
     echelleVerticale: auRepos ? 0 : Math.max(etat.hauteurM, HAUTEUR_PLANT_MINIMAL_M),
-    echelleHorizontale: ecart * REMPLISSAGE_ADULTE * (REMPLISSAGE_JEUNE + (1 - REMPLISSAGE_JEUNE) * adulte),
+    // T46 : un plant n'est pas plus large que l'écart entre rangs saisi : les rangs restent distincts.
+    echelleHorizontale: (e > 0 ? Math.min(ecart, e) : ecart) * REMPLISSAGE_ADULTE * (REMPLISSAGE_JEUNE + (1 - REMPLISSAGE_JEUNE) * adulte),
     structureM,
     surelevationM,
     couleur: volume.couleur,
