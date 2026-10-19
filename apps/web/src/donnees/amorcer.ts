@@ -34,6 +34,10 @@
  * du navigateur, et 1 d'un autre utilisateur), dans la base de SON utilisateur de test
  * (e2e/refus.e2e.ts).
  *
+ * T49 — `?jeu=ferme-neuve` : une ferme neuve, ni saison, ni zone, ni planche, ni série
+ * (src/ecrans/parcellaire/test/ferme-neuve.ts), dans la base de SON utilisateur de test
+ * (e2e/demarrer-ferme.e2e.ts).
+ *
  * Garde-fous : seule la base de l'utilisateur du jeu (identifiant de test, jamais un vrai compte)
  * est ouverte, sans session ; la synchro n'est jamais branchée (aucun appel à connect()), et la
  * file d'envoi est vidée : rien de ce jeu ne partira vers un serveur.
@@ -48,6 +52,7 @@ import { ecrireRefus, REFUS_DU_JEU_TOTAL, refusDuJeu } from '../ecrans/ferme/tes
 import { ecrireFermeSerie, fermeSerie } from '../ecrans/serie/test/ferme-serie.ts';
 import { ecrireFermeImport, fermeImport } from '../ecrans/import/test/ferme-import.ts';
 import { ecrireFermePlacement, fermePlacement } from '../ecrans/placement/test/ferme-placement.ts';
+import { ecrireFermeNeuve, fermeNeuve } from '../ecrans/parcellaire/test/ferme-neuve.ts';
 import { ouvrirBaseLocale } from './ouvrir.ts';
 
 interface Amorcage {
@@ -175,6 +180,13 @@ async function amorcerPlacement(parametres: URLSearchParams): Promise<Amorcage> 
   return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
 }
 
+/** T49 : la ferme neuve (rien que la ferme, son gérant et la bibliothèque commune). */
+async function amorcerFermeNeuve(): Promise<Amorcage> {
+  const ferme = fermeNeuve();
+  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermeNeuve(base));
+  return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
+}
+
 function amorcer(): Promise<Amorcage> {
   const parametres = new URLSearchParams(location.search);
   const jeu = parametres.get('jeu');
@@ -188,6 +200,7 @@ function amorcer(): Promise<Amorcage> {
   if (jeu === 'refus') return amorcerRefus(parametres.get('date') ?? '');
   if (jeu === 'import') return amorcerImport();
   if (jeu === 'placement') return amorcerPlacement(parametres);
+  if (jeu === 'ferme-neuve') return amorcerFermeNeuve();
   return Promise.reject(new Error(`jeu inconnu : « ${jeu} »`));
 }
 

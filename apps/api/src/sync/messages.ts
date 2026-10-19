@@ -53,7 +53,11 @@ export const PRECISION_ZONE_ABRITEE_SUPPRIMEE = 'cette zone est abritée par un 
 export const PRECISION_DISPOSITION_RANGS = 'la disposition des rangs se choisit entre alignés et en quinconce';
 
 /** T43 : écart entre rangs hors bornes ou de mauvaise forme dans la densité d'un itinéraire ou d'une série. */
-export const PRECISION_ECART_ENTRE_RANGS = 'l’écart entre rangs se donne en centimètres, de 5 à 200, pour des rangs (pas à la volée)';
+export const PRECISION_ECART_HORS_BORNES = 'l’écart entre rangs doit être compris entre 5 et 200 cm';
+/** T48 : écart entre rangs qui n'est pas un nombre. */
+export const PRECISION_ECART_NON_NUMERIQUE = 'l’écart entre rangs doit être un nombre de centimètres, de 5 à 200';
+/** T48 : écart entre rangs donné avec un semis à la volée, qui n'a pas de rangs. */
+export const PRECISION_ECART_A_LA_VOLEE = 'un semis à la volée n’a pas de rangs : l’écart entre rangs ne s’y donne pas';
 
 /** Message enregistré dans refus_synchro : seul 'ecriture_invalide' porte une précision. */
 export function messageRefus(refus: Refus): string {
@@ -191,7 +195,11 @@ export function precisionDuCoeur(erreur: ErreurSaisie): string {
   // Le champ d'une colonne ou d'une clé inconnue est le nom reçu : jamais affiché.
   if (erreur.code === 'colonne_inconnue' || erreur.code === 'cle_inconnue') return texte;
   if (erreur.champ === 'parametres.densite.disposition') return PRECISION_DISPOSITION_RANGS;
-  if (erreur.champ === 'parametres.densite.ecartEntreRangsCm') return PRECISION_ECART_ENTRE_RANGS;
+  if (erreur.champ === 'parametres.densite.ecartEntreRangsCm') {
+    if (erreur.raison === 'volee') return PRECISION_ECART_A_LA_VOLEE;
+    if (erreur.raison === 'non_numerique') return PRECISION_ECART_NON_NUMERIQUE;
+    return PRECISION_ECART_HORS_BORNES;
+  }
   const libelle = libelleDuChamp(erreur.champ);
   return libelle === null ? texte : `${texte} (${libelle})`;
 }

@@ -37,6 +37,7 @@ import { useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMe
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import { commencerEcriture } from '../../donnees/ecritures-en-cours.ts';
+import { allerVers, Bandeau as BandeauDemarrer, BOUTON_ETAPE, EtatVide, useDemarrage } from '../demarrer/BandeauDemarrer.tsx';
 import { lireFermeMontree } from '../../donnees/ferme-memorisee.ts';
 import './aujourdhui.css';
 import { changerMasques, deplierTout, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, retenirRelecture, suivreJournee, suivreMasques, toutVoirDe, type Masque, type Masques } from './cache.ts';
@@ -75,6 +76,11 @@ export interface ProprietesEcranAujourdhui {
   readonly utilisateurId?: string;
   /** T13d : où garder l'instantané de la journée (défaut : localStorage). */
   readonly stockage?: StockageInstantane;
+  /**
+   * T49 : change d'onglet (App). Avec lui, une ferme sans série voit le bandeau « Démarrer votre
+   * ferme » et un état vide qui mène à la prochaine étape ; sans lui, comme avant.
+   */
+  readonly surOnglet?: (onglet: 'ferme' | 'planches') => void;
 }
 
 /** Marque de performance posée quand les tâches (ou « rien à faire ») sont dessinées. */
@@ -558,6 +564,14 @@ function MessageAbandon({ nombre }: { readonly nombre: number }) {
   ) : null;
 }
 
+type EtapesDemarrage = NonNullable<ReturnType<typeof useDemarrage>>['etapes'];
+/** T49 : l'étape où mène l'état vide : la saison, les planches, puis la série (les itinéraires sont facultatifs). */
+function etapeVide(etapes: EtapesDemarrage): 'saison' | 'planches' | 'serie' {
+  const e = etapes.find((x) => !x.faite && x.cle !== 'itineraires');
+  return e === undefined || e.cle === 'itineraires' ? 'serie' : e.cle;
+}
+const cibleVide = (etapes: EtapesDemarrage) => ({ saison: 'saisons', planches: 'zones', serie: 'serie' } as const)[etapeVide(etapes)];
+
 /** Ce qu'on dit tant que la base s'ouvre et qu'aucun instantané n'est à montrer. */
 function Ouverture({ abandonnes }: { readonly abandonnes: number }) {
   return (
@@ -630,7 +644,9 @@ function nouvelleAttente(): AttentePorte {
   return { promesse, rendre };
 }
 
-function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage, abandonnes, surAbandon, oublierAbandon }: ProprietesEcran) {
+function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage, abandonnes, surAbandon, oublierAbandon, surOnglet }: ProprietesEcran) {
+  // T49 : parcours guidé d'une ferme qui démarre (lu après l'affichage, seulement si l'appli sait changer d'onglet).
+  const demarrage = useDemarrage(porte, fermeId, surOnglet !== undefined);
   /** Jour du téléphone maintenant (relu à chaque écriture : l'écran peut rester ouvert à minuit). */
   const jourCourant = () => (jourDonne ?? jourDuTelephone)();
   const [jour, setJour] = useState(jourCourant);
@@ -1155,6 +1171,14 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   return (
     // T11b : écriture en cours ou en attente de la base : pas de rechargement après une mise à jour.
     <div data-testid="aujourdhui" data-saisie-en-cours={occupe ? 'oui' : undefined} className={annulable === null ? 'auj' : 'auj auj-avec-bandeau'}>
+      {demarrage !== null && surOnglet !== undefined && (
+        <BandeauDemarrer
+          etat={demarrage}
+          surAller={(c) => {
+            allerVers(c, surOnglet);
+          }}
+        />
+      )}
       {vue !== null && (
         <div className="auj-resume">
           <span className="auj-semaine">Semaine {vue.semaine}</span>
@@ -1217,7 +1241,18 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
       {vue === null ? (
         <p className="auj-chargement">Lecture des tâches…</p>
       ) : vue.retard + vue.cetteSemaine === 0 ? (
-        <p className="auj-vide">Rien de prévu cette semaine. Les semis, plantations et récoltes du plan s’afficheront ici.</p>
+        demarrage?.visible === true && surOnglet !== undefined ? (
+          // T49 : aucune série dans la ferme : dire quoi faire, et y mener (saison, planches, puis la série).
+          <EtatVide
+            texte="Aucune série dans cette ferme pour l’instant : planifiez la première, ses semis, plantations et récoltes s’afficheront ici."
+            bouton={BOUTON_ETAPE[etapeVide(demarrage.etapes)]}
+            surTap={() => {
+              allerVers(cibleVide(demarrage.etapes), surOnglet);
+            }}
+          />
+        ) : (
+          <p className="auj-vide">Rien de prévu cette semaine. Les semis, plantations et récoltes du plan s’afficheront ici.</p>
+        )
       ) : (
         <>
           {enRetard.length > 0 && (
