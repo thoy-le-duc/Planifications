@@ -37,8 +37,13 @@ export type CodeErreurSaisie =
   | 'cle_inconnue'
   | 'plafond_depasse';
 
+/** T48 : pourquoi l'écart entre rangs est refusé, pour des messages sans lire le texte. */
+export type RaisonEcartEntreRangs = 'hors_bornes' | 'non_numerique' | 'volee';
+
 export interface ErreurSaisie {
   readonly code: CodeErreurSaisie;
+  /** T48 : seulement pour l'écart entre rangs (`parametres.densite.ecartEntreRangsCm`). */
+  readonly raison?: RaisonEcartEntreRangs;
   /** Colonne reçue ('date', 'emplacement_ids'…) ou chemin dans le détail ('detail.quantite', 'detail.dose.valeur'). */
   readonly champ: string | null;
   /** Explication en français, 200 caractères au plus. */

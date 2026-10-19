@@ -196,9 +196,9 @@ export function precisionDuCoeur(erreur: ErreurSaisie): string {
   if (erreur.code === 'colonne_inconnue' || erreur.code === 'cle_inconnue') return texte;
   if (erreur.champ === 'parametres.densite.disposition') return PRECISION_DISPOSITION_RANGS;
   if (erreur.champ === 'parametres.densite.ecartEntreRangsCm') {
-    if (erreur.code === 'hors_bornes') return PRECISION_ECART_HORS_BORNES;
-    // Même code pour la volée et le non numérique : le cœur les distingue par son message.
-    return erreur.message.includes('seulement pour une densité en rangs') ? PRECISION_ECART_A_LA_VOLEE : PRECISION_ECART_NON_NUMERIQUE;
+    if (erreur.raison === 'volee') return PRECISION_ECART_A_LA_VOLEE;
+    if (erreur.raison === 'non_numerique') return PRECISION_ECART_NON_NUMERIQUE;
+    return PRECISION_ECART_HORS_BORNES;
   }
   const libelle = libelleDuChamp(erreur.champ);
   return libelle === null ? texte : `${texte} (${libelle})`;
