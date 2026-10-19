@@ -199,8 +199,10 @@ export const emplacement = pgTable(
     sorte: text('sorte', { enum: SORTES_EMPLACEMENT }).notNull(),
     longueurM: decimal('longueur_m').notNull(),
     largeurM: decimal('largeur_m'),
-    /** Gouttière seulement. */
+    /** Gouttière seulement : ancien « nombre de places », gardé en lecture seule depuis T51. */
     nombrePlaces: integer('nombre_places'),
+    /** Gouttière seulement (T51) : pains, sacs ou pots posés ; par défaut 1 par mètre. */
+    nombrePains: integer('nombre_pains'),
     actifDu: jour('actif_du').notNull(),
     actifAu: jour('actif_au'),
     /** Anciens emplacements redessinés en celui-ci (tableau d'UUID, sans clé étrangère). */
@@ -233,7 +235,12 @@ export const emplacement = pgTable(
     verif(
       'emplacement',
       'places_de_gouttiere',
-      sql`(${t.sorte} = 'gouttiere') = (${t.nombrePlaces} IS NOT NULL) AND (${t.nombrePlaces} IS NULL OR ${t.nombrePlaces} > 0)`,
+      sql`${t.nombrePlaces} IS NULL OR (${t.sorte} = 'gouttiere' AND ${t.nombrePlaces} > 0)`,
+    ),
+    verif(
+      'emplacement',
+      'pains_de_gouttiere',
+      sql`(${t.sorte} = 'gouttiere') = (${t.nombrePains} IS NOT NULL) AND (${t.nombrePains} IS NULL OR ${t.nombrePains} > 0)`,
     ),
     verif('emplacement', 'periode_active', sql`${t.actifAu} IS NULL OR ${t.actifAu} >= ${t.actifDu}`),
     /** Reconnaissance vocale : « planche 3 du tunnel 2 » → code. */
