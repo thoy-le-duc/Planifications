@@ -14,6 +14,6 @@
 
 ## Critères d'acceptation
 
-- [ ] Tests d'écran : libellé « entre planches » à 1 rang ; « entre rangs » à 2 rangs et plus.
-- [ ] Tests serveur : trois messages distincts.
-- [ ] `pnpm typecheck`, `pnpm lint`, `pnpm test`, e2e itineraires verts ; démarrage inchangé.
+- [x] Tests d'écran : libellé « entre planches » à 1 rang ; « entre rangs » à 2 rangs et plus.
+- [x] Tests serveur : trois messages distincts.
+- [x] `pnpm typecheck`, `pnpm lint`, `pnpm test`, e2e itineraires verts ; démarrage inchangé.
