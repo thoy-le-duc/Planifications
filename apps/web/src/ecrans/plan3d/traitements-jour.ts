@@ -28,6 +28,10 @@ export interface TraitementDuJour3d {
  * Paramètres : ferme, jour, ferme. Les traitements datés du jour, puis, de proche en proche par
  * l'index remplacement, les corrections et annulations qui les remplacent (une correction qui
  * change la date en fait partie) ; la ferme et le type sont revérifiés à la fin.
+ *
+ * T68 : revérifiés hors index (`+`) : chaque maillon se relit par sa clé. Sans cela, SQLite partait
+ * de l'index ferme_type et relisait tous les traitements de la ferme (4 331 sur la grande ferme,
+ * jusqu'à 2,8 s dans le navigateur) ; la base, occupée, retardait la 3D (e2e vue-3d-jumeau).
  */
 export const SQL_TRAITEMENTS_DU_JOUR = `WITH RECURSIVE chaine(id) AS (
     SELECT id FROM evenement WHERE ferme_id = ? AND type = 'traitement' AND date = ?
@@ -38,7 +42,7 @@ export const SQL_TRAITEMENTS_DU_JOUR = `WITH RECURSIVE chaine(id) AS (
     json_extract(e.detail, '$.produitPhytoId') AS produit, p.nom_commercial AS nom
   FROM chaine c JOIN evenement e ON e.id = c.id
   LEFT JOIN produit_phyto p ON p.id = lower(json_extract(e.detail, '$.produitPhytoId'))
-  WHERE e.ferme_id = ? AND e.type = 'traitement' AND json_valid(e.detail)`;
+  WHERE +e.ferme_id = ? AND +e.type = 'traitement' AND json_valid(e.detail)`;
 
 interface Ligne {
   readonly id: string;
