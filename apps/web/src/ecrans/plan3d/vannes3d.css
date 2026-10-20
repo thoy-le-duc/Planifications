@@ -1,0 +1,119 @@
+/* T57 — les vannes dans la vue 3D (Vannes3d.tsx) : repères posés sur la toile comme les pastilles
+   des travaux (T37), outils et fiche par-dessus la scène. Jetons seulement ; 44 px au moins. */
+
+.plan3d-vannes {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.plan3d-repere-vanne {
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-width: 44px;
+  height: 44px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--couleur-surface);
+  border-radius: var(--rayon-case);
+  font-family: var(--police-code);
+  font-weight: 700;
+  font-size: 15px;
+  box-shadow: var(--ombre-carte);
+  pointer-events: auto;
+  visibility: hidden;
+}
+
+.plan3d-repere-vanne-choisi {
+  min-width: 52px;
+  height: 52px;
+  border-color: var(--couleur-orange);
+  font-size: 17px;
+  z-index: 1;
+}
+
+.plan3d-vannes-outils {
+  position: absolute;
+  top: var(--espace-s);
+  right: var(--espace-s);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--espace-xs);
+}
+
+.plan3d-vannes-outils .plan3d-bouton,
+.plan3d-fiche-vanne .plan3d-bouton {
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 15px;
+}
+
+.plan3d-fiche-vanne .plan3d-bouton-principal,
+.plan3d-vannes-outils .plan3d-bouton[aria-pressed='true'] {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.plan3d-legende-irrigation {
+  margin: 0;
+  padding: var(--espace-s);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--couleur-surface);
+  border-radius: var(--rayon-case);
+  box-shadow: var(--ombre-carte);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.plan3d-legende-irrigation li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plan3d-legende-irrigation i {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+.plan3d-fiche-vanne {
+  position: absolute;
+  top: var(--espace-s);
+  left: var(--espace-s);
+  z-index: 3;
+  max-width: min(360px, calc(100% - 2 * var(--espace-s)));
+  padding: var(--espace-m);
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-s);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-carte);
+  box-shadow: var(--ombre-carte);
+  font-weight: 700;
+}
+
+.plan3d-fiche-vanne p {
+  margin: 0;
+}
+
+.plan3d-fiche-vanne-actions {
+  display: flex;
+  gap: var(--espace-s);
+}
+
+.plan3d-fiche-vanne-actions .plan3d-bouton {
+  flex: 1 1 auto;
+  min-height: 48px;
+}
