@@ -285,6 +285,8 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       nom: texte('nom du secteur'),
       debit_litres_heure: reel('débit en litres par heure (facultatif)'),
       adresse_modbus: entier('adresse Modbus de la vanne (facultative)'),
+      placement_x_m: reel('position de la vanne sur le plan, vers l’est depuis le point de départ du plan, en mètres ; vide si la vanne est en tête de sa première planche'),
+      placement_y_m: reel('position de la vanne sur le plan, vers le nord depuis le point de départ du plan, en mètres ; vide si la vanne est en tête de sa première planche'),
       ...HORODATAGE,
     }),
     serie: table('Séries de culture planifiées : espèce, dates prévues, longueur ou nombre de plants.', {

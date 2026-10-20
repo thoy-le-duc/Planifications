@@ -1,0 +1,50 @@
+/*
+ * « Vannes d'irrigation » (T57), en plus de ../parcellaire.css : jetons seulement, cases d'au moins
+ * 56 px de haut (gants), à 360 px de large rien ne déborde.
+ */
+
+.van-voile {
+  z-index: 33;
+}
+
+.van-zone {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.van-cases {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.van-case {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 0 12px;
+  border: 2px solid var(--couleur-tertiaire);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-fond);
+  font-weight: 700;
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.van-case input {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  accent-color: var(--couleur-foret);
+}
+
+.van-case-cochee {
+  border-color: var(--couleur-foret);
+  background: var(--couleur-foret-clair);
+}

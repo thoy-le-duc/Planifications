@@ -281,6 +281,13 @@
       "when": 1792462226543,
       "tag": "0039_equipe_attribution",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792473823449,
+      "tag": "0040_secteur_irrigation_placement",
+      "breakpoints": true
     }
   ]
 }

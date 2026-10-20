@@ -40,12 +40,17 @@ export function CouchePastilles({ pastilles, actif, couche }: { readonly pastill
 
 const point = new Vector3();
 
+/** Un point posé sur la toile (T57 : aussi les repères des vannes). */
+export interface PointPose {
+  readonly pastille: { readonly x: number; readonly z: number };
+}
+
 /** Ce que la couche a posé la dernière fois : caméra (matrices), taille de la toile, pastilles. */
 interface Pose {
   readonly vue: Float64Array;
   largeur: number;
   hauteur: number;
-  pastilles: readonly PastilleDessinee[];
+  pastilles: readonly PointPose[];
 }
 const poses = new WeakMap<HTMLElement, Pose>();
 
@@ -71,7 +76,7 @@ function cameraChangee(vue: Float64Array, camera: Camera): boolean {
  * Rien n'est écrit quand ni la caméra, ni la taille de la toile, ni les pastilles n'ont changé depuis
  * le dernier appel (T37b) : la mise en page n'est pas relancée à chaque image.
  */
-export function placerPastilles(couche: HTMLElement, camera: Camera, largeur: number, hauteur: number, pastilles: readonly PastilleDessinee[]): void {
+export function placerPastilles(couche: HTMLElement, camera: Camera, largeur: number, hauteur: number, pastilles: readonly PointPose[]): void {
   camera.updateMatrixWorld();
   let pose = poses.get(couche);
   if (pose === undefined) {

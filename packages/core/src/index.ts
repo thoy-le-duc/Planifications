@@ -20,6 +20,8 @@ export * from './import/index.ts';
 export * from './placement/index.ts';
 // Croissance des cultures (T32a) : profils par espèce, hauteur et stade à une date (jumeau numérique).
 export * from './croissance/index.ts';
+// Vannes d'irrigation (T57) : lot, liens datés vanne ↔ emplacements, dernière irrigation.
+export * from './irrigation/index.ts';
 
 // Planification (T03), exposée pour la vue 2D (T11) : conflits de place et période effective
 // d'une occupation. Les écrans montrent ce que ce moteur trouve, sans réécrire de règle.

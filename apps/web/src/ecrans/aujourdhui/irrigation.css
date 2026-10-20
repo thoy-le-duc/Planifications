@@ -1,0 +1,98 @@
+/* T57 — saisie d'irrigation (SaisieIrrigation.tsx) : ouverte depuis Aujourd'hui ou depuis la vue 3D,
+   elle porte ses propres styles (la feuille d'Aujourd'hui n'est pas chargée dans la 3D). */
+
+.irr-voile {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in srgb, var(--couleur-ombre) 45%, transparent);
+}
+
+.irr-feuille {
+  width: 100%;
+  max-width: 560px;
+  max-height: 100%;
+  overflow: auto;
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  border-radius: var(--rayon-feuille) var(--rayon-feuille) 0 0;
+  padding: 22px 16px max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+}
+
+.irr-titre {
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 24px;
+  margin: 0;
+}
+
+.irr-libelle {
+  font-weight: 700;
+}
+
+.irr-champ {
+  min-height: 56px;
+  padding: 0 14px;
+  border: 2px solid var(--couleur-tertiaire);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font-size: 18px;
+}
+
+.irr-rapides {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.irr-bouton,
+.irr-principal {
+  min-height: 56px;
+  padding: 0 12px;
+  border-radius: var(--rayon-bouton);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.irr-bouton {
+  border: 2px solid var(--couleur-foret);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+}
+
+.irr-principal {
+  min-height: 64px;
+  border: 0;
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-family: var(--police-titre);
+  font-size: 19px;
+}
+
+.irr-principal:disabled {
+  opacity: 0.55;
+}
+
+.irr-erreur {
+  margin: 0;
+  color: var(--couleur-conflit);
+  font-weight: 700;
+}
+
+.irr-notee {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  font-weight: 700;
+}
