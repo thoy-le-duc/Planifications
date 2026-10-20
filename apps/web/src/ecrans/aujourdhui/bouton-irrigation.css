@@ -1,24 +1,24 @@
-/* T57 — bouton « Irrigation » de la barre d'actions d'Aujourd'hui, à côté de « Historique » :
-   même gabarit (64 px de haut, icône au-dessus du texte), jetons seulement. */
+/* T57 — bouton « Irrigation » de la barre d'actions d'Aujourd'hui : sur sa propre ligne, sous
+   « Traitement » (T52), au même gabarit (56 px de haut ; rien ne déborde à 360 px). Jetons seulement. */
 
 .irr-ouvrir {
-  flex-shrink: 0;
-  width: 92px;
-  min-height: 64px;
-  border: 0;
+  flex: 1 0 100%;
+  order: 4;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 2px solid var(--couleur-foret);
   border-radius: var(--rayon-bouton);
   background: var(--couleur-surface);
   color: var(--couleur-foret);
-  box-shadow: var(--ombre-carte);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 8px;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 17px;
 }
 
 .irr-ouvrir:disabled {
-  opacity: 0.55;
+  border-color: var(--couleur-trait);
+  color: var(--couleur-secondaire);
 }
