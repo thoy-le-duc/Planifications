@@ -276,23 +276,31 @@ async function oublierInstantane(page: Page): Promise<void> {
  * Relecture après « Fait » sur la première tâche qui en a un : temps de l'appui (pointerdown) à
  * l'arrivée d'une nouvelle saisie en tête de l'historique, qui ne vient que de la journée relue
  * (la tâche, elle, est masquée dès l'appui).
+ *
+ * T62 : « nouvelle » veut dire absente de l'historique dessiné au moment de l'appui. Avant, le
+ * premier changement de la saisie en tête suffisait : une relecture de la journée (retour sur
+ * l'onglet, vérification) qui réordonnait ou remplaçait l'historique arrêtait la mesure avant
+ * que le « Fait » soit écrit (relevé : 20 ms, alors que l'écriture seule en prend plus de 40).
+ * Le nouveau critère arrive au même moment ou plus tard que l'ancien : le budget n'est pas desserré.
  */
 async function relectureApresFait(page: Page): Promise<number> {
   await page.evaluate(() => {
     const f = window as unknown as { __appui?: number; __relue?: number };
     delete f.__appui;
     delete f.__relue;
-    const premiere = () => document.querySelector('[data-testid="saisie-historique"]')?.getAttribute('data-evenement') ?? null;
-    const avant = premiere();
+    const ids = () => [...document.querySelectorAll('[data-testid="saisie-historique"]')].map((e) => e.getAttribute('data-evenement'));
+    let deja = new Set(ids());
     document.addEventListener(
       'pointerdown',
       () => {
         f.__appui = performance.now();
+        deja = new Set(ids());
       },
       { capture: true, once: true },
     );
     const observateur = new MutationObserver(() => {
-      if (f.__appui !== undefined && premiere() !== avant) {
+      const tete = ids()[0] ?? null;
+      if (f.__appui !== undefined && tete !== null && !deja.has(tete)) {
         f.__relue = performance.now();
         observateur.disconnect();
       }
