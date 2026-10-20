@@ -55,6 +55,10 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* Le contour de focus (3 px + 2 px de décalage, ui/base.css) sort des boutons : sans cette marge
+     intérieure, le défilement le rogne sur les côtés et en haut de la première étape. */
+  margin: -5px;
+  padding: 5px;
 }
 
 /* T65 : replié, seule la prochaine étape reste, à un tap ; serré pour laisser voir l'écran. */
