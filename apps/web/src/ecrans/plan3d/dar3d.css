@@ -1,0 +1,58 @@
+/* T55 — repères « Ne pas récolter » (délai avant récolte) dans la vue 3D (Dar3d.tsx), posés dans
+   la couche des vannes (vannes3d.css : retirés pendant le vol et le glissé). Couleur dédiée par
+   les jetons existants : fond rouge des conflits, texte de la surface ; en sombre, rouge éclairci
+   et texte foncé (contraste AA dans les deux thèmes, dar-3d.test.ts). Distincte de l'orange de la
+   balise « à récolter ». Placés sous la pastille des travaux de la même planche. 44 px au moins. */
+
+.plan3d-repere-dar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin-top: 50px;
+  min-height: 44px;
+  padding: 0 12px 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--couleur-conflit);
+  color: var(--couleur-surface);
+  border: 3px solid var(--couleur-surface);
+  border-radius: 22px;
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  box-shadow: var(--ombre-carte);
+  pointer-events: auto;
+  touch-action: none;
+  visibility: hidden;
+}
+
+/* Sens interdit : un disque de la couleur du texte barré d'un trait de la couleur du fond. */
+.plan3d-repere-dar-signe {
+  position: relative;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--couleur-surface);
+}
+
+.plan3d-repere-dar-signe::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 9px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--couleur-conflit);
+}
+
+.plan3d-repere-dar-choisi {
+  border-color: var(--couleur-encre);
+  z-index: 1;
+}
+
+.plan3d-fiche-dar {
+  border-color: var(--couleur-conflit);
+}
