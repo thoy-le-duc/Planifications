@@ -40,6 +40,8 @@ const replier = (page: Page) => bandeau(page).getByRole('button', { name: 'Repli
 const etapes = (page: Page) => bandeau(page).locator('[data-testid="etape-demarrage"]');
 /** L'état vide d'Aujourd'hui et son bouton (« Planifier une série »), hors du bandeau. */
 const boutonVide = (page: Page) => page.getByTestId('aujourdhui').locator('.dem-vide').getByRole('button');
+/** Le premier contenu d'Aujourd'hui sous le bandeau : la barre d'actions (« Noter une récolte »…). */
+const premiereAction = (page: Page) => page.getByTestId('aujourdhui').getByRole('button', { name: 'Noter une récolte' });
 
 async function amorcerEtOuvrir(page: Page): Promise<void> {
   await page.goto(NEUVE);
@@ -158,9 +160,9 @@ test.describe('téléphone', () => {
       await page.setViewportSize(vue);
       await amorcerEtOuvrir(page);
 
-      await test.step('Aujourd’hui : replié, l’état vide qui guide se voit sans défiler', async () => {
+      await test.step('Aujourd’hui : replié, le contenu de l’écran se voit sans défiler', async () => {
         await verifierReplie(page, 'Aujourd’hui');
-        await vuSansDefiler(boutonVide(page), 'Aujourd’hui : bouton de l’état vide');
+        await vuSansDefiler(premiereAction(page), 'Aujourd’hui : « Noter une récolte »');
         await sansDefilementHorizontal(page, 'Aujourd’hui replié');
       });
 
