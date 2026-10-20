@@ -443,21 +443,42 @@ export function traitementDeLigne(l: LigneLocaleRegistre): TraitementRegistre | 
 
 type Tables = Readonly<Record<string, readonly LigneLocaleRegistre[] | undefined>>;
 
+/**
+ * Lignes parcourues entre deux arrêts (`yield`) des générateurs du registre : l'export (T63) rend
+ * la main au fil à ces arrêts ; `lignesRegistrePhyto` les déroule d'une traite. Plus petit que le
+ * paquet de l'export (1 024) : lire le détail JSON d'un traitement coûte ≈ 4 µs sous Node, et
+ * 1 024 traitements d'affilée (3 à 5 ms) s'ajoutaient à une tranche de 8 ms presque pleine.
+ */
+const PAQUET_REGISTRE = 256;
+
+/** Déroule un générateur d'une traite. */
+function deroule<T>(g: Generator<void, T, undefined>): T {
+  for (;;) {
+    const r = g.next();
+    if (r.done === true) return r.value;
+  }
+}
+
 /** Lignes d'une table, de la ferme (et de la bibliothèque si `bibliotheque`), par id en minuscules. */
-function parId(tables: Tables, nom: string, fermeId: string, bibliotheque: boolean): Map<string, LigneLocaleRegistre> {
+function* parId(tables: Tables, nom: string, fermeId: string, bibliotheque: boolean): Generator<void, Map<string, LigneLocaleRegistre>, undefined> {
   const m = new Map<string, LigneLocaleRegistre>();
-  for (const l of tables[nom] ?? []) {
-    if (typeof l.id !== 'string') continue;
+  const lignes = tables[nom] ?? [];
+  for (let i = 0; i < lignes.length; i++) {
+    if (i % PAQUET_REGISTRE === PAQUET_REGISTRE - 1) yield;
+    const l = lignes[i];
+    if (l === undefined || typeof l.id !== 'string') continue;
     const f = l.ferme_id;
     if (f === fermeId || (bibliotheque && (f === null || f === undefined))) m.set(l.id.toLowerCase(), l);
   }
   return m;
 }
 
-/** Traitements de la ferme lus des lignes locales (avant la résolution des chaînes). */
-export function traitementsDeLaFerme(evenements: readonly LigneLocaleRegistre[], fermeId: string): TraitementRegistre[] {
+/** Traitements de la ferme lus des lignes locales, par paquets (la lecture du détail JSON coûte). */
+function* traitementsParPaquets(evenements: readonly LigneLocaleRegistre[], fermeId: string): Generator<void, TraitementRegistre[], undefined> {
   const r: TraitementRegistre[] = [];
+  let i = 0;
   for (const l of evenements) {
+    if (i++ % PAQUET_REGISTRE === PAQUET_REGISTRE - 1) yield;
     if (l.ferme_id !== fermeId || l.type !== 'traitement') continue;
     const t = traitementDeLigne(l);
     if (t !== null) r.push(t);
@@ -465,20 +486,34 @@ export function traitementsDeLaFerme(evenements: readonly LigneLocaleRegistre[],
   return r;
 }
 
+/** Traitements de la ferme lus des lignes locales (avant la résolution des chaînes). */
+export function traitementsDeLaFerme(evenements: readonly LigneLocaleRegistre[], fermeId: string): TraitementRegistre[] {
+  return deroule(traitementsParPaquets(evenements, fermeId));
+}
+
 /**
  * Le registre phyto de la ferme : une ligne par traitement EN VIGUEUR (sans les annulés ni les
  * remplacés), dans l'ordre (date, horodatage, id). Les autres fermes sont ignorées.
  */
 export function lignesRegistrePhyto(tables: Tables, fermeId: string): LigneRegistre[] {
-  const traitements = enVigueurDesTraitements(traitementsDeLaFerme(tables.evenement ?? [], fermeId));
+  return deroule(lignesRegistrePhytoParPaquets(tables, fermeId));
+}
+
+/**
+ * `lignesRegistrePhyto` par paquets (T63) : le générateur s'arrête toutes les `PAQUET_REGISTRE`
+ * lignes lues ou écrites, pour que l'export rende la main au fil entre deux paquets. D'une traite,
+ * le registre de la ferme de T07 faisait la plus longue tâche de `construireArchive`.
+ */
+export function* lignesRegistrePhytoParPaquets(tables: Tables, fermeId: string): Generator<void, LigneRegistre[], undefined> {
+  const traitements = enVigueurDesTraitements(yield* traitementsParPaquets(tables.evenement ?? [], fermeId));
   if (traitements.length === 0) return [];
-  const produits = parId(tables, 'produit_phyto', fermeId, true);
-  const emplacements = parId(tables, 'emplacement', fermeId, false);
-  const series = parId(tables, 'serie', fermeId, false);
-  const campagnes = parId(tables, 'campagne', fermeId, false);
-  const plantations = parId(tables, 'plantation', fermeId, false);
-  const especes = parId(tables, 'espece', fermeId, true);
-  const varietes = parId(tables, 'variete', fermeId, true);
+  const produits = yield* parId(tables, 'produit_phyto', fermeId, true);
+  const emplacements = yield* parId(tables, 'emplacement', fermeId, false);
+  const series = yield* parId(tables, 'serie', fermeId, false);
+  const campagnes = yield* parId(tables, 'campagne', fermeId, false);
+  const plantations = yield* parId(tables, 'plantation', fermeId, false);
+  const especes = yield* parId(tables, 'espece', fermeId, true);
+  const varietes = yield* parId(tables, 'variete', fermeId, true);
   const nomCulture = (especeId: ValeurRegistre | undefined, varieteId: ValeurRegistre | undefined): string => {
     const espece = chaine(especes.get(chaine(especeId).toLowerCase())?.nom);
     const variete = typeof varieteId === 'string' ? chaine(varietes.get(varieteId.toLowerCase())?.nom) : '';
@@ -497,13 +532,17 @@ export function lignesRegistrePhyto(tables: Tables, fermeId: string): LigneRegis
     return '';
   };
   const tries = [...traitements].sort((a, b) => (a.date !== b.date ? (a.date < b.date ? -1 : 1) : a.horodatage !== b.horodatage ? (a.horodatage < b.horodatage ? -1 : 1) : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return tries.map((t) => {
+  const lignes: LigneRegistre[] = [];
+  for (let i = 0; i < tries.length; i++) {
+    if (i % PAQUET_REGISTRE === PAQUET_REGISTRE - 1) yield;
+    const t = tries[i];
+    if (t === undefined) continue;
     const p = produits.get(t.produitPhytoId);
     const codes = t.emplacementIds
       .map((e) => chaine(emplacements.get(e.toLowerCase())?.code))
       .filter((c) => c !== '')
       .sort((a, b) => a.localeCompare(b, 'fr', { numeric: true }));
-    return {
+    lignes.push({
       evenementId: t.id,
       date: t.date,
       produit: chaine(p?.nom_commercial),
@@ -518,8 +557,9 @@ export function lignesRegistrePhyto(tables: Tables, fermeId: string): LigneRegis
       cible: t.cible,
       operateur: t.operateur,
       recolteAutoriseeLe: t.recolteAutoriseeLe,
-    };
-  });
+    });
+  }
+  return lignes;
 }
 
 /** Une ligne du registre au format des CSV de l'export (bio en 0 / 1). */
