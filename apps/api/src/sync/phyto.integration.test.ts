@@ -317,16 +317,36 @@ decrireAvecBase('T52')('T52 : produits phyto de la ferme et traitements écrits 
     expect(await evenementEcrit(e.id)).toBe(0);
   });
 
-  it('produit archivé : un nouveau traitement est refusé ; un traitement passé garde sa date quand le produit change', async () => {
+  it('produit archivé : un traitement passé garde sa date quand le produit change ; un traitement saisi hors ligne arrivé après l’archivage est gardé', async () => {
     const id = await creerProduit();
     const avant = putTraitement(id);
     expect(await lot([avant])).toEqual({ refus: [] });
     expect(await lot([patch(id, { delai_avant_recolte_jours: 30 })])).toEqual({ refus: [] });
     const r = await base.pool.query<{ d: string }>(`SELECT recolte_autorisee_le::text AS d FROM traitements WHERE id = $1`, [avant.id]);
     expect(r.rows[0]?.d).toBe('2027-05-13');
+    // Téléphone B archive le produit et se synchronise d'abord ; le traitement fait au champ par
+    // le téléphone A (hors ligne, avant l'archivage) arrive ensuite : le registre doit le garder.
     expect(await lot([patch(id, { supprime_le: '2027-05-10T08:00:00.000Z' })])).toEqual({ refus: [] });
-    const apres = putTraitement(id);
-    expect((await lot([apres])).refus).toEqual([{ table: 'evenement', id: apres.id, motif: 'ecriture_invalide' }]);
-    expect(await evenementEcrit(apres.id)).toBe(0);
+    const enRetard = putTraitement(id);
+    expect(await lot([enRetard])).toEqual({ refus: [] });
+    expect(await evenementEcrit(enRetard.id)).toBe(1);
+  });
+
+  it('produit archivé : un traitement passé reste annulable (et corrigeable)', async () => {
+    const id = await creerProduit();
+    const t = putTraitement(id);
+    expect(await lot([t])).toEqual({ refus: [] });
+    expect(await lot([patch(id, { supprime_le: '2027-05-10T08:00:00.000Z' })])).toEqual({ refus: [] });
+    const correction = putTraitement(id, { dose: { valeur: 1.5, unite: 'L/ha' } }, { remplace_sorte: 'correction', remplace_evenement_id: t.id, horodatage: '2027-05-10T07:00:00.000Z' });
+    expect(await lot([correction])).toEqual({ refus: [] });
+    const annulation = putTraitement(id, { dose: { valeur: 1.5, unite: 'L/ha' } }, { remplace_sorte: 'annulation', remplace_evenement_id: correction.id, horodatage: '2027-05-10T07:30:00.000Z' });
+    expect(await lot([annulation])).toEqual({ refus: [] });
+    const r = await base.pool.query(`SELECT 1 FROM traitements WHERE id = ANY($1::uuid[])`, [[t.id, correction.id, annulation.id]]);
+    expect(r.rowCount).toBe(0);
+  });
+
+  it('produit d’une autre ferme archivé ou non : toujours refusé', async () => {
+    const e = putTraitement(produitVoisin);
+    expect((await lot([e])).refus).toEqual([{ table: 'evenement', id: e.id, motif: 'ecriture_invalide' }]);
   });
 });
