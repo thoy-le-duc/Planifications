@@ -105,6 +105,30 @@
 }
 
 /* T52 : alerte de délai avant récolte (carte de début de récolte, récolte). */
+/* T69 : planches récoltées d'une culture en partie sous délai avant récolte. */
+.auj-planches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.auj-planche {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--couleur-trait);
+  border-radius: var(--rayon-etiquette);
+  font-weight: 700;
+}
+
+.auj-planche input {
+  width: 28px;
+  height: 28px;
+}
+
 .auj-alerte-dar {
   display: block;
   margin-top: 4px;

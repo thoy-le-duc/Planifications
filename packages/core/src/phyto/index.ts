@@ -178,26 +178,63 @@ export interface InterdictionRecolte {
   readonly dateTraitement: string;
   /** Premier jour où la récolte est permise. */
   readonly recolteAutoriseeLe: string;
+  /**
+   * T69 : les emplacements interdits quand l'interdiction est partielle (récolte de la culture
+   * sans emplacement, ou dont une partie seulement des emplacements est sous délai) ; absent
+   * quand toute la récolte est interdite.
+   */
+  readonly planches?: readonly string[];
 }
 
 /**
- * Traitement en vigueur qui interdit la récolte le `date` sur l'un des `emplacementIds`, ou sur la
- * culture `cultureId` (série ou campagne : une culture sans emplacement, des kiwis par exemple),
- * du jour du traitement compris à recolteAutoriseeLe exclue ; s'il y en a plusieurs, celui dont la
- * date autorisée est la plus tardive. null si la récolte est permise.
+ * Traitement en vigueur qui interdit la récolte le `date`, du jour du traitement compris à
+ * recolteAutoriseeLe exclue ; s'il y en a plusieurs, celui dont la date autorisée est la plus
+ * tardive. null si la récolte est permise. Une seule règle pour Aujourd'hui, la 3D et le
+ * registre (T69, Q46 : « on peut récolter les autres ») :
+ *   - un traitement qui désigne des emplacements n'interdit que ceux-là : une récolte sur
+ *     d'autres emplacements de la même culture est permise ; une récolte de sa culture
+ *     (`cultureId`) sans emplacement est interdite, et `planches` nomme les emplacements traités ;
+ *   - un traitement sans emplacement (kiwis, campagne sans occupation) interdit toute sa culture
+ *     (série ou campagne `cultureId`).
  */
 export function interdictionRecolte(traitements: readonly TraitementLu[], emplacementIds: readonly string[], date: string, cultureId: string | null = null): InterdictionRecolte | null {
   const culture = cultureId?.toLowerCase() ?? null;
   if ((emplacementIds.length === 0 && culture === null) || traitements.length === 0) return null;
   const vises = new Set(emplacementIds.map((e) => e.toLowerCase()));
+  /** Emplacements interdits (casse ignorée) et, pour une récolte sans emplacement, tels qu'écrits. */
+  const interdits = new Set<string>();
+  const traites: string[] = [];
+  let toute = false;
   let meilleur: TraitementLu | null = null;
   for (const t of enVigueurDesTraitements(traitements)) {
     if (!(t.date <= date && date < t.recolteAutoriseeLe)) continue;
     const memeCulture = culture !== null && typeof t.cultureId === 'string' && t.cultureId.toLowerCase() === culture;
-    if (!memeCulture && !t.emplacementIds.some((e) => vises.has(e.toLowerCase()))) continue;
+    let touche = false;
+    if (t.emplacementIds.length === 0) {
+      touche = memeCulture;
+      if (touche) toute = true;
+    } else
+      for (const e of t.emplacementIds) {
+        const cle = e.toLowerCase();
+        if (vises.size === 0 ? !memeCulture : !vises.has(cle)) continue;
+        touche = true;
+        if (!interdits.has(cle) && vises.size === 0) traites.push(e);
+        interdits.add(cle);
+      }
+    if (!touche) continue;
     if (meilleur === null || t.recolteAutoriseeLe > meilleur.recolteAutoriseeLe || (t.recolteAutoriseeLe === meilleur.recolteAutoriseeLe && t.id > meilleur.id)) meilleur = t;
   }
-  return meilleur === null ? null : { evenementId: meilleur.id, produitPhytoId: meilleur.produitPhytoId, dateTraitement: meilleur.date, recolteAutoriseeLe: meilleur.recolteAutoriseeLe };
+  if (meilleur === null) return null;
+  const i: InterdictionRecolte = { evenementId: meilleur.id, produitPhytoId: meilleur.produitPhytoId, dateTraitement: meilleur.date, recolteAutoriseeLe: meilleur.recolteAutoriseeLe };
+  if (toute || interdits.size === vises.size) return i;
+  if (vises.size === 0) return { ...i, planches: traites };
+  // Dans l'ordre de la récolte, sans doublon.
+  const planches: string[] = [];
+  for (const e of emplacementIds) {
+    if (!interdits.delete(e.toLowerCase())) continue;
+    planches.push(e);
+  }
+  return { ...i, planches };
 }
 
 /** 'AAAA-MM-JJ' → 'JJ/MM'. */
@@ -205,9 +242,12 @@ export function jourMois(date: string): string {
   return `${date.slice(8, 10)}/${date.slice(5, 7)}`;
 }
 
-/** « Récolte interdite jusqu’au 13/05 (Bouillie bordelaise, traité le 10/05) ». */
-export function texteInterdiction(interdiction: InterdictionRecolte, nomProduit: string): string {
-  return `Récolte interdite jusqu’au ${jourMois(interdiction.recolteAutoriseeLe)} (${nomProduit}, traité le ${jourMois(interdiction.dateTraitement)})`;
+/**
+ * « Récolte interdite jusqu’au 13/05 (Bouillie bordelaise, traité le 10/05) » ; avec les codes des
+ * planches interdites (T69, interdiction partielle) : « Récolte interdite sur P3, P4 jusqu’au… ».
+ */
+export function texteInterdiction(interdiction: InterdictionRecolte, nomProduit: string, codes: readonly string[] = []): string {
+  return `Récolte interdite ${codes.length > 0 ? `sur ${codes.join(', ')} ` : ''}jusqu’au ${jourMois(interdiction.recolteAutoriseeLe)} (${nomProduit}, traité le ${jourMois(interdiction.dateTraitement)})`;
 }
 
 // ── Produit phyto de la ferme ────────────────────────────────────────────────────────────────

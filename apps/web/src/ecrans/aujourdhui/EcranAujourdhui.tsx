@@ -784,7 +784,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   }, [suiviDar, porte, fermeId, jour]);
   const dar = traitementsDar !== null && traitementsDar.porte === porte ? traitementsDar : null;
   const interdiction = useCallback(
-    (c: Culture): string | null => (dar === null ? null : dar.alerte(dar.t, c.emplacements.map((e) => e.id), jour, c.cibleId)),
+    (c: Culture): string | null => (dar === null ? null : dar.alerte(dar.t, c.emplacements, jour, c.cibleId)),
     [dar, jour],
   );
   /**
@@ -796,7 +796,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
     async (c: Culture): Promise<string | null> => {
       if (porte === null) return null;
       const m = await chargerDar();
-      return m.alerteRecolte(await m.lireTraitements(porte, fermeId, jour), c.emplacements.map((e) => e.id), jour, c.cibleId);
+      return m.alerteRecolte(await m.lireTraitements(porte, fermeId, jour), c.emplacements, jour, c.cibleId);
     },
     [porte, fermeId, jour],
   );
