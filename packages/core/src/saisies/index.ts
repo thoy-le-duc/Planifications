@@ -137,7 +137,7 @@ const CLES_DETAIL: Readonly<Record<TypeEvenement, readonly string[]>> = {
   realise: ['etape', 'quantiteReelle'],
   recolte: ['quantite', 'unite', 'categorie'],
   intervention: ['categorie', 'type', 'outil', 'occurrenceVisee'],
-  irrigation: ['secteurIrrigationId', 'dureeMinutes'],
+  irrigation: ['secteurIrrigationId', 'dureeMinutes', 'recetteFertirrigationId', 'volumeM3', 'ecMesuree', 'phMesure', 'engrais'],
   traitement: ['produitPhytoId', 'dose', 'surfaceTraiteeM2', 'cible', 'operateur', 'recolteAutoriseeLe'],
   observation: ['nature', 'gravite'],
 };
@@ -340,7 +340,8 @@ function verifDetail(type: TypeEvenement, d: Objet): Verif {
           obligatoire: true,
           plafond: P.irrigationMinutes,
           entier: true,
-        })
+        }) ??
+        verifFertirrigation(d)
       );
     case 'traitement':
       return (
@@ -357,6 +358,61 @@ function verifDetail(type: TypeEvenement, d: Objet): Verif {
         verifParmi(d.gravite, GRAVITES, 'detail.gravite', 'gravité', false)
       );
   }
+}
+
+/**
+ * T56 : bornes d'une fertirrigation. Pas dans PLAFONDS_SAISIES (valeurs validées par Théophane,
+ * Q13) : ce sont des bornes physiques (EC, pH) ou celles d'une recette, pas des plafonds de saisie.
+ */
+export const BORNES_FERTIRRIGATION = {
+  /** irrigation.volumeM3 (m³ d'eau d'une irrigation). */
+  volumeM3: 10_000,
+  /** irrigation.ecMesuree (mS/cm). */
+  ec: 20,
+  /** irrigation.phMesure. */
+  ph: 14,
+  /** Engrais injectés par une fertirrigation (comme une recette). */
+  engrais: 20,
+} as const;
+
+const CLES_DOSE = ['produitFertilisantId', 'produit', 'quantite'];
+const UNITES_DOSE = ['kg', 'L'];
+
+/**
+ * T56 : ce qu'une irrigation porte en plus (tout facultatif) : recette, volume, EC et pH mesurés,
+ * doses injectées. Une recette exige le volume et les doses ; des doses sans recette sont
+ * incohérentes (rien ne dit d'où elles viennent).
+ */
+function verifFertirrigation(d: Objet): Verif {
+  const e =
+    (absent(d.recetteFertirrigationId) ? null : verifUuid(d.recetteFertirrigationId, 'detail.recetteFertirrigationId', 'recette de fertirrigation')) ??
+    verifNombre(d.volumeM3, 'detail.volumeM3', { libelle: "volume d'eau", obligatoire: !absent(d.recetteFertirrigationId), plafond: BORNES_FERTIRRIGATION.volumeM3, strictementPositif: true }) ??
+    verifNombre(d.ecMesuree, 'detail.ecMesuree', { libelle: 'EC mesurée', obligatoire: false, plafond: BORNES_FERTIRRIGATION.ec }) ??
+    verifNombre(d.phMesure, 'detail.phMesure', { libelle: 'pH mesuré', obligatoire: false, plafond: BORNES_FERTIRRIGATION.ph });
+  if (e !== null) return e;
+  if (absent(d.engrais)) return absent(d.recetteFertirrigationId) ? null : erreur('champ_manquant', 'detail.engrais', 'engrais injectés manquants');
+  if (absent(d.recetteFertirrigationId)) return erreur('incoherent', 'detail.engrais', 'engrais injectés sans recette de fertirrigation');
+  if (!Array.isArray(d.engrais)) return erreur('champ_invalide', 'detail.engrais', 'engrais injectés : liste attendue');
+  const doses = d.engrais as readonly unknown[];
+  if (doses.length === 0) return erreur('champ_manquant', 'detail.engrais', 'engrais injectés manquants');
+  if (doses.length > BORNES_FERTIRRIGATION.engrais) return erreur('trop_nombreux', 'detail.engrais', `${String(BORNES_FERTIRRIGATION.engrais)} engrais au plus`);
+  for (const [i, dose] of doses.entries()) {
+    const champ = `detail.engrais[${String(i)}]`;
+    if (!estObjet(dose)) return erreur('champ_invalide', champ, 'engrais injecté : objet attendu');
+    const cle = Object.keys(dose).find((c) => !CLES_DOSE.includes(c));
+    if (cle !== undefined) return erreur('cle_inconnue', `${champ}.${extrait(cle)}`, `clé inconnue dans un engrais injecté : ${extrait(cle)}`);
+    const q = dose.quantite;
+    const cleQ = estObjet(q) ? Object.keys(q).find((c) => !CLES_QUANTITE.includes(c)) : undefined;
+    if (cleQ !== undefined) return erreur('cle_inconnue', `${champ}.quantite.${extrait(cleQ)}`, `clé inconnue dans une quantité : ${extrait(cleQ)}`);
+    const v =
+      verifUuid(dose.produitFertilisantId, `${champ}.produitFertilisantId`, 'produit fertilisant') ??
+      verifTexte(dose.produit, `${champ}.produit`, 'produit', { obligatoire: true, nonVide: true }) ??
+      verifQuantite(q, `${champ}.quantite`, 'quantité injectée', P.interventionQuantite) ??
+      (estObjet(q) && q.valeur === 0 ? erreur('champ_invalide', `${champ}.quantite.valeur`, 'quantité injectée : nombre positif attendu') : null) ??
+      (estObjet(q) && !parmi(UNITES_DOSE, q.unite) ? erreur('champ_invalide', `${champ}.quantite.unite`, 'unité injectée : kg ou L') : null);
+    if (v !== null) return v;
+  }
+  return null;
 }
 
 /** T22b : date prévue de la carte touchée par « Fait » ; facultative, bornée comme `date`. */

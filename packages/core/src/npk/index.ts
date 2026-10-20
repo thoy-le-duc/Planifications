@@ -18,10 +18,15 @@
  */
 import { estDateValide, type DateCalendaire } from '../dates/index.ts';
 import type { DetailIntervention, Id, Instant, Quantite, TravailPrevu } from '../domaine/index.ts';
+import { emplacementsArroses, type LienVanne } from '../irrigation/index.ts';
 import { enVigueurDesTraitements } from '../phyto/index.ts';
 import { datesTravailPrevu } from '../planification/travaux.ts';
 import { absent, colonnesConnues, echec, erreur, estObjet, id, lu, parmi, sansException, supprimeLe, type Lu, type Objet, type ResultatLigne } from '../saisies/lignes.ts';
 import { texteInterdit, validerTravailPrevu } from '../saisies/travaux.ts';
+import type { DoseInjectee } from './fertirrigation.ts';
+
+// Fertirrigation (T56) : recettes, doses injectées, répartition ; comptée dans le bilan ci-dessous.
+export * from './fertirrigation.ts';
 
 // ── Produit fertilisant ──────────────────────────────────────────────────────────────────────
 
@@ -261,6 +266,11 @@ export function parHectare(u: Unites, surfaceM2: number | null): Unites | null {
   return auCentieme(hectareBrut(u, surfaceM2));
 }
 
+/** kg bruts d'un apport du produit : un solide compté en volume (densité inconnue) ou un produit inconnu → null. */
+function kgDuProduit(p: Produit | null, q: Quantite): Unites | null {
+  return p === null || (!p.liquide && estVolume(q)) ? null : brutes(q, p.teneurs);
+}
+
 // ── Saisie d'un apport ───────────────────────────────────────────────────────────────────────
 
 /** Détail de l'intervention d'un apport : produit de la ferme (id) ou texte libre (id null). */
@@ -281,12 +291,15 @@ export type ValeurFertilisation = string | number | null;
 export type LigneLocaleFertilisation = Readonly<Record<string, ValeurFertilisation>>;
 type Tables = Readonly<Record<string, readonly LigneLocaleFertilisation[] | undefined>>;
 
+/** Catégorie d'un apport du cahier : intervention (T54) ou fertirrigation par une vanne (T56). */
+export type CategorieApport = 'fertilisation' | 'amendement' | 'fertirrigation';
+
 export interface ApportCalcule {
-  /** null pour un apport prévu. */
+  /** null pour un apport prévu. Une fertirrigation donne un apport par engrais, du même événement. */
   readonly evenementId: string | null;
   readonly date: string;
   readonly prevu: boolean;
-  readonly categorie: 'fertilisation' | 'amendement';
+  readonly categorie: CategorieApport;
   readonly produit: string;
   readonly produitId: string | null;
   readonly quantite: number;
@@ -324,7 +337,7 @@ export interface BilanFertilisation {
 }
 
 /** Tables lues par le cahier exporté (le bilan lit aussi `occupation`, pour les apports prévus). */
-export const TABLES_CAHIER_FERTILISATION = ['evenement', 'produit_fertilisant', 'emplacement', 'saison', 'serie', 'campagne', 'plantation', 'espece', 'variete'] as const;
+export const TABLES_CAHIER_FERTILISATION = ['evenement', 'produit_fertilisant', 'emplacement', 'saison', 'serie', 'campagne', 'plantation', 'espece', 'variete', 'secteur_emplacement'] as const;
 
 const chaine = (v: ValeurFertilisation | undefined): string => (typeof v === 'string' ? v : '');
 const minuscule = (v: ValeurFertilisation | undefined): string | null => (typeof v === 'string' && v !== '' ? v.toLowerCase() : null);
@@ -355,24 +368,30 @@ interface Contexte {
   readonly produits: ReadonlyMap<string, Produit>;
   readonly parNom: ReadonlyMap<string, Produit | null>;
   readonly emplacements: ReadonlyMap<string, LigneLocaleFertilisation>;
+  /** T56 : liens datés vanne ↔ emplacement non supprimés de la ferme. */
+  readonly liens: readonly LienVanne[];
 }
 
 function lignesDeLaFerme(tables: Tables, nom: string, fermeId: string): LigneLocaleFertilisation[] {
   return (tables[nom] ?? []).filter((l) => typeof l.id === 'string' && l.ferme_id === fermeId);
 }
 
+function produitDeLigne(l: LigneLocaleFertilisation): Produit {
+  return {
+    id: chaine(l.id).toLowerCase(),
+    nom: chaine(l.nom),
+    teneurs: { teneurN: nombreOuNul(l.teneur_n), teneurP2o5: nombreOuNul(l.teneur_p2o5), teneurK2o: nombreOuNul(l.teneur_k2o) },
+    liquide: l.forme === 'liquide',
+    organique: l.organique === 1,
+    bio: l.utilisable_en_bio === 1,
+    archive: l.supprime_le !== null && l.supprime_le !== undefined,
+  };
+}
+
 function contexte(tables: Tables, fermeId: string): Contexte {
   const produits = new Map<string, Produit>();
   for (const l of lignesDeLaFerme(tables, 'produit_fertilisant', fermeId)) {
-    const p: Produit = {
-      id: chaine(l.id).toLowerCase(),
-      nom: chaine(l.nom),
-      teneurs: { teneurN: nombreOuNul(l.teneur_n), teneurP2o5: nombreOuNul(l.teneur_p2o5), teneurK2o: nombreOuNul(l.teneur_k2o) },
-      liquide: l.forme === 'liquide',
-      organique: l.organique === 1,
-      bio: l.utilisable_en_bio === 1,
-      archive: l.supprime_le !== null && l.supprime_le !== undefined,
-    };
+    const p = produitDeLigne(l);
     produits.set(p.id, p);
   }
   // Par nom : un seul produit par nom, les non archivés d'abord ; deux du même nom → aucun (null).
@@ -388,7 +407,16 @@ function contexte(tables: Tables, fermeId: string): Contexte {
   }
   const emplacements = new Map<string, LigneLocaleFertilisation>();
   for (const l of lignesDeLaFerme(tables, 'emplacement', fermeId)) emplacements.set(chaine(l.id).toLowerCase(), l);
-  return { produits, parNom, emplacements };
+  const liens: LienVanne[] = [];
+  for (const l of lignesDeLaFerme(tables, 'secteur_emplacement', fermeId)) {
+    const secteur = minuscule(l.secteur_irrigation_id);
+    const e = minuscule(l.emplacement_id);
+    const du = chaine(l.du);
+    const au = l.au === null || l.au === undefined ? null : chaine(l.au);
+    if (secteur === null || e === null || (l.supprime_le !== null && l.supprime_le !== undefined) || !estDateValide(du) || (au !== null && !estDateValide(au))) continue;
+    liens.push({ id: chaine(l.id).toLowerCase(), secteurId: secteur, emplacementId: e, du, au });
+  }
+  return { produits, parNom, emplacements, liens };
 }
 
 function produitDe(ctx: Contexte, produitId: string | null, nom: string): Produit | null {
@@ -415,7 +443,7 @@ function calcule(
   a: {
     readonly evenementId: string | null;
     readonly date: string;
-    readonly categorie: 'fertilisation' | 'amendement';
+    readonly categorie: CategorieApport;
     readonly produitId: string | null;
     readonly nom: string;
     readonly quantite: Quantite;
@@ -428,7 +456,7 @@ function calcule(
   const s = surface(ctx, a.emplacementIds);
   // Arrondi une seule fois, à la fin : les kg/ha partent des kg exacts. Un solide compté en volume
   // (L, m³ : compost, fumier) n'a pas de densité connue : sans unités plutôt qu'un azote faux.
-  const kg = p === null || (!p.liquide && estVolume(a.quantite)) ? null : brutes(a.quantite, p.teneurs);
+  const kg = kgDuProduit(p, a.quantite);
   return {
     evenementId: a.evenementId,
     date: a.date,
@@ -523,7 +551,58 @@ function* interventionsEnVigueur(tables: Tables, fermeId: string): Generator<voi
   return enVigueurDesTraitements(lues);
 }
 
-function* apportsRealises(ctx: Contexte, interventions: readonly InterventionLue[]): Generator<void, ApportCalcule[], undefined> {
+interface IrrigationLue {
+  readonly id: string;
+  readonly date: string;
+  readonly horodatage: string;
+  readonly remplaceSorte: 'correction' | 'annulation' | null;
+  readonly remplaceEvenementId: string | null;
+  readonly secteurId: string;
+  readonly doses: readonly { readonly produitId: string; readonly produit: string; readonly quantite: Quantite }[];
+}
+
+/** T56 : une irrigation (fertirrigation ou eau seule : les deux soldent leur chaîne), ou null. */
+function irrigationDeLigne(l: LigneLocaleFertilisation): IrrigationLue | null {
+  if (l.type !== 'irrigation' || typeof l.id !== 'string') return null;
+  const d = lireJson(l.detail);
+  const date = chaine(l.date);
+  if (!estObjet(d) || typeof d.secteurIrrigationId !== 'string' || !estDateValide(date)) return null;
+  const doses: { produitId: string; produit: string; quantite: Quantite }[] = [];
+  // Doses sans recette : incohérentes (validerSaisie les refuse), jamais comptées.
+  if (typeof d.recetteFertirrigationId === 'string' && Array.isArray(d.engrais)) {
+    for (const e of d.engrais as unknown[]) {
+      if (!estObjet(e) || typeof e.produitFertilisantId !== 'string' || !estObjet(e.quantite)) continue;
+      const q = e.quantite;
+      if (typeof q.valeur !== 'number' || !Number.isFinite(q.valeur) || typeof q.unite !== 'string') continue;
+      doses.push({ produitId: e.produitFertilisantId.toLowerCase(), produit: typeof e.produit === 'string' ? e.produit : '', quantite: { valeur: q.valeur, unite: q.unite } });
+    }
+  }
+  const sorte = l.remplace_sorte === 'correction' || l.remplace_sorte === 'annulation' ? l.remplace_sorte : null;
+  return {
+    id: l.id.toLowerCase(),
+    date,
+    horodatage: chaine(l.horodatage),
+    remplaceSorte: sorte,
+    remplaceEvenementId: minuscule(l.remplace_evenement_id),
+    secteurId: d.secteurIrrigationId.toLowerCase(),
+    doses,
+  };
+}
+
+/** T56 : irrigations en vigueur de la ferme qui portent des engrais. */
+function* fertirrigationsEnVigueur(tables: Tables, fermeId: string): Generator<void, IrrigationLue[], undefined> {
+  const lues: IrrigationLue[] = [];
+  let k = 0;
+  for (const l of tables.evenement ?? []) {
+    if (k++ % PAQUET === PAQUET - 1) yield;
+    if (l.ferme_id !== fermeId) continue;
+    const i = irrigationDeLigne(l);
+    if (i !== null) lues.push(i);
+  }
+  return enVigueurDesTraitements(lues).filter((i) => i.doses.length > 0);
+}
+
+function* apportsRealises(ctx: Contexte, interventions: readonly InterventionLue[], fertirrigations: readonly IrrigationLue[]): Generator<void, ApportCalcule[], undefined> {
   const apports: ApportCalcule[] = [];
   let k = 0;
   for (const i of interventions) {
@@ -531,7 +610,33 @@ function* apportsRealises(ctx: Contexte, interventions: readonly InterventionLue
     if (!estApport(i.categorie) || i.quantite === null) continue;
     apports.push(calcule(ctx, { evenementId: i.id, date: i.date, categorie: i.categorie, produitId: i.produitId, nom: i.produit, quantite: i.quantite, emplacementIds: i.emplacementIds, serieId: i.serieId, campagneId: i.campagneId }));
   }
+  // T56 : un apport par engrais injecté, sur les emplacements que la vanne arrosait ce jour-là
+  // (liens datés : changer le réseau ne réécrit pas le passé). Même calcul que les interventions.
+  for (const f of fertirrigations) {
+    if (k++ % PAQUET === PAQUET - 1) yield;
+    const emplacementIds = emplacementsArroses(ctx.liens, f.secteurId, f.date);
+    for (const d of f.doses) {
+      apports.push(calcule(ctx, { evenementId: f.id, date: f.date, categorie: 'fertirrigation', produitId: d.produitId, nom: d.produit, quantite: d.quantite, emplacementIds, serieId: null, campagneId: null }));
+    }
+  }
   return apports.sort(parDate);
+}
+
+/**
+ * T56 : kg de N, P₂O₅, K₂O apportés par des doses injectées, avec les teneurs des produits (même
+ * règle que les apports de T54), au gramme ; null si aucune dose n'a d'unités.
+ */
+export function unitesFertirrigation(doses: readonly DoseInjectee[], produits: readonly LigneLocaleFertilisation[]): Unites | null {
+  const parId = new Map(produits.filter((l) => typeof l.id === 'string').map((l) => [chaine(l.id).toLowerCase(), produitDeLigne(l)]));
+  let total: { n: number | null; p2o5: number | null; k2o: number | null } | null = null;
+  const plus = (a: number | null, b: number | null): number | null => (a === null ? b : b === null ? a : a + b);
+  for (const d of doses) {
+    const u = kgDuProduit(parId.get(d.produitFertilisantId.toLowerCase()) ?? null, d.quantite);
+    if (u === null) continue;
+    total = total === null ? { ...u } : { n: plus(total.n, u.n), p2o5: plus(total.p2o5, u.p2o5), k2o: plus(total.k2o, u.k2o) };
+  }
+  const gramme = (x: number | null): number | null => (x === null ? null : Math.round((x + Number.EPSILON * Math.abs(x)) * 1000) / 1000);
+  return total === null ? null : { n: gramme(total.n), p2o5: gramme(total.p2o5), k2o: gramme(total.k2o) };
 }
 
 function dateOuAbsente(v: ValeurFertilisation | undefined): DateCalendaire | undefined {
@@ -635,7 +740,7 @@ const arrondi = (t: TotalFertilisation): TotalFertilisation => ({ ...t, n: centi
 export function bilanFertilisation(tables: Tables, fermeId: string): BilanFertilisation {
   const ctx = contexte(tables, fermeId);
   const interventions = deroule(interventionsEnVigueur(tables, fermeId));
-  const apports = deroule(apportsRealises(ctx, interventions));
+  const apports = deroule(apportsRealises(ctx, interventions, deroule(fertirrigationsEnVigueur(tables, fermeId))));
   const prevus = apportsPrevus(ctx, tables, fermeId, interventions);
   const saisons = saisonsDe(tables, fermeId);
   const cles = new Map<string, { emplacementId: string; periode: string; realise: TotalFertilisation; prevu: TotalFertilisation }>();
@@ -737,7 +842,7 @@ export function lignesCahierFertilisation(tables: Tables, fermeId: string): Lign
 /** `lignesCahierFertilisation` par paquets (T63) : l'export rend la main au fil entre deux paquets. */
 export function* lignesCahierFertilisationParPaquets(tables: Tables, fermeId: string): Generator<void, LigneCahier[], undefined> {
   const ctx = contexte(tables, fermeId);
-  const apports = yield* apportsRealises(ctx, yield* interventionsEnVigueur(tables, fermeId));
+  const apports = yield* apportsRealises(ctx, yield* interventionsEnVigueur(tables, fermeId), yield* fertirrigationsEnVigueur(tables, fermeId));
   if (apports.length === 0) return [];
   const saisons = saisonsDe(tables, fermeId);
   const emplacements = parId(tables, 'emplacement', fermeId, false);

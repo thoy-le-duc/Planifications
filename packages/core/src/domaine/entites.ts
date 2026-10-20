@@ -673,6 +673,23 @@ export type DetailIntervention =
 export interface DetailIrrigation {
   readonly secteurIrrigationId: Id<'SecteurIrrigation'>;
   readonly dureeMinutes: Minutes;
+  /** T56 : recette de fertirrigation portée par l'irrigation (absente : eau seule). */
+  readonly recetteFertirrigationId?: Id<'RecetteFertirrigation'>;
+  /** T56 : volume d'eau, saisi ou calculé à la saisie (durée × débit de la vanne). */
+  readonly volumeM3?: number;
+  /** T56 : EC mesurée (mS/cm) et pH mesuré, facultatifs. */
+  readonly ecMesuree?: number;
+  readonly phMesure?: number;
+  /** T56 : doses injectées, figées à la saisie (une recette modifiée ensuite ne réécrit pas le passé). */
+  readonly engrais?: readonly DoseFertirrigation[];
+}
+
+/** T56 : un engrais injecté par une fertirrigation, et sa quantité. */
+export interface DoseFertirrigation {
+  readonly produitFertilisantId: Id<'ProduitFertilisant'>;
+  /** Nom du produit à la saisie (lisible même si le produit disparaît). */
+  readonly produit: string;
+  readonly quantite: Quantite;
 }
 
 export interface DetailTraitement {
