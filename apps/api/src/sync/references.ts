@@ -36,7 +36,7 @@ export const DETAIL_CHAINE_TROP_LONGUE = `chaîne de plus de ${String(PROFONDEUR
 
 interface Reference {
   /** Table Postgres visée. */
-  readonly table: 'serie' | 'campagne' | 'emplacement' | 'evenement' | 'secteur_irrigation' | 'produit_phyto' | 'produit_fertilisant';
+  readonly table: 'serie' | 'campagne' | 'emplacement' | 'evenement' | 'secteur_irrigation' | 'produit_phyto' | 'produit_fertilisant' | 'recette_fertirrigation';
   readonly ids: readonly string[];
   /** Ce que le maraîcher lit dans le message. */
   readonly libelle: string;
@@ -96,6 +96,15 @@ function references(l: LigneEvenement): Reference[] {
   // seulement (pas de bibliothèque). Archivé : toujours référençable, comme un produit phyto.
   if ('produitFertilisantId' in detail && typeof detail.produitFertilisantId === 'string') {
     liste.push({ table: 'produit_fertilisant', ids: [detail.produitFertilisantId.toLowerCase()], libelle: 'produit fertilisant', supprimee: null });
+  }
+  // T56 : recette d'une fertirrigation et produits de ses doses, de la ferme ; archivés compris
+  // (irrigation faite hors ligne avant l'archivage, ou son annulation), comme un produit phyto.
+  if ('recetteFertirrigationId' in detail && typeof detail.recetteFertirrigationId === 'string') {
+    liste.push({ table: 'recette_fertirrigation', ids: [detail.recetteFertirrigationId.toLowerCase()], libelle: 'recette de fertirrigation', supprimee: null });
+  }
+  if ('engrais' in detail && Array.isArray(detail.engrais) && detail.engrais.length > 0) {
+    const ids = [...new Set(detail.engrais.map((e) => e.produitFertilisantId.toLowerCase()))];
+    liste.push({ table: 'produit_fertilisant', ids, libelle: 'produit fertilisant', supprimee: null });
   }
   return liste;
 }

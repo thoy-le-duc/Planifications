@@ -52,6 +52,8 @@
  * - T52 : les produits phyto de la ferme (phyto.ts) se créent et se modifient (archivage = suppression
  *   douce), tout ou rien avec le reste du lot ; la bibliothèque commune reste en lecture seule.
  *   Contrat : phyto.integration.test.ts.
+ * - T56 : les recettes de fertirrigation de la ferme (fertirrigation.ts), de même ; chaque engrais
+ *   est un produit fertilisant de la ferme. Contrat : fertirrigation.integration.test.ts.
  * - T54 : les produits fertilisants de la ferme (fertilisation.ts), de même ; l'option « zone
  *   vulnérable nitrates » de la ferme (structure-origine.ts). Contrat : fertilisation.integration.test.ts.
  * - T28s (Q31) : le placement réel (bâtiments, contours des zones, placement des emplacements ;
@@ -92,6 +94,7 @@ import { ecrireStructure, estTableStructure, TABLES_STRUCTURE } from './structur
 import { ecrireOrigine, fermesDesOrigines, fermesGerees } from './structure-origine.ts';
 import { ecrireProduitPhyto, TABLE_PHYTO } from './phyto.ts';
 import { ecrireProduitFertilisant, TABLE_FERTILISANT } from './fertilisation.ts';
+import { ecrireRecetteFertirrigation, TABLE_RECETTE } from './fertirrigation.ts';
 import { ecrireEquipe, estTableEquipe, fermesDesLignesEquipe, TABLES_EQUIPE } from './equipe.ts';
 import { completerStock, ecrireArticle, ecrireMouvement, type RemplacementEcrit } from './stock.ts';
 
@@ -139,7 +142,7 @@ const TABLES_STOCK = new Set(['article_stock', 'mouvement_stock']);
  * ferme) : un lot qui en écrit une est accepté ou refusé en entier, sous le verrou de chaque
  * ferme touchée.
  */
-const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE, ...TABLES_ITINERAIRE, ...TABLES_STRUCTURE, 'ferme', TABLE_PHYTO, TABLE_FERTILISANT, ...TABLES_EQUIPE]);
+const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE, ...TABLES_ITINERAIRE, ...TABLES_STRUCTURE, 'ferme', TABLE_PHYTO, TABLE_FERTILISANT, TABLE_RECETTE, ...TABLES_EQUIPE]);
 /**
  * Tables que le téléphone écrit (T10 : le journal ; T10c : le stock ; T10e : les séries ; T23 : les
  * itinéraires ; T10s : le parcellaire et le catalogue ; les autres suivront avec leurs écrans).
@@ -482,6 +485,10 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       // T54 : un produit fertilisant de la ferme se modifie (teneurs, archivage, rétablissement).
       return ecrireProduitFertilisant(tx, ctx, { op: 'PATCH', id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, utilisateurId);
     }
+    if (e.op === 'PATCH' && e.table === TABLE_RECETTE) {
+      // T56 : une recette de fertirrigation de la ferme se modifie (archivage et rétablissement compris).
+      return ecrireRecetteFertirrigation(tx, ctx, { op: 'PATCH', id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, utilisateurId);
+    }
     if (e.op === 'PATCH' && estTableEquipe(e.table)) {
       // T60 : une personne de l'équipe ou une attribution se modifie (retrait et rétablissement compris), par le gérant.
       return ecrireEquipe(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, gerees);
@@ -503,6 +510,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     if (estTableItineraire(e.table)) return ecrireItineraire(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
     if (e.table === TABLE_PHYTO) return ecrireProduitPhyto(tx, ctx, { op: 'PUT', id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
     if (e.table === TABLE_FERTILISANT) return ecrireProduitFertilisant(tx, ctx, { op: 'PUT', id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
+    if (e.table === TABLE_RECETTE) return ecrireRecetteFertirrigation(tx, ctx, { op: 'PUT', id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
     if (estTableEquipe(e.table)) return ecrireEquipe(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, gerees);
     if (estTableStructure(e.table)) return ecrireStructure(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, gerees, utilisateurId);
     // Stock : la ferme, validée par le cœur, est forcément celle de fermeDonnee (UUID de la ferme du jeton).
