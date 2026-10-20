@@ -294,6 +294,8 @@ Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit 
 
 Question : quand une culture est traitée sur une partie de ses planches seulement (tomates sur P1, pas sur P2), l'écran Aujourd'hui (T52) bloque la récolte de **toute la culture** jusqu'à la fin du délai, par prudence. La 3D (T55) ne pose le repère « Ne pas récolter » que sur **les planches traitées** (P1) : P2 garde sa balise « à récolter ». Les deux se contredisent. Et une culture sans planche (kiwis ou asperges saisis sans rang) n'a pas de volume dans la 3D, donc pas de repère du tout. Proposition : aligner la 3D sur Aujourd'hui, repère sur toutes les planches de la culture traitée (ticket de suite, il faut faire de la place dans le poids de la vue 3D). L'autre choix : desserrer Aujourd'hui pour ne bloquer que les planches traitées. Lequel colle à ta pratique ?
 
+Réponse (2026-10-20) : « oui, on peut récolter les autres ». Le délai avant récolte ne bloque que les planches traitées ; la culture entière n'est bloquée que si le traitement ne désigne aucune planche (kiwis, asperges, culture sans emplacement). Ticket T69.
+
 ### Q44 — Engrais, phyto et suite du jumeau 3D (posée le 2026-10-19)
 
 Demande de Théophane : « avance la 3D aussi, on est en mode jumeau numérique ; penser aux engrais, phyto et traitements ». Arbitrage de Claude : le **registre phyto d'abord** (obligation légale, sert tous les jours, schéma déjà prêt), puis la base publique e-phy, puis le cahier de fertilisation ; en 3D, les traitements et le délai avant récolte visibles, pour que personne ne récolte une planche traitée. Tickets T52 à T55.
