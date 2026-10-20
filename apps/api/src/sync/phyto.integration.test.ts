@@ -26,7 +26,8 @@
  *
  * Traitement (événement) : sans produit, avec une dose négative, une date impossible ou une date
  * de récolte autorisée avant le jour du traitement → 'ecriture_invalide', rien d'écrit. Produit
- * archivé → 'ecriture_invalide' (on ne traite plus avec). Modifier le produit ensuite ne change
+ * d'une autre ferme → 'ecriture_invalide'. Produit archivé : accepté (traitement fait hors ligne
+ * avant l'archivage, correction, annulation ; relecture PR #211). Modifier le produit ensuite ne change
  * pas un traitement passé : la vue `traitements` garde sa date de récolte autorisée.
  */
 import { creerGenerateurId } from '@planif/core';

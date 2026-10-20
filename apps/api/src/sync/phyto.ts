@@ -7,8 +7,9 @@
  *
  * Bibliothèque commune (ferme_id nul) : en lecture seule. Un PATCH sur un de ses produits, ou sur
  * celui d'une autre ferme, se comporte exactement comme sur un id inexistant (T10d). Archiver =
- * suppression douce (`supprime_le`) : les traitements passés gardent leur produit ; un nouveau
- * traitement avec un produit archivé est refusé par references.ts.
+ * suppression douce (`supprime_le`) : les traitements passés gardent leur produit ; l'écran de
+ * saisie ne le propose plus, mais le serveur accepte encore un traitement qui le vise (fait hors
+ * ligne avant l'archivage, correction, annulation : references.ts).
  *
  * Tout se fait dans la transaction du lot (upload.ts), sous le verrou consultatif de la ferme.
  */
