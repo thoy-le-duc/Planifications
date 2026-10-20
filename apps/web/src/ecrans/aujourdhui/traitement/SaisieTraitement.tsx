@@ -146,7 +146,8 @@ function Formulaire({ culture, produits, aujourdhui, occupe, message, surEnregis
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {culture.emplacements.map((e) => (
               <label key={e.id} className="parc-bouton-secondaire" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={coches.has(e.id)} style={{ width: 28, height: 28 }} onChange={() => { basculer(e.id); }} />
+                {/* T69 : la dernière planche cochée le reste ; un traitement sans planche bloquerait toute la culture. */}
+                <input type="checkbox" checked={coches.has(e.id)} disabled={coches.has(e.id) && coches.size === 1} style={{ width: 28, height: 28 }} onChange={() => { basculer(e.id); }} />
                 {e.code}
               </label>
             ))}

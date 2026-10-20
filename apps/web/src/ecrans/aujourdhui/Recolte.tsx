@@ -7,8 +7,12 @@
  * T52 : une culture dont un emplacement est sous délai avant récolte montre l'alerte
  * (« Récolte interdite jusqu’au… ») ; « Valider » demande alors une confirmation explicite. La
  * récolte reste possible (le maraîcher reste maître) et sa note garde l'avertissement.
+ *
+ * T69 : le délai ne bloque que les planches traitées. Une culture de plusieurs planches dont une
+ * partie seulement est sous délai propose les « Planches récoltées » (toutes cochées) : l'alerte,
+ * la confirmation et la récolte écrite suivent les planches cochées.
  */
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { UniteRecolte } from '@planif/core';
 import { codesEmplacements, dateCourte, nomCulture, quantiteAvecUnite, type Culture, type DerniereRecolte } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
@@ -110,6 +114,12 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
     retour.current?.focus();
   }, []);
 
+  /** T69 : planches décochées de la culture (ids) ; la récolte porte sur les autres. */
+  const [exclues, setExclues] = useState<ReadonlySet<string>>(() => new Set());
+  const recoltee = useMemo(() => (culture === null || exclues.size === 0 ? culture : { ...culture, emplacements: culture.emplacements.filter((e) => !exclues.has(e.id)) }), [culture, exclues]);
+  /** T69 : choix des planches seulement quand une partie de la culture est sous délai. */
+  const choixPlanches =
+    culture !== null && interdiction !== undefined && culture.emplacements.length > 1 && interdiction(culture) !== null && culture.emplacements.some((e) => interdiction({ ...culture, emplacements: [e] }) === null);
   const quantite = quantiteDe(texte);
   const valide = culture !== null && quantite > 0;
   const affichee = texte === '' ? '0' : texte;
@@ -117,17 +127,17 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
   /** T52 : alerte lue à « Valider » quand le suivi n'était pas prêt (pour cette culture). */
   const [alerteLue, setAlerteLue] = useState<{ readonly culture: Culture; readonly texte: string } | null>(null);
   const [verification, setVerification] = useState(false);
-  const alerte = culture === null ? null : (interdiction?.(culture) ?? (alerteLue?.culture === culture ? alerteLue.texte : null));
+  const alerte = recoltee === null ? null : (interdiction?.(recoltee) ?? (alerteLue?.culture === recoltee ? alerteLue.texte : null));
   /** T52 : confirmation de la récolte sous délai avant récolte, en attente de réponse. */
   const [aConfirmer, setAConfirmer] = useState(false);
   const valider = () => {
-    if (culture === null || quantite <= 0 || occupe || verification) return;
+    if (recoltee === null || quantite <= 0 || occupe || verification) return;
     if (alerte !== null) {
       setAConfirmer(true);
       return;
     }
     if (verifierInterdiction !== undefined) {
-      const c = culture;
+      const c = recoltee;
       const q = quantite;
       const u = unite;
       setVerification(true);
@@ -150,11 +160,11 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
       );
       return;
     }
-    surValider(culture, quantite, unite, null);
+    surValider(recoltee, quantite, unite, null);
   };
   const recolterQuandMeme = () => {
     setAConfirmer(false);
-    if (culture !== null && quantite > 0 && !occupe && alerte !== null) surValider(culture, quantite, unite, `Récolte confirmée malgré l’alerte : ${alerte}`);
+    if (recoltee !== null && quantite > 0 && !occupe && alerte !== null) surValider(recoltee, quantite, unite, `Récolte confirmée malgré l’alerte : ${alerte}`);
   };
   const toucher = (t: Touche) => {
     setTexte((x) => appuyer(x, t));
@@ -164,6 +174,16 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
     setCulture(c);
     setUnite(c.unite);
     setTexte('');
+    setExclues(new Set());
+  }
+
+  function basculer(emplacementId: string): void {
+    setAConfirmer(false);
+    setExclues((x) => {
+      const y = new Set(x);
+      if (!y.delete(emplacementId)) y.add(emplacementId);
+      return y;
+    });
   }
 
   // Clavier physique (tablette, ordinateur) : chiffres, virgule ou point, effacement, Entrée, Échap.
@@ -196,7 +216,7 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
     radios.current[j]?.focus();
   }
 
-  const codes = culture === null ? null : codesEmplacements(culture.emplacements);
+  const codes = recoltee === null ? null : codesEmplacements(recoltee.emplacements);
   const derniere = culture === null ? undefined : dernieres.get(culture.cibleId);
 
   return (
@@ -277,6 +297,20 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
                 </span>
                 <span className="auj-quantite-unite">{libelleUnite}</span>
               </div>
+              {choixPlanches && (
+                <div role="group" aria-label="Planches récoltées" className="auj-planches">
+                  {culture.emplacements.map((e) => {
+                    const coche = !exclues.has(e.id);
+                    return (
+                      <label key={e.id} className="auj-planche">
+                        {/* La dernière planche cochée le reste : une récolte porte sur au moins une planche. */}
+                        <input type="checkbox" checked={coche} disabled={coche && exclues.size === culture.emplacements.length - 1} onChange={() => { basculer(e.id); }} />
+                        {e.code}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
               {alerte !== null && (
                 <span data-testid="alerte-dar" role="alert" className="auj-alerte-dar">
                   {alerte}

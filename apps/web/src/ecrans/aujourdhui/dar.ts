@@ -155,9 +155,14 @@ export function suivreTraitements(porte: PorteDonnees, fermeId: string, aujourdh
 
 /**
  * L'alerte d'une récolte le `date` sur ces emplacements ou sur la culture `cultureId` (série ou
- * campagne : une culture sans emplacement), ou null si elle est permise.
+ * campagne : une culture sans emplacement), ou null si elle est permise. T69 : seules les planches
+ * traitées sont interdites ; quand une partie seulement des emplacements l'est, l'alerte les nomme
+ * par leur code (« Récolte interdite sur T2-P07 jusqu’au… »).
  */
-export function alerteRecolte(t: TraitementsDar, emplacementIds: readonly string[], date: string, cultureId: string | null = null): string | null {
-  const i = interdictionRecolte(t.traitements, emplacementIds, date, cultureId);
-  return i === null ? null : texteInterdiction(i, t.noms.get(i.produitPhytoId) ?? 'produit inconnu');
+export function alerteRecolte(t: TraitementsDar, emplacements: readonly { readonly id: string; readonly code: string }[], date: string, cultureId: string | null = null): string | null {
+  const i = interdictionRecolte(t.traitements, emplacements.map((e) => e.id), date, cultureId);
+  if (i === null) return null;
+  const codes = new Map(emplacements.map((e) => [e.id.toLowerCase(), e.code]));
+  const nommees = (i.planches ?? []).flatMap((p) => codes.get(p.toLowerCase()) ?? []);
+  return texteInterdiction(i, t.noms.get(i.produitPhytoId) ?? 'produit inconnu', nommees);
 }
