@@ -100,33 +100,35 @@ export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui 
       ),
     [porte, fermeId],
   );
-  useEffect(
-    () =>
-      porte.surveiller<IrrigationLue>(
-        {
-          // Seuls la vanne et la durée sont lus du détail ; les chaînes (corrections, annulations) sont jugées par `enVigueur`.
-          sql: `SELECT id, date, horodatage, remplace_sorte, remplace_evenement_id,
-                       json_extract(detail, '$.secteurIrrigationId') AS secteur, json_extract(detail, '$.dureeMinutes') AS duree
-                FROM evenement WHERE ferme_id = ? AND type = 'irrigation' AND json_valid(detail)`,
-          parametres: [fermeId],
-          tables: ['evenement'],
-          convertir: (l: L) => {
-            const sorte = l.remplace_sorte;
-            return {
-              id: txt(l.id),
-              secteurId: txt(l.secteur).toLowerCase(),
-              date: txt(l.date),
-              horodatage: txt(l.horodatage),
-              dureeMinutes: nbOuNul(l.duree) ?? 0,
-              remplaceSorte: sorte === 'correction' || sorte === 'annulation' ? sorte : null,
-              remplaceEvenementId: typeof l.remplace_evenement_id === 'string' ? l.remplace_evenement_id : null,
-            };
-          },
+  // Les irrigations (tout le journal d'irrigation de la ferme) ne se lisent que si on en a besoin : filtre
+  // « Irrigation » ou fiche ouverte. Les lire à l'ouverture de la 3D retardait ses images sur une grande ferme.
+  const besoinIrrigations = filtre || choisie !== null;
+  useEffect(() => {
+    if (!besoinIrrigations) return undefined;
+    return porte.surveiller<IrrigationLue>(
+      {
+        // Seuls la vanne et la durée sont lus du détail ; les chaînes (corrections, annulations) sont jugées par `enVigueur`.
+        sql: `SELECT id, date, horodatage, remplace_sorte, remplace_evenement_id,
+                     json_extract(detail, '$.secteurIrrigationId') AS secteur, json_extract(detail, '$.dureeMinutes') AS duree
+              FROM evenement WHERE ferme_id = ? AND type = 'irrigation' AND json_valid(detail)`,
+        parametres: [fermeId],
+        tables: ['evenement'],
+        convertir: (l: L) => {
+          const sorte = l.remplace_sorte;
+          return {
+            id: txt(l.id),
+            secteurId: txt(l.secteur).toLowerCase(),
+            date: txt(l.date),
+            horodatage: txt(l.horodatage),
+            dureeMinutes: nbOuNul(l.duree) ?? 0,
+            remplaceSorte: sorte === 'correction' || sorte === 'annulation' ? sorte : null,
+            remplaceEvenementId: typeof l.remplace_evenement_id === 'string' ? l.remplace_evenement_id : null,
+          };
         },
-        setIrrigations,
-      ),
-    [porte, fermeId],
-  );
+      },
+      setIrrigations,
+      );
+  }, [porte, fermeId, besoinIrrigations]);
 
   const reperes = useMemo(() => reperesVannes(vannes, liens, volumes, jour), [vannes, liens, volumes, jour]);
   const enVigueurs = useMemo(() => enVigueur(irrigations), [irrigations]);
