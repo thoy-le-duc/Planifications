@@ -33,7 +33,7 @@
  * Sinon (dose maximale absente, dose ≤ max, unités différentes) → null. Jamais un refus :
  * validerSaisie accepte la saisie.
  *
- * ── interdictionRecolte(traitements, emplacementIds, date) ──────────────────────────────────
+ * ── interdictionRecolte(traitements, emplacementIds, date, cultureId?) ──────────────────────────────────
  *
  * `traitements` : événements de type traitement tels que lus (TraitementLu), corrections et
  * annulations comprises. Seuls comptent les traitements EN VIGUEUR : une chaîne (l'origine, ses
@@ -42,8 +42,9 @@
  * l'origine (même règle que la vue evenements_en_vigueur). Un traitement en vigueur interdit la
  * récolte sur ses emplacements du jour du traitement (compris) à recolteAutoriseeLe (exclu).
  * Rend, parmi les traitements en vigueur qui touchent l'un des `emplacementIds` (casse
- * ignorée) et interdisent la récolte le `date`, celui dont recolteAutoriseeLe est la plus
- * tardive ; null si aucun.
+ * ignorée) OU la culture `cultureId` (série ou campagne, casse ignorée : une culture sans
+ * emplacement, relecture PR #211) et interdisent la récolte le `date`, celui dont
+ * recolteAutoriseeLe est la plus tardive ; null si aucun.
  *
  * ── texteInterdiction(interdiction, nomProduit) ─────────────────────────────────────────────
  *
@@ -116,6 +117,8 @@ export interface TraitementLu {
   readonly remplaceEvenementId: string | null;
   readonly produitPhytoId: string;
   readonly recolteAutoriseeLe: string;
+  /** Série ou campagne du traitement (relecture PR #211) ; absente ou null sans culture. */
+  readonly cultureId?: string | null;
 }
 
 export interface InterdictionRecolte {
@@ -162,7 +165,7 @@ export interface ModulePhyto {
   dateRecolteAutorisee(date: DateCalendaire, delaiAvantRecolteJours: number): DateCalendaire;
   detailTraitement(produit: ProduitPourTraitement, saisie: SaisieTraitement, date: DateCalendaire): DetailTraitement;
   avertissementDose(dose: Quantite, doseMaximale: Quantite | null): string | null;
-  interdictionRecolte(traitements: readonly TraitementLu[], emplacementIds: readonly string[], date: string): InterdictionRecolte | null;
+  interdictionRecolte(traitements: readonly TraitementLu[], emplacementIds: readonly string[], date: string, cultureId?: string | null): InterdictionRecolte | null;
   texteInterdiction(interdiction: InterdictionRecolte, nomProduit: string): string;
   surfaceEmplacements(emplacements: readonly { readonly longueurM: number; readonly largeurM: number | null }[]): number;
   validerProduitPhyto(entree: unknown): Resultat<ProduitPhytoEcrit>;

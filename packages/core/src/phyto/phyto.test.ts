@@ -159,6 +159,18 @@ describe('T52 : récolte interdite sous DAR', () => {
     expect(m.interdictionRecolte([correction], [P01], '2027-05-20')?.evenementId).toBe(correction.id);
   });
 
+  it('relecture : culture sans emplacement (kiwis, campagne sans occupation) — le traitement de la culture interdit sa récolte', () => {
+    const CAMPAGNE = uuid(0x30);
+    const t = traitement(1, '2027-05-10', '2027-05-13', [], { cultureId: CAMPAGNE });
+    expect(m.interdictionRecolte([t], [], '2027-05-11', CAMPAGNE.toUpperCase())?.evenementId).toBe(t.id);
+    expect(m.interdictionRecolte([t], [], '2027-05-13', CAMPAGNE)).toBeNull();
+    // Une autre culture sur d'autres emplacements n'est pas concernée.
+    expect(m.interdictionRecolte([t], [P02], '2027-05-11', uuid(0x31))).toBeNull();
+    // Sur ses emplacements, la culture voisine reste interdite (traitement d'une autre série).
+    const surP01 = traitement(2, '2027-05-10', '2027-05-13', [P01], { cultureId: uuid(0x31) });
+    expect(m.interdictionRecolte([surP01], [P01], '2027-05-11', CAMPAGNE)?.evenementId).toBe(surP01.id);
+  });
+
   it('texte de l’alerte : « Récolte interdite jusqu’au JJ/MM (Produit, traité le JJ/MM) »', () => {
     const i = m.interdictionRecolte([traitement(1, '2027-05-10', '2027-05-13')], [P01], '2027-05-11');
     if (i === null) throw new Error('interdiction attendue');
