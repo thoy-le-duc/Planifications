@@ -1,0 +1,9 @@
+{
+  "name": "planifications-cli-powersync",
+  "private": true,
+  "description": "T67 : CLI PowerSync figée (version exacte et lockfile) pour scripts/deployer-regles-powersync.sh. Hors de l'espace de travail pnpm : installée seulement par le workflow « Règles de synchro PowerSync ».",
+  "packageManager": "pnpm@10.33.0",
+  "devDependencies": {
+    "powersync": "0.10.2"
+  }
+}

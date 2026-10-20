@@ -19,3 +19,10 @@
 - [ ] Workflow testé (script validé sans secret : sortie propre ; avec secret factice : refus clair).
 - [ ] Test « publication ↔ flux » vert, et rouge si l'on retire un flux.
 - [ ] Guide à jour ; `pnpm verif` passe.
+
+## Voie retenue (recherche du 2026-10-20)
+
+- **CLI officielle PowerSync**, paquet npm `powersync` (dépôt https://github.com/powersync-ja/powersync-cli), épinglée en **0.10.2** (publiée le 2026-10-01). Documentation : https://docs.powersync.com/tools/cli.
+- Commande `powersync deploy sync-config --directory=powersync` : « [Cloud only] Deploy only local sync config to the linked Cloud instance » ; `--dry-run` valide sans déployer. Elle garde la configuration de l'instance (connexion, authentification) déjà déployée par le tableau de bord.
+- Authentification en CI : jeton d'accès personnel dans `PS_ADMIN_TOKEN` (créé sur https://dashboard.powersync.com/account/access-tokens) et instance dans `INSTANCE_ID` (BSON ObjectID, 24 caractères hexadécimaux) ; organisation et projet déduits de l'instance (`--org-id` et `--project-id` sont dépréciés en 0.10.2). Vérifié dans le code publié de `powersync@0.10.2` et `@powersync/cli-core@0.10.2` (`utils/env.js`, `CloudInstanceCommand.js`, `commands/deploy/sync-config.js`).
+- Secrets GitHub (environnement `production`) : `POWERSYNC_ADMIN_TOKEN` et `POWERSYNC_INSTANCE_ID`, passés à la CLI par `scripts/deployer-regles-powersync.sh`.
