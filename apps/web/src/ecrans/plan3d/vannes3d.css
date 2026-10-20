@@ -25,6 +25,7 @@
   font-size: 15px;
   box-shadow: var(--ombre-carte);
   pointer-events: auto;
+  touch-action: none;
   visibility: hidden;
 }
 

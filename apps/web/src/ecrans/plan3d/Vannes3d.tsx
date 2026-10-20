@@ -10,7 +10,7 @@
  * Lecture seule de la base, sauf la saisie d'irrigation (../aujourdhui/SaisieIrrigation.tsx).
  * L'état ouvert ou fermé en direct des vannes (Modbus) n'est pas ici : c'est la phase 3.
  */
-import { useEffect, useMemo, useState, type ReactElement, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactElement, type RefObject } from 'react';
 import { derniereIrrigationDe, dernieresIrrigations, type Irrigation, type LienVanne } from '@planif/core/irrigation';
 import type { PorteDonnees } from '@planif/sync';
 import { enVigueur } from '../aujourdhui/index.ts';
@@ -55,6 +55,9 @@ interface IrrigationLue extends Irrigation {
   readonly remplaceSorte: 'correction' | 'annulation' | null;
   readonly remplaceEvenementId: string | null;
 }
+
+/** Au-delà de ce déplacement (px), un geste parti d'un repère n'est plus un tap : il fait tourner la vue (comme la toile). */
+const SEUIL_GESTE_PX = 4;
 
 const STYLE_REPERE = { background: COULEURS_REPERE_VANNE.fond, color: COULEURS_REPERE_VANNE.texte } as const;
 
@@ -137,6 +140,26 @@ export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui 
   const repereChoisi = choisie === null ? undefined : reperes.find((r) => r.id === choisie);
   const evidence = useMemo(() => (repereChoisi === undefined ? null : new Set(repereChoisi.planches)), [repereChoisi]);
 
+  // Un repère est petit, mais il y en a 60 : un doigt qui glisse depuis un repère fait tourner la vue
+  // (le geste est rendu à la toile au-delà de quelques pixels), seul un tap choisit la vanne.
+  const geste = useRef<{ readonly id: number; readonly x: number; readonly y: number } | null>(null);
+  function commencerGeste(e: PointerEvent<HTMLButtonElement>): void {
+    geste.current = e.isPrimary && e.button === 0 ? { id: e.pointerId, x: e.clientX, y: e.clientY } : null;
+  }
+  function suivreGeste(e: PointerEvent<HTMLButtonElement>): void {
+    const g = geste.current;
+    if (g?.id !== e.pointerId || Math.hypot(e.clientX - g.x, e.clientY - g.y) <= SEUIL_GESTE_PX) return;
+    geste.current = null;
+    const toile = couche.current?.parentElement?.querySelector('canvas');
+    if (toile === null || toile === undefined) return;
+    const commun = { pointerId: e.pointerId, pointerType: e.pointerType, isPrimary: true, button: 0, buttons: e.buttons, bubbles: true, cancelable: true };
+    toile.dispatchEvent(new window.PointerEvent('pointerdown', { ...commun, clientX: g.x, clientY: g.y }));
+    toile.dispatchEvent(new window.PointerEvent('pointermove', { ...commun, clientX: e.clientX, clientY: e.clientY }));
+  }
+  function finirGeste(): void {
+    geste.current = null;
+  }
+
   useEffect(() => {
     surEtat({
       reperes: reperes.map((r) => ({ pastille: { x: r.x, z: r.z } })),
@@ -162,6 +185,10 @@ export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui 
             onClick={() => {
               setChoisie((c) => (c === r.id ? null : r.id));
             }}
+            onPointerDown={commencerGeste}
+            onPointerMove={suivreGeste}
+            onPointerUp={finirGeste}
+            onPointerCancel={finirGeste}
           >
             {r.nom}
           </button>

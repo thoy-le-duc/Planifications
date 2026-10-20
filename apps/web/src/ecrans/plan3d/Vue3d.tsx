@@ -21,7 +21,7 @@
  * Aucun calcul agronomique : tout vient de `versScene`, qui ne fait que placer le plan de la 2D.
  */
 import { createRoot, extend, useFrame, useThree, type ReconcilerRoot, type RootState } from '@react-three/fiber';
-import { Component, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ErrorInfo, type RefObject, type ReactNode } from 'react';
+import { Component, lazy, memo, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type RefObject, type ReactNode } from 'react';
 import { AmbientLight, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
 import type { DateCalendaire } from '@planif/core';
 import type { Plan } from '../plan/calculs.ts';
@@ -828,26 +828,11 @@ const ElementBatiment = memo(function ElementBatiment({ batiment, surAller }: { 
 });
 
 /**
- * T57 : les vannes, chargées à la demande. Leur arrivée ne rend que ce composant, jamais la vue
- * (un rendu de la vue redessine la scène : la 3D au repos ne dessine aucune image).
+ * T57 : les vannes, chargées à la demande. Leur arrivée ne rend que ce composant, jamais la vue (un
+ * rendu de la vue redessine la scène : la 3D au repos ne dessine aucune image). Morceau introuvable
+ * (hors ligne avant tout précache) : la 3D reste entière, sans repères.
  */
-function VannesDifferees(p: ProprietesVannes3d) {
-  const [Vannes, setVannes] = useState<ComponentType<ProprietesVannes3d> | null>(null);
-  useEffect(() => {
-    let actif = true;
-    import('./Vannes3d.tsx').then(
-      (m) => {
-        if (actif) setVannes(() => m.Vannes3d);
-      },
-      // Morceau introuvable (hors ligne avant tout précache) : la 3D reste entière, sans repères.
-      () => undefined,
-    );
-    return () => {
-      actif = false;
-    };
-  }, []);
-  return Vannes === null ? null : <Vannes {...p} />;
-}
+const VannesDifferees = lazy((): Promise<{ default: (p: ProprietesVannes3d) => ReactNode }> => import('./Vannes3d.tsx').catch(() => ({ default: () => null })));
 
 export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, invitationDemo = false, porte, fermeId }: ProprietesVue3d) {
   // T28k (Q36) : le gérant place la ferme aussi au téléphone, à tout écran.
@@ -1300,7 +1285,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-fruits={0} data-balises={0} data-lignes-rangs={0} data-active-en-detail="" data-planches-a-recolter={nbARecolter} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-travaux-erreur={erreurTravaux ? 'oui' : 'non'} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
           <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} erreur={erreurTravaux} />
-          {porte !== undefined && fermeId !== undefined && geometrie !== null && <VannesDifferees porte={porte} fermeId={fermeId} volumes={geometrie.volumes} couche={coucheVannes} surEtat={surEtatVannes} />}
+          {porte !== undefined && fermeId !== undefined && geometrie !== null && <Suspense><VannesDifferees porte={porte} fermeId={fermeId} volumes={geometrie.volumes} couche={coucheVannes} surEtat={surEtatVannes} /></Suspense>}
         </div>
         <aside id={idPanneau} data-testid="panneau-3d" className={filtresOuverts ? 'plan3d-cote' : 'plan3d-cote plan3d-cote-replie'} aria-label="Légende, filtres et liste des planches">
           {/* T37c : replié au téléphone, le panneau n'a plus de taille mais la liste des planches (l'alternative texte de la toile) reste lisible au lecteur d'écran : seul le reste est `hidden`. */}
