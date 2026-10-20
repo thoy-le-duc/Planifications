@@ -16,14 +16,22 @@
  *     `import()`). Un nom haché change à chaque correction du module et fait varier le démarrage
  *     de quelques octets (T54) : seuls les morceaux qui servent à chaque ouverture y sont cités.
  *   - Hors ligne : chaque morceau JavaScript de l'appli est dans le précache du service worker.
+ *   - Aide de préchargement (relecture) : vite.config.ts remplace celle de Vite par
+ *     src/prechargement/ (copie de son comportement). Une mise à jour de Vite qui change son aide
+ *     doit se voir : l'empreinte de la fonction `preload` de Vite est épinglée ici. L'aide
+ *     complète se charge sans rien précharger (sinon son propre import la redemanderait, sans
+ *     fin). Une base relative (`base: './'`) ou `renderBuiltUrl`, que l'aide ne gère pas, fait
+ *     échouer le build.
  *
  * Le build est lancé ici par l'API de Vite, vers un dossier temporaire (comme scripts/vue3d.test.ts) ;
  * les morceaux sont classés d'après les modules qu'ils contiennent (sortie de Rolldown), pas
  * d'après leur nom.
  */
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { build as viteBuild, type Rollup } from 'vite';
@@ -158,4 +166,58 @@ describe('T66 : hors ligne', () => {
     const absents = appli.filter((f) => !sw.includes(`"${f}"`));
     expect(absents, 'morceaux absents du précache (sw.js)').toEqual([]);
   });
+});
+
+/**
+ * Empreinte (sha256) de la fonction `preload` de l'aide de Vite 8.3.1, que src/prechargement/complet.ts
+ * reproduit. Si elle change : relire complet.ts et aide.ts contre la nouvelle aide de Vite, les
+ * aligner, puis mettre l'empreinte à jour ici, en le disant dans la PR.
+ */
+const EMPREINTE_AIDE_VITE = '0aef05fc9638f7c4b971f8dbcd3492cd709dfc50af5e9df5160745022b909318';
+
+describe('T66 (relecture) : aide de préchargement remplacée', () => {
+  it('l’aide de Vite est celle que src/prechargement/ reproduit (empreinte épinglée)', () => {
+    const vite = dirname(createRequire(import.meta.url).resolve('vite/package.json'));
+    const dossier = join(vite, 'dist', 'node', 'chunks');
+    const debut = 'function preload(baseModule, deps, importerUrl) {';
+    const sources = readdirSync(dossier)
+      .filter((f) => f.endsWith('.js'))
+      .map((f) => readFileSync(join(dossier, f), 'utf8'))
+      .filter((code) => code.includes(debut));
+    expect(sources, `aide de Vite introuvable (${debut}) : src/prechargement/ est à relire`).toHaveLength(1);
+    const code = sources[0] ?? '';
+    expect(code, 'identifiant de l’aide de Vite').toContain('const preloadHelperId = "\\0vite/preload-helper.js";');
+    expect(code, 'nom de l’aide de Vite').toContain('const preloadMethod = `__vitePreload`;');
+    const i = code.indexOf(debut);
+    const fin = code.indexOf('\nfunction getPreloadCode(', i);
+    expect(fin, 'fin de la fonction preload de Vite').toBeGreaterThan(i);
+    const empreinte = createHash('sha256').update(code.slice(i, fin)).digest('hex');
+    expect(empreinte, 'l’aide de Vite a changé : relire src/prechargement/complet.ts contre elle').toBe(EMPREINTE_AIDE_VITE);
+  });
+
+  it('l’aide complète se charge sans rien précharger (pas de boucle)', () => {
+    const complet = morceaux.filter((m) => m.moduleIds.some((id) => relatif(id) === 'apps/web/src/prechargement/complet.ts'));
+    expect(complet, 'morceau de l’aide complète').toHaveLength(1);
+    const c = complet[0];
+    if (c === undefined) return;
+    const hotes = morceaux.filter((m) => m.dynamicImports.includes(c.fileName)).map((m) => m.fileName);
+    expect(hotes.length, 'morceaux qui importent l’aide complète').toBeGreaterThan(0);
+    // Vite précharge avec un morceau ses imports statiques, sauf le morceau qui l'importe : s'il en
+    // avait un autre, l'import de l'aide complète passerait par l'aide complète, sans fin.
+    expect(c.imports.filter((f) => !hotes.includes(f)), 'imports statiques de l’aide complète hors de son hôte').toEqual([]);
+  });
+
+  it('base relative : le build échoue au lieu de servir une aide qui ne la gère pas', async () => {
+    const dossier = mkdtempSync(join(tmpdir(), 'planif-t66-base-'));
+    const nodeEnv = process.env.NODE_ENV;
+    delete process.env.NODE_ENV;
+    try {
+      await expect(
+        viteBuild({ configFile: join(WEB, 'vite.config.ts'), root: WEB, mode: 'production', base: './', logLevel: 'silent', build: { outDir: dossier, emptyOutDir: true } }),
+      ).rejects.toThrow(/T66/);
+    } finally {
+      if (nodeEnv !== undefined) process.env.NODE_ENV = nodeEnv;
+      rmSync(dossier, { recursive: true, force: true });
+    }
+  }, 240_000);
 });
