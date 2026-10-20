@@ -13,8 +13,31 @@
 
 .coquille-plan > .coquille-contenu {
   min-height: 0;
-  overflow: hidden;
+  /* T50 : jamais de contenu coupé. Si l'écran est trop court pour ce qui précède le plan (petit
+     téléphone, état vide), le contenu défile au doigt plutôt que d'être rogné ; d'ordinaire tout
+     tient et seul le plan défile. Jamais de défilement horizontal. */
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-bottom: var(--espace-s);
+}
+
+/* T50 : sur Planches, le bandeau « Démarrer votre ferme » se replie sur sa prochaine étape (titre,
+   compte, une étape) : il ne prend plus la hauteur du plan. Le bandeau complet reste sur
+   Aujourd'hui. CSS seul : rien au JavaScript de démarrage. */
+.plan > .dem {
+  flex: 0 0 auto;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.plan > .dem .dem-etapes {
+  gap: 0;
+}
+
+.plan > .dem .dem-etape:not(.dem-etape-prochaine),
+.plan > .dem .dem-import {
+  display: none;
 }
 
 .plan {
@@ -26,7 +49,11 @@
 }
 
 .plan-outils {
+  flex: 0 0 auto;
   display: flex;
+  /* T50 : trop étroit pour tout (téléphone) : « Nouvelle série » passe à la ligne, rien ne
+     dépasse à droite. */
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--espace-s);
   font-weight: 700;
@@ -424,7 +451,9 @@
   color: var(--couleur-sur-foret);
 }
 
-.coquille-contenu > .plan:first-child > .plan-zones {
+/* Bande pleine largeur collée à l'en-tête, seulement quand rien ne la précède (T50 : sous le
+   bandeau « Démarrer votre ferme », sa marge négative le recouvrait). */
+.coquille-contenu > .plan:first-child > .plan-zones:first-child {
   margin: calc(-1 * var(--espace-l)) -14px 0;
   padding-top: 0;
   border-radius: 0;
@@ -692,6 +721,32 @@
 @media (min-width: 1024px) {
   .plan-voir-3d + .plan-nouvelle {
     margin-left: 0;
+  }
+}
+
+/* T50 : au téléphone, la barre d'outils tient sur UNE ligne (Pixel 7, iPhone : 390 à 412 px) pour
+   laisser sa hauteur au plan : « Saison » et le texte de « Voir en 3D » sont masqués à l'œil mais
+   restent lus (nom accessible inchangé) ; l'icône 3D et l'année suffisent au doigt. Plus étroit
+   encore (360 px), « Nouvelle série » passe à la ligne plutôt que de dépasser. */
+@media (max-width: 599px) {
+  .plan-outils {
+    position: relative;
+  }
+
+  .plan-outils > label,
+  .plan-outil-texte {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .plan-voir-3d {
+    min-width: 56px;
+    padding: 0;
+    justify-content: center;
   }
 }
 

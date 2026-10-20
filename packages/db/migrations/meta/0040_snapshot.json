@@ -1,6 +1,6 @@
 {
-  "id": "13360c83-6738-4115-89d6-9af71646741f",
-  "prevId": "9245edba-d2bb-4ca5-b34e-ac4181134be4",
+  "id": "baee229f-2875-4479-94c5-283f7afbde4f",
+  "prevId": "ad584788-eebf-4304-903e-d0f8031fef52",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -779,6 +779,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "nombre_pains": {
+          "name": "nombre_pains",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "actif_du": {
           "name": "actif_du",
           "type": "date",
@@ -961,7 +967,11 @@
         },
         "emplacement_places_de_gouttiere": {
           "name": "emplacement_places_de_gouttiere",
-          "value": "(\"emplacement\".\"sorte\" = 'gouttiere') = (\"emplacement\".\"nombre_places\" IS NOT NULL) AND (\"emplacement\".\"nombre_places\" IS NULL OR \"emplacement\".\"nombre_places\" > 0)"
+          "value": "\"emplacement\".\"nombre_places\" IS NULL OR (\"emplacement\".\"sorte\" = 'gouttiere' AND \"emplacement\".\"nombre_places\" > 0)"
+        },
+        "emplacement_pains_de_gouttiere": {
+          "name": "emplacement_pains_de_gouttiere",
+          "value": "(\"emplacement\".\"sorte\" = 'gouttiere') = (\"emplacement\".\"nombre_pains\" IS NOT NULL) AND (\"emplacement\".\"nombre_pains\" IS NULL OR \"emplacement\".\"nombre_pains\" > 0)"
         },
         "emplacement_periode_active": {
           "name": "emplacement_periode_active",

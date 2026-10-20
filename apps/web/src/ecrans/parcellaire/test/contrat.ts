@@ -8,7 +8,7 @@
  * - `../regles.ts` (pur : ni porte, ni horloge, ni DOM) : ModuleRegles ci-dessous. Mêmes règles
  *   que le serveur (apps/api/src/sync/structure-lignes.ts : noms non vides de 200 caractères au
  *   plus, saison dans l'ordre, dates de 1900 à 2100, longueurs et largeurs > 0 et plafonnées,
- *   gouttière ⇔ nombre de places) et code unique dans sa zone sans tenir compte de la casse ni
+ *   gouttière ⇔ nombre de pains (T51)) et code unique dans sa zone sans tenir compte de la casse ni
  *   des espaces autour, parmi les emplacements non supprimés et en service (Q27).
  * - `../index.ts` : `EcranParcellaire` (et en défaut), chargé à la demande depuis l'onglet Ferme.
  *
@@ -32,7 +32,7 @@
  *   « Ajouter les planches » : une transaction, codes <préfixe>1…<préfixe>n, à la suite des
  *   codes déjà pris dans la zone.
  * - Dialogue « Modifier <code> » : « Code », liste « Sorte » (planche, rang, gouttiere),
- *   « Longueur (m) », « Largeur (m) », « Nombre de places » (gouttière), « Enregistrer »,
+ *   « Longueur (m) », « Largeur (m) », « Nombre de pains » (gouttière, T51), « Enregistrer »,
  *   « Mettre hors service » / « Remettre en service », « Supprimer la planche ».
  * - Chaque enregistrement : bandeau [data-testid="saisie-annulable"] avec « Annuler » (10 s),
  *   qui défait en une transaction (création : suppression douce).
@@ -73,7 +73,7 @@ export interface SaisieEmplacement {
   readonly sorte: string;
   readonly longueur: string;
   readonly largeur: string;
-  readonly nombrePlaces: string;
+  readonly nombrePains: string;
 }
 
 export interface EmplacementVerifie {
@@ -81,7 +81,7 @@ export interface EmplacementVerifie {
   readonly sorte: 'planche' | 'rang' | 'gouttiere';
   readonly longueurM: number;
   readonly largeurM: number | null;
-  readonly nombrePlaces: number | null;
+  readonly nombrePains: number | null;
 }
 
 export interface ModuleRegles {

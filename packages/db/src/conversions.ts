@@ -179,6 +179,7 @@ export function ligneDepuisEmplacement(e: Emplacement): LigneEmplacement {
     longueurM: e.longueurM,
     largeurM: e.largeurM,
     nombrePlaces: e.sorte === 'gouttiere' ? e.nombrePlaces : null,
+    nombrePains: e.sorte === 'gouttiere' ? e.nombrePains : null,
     actifDu: e.actifDu,
     actifAu: e.actifAu,
     remplace: e.remplace,
@@ -210,10 +211,10 @@ export function emplacementDepuisLigne(l: LigneEmplacement): Emplacement {
     case 'rang':
       return { ...commun, sorte: 'rang' };
     case 'gouttiere':
-      if (l.nombrePlaces === null) {
-        throw new LigneInvalide('emplacement', l.id, 'gouttière sans nombre de places');
+      if (l.nombrePains === null) {
+        throw new LigneInvalide('emplacement', l.id, 'gouttière sans nombre de pains');
       }
-      return { ...commun, sorte: 'gouttiere', nombrePlaces: l.nombrePlaces };
+      return { ...commun, sorte: 'gouttiere', nombrePains: l.nombrePains, nombrePlaces: l.nombrePlaces };
     default:
       return verifierExhaustif(l.sorte);
   }

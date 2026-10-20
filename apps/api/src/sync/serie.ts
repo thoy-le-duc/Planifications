@@ -20,8 +20,8 @@
  * (`jsonb_populate_record`) : les types sont ceux de Postgres, et la comparaison d'un renvoi se
  * fait en SQL, colonne par colonne (jsonb, numeric, timestamptz comparés par valeur).
  */
-import { validerOccupation, validerSerie, type Id, type Occupation, type Serie } from '@planif/core';
-import { modification } from '@planif/db';
+import { validerOccupation, validerSerie, verifierDensiteSurEmplacement, type Id, type Occupation, type Serie, type SorteEmplacement } from '@planif/core';
+import { modification, SORTES_EMPLACEMENT } from '@planif/db';
 import { sql, type SQL } from 'drizzle-orm';
 import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
@@ -493,7 +493,8 @@ export async function fermesDesLignesVisees(
   const trouvees = new Set<string>();
   // T23 : les itinéraires et les types d'intervention se modifient aussi, sous le même verrou ;
   // T10s : le parcellaire et le catalogue de la ferme de même.
-  for (const table of ['serie', 'occupation', 'itineraire', 'type_intervention', ...TABLES_STRUCTURE]) {
+  // T52 : les produits phyto de la ferme de même.
+  for (const table of ['serie', 'occupation', 'itineraire', 'type_intervention', 'produit_phyto', ...TABLES_STRUCTURE]) {
     const ids = [...new Set(ecritures.filter((e) => e.table === table && e.op === 'PATCH' && estUuid(e.id)).map((e) => e.id.toLowerCase()))];
     if (ids.length === 0) continue;
     const r = await tx.execute<{ ferme_id: string }>(
@@ -503,6 +504,27 @@ export async function fermesDesLignesVisees(
     for (const l of r.rows) trouvees.add(l.ferme_id);
   }
   return [...trouvees];
+}
+
+const estSorte = (v: unknown): v is SorteEmplacement => typeof v === 'string' && (SORTES_EMPLACEMENT as readonly string[]).includes(v);
+
+/**
+ * T51 : la densité de la série (son instantané) se compte-t-elle sur chacun de ses emplacements
+ * occupés ? Règle du cœur (`verifierDensiteSurEmplacement`) ; null si oui, sinon le refus.
+ */
+async function verifierContenants(tx: TransactionDb, serieId: string, fermeId: string, serie: Serie): Promise<Refus | null> {
+  if (serie.parametres.densite.facon !== 'contenants') return null;
+  const r = await tx.execute<{ sorte: unknown }>(
+    sql`SELECT DISTINCT e.sorte FROM occupation o
+        JOIN emplacement e ON e.id = o.emplacement_id AND e.ferme_id = o.ferme_id
+        WHERE o.serie_id = ${serieId}::uuid AND o.ferme_id = ${fermeId}::uuid AND o.supprime_le IS NULL ORDER BY e.sorte`,
+  );
+  for (const { sorte } of r.rows) {
+    if (!estSorte(sorte)) continue;
+    const erreur = verifierDensiteSurEmplacement(serie.parametres, sorte);
+    if (erreur !== null) return refusDuCoeur(erreur, fermeId);
+  }
+  return null;
 }
 
 /**
@@ -544,6 +566,11 @@ export async function verifierFinDeLot(
             ) AS inactif`,
       );
       if (r.rows[0]?.inactif === true) return { index, refus: invalide('la série occupe un emplacement supprimé', fermeId) };
+    }
+    if (serie.valeur.supprimeLe === null && occupations.rows.length > 0) {
+      // T51 : une série comptée en contenants (trous par pain) n'occupe que des gouttières.
+      const refus = await verifierContenants(tx, serieId, fermeId, serie.valeur);
+      if (refus !== null) return { index, refus };
     }
     for (const o of occupations.rows) {
       const lecture = validerOccupation(o.l, serie.valeur);

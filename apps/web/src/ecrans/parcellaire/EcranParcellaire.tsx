@@ -7,6 +7,7 @@
  * Règles : ./regles.ts ; écritures (une transaction par geste, annulable 10 s) : ./ecritures.ts.
  */
 import { useEffect, useId, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
+import { painsParDefaut } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import './parcellaire.css';
 import {
@@ -75,7 +76,8 @@ interface PlancheLue {
   readonly sorte: string;
   readonly longueurM: number;
   readonly largeurM: number | null;
-  readonly nombrePlaces: number | null;
+  /** T51 : pains d'une gouttière (l'ancien nombre de places n'est plus lu). */
+  readonly nombrePains: number | null;
   readonly actifAu: string | null;
 }
 
@@ -380,7 +382,10 @@ function FormulairePlanche({ ctx, planche, codesPris, surFermer, surEnregistre }
   const [sorte, setSorte] = useState(planche.sorte);
   const [longueur, setLongueur] = useState(nombreFr(planche.longueurM));
   const [largeur, setLargeur] = useState(nombreFr(planche.largeurM));
-  const [places, setPlaces] = useState(planche.nombrePlaces === null ? '' : String(planche.nombrePlaces));
+  // T51 : pains saisis ; null tant qu'ils ne sont pas touchés (proposés à 1 par mètre de longueur).
+  const [painsSaisis, setPainsSaisis] = useState<string | null>(planche.nombrePains === null ? null : String(planche.nombrePains));
+  const longueurLue = lireNombre(longueur);
+  const pains = painsSaisis ?? (longueurLue === null || longueurLue <= 0 ? '' : String(painsParDefaut(longueurLue)));
   const [message, setMessage] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
   const enService = planche.actifAu === null;
@@ -398,7 +403,7 @@ function FormulairePlanche({ ctx, planche, codesPris, surFermer, surEnregistre }
   }
 
   function enregistrer(): void {
-    const v = verifierEmplacement({ code, sorte, longueur, largeur, nombrePlaces: sorte === 'gouttiere' ? places : '' }, enService ? codesPris : []);
+    const v = verifierEmplacement({ code, sorte, longueur, largeur, nombrePains: sorte === 'gouttiere' ? pains : '' }, enService ? codesPris : []);
     if (!v.ok) {
       setMessage(v.message);
       return;
@@ -424,6 +429,13 @@ function FormulairePlanche({ ctx, planche, codesPris, surFermer, surEnregistre }
     f(v);
     setMessage(null);
   };
+  /** Un pain de plus ou de moins, au doigt (au moins 1). */
+  const ajouterPains = (delta: number) => () => {
+    const n = lireNombre(pains);
+    const depart = n === null || !Number.isInteger(n) ? 1 : n;
+    setPainsSaisis(String(Math.max(1, depart + delta)));
+    setMessage(null);
+  };
   return (
     <Saisie titre={`Modifier ${planche.code}`} surFermer={surFermer} message={message}>
       <div className="parc-grille">
@@ -431,8 +443,21 @@ function FormulairePlanche({ ctx, planche, codesPris, surFermer, surEnregistre }
         <Liste etiquette="Sorte" valeur={sorte} surChange={changer(setSorte)} options={SORTES.map((s) => [s, LIBELLES_SORTE[s]] as const)} />
         <Champ etiquette="Longueur (m)" mode="decimal" valeur={longueur} surChange={changer(setLongueur)} />
         <Champ etiquette="Largeur (m)" mode="decimal" valeur={largeur} surChange={changer(setLargeur)} />
-        {sorte === 'gouttiere' && <Champ etiquette="Nombre de places" mode="numeric" valeur={places} surChange={changer(setPlaces)} large />}
+        {sorte === 'gouttiere' && (
+          <>
+            <Champ etiquette="Nombre de pains" mode="numeric" valeur={pains} surChange={changer(setPainsSaisis)} large />
+            <div className="parc-pas parc-large">
+              <button type="button" className="parc-bouton-secondaire" aria-label="Un pain de moins" onClick={ajouterPains(-1)}>
+                −1
+              </button>
+              <button type="button" className="parc-bouton-secondaire" aria-label="Un pain de plus" onClick={ajouterPains(1)}>
+                +1
+              </button>
+            </div>
+          </>
+        )}
       </div>
+      {sorte === 'gouttiere' && <p className="parc-aide">1 pain ≈ 1 m (pains, sacs ou pots posés sur la gouttière).</p>}
       {!enService && <p className="parc-aide">Hors service depuis le {dateCourte(planche.actifAu)} : elle n’est plus proposée pour les nouvelles séries.</p>}
       <div className="parc-actions">
         <button type="button" className="parc-bouton-principal" disabled={occupe} onClick={enregistrer}>
@@ -575,7 +600,7 @@ function DialogueZone({
                       <strong>{p.code}</strong>
                       <span>
                         {libelleSorte(p.sorte)} · {nombreFr(p.longueurM)} m{p.largeurM === null ? '' : ` × ${nombreFr(p.largeurM)} m`}
-                        {p.nombrePlaces === null ? '' : ` · ${String(p.nombrePlaces)} places`}
+                        {p.nombrePains === null ? '' : ` · ${String(p.nombrePains)} pains`}
                         {p.actifAu === null ? '' : ' · hors service'}
                       </span>
                     </span>
@@ -652,7 +677,7 @@ export function EcranParcellaire({ porte, fermeId, section, surFermer, surImport
     () =>
       porte.surveiller<PlancheLue>(
         {
-          sql: 'SELECT id, zone_id, code, sorte, longueur_m, largeur_m, nombre_places, actif_au FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL',
+          sql: 'SELECT id, zone_id, code, sorte, longueur_m, largeur_m, nombre_pains, actif_au FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL',
           parametres: [fermeId],
           tables: ['emplacement'],
           convertir: (l: L) => ({
@@ -662,7 +687,7 @@ export function EcranParcellaire({ porte, fermeId, section, surFermer, surImport
             sorte: txt(l.sorte),
             longueurM: nbOuNul(l.longueur_m) ?? 0,
             largeurM: nbOuNul(l.largeur_m),
-            nombrePlaces: nbOuNul(l.nombre_places),
+            nombrePains: nbOuNul(l.nombre_pains),
             actifAu: txtOuNul(l.actif_au),
           }),
         },

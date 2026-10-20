@@ -32,6 +32,12 @@
  * survit au remplacement), dit combien n'ont pas été enregistrés, sans nommer de culture. Appli
  * fermée (ou onglet quitté) avant la base : le nombre en attente est noté avec l'instantané
  * (`noterFaitsEnAttente`), le lancement suivant le dit de la même façon.
+ *
+ * T52 : « Traitement » ouvre la saisie d'un traitement phyto (./traitement/, chargée au tap). Une
+ * fois la journée relue (jamais avant : le premier affichage garde son budget), les traitements
+ * qui peuvent interdire une récolte sont suivis (./dar.ts) : une carte de début de récolte ou une
+ * récolte sur un emplacement sous délai avant récolte montre l'alerte, et la récolte demande une
+ * confirmation (Recolte.tsx).
  */
 import { useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
@@ -61,6 +67,16 @@ import type { ProprietesBandeauInstallation } from '../../installation/BandeauIn
 import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
 import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
+import type { TraitementsDar } from './dar.ts';
+import type { ProprietesSaisieTraitement } from './traitement/index.ts';
+
+/** T52 : le suivi des délais avant récolte, chargé une fois la journée relue (morceau à part). */
+const chargerDar = () => import('./dar.ts');
+type AlerteDar = Awaited<ReturnType<typeof chargerDar>>['alerteRecolte'];
+
+/** T52 : la saisie d'un traitement, chargée au tap (morceau à part). */
+const chargerTraitement = () => import('./traitement/index.ts');
+type SaisieTraitementChargee = (p: ProprietesSaisieTraitement) => ReactNode;
 import { libelleEvenement, tachesDeLEcran, vueCarte, vuesHistorique, type CarteVue, type SaisieVue } from './vues.ts';
 
 export interface ProprietesEcranAujourdhui {
@@ -168,6 +184,8 @@ interface ProprietesCarte {
   readonly inactive: boolean;
   readonly surFait: (cle: string) => void;
   readonly surPeser: (cle: string) => void;
+  /** T52 : alerte de délai avant récolte d'une carte de début de récolte, ou null. */
+  readonly alerte?: string | null;
 }
 
 /** Petite horloge du temps estimé et de la charge de la semaine. */
@@ -180,7 +198,7 @@ function IconeHorloge() {
   );
 }
 
-function CarteTache({ carte: c, inactive, surFait, surPeser }: ProprietesCarte) {
+function CarteTache({ carte: c, inactive, surFait, surPeser, alerte = null }: ProprietesCarte) {
   return (
     <li data-testid="tache" data-cle={c.cle} data-retard={c.retard ? 'oui' : 'non'} className={c.travail ? 'auj-tache auj-tache-travail' : 'auj-tache'}>
       <span data-testid="bande-famille" aria-hidden="true" className={`auj-bande auj-bande-${c.bande}`} />
@@ -190,6 +208,11 @@ function CarteTache({ carte: c, inactive, surFait, surPeser }: ProprietesCarte) 
         </span>
         <span className="auj-tache-titre">{c.titre}</span>
         <span className="auj-tache-detail">{c.detail}</span>
+        {alerte !== null && (
+          <span data-testid="alerte-dar" className="auj-alerte-dar">
+            {alerte}
+          </span>
+        )}
         {(c.codes !== null || c.retard || c.minutes !== null) && (
           <span className="auj-tache-pied">
             {c.codes !== null && <span className="auj-code">{c.codes}</span>}
@@ -703,6 +726,75 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   useEffect(() => {
     journeeActuelle.current = journee;
   }, [journee]);
+  // T52 : traitements sous délai avant récolte, suivis une fois la journée relue (pas avant : le
+  // premier affichage n'attend rien de plus).
+  const journeeLue = journee !== null;
+  // ./dar.ts est chargé à la demande (morceau à part, avec la règle du cœur) : rien de plus dans
+  // le morceau d'Aujourd'hui ni dans ses dépendances préchargées.
+  const [traitementsDar, setTraitementsDar] = useState<{ readonly porte: PorteDonnees; readonly t: TraitementsDar; readonly alerte: AlerteDar } | null>(null);
+  const [suiviDar, setSuiviDar] = useState(false);
+  /** Relit les traitements tout de suite (traitement saisi ou annulé sur ce téléphone). */
+  const relireDar = useRef<(() => void) | null>(null);
+  // Une fois lancé, le suivi reste (état dérivé, posé pendant le rendu).
+  if (journeeLue && !suiviDar) setSuiviDar(true);
+  useEffect(() => {
+    if (!suiviDar || porte === null) return undefined;
+    let suivi: { readonly relire: () => void; readonly arreter: () => void } | null = null;
+    let actif = true;
+    chargerDar().then(
+      (m) => {
+        if (!actif) return;
+        suivi = m.suivreTraitements(porte, fermeId, jour, (t) => {
+          setTraitementsDar({ porte, t, alerte: m.alerteRecolte });
+        });
+        relireDar.current = suivi.relire;
+      },
+      (e: unknown) => {
+        // Sans le morceau (hors ligne, cache vidé) : pas d'alerte, l'écran reste utilisable.
+        console.error('Suivi des délais avant récolte impossible', e);
+      },
+    );
+    return () => {
+      actif = false;
+      relireDar.current = null;
+      suivi?.arreter();
+    };
+  }, [suiviDar, porte, fermeId, jour]);
+  const dar = traitementsDar !== null && traitementsDar.porte === porte ? traitementsDar : null;
+  const interdiction = useCallback(
+    (c: Culture): string | null => (dar === null ? null : dar.alerte(dar.t, c.emplacements.map((e) => e.id), jour, c.cibleId)),
+    [dar, jour],
+  );
+  /**
+   * T52 (règle 4) : suivi pas encore prêt (morceau en chargement, première lecture en cours) :
+   * la récolte validée attend ./dar.ts et une lecture des traitements avant d'écrire. Jamais
+   * appelé au démarrage ni à la relecture de la journée : seulement à « Valider ».
+   */
+  const verifierInterdiction = useCallback(
+    async (c: Culture): Promise<string | null> => {
+      if (porte === null) return null;
+      const m = await chargerDar();
+      return m.alerteRecolte(await m.lireTraitements(porte, fermeId, jour), c.emplacements.map((e) => e.id), jour, c.cibleId);
+    },
+    [porte, fermeId, jour],
+  );
+  /** T52 : la saisie d'un traitement, une fois chargée ; ouverte ou non. */
+  const [SaisieTraitement, setSaisieTraitement] = useState<SaisieTraitementChargee | null>(null);
+  const [traitementOuvert, setTraitementOuvert] = useState(false);
+  function ouvrirTraitement(): void {
+    setTraitementOuvert(true);
+    if (SaisieTraitement !== null) return;
+    chargerTraitement().then(
+      (m) => {
+        setSaisieTraitement(() => m.SaisieTraitement);
+      },
+      (e: unknown) => {
+        console.error('Saisie du traitement introuvable', e);
+        setTraitementOuvert(false);
+        setErreur('La saisie du traitement n’a pas pu s’ouvrir. Rechargez l’appli ; si cela recommence, signalez-le.');
+      },
+    );
+  }
   /**
    * T13c : saisie à qui rendre le focus après « Changer la date » (sa correction), et la journée
    * affichée au moment de l'écriture : le focus attend une journée relue.
@@ -1067,10 +1159,10 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
     });
   }
 
-  function surValiderRecolte(culture: Culture, quantite: number, unite: UniteRecolte): void {
+  function surValiderRecolte(culture: Culture, quantite: number, unite: UniteRecolte, note: string | null): void {
     void ecrire(async () => {
       const ctx = contexte();
-      const id = await noterRecolte(ctx, culture, quantite, unite);
+      const id = await noterRecolte(ctx, culture, quantite, unite, note);
       setDialogue(null);
       const detail = { type: 'recolte' as const, quantite, unite, categorie: null };
       const ev = evenementEcrit(id, culture, ctx.aujourdhui, detail);
@@ -1158,6 +1250,12 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   const enRetard = dessinees.filter((c) => c.retard);
   const semaine = dessinees.filter((c) => !c.retard);
   const cachees = vue === null || !complet || (toutVoir && journee !== null) ? 0 : vue.retard - enRetard.length + (vue.cetteSemaine - semaine.length);
+  /** T52 : alerte de délai avant récolte des cartes de début de récolte (« Peser »). */
+  const alerteCarte = (c: CarteVue): string | null => {
+    if (!c.peser || dar === null || dar.t.traitements.length === 0) return null;
+    const culture = journee?.taches.find((t) => t.cle === c.cle)?.culture;
+    return culture === undefined ? null : interdiction(culture);
+  };
   const peser = (cle: string) => {
     const t = journee?.taches.find((x) => x.cle === cle);
     setDialogue({ sorte: 'recolte', culture: t?.culture ?? null, cle: t === undefined ? cle : null });
@@ -1207,6 +1305,10 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         >
           <IconePanier />
           Noter une récolte
+        </button>
+        {/* T52 : saisir un traitement phyto (chargé au tap). */}
+        <button type="button" className="auj-traitement" disabled={porte === null} onClick={ouvrirTraitement}>
+          Traitement
         </button>
         {/* T57 : seul point d'entrée de la saisie d'irrigation (fichier à part, chargé au premier tap). */}
         <BoutonIrrigation porte={porte} fermeId={fermeId} aujourdhui={jour} />
@@ -1263,7 +1365,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
               <h2 className="auj-groupe auj-groupe-retard">En retard</h2>
               <ul className="auj-taches">
                 {enRetard.map((c) => (
-                  <CarteTache key={c.cle} carte={c} inactive={porte === null} surFait={surFait} surPeser={peser} />
+                  <CarteTache key={c.cle} carte={c} inactive={porte === null} surFait={surFait} surPeser={peser} alerte={alerteCarte(c)} />
                 ))}
               </ul>
             </>
@@ -1273,7 +1375,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
               <h2 className="auj-groupe">Cette semaine</h2>
               <ul className="auj-taches">
                 {semaine.map((c) => (
-                  <CarteTache key={c.cle} carte={c} inactive={porte === null} surFait={surFait} surPeser={peser} />
+                  <CarteTache key={c.cle} carte={c} inactive={porte === null} surFait={surFait} surPeser={peser} alerte={alerteCarte(c)} />
                 ))}
               </ul>
             </>
@@ -1351,9 +1453,24 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
           texteOccupe={TEXTE_FILE}
           dernieres={journee?.dernieresRecoltes ?? new Map()}
           erreur={erreur}
+          interdiction={interdiction}
+          verifierInterdiction={dar === null ? verifierInterdiction : undefined}
           surValider={surValiderRecolte}
           surFermer={() => {
             setDialogue(null);
+          }}
+        />
+      )}
+      {traitementOuvert && SaisieTraitement !== null && porte !== null && (
+        <SaisieTraitement
+          porte={porte}
+          fermeId={fermeId}
+          aujourdhui={jourCourant()}
+          surEcrit={() => {
+            relireDar.current?.();
+          }}
+          surFermer={() => {
+            setTraitementOuvert(false);
           }}
         />
       )}

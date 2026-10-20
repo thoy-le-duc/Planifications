@@ -9,6 +9,7 @@
 import {
   ajouterJours,
   detecterConflits,
+  painsParDefaut,
   jourAbsolu,
   lundiDeSemaine,
   periodeOccupation,
@@ -267,7 +268,11 @@ export function versEmplacement(l: LigneLocale): Emplacement {
     placementYM: nombreOuNul(l.placement_y_m),
     orientationDeg: nombreOuNul(l.orientation_deg),
   };
-  if (l.sorte === 'gouttiere') return { ...commun, sorte: 'gouttiere', nombrePlaces: nombre(l.nombre_places) };
+  if (l.sorte === 'gouttiere') {
+    // T51 : une gouttière se remplit par pains ; sans pains encore reçus du serveur, 1 par mètre.
+    const pains = nombreOuNul(l.nombre_pains);
+    return { ...commun, sorte: 'gouttiere', nombrePains: pains ?? painsParDefaut(commun.longueurM), nombrePlaces: nombreOuNul(l.nombre_places) };
+  }
   return { ...commun, sorte: l.sorte === 'rang' ? 'rang' : 'planche' };
 }
 
@@ -620,7 +625,7 @@ type OccupationsPlan = Pick<DonneesPlan, 'occupation' | 'serie' | 'plantation'>;
 const COLONNES = {
   zone: 'id, nom, zone_parente_id, contour, supprime_le',
   emplacement:
-    'id, ferme_id, zone_id, code, sorte, longueur_m, largeur_m, nombre_places, actif_du, actif_au, supprime_le, placement_x_m, placement_y_m, orientation_deg',
+    'id, ferme_id, zone_id, code, sorte, longueur_m, largeur_m, nombre_places, nombre_pains, actif_du, actif_au, supprime_le, placement_x_m, placement_y_m, orientation_deg',
   batiment: 'id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, zone_id, supprime_le',
   occupation:
     'id, ferme_id, emplacement_id, serie_id, plantation_id, evenement_id, longueur_m, nombre_places, position_m, prevu_du, prevu_au, reel_du, reel_au, supprime_le',

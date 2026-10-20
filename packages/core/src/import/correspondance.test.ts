@@ -318,6 +318,7 @@ describe('fichiers du jeu de test qui correspondent entièrement, sans correctio
         col('longueur_m', 'm'),
         col('largeur_m', 'm'),
         col('nombre_places'),
+        IGNOREE, // nombre_pains (T51 : l'import ne le lit pas encore)
         IGNOREE, // actif_du
         IGNOREE, // actif_au
         IGNOREE, // remplace

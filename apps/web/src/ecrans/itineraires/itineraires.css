@@ -1231,3 +1231,20 @@ select.itin-liste {
   border-left: 4px solid var(--couleur-orange);
   color: var(--couleur-texte-orange);
 }
+
+/* T51 : un trou de plus ou de moins par pain, au doigt (avec des gants). */
+.itin-pas {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.itin-bouton-pas {
+  min-height: 56px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 800;
+  font-size: 22px;
+}

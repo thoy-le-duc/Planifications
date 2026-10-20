@@ -40,10 +40,16 @@ export type CodeErreurSaisie =
 /** T48 : pourquoi l'écart entre rangs est refusé, pour des messages sans lire le texte. */
 export type RaisonEcartEntreRangs = 'hors_bornes' | 'non_numerique' | 'volee';
 
+/** T51 : une densité en contenants (trous par pain) posée ailleurs que sur une gouttière. */
+export type RaisonContenants = 'contenants_hors_gouttiere';
+
 export interface ErreurSaisie {
   readonly code: CodeErreurSaisie;
-  /** T48 : seulement pour l'écart entre rangs (`parametres.densite.ecartEntreRangsCm`). */
-  readonly raison?: RaisonEcartEntreRangs;
+  /**
+   * T48 : pour l'écart entre rangs (`parametres.densite.ecartEntreRangsCm`) ; T51 : densité en
+   * contenants hors d'une gouttière (`verifierDensiteSurEmplacement`).
+   */
+  readonly raison?: RaisonEcartEntreRangs | RaisonContenants;
   /** Colonne reçue ('date', 'emplacement_ids'…) ou chemin dans le détail ('detail.quantite', 'detail.dose.valeur'). */
   readonly champ: string | null;
   /** Explication en français, 200 caractères au plus. */
@@ -500,6 +506,10 @@ function lire(l: Objet): Lu<Evenement> {
   if (!remplacement.ok) return remplacement;
   const detail = lireDetail(type.valeur, l.detail);
   if (!detail.ok) return detail;
+  // T52 : la récolte est autorisée au plus tôt le jour du traitement (DAR ≥ 0).
+  if (type.valeur === 'traitement' && typeof detail.valeur.recolteAutoriseeLe === 'string' && detail.valeur.recolteAutoriseeLe < date.valeur) {
+    return echec(erreur('incoherent', 'detail.recolteAutoriseeLe', 'date de récolte autorisée avant le jour du traitement'));
+  }
 
   let culture: Evenement['culture'] = null;
   if (serieId.valeur !== null) culture = { sorte: 'serie', serieId: serieId.valeur as Id<'Serie'> };

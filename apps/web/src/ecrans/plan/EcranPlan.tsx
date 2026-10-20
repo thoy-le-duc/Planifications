@@ -1169,7 +1169,7 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinejoin="round" aria-hidden="true">
               <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM4 7.5l8 4.5 8-4.5M12 12v9" />
             </svg>
-            Voir en 3D
+            <span className="plan-outil-texte">Voir en 3D</span>
           </button>
         )}
         <button

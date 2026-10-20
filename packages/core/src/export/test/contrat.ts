@@ -71,7 +71,9 @@
  *   - `ferme.json`
  *   - `LISEZMOI.txt`
  *   - `<table>.csv` pour chaque table de TABLES_EXPORTEES (lignes de la ferme) ;
- *   - `bibliotheque/<table>.csv` pour chaque table `bibliotheque: true` (lignes à ferme_id nul).
+ *   - `bibliotheque/<table>.csv` pour chaque table `bibliotheque: true` (lignes à ferme_id nul) ;
+ *   - T52 : `registre-phyto.csv`, le registre des traitements en vigueur de la ferme (colonnes
+ *     COLONNES_REGISTRE_PHYTO, ../registre-phyto.test.ts). `lignes` ne le compte pas.
  *
  * ferme.json (UTF-8 sans BOM, JSON valide) :
  *   {

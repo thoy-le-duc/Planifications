@@ -5,7 +5,7 @@
  * Internes au cœur : non exportés par @planif/core (sauf les constantes reprises par serie.ts).
  */
 import { estDateValide, type DateCalendaire } from '../dates/index.ts';
-import { DISPOSITIONS_RANGS, ECART_ENTRE_RANGS_MAX_CM, ECART_ENTRE_RANGS_MIN_CM, type Instant, type ModeItineraire, type ParametresItineraire } from '../domaine/index.ts';
+import { BORNES_CONTENANTS, DISPOSITIONS_RANGS, ECART_ENTRE_RANGS_MAX_CM, ECART_ENTRE_RANGS_MIN_CM, type Instant, type ModeItineraire, type ParametresItineraire } from '../domaine/index.ts';
 import type { CodeErreurSaisie, ErreurSaisie } from './index.ts';
 import { octetsUtf8, texteJson } from './outils.ts';
 import { validerTravauxPrevus, type OptionsTravaux } from './travaux.ts';
@@ -152,6 +152,37 @@ function ecartEntreRangs(densite: unknown): ErreurSaisie | null {
   return null;
 }
 
+const CLES_CONTENANTS = new Set(['facon', 'trousParContenant', 'plantsParTrou', 'grainesParTrou']);
+
+/** Entier de 1 à `max` (champ `parametres.densite.<cle>`), ou l'erreur ; absent : `champ_manquant`. */
+function entierDensite(densite: Objet, cle: string, libelle: string, max: number): ErreurSaisie | null {
+  const champ = `parametres.densite.${cle}`;
+  const v = densite[cle];
+  if (absent(v)) return erreur('champ_manquant', champ, `${libelle} manquant`);
+  if (typeof v !== 'number' || !Number.isSafeInteger(v)) return erreur('champ_invalide', champ, `${libelle} : un nombre entier attendu`);
+  if (v < 1 || v > max) return erreur('hors_bornes', champ, `${libelle} : de 1 à ${String(max)}`);
+  return null;
+}
+
+/**
+ * T51 : densité « en contenants » (hors-sol) : trous par contenant ; graines par trou en semis
+ * direct (obligatoires), plants par trou en plant (facultatifs, 1 par défaut) ; rien d'autre.
+ */
+function contenants(densite: unknown, mode: unknown): ErreurSaisie | null {
+  if (!estObjet(densite) || densite.facon !== 'contenants') return null;
+  const inconnue = Object.keys(densite).find((c) => !CLES_CONTENANTS.has(c));
+  if (inconnue !== undefined) return erreur('cle_inconnue', `parametres.densite.${extrait(inconnue)}`, `densite en contenants : clé inconnue ${extrait(inconnue)}`);
+  const trous = entierDensite(densite, 'trousParContenant', 'trous par pain', BORNES_CONTENANTS.trousParContenantMax);
+  if (trous !== null) return trous;
+  if (mode === 'semis_direct') {
+    if (densite.plantsParTrou !== undefined) return erreur('incoherent', 'parametres.densite.plantsParTrou', 'semis direct : des graines par trou, pas des plants');
+    return entierDensite(densite, 'grainesParTrou', 'graines par trou', BORNES_CONTENANTS.grainesParTrouMax);
+  }
+  if (densite.grainesParTrou !== undefined) return erreur('incoherent', 'parametres.densite.grainesParTrou', 'plant : des plants par trou, pas des graines');
+  if (densite.plantsParTrou === undefined) return null;
+  return entierDensite(densite, 'plantsParTrou', 'plants par trou', BORNES_CONTENANTS.plantsParTrouMax);
+}
+
 /**
  * L'instantané de l'itinéraire, lisible : un objet JSON de 8 192 octets au plus, avec ce que le
  * calcul des dates lit. Les autres clés (densité, marge…) sont gardées telles quelles : elles
@@ -178,7 +209,7 @@ export function lireParametres(v: unknown, options: OptionsParametres = {}): Lu<
     dureeJours(p, 'dureeAvantRecolteJours', 'durée avant récolte') ??
     dureeJours(p, 'fenetreRecolteJours', 'fenêtre de récolte');
   if (e !== null) return echec(e);
-  const d = disposition(p.densite) ?? ecartEntreRangs(p.densite);
+  const d = contenants(p.densite, p.mode) ?? disposition(p.densite) ?? ecartEntreRangs(p.densite);
   if (d !== null) return echec(d);
   // Relu depuis le texte : une copie JSON pure, sans valeur non sérialisable (undefined…).
   const relus = JSON.parse(ecrit.texte) as Record<string, unknown>;

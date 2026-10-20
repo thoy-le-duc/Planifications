@@ -17,7 +17,7 @@ const n = (v: unknown): number | null => (typeof v === 'number' && Number.isFini
 export async function lireContexte(porte: PorteDonnees, fermeId: string): Promise<ContexteBase> {
   const [zones, emplacements, especes, familles, varietes, itineraires, saisons, series, occupations, assolements] = await Promise.all([
     porte.lire<L>('SELECT id, nom, zone_parente_id FROM zone WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY id', [fermeId]),
-    porte.lire<L>('SELECT id, zone_id, code, sorte, longueur_m, nombre_places FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND actif_au IS NULL ORDER BY id', [fermeId]),
+    porte.lire<L>('SELECT id, zone_id, code, sorte, longueur_m, nombre_places, nombre_pains FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND actif_au IS NULL ORDER BY id', [fermeId]),
     porte.lire<L>('SELECT id, nom, famille_id FROM espece WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL ORDER BY ferme_id IS NULL, nom, id', [fermeId]),
     porte.lire<L>('SELECT id, nom FROM famille WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL ORDER BY ferme_id IS NULL, nom, id', [fermeId]),
     porte.lire<L>('SELECT id, espece_id, nom FROM variete WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL ORDER BY ferme_id IS NULL, id', [fermeId]),
@@ -37,7 +37,7 @@ export async function lireContexte(porte: PorteDonnees, fermeId: string): Promis
   return {
     fermeId,
     zones: zones.map((z) => ({ id: t(z.id), nom: t(z.nom), parenteId: tn(z.zone_parente_id) })),
-    emplacements: emplacements.map((e) => ({ id: t(e.id), zoneId: t(e.zone_id), code: t(e.code), sorte: t(e.sorte), longueurM: n(e.longueur_m), nombrePlaces: n(e.nombre_places) })),
+    emplacements: emplacements.map((e) => ({ id: t(e.id), zoneId: t(e.zone_id), code: t(e.code), sorte: t(e.sorte), longueurM: n(e.longueur_m), nombrePlaces: n(e.nombre_places), nombrePains: n(e.nombre_pains) })),
     especes: especes.map((e) => ({ id: t(e.id), nom: t(e.nom), familleId: tn(e.famille_id) })),
     familles: familles.map((f) => ({ id: t(f.id), nom: t(f.nom) })),
     varietes: varietes.map((v) => ({ id: t(v.id), especeId: t(v.espece_id), nom: t(v.nom) })),
