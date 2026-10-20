@@ -62,7 +62,19 @@ export function useReperesDar(porte: PorteDonnees, fermeId: string, volumes: rea
       arreter?.();
     };
   }, [porte, fermeId, borne]);
-  return useMemo(() => reperesDar(lus, volumes, date), [lus, volumes, date]);
+  // Même liste qu'avant (une autre semaine sous les mêmes DAR) : le même tableau, pour que la vue
+  // ne reçoive pas un nouvel état et ne redessine pas la scène une seconde fois au changement de semaine.
+  const calcules = useMemo(() => reperesDar(lus, volumes, date), [lus, volumes, date]);
+  const [stables, setStables] = useState(calcules);
+  if (stables !== calcules && !memesReperes(stables, calcules)) setStables(calcules);
+  return memesReperes(stables, calcules) ? stables : calcules;
+}
+
+function memesReperes(a: readonly RepereDar[], b: readonly RepereDar[]): boolean {
+  return a.length === b.length && a.every((r, i) => {
+    const s = b[i];
+    return s?.planche === r.planche && r.code === s.code && r.x === s.x && r.z === s.z && r.texte === s.texte && r.recolteAutoriseeLe === s.recolteAutoriseeLe;
+  });
 }
 
 export interface GesteRepere {

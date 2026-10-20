@@ -196,6 +196,27 @@ describe('T55 : repère « Ne pas récolter » (traité le 10/05, DAR 3 j)', () 
     expect(reperesDar()).toHaveLength(0);
   });
 
+  it('relecture : une autre semaine aux mêmes repères ne redonne pas d’état à la vue (pas de second rendu de la scène)', async () => {
+    // P4 traitée le 1/05, récolte autorisée le 1/06 : sous DAR les semaines du 18/05 et du 25/05.
+    await traiter('0192f0c1-5555-7000-8000-000000000202', '2026-05-01', '2026-06-01', [P4]);
+    const surEtat = (e: EtatVannes3d) => {
+      etats.push(e);
+    };
+    const montrer = async (jour: string) => {
+      await act(async () => {
+        racine.render(createElement(m.Vannes3d, { porte, fermeId: FERME, volumes: VOLUMES, couche, surEtat, aujourdhui: () => '2026-06-10', maintenant: () => new Date('2026-06-10T09:00:00.000Z'), jour }));
+        await Promise.resolve();
+      });
+      for (let i = 0; i < 20; i++) await unTour();
+    };
+    await montrer('2026-05-18');
+    await attendre(() => reperesDar().length === 1, 'repère DAR sur P4');
+    const avant = etats.length;
+    await montrer('2026-05-25');
+    expect(reperesDar().map((r) => r.dataset.planche)).toEqual([P4]);
+    expect(etats.length).toBe(avant);
+  });
+
   it('sans traitement sous DAR, les vannes ne changent pas (T57) : deux repères, rien d’actif', async () => {
     await rendre('2026-10-19', '2026-10-19');
     expect(reperesDar()).toHaveLength(0);
