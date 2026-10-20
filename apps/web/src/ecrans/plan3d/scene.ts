@@ -490,6 +490,8 @@ export interface VolumeFiltre extends VolumeScene {
   readonly estompe: boolean;
   /** Hauteur à dessiner : `hauteur` pour une culture, plus basse pour une planche vide. */
   readonly hauteurRendue: number;
+  /** T55 : sous délai avant récolte à la date montrée (posé par ./dar3d.ts, `marquerDar`). */
+  readonly dar?: boolean;
 }
 
 export interface SceneFiltree extends Omit<Scene, 'volumes'> {

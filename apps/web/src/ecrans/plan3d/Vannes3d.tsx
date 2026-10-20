@@ -9,6 +9,10 @@
  *
  * Lecture seule de la base, sauf la saisie d'irrigation (../aujourdhui/SaisieIrrigation.tsx).
  * L'état ouvert ou fermé en direct des vannes (Modbus) n'est pas ici : c'est la phase 3.
+ *
+ * T55 : la même couche porte, après les vannes, les repères « Ne pas récolter » des planches sous
+ * délai avant récolte à la date du curseur de la 3D (./Dar3d.tsx) ; `colorer` les marque, pour que
+ * la vue n'y pose pas la balise « à récolter ». Contrat : ./test/contrat-dar3d.ts.
  */
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactElement, type RefObject } from 'react';
 import { derniereIrrigationDe, dernieresIrrigations, type Irrigation, type LienVanne } from '@planif/core/irrigation';
@@ -18,6 +22,8 @@ import { SaisieIrrigation } from '../aujourdhui/SaisieIrrigation.tsx';
 import type { SceneFiltree, VolumeScene } from './scene.ts';
 import { classesIrrigation, colorer, COULEURS_IRRIGATION, phraseVanne, reperesVannes, type VanneLue } from './vannes.ts';
 import { COULEURS_REPERE_VANNE } from '../../ui/jetons.ts';
+import { BoutonDar, FicheDar, useReperesDar } from './Dar3d.tsx';
+import { dateAffichee, marquerDar } from './dar3d.ts';
 import './vannes3d.css';
 
 export interface EtatVannes3d {
@@ -29,6 +35,8 @@ export interface EtatVannes3d {
   readonly evidence: ReadonlySet<string> | null;
   /** Filtre « Irrigation » actif. */
   readonly irrigation: boolean;
+  /** La vue doit appliquer `colorer` : filtre « Irrigation », vanne choisie, ou planche sous délai avant récolte (T55). */
+  readonly actif: boolean;
 }
 
 export interface ProprietesVannes3d {
@@ -40,6 +48,8 @@ export interface ProprietesVannes3d {
   readonly surEtat: (etat: EtatVannes3d) => void;
   readonly aujourdhui?: () => string;
   readonly maintenant?: () => Date;
+  /** T55 : lundi de la semaine choisie au curseur de la 3D (absent : aujourd'hui). */
+  readonly jour?: string | undefined;
 }
 
 type L = Readonly<Record<string, unknown>>;
@@ -68,7 +78,7 @@ const LEGENDE: readonly (readonly [keyof typeof COULEURS_IRRIGATION, string])[] 
   ['jamais', 'Jamais'],
 ];
 
-export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui = jourDuTelephone }: ProprietesVannes3d): ReactElement {
+export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui = jourDuTelephone, jour: lundi }: ProprietesVannes3d): ReactElement {
   const [jour] = useState(aujourdhui);
   const [vannes, setVannes] = useState<readonly VanneLue[]>([]);
   const [liens, setLiens] = useState<readonly LienVanne[]>([]);
@@ -140,6 +150,12 @@ export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui 
   const repereChoisi = choisie === null ? undefined : reperes.find((r) => r.id === choisie);
   const evidence = useMemo(() => (repereChoisi === undefined ? null : new Set(repereChoisi.planches)), [repereChoisi]);
 
+  // T55 : planches sous délai avant récolte à la date montrée par le curseur.
+  const reperesDar = useReperesDar(porte, fermeId, volumes, dateAffichee(lundi, jour), jour);
+  const planchesDar = useMemo(() => new Set(reperesDar.map((r) => r.planche)), [reperesDar]);
+  const [darChoisi, setDarChoisi] = useState<string | null>(null);
+  const ficheDar = darChoisi === null ? undefined : reperesDar.find((r) => r.planche === darChoisi);
+
   // Un repère est petit, mais il y en a 60 : un doigt qui glisse depuis un repère fait tourner la vue
   // (le geste est rendu à la toile au-delà de quelques pixels), seul un tap choisit la vanne.
   const geste = useRef<{ readonly id: number; readonly x: number; readonly y: number } | null>(null);
@@ -184,12 +200,14 @@ export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui 
 
   useEffect(() => {
     surEtat({
-      reperes: reperes.map((r) => ({ pastille: { x: r.x, z: r.z } })),
-      colorer: (f) => colorer(f, { irrigation: classes, evidence }),
+      reperes: [...reperes, ...reperesDar].map((r) => ({ pastille: { x: r.x, z: r.z } })),
+      colorer: (f) => marquerDar(colorer(f, { irrigation: classes, evidence }), planchesDar),
       evidence,
       irrigation: filtre,
+      actif: filtre || evidence !== null || planchesDar.size > 0,
     });
-  }, [surEtat, reperes, classes, evidence, filtre]);
+  }, [surEtat, reperes, reperesDar, planchesDar, classes, evidence, filtre]);
+  const gesteRepere = { onPointerDown: commencerGeste, onPointerMove: suivreGeste, onPointerUp: finirGeste, onPointerCancel: finirGeste };
 
   return (
     <>
@@ -205,6 +223,7 @@ export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui 
             className={choisie === r.id ? 'plan3d-repere-vanne plan3d-repere-vanne-choisi' : 'plan3d-repere-vanne'}
             style={STYLE_REPERE}
             onClick={() => {
+              setDarChoisi(null);
               setChoisie((c) => (c === r.id ? null : r.id));
             }}
             onPointerDown={commencerGeste}
@@ -214,6 +233,18 @@ export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui 
           >
             {r.nom}
           </button>
+        ))}
+        {reperesDar.map((r) => (
+          <BoutonDar
+            key={`dar-${r.planche}`}
+            repere={r}
+            choisi={darChoisi === r.planche}
+            surChoisir={(planche) => {
+              setChoisie(null);
+              setDarChoisi((c) => (c === planche ? null : planche));
+            }}
+            geste={gesteRepere}
+          />
         ))}
       </div>
       <div className="plan3d-vannes-outils">
@@ -264,6 +295,14 @@ export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui 
             </button>
           </div>
         </div>
+      )}
+      {ficheDar !== undefined && (
+        <FicheDar
+          repere={ficheDar}
+          surFermer={() => {
+            setDarChoisi(null);
+          }}
+        />
       )}
       {saisie !== null && (
         <SaisieIrrigation

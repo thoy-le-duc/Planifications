@@ -35,14 +35,18 @@ export const typeDeFruit = (espece: string): TypeFruit => TYPE_PAR_CLE[cleDeFrui
 /** On récolte encore sur la planche : « à récolter » ou « dernières récoltes » (Q38). */
 export const seRecolte = (p: PlantsPlanche): boolean => p.recolte.phase === 'a-recolter' || p.recolte.phase === 'fin-de-recolte';
 
-/** Une planche porte une balise tant qu'on y récolte (vive, puis pâle en fin de récolte, Q38) et que les filtres ne l'estompent pas (Q35). */
-export const aBalise = (p: PlantsPlanche | null, filtre: { readonly estompe: boolean } | undefined): boolean => p !== null && seRecolte(p) && filtre?.estompe === false;
+/**
+ * Une planche porte une balise tant qu'on y récolte (vive, puis pâle en fin de récolte, Q38), que
+ * les filtres ne l'estompent pas (Q35) et qu'elle n'est pas sous délai avant récolte (T55 : le DAR
+ * l'emporte, son repère « Ne pas récolter » est posé à la place).
+ */
+export const aBalise = (p: PlantsPlanche | null, filtre: { readonly estompe: boolean; readonly dar?: boolean } | undefined): boolean => p !== null && seRecolte(p) && filtre?.estompe === false && filtre.dar !== true;
 
 /** Ce que la ligne d'une planche dit de sa récolte : rien tant qu'elle ne forme pas de fruits. */
 const MENTIONS: Readonly<Record<string, string | undefined>> = { 'fruits-en-formation': 'récolte proche', 'a-recolter': 'à récolter', 'fin-de-recolte': 'dernières récoltes' };
 export const mentionRecolte = (phase: string): string | null => MENTIONS[phase] ?? null;
 
-/** Ids des planches où l'on récolte (« à récolter » ou en fin de récolte), non estompées par les filtres, dans l'ordre de la scène. */
+/** Ids des planches où l'on récolte (« à récolter » ou en fin de récolte), non estompées par les filtres ni sous DAR (T55), dans l'ordre de la scène. */
 export function planchesARecolter(plants: readonly (PlantsPlanche | null)[], filtree: SceneFiltree): readonly string[] {
   const ids: string[] = [];
   plants.forEach((p, i) => {
