@@ -366,8 +366,13 @@ interface MasquesFerme {
   masques: Masques;
   /** « Voir les autres » touché : l'écran montre toutes ses tâches (la 3D les numérote de même, T37c). */
   toutVoir: boolean;
+  /** T60 : « Mes travaux » ou « Tous » choisi dans l'écran (null : pas encore, le rôle décide) ; la 3D suit. */
+  mode: ModeEquipe | null;
   readonly abonnes: Set<() => void>;
 }
+
+/** T60 : ce que l'écran Aujourd'hui (et la 3D) montre des travaux de l'équipe. */
+export type ModeEquipe = 'mes' | 'tous';
 
 const masquesParPorte = new WeakMap<PorteDonnees, Map<string, MasquesFerme>>();
 
@@ -379,7 +384,7 @@ function masquesFerme(porte: PorteDonnees, fermeId: string): MasquesFerme {
   }
   let m = parFerme.get(fermeId);
   if (m === undefined) {
-    m = { masques: new Map(), toutVoir: false, abonnes: new Set() };
+    m = { masques: new Map(), toutVoir: false, mode: null, abonnes: new Set() };
     parFerme.set(fermeId, m);
   }
   return m;
@@ -399,6 +404,19 @@ export function toutVoirDe(porte: PorteDonnees, fermeId: string): boolean {
 export function deplierTout(porte: PorteDonnees, fermeId: string): void {
   const f = masquesFerme(porte, fermeId);
   f.toutVoir = true;
+  for (const rappel of [...f.abonnes]) rappel();
+}
+
+/** T60 : « Mes travaux » ou « Tous », tel que choisi dans l'écran de la ferme (null : pas encore choisi). */
+export function modeEquipeDe(porte: PorteDonnees, fermeId: string): ModeEquipe | null {
+  return masquesFerme(porte, fermeId).mode;
+}
+
+/** T60 : change le mode de l'écran de la ferme, et prévient ceux qui suivent les masques (la 3D). */
+export function changerModeEquipe(porte: PorteDonnees, fermeId: string, mode: ModeEquipe): void {
+  const f = masquesFerme(porte, fermeId);
+  if (f.mode === mode) return;
+  f.mode = mode;
   for (const rappel of [...f.abonnes]) rappel();
 }
 

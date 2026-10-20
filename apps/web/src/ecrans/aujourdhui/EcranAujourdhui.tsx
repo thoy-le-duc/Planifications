@@ -38,6 +38,10 @@
  * qui peuvent interdire une récolte sont suivis (./dar.ts) : une carte de début de récolte ou une
  * récolte sur un emplacement sous délai avant récolte montre l'alerte, et la récolte demande une
  * confirmation (Recolte.tsx).
+ *
+ * T60 : consignes par ouvrier (./equipe/, chargées une fois la journée relue, comme ./dar.ts) :
+ * « Mes travaux » / « Tous » (équipier : « Mes travaux » d'abord), prénoms sur les cartes
+ * attribuées, « Attribuer » et appui long sur une carte (gérant), « Fiche du jour ».
  */
 import { useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { chargeSemaine, type EtapeRealisee, type UniteRecolte } from '@planif/core';
@@ -46,6 +50,9 @@ import { commencerEcriture } from '../../donnees/ecritures-en-cours.ts';
 import { allerVers, Bandeau as BandeauDemarrer, BOUTON_ETAPE, EtatVide, useDemarrage } from '../demarrer/BandeauDemarrer.tsx';
 import { lireFermeMontree } from '../../donnees/ferme-memorisee.ts';
 import './aujourdhui.css';
+import { useAppuiLong } from './appui-long.ts';
+import { changerModeEquipe, modeEquipeDe, type ModeEquipe } from './cache.ts';
+import type { Equipe } from './equipe/donnees.ts';
 import { changerMasques, deplierTout, estMasquee as estMasqueeDans, journeeEnCache, marquerEcriture, masquesDe, retenirRelecture, suivreJournee, suivreMasques, toutVoirDe, type Masque, type Masques } from './cache.ts';
 import {
   capitale,
@@ -76,7 +83,11 @@ type AlerteDar = Awaited<ReturnType<typeof chargerDar>>['alerteRecolte'];
 /** T52 : la saisie d'un traitement, chargée au tap (morceau à part). */
 const chargerTraitement = () => import('./traitement/index.ts');
 type SaisieTraitementChargee = (p: ProprietesSaisieTraitement) => ReactNode;
-import { libelleEvenement, tachesDeLEcran, vueCarte, vuesHistorique, type CarteVue, type SaisieVue } from './vues.ts';
+
+/** T60 : les consignes de l'équipe, chargées une fois la journée relue (morceau à part). */
+const chargerConsignes = () => import('./equipe/index.ts');
+type ModuleConsignes = Awaited<ReturnType<typeof chargerConsignes>>;
+import { libelleEvenement, tachesDeLEcran, travauxVus, vueCarte, vuesHistorique, type CarteVue, type SaisieVue } from './vues.ts';
 
 export interface ProprietesEcranAujourdhui {
   /**
@@ -185,6 +196,8 @@ interface ProprietesCarte {
   readonly surPeser: (cle: string) => void;
   /** T52 : alerte de délai avant récolte d'une carte de début de récolte, ou null. */
   readonly alerte?: string | null;
+  /** T60 : prénoms des personnes à qui le travail est attribué, ou null. */
+  readonly qui?: string | null;
 }
 
 /** Petite horloge du temps estimé et de la charge de la semaine. */
@@ -197,7 +210,7 @@ function IconeHorloge() {
   );
 }
 
-function CarteTache({ carte: c, inactive, surFait, surPeser, alerte = null }: ProprietesCarte) {
+function CarteTache({ carte: c, inactive, surFait, surPeser, alerte = null, qui = null }: ProprietesCarte) {
   return (
     <li data-testid="tache" data-cle={c.cle} data-retard={c.retard ? 'oui' : 'non'} className={c.travail ? 'auj-tache auj-tache-travail' : 'auj-tache'}>
       <span data-testid="bande-famille" aria-hidden="true" className={`auj-bande auj-bande-${c.bande}`} />
@@ -210,6 +223,11 @@ function CarteTache({ carte: c, inactive, surFait, surPeser, alerte = null }: Pr
         {alerte !== null && (
           <span data-testid="alerte-dar" className="auj-alerte-dar">
             {alerte}
+          </span>
+        )}
+        {qui !== null && (
+          <span data-testid="attribue-a" className="auj-attribue-a">
+            {qui}
           </span>
         )}
         {(c.codes !== null || c.retard || c.minutes !== null) && (
@@ -519,8 +537,9 @@ interface FaitEcrit {
  */
 
 /** Ce que l'écran dessine de la journée relue (tâches masquées retirées) : c'est aussi l'instantané gardé. */
-function vueDeJournee(journee: Journee, masquees: Masques, toutVoir: boolean): VueJournee {
-  const taches = tachesDeLEcran(journee.taches.filter((t) => !estMasqueeDans(masquees, journee, t.cle)));
+/** `garder` (T60, « Mes travaux ») : seules les tâches qu'il garde ; absent, toutes. */
+function vueDeJournee(journee: Journee, masquees: Masques, toutVoir: boolean, garder?: (cle: string) => boolean): VueJournee {
+  const taches = tachesDeLEcran(journee.taches.filter((t) => !estMasqueeDans(masquees, journee, t.cle) && (garder === undefined || garder(t.cle))));
   const enRetard = taches.filter((t) => t.tache.enRetard);
   const semaine = taches.filter((t) => !t.tache.enRetard);
   const groupe = (liste: readonly TacheJour[]) => (toutVoir ? liste : liste.slice(0, TACHES_PAR_GROUPE));
@@ -794,6 +813,44 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
       },
     );
   }
+  // T60 : l'équipe, suivie une fois la journée relue (comme les délais avant récolte) ; ./equipe/ à part.
+  const [consignes, setConsignes] = useState<{ readonly porte: PorteDonnees; readonly m: ModuleConsignes; readonly equipe: Equipe } | null>(null);
+  useEffect(() => {
+    if (!suiviDar || porte === null) return undefined;
+    let actif = true;
+    let arreter = (): void => undefined;
+    chargerConsignes().then(
+      (m) => {
+        if (actif) arreter = m.suivreEquipe(porte, fermeId, utilisateurId, (equipe) => {
+          setConsignes({ porte, m, equipe });
+        });
+      },
+      (e: unknown) => {
+        // Sans le morceau (hors ligne, cache vidé) : tous les travaux, sans attribution ; l'écran reste utilisable.
+        console.error('Consignes de l’équipe impossibles', e);
+      },
+    );
+    return () => {
+      actif = false;
+      arreter();
+    };
+  }, [suiviDar, porte, fermeId, utilisateurId]);
+  const equipe = consignes !== null && consignes.porte === porte ? consignes.equipe : null;
+  /** « Mes travaux » ou « Tous » : le choix de l'écran (gardé avec les masques, la 3D le suit), sinon le rôle. */
+  const [modeChoisi, setModeChoisi] = useState<ModeEquipe | null>(() => (porte === null ? null : modeEquipeDe(porte, fermeId)));
+  const mode: ModeEquipe = modeChoisi ?? (equipe?.gerant === true ? 'tous' : 'mes');
+  const pourMoi = equipe !== null && equipe.moi !== null && mode === 'mes' ? equipe.moi : null;
+  const estPour = consignes?.m.estPourPersonne;
+  const garder = useMemo(() => (equipe === null || pourMoi === null || estPour === undefined ? undefined : (cle: string) => estPour(equipe.parTache, cle, pourMoi)), [equipe, pourMoi, estPour]);
+  /** Appui long sur une carte (gérant) : la consigne s'ouvre sur ce travail. */
+  const [demandeAttribution, setDemandeAttribution] = useState<{ readonly cle: string; readonly n: number } | null>(null);
+  const appuiLong = useAppuiLong(
+    equipe?.gerant === true
+      ? (cle) => {
+          setDemandeAttribution((d) => ({ cle, n: (d?.n ?? 0) + 1 }));
+        }
+      : null,
+  );
   /**
    * T13c : saisie à qui rendre le focus après « Changer la date » (sa correction), et la journée
    * affichée au moment de l'écriture : le focus attend une journée relue.
@@ -929,14 +986,14 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   useEffect(() => {
     if (journee === null || utilisateurId === undefined || stockage === null) return undefined;
     const minuterie = setTimeout(() => {
-      garderInstantane(stockage, { utilisateurId, fermeId, jour: journee.aujourdhui }, vueDeJournee(journee, masquees, false));
+      garderInstantane(stockage, { utilisateurId, fermeId, jour: journee.aujourdhui }, vueDeJournee(journee, masquees, false, garder));
       // T13k : l'instantané réécrit garde le nombre de « Fait » d'avant la base encore en file.
       if (avantBase.current > 0) noterEnAttente();
     }, DELAI_INSTANTANE_MS);
     return () => {
       clearTimeout(minuterie);
     };
-  }, [journee, masquees, utilisateurId, fermeId, stockage, noterEnAttente]);
+  }, [journee, masquees, utilisateurId, fermeId, stockage, noterEnAttente, garder]);
 
   // « Annuler » : 10 s après l'écriture de la saisie (T13l : pas pendant son attente en file), puis
   // l'historique.
@@ -1243,7 +1300,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   }
 
   // Ce qui est dessiné : la journée relue, sinon l'instantané (T13d), sinon rien encore.
-  const vue = journee !== null ? vueDeJournee(journee, masquesVus, toutVoir) : surInstantane ? vueDeInstantane(instantane, masquesVus) : null;
+  const vue = journee !== null ? vueDeJournee(journee, masquesVus, toutVoir, garder) : surInstantane ? vueDeInstantane(instantane, masquesVus) : null;
   const toutes = vue?.taches ?? [];
   const dessinees = complet ? toutes : toutes.slice(0, CARTES_PREMIER_DESSIN);
   const enRetard = dessinees.filter((c) => c.retard);
@@ -1265,6 +1322,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
 
   /** « Annuler » du bandeau inactif : demandé ici, ou la saisie est déjà en annulation (historique). */
   const bandeauEnAnnulation = annulable !== null && (annulable.demandee || (annulable.evenement !== null && enAnnulation.has(annulable.evenement.id)));
+  /** T60 : à qui le travail est attribué (prénoms), une fois l'équipe lue. */
+  const quiDe = (cle: string): string | null => (equipe === null || consignes === null ? null : consignes.m.prenomsDe(equipe, cle));
 
   return (
     // T11b : écriture en cours ou en attente de la base : pas de rechargement après une mise à jour.
@@ -1328,6 +1387,22 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         </button>
       </div>
 
+      {/* T60 : « Mes travaux » / « Tous », « Attribuer », « Fiche du jour » (./equipe/, chargé à part). */}
+      {equipe !== null && consignes !== null && porte !== null && journee !== null && (
+        <consignes.m.Consignes
+          porte={porte}
+          fermeId={fermeId}
+          utilisateurId={utilisateurId}
+          equipe={equipe}
+          travaux={travauxVus(journee.taches.filter((t) => !estMasquee(t.cle)))}
+          mode={mode}
+          surMode={(m) => {
+            setModeChoisi(m);
+            changerModeEquipe(porte, fermeId, m);
+          }}
+          demande={demandeAttribution}
+        />
+      )}
       {erreur !== null && (
         <p role="alert" className="auj-erreur">
           {erreur}
@@ -1360,9 +1435,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
           {enRetard.length > 0 && (
             <>
               <h2 className="auj-groupe auj-groupe-retard">En retard</h2>
-              <ul className="auj-taches">
+              <ul className="auj-taches" {...appuiLong}>
                 {enRetard.map((c) => (
-                  <CarteTache key={c.cle} carte={c} inactive={porte === null} surFait={surFait} surPeser={peser} alerte={alerteCarte(c)} />
+                  <CarteTache key={c.cle} carte={c} inactive={porte === null} surFait={surFait} surPeser={peser} alerte={alerteCarte(c)} qui={quiDe(c.cle)} />
                 ))}
               </ul>
             </>
@@ -1370,9 +1445,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
           {semaine.length > 0 && (
             <>
               <h2 className="auj-groupe">Cette semaine</h2>
-              <ul className="auj-taches">
+              <ul className="auj-taches" {...appuiLong}>
                 {semaine.map((c) => (
-                  <CarteTache key={c.cle} carte={c} inactive={porte === null} surFait={surFait} surPeser={peser} alerte={alerteCarte(c)} />
+                  <CarteTache key={c.cle} carte={c} inactive={porte === null} surFait={surFait} surPeser={peser} alerte={alerteCarte(c)} qui={quiDe(c.cle)} />
                 ))}
               </ul>
             </>
