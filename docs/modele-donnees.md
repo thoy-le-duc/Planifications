@@ -52,6 +52,7 @@ erDiagram
   EVENEMENT }o--o{ EMPLACEMENT : "a lieu sur"
   EVENEMENT }o--o| SECTEUR_IRRIGATION : "irrigue"
   EVENEMENT }o--o| PRODUIT_PHYTO : "traitement : utilise"
+  EVENEMENT }o--o| PRODUIT_FERTILISANT : "apport : utilise"
   EVENEMENT ||--o| MOUVEMENT_STOCK : "récolte : entre en stock"
   EVENEMENT |o--o| EVENEMENT : "corrige ou annule"
   ARTICLE_STOCK ||--o{ MOUVEMENT_STOCK : "cumule"
