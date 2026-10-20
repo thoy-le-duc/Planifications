@@ -379,8 +379,8 @@ test('export de toute la ferme depuis l’onglet Ferme : hors ligne, CPU ×4, fe
     const chemin = await telechargement.path();
     const octets = new Uint8Array(readFileSync(chemin));
     const entrees = lireZip(octets);
-    // T52 : l'archive gagne le registre phyto (registre-phyto.csv).
-    const fichiers = ['ferme.json', 'LISEZMOI.txt', 'registre-phyto.csv', ...Object.keys(a.comptes).map((t) => `${t}.csv`)].sort();
+    // T52 : l'archive gagne le registre phyto (registre-phyto.csv) ; T54 : le cahier de fertilisation.
+    const fichiers = ['ferme.json', 'LISEZMOI.txt', 'registre-phyto.csv', 'cahier-fertilisation.csv', ...Object.keys(a.comptes).map((t) => `${t}.csv`)].sort();
     expect(entrees.map((e) => e.chemin).sort()).toEqual(fichiers);
     expect(verifierAvecUnzip(octets).sort()).toEqual(fichiers);
     const json = JSON.parse(texteZip(entrees, 'ferme.json')) as { tables: Record<string, unknown[]>; bibliotheque: Record<string, unknown[]> };

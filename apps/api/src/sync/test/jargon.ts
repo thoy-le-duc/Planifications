@@ -83,6 +83,8 @@ const MOTS_FRANCAIS_DU_SCHEMA = new Set([
   'famille',
   'ferme',
   'fin',
+  // T54 : colonnes de produit_fertilisant, mots français écrits pareil (« elle prend sa forme »).
+  'forme',
   'fournisseur',
   'masque',
   'membre',
@@ -94,6 +96,7 @@ const MOTS_FRANCAIS_DU_SCHEMA = new Set([
   'nom',
   'note',
   'occupation',
+  'organique',
   'personne',
   'photos',
   'plantation',

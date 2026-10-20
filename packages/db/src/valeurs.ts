@@ -8,6 +8,7 @@ import type {
   CategorieEspece,
   CategorieIntervention,
   EtapeRealisee,
+  FormeFertilisant,
   ModeItineraire,
   NatureObservation,
   Modification,
@@ -24,6 +25,7 @@ import type {
   TypeAncreSerie,
   TypeBatiment,
   TypeEvenement,
+  UniteFertilisant,
   UniteRecolte,
 } from '@planif/core';
 
@@ -96,6 +98,7 @@ export const TABLES_MODIFIABLES = toutes<Modification['table']>()([
   'ArticleStock',
   'MouvementStock',
   'ProduitPhyto',
+  'ProduitFertilisant',
   'Proposition',
   'TypeIntervention',
   'Batiment',
@@ -115,3 +118,7 @@ export type EtatMembre = (typeof ETATS_MEMBRE)[number];
 /** Opérations de la file d'écritures de PowerSync (`CrudEntry.op`), reçues par POST /sync/upload (T10). */
 export const OPERATIONS_SYNCHRO = ['PUT', 'PATCH', 'DELETE'] as const;
 export type OperationSynchro = (typeof OPERATIONS_SYNCHRO)[number];
+
+/** T54 : forme et unité d'un produit fertilisant. */
+export const FORMES_FERTILISANT = toutes<FormeFertilisant>()(['solide', 'liquide']);
+export const UNITES_FERTILISANT = toutes<UniteFertilisant>()(['kg', 't', 'L', 'm3']);

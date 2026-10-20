@@ -42,6 +42,10 @@
  * jamais un import statique : ni l'entrée ni ce morceau ne les portent) et montre celui demandé
  * avec la porte du contexte.
  *
+ * Fertilisation (T54) : carte « Fertilisation », lignes « Produits fertilisants » et « Cahier de
+ * fertilisation », comme « Traitements phyto » : un tap charge les écrans
+ * (`import('./fertilisation/index.ts')`, jamais un import statique).
+ *
  * Équipe (T60) : carte « Équipe », ligne « Équipe de la ferme », active comme « Mes itinéraires ».
  * Un tap charge l'écran (`import('./equipe/index.ts')`, jamais un import statique).
  *
@@ -120,6 +124,10 @@ type ModuleItineraires = Awaited<ReturnType<typeof chargerItineraires>>;
 /** « Ma ferme : saisons, zones, planches » (T49), chargé à la demande (morceau à part). */
 const chargerParcellaire = () => import('../parcellaire/index.ts');
 type EcranParcellaireCharge = Awaited<ReturnType<typeof chargerParcellaire>>['EcranParcellaire'];
+
+/** Produits fertilisants et cahier de fertilisation (T54), chargés à la demande (morceau à part). */
+const chargerFertilisation = () => import('./fertilisation/index.ts');
+type ModuleFertilisation = Awaited<ReturnType<typeof chargerFertilisation>>;
 
 /** Produits phyto et registre (T52), chargés à la demande (morceau à part). */
 const chargerPhyto = () => import('./phyto/index.ts');
@@ -416,6 +424,20 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     );
   }
 
+  // Fertilisation (T54) : chargés au tap, montrés avec la porte du contexte.
+  const [fertilisation, setFertilisation] = useState<{ readonly module: ModuleFertilisation; readonly ecran: 'produits' | 'cahier' } | null>(null);
+  function ouvrirFertilisation(ecran: 'produits' | 'cahier'): void {
+    if (!itinerairesPossibles) return;
+    chargerFertilisation().then(
+      (module) => {
+        setFertilisation({ module, ecran });
+      },
+      (e: unknown) => {
+        console.error('Écrans de fertilisation introuvables', e);
+      },
+    );
+  }
+
   // Éditeur de placement (T28b) : chargé au tap, montré avec la porte du contexte.
   const [EditeurPlacement, setEditeurPlacement] = useState<EditeurPlacementCharge | null>(null);
   // Focus rendu au bouton d'ouverture une fois l'éditeur retiré (T28g).
@@ -684,6 +706,47 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
           fermeId={ouverte.fermeId}
           surFermer={() => {
             setPhyto(null);
+          }}
+        />
+      ))}
+      <Carte titre="Fertilisation">
+        <Ligne
+          nom="Produits fertilisants"
+          detail="Composts, fumiers, engrais et leur teneur en N, P₂O₅, K₂O."
+          signe="›"
+          couleur="var(--couleur-foret)"
+          desactivee={!itinerairesPossibles}
+          surTap={() => {
+            ouvrirFertilisation('produits');
+          }}
+        />
+        <Ligne
+          nom="Cahier de fertilisation"
+          detail="Les unités apportées par planche dans la saison. Aussi dans l’export."
+          signe="›"
+          couleur="var(--couleur-foret)"
+          desactivee={!itinerairesPossibles}
+          surTap={() => {
+            ouvrirFertilisation('cahier');
+          }}
+        />
+      </Carte>
+      {fertilisation !== null && ouverte !== null && (fertilisation.ecran === 'produits' ? (
+        <fertilisation.module.EcranProduitsFertilisants
+          key={ouverte.fermeId}
+          porte={ouverte.porte}
+          fermeId={ouverte.fermeId}
+          surFermer={() => {
+            setFertilisation(null);
+          }}
+        />
+      ) : (
+        <fertilisation.module.EcranCahierFertilisation
+          key={ouverte.fermeId}
+          porte={ouverte.porte}
+          fermeId={ouverte.fermeId}
+          surFermer={() => {
+            setFertilisation(null);
           }}
         />
       ))}

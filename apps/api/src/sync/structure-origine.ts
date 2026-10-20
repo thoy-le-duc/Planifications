@@ -1,10 +1,11 @@
 /**
- * T28s (Q31) : l'origine du plan d'une ferme (`ferme.origine_plan`), seule colonne de `ferme` que
- * le téléphone écrit, et les droits du placement réel. Contrat : en-tête de
+ * T28s (Q31) : l'origine du plan d'une ferme (`ferme.origine_plan`), et les droits du placement
+ * réel. T54 (Q44) : l'option « zone vulnérable nitrates » (`ferme.zone_vulnerable_nitrates`, 0/1),
+ * seule autre colonne de `ferme` que le téléphone écrit, par tout membre actif. Contrat : en-tête de
  * structure-placement.integration.test.ts.
  *
- * - PATCH de `origine_plan` seulement (texte JSON {latitude, longitude}, ou nul). Toute autre
- *   colonne reçue : refusée, rien ne change. PUT et DELETE d'une ferme : 'table_interdite'
+ * - PATCH de `origine_plan` (texte JSON {latitude, longitude}, ou nul) et de
+ *   `zone_vulnerable_nitrates`. Toute autre colonne reçue : refusée, rien ne change. PUT et DELETE d'une ferme : 'table_interdite'
  *   (upload.ts).
  * - Ferme dont l'auteur n'est pas membre actif (voisine, membre retiré, invité) : refusée comme une
  *   ligne introuvable (T10d), sans ferme dans le refus.
@@ -29,6 +30,7 @@ import {
   PRECISION_ORIGINE_FIGEE,
   PRECISION_ORIGINE_INVALIDE,
   PRECISION_SEUL_LE_GERANT,
+  PRECISION_ZONE_VULNERABLE_INVALIDE,
 } from './messages.ts';
 import type { Refus } from './motifs.ts';
 import type { TransactionDb } from './references.ts';
@@ -97,7 +99,19 @@ async function aUnPlacement(tx: TransactionDb, fermeId: string): Promise<boolean
   return r.rows[0]?.existe === true;
 }
 
-/** PATCH de `ferme` (origine du plan seulement), dans la transaction du lot : null si accepté, sinon le refus. */
+/** Option « zone vulnérable nitrates » reçue (0/1 ou booléen) ; undefined si illisible. */
+function lireZoneVulnerable(v: unknown): boolean | undefined {
+  if (v === 0 || v === false) return false;
+  if (v === 1 || v === true) return true;
+  return undefined;
+}
+
+/**
+ * PATCH de `ferme` (origine du plan, T28s ; option « zone vulnérable nitrates », T54), dans la
+ * transaction du lot : null si accepté, sinon le refus. L'option s'écrit par tout membre actif
+ * (c'est un affichage : plan prévisionnel et alerte du cahier de fertilisation) ; l'origine garde
+ * ses règles (gérant seul, figée dès qu'un placement existe).
+ */
 export async function ecrireOrigine(
   tx: TransactionDb,
   ctx: Contexte,
@@ -109,28 +123,41 @@ export async function ecrireOrigine(
   const fermeId = estUuid(e.id) ? e.id.toLowerCase() : null;
   // Ferme dont l'auteur n'est pas membre actif : comme une ligne introuvable (T10d), sans rien lire.
   if (fermeId === null || !fermes.has(fermeId)) return invalide(PRECISION_INTROUVABLE, null);
-  if (Object.keys(e.donnees).some((c) => c !== 'origine_plan')) return invalide(PRECISION_FERME_SEULE_ORIGINE, fermeId);
-  if (!Object.hasOwn(e.donnees, 'origine_plan')) return null;
-  const origine = lireOrigine(e.donnees.origine_plan);
+  if (Object.keys(e.donnees).some((c) => c !== 'origine_plan' && c !== 'zone_vulnerable_nitrates')) return invalide(PRECISION_FERME_SEULE_ORIGINE, fermeId);
+  const avecOrigine = Object.hasOwn(e.donnees, 'origine_plan');
+  const avecZone = Object.hasOwn(e.donnees, 'zone_vulnerable_nitrates');
+  if (!avecOrigine && !avecZone) return null;
+  const origine = avecOrigine ? lireOrigine(e.donnees.origine_plan) : null;
   if (origine === undefined) return invalide(PRECISION_ORIGINE_INVALIDE, fermeId);
+  const zone = avecZone ? lireZoneVulnerable(e.donnees.zone_vulnerable_nitrates) : false;
+  if (zone === undefined) return invalide(PRECISION_ZONE_VULNERABLE_INVALIDE, fermeId);
 
-  const r = await tx.execute<{ origine: Origine | null; texte: string }>(
-    sql`SELECT origine_plan AS origine, to_jsonb(f)::text AS texte FROM ferme f
+  const r = await tx.execute<{ origine: Origine | null; zone: boolean; texte: string }>(
+    sql`SELECT origine_plan AS origine, zone_vulnerable_nitrates AS zone, to_jsonb(f)::text AS texte FROM ferme f
         WHERE f.id = ${fermeId}::uuid FOR NO KEY UPDATE`,
   );
   const existante = r.rows[0];
   if (existante === undefined) return invalide(PRECISION_INTROUVABLE, null);
   const avant = existante.origine;
   // Renvoi de la même valeur (réponse perdue) : accepté, rien d'écrit.
-  if (avant === null ? origine === null : origine !== null && avant.latitude === origine.latitude && avant.longitude === origine.longitude) return null;
-  if (!gerees.has(fermeId)) return invalide(PRECISION_SEUL_LE_GERANT, fermeId);
-  if (await aUnPlacement(tx, fermeId)) return invalide(PRECISION_ORIGINE_FIGEE, fermeId);
+  const origineChange = avecOrigine && !(avant === null ? origine === null : origine !== null && avant.latitude === origine.latitude && avant.longitude === origine.longitude);
+  const zoneChange = avecZone && existante.zone !== zone;
+  if (!origineChange && !zoneChange) return null;
+  if (origineChange) {
+    if (!gerees.has(fermeId)) return invalide(PRECISION_SEUL_LE_GERANT, fermeId);
+    if (await aUnPlacement(tx, fermeId)) return invalide(PRECISION_ORIGINE_FIGEE, fermeId);
+  }
 
   const maintenant = ctx.maintenant();
-  await tx.execute(
-    sql`UPDATE ferme SET origine_plan = ${origine === null ? null : JSON.stringify(origine)}::jsonb, modifie_le = ${maintenant}::timestamptz
-        WHERE id = ${fermeId}::uuid`,
-  );
+  if (origineChange) {
+    await tx.execute(
+      sql`UPDATE ferme SET origine_plan = ${origine === null ? null : JSON.stringify(origine)}::jsonb, modifie_le = ${maintenant}::timestamptz
+          WHERE id = ${fermeId}::uuid`,
+    );
+  }
+  if (zoneChange) {
+    await tx.execute(sql`UPDATE ferme SET zone_vulnerable_nitrates = ${zone}, modifie_le = ${maintenant}::timestamptz WHERE id = ${fermeId}::uuid`);
+  }
   await tx.insert(modification).values({
     id: ctx.nouvelId(),
     fermeId: fermeId as Id<'Ferme'>,

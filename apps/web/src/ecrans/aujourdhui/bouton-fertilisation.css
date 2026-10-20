@@ -1,0 +1,20 @@
+/* T54 — bouton « Fertilisation » de la barre d'actions d'Aujourd'hui : sur sa propre ligne, sous
+   « Irrigation » (T57), au même gabarit (56 px de haut ; rien ne déborde à 360 px). Jetons seulement. */
+
+.fert-ouvrir {
+  flex: 1 0 100%;
+  order: 5;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.fert-ouvrir:disabled {
+  border-color: var(--couleur-trait);
+  color: var(--couleur-secondaire);
+}

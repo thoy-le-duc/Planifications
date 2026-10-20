@@ -144,8 +144,8 @@ const CLES_DETAIL: Readonly<Record<TypeEvenement, readonly string[]>> = {
 const CLES_CATEGORIE: Readonly<Record<CategorieIntervention, readonly string[]>> = {
   travail_sol: [],
   couverture: ['dureeOccupationJours'],
-  fertilisation: ['produit', 'quantite'],
-  amendement: ['produit', 'quantite'],
+  fertilisation: ['produit', 'quantite', 'produitFertilisantId'],
+  amendement: ['produit', 'quantite', 'produitFertilisantId'],
   entretien: [],
 };
 const CLES_QUANTITE = ['valeur', 'unite'];
@@ -325,7 +325,9 @@ function verifDetail(type: TypeEvenement, d: Objet): Verif {
       if (d.categorie === 'fertilisation' || d.categorie === 'amendement') {
         return (
           verifTexte(d.produit, 'detail.produit', 'produit', { obligatoire: true, nonVide: true }) ??
-          verifQuantite(d.quantite, 'detail.quantite', 'quantité', P.interventionQuantite)
+          verifQuantite(d.quantite, 'detail.quantite', 'quantité', P.interventionQuantite) ??
+          // T54 : produit fertilisant de la ferme, facultatif (texte libre sans lui).
+          (absent(d.produitFertilisantId) ? null : verifUuid(d.produitFertilisantId, 'detail.produitFertilisantId', 'produit fertilisant'))
         );
       }
       return null;
