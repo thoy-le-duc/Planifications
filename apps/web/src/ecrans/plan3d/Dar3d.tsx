@@ -25,6 +25,14 @@ import './dar3d.css';
  */
 const AUCUN: TraitementsDar = { traitements: [], noms: new Map() };
 
+/**
+ * Attente avant la première lecture des traitements : la vue s'ouvre, lit ses travaux et dessine
+ * d'abord (sur la grande ferme, deux ans de traitements à lire ne disputent pas la base à la lecture
+ * des travaux). Une vue refermée avant ce délai ne lit rien. Nulle sous Vitest (les tests du
+ * composant attendent les repères sans horloge simulée).
+ */
+const ATTENTE_DAR_MS = import.meta.env.MODE === 'test' ? 0 : 1_000;
+
 export function useReperesDar(porte: PorteDonnees, fermeId: string, volumes: readonly VolumeScene[], date: string, aujourdhui: string): readonly RepereDar[] {
   const [lus, setLus] = useState(AUCUN);
   const [borne, setBorne] = useState(() => {
@@ -38,16 +46,19 @@ export function useReperesDar(porte: PorteDonnees, fermeId: string, volumes: rea
     // ajoutait au démarrage l'assistant des objets d'espace de noms) ; déjà précaché, hors ligne aussi.
     let arreter: (() => void) | null = null;
     let actif = true;
-    import('../aujourdhui/dar.ts').then(
-      (m) => {
-        if (actif) arreter = m.suivreTraitements(porte, fermeId, borne, setLus).arreter;
-      },
-      (e: unknown) => {
-        console.error('Délais avant récolte 3D : suivi impossible', e);
-      },
-    );
+    const minuterie = setTimeout(() => {
+      import('../aujourdhui/dar.ts').then(
+        (m) => {
+          if (actif) arreter = m.suivreTraitements(porte, fermeId, borne, setLus).arreter;
+        },
+        (e: unknown) => {
+          console.error('Délais avant récolte 3D : suivi impossible', e);
+        },
+      );
+    }, ATTENTE_DAR_MS);
     return () => {
       actif = false;
+      clearTimeout(minuterie);
       arreter?.();
     };
   }, [porte, fermeId, borne]);
