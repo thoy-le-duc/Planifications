@@ -12,7 +12,7 @@
  * Contrat détaillé : ./test/contrat.ts.
  */
 import { CAHIER_FERTILISATION, REGISTRE_PHYTO, TABLES_EXPORTEES, type DescriptionTable, type TypeExport } from './tables.ts';
-import { lignesCahierFertilisationParPaquets, TABLES_CAHIER_FERTILISATION, type LigneLocaleFertilisation } from '../fertilisation/index.ts';
+import { lignesCahierFertilisationParPaquets, TABLES_CAHIER_FERTILISATION, type LigneLocaleFertilisation } from '../npk/index.ts';
 import { ligneCsvRegistre, lignesRegistrePhytoParPaquets, TABLES_REGISTRE_PHYTO, type LigneLocaleRegistre } from '../phyto/index.ts';
 import { annulable, dateDos, EN_VOL, lancerEntree, partiesZip, verifierAnnulation, type Compressee, type Compresseur, type EntreeLancee, type MorceauZip, type SignalAnnulation } from './zip.ts';
 

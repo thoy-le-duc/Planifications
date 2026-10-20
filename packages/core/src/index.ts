@@ -11,7 +11,7 @@ export * from './saisies/itineraire.ts';
 // Traitements phyto (T52) : délai avant récolte, dose maximale, produits de la ferme, registre.
 export * from './phyto/index.ts';
 // Cahier de fertilisation (T54) : produits fertilisants, unités apportées, bilan, zone vulnérable.
-export * from './fertilisation/index.ts';
+export * from './npk/index.ts';
 // Équipe et consignes par ouvrier (T60) : personnes, attributions des travaux du jour, « Mes travaux ».
 export * from './equipe/index.ts';
 // Formats communs du serveur et de la porte (T28s) : identifiant, instant de suppression.

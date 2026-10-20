@@ -389,7 +389,7 @@ export const REGISTRE_PHYTO: DescriptionTable = /* @__PURE__ */ (() => ({
 
 /**
  * T54 : cahier-fertilisation.csv, le cahier des apports (une ligne par apport réalisé en vigueur),
- * lu dans les tables par `lignesCahierFertilisation` (../fertilisation/index.ts). Ce n'est pas une
+ * lu dans les tables par `lignesCahierFertilisation` (../npk/index.ts). Ce n'est pas une
  * table : il n'est ni dans ferme.json ni dans `lignes`. Colonnes : COLONNES_CAHIER_FERTILISATION.
  */
 export const CAHIER_FERTILISATION: DescriptionTable = /* @__PURE__ */ (() => ({

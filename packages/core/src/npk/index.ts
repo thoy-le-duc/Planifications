@@ -1,8 +1,13 @@
 /**
- * Cahier de fertilisation (T54) : produits fertilisants de la ferme et leur composition, unités
+ * Cahier de fertilisation (T54) : produits fertilisants de la ferme et leur composition (NPK), unités
  * apportées (N, P₂O₅, K₂O), bilan par planche et par saison, apports prévus (travaux prévus des
  * séries), alerte « zone vulnérable nitrates » et lignes du cahier exporté. Pur : ni base, ni
  * réseau, ni horloge ; ne lève jamais. Contrat : ./test/contrat.ts.
+ *
+ * Dossier `npk/` (et non `fertilisation/`) : l'appli range ce module dans un morceau à part, dont
+ * le nom de fichier s'écrit dans la table des dépendances du JavaScript de démarrage (l'export,
+ * préchargé, le lit). « fertilisation-XXXXXXXX.js » faisait dépasser le budget de démarrage de
+ * 4 octets compressés ; « npk-XXXXXXXX.js » tient dedans (mesuré : 72 906 sur 72 908).
  *
  * On MESURE ce qui a été apporté (règle 5) : aucune dose n'est conseillée ici.
  *
