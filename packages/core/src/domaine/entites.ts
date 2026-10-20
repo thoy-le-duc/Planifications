@@ -655,11 +655,18 @@ export type DetailIntervention =
       readonly categorie: 'fertilisation';
       readonly produit: string;
       readonly quantite: Quantite;
+      /**
+       * T54 : produit fertilisant de la ferme choisi à la saisie (ses teneurs font le bilan).
+       * Absent ou null : texte libre (saisies d'avant T54, « Fait » d'un travail prévu).
+       */
+      readonly produitFertilisantId?: Id<'ProduitFertilisant'> | null;
     })
   | (InterventionCommune & {
       readonly categorie: 'amendement';
       readonly produit: string;
       readonly quantite: Quantite;
+      /** T54 : comme pour la fertilisation. */
+      readonly produitFertilisantId?: Id<'ProduitFertilisant'> | null;
     })
   | (InterventionCommune & { readonly categorie: 'entretien' });
 

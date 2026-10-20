@@ -166,6 +166,7 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       position: json('position géographique de la ferme (pour la météo), en JSON'),
       origine_plan: json('origine du plan de la ferme (latitude, longitude), en JSON : point (0, 0) des positions en mètres'),
       unites: json('unités préférées de la ferme, en JSON'),
+      zone_vulnerable_nitrates: booleen('exploitation en zone vulnérable nitrates : oui ou non (plan prévisionnel et plafond de 170 kg N/ha d’azote organique dans le cahier de fertilisation)'),
       ...HORODATAGE,
     }),
     itineraire: table(
@@ -239,6 +240,19 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       date_plantation: date('jour de plantation (AAAA-MM-JJ)'),
       nombre_plants: entier('nombre de plants'),
       date_arrachage: date('jour d’arrachage (AAAA-MM-JJ) ; vide tant que la plantation est en place'),
+      ...HORODATAGE,
+    }),
+    produit_fertilisant: table('Produits fertilisants de la ferme (compost, fumier, engrais) et leur composition, pour le cahier de fertilisation.', {
+      ferme_id: FERME_ID,
+      nom: texte('nom du produit'),
+      forme: texte('forme du produit : solide ou liquide'),
+      unite: texte('unité dans laquelle le produit se compte : kg, t, L ou m3'),
+      teneur_n: reel('teneur en azote N, en % (vide si inconnue)'),
+      teneur_p2o5: reel('teneur en phosphore P2O5, en % (vide si inconnue)'),
+      teneur_k2o: reel('teneur en potasse K2O, en % (vide si inconnue)'),
+      organique: booleen('azote d’origine organique : oui ou non'),
+      utilisable_en_bio: booleen('utilisable en agriculture biologique : oui ou non'),
+      source: texte('source des teneurs (document, date, analyse)'),
       ...HORODATAGE,
     }),
     produit_phyto: table(
@@ -370,5 +384,35 @@ export const REGISTRE_PHYTO: DescriptionTable = /* @__PURE__ */ (() => ({
     cible: texte('ravageur ou maladie visé'),
     operateur: texte('personne qui a traité ; vide si non précisée'),
     recolte_autorisee_le: date('premier jour où la récolte est permise (jour du traitement + délai avant récolte du produit, figé au traitement)'),
+  },
+}))();
+
+/**
+ * T54 : cahier-fertilisation.csv, le cahier des apports (une ligne par apport réalisé en vigueur),
+ * lu dans les tables par `lignesCahierFertilisation` (../fertilisation/index.ts). Ce n'est pas une
+ * table : il n'est ni dans ferme.json ni dans `lignes`. Colonnes : COLONNES_CAHIER_FERTILISATION.
+ */
+export const CAHIER_FERTILISATION: DescriptionTable = /* @__PURE__ */ (() => ({
+  description:
+    'Cahier de fertilisation : un apport réalisé par ligne (fertilisation, amendement), tel qu’en vigueur (sans les apports annulés ni ceux remplacés par une correction), du plus ancien au plus récent. Unités calculées avec les teneurs actuelles des produits (produit_fertilisant.csv) ; vides si le produit est saisi en texte libre ou sans teneur.',
+  bibliotheque: false,
+  colonnes: {
+    date: date('jour de l’apport (AAAA-MM-JJ)'),
+    saison: texte('saison de la ferme qui contient le jour, à défaut l’année'),
+    emplacements: texte('codes des planches ou emplacements qui ont reçu l’apport, séparés par des virgules'),
+    surface_m2: reel('surface de ces emplacements, en mètres carrés ; vide si une largeur manque'),
+    culture: texte('culture concernée (espèce et variété) ; vide si l’apport ne vise pas une culture'),
+    categorie: texte('fertilisation ou amendement'),
+    produit: texte('produit apporté'),
+    quantite: reel('quantité apportée'),
+    unite: texte('unité de la quantité (kg, t, L, m3…)'),
+    organique: booleen('azote d’origine organique : oui ou non ; vide pour un produit en texte libre'),
+    bio: booleen('produit utilisable en agriculture biologique : oui ou non ; vide pour un produit en texte libre'),
+    n_kg: reel('azote N apporté, en kg'),
+    p2o5_kg: reel('phosphore P2O5 apporté, en kg'),
+    k2o_kg: reel('potasse K2O apportée, en kg'),
+    n_kg_ha: reel('azote N apporté, en kg par hectare'),
+    p2o5_kg_ha: reel('phosphore P2O5 apporté, en kg par hectare'),
+    k2o_kg_ha: reel('potasse K2O apportée, en kg par hectare'),
   },
 }))();

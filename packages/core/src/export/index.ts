@@ -11,7 +11,8 @@
  *
  * Contrat détaillé : ./test/contrat.ts.
  */
-import { REGISTRE_PHYTO, TABLES_EXPORTEES, type DescriptionTable, type TypeExport } from './tables.ts';
+import { CAHIER_FERTILISATION, REGISTRE_PHYTO, TABLES_EXPORTEES, type DescriptionTable, type TypeExport } from './tables.ts';
+import { lignesCahierFertilisationParPaquets, TABLES_CAHIER_FERTILISATION, type LigneLocaleFertilisation } from '../fertilisation/index.ts';
 import { ligneCsvRegistre, lignesRegistrePhytoParPaquets, TABLES_REGISTRE_PHYTO, type LigneLocaleRegistre } from '../phyto/index.ts';
 import { annulable, dateDos, EN_VOL, lancerEntree, partiesZip, verifierAnnulation, type Compressee, type Compresseur, type EntreeLancee, type MorceauZip, type SignalAnnulation } from './zip.ts';
 
@@ -201,6 +202,38 @@ function* lignesRegistre(tables: Readonly<Record<string, readonly LigneLocaleReg
   return r;
 }
 
+// ── Cahier de fertilisation (T54) ────────────────────────────────────────────────────────────
+
+/** Chemin du cahier dans l'archive : juste après le registre phyto, avant bibliotheque/. */
+const CHEMIN_CAHIER = 'cahier-fertilisation.csv';
+
+/** Tables lues par le cahier. */
+const TABLES_CAHIER: ReadonlySet<string> = /* @__PURE__ */ new Set<string>(TABLES_CAHIER_FERTILISATION);
+
+/** Colonnes gardées de chaque table pour le cahier (evenement et produit_fertilisant : entières). */
+const COLONNES_CAHIER: Readonly<Record<string, readonly string[]>> = {
+  emplacement: ['id', 'ferme_id', 'code', 'longueur_m', 'largeur_m'],
+  saison: ['id', 'ferme_id', 'nom', 'debut', 'fin', 'supprime_le'],
+  serie: ['id', 'ferme_id', 'espece_id', 'variete_id'],
+  campagne: ['id', 'ferme_id', 'plantation_id'],
+  plantation: ['id', 'ferme_id', 'espece_id', 'variete_id'],
+  espece: ['id', 'ferme_id', 'nom'],
+  variete: ['id', 'ferme_id', 'nom'],
+};
+
+function reduitePourCahier(nom: string, l: LigneLocale): LigneLocaleFertilisation {
+  const colonnes = COLONNES_CAHIER[nom];
+  if (colonnes === undefined) return l;
+  const r: Record<string, ValeurLocale> = {};
+  for (const c of colonnes) r[c] = l[c] ?? null;
+  return r;
+}
+
+/** Lignes du cahier, au format des CSV de l'export ; générateur, comme `lignesRegistre`. */
+function* lignesCahier(tables: Readonly<Record<string, readonly LigneLocaleFertilisation[] | undefined>>, fermeId: string): Generator<void, LigneLocale[], undefined> {
+  return yield* lignesCahierFertilisationParPaquets(tables, fermeId);
+}
+
 // ── Producteurs ──────────────────────────────────────────────────────────────────────────────
 
 /** CSV d'une table, sans le BOM, en morceaux d'environ `MORCEAU` caractères. */
@@ -348,6 +381,7 @@ function lisezmoi(nomFerme: string, genereLe: string): string {
     if (d.bibliotheque) biblio.push([nom, d]);
   }
   bloc(CHEMIN_REGISTRE, REGISTRE_PHYTO, 'Calculé à l’export : pour le contrôle (registre phytosanitaire, contrôle bio), filtrez la colonne bio.');
+  bloc(CHEMIN_CAHIER, CAHIER_FERTILISATION, 'Calculé à l’export : le cahier d’enregistrement des apports (zone vulnérable nitrates, contrôle bio).');
   for (const [nom, d] of biblio) bloc(`bibliotheque/${nom}.csv`, d, 'Bibliothèque de référence commune (ferme_id vide).');
   return l.join(FIN) + FIN;
 }
@@ -377,6 +411,8 @@ function* planifier(entree: EntreeExport): Generator<void, Plan, undefined> {
 
   const registre = yield* lignesRegistre(entree.tables, fermeId);
   const csvRegistre: FichierPrevu = { chemin: CHEMIN_REGISTRE, bom: true, lignes: registre.length, produire: (c) => csv(REGISTRE_PHYTO, registre, c) };
+  const cahier = yield* lignesCahier(entree.tables, fermeId);
+  const csvCahier: FichierPrevu = { chemin: CHEMIN_CAHIER, bom: true, lignes: cahier.length, produire: (c) => csv(CAHIER_FERTILISATION, cahier, c) };
 
   const nomFerme = entree.tables.ferme?.find((l) => l.id === fermeId)?.nom;
   const titre = typeof nomFerme === 'string' && nomFerme.trim() !== '' ? nomFerme : fermeId;
@@ -392,6 +428,7 @@ function* planifier(entree: EntreeExport): Generator<void, Plan, undefined> {
     },
     ...csvFerme,
     csvRegistre,
+    csvCahier,
     ...csvBiblio,
   ];
   return { fichiers, lignes };
@@ -558,11 +595,14 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
   const nTables = noms.length;
   const nBiblio = noms.filter((n) => TABLES_EXPORTEES[n]?.bibliotheque === true).length;
   // Place de chaque entrée dans l'archive : ferme.json, LISEZMOI.txt, les CSV des tables, le
-  // registre phyto (T52), bibliotheque/.
+  // registre phyto (T52), cahier de fertilisation (T54), bibliotheque/.
   const placeRegistre = 2 + nTables;
-  const entrees: (EntreeLancee | undefined)[] = Array.from({ length: 2 + nTables + 1 + nBiblio }, () => undefined);
+  const placeCahier = placeRegistre + 1;
+  const entrees: (EntreeLancee | undefined)[] = Array.from({ length: 2 + nTables + 2 + nBiblio }, () => undefined);
   /** T52 : ce que le registre phyto lit des tables, gardé jusqu'à la fin (colonnes utiles seulement). */
   const pourRegistre: Record<string, LigneLocaleRegistre[]> = {};
+  /** T54 : de même pour le cahier de fertilisation. */
+  const pourCahier: Record<string, LigneLocaleFertilisation[]> = {};
   const lignes: Record<string, number> = {};
   const membres = new Set<unknown>();
   const bibliotheques: TableRepartie[] = [];
@@ -736,6 +776,20 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
       }
       pourRegistre[nom] = gardees;
     }
+    if (TABLES_CAHIER.has(nom)) {
+      // Événements : les interventions seules ; les autres tables : colonnes utiles (bibliothèque comprise).
+      const gardees: LigneLocaleFertilisation[] = [];
+      const sources = d.bibliotheque ? [t.ferme, t.bibliotheque] : [t.ferme];
+      for (const source of sources) {
+        for (let i = 0; i < source.length; i++) {
+          if (i % PAQUET_LIGNES === PAQUET_LIGNES - 1) await peutEtreRendre();
+          const l = source[i];
+          if (l === undefined || (nom === 'evenement' && l.type !== 'intervention')) continue;
+          gardees.push(reduitePourCahier(nom, l));
+        }
+      }
+      pourCahier[nom] = gardees;
+    }
     lignes[nom] = t.ferme.length;
     if (d.bibliotheque) {
       lignes[`bibliotheque/${nom}`] = t.bibliotheque.length;
@@ -749,7 +803,7 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
     const attendues: Promise<unknown>[] = [plusTard(Promise.race([ecrites[k]?.promesse, j.travail]))];
     attendues.push(lue(await lancer(2 + k, `${nom}.csv`, flux(true, csv(d, t.ferme, compteur)))));
     if (d.bibliotheque) {
-      const place = placeRegistre + 1 + bibliotheques.length - 1;
+      const place = placeCahier + 1 + bibliotheques.length - 1;
       attendues.push(lue(await lancer(place, `bibliotheque/${nom}.csv`, flux(true, csv(d, t.bibliotheque, compteur)))));
     }
     await Promise.all(attendues);
@@ -778,6 +832,16 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
     const registre = etape.value;
     for (const nom of Object.keys(pourRegistre)) Reflect.deleteProperty(pourRegistre, nom);
     const r = await lancer(placeRegistre, CHEMIN_REGISTRE, flux(true, csv(REGISTRE_PHYTO, registre, { lignes: 0 })));
+    // T54 : le cahier de fertilisation, de même, par paquets.
+    const calculCahier = lignesCahier(pourCahier, fermeId);
+    let etapeCahier = calculCahier.next();
+    while (etapeCahier.done !== true) {
+      await peutEtreRendre();
+      etapeCahier = calculCahier.next();
+    }
+    const cahier = etapeCahier.value;
+    for (const nom of Object.keys(pourCahier)) Reflect.deleteProperty(pourCahier, nom);
+    const rc = await lancer(placeCahier, CHEMIN_CAHIER, flux(true, csv(CAHIER_FERTILISATION, cahier, { lignes: 0 })));
     const titre = typeof nomFerme === 'string' && nomFerme.trim() !== '' ? nomFerme : fermeId;
     const l = await lancer(
       1,
@@ -789,7 +853,7 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
         })(),
       ),
     );
-    await Promise.all([lue(j), lue(l), lue(r)]);
+    await Promise.all([lue(j), lue(l), lue(r), lue(rc)]);
     verifierArret();
     const compressees: Compressee[] = [];
     for (const e of entrees) {
