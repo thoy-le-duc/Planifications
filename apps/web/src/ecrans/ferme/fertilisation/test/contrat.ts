@@ -61,6 +61,24 @@
  *   date du jour, sur les planches choisies, `detail.produitFertilisantId` = le produit choisi
  *   (null pour un texte libre). Rien n'est écrit sans planche, sans produit ou sans quantité
  *   (message en role="alert").
+ *
+ * ## Recettes de fertirrigation (dialogue « Recettes de fertirrigation », T56)
+ *
+ * - `../index.ts` exporte aussi `EcranRecettesFertirrigation`, ouvert depuis la carte
+ *   « Fertilisation » de l'onglet Ferme (ligne « Recettes de fertirrigation »), chargé à la demande.
+ * - Ferme sans aucun produit fertilisant non archivé : un message renvoie vers « Produits
+ *   fertilisants » ; pas de bouton « Nouvelle recette ».
+ * - Lignes [data-testid="recette-fertirrigation"][data-recette=<id>] : recettes NON archivées de la
+ *   ferme (nom, dosage « injection 1 % » ou « par m³ d'eau », engrais et quantités), avec
+ *   « Modifier <nom> ». Les archivées à part, avec « Rétablir <nom> ».
+ * - « Nouvelle recette » : dialogue « Nouvelle recette », champs « Nom », « Taux d’injection (%) »
+ *   (vide : quantités par m³ d'eau), « EC cible (mS/cm) », « pH cible » (facultatifs, virgule
+ *   acceptée) ; pour chaque engrais N : liste « Engrais N » (produits non archivés de la ferme),
+ *   champ « Quantité N » (virgule acceptée ; pour 1 000 L de mère avec un taux, par m³ d'eau
+ *   sans), liste « Unité N » (kg, L) ; « Ajouter un engrais ». « Enregistrer » : UNE transaction,
+ *   ligne acceptée par validerRecetteFertirrigation ; refus en role="alert", rien d'écrit.
+ * - « Modifier <nom> » : dialogue « Modifier la recette », mêmes champs préremplis,
+ *   « Enregistrer » et « Archiver la recette ». Jamais de DELETE.
  */
 import type { ReactElement } from 'react';
 import type { PorteDonnees } from '@planif/sync';
@@ -90,4 +108,8 @@ export interface ProprietesSaisieFertilisation {
 
 export interface ModuleSaisieFertilisation {
   readonly SaisieFertilisation: (p: ProprietesSaisieFertilisation) => ReactElement;
+}
+
+export interface ModuleRecettesFertirrigation {
+  readonly EcranRecettesFertirrigation: (p: ProprietesEcranFertilisation) => ReactElement;
 }
