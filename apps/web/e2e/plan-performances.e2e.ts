@@ -37,8 +37,9 @@ import { installerAvecBase, noterPremierAppui, onglet, tapJusquAuPlanDepuisPremi
  *    5 et 6 intervalles). Mesuré avant : 2 passages saccadés sur 10, 5 intervalles fautifs, pire
  *    133 ms ; images longues dont le RENDU (style, mise en page, peinture) prend 39 à 62 ms, et
  *    un message de PowerSync traité 123 ms dans la page (base-appli).
- *    T62 : jusqu'à trois manches de dix passages, mêmes seuils ; la première fluide est retenue
- *    (docs/mesures/T62.md : les intervalles fautifs restants viennent surtout de la machine).
+ *    T62 : jusqu'à trois manches de dix passages, mêmes seuils ; une première manche fautive n'est
+ *    tolérée que si les deux manches rejouées sont fluides (docs/mesures/T62.md : les intervalles
+ *    fautifs restants viennent surtout de la machine).
  */
 
 const BUDGET_MS = 300;
@@ -150,10 +151,13 @@ test('défilement : dix passages, au plus un saccadé et au plus deux intervalle
     console.log(decrireDefilement(`défilement, manche ${String(n + 1)}, 10 passages`, v));
     return v;
   };
-  // T62 : une manche en échec est refaite (au plus MANCHES_DEFILEMENT_MAX), mêmes seuils ; une
-  // rafale de la machine ne revient pas d'une manche à l'autre, un à-coup de l'appli si.
-  const { retenu: verdict, manches } = await mesurerEnManches(manche);
-  console.log(`défilement : ${String(manches.length)} manche(s) mesurée(s), retenue : ${String(verdict.passagesSaccades)} passage(s) saccadé(s), ${String(verdict.rafalesTotal)} intervalle(s) fautif(s)`);
+  // T62 : une première manche en échec n'est tolérée que si TOUTES les manches rejouées (jusqu'à
+  // MANCHES_DEFILEMENT_MAX en tout) sont fluides, mêmes seuils ; deux manches fautives : échec.
+  const { fluide, manchesFautives, retenu: verdict, manches } = await mesurerEnManches(manche);
+  console.log(
+    `défilement : ${String(manches.length)} manche(s) mesurée(s), ${String(manchesFautives)} fautive(s) ; retenue : ${String(verdict.passagesSaccades)} passage(s) saccadé(s), ${String(verdict.rafalesTotal)} intervalle(s) fautif(s)`,
+  );
+  expect(fluide, `au plus une manche fautive, et seulement si les manches rejouées sont toutes fluides (${String(manchesFautives)} fautive(s) sur ${String(manches.length)})`).toBe(true);
   expect(verdict.passagesSaccades, 'passages qui perdent plus de 2 images d’affilée (sur 10)').toBeLessThan(PASSAGES_SACCADES_ECHEC);
   expect(verdict.rafalesTotal, 'intervalles au-delà de 2 images perdues, sur les 10 passages').toBeLessThanOrEqual(RAFALES_TOTAL_MAX);
 });

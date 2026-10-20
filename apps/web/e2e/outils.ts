@@ -241,8 +241,7 @@ export function decrireDefilement(libelle: string, v: VerdictDefilement): string
 /**
  * T62 — nombre de manches au plus d'une mesure de défilement. Une rafale de la machine (fil
  * principal privé de CPU, compositeur ou processus GPU en attente : docs/mesures/T62.md) ne se
- * reproduit pas d'une manche à l'autre ; un à-coup de l'appli, si (T11d). Mêmes seuils à chaque
- * manche : aucun n'est relâché.
+ * reproduit pas d'une manche à l'autre. Mêmes seuils à chaque manche : aucun n'est relâché.
  */
 export const MANCHES_DEFILEMENT_MAX = 3;
 
@@ -253,25 +252,51 @@ function moinsMauvais(a: VerdictDefilement, b: VerdictDefilement): VerdictDefile
   return a.rafalesTotal <= b.rafalesTotal ? a : b;
 }
 
+/** Résultat d'une mesure en manches. */
+export interface ResultatManches {
+  /** Vrai si la première manche est fluide, ou si UNE seule manche est fautive et que TOUTES les manches rejouées sont fluides. */
+  readonly fluide: boolean;
+  /** Nombre de manches fautives (non fluides) parmi celles mesurées. */
+  readonly manchesFautives: number;
+  /**
+   * Le verdict à vérifier : la dernière manche (fluide) si le défilement passe ; sinon la moins
+   * mauvaise des manches FAUTIVES, qui échoue donc aux seuils du test.
+   */
+  readonly retenu: VerdictDefilement;
+  /** Toutes les manches mesurées, dans l'ordre, pour le journal. */
+  readonly manches: readonly VerdictDefilement[];
+}
+
 /**
  * Mesure un défilement en manches : `manche(n)` mesure ses passages et rend leur verdict
- * (jugerDefilement, seuils du test). Dès qu'une manche est fluide, elle est retenue ; sinon, une
- * autre manche, au plus `mancheMax`. Toutes en échec : la moins mauvaise est retenue (et le test
- * échoue sur elle). `manches` : toutes les manches mesurées, dans l'ordre, pour le journal.
+ * (jugerDefilement, seuils du test). Première manche fluide : le défilement passe. Sinon, les
+ * manches suivantes sont mesurées (jusqu'à `mancheMax` en tout) et doivent TOUTES être fluides :
+ * une seule manche fautive est tolérée, et seulement si toutes celles qui la suivent sont
+ * fluides. Une deuxième manche fautive fait échouer aussitôt (relecture T62 : « la première
+ * fluide sur trois » laissait passer un à-coup de l'appli qui touche une manche sur trois
+ * 26 fois sur 27 ; ici, il échoue dès qu'il touche deux manches).
  */
-export async function mesurerEnManches(
-  manche: (n: number) => Promise<VerdictDefilement>,
-  mancheMax: number = MANCHES_DEFILEMENT_MAX,
-): Promise<{ readonly retenu: VerdictDefilement; readonly manches: readonly VerdictDefilement[] }> {
+export async function mesurerEnManches(manche: (n: number) => Promise<VerdictDefilement>, mancheMax: number = MANCHES_DEFILEMENT_MAX): Promise<ResultatManches> {
   if (!Number.isInteger(mancheMax) || mancheMax < 1) throw new Error('mesurerEnManches : au moins une manche');
   const manches: VerdictDefilement[] = [];
-  let retenu: VerdictDefilement | null = null;
+  let pireFautive: VerdictDefilement | null = null;
+  let manchesFautives = 0;
   for (let n = 0; n < mancheMax; n += 1) {
     const v = await manche(n);
     manches.push(v);
-    retenu = retenu === null ? v : moinsMauvais(retenu, v);
-    if (v.fluide) return { retenu: v, manches };
+    if (v.fluide) {
+      // Première manche fluide : rien à rejouer. Après une manche fautive : on va jusqu'au bout.
+      if (manchesFautives === 0) return { fluide: true, manchesFautives, retenu: v, manches };
+      continue;
+    }
+    manchesFautives += 1;
+    pireFautive = pireFautive === null ? v : moinsMauvais(pireFautive, v);
+    if (manchesFautives >= 2) break;
   }
-  if (retenu === null) throw new Error('mesurerEnManches : aucune manche');
-  return { retenu, manches };
+  const derniere = manches[manches.length - 1];
+  if (derniere === undefined) throw new Error('mesurerEnManches : aucune manche');
+  // Une seule manche fautive, suivie d'au moins une manche rejouée, toutes fluides.
+  if (manchesFautives === 1 && manches.length > 1 && derniere.fluide) return { fluide: true, manchesFautives, retenu: derniere, manches };
+  if (pireFautive === null) throw new Error('mesurerEnManches : aucune manche fautive');
+  return { fluide: false, manchesFautives, retenu: pireFautive, manches };
 }
