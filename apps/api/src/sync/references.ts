@@ -69,7 +69,13 @@ function references(l: LigneEvenement): Reference[] {
       table: 'secteur_irrigation',
       ids: [detail.secteurIrrigationId.toLowerCase()],
       libelle: "secteur d'irrigation",
-      supprimee: "secteur d'irrigation supprimé",
+      // T57 (relecture) : une vanne supprimée reste référençable, comme un produit phyto archivé
+      // (T52). Depuis T57 une vanne se supprime ; le serveur ne distingue pas une irrigation faite
+      // hors ligne avant la suppression (un autre téléphone a supprimé puis s'est synchronisé
+      // d'abord), ni l'annulation ou la correction d'une irrigation passée : les refuser effacerait
+      // une irrigation réellement faite. Une vanne d'une autre ferme reste introuvable ; les écrans
+      // de saisie ne proposent déjà plus une vanne supprimée.
+      supprimee: null,
     });
   }
   if ('produitPhytoId' in detail) {

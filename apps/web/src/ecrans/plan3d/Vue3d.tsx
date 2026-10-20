@@ -21,7 +21,7 @@
  * Aucun calcul agronomique : tout vient de `versScene`, qui ne fait que placer le plan de la 2D.
  */
 import { createRoot, extend, useFrame, useThree, type ReconcilerRoot, type RootState } from '@react-three/fiber';
-import { Component, memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type RefObject, type ReactNode } from 'react';
+import { Component, lazy, memo, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type RefObject, type ReactNode } from 'react';
 import { AmbientLight, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
 import type { DateCalendaire } from '@planif/core';
 import type { Plan } from '../plan/calculs.ts';
@@ -51,7 +51,8 @@ import { fermeSansPlacement } from './invitation.ts';
 import { cultureAu, lireCultures, type CulturesLues } from './donnees-plants.ts';
 import { Plants } from './Plants.tsx';
 import { PanneauTravaux3d } from './PanneauTravaux.tsx';
-import { CouchePastilles, placerPastilles, type PastilleDessinee } from './Pastilles.tsx';
+import { CouchePastilles, placerPastilles, type PastilleDessinee, type PointPose } from './Pastilles.tsx';
+import type { EtatVannes3d, ProprietesVannes3d } from './Vannes3d.tsx';
 import type { Camera as CameraThree } from 'three';
 import type { Masques } from '../aujourdhui/cache.ts';
 import type { LectureTravaux, pourDe, tachesVisibles, travauxDuJour3d, TravauxDuJour3d } from './travaux.ts';
@@ -829,6 +830,19 @@ const ElementBatiment = memo(function ElementBatiment({ batiment, surAller }: { 
   );
 });
 
+/**
+ * T57 : les vannes, chargées à la demande. Leur arrivée ne rend que ce composant, jamais la vue (un
+ * rendu de la vue redessine la scène : la 3D au repos ne dessine aucune image). Morceau introuvable
+ * (hors ligne avant tout précache) : la 3D reste entière, sans repères. Chargées par un relais
+ * (./vannes-differees.ts) : la liste de leurs dépendances n'alourdit pas le morceau 3D.
+ */
+const VannesDifferees = lazy(
+  (): Promise<{ default: (p: ProprietesVannes3d) => ReactNode }> =>
+    import('./vannes-differees.ts')
+      .then((m) => m.chargerVannes3d())
+      .catch(() => ({ default: () => null })),
+);
+
 export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, invitationDemo = false, porte, fermeId, utilisateurId }: ProprietesVue3d) {
   // T28k (Q36) : le gérant place la ferme aussi au téléphone, à tout écran.
   const peutModifier = gerant && surModifierPlan !== undefined;
@@ -934,10 +948,19 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const derniereTaille = useRef<{ readonly width: number; readonly height: number } | null>(null);
   const plancheActive = travailActif === null ? null : (jour.travaux.find((t) => t.rang === travailActif)?.planche ?? null);
 
+  // Vannes (T57) : chargées à part du morceau 3D (VannesDifferees) ; leurs repères sont posés sur la toile comme les pastilles.
+  // Seule une coloration active (filtre « Irrigation », vanne choisie) redessine la vue : les repères arrivés de la base sont posés sans rendu.
+  const [coloration, setColoration] = useState<{ readonly colorer: EtatVannes3d['colorer'] } | null>(null);
+  const coucheVannes = useRef<HTMLDivElement>(null);
+  const reperesRef = useRef<readonly PointPose[]>([]);
+  const colorationActive = useRef(false);
+
   // Filtres (T27b) : état local à la vue, jamais écrit ni stocké ; tout est coché à chaque ouverture.
   const [filtres, setFiltres] = useState<FiltresScene>(FILTRES_TOUT);
   const options = useMemo(() => (scene === null ? { familles: [], cultures: [], zones: [] } : optionsFiltres(scene)), [scene]);
-  const filtree = useMemo(() => (scene === null ? null : appliquerFiltres(scene, filtres)), [scene, filtres]);
+  const filtreeBrute = useMemo(() => (scene === null ? null : appliquerFiltres(scene, filtres)), [scene, filtres]);
+  // T57 : filtre « Irrigation » et planches de la vanne choisie, posés sur la scène filtrée.
+  const filtree = useMemo(() => (filtreeBrute === null || coloration === null ? filtreeBrute : coloration.colorer(filtreeBrute)), [filtreeBrute, coloration]);
   const univers = useCallback(
     (dimension: DimensionFiltre): readonly string[] => (dimension === 'zones' ? options.zones.map((z) => z.id) : options[dimension]),
     [options],
@@ -968,6 +991,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     derniereTaille.current = size;
     // Taille de la toile lue par fiber (T37b) : aucune lecture de mise en page à chaque image.
     if (couchePastilles.current !== null) placerPastilles(couchePastilles.current, camera, size.width, size.height, pastillesRef.current);
+    if (coucheVannes.current !== null) placerPastilles(coucheVannes.current, camera, size.width, size.height, reperesRef.current);
     s.rendus += 1;
     const ds = gl.domElement.dataset;
     ds.rendus = String(s.rendus);
@@ -1019,6 +1043,16 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   }, []);
 
   const toileRef = useRef<HTMLCanvasElement>(null);
+  const surEtatVannes = useCallback((e: EtatVannes3d) => {
+    reperesRef.current = e.reperes;
+    const taille = derniereTaille.current;
+    if (coucheVannes.current !== null && derniereCamera.current !== null && taille !== null) placerPastilles(coucheVannes.current, derniereCamera.current, taille.width, taille.height, e.reperes);
+    // Aucun état touché tant que rien n'est ni n'était coloré : pas de rendu, pas d'image.
+    const active = e.irrigation || e.evidence !== null;
+    if (!active && !colorationActive.current) return;
+    colorationActive.current = active;
+    setColoration(active ? { colorer: e.colorer } : null);
+  }, []);
   /** Donné par la caméra : les boutons de la liste s'en servent pour voler vers une zone (T29). */
   const pilote = useRef<Pilote | null>(null);
   const aller = useCallback((cible: CibleVol) => {
@@ -1163,7 +1197,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const nbPlacees = geometrie?.volumes.filter((v) => v.placee).length ?? 0;
   const libelleCourant = plan.semaines[semaineBornee]?.libelle ?? '';
   // Récolte (T32e) : les planches à récolter (non estompées par les filtres), annoncées dans le panneau et l'alternative texte de la toile.
-  const nbARecolter = useMemo(() => (plants === null || filtree === null ? 0 : planchesARecolter(plants, filtree).length), [plants, filtree]);
+  const nbARecolter = useMemo(() => (plants === null || filtreeBrute === null ? 0 : planchesARecolter(plants, filtreeBrute).length), [plants, filtreeBrute]);
   const phraseRecolte = phrasePlanchesARecolter(nbARecolter);
   const recoltes = useMemo(() => (filtree?.volumes ?? []).map((_, i) => plants?.[i]?.recolte.phase ?? 'aucune'), [plants, filtree]);
   const description = `Vue 3D des planches, semaine ${libelleCourant}. ${phraseRecolte}. Glisser pour tourner, molette pour s’approcher ; au clavier, flèches et + ou -.`;
@@ -1267,6 +1301,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-fruits={0} data-balises={0} data-lignes-rangs={0} data-active-en-detail="" data-planches-a-recolter={nbARecolter} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-travaux-erreur={erreurTravaux ? 'oui' : 'non'} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
           <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} erreur={erreurTravaux} />
+          {porte !== undefined && fermeId !== undefined && geometrie !== null && <Suspense><VannesDifferees porte={porte} fermeId={fermeId} volumes={geometrie.volumes} couche={coucheVannes} surEtat={surEtatVannes} /></Suspense>}
         </div>
         <aside id={idPanneau} data-testid="panneau-3d" className={filtresOuverts ? 'plan3d-cote' : 'plan3d-cote plan3d-cote-replie'} aria-label="Légende, filtres et liste des planches">
           {/* T37c : replié au téléphone, le panneau n'a plus de taille mais la liste des planches (l'alternative texte de la toile) reste lisible au lecteur d'écran : seul le reste est `hidden`. */}

@@ -166,7 +166,9 @@ export type ChangementPlacement =
       readonly id: string;
       readonly placement: { readonly x: number; readonly y: number; readonly orientation_deg: number } | null;
     }
-  | { readonly sorte: 'origine'; readonly origine: { readonly latitude: number; readonly longitude: number } | null };
+  | { readonly sorte: 'origine'; readonly origine: { readonly latitude: number; readonly longitude: number } | null }
+  /** T57 : une vanne posée sur le plan (repère de la ferme, mètres) ; nulle : en tête de sa première planche. */
+  | { readonly sorte: 'vanne'; readonly id: string; readonly position: { readonly x: number; readonly y: number } | null };
 
 export interface PorteDonnees {
   /** Lecture SQL libre (jointures comprises) sur la base locale. */

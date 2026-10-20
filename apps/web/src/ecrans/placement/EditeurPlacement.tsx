@@ -32,6 +32,7 @@ import {
   requetePlanches,
   requeteEmplacementsPlaces,
   requeteRoles,
+  requeteVannes,
   requeteZones,
   sansNull,
   TYPES,
@@ -39,6 +40,7 @@ import {
   type EmplacementPlace,
   type FermeLue,
   type Planche,
+  type Vanne,
   type Zone,
 } from './donnees.ts';
 import {
@@ -131,9 +133,9 @@ const TAILLE_PAR_DEFAUT = { w: 1280, h: 800 } as const;
 
 const LIBELLE_TYPE: Readonly<Record<TypeBatiment, string>> = Object.fromEntries(TYPES.map((t) => [t.valeur, t.libelle])) as Record<TypeBatiment, string>;
 
-/** Un élément dessiné : bâtiment, ou planche ramenée dans le repère de la ferme. */
+/** Un élément dessiné : bâtiment, planche ramenée dans le repère de la ferme, ou vanne (T57 : un point, carré de 1 m, jamais tourné). */
 interface Objet {
-  readonly sorte: 'batiment' | 'planche';
+  readonly sorte: 'batiment' | 'planche' | 'vanne';
   readonly id: string;
   readonly libelle: string;
   readonly rect: RectanglePlace;
@@ -387,12 +389,15 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [zones, setZones] = useState<readonly Zone[] | null>(null);
   const [lusP, setLusP] = useState<readonly Planche[] | null>(null);
   const [lusE, setLusE] = useState<readonly EmplacementPlace[] | null>(null);
+  const [jour] = useState(() => new Date().toLocaleDateString('sv'));
+  const [lusV, setLusV] = useState<readonly Vanne[]>([]);
   useEffect(() => porte.surveiller(requeteFerme(fermeId), (l) => { setFerme({ valeur: l[0] ?? null }); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteRoles(fermeId, utilisateurId), setRoles), [porte, fermeId, utilisateurId]);
   useEffect(() => porte.surveiller(requeteBatiments(fermeId), (l) => { setLusB(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteZones(fermeId), (l) => { setZones(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requetePlanches(fermeId), (l) => { setLusP(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteEmplacementsPlaces(fermeId), (l) => { setLusE(sansNull(l)); }), [porte, fermeId]);
+  useEffect(() => porte.surveiller(requeteVannes(fermeId, jour), (l) => { setLusV(sansNull(l)); }), [porte, fermeId, jour]);
 
   const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null;
   const gerant = roles?.includes('gerant') === true;
@@ -403,6 +408,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [brouillonB, setBrouillonB] = useState<ReadonlyMap<string, Batiment>>(() => new Map());
   const [brouillonP, setBrouillonP] = useState<ReadonlyMap<string, Planche>>(() => new Map());
   const [brouillonZ, setBrouillonZ] = useState<ReadonlyMap<string, readonly Point[]>>(() => new Map());
+  const [brouillonV, setBrouillonV] = useState<ReadonlyMap<string, Point>>(() => new Map());
   const [selection, setSelection] = useState<string | null>(null);
   const [zoneSel, setZoneSel] = useState<string | null>(null);
   const [trace, setTrace] = useState<Trace | null>(null);
@@ -603,10 +609,23 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
         repere: repere.base ?? repere.affichage,
       });
     }
-    return { batiments: liste, planches };
-  }, [batimentsAff, planchesAff, reperes]);
+    // T57 : une vanne à sa place, sinon en tête de sa première planche affichée (plus petit code), au bout opposé à son cap.
+    const vannes: Objet[] = [];
+    for (const v of lusV) {
+      let centre = brouillonV.get(v.id) ?? v.position;
+      if (centre === null) {
+        const premiere = planches.filter((p) => v.planches.includes(p.id)).sort((a, b) => a.libelle.localeCompare(b.libelle, 'fr', { numeric: true }))[0];
+        if (premiere === undefined) continue;
+        const t = (premiere.rect.orientationDeg * Math.PI) / 180;
+        const d = premiere.rect.longueurM / 2;
+        centre = { x: premiere.rect.centre.x - Math.sin(t) * d, y: premiere.rect.centre.y - Math.cos(t) * d };
+      }
+      vannes.push({ sorte: 'vanne', id: v.id, libelle: `Vanne ${v.nom}`, rect: { centre, orientationDeg: 0, longueurM: 1, largeurM: 1 }, repere: null });
+    }
+    return { batiments: liste, planches, vannes };
+  }, [batimentsAff, planchesAff, reperes, lusV, brouillonV]);
 
-  const choisi = selection === null ? undefined : [...elements.batiments, ...elements.planches].find((e) => e.id === selection);
+  const choisi = selection === null ? undefined : [...elements.batiments, ...elements.planches, ...elements.vannes].find((e) => e.id === selection);
   const batimentChoisi = choisi?.sorte === 'batiment' ? batimentsAff.find((b) => b.id === choisi.id) : undefined;
 
   const changements = useMemo(
@@ -622,9 +641,16 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             brouillonPlanches: brouillonP,
             brouillonZones: brouillonZ,
             zonesAbritees: new Set([...zonesInfo.values()].filter((i) => i.abritee).map((i) => i.zone.id)),
-          })
+          }).concat(
+            // T57 : les vannes déplacées (repère de la ferme, au millimètre).
+            [...brouillonV].flatMap(([id, p]): ChangementPlacement[] => {
+              const avant = lusV.find((v) => v.id === id);
+              const position = { x: arrondi(p.x), y: arrondi(p.y) };
+              return avant === undefined || (avant.position?.x === position.x && avant.position.y === position.y) ? [] : [{ sorte: 'vanne', id, position }];
+            }),
+          )
         : [],
-    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo],
+    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, brouillonV, lusV],
   );
   const modifie = changements.length > 0;
   const contoursModifies = [...zonesInfo.values()].filter((i) => i.change);
@@ -671,6 +697,10 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   /** Applique un rectangle (repère de la ferme) à l'élément : bâtiment tel quel, planche dans le repère de sa zone. */
   function majRectangle(e: Objet, r: RectanglePlace): void {
+    if (e.sorte === 'vanne') {
+      setBrouillonV((prev) => new Map(prev).set(e.id, r.centre));
+      return;
+    }
     if (e.sorte === 'batiment') {
       majBatiment(e.id, { centre: r.centre, orientationDeg: r.orientationDeg, longueurM: r.longueurM, largeurM: r.largeurM });
       return;
@@ -685,6 +715,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setBrouillonB(new Map());
     setBrouillonP(new Map());
     setBrouillonZ(new Map());
+    setBrouillonV(new Map());
     setTrace(null);
     setMessageContour(null);
     setErreur(null);
@@ -811,13 +842,14 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   // ── Écriture : toujours par porte.placer ─────────────────────────────────────────────────────
   async function recharger(): Promise<void> {
-    const l = await lireTout(porte, fermeId, utilisateurId);
+    const l = await lireTout(porte, fermeId, utilisateurId, jour);
     setFerme({ valeur: l.ferme });
     setRoles(l.roles);
     setLusB(l.batiments);
     setZones(l.zones);
     setLusP(l.planches);
     setLusE(l.emplacements);
+    setLusV(l.vannes);
   }
 
   /** Relit la base après une écriture réussie ; un échec ne défait rien : il est dit à part d'un refus. */
@@ -851,7 +883,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   async function enregistrer(): Promise<void> {
     if (!peutEnregistrer) return;
-    const [ecritsB, ecritsP, ecritsZ] = [brouillonB, brouillonP, brouillonZ];
+    const [ecritsB, ecritsP, ecritsZ, ecritsV] = [brouillonB, brouillonP, brouillonZ, brouillonV];
     const entree = await ecrire(changements);
     if (entree === null) return;
     // Seul ce qui vient d'être écrit sort du brouillon : un geste fait pendant l'écriture reste.
@@ -863,6 +895,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setBrouillonB((prev) => sans(prev, ecritsB));
     setBrouillonP((prev) => sans(prev, ecritsP));
     setBrouillonZ((prev) => sans(prev, ecritsZ));
+    setBrouillonV((prev) => sans(prev, ecritsV));
     setDernier(entree);
   }
 
@@ -1188,7 +1221,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   // ── Rendu ─────────────────────────────────────────────────────────────────────────────────────
   // Au doigt (écran de téléphone ou de tablette, ou écran tactile), les zones à toucher font 44 px au moins.
   const auDoigt = !surOrdinateur || ecranTactile;
-  const poignees = edition && choisi !== undefined ? positionsPoignees(vue, choisi.rect, auDoigt ? DECALAGE_POIGNEE_COTE_DOIGT_PX : 0) : null;
+  const poignees = edition && choisi !== undefined && choisi.sorte !== 'vanne' ? positionsPoignees(vue, choisi.rect, auDoigt ? DECALAGE_POIGNEE_COTE_DOIGT_PX : 0) : null;
   const tailleSommet = auDoigt ? TAILLE_SOMMET_DOIGT_PX : TAILLE_SOMMET_SOURIS_PX;
   const carreau = CARREAU_M / mpp;
   const depart = versEcran(vue, { x: 0, y: 0 });
@@ -1210,6 +1243,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   function dessiner(e: Objet): ReactElement {
     const selectionne = selection === e.id;
     const batiment = e.sorte === 'batiment';
+    const vanne = e.sorte === 'vanne';
+    // T57 : une vanne est un repère de 44 px (au doigt, avec des gants), quel que soit le zoom.
+    const c = versEcran(vue, e.rect.centre);
     return (
       <div
         key={e.id}
@@ -1217,15 +1253,16 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
         tabIndex={0}
         aria-pressed={selectionne}
         aria-label={e.libelle}
-        data-testid={batiment ? 'batiment' : 'planche'}
+        data-testid={e.sorte}
         data-id={e.id}
+        data-placee={vanne ? (lusV.find((v) => v.id === e.id)?.position != null || brouillonV.has(e.id) ? 'oui' : 'non') : undefined}
         data-x={arrondi(e.rect.centre.x)}
         data-y={arrondi(e.rect.centre.y)}
         data-orientation={arrondi(e.rect.orientationDeg)}
         data-longueur={arrondi(e.rect.longueurM)}
         data-largeur={arrondi(e.rect.largeurM)}
-        className={`pl-forme ${batiment ? 'pl-batiment' : 'pl-planche'}${selectionne ? ' pl-choisi' : ''}${edition ? ' pl-mobile' : ''}`}
-        style={styleRectangle(vue, e.rect)}
+        className={`pl-forme pl-${e.sorte}${selectionne ? ' pl-choisi' : ''}${edition ? ' pl-mobile' : ''}`}
+        style={vanne ? { left: c.x - 22, top: c.y - 22, touchAction: 'none' } : styleRectangle(vue, e.rect)}
         onPointerDown={(ev) => {
           commencer(ev, e, 'deplacer', null);
         }}
@@ -1237,6 +1274,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
         }}
       >
         {batiment && <span className="pl-nom">{e.libelle.split(',')[0]}</span>}
+        {vanne && e.libelle.slice(6)}
       </div>
     );
   }
@@ -1244,7 +1282,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   /** Barre de boutons : en bas de l'écran sur téléphone et tablette (boutons larges), dans la colonne de droite sur ordinateur. */
   const barre = edition ? (
     <div data-testid="barre-doigt" className={`pl-barre${surOrdinateur ? ' pl-barre-colonne' : ''}`}>
-      {choisi !== undefined && (
+      {choisi !== undefined && choisi.sorte !== 'vanne' && (
         <>
           <button
             type="button"
@@ -1472,6 +1510,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
               {pret && elements.planches.map(dessiner)}
               {pret && elements.batiments.map(dessiner)}
+              {pret && elements.vannes.map(dessiner)}
 
               {pret && zoneChoisie !== undefined && sommetsAff.length > 0 && (
                 <>

@@ -318,6 +318,13 @@ describe('T41b : préparer une migration de bibliothèque (le script `bibliotheq
   });
 
   it('la dernière migration de bibliothèque, pas encore fusionnée : réécrite depuis l’état précédent ; sur le dépôt, les mêmes fichiers', () => {
+    // T57 : une migration de schéma (0040, vannes) peut venir après la dernière de bibliothèque ;
+    // celle-ci n'est alors plus la dernière du journal et ne se réécrit plus (règle du script).
+    if (depot.journal.entries.at(-1)?.tag !== DERNIERE) {
+      const refus = db.preparerMigrationBibliotheque(DERNIERE, depot, options);
+      expect(refus.ok ? '' : refus.erreur).toMatch(/ne se réécrit jamais/);
+      return;
+    }
     const r = db.preparerMigrationBibliotheque(DERNIERE, depot, options);
     // T60 : une migration ordinaire (0039) la suit : elle est fusionnée et ne se réécrit plus.
     if (depot.journal.entries.at(-1)?.tag !== DERNIERE) {

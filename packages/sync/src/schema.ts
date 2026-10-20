@@ -40,7 +40,7 @@ export const TABLES_LOCALES = {
   refus_synchro: { utilisateur_id: T, ferme_id: T, nom_table: T, ligne_id: T, operation: T, motif: T, message: T, cree_le: T, saisie_type: T, saisie_culture: T, saisie_date: T, saisie_quantite: 'reel', saisie_unite: T, archive_le: T },
   saison: { ferme_id: T, nom: T, debut: T, fin: T, cree_le: T, modifie_le: T, supprime_le: T },
   secteur_emplacement: { ferme_id: T, secteur_irrigation_id: T, emplacement_id: T, du: T, au: T, cree_le: T, modifie_le: T, supprime_le: T },
-  secteur_irrigation: { ferme_id: T, numero_vanne: 'entier', nom: T, debit_litres_heure: 'reel', adresse_modbus: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
+  secteur_irrigation: { ferme_id: T, numero_vanne: 'entier', nom: T, debit_litres_heure: 'reel', adresse_modbus: 'entier', placement_x_m: 'reel', placement_y_m: 'reel', cree_le: T, modifie_le: T, supprime_le: T },
   serie: { ferme_id: T, saison_id: T, espece_id: T, variete_id: T, itineraire_id: T, parametres: T, ancre_type: T, ancre_date: T, prevu_semis_pepiniere: T, prevu_mise_en_place: T, prevu_debut_recolte: T, prevu_fin_recolte: T, longueur_m: 'reel', nombre_plants: 'entier', statut: T, rotation_acceptee: T, cree_le: T, modifie_le: T, supprime_le: T },
   type_intervention: { ferme_id: T, categorie: T, libelle: T, masque: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
   utilisateur: { nom: T, cree_le: T, modifie_le: T, supprime_le: T },

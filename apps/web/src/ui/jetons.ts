@@ -363,3 +363,11 @@ export function variablesCss(): string {
 export function couleur(cle: CleCouleur): string {
   return `var(--couleur-${kebab(cle)})`;
 }
+
+/**
+ * Vue 3D (T57) : filtre « Irrigation », couleur des planches selon leur dernière irrigation (bleu
+ * franc aujourd'hui, bleu clair hier, sable plus ancienne, gris jamais), et repère d'une vanne
+ * (bleu de l'eau, chiffre blanc). Une seule valeur pour les deux thèmes, comme la scène.
+ */
+export const COULEURS_IRRIGATION_3D = { aujourdhui: '#1F6FB2', hier: '#8EC0E8', ancienne: '#D9A441', jamais: '#9C9A92' } as const;
+export const COULEURS_REPERE_VANNE = { fond: '#1F6FB2', texte: '#FFFFFF' } as const;

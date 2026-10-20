@@ -69,6 +69,7 @@ import {
   type TacheJour,
 } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
+import { BoutonIrrigation } from './BoutonIrrigation.tsx';
 import type { ProprietesBandeauInstallation } from '../../installation/BandeauInstallation.tsx';
 import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
 import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
@@ -1368,6 +1369,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         <button type="button" className="auj-traitement" disabled={porte === null} onClick={ouvrirTraitement}>
           Traitement
         </button>
+        {/* T57 : seul point d'entrée de la saisie d'irrigation (fichier à part, chargé au premier tap). */}
+        <BoutonIrrigation porte={porte} fermeId={fermeId} aujourdhui={jour} />
         {/* L'historique est en bas de l'écran : ce bouton y mène d'un geste. */}
         <button
           type="button"

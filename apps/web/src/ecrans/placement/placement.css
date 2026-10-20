@@ -222,6 +222,22 @@
   border: 1px solid var(--couleur-foret);
 }
 
+/* T57 : une vanne, repère de 44 px quel que soit le zoom (au doigt, avec des gants). */
+.pl-vanne {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid var(--couleur-surface);
+  border-radius: var(--rayon-case);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-family: var(--police-code);
+  font-weight: 700;
+  font-size: 13px;
+}
+
 .pl-mobile {
   cursor: move;
 }

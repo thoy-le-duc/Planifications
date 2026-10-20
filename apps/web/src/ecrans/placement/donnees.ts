@@ -160,6 +160,31 @@ export const requeteEmplacementsPlaces = (fermeId: string): RequeteSurveillee<Em
   },
 });
 
+/** T57 : une vanne, sa position sur le plan (repère de la ferme) ou nulle, et les planches qu'elle arrose ce jour-là. */
+export interface Vanne {
+  readonly id: string;
+  readonly nom: string;
+  readonly position: Point | null;
+  readonly planches: readonly string[];
+}
+
+/** Vannes non supprimées, par numéro ; leurs planches : liens non supprimés actifs le jour `jour`. */
+export const requeteVannes = (fermeId: string, jour: string): RequeteSurveillee<Vanne | null> => ({
+  sql: `SELECT v.id, v.nom, v.placement_x_m, v.placement_y_m,
+          (SELECT json_group_array(se.emplacement_id) FROM secteur_emplacement se WHERE se.secteur_irrigation_id = v.id AND se.ferme_id = v.ferme_id
+             AND se.supprime_le IS NULL AND se.du <= ? AND (se.au IS NULL OR se.au >= ?)) AS planches
+        FROM secteur_irrigation v WHERE v.ferme_id = ? AND v.supprime_le IS NULL ORDER BY v.numero_vanne, v.id`,
+  parametres: [jour, jour, fermeId],
+  tables: ['secteur_irrigation', 'secteur_emplacement'],
+  convertir: (l: Ligne) => {
+    const id = texte(l.id);
+    const x = nombre(l.placement_x_m);
+    const y = nombre(l.placement_y_m);
+    const planches = json(l.planches);
+    return id === null ? null : { id, nom: texte(l.nom) ?? '', position: x === null || y === null ? null : { x, y }, planches: Array.isArray(planches) ? planches.filter((p): p is string => typeof p === 'string') : [] };
+  },
+});
+
 export interface Lectures {
   readonly ferme: FermeLue | null;
   readonly roles: readonly string[];
@@ -167,21 +192,23 @@ export interface Lectures {
   readonly zones: readonly Zone[];
   readonly planches: readonly Planche[];
   readonly emplacements: readonly EmplacementPlace[];
+  readonly vannes: readonly Vanne[];
 }
 
 export const sansNull = <T,>(l: readonly (T | null)[]): T[] => l.filter((x): x is T => x !== null);
 
 /** Relit tout d'un coup (après une écriture : l'affichage ne passe pas par un état intermédiaire). */
-export async function lireTout(porte: PorteDonnees, fermeId: string, utilisateurId: string): Promise<Lectures> {
-  const [rf, rr, rb, rz, rp, re] = await Promise.all([
+export async function lireTout(porte: PorteDonnees, fermeId: string, utilisateurId: string, jour: string): Promise<Lectures> {
+  const [rf, rr, rb, rz, rp, re, rv] = await Promise.all([
     lireRequete(porte, requeteFerme(fermeId)),
     lireRequete(porte, requeteRoles(fermeId, utilisateurId)),
     lireRequete(porte, requeteBatiments(fermeId)),
     lireRequete(porte, requeteZones(fermeId)),
     lireRequete(porte, requetePlanches(fermeId)),
     lireRequete(porte, requeteEmplacementsPlaces(fermeId)),
+    lireRequete(porte, requeteVannes(fermeId, jour)),
   ]);
-  return { ferme: rf[0] ?? null, roles: rr, batiments: sansNull(rb), zones: sansNull(rz), planches: sansNull(rp), emplacements: sansNull(re) };
+  return { ferme: rf[0] ?? null, roles: rr, batiments: sansNull(rb), zones: sansNull(rz), planches: sansNull(rp), emplacements: sansNull(re), vannes: sansNull(rv) };
 }
 
 async function lireRequete<T>(porte: PorteDonnees, r: RequeteSurveillee<T>): Promise<T[]> {

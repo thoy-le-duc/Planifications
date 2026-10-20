@@ -45,7 +45,11 @@ let EcranFerme: typeof import('../ferme/EcranFerme.tsx').default;
 beforeAll(async () => {
   EcranPlan = (await import('../plan/EcranPlan.tsx')).EcranPlan;
   EcranFerme = (await import('../ferme/EcranFerme.tsx')).default;
-});
+  // Morceaux chargés à la demande par les gestes des tests (vue 3D, éditeur, vannes de la 3D) : transformés
+  // ici par Vitest, pour que le premier test n'attende pas leur transformation à froid (300 tours ne
+  // suffisaient pas toujours sous charge, même sur main ; T57). Les assertions ne changent pas.
+  await Promise.all([import('../plan3d/index.ts'), import('./index.ts'), import('../plan3d/Vannes3d.tsx'), import('../plan3d/travaux.ts')]);
+}, 60_000);
 
 let conteneur: HTMLDivElement;
 let racine: Root;
