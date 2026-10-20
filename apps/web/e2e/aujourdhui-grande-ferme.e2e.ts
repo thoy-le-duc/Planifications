@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { CLE_SESSION } from '../src/connexion/session.ts';
+import { cleInstantane } from '../src/ecrans/aujourdhui/cle-instantane.ts';
 import { MARQUE_AUJOURDHUI_ATTENDUE } from '../src/ecrans/aujourdhui/test/contrat.ts';
 import { grandeFerme } from '../src/ecrans/aujourdhui/test/grande-ferme.ts';
 import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, repeterMesures, jugerSerie } from './outils.ts';
@@ -50,7 +51,8 @@ import { decrireSerie, ralentirCpu, REPETITIONS_MESURE, repeterMesure, repeterMe
  *     page dès que les cartes sont là, sur trois tâches différentes) → trois réalisés, aucun
  *     perdu, aucun en double : le compteur « saisies en attente » de la synchro monte de 3
  *     exactement et y reste ; les trois tâches ne reviennent pas, ni après la base ni après un
- *     rechargement.
+ *     rechargement. T64 : puis la journée relue arrive, et elles n'y sont pas non plus ; les étapes
+ *     suivantes partent d'un écran au repos.
  */
 
 const BUDGET_TAP_MS = 300;
@@ -258,6 +260,21 @@ async function armerFaitAvantBase(page: Page): Promise<void> {
   }, DRAPEAU_FAIT_AVANT_BASE);
 }
 
+/**
+ * T64 : à chaque chargement, note (window.__instantaneGarde) la première écriture de l'instantané
+ * de `utilisateurId` (contrat T13d : localStorage). Sans geste, seule une journée relue le réécrit.
+ */
+async function relevesInstantaneGarde(page: Page, utilisateurId: string): Promise<void> {
+  await page.addInitScript((cle) => {
+    const f = window as unknown as { __instantaneGarde?: number };
+    const ecrire = Object.getOwnPropertyDescriptor(Storage.prototype, 'setItem')?.value as (this: Storage, k: string, v: string) => void;
+    Storage.prototype.setItem = function (this: Storage, k: string, v: string) {
+      if (k === cle && f.__instantaneGarde === undefined) f.__instantaneGarde = performance.now();
+      ecrire.call(this, k, v);
+    };
+  }, cleInstantane(utilisateurId));
+}
+
 /** Nombre de saisies en attente d'envoi, d'après l'état de la synchro (« Hors ligne · N saisies en attente »). */
 async function saisiesEnAttente(page: Page): Promise<number> {
   const t = (await page.getByTestId('etat-synchro').textContent()) ?? '';
@@ -451,12 +468,19 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
     for (const cle of fait.cles) await expect(page.locator(`[data-testid="tache"][data-cle="${cle}"]`), `${cle} faite, ne revient pas`).toHaveCount(0);
 
     // Rechargement, toujours hors ligne : les trois restent faites, rien de plus n'est écrit.
+    await relevesInstantaneGarde(page, ferme.utilisateurId);
     await page.reload();
     await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 30_000 });
     await expect(taches(page).first()).toBeVisible({ timeout: 30_000 });
     await page.waitForTimeout(DELAI_ECRITURE_INSTANTANE_MS);
     expect(await saisiesEnAttente(page), 'après rechargement : trois de plus, pas une de plus').toBe(avant + 3);
     for (const cle of fait.cles) await expect(page.locator(`[data-testid="tache"][data-cle="${cle}"]`), `${cle} reste faite après rechargement`).toHaveCount(0);
+    // T64 : la journée relue est arrivée (seule à réécrire l'instantané, sans geste ensuite), et
+    // les trois restent faites. Avant T64, l'attente ci-dessus durait jusqu'à elle (les cartes
+    // revenues de l'instantané ne partaient qu'avec la journée relue) : les étapes suivantes
+    // partent, comme avant, d'un écran au repos, et non pendant la relecture complète à froid.
+    await page.waitForFunction(() => (window as unknown as { __instantaneGarde?: number }).__instantaneGarde !== undefined, undefined, { timeout: 60_000 });
+    for (const cle of fait.cles) await expect(page.locator(`[data-testid="tache"][data-cle="${cle}"]`), `${cle} reste faite dans la journée relue`).toHaveCount(0);
   });
 
   await test.step(`tap sur « Aujourd’hui » depuis Planches : écran affiché en moins de ${String(BUDGET_TAP_MS)} ms (base ouverte), médiane de 5`, async () => {
