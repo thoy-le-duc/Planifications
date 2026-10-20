@@ -374,6 +374,14 @@ function aidePrechargementLegere(): AidePrechargement {
     name: 'planif:aide-prechargement',
     apply: 'build',
     enforce: 'pre',
+    configResolved(config) {
+      // L'aide (src/prechargement/complet.ts) place les fichiers sous BASE_URL, comme Vite avec
+      // une base absolue. Base relative ou renderBuiltUrl : Vite passerait des chemins relatifs
+      // au morceau importateur, que l'aide placerait mal, sans bruit. Échec franc à la place.
+      if (config.base === './' || config.base === '' || config.experimental.renderBuiltUrl !== undefined) {
+        throw new Error('aide de préchargement (T66) : base relative ou renderBuiltUrl non gérés par src/prechargement/complet.ts');
+      }
+    },
     buildStart() {
       remplacee = false;
       fichiersEntree.clear();
