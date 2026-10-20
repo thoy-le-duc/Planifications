@@ -143,6 +143,53 @@ export function garderInstantane(stockage: StockageInstantane, ids: { readonly u
   }
 }
 
+// ── T64 : « Fait » écrit, retiré de l'instantané rangé ────────────────────────────────────────
+
+/**
+ * T64 : la tâche `cle` est faite (son « Fait » est écrit, ou déjà noté) : elle quitte l'instantané
+ * rangé tout de suite, et la saisie écrite (`ecrite`) entre en tête de son historique (au plus
+ * `max` saisies). Avant, l'instantané n'était réécrit que depuis une journée relue : appli fermée
+ * ou rechargée avant elle (5 à 8 s sur une grande ferme à froid), le lancement suivant montrait
+ * la tâche « à faire » jusqu'à la relecture. Rien d'autre ne change (« Fait » en attente compris) ;
+ * session d'un autre compte, autre ferme, illisible, plein ou refusé : rien.
+ */
+export function retirerDeInstantane(
+  stockage: StockageInstantane,
+  ids: { readonly utilisateurId: string; readonly fermeId: string },
+  cle: string,
+  ecrite: SaisieVue | null,
+  max: number,
+): void {
+  if (lireSession(stockage)?.utilisateurId !== ids.utilisateurId) return;
+  try {
+    const brut = stockage.getItem(cleInstantane(ids.utilisateurId));
+    if (brut === null) return;
+    const lu: unknown = JSON.parse(brut);
+    if (!estObjet(lu) || lu.utilisateurId !== ids.utilisateurId || lu.fermeId !== ids.fermeId) return;
+    const taches = liste(lu.taches, carte);
+    const historique = liste(lu.historique, saisie);
+    if (taches === null || historique === null) return;
+    const faite = taches.find((c) => c.cle === cle);
+    const ajout = ecrite !== null && !historique.some((h) => h.id === ecrite.id);
+    if (faite === undefined && !ajout) return;
+    const moins = (champ: unknown, n: number) => (estEntier(champ) ? Math.max(0, champ - n) : champ);
+    const note: Record<string, unknown> = { ...lu };
+    if (faite !== undefined) {
+      note.taches = taches.filter((c) => c !== faite);
+      note.retard = moins(lu.retard, faite.retard ? 1 : 0);
+      note.cetteSemaine = moins(lu.cetteSemaine, faite.retard ? 0 : 1);
+      note.charge = moins(lu.charge, faite.travail ? (faite.minutes ?? 0) : 0);
+    }
+    if (ajout) {
+      note.historique = [ecrite, ...historique].slice(0, max);
+      note.saisies = estEntier(lu.saisies) ? lu.saisies + 1 : lu.saisies;
+    }
+    stockage.setItem(cleInstantane(ids.utilisateurId), JSON.stringify(note));
+  } catch {
+    // Illisible, plein ou refusé : le prochain lancement relit la base, comme avant.
+  }
+}
+
 // ── T13k : « Fait » tapés avant la base, pas encore écrits ────────────────────────────────────
 
 /**

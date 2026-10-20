@@ -72,7 +72,7 @@ import { useFocusDuDialogue } from './dialogue.ts';
 import { BoutonIrrigation } from './BoutonIrrigation.tsx';
 import type { ProprietesBandeauInstallation } from '../../installation/BandeauInstallation.tsx';
 import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
-import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
+import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, retirerDeInstantane, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
 import type { TraitementsDar } from './dar.ts';
 import type { ProprietesSaisieTraitement } from './traitement/index.ts';
@@ -1183,13 +1183,17 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
     // alors que la saisie est écrite.
     const n = (ecritures.current > 0 || avantLaBase) && provisoire !== null ? montrerAnnulable(null, ecrite, provisoire.titre, provisoire.texte) : null;
     const avant = numero.current;
+    /** T64 : la saisie écrite, pour l'historique de l'instantané rangé. */
+    let entree: EntreeHistorique | null = null;
     void ecrire(async () => {
       let fait: FaitEcrit | null = null;
       try {
         const t = await tache();
         if (t !== null) fait = await ecrireFait(t);
         const ecrit = fait?.evenement;
-        if (t !== null && ecrit !== undefined && journee === null) setEcritsSurInstantane((l) => [{ evenement: ecrit, culture: t.culture }, ...l]);
+        if (t !== null && ecrit !== undefined) entree = { evenement: ecrit, culture: t.culture };
+        const e = entree;
+        if (e !== null && journee === null) setEcritsSurInstantane((l) => [e, ...l]);
       } finally {
         lever();
         // Avant le tour de l'annulation éventuelle, rangée derrière dans la file.
@@ -1201,6 +1205,11 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
       }
     }, true).then((ok) => {
       if (abandonne) return;
+      // T64 : faite (écrite ou déjà notée) : l'instantané rangé ne la montre plus, même si l'appli
+      // est fermée avant la journée relue (seule à réécrire l'instantané).
+      if (ok && !changee && utilisateurId !== undefined && stockage !== null) {
+        retirerDeInstantane(stockage, { utilisateurId, fermeId }, cle, entree === null ? null : (vuesHistorique([entree], jour)[0] ?? null), SAISIES_HISTORIQUE);
+      }
       masquer(cle, ok && !changee ? marquerEcriture() : undefined);
       if (!avantLaBase) return;
       // Le masque du cache a pris le relais (ou la carte revient : tâche changée, échec).
