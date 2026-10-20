@@ -53,6 +53,8 @@ const INDEX: Partial<Record<NomTableLocale, Record<string, string[]>>> = {
   evenement: {
     ferme_date: ['ferme_id', 'date'],
     ferme_horodatage: ['ferme_id', 'horodatage', 'date'],
+    // T52 : les traitements d'une ferme (délai avant récolte dans Aujourd'hui), sans parcourir le journal.
+    ferme_type: ['ferme_id', 'type', 'date'],
     serie: ['serie_id', 'ferme_id', 'type', 'date', 'remplace_sorte', 'detail'],
     campagne: ['campagne_id'],
     remplacement: ['remplace_evenement_id', 'ferme_id', 'origine_id', 'remplace_sorte', 'horodatage'],

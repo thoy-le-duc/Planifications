@@ -386,6 +386,8 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
     const attendus = [
       'ferme.json',
       'LISEZMOI.txt',
+      // T52 : le registre phyto (packages/core/src/export/registre-phyto.test.ts).
+      'registre-phyto.csv',
       ...Object.keys(TABLES_EXPORTEES).map((t) => `${t}.csv`),
       ...[...TABLES_BIBLIOTHEQUE].map((t) => `bibliotheque/${t}.csv`),
     ].sort();

@@ -934,11 +934,6 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
       ['campagne_id', () => ({ campagne_id: supprimees.campagne })],
       ['un des emplacement_ids', () => ({ emplacement_ids: JSON.stringify([supprimees.emplacement]) })],
       ['detail.secteurIrrigationId', () => ({ type: 'irrigation', detail: JSON.stringify(irrigation(supprimees.secteurIrrigation)) })],
-      ['detail.produitPhytoId (produit de la ferme)', () => ({ type: 'traitement', detail: JSON.stringify(traitement(supprimees.produitPhyto)) })],
-      [
-        'detail.produitPhytoId (produit de la bibliothèque)',
-        () => ({ type: 'traitement', detail: JSON.stringify(traitement(phytoBibliothequeSupprime)) }),
-      ],
     ])('%s supprimé : ecriture_invalide, rien d’écrit, 200, le reste du lot passe', async (_cas, champs) => {
       const mauvaise = putRecolte(theo.id, ferme, 1, champs());
       const bonne = putRecolte(theo.id, ferme, 2);
@@ -947,6 +942,19 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
       expect(await evenements(mauvaise.id)).toBe(0);
       expect(await modifications(mauvaise.id)).toBe(0);
       expect(await evenements(bonne.id)).toBe(1);
+    });
+
+    // T52 (relecture PR #211) : un produit phyto archivé reste référençable. Un traitement fait hors
+    // ligne avant l'archivage (un autre téléphone a archivé puis s'est synchronisé d'abord), une
+    // correction ou une annulation d'un traitement passé ne se distinguent pas d'un nouveau
+    // traitement : les refuser effacerait du registre un traitement réellement fait.
+    it.each([
+      ['produit de la ferme', () => supprimees.produitPhyto],
+      ['produit de la bibliothèque', () => phytoBibliothequeSupprime],
+    ])('detail.produitPhytoId (%s) archivé : accepté (registre phyto)', async (_cas, produit) => {
+      const e = putRecolte(theo.id, ferme, 1, { type: 'traitement', detail: JSON.stringify(traitement(produit())) });
+      expect(await lot([e], theo.jeton)).toEqual({ refus: [] });
+      expect(await evenements(e.id)).toBe(1);
     });
   });
 });

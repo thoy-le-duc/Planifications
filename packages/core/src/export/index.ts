@@ -11,7 +11,8 @@
  *
  * Contrat détaillé : ./test/contrat.ts.
  */
-import { TABLES_EXPORTEES, type DescriptionTable, type TypeExport } from './tables.ts';
+import { REGISTRE_PHYTO, TABLES_EXPORTEES, type DescriptionTable, type TypeExport } from './tables.ts';
+import { ligneCsvRegistre, lignesRegistrePhyto, TABLES_REGISTRE_PHYTO, type LigneLocaleRegistre } from '../phyto/index.ts';
 import { annulable, dateDos, EN_VOL, lancerEntree, partiesZip, verifierAnnulation, type Compressee, type Compresseur, type EntreeLancee, type MorceauZip, type SignalAnnulation } from './zip.ts';
 
 export { TABLES_EXPORTEES, type DescriptionColonne, type DescriptionTable, type TypeExport } from './tables.ts';
@@ -155,6 +156,38 @@ interface FichierPrevu {
 interface Plan {
   readonly fichiers: readonly FichierPrevu[];
   readonly lignes: Readonly<Record<string, number>>;
+}
+
+// ── Registre phyto (T52) ─────────────────────────────────────────────────────────────────────
+
+/** Chemin du registre phyto dans l'archive : après les CSV des tables, avant bibliotheque/. */
+const CHEMIN_REGISTRE = 'registre-phyto.csv';
+
+/** Tables lues par le registre phyto. */
+const TABLES_REGISTRE: ReadonlySet<string> = /* @__PURE__ */ new Set<string>(TABLES_REGISTRE_PHYTO);
+
+/** Colonnes gardées de chaque table pour le registre (le reste ne sert pas : moins de mémoire). */
+const COLONNES_GARDEES: Readonly<Record<string, readonly string[]>> = {
+  produit_phyto: ['id', 'ferme_id', 'nom_commercial', 'numero_amm', 'substance_active', 'utilisable_en_bio'],
+  emplacement: ['id', 'ferme_id', 'code'],
+  serie: ['id', 'ferme_id', 'espece_id', 'variete_id'],
+  campagne: ['id', 'ferme_id', 'plantation_id'],
+  plantation: ['id', 'ferme_id', 'espece_id', 'variete_id'],
+  espece: ['id', 'ferme_id', 'nom'],
+  variete: ['id', 'ferme_id', 'nom'],
+};
+
+function reduite(nom: string, l: LigneLocale): LigneLocaleRegistre {
+  const colonnes = COLONNES_GARDEES[nom];
+  if (colonnes === undefined) return l;
+  const r: Record<string, ValeurLocale> = {};
+  for (const c of colonnes) r[c] = l[c] ?? null;
+  return r;
+}
+
+/** Lignes du registre, au format des CSV de l'export. */
+function lignesRegistre(tables: Readonly<Record<string, readonly LigneLocaleRegistre[] | undefined>>, fermeId: string): LigneLocale[] {
+  return lignesRegistrePhyto(tables, fermeId).map(ligneCsvRegistre);
 }
 
 // ── Producteurs ──────────────────────────────────────────────────────────────────────────────
@@ -303,6 +336,7 @@ function lisezmoi(nomFerme: string, genereLe: string): string {
     bloc(`${nom}.csv`, d, remarque);
     if (d.bibliotheque) biblio.push([nom, d]);
   }
+  bloc(CHEMIN_REGISTRE, REGISTRE_PHYTO, 'Calculé à l’export : pour le contrôle (registre phytosanitaire, contrôle bio), filtrez la colonne bio.');
   for (const [nom, d] of biblio) bloc(`bibliotheque/${nom}.csv`, d, 'Bibliothèque de référence commune (ferme_id vide).');
   return l.join(FIN) + FIN;
 }
@@ -330,6 +364,9 @@ function* planifier(entree: EntreeExport): Generator<void, Plan, undefined> {
     }
   }
 
+  const registre = lignesRegistre(entree.tables, fermeId);
+  const csvRegistre: FichierPrevu = { chemin: CHEMIN_REGISTRE, bom: true, lignes: registre.length, produire: (c) => csv(REGISTRE_PHYTO, registre, c) };
+
   const nomFerme = entree.tables.ferme?.find((l) => l.id === fermeId)?.nom;
   const titre = typeof nomFerme === 'string' && nomFerme.trim() !== '' ? nomFerme : fermeId;
   const fichiers: FichierPrevu[] = [
@@ -343,6 +380,7 @@ function* planifier(entree: EntreeExport): Generator<void, Plan, undefined> {
       },
     },
     ...csvFerme,
+    csvRegistre,
     ...csvBiblio,
   ];
   return { fichiers, lignes };
@@ -508,8 +546,12 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
   const noms = Object.keys(TABLES_EXPORTEES);
   const nTables = noms.length;
   const nBiblio = noms.filter((n) => TABLES_EXPORTEES[n]?.bibliotheque === true).length;
-  // Place de chaque entrée dans l'archive : ferme.json, LISEZMOI.txt, les CSV des tables, bibliotheque/.
-  const entrees: (EntreeLancee | undefined)[] = Array.from({ length: 2 + nTables + nBiblio }, () => undefined);
+  // Place de chaque entrée dans l'archive : ferme.json, LISEZMOI.txt, les CSV des tables, le
+  // registre phyto (T52), bibliotheque/.
+  const placeRegistre = 2 + nTables;
+  const entrees: (EntreeLancee | undefined)[] = Array.from({ length: 2 + nTables + 1 + nBiblio }, () => undefined);
+  /** T52 : ce que le registre phyto lit des tables, gardé jusqu'à la fin (colonnes utiles seulement). */
+  const pourRegistre: Record<string, LigneLocaleRegistre[]> = {};
   const lignes: Record<string, number> = {};
   const membres = new Set<unknown>();
   const bibliotheques: TableRepartie[] = [];
@@ -669,6 +711,20 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
     const t = etape.value;
     if (nom === 'membre') for (const m of t.ferme) membres.add(m.utilisateur_id);
     if (nom === 'ferme') nomFerme = t.ferme[0]?.nom;
+    if (TABLES_REGISTRE.has(nom)) {
+      // Événements : les traitements seuls ; les autres tables : colonnes utiles (bibliothèque comprise).
+      const gardees: LigneLocaleRegistre[] = [];
+      const sources = d.bibliotheque ? [t.ferme, t.bibliotheque] : [t.ferme];
+      for (const source of sources) {
+        for (let i = 0; i < source.length; i++) {
+          if (i % PAQUET_LIGNES === PAQUET_LIGNES - 1) await peutEtreRendre();
+          const l = source[i];
+          if (l === undefined || (nom === 'evenement' && l.type !== 'traitement')) continue;
+          gardees.push(reduite(nom, l));
+        }
+      }
+      pourRegistre[nom] = gardees;
+    }
     lignes[nom] = t.ferme.length;
     if (d.bibliotheque) {
       lignes[`bibliotheque/${nom}`] = t.bibliotheque.length;
@@ -682,7 +738,7 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
     const attendues: Promise<unknown>[] = [plusTard(Promise.race([ecrites[k]?.promesse, j.travail]))];
     attendues.push(lue(await lancer(2 + k, `${nom}.csv`, flux(true, csv(d, t.ferme, compteur)))));
     if (d.bibliotheque) {
-      const place = 2 + nTables + bibliotheques.length - 1;
+      const place = placeRegistre + 1 + bibliotheques.length - 1;
       attendues.push(lue(await lancer(place, `bibliotheque/${nom}.csv`, flux(true, csv(d, t.bibliotheque, compteur)))));
     }
     await Promise.all(attendues);
@@ -700,6 +756,10 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
       bibliotheques.reduce((n, t) => n + t.bibliotheque.length, 0),
     );
     remiseFin.tenir(compteur);
+    // T52 : le registre phyto, une fois toutes les tables lues (hors de la barre d'avancement).
+    const registre = lignesRegistre(pourRegistre, fermeId);
+    for (const nom of Object.keys(pourRegistre)) Reflect.deleteProperty(pourRegistre, nom);
+    const r = await lancer(placeRegistre, CHEMIN_REGISTRE, flux(true, csv(REGISTRE_PHYTO, registre, { lignes: 0 })));
     const titre = typeof nomFerme === 'string' && nomFerme.trim() !== '' ? nomFerme : fermeId;
     const l = await lancer(
       1,
@@ -711,7 +771,7 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
         })(),
       ),
     );
-    await Promise.all([lue(j), lue(l)]);
+    await Promise.all([lue(j), lue(l), lue(r)]);
     verifierArret();
     const compressees: Compressee[] = [];
     for (const e of entrees) {

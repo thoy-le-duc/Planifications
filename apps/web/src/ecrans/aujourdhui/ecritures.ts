@@ -215,8 +215,11 @@ export async function marquerTravailFait(
   return e.id;
 }
 
-/** Récolte : l'événement et son entrée en stock (+quantité), l'article créé s'il n'existe pas. */
-export async function noterRecolte(ctx: ContexteEcriture, culture: Culture, quantite: number, unite: UniteRecolte): Promise<Id<'Evenement'>> {
+/**
+ * Récolte : l'événement et son entrée en stock (+quantité), l'article créé s'il n'existe pas.
+ * T52 : `note` garde l'avertissement d'une récolte confirmée sous délai avant récolte.
+ */
+export async function noterRecolte(ctx: ContexteEcriture, culture: Culture, quantite: number, unite: UniteRecolte, note: string | null = null): Promise<Id<'Evenement'>> {
   const detail: DetailRecolte = { quantite, unite, categorie: null };
   const e = evenement(ctx.porte, {
     type: 'recolte',
@@ -224,7 +227,7 @@ export async function noterRecolte(ctx: ContexteEcriture, culture: Culture, quan
     source: 'tap',
     culture: culturePour(culture),
     emplacementIds: emplacementsDe(culture),
-    note: null,
+    note,
     photos: [],
     remplaceEvenement: null,
     detail,

@@ -332,3 +332,29 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
     }),
   };
 })();
+
+/**
+ * T52 : registre-phyto.csv, le registre des traitements (une ligne par traitement en vigueur),
+ * lu dans les tables par `lignesRegistrePhyto` (../phyto/index.ts). Ce n'est pas une table : il
+ * n'est ni dans ferme.json ni dans `lignes`. Colonnes : COLONNES_REGISTRE_PHYTO, dans l'ordre.
+ */
+export const REGISTRE_PHYTO: DescriptionTable = /* @__PURE__ */ (() => ({
+  description:
+    'Registre phytosanitaire : un traitement par ligne, tel qu’en vigueur (sans les traitements annulés ni ceux remplacés par une correction), du plus ancien au plus récent. Calculé depuis evenement.csv et produit_phyto.csv.',
+  bibliotheque: false,
+  colonnes: {
+    date: date('jour du traitement (AAAA-MM-JJ)'),
+    produit: texte('nom commercial du produit utilisé'),
+    amm: texte('numéro d’autorisation de mise sur le marché (AMM) du produit'),
+    substance_active: texte('substance active du produit'),
+    bio: booleen('produit utilisable en agriculture biologique : oui ou non'),
+    dose: reel('dose appliquée'),
+    unite_dose: texte('unité de la dose (L/ha, kg/ha, g/hl…)'),
+    surface_traitee_m2: reel('surface traitée, en mètres carrés'),
+    emplacements: texte('codes des planches ou emplacements traités, séparés par des virgules'),
+    culture: texte('culture traitée (espèce et variété) ; vide si le traitement ne vise pas une culture'),
+    cible: texte('ravageur ou maladie visé'),
+    operateur: texte('personne qui a traité ; vide si non précisée'),
+    recolte_autorisee_le: date('premier jour où la récolte est permise (jour du traitement + délai avant récolte du produit, figé au traitement)'),
+  },
+}))();

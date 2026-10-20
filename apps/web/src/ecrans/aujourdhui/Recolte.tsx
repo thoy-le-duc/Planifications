@@ -3,6 +3,10 @@
  * quantité au pavé géant, « Valider ». L'unité est préremplie depuis la culture
  * (espece.unite_recolte). Valider écrit tout de suite, sans confirmation (saisie manuelle,
  * principe 3) : « Annuler » reste possible 10 s, puis depuis l'historique.
+ *
+ * T52 : une culture dont un emplacement est sous délai avant récolte montre l'alerte
+ * (« Récolte interdite jusqu’au… ») ; « Valider » demande alors une confirmation explicite. La
+ * récolte reste possible (le maraîcher reste maître) et sa note garde l'avertissement.
  */
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { UniteRecolte } from '@planif/core';
@@ -25,7 +29,15 @@ export interface ProprietesRecolte {
   readonly culture: Culture | null;
   readonly recoltesEnCours: readonly Culture[];
   readonly dernieres: ReadonlyMap<string, DerniereRecolte>;
-  readonly surValider: (culture: Culture, quantite: number, unite: UniteRecolte) => void;
+  /** `note` : l'avertissement d'une récolte confirmée sous délai avant récolte (T52), sinon null. */
+  readonly surValider: (culture: Culture, quantite: number, unite: UniteRecolte, note: string | null) => void;
+  /** T52 : alerte de délai avant récolte de la culture (« Récolte interdite jusqu’au… »), ou null. */
+  readonly interdiction?: (culture: Culture) => string | null;
+  /**
+   * T52 : présent tant que le suivi des délais n'est pas prêt : « Valider » l'attend (lecture des
+   * traitements) avant d'écrire, puis demande la même confirmation qu'à l'habitude.
+   */
+  readonly verifierInterdiction?: ((culture: Culture) => Promise<string | null>) | undefined;
   readonly surFermer: () => void;
   /** Échec de la dernière écriture, montré dans la récolte (l'écran est dessous). */
   readonly erreur?: string | null;
@@ -85,7 +97,7 @@ function uniteAffichee(quantite: number, u: UniteRecolte): string {
   return quantiteAvecUnite(quantite, u).replace(/^\S+ /, '');
 }
 
-export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surValider, surFermer, erreur = null, enAttente = false, occupe = false, texteOccupe = 'Saisies précédentes en cours d’enregistrement…' }: ProprietesRecolte) {
+export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surValider, surFermer, interdiction, verifierInterdiction, erreur = null, enAttente = false, occupe = false, texteOccupe = 'Saisies précédentes en cours d’enregistrement…' }: ProprietesRecolte) {
   const [culture, setCulture] = useState<Culture | null>(initiale);
   const [unite, setUnite] = useState<UniteRecolte>(initiale?.unite ?? 'kg');
   const [texte, setTexte] = useState('');
@@ -102,8 +114,47 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
   const valide = culture !== null && quantite > 0;
   const affichee = texte === '' ? '0' : texte;
   const libelleUnite = uniteAffichee(quantite === 0 ? 2 : quantite, unite);
+  /** T52 : alerte lue à « Valider » quand le suivi n'était pas prêt (pour cette culture). */
+  const [alerteLue, setAlerteLue] = useState<{ readonly culture: Culture; readonly texte: string } | null>(null);
+  const [verification, setVerification] = useState(false);
+  const alerte = culture === null ? null : (interdiction?.(culture) ?? (alerteLue?.culture === culture ? alerteLue.texte : null));
+  /** T52 : confirmation de la récolte sous délai avant récolte, en attente de réponse. */
+  const [aConfirmer, setAConfirmer] = useState(false);
   const valider = () => {
-    if (culture !== null && quantite > 0 && !occupe) surValider(culture, quantite, unite);
+    if (culture === null || quantite <= 0 || occupe || verification) return;
+    if (alerte !== null) {
+      setAConfirmer(true);
+      return;
+    }
+    if (verifierInterdiction !== undefined) {
+      const c = culture;
+      const q = quantite;
+      const u = unite;
+      setVerification(true);
+      const confirmer = (texte: string) => {
+        setAlerteLue({ culture: c, texte });
+        setAConfirmer(true);
+      };
+      verifierInterdiction(c).then(
+        (a) => {
+          setVerification(false);
+          if (a === null) surValider(c, q, u, null);
+          else confirmer(a);
+        },
+        (e: unknown) => {
+          // Délai illisible : le maraîcher décide, averti (jamais une récolte écrite sans vérification).
+          console.error('Délai avant récolte illisible', e);
+          setVerification(false);
+          confirmer('Délai avant récolte non vérifié sur ce téléphone');
+        },
+      );
+      return;
+    }
+    surValider(culture, quantite, unite, null);
+  };
+  const recolterQuandMeme = () => {
+    setAConfirmer(false);
+    if (culture !== null && quantite > 0 && !occupe && alerte !== null) surValider(culture, quantite, unite, `Récolte confirmée malgré l’alerte : ${alerte}`);
   };
   const toucher = (t: Touche) => {
     setTexte((x) => appuyer(x, t));
@@ -226,6 +277,11 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
                 </span>
                 <span className="auj-quantite-unite">{libelleUnite}</span>
               </div>
+              {alerte !== null && (
+                <span data-testid="alerte-dar" role="alert" className="auj-alerte-dar">
+                  {alerte}
+                </span>
+              )}
               {derniere !== undefined && (
                 <span className="auj-recolte-rappel">
                   Dernière récolte : {quantiteAvecUnite(derniere.quantite, derniere.unite)} le {dateCourte(derniere.date)}
@@ -256,7 +312,7 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
                   {erreur}
                 </p>
               )}
-              <button type="button" className="auj-valider" disabled={!valide || occupe} aria-describedby={occupe ? idOccupe : undefined} onClick={valider}>
+              <button type="button" className="auj-valider" disabled={!valide || occupe || verification} aria-describedby={occupe ? idOccupe : undefined} onClick={valider}>
                 <IconeCoche />
                 {valide ? `Valider ${quantiteAvecUnite(quantite, unite)}` : 'Valider'}
               </button>
@@ -266,6 +322,25 @@ export function Recolte({ culture: initiale, recoltesEnCours, dernieres, surVali
                 </span>
               )}
               <span className="auj-recolte-note">Enregistré sur le téléphone, envoyé dès que le réseau revient. Annulable 10 secondes.</span>
+              {aConfirmer && alerte !== null && (
+                // Confirmation en un tap (comme ui/confirmation.tsx, sans l'importer dans ce morceau).
+                <div role="alertdialog" aria-label="Récolter quand même ?" className="auj-confirmation-dar">
+                  <strong>Récolter quand même ?</strong>
+                  <span>{alerte}. La récolte sera notée avec cet avertissement.</span>
+                  <button type="button" className="auj-valider" onClick={recolterQuandMeme}>
+                    Récolter quand même
+                  </button>
+                  <button
+                    type="button"
+                    className="auj-confirmation-non"
+                    onClick={() => {
+                      setAConfirmer(false);
+                    }}
+                  >
+                    Ne pas récolter
+                  </button>
+                </div>
+              )}
             </div>
           </>
         )}
