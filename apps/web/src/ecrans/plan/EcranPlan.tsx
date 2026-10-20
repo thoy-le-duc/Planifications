@@ -1100,7 +1100,7 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
     // T49 : le dire, et y mener.
     return (
       <div className="plan plan-demarrage">
-        {demarrage !== null && <BandeauDemarrer etat={demarrage} surAller={allerA} />}
+        {demarrage !== null && <BandeauDemarrer etat={demarrage} fermeId={fermeId} surAller={allerA} />}
         <EtatVide
           texte="Aucune saison dans cette ferme pour l’instant. Une saison regroupe les séries d’une année : créez-la, le plan des planches s’affichera ici."
           bouton="Créer la saison"
@@ -1128,7 +1128,7 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
   const en3d = vue3d.sorte === 'ouverte' && plan !== null;
   return (
     <div className="plan">
-      {!en3d && demarrage !== null && surOnglet !== undefined && <BandeauDemarrer etat={demarrage} surAller={allerA} />}
+      {!en3d && demarrage !== null && surOnglet !== undefined && <BandeauDemarrer etat={demarrage} fermeId={fermeId} surAller={allerA} />}
       {!en3d && sansPlanche && (
         <EtatVide
           texte="Aucune planche dans cette ferme pour l’instant : ajoutez une zone et ses planches, elles s’afficheront ici."

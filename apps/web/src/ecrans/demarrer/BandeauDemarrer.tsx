@@ -47,68 +47,112 @@ export function useDemarrage(porte: PorteDonnees | null, fermeId: string, actif 
 
 const COCHE = 'M5 12.5l4.5 4.5L19 7.5';
 
+/** T65 : replié ou déplié, retenu par ferme dans le stockage local de ce téléphone. */
+const CLE_REPLI = 'planif.demarrer.replie.';
+
+/** Le choix retenu pour la ferme ; sans choix (ou stockage refusé) : replié sous 600 px de large. */
+function lireRepli(fermeId: string): boolean {
+  try {
+    const v = localStorage.getItem(CLE_REPLI + fermeId);
+    if (v === 'oui' || v === 'non') return v === 'oui';
+  } catch {
+    // Stockage indisponible (navigation privée…) : le défaut.
+  }
+  return window.innerWidth < 600;
+}
+
+function ecrireRepli(fermeId: string, replie: boolean): void {
+  try {
+    localStorage.setItem(CLE_REPLI + fermeId, replie ? 'oui' : 'non');
+  } catch {
+    // Stockage refusé : le choix vaut pour cet affichage seulement.
+  }
+}
+
 export interface ProprietesBandeauDemarrer {
   readonly etat: EtatDemarrage;
+  /** T65 : la ferme dont le choix replié / déplié est retenu. */
+  readonly fermeId: string;
   readonly surAller: (c: CibleDemarrage) => void;
 }
 
-/** Le bandeau, d'après un état déjà lu (`useDemarrage`) ; rien quand il n'est plus visible. */
-export function Bandeau({ etat, surAller }: ProprietesBandeauDemarrer) {
+/**
+ * Le bandeau, d'après un état déjà lu (`useDemarrage`) ; rien quand il n'est plus visible.
+ * T65 : replié (titre, compte, prochaine étape) ou déplié (les 4 étapes, au plus 40 % de l'écran,
+ * la liste défile à l'intérieur) ; les autres étapes restent dans la page, le CSS les cache.
+ */
+export function Bandeau({ etat, fermeId, surAller }: ProprietesBandeauDemarrer) {
   const idTitre = useId();
+  const [choix, setChoix] = useState<{ readonly fermeId: string; readonly replie: boolean } | null>(null);
   if (!etat.visible) return null;
+  const replie = choix !== null && choix.fermeId === fermeId ? choix.replie : lireRepli(fermeId);
   const faites = etat.etapes.filter((e) => e.faite).length;
   return (
-    <section data-testid="demarrer-ferme" aria-labelledby={idTitre} className="dem">
+    <section data-testid="demarrer-ferme" data-replie={replie ? 'oui' : 'non'} aria-labelledby={idTitre} className="dem">
       <div className="dem-tete">
         <h2 id={idTitre}>Démarrer votre ferme</h2>
         <span className="dem-compte">
           {faites}/{etat.etapes.length}
         </span>
-      </div>
-      <ol className="dem-etapes">
-        {etat.etapes.map((e, i) => (
-          <li key={e.cle}>
-            <button
-              type="button"
-              data-testid="etape-demarrage"
-              data-etape={e.cle}
-              data-faite={e.faite ? 'oui' : 'non'}
-              className={e.faite ? 'dem-etape dem-etape-faite' : e === etat.prochaine ? 'dem-etape dem-etape-prochaine' : 'dem-etape'}
-              onClick={() => {
-                surAller(e.cible);
-              }}
-            >
-              <span aria-hidden="true" className="dem-pastille">
-                {e.faite ? (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                    <path d={COCHE} />
-                  </svg>
-                ) : (
-                  i + 1
-                )}
-              </span>
-              <span className="dem-textes">
-                <strong>{e.titre}</strong>
-                <span>{e.faite ? 'Fait' : e.detail}</span>
-              </span>
-              <span aria-hidden="true" className="dem-chevron">
-                ›
-              </span>
-            </button>
-          </li>
-        ))}
-      </ol>
-      <div className="dem-import">
-        <span>Vous avez déjà un tableur ?</span>
         <button
           type="button"
-          className="dem-bouton-import"
+          className="dem-bascule"
+          aria-expanded={!replie}
+          aria-controls={`${idTitre}c`}
           onClick={() => {
-            surAller('import');
+            setChoix({ fermeId, replie: !replie });
+            ecrireRepli(fermeId, !replie);
           }}
         >
-          Importer un tableur
+          {replie ? 'Voir les étapes' : 'Replier'}
         </button>
+      </div>
+      <div id={`${idTitre}c`} className="dem-corps">
+        <ol className="dem-etapes">
+          {etat.etapes.map((e, i) => (
+            <li key={e.cle}>
+              <button
+                type="button"
+                data-testid="etape-demarrage"
+                data-etape={e.cle}
+                data-faite={e.faite ? 'oui' : 'non'}
+                className={e.faite ? 'dem-etape dem-etape-faite' : e === etat.prochaine ? 'dem-etape dem-etape-prochaine' : 'dem-etape'}
+                onClick={() => {
+                  surAller(e.cible);
+                }}
+              >
+                <span aria-hidden="true" className="dem-pastille">
+                  {e.faite ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                      <path d={COCHE} />
+                    </svg>
+                  ) : (
+                    i + 1
+                  )}
+                </span>
+                <span className="dem-textes">
+                  <strong>{e.titre}</strong>
+                  <span>{e.faite ? 'Fait' : e.detail}</span>
+                </span>
+                <span aria-hidden="true" className="dem-chevron">
+                  ›
+                </span>
+              </button>
+            </li>
+          ))}
+        </ol>
+        <div className="dem-import">
+          <span>Vous avez déjà un tableur ?</span>
+          <button
+            type="button"
+            className="dem-bouton-import"
+            onClick={() => {
+              surAller('import');
+            }}
+          >
+            Importer un tableur
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -117,7 +161,7 @@ export function Bandeau({ etat, surAller }: ProprietesBandeauDemarrer) {
 /** Le bandeau avec sa lecture : pour un écran qui n'a pas besoin de l'état par ailleurs. */
 export function BandeauDemarrer({ porte, fermeId, surAller }: { readonly porte: PorteDonnees; readonly fermeId: string; readonly surAller: (c: CibleDemarrage) => void }) {
   const etat = useDemarrage(porte, fermeId);
-  return etat === null ? null : <Bandeau etat={etat} surAller={surAller} />;
+  return etat === null ? null : <Bandeau etat={etat} fermeId={fermeId} surAller={surAller} />;
 }
 
 /** État vide qui guide (T49, règle 5) : ce qui manque, et un bouton qui y mène. */

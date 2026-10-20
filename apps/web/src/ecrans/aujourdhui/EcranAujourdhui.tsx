@@ -1332,6 +1332,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
       {demarrage !== null && surOnglet !== undefined && (
         <BandeauDemarrer
           etat={demarrage}
+          fermeId={fermeId}
           surAller={(c) => {
             allerVers(c, surOnglet);
           }}
