@@ -1,6 +1,6 @@
 -- T57 : position des vannes sur le plan (repère de la ferme, mètres ; les deux nulles : en tête de
 -- leur première planche), numéro de vanne de 1 à 9 999 et unique par ferme parmi les vannes non
--- supprimées. Numéro 0040 : 0037 et 0038 sont prises par T51, 0039 était réservée à T52.
+-- supprimées. Numéro 0040 : régénérée par drizzle-kit à la suite de 0039 (T60).
 ALTER TABLE "secteur_irrigation" ADD COLUMN "placement_x_m" numeric;--> statement-breakpoint
 ALTER TABLE "secteur_irrigation" ADD COLUMN "placement_y_m" numeric;--> statement-breakpoint
 CREATE UNIQUE INDEX "secteur_irrigation_numero_actif_idx" ON "secteur_irrigation" USING btree ("ferme_id","numero_vanne") WHERE "secteur_irrigation"."supprime_le" IS NULL;--> statement-breakpoint

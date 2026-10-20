@@ -1,6 +1,6 @@
 {
-  "id": "baee229f-2875-4479-94c5-283f7afbde4f",
-  "prevId": "ad584788-eebf-4304-903e-d0f8031fef52",
+  "id": "bbc5a2ee-3ec4-46bc-9311-96f9172258e3",
+  "prevId": "bfa0d808-53bc-4e14-863f-d45ae51e019f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -324,6 +324,132 @@
         "assolement_source_import": {
           "name": "assolement_source_import",
           "value": "\"assolement\".\"source_import\" IS NULL OR \"assolement\".\"nature\" = 'passe_importe'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.attribution": {
+      "name": "attribution",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "personne_id": {
+          "name": "personne_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cle_tache": {
+          "name": "cle_tache",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "attribution_ferme_cle_idx": {
+          "name": "attribution_ferme_cle_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "cle_tache",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "attribution_personne_idx": {
+          "name": "attribution_personne_idx",
+          "columns": [
+            {
+              "expression": "personne_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "attribution_ferme_id_ferme_id_fk": {
+          "name": "attribution_ferme_id_ferme_id_fk",
+          "tableFrom": "attribution",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "attribution_personne_id_personne_id_fk": {
+          "name": "attribution_personne_id_personne_id_fk",
+          "tableFrom": "attribution",
+          "tableTo": "personne",
+          "columnsFrom": [
+            "personne_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "attribution_cle_tache": {
+          "name": "attribution_cle_tache",
+          "value": "length(\"attribution\".\"cle_tache\") BETWEEN 1 AND 200"
         }
       },
       "isRLSEnabled": false
@@ -2686,6 +2812,127 @@
         "occupation_periode_reelle": {
           "name": "occupation_periode_reelle",
           "value": "(\"occupation\".\"reel_du\" IS NOT NULL OR \"occupation\".\"reel_au\" IS NULL) AND (\"occupation\".\"reel_au\" IS NULL OR \"occupation\".\"reel_au\" >= \"occupation\".\"reel_du\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.personne": {
+      "name": "personne",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "ferme_id": {
+          "name": "ferme_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "prenom": {
+          "name": "prenom",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "membre_id": {
+          "name": "membre_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cree_le": {
+          "name": "cree_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "modifie_le": {
+          "name": "modifie_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "supprime_le": {
+          "name": "supprime_le",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "personne_membre_actif_idx": {
+          "name": "personne_membre_actif_idx",
+          "columns": [
+            {
+              "expression": "membre_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"personne\".\"supprime_le\" IS NULL AND \"personne\".\"membre_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "personne_ferme_idx": {
+          "name": "personne_ferme_idx",
+          "columns": [
+            {
+              "expression": "ferme_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "personne_ferme_id_ferme_id_fk": {
+          "name": "personne_ferme_id_ferme_id_fk",
+          "tableFrom": "personne",
+          "tableTo": "ferme",
+          "columnsFrom": [
+            "ferme_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "personne_membre_id_membre_id_fk": {
+          "name": "personne_membre_id_membre_id_fk",
+          "tableFrom": "personne",
+          "tableTo": "membre",
+          "columnsFrom": [
+            "membre_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "personne_prenom": {
+          "name": "personne_prenom",
+          "value": "length(btrim(\"personne\".\"prenom\")) BETWEEN 1 AND 60"
         }
       },
       "isRLSEnabled": false
