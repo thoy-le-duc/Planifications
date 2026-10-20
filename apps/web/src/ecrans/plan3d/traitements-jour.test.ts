@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { SCHEMA_LOCAL } from '@planif/sync';
 import { creerBasePowerSync, type SchemaJson } from '../aujourdhui/test/base-powersync.ts';
 import { SQL_TRAITEMENTS_DU_JOUR } from './traitements-jour.ts';
+import { AUTRE_FERME, chargerJeuVarie, FERME, JOURS_PIVOTS, multiensemble } from '../aujourdhui/test/jeu-traitements-varies.ts';
 
 describe('T55 : lecture des traitements du jour par les index', () => {
   it('aucun parcours de ps_data__evenement : ferme_type pour le jour, remplacement pour les chaînes', () => {
@@ -44,6 +45,42 @@ describe('T55 : lecture des traitements du jour par les index', () => {
       expect(fermeType[0], texte).toMatch(/\(<expr>=\? AND <expr>=\? AND <expr>=\?\)/);
     } finally {
       base.fermer();
+    }
+  });
+});
+
+/** La requête d'avant T68 (origin/main) : seule la clause finale diffère, sans `+`. */
+const SQL_TRAITEMENTS_DU_JOUR_AVANT_T68 = SQL_TRAITEMENTS_DU_JOUR.replace(
+  "WHERE +e.ferme_id = ? AND +e.type = 'traitement' AND json_valid(e.detail)",
+  "WHERE e.ferme_id = ? AND e.type = 'traitement' AND json_valid(e.detail)",
+);
+
+describe('T68 (relecture) : la requête réécrite rend exactement les lignes d’avant', () => {
+  it('même multiensemble de lignes sur un jeu varié (chaînes, cycles, autre ferme), pour chaque ferme et chaque jour', () => {
+    expect(SQL_TRAITEMENTS_DU_JOUR_AVANT_T68).not.toBe(SQL_TRAITEMENTS_DU_JOUR);
+    for (const graine of [68, 1, 2026]) {
+      const base = creerBasePowerSync(SCHEMA_LOCAL.toJSON() as SchemaJson);
+      try {
+        chargerJeuVarie(base, graine);
+        let rendues = 0;
+        for (const ferme of [FERME, AUTRE_FERME, 'inconnue']) {
+          for (const pivot of JOURS_PIVOTS) {
+            for (const decalage of [0, -1, 1, -366]) {
+              const d = new Date(`${pivot}T00:00:00Z`);
+              d.setUTCDate(d.getUTCDate() + decalage);
+              const jour = d.toISOString().slice(0, 10);
+              const p = [ferme, jour, ferme];
+              const avant = multiensemble(base.lireDirect(SQL_TRAITEMENTS_DU_JOUR_AVANT_T68, p));
+              const apres = multiensemble(base.lireDirect(SQL_TRAITEMENTS_DU_JOUR, p));
+              expect(apres, `${ferme} le ${jour} (graine ${String(graine)})`).toEqual(avant);
+              rendues += avant.length;
+            }
+          }
+        }
+        expect(rendues).toBeGreaterThan(0);
+      } finally {
+        base.fermer();
+      }
     }
   });
 });
