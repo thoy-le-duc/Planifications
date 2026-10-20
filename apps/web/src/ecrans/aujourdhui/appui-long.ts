@@ -74,6 +74,8 @@ export function useAppuiLong(surAppui: ((cle: string) => void) | null): GestesAp
     onClickCapture: (e) => {
       if (!declenche.current) return;
       declenche.current = false;
+      // Clic au clavier (Entrée, Espace : detail 0) : ce n'est pas le doigt relâché, il compte.
+      if (e.detail === 0) return;
       e.preventDefault();
       e.stopPropagation();
     },
