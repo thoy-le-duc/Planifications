@@ -53,6 +53,7 @@ import {
   CATEGORIES_INTERVENTION,
   ETAPES_REALISEES,
   ETATS_MEMBRE,
+  FORMES_FERTILISANT,
   MODES_ITINERAIRE,
   MOTIFS_MOUVEMENT,
   NATURES_OBSERVATION,
@@ -71,6 +72,7 @@ import {
   TYPES_ANCRE,
   TYPES_BATIMENT,
   TYPES_EVENEMENT,
+  UNITES_FERTILISANT,
   UNITES_RECOLTE,
 } from './valeurs.ts';
 
@@ -117,7 +119,7 @@ const auteurId = () =>
 /** `colonne IN ('a', 'b', …)`, valeurs écrites en clair dans la contrainte. */
 function parmi(expression: AnyPgColumn | SQL, valeurs: readonly string[]): SQL {
   for (const v of valeurs) {
-    if (!/^[A-Za-z_]+$/.test(v)) {
+    if (!/^[A-Za-z0-9_]+$/.test(v)) {
       throw new Error(`valeur d’union inattendue : ${v}`);
     }
   }
@@ -157,6 +159,12 @@ export const ferme = pgTable('ferme', {
     .$type<UnitesFerme>()
     .notNull()
     .default(sql`'{"longueur": "m", "masse": "kg"}'::jsonb`),
+  /**
+   * T54 (Q44) : exploitation en zone vulnérable nitrates. Cochée, le cahier de fertilisation montre
+   * le plan prévisionnel et l'alerte au-delà de 170 kg N/ha d'azote organique. Écrite par tout
+   * membre actif (apps/api/src/sync/structure-origine.ts).
+   */
+  zoneVulnerableNitrates: boolean('zone_vulnerable_nitrates').notNull().default(false),
   ...horodatages(),
 });
 
@@ -893,6 +901,41 @@ export const produitPhyto = pgTable(
     ...horodatages(),
   },
   (t) => [verif('produit_phyto', 'delai_avant_recolte', sql`${t.delaiAvantRecolteJours} >= 0`)],
+);
+
+/**
+ * T54 : produit fertilisant de la ferme (compost, fumier, engrais) et sa composition, en % de la
+ * masse apportée (kg d'élément pour 100 L pour un liquide compté en L ou m³). Pas de bibliothèque
+ * commune : la liste de départ (@planif/core, FERTILISANTS_DEPART) est copiée dans la ferme par le
+ * téléphone. Écrit par tout membre actif (apps/api/src/sync/fertilisation.ts) ; archivé en
+ * douceur (`supprime_le`). Publiée.
+ */
+export const produitFertilisant = pgTable(
+  'produit_fertilisant',
+  {
+    id: idDe<'ProduitFertilisant'>('id').primaryKey(),
+    fermeId: fermeId(),
+    nom: text('nom').notNull(),
+    forme: text('forme', { enum: FORMES_FERTILISANT }).notNull(),
+    unite: text('unite', { enum: UNITES_FERTILISANT }).notNull(),
+    teneurN: doublePrecision('teneur_n'),
+    teneurP2o5: doublePrecision('teneur_p2o5'),
+    teneurK2o: doublePrecision('teneur_k2o'),
+    organique: boolean('organique').notNull(),
+    utilisableEnBio: boolean('utilisable_en_bio').notNull(),
+    source: text('source').notNull().default(''),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('produit_fertilisant', 'nom', sql`length(btrim(${t.nom})) BETWEEN 1 AND 200`),
+    verif('produit_fertilisant', 'forme', parmi(t.forme, FORMES_FERTILISANT)),
+    verif('produit_fertilisant', 'unite', parmi(t.unite, UNITES_FERTILISANT)),
+    verif('produit_fertilisant', 'teneur_n', sql`${t.teneurN} IS NULL OR ${t.teneurN} BETWEEN 0 AND 100`),
+    verif('produit_fertilisant', 'teneur_p2o5', sql`${t.teneurP2o5} IS NULL OR ${t.teneurP2o5} BETWEEN 0 AND 100`),
+    verif('produit_fertilisant', 'teneur_k2o', sql`${t.teneurK2o} IS NULL OR ${t.teneurK2o} BETWEEN 0 AND 100`),
+    verif('produit_fertilisant', 'source', sql`length(${t.source}) <= 300`),
+    index('produit_fertilisant_ferme_idx').on(t.fermeId),
+  ],
 );
 
 // ---------------------------------------------------------------------------------------------
