@@ -333,6 +333,8 @@ export const DEBUT_FORMULE = /^[=+\-@\t\r]/;
 export const TABLES_ATTENDUES = [
   'article_stock',
   'assolement',
+  // T60 : travaux du jour attribués à une personne de l'équipe.
+  'attribution',
   // T28a : bâtiments de la ferme (serres, hangar, magasin), placés dans le repère local.
   'batiment',
   'campagne',
@@ -346,6 +348,8 @@ export const TABLES_ATTENDUES = [
   'modification',
   'mouvement_stock',
   'occupation',
+  // T60 : l'équipe de la ferme (prénom, compte facultatif).
+  'personne',
   'plantation',
   'produit_phyto',
   'proposition',

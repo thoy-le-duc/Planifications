@@ -292,6 +292,28 @@ Le serveur (`apps/api/src/sync/phyto.ts`) accepte les produits phyto **de la fer
 - **Historique** : une ligne `modification` par écriture (`ProduitPhyto` ; création, modification, suppression).
 - **Téléphone** : index local `ferme_type` (`ferme_id`, `type`, `date`) sur `evenement`, pour lire les traitements sans parcourir le journal (aucune migration serveur).
 
+## 7 bis. Équipe et consignes — v1.x (T60, Q36 et Q44)
+
+Le gérant attribue les travaux du jour à des personnes de l'équipe ; chacun voit les siens dans Aujourd'hui et numérotés dans la 3D.
+
+| Table | Colonnes | Rôle |
+| --- | --- | --- |
+| `personne` | `ferme_id`, `prenom` (1 à 60 caractères), `membre_id` (facultatif, vers `membre`), horodatages, `supprime_le` | Une personne de l'équipe, avec un prénom affiché. Une personne active au plus par membre. |
+| `attribution` | `ferme_id`, `personne_id`, `cle_tache` (1 à 200 caractères), horodatages, `supprime_le` | Un travail du jour attribué à une personne : une ligne par (travail, personne). |
+
+**Pourquoi une table `personne` liée facultativement à un membre** (règle 1 : un ouvrier sans téléphone, prénom seul) : c'est le modèle le plus simple qui couvre les deux cas. Un membre est un compte, avec une adresse e-mail et des droits ; on ne peut pas créer un membre sans compte, et on ne veut pas de faux comptes. La personne porte le prénom qui s'affiche ; un équipier qui a l'appli est relié à sa personne par `membre_id`. Le gérant l'y relie depuis l'écran Équipe, grâce au code que l'équipier lit sur son téléphone (les 4 derniers caractères de l'id de son membre). Ni les noms ni les e-mails des collègues ne descendent sur les téléphones.
+
+**Pourquoi désigner le travail par la clé de sa tâche** : les travaux du jour sont calculés, pas stockés (le semainier, section 8). La clé de la tâche dans Aujourd'hui (`<série ou campagne>:<étape>` ou `<série>:travail:<indice>:<date prévue>`) est stable tant que la tâche n'est pas faite : il n'y a rien à recalculer en base. Une tâche faite disparaît pour tout le monde, attribuée ou non (règle 6). Ses attributions restent comme trace.
+
+Règles :
+
+- **« Mes travaux »** = les travaux attribués à moi **ou à personne** (un travail non attribué est visible de tous). Une attribution à une personne retirée ne compte plus. Calcul déterministe du cœur (`packages/core/src/equipe/`) : `personnesParTache`, `travauxDe`, `planAttribution` (créer, rétablir, retirer).
+- **Attribuer** = donner à chaque travail choisi exactement ses personnes, en une transaction. Retirer pose `supprime_le`, réattribuer le remet à nul : rien ne s'efface. Annuler réécrit l'état d'avant.
+- **Droits** : le gérant actif seul écrit `personne` et `attribution`, comme le profil de croissance (T32c). Le serveur le vérifie (`apps/api/src/sync/equipe.ts`), rôle relu dans la transaction du lot. Un équipier qui essaie est refusé (`ecriture_invalide`), avec tout son lot. Tout membre actif reçoit les deux tables par la synchro.
+- **Références** : le membre d'une personne est un membre actif de la même ferme, celui d'aucune autre personne active ; la personne d'une attribution est de la même ferme. Une attribution ne change ni de travail ni de personne : on la retire et on en crée une autre.
+- **Pas d'historique** dans `modification` : ce sont des consignes du jour, pas des données de culture. Les deux tables sont dans l'export (`personne.csv`, `attribution.csv`).
+- **Migration** `0039_equipe_attribution` (générée, avec l'ajout à la publication `powersync`) ; streams `personne` et `attribution` dans `powersync/sync-config.yaml` ; index local `attribution (ferme_id, cle_tache)`.
+
 ## 8. Ce qui est calculé, pas stocké
 
 | Vue | Calculée à partir de |

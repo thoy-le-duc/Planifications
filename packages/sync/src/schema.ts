@@ -20,6 +20,7 @@ const T = 'texte';
 export const TABLES_LOCALES = {
   article_stock: { ferme_id: T, espece_id: T, variete_id: T, unite: T, categorie: T, cree_le: T, modifie_le: T, supprime_le: T },
   assolement: { ferme_id: T, saison_id: T, zone_id: T, emplacement_id: T, famille_id: T, espece_id: T, nature: T, source_import: T, cree_le: T, modifie_le: T, supprime_le: T },
+  attribution: { ferme_id: T, personne_id: T, cle_tache: T, cree_le: T, modifie_le: T, supprime_le: T },
   batiment: { ferme_id: T, nom: T, type: T, longueur_m: 'reel', largeur_m: 'reel', hauteur_m: 'reel', centre_x_m: 'reel', centre_y_m: 'reel', orientation_deg: 'reel', zone_id: T, cree_le: T, modifie_le: T, supprime_le: T },
   campagne: { ferme_id: T, plantation_id: T, annee: 'entier', debut_recolte_prevu: T, fin_recolte_prevue: T, rendement_prevu: T, cree_le: T, modifie_le: T, supprime_le: T },
   emplacement: { ferme_id: T, zone_id: T, code: T, sorte: T, longueur_m: 'reel', largeur_m: 'reel', nombre_places: 'entier', nombre_pains: 'entier', actif_du: T, actif_au: T, remplace: T, placement_x_m: 'reel', placement_y_m: 'reel', orientation_deg: 'reel', cree_le: T, modifie_le: T, supprime_le: T },
@@ -32,6 +33,7 @@ export const TABLES_LOCALES = {
   modification: { ferme_id: T, nom_table: T, ligne_id: T, auteur_id: T, horodatage: T, operation: T, avant: T, apres: T, proposition_id: T, cree_le: T, modifie_le: T, supprime_le: T },
   mouvement_stock: { ferme_id: T, article_stock_id: T, date: T, quantite: 'reel', motif: T, recolte_id: T, cree_le: T },
   occupation: { ferme_id: T, emplacement_id: T, serie_id: T, plantation_id: T, evenement_id: T, longueur_m: 'reel', nombre_places: 'entier', position_m: 'reel', prevu_du: T, prevu_au: T, reel_du: T, reel_au: T, cree_le: T, modifie_le: T, supprime_le: T },
+  personne: { ferme_id: T, prenom: T, membre_id: T, cree_le: T, modifie_le: T, supprime_le: T },
   plantation: { ferme_id: T, espece_id: T, variete_id: T, date_plantation: T, nombre_plants: 'entier', date_arrachage: T, cree_le: T, modifie_le: T, supprime_le: T },
   produit_phyto: { ferme_id: T, nom_commercial: T, numero_amm: T, substance_active: T, delai_avant_recolte_jours: 'entier', utilisable_en_bio: 'entier', dose_maximale: T, cree_le: T, modifie_le: T, supprime_le: T },
   proposition: { ferme_id: T, source: T, auteur_id: T, statut: T, decide_le: T, changements: T, cree_le: T, modifie_le: T, supprime_le: T },
@@ -60,6 +62,8 @@ const INDEX: Partial<Record<NomTableLocale, Record<string, string[]>>> = {
     remplacement: ['remplace_evenement_id', 'ferme_id', 'origine_id', 'remplace_sorte', 'horodatage'],
   },
   mouvement_stock: { recolte: ['recolte_id'] },
+  // T60 : les attributions d'une ferme par travail (Aujourd'hui, 3D), sans parcourir la table.
+  attribution: { ferme_cle: ['ferme_id', 'cle_tache'] },
   occupation: {
     emplacement: ['emplacement_id', 'prevu_du'],
     ferme_culture: ['ferme_id', 'serie_id', 'plantation_id', 'emplacement_id', 'supprime_le'],

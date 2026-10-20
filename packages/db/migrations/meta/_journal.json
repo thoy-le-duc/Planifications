@@ -274,6 +274,13 @@
       "when": 1792441891489,
       "tag": "0038_bibliotheque_fraise_hors_sol",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792462226543,
+      "tag": "0039_equipe_attribution",
+      "breakpoints": true
     }
   ]
 }

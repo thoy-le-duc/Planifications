@@ -1189,7 +1189,7 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
           {repli3d}
         </p>
       )}
-      {en3d && porte !== null && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} invitationDemo={DEMO} surModifierPlan={modifierPlan} porte={porte} fermeId={fermeId} />}
+      {en3d && porte !== null && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} invitationDemo={DEMO} surModifierPlan={modifierPlan} porte={porte} fermeId={fermeId} utilisateurId={utilisateurId} />}
       {EditeurPlacement !== null && utilisateurId !== undefined && porte !== null && (
         <EditeurPlacement
           key={fermeId}
