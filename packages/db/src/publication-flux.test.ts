@@ -74,6 +74,10 @@ describe('T67 : tablesPublieesPowerSync', () => {
         'CREATE PUBLICATION powersync FOR TABLE b;',
       ]),
     ).toEqual(['b']);
+    // Relecture : DROP PUBLICATION IF EXISTS était ignoré en silence (la liste survivait).
+    expect(
+      tablesPublieesPowerSync(['CREATE PUBLICATION powersync FOR TABLE a;', 'DROP PUBLICATION IF EXISTS powersync;']),
+    ).toEqual([]);
   });
 
   it('ignore les autres publications', () => {
@@ -85,6 +89,24 @@ describe('T67 : tablesPublieesPowerSync', () => {
   it('refuse une forme qu’il ne sait pas lire, plutôt que de l’ignorer', () => {
     expect(() => tablesPublieesPowerSync(['CREATE PUBLICATION powersync FOR ALL TABLES;'])).toThrow(/powersync/);
     expect(() => tablesPublieesPowerSync(['ALTER PUBLICATION powersync RENAME TO autre;'])).toThrow(/powersync/);
+  });
+
+  it('refuse une publication touchée hors d’une instruction de premier niveau (bloc DO, EXECUTE)', () => {
+    // Relecture : le découpage sur « ; » ne voit pas l'intérieur d'un bloc DO ; une mention de la
+    // publication qu'il n'a pas rejouée doit lever, pas passer en silence.
+    expect(() =>
+      tablesPublieesPowerSync([
+        'CREATE PUBLICATION powersync FOR TABLE a;',
+        `DO $$ BEGIN
+           IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE tablename = 'b') THEN
+             ALTER PUBLICATION powersync ADD TABLE b;
+           END IF;
+         END $$;`,
+      ]),
+    ).toThrow(/powersync/);
+    expect(() =>
+      tablesPublieesPowerSync(['CREATE PUBLICATION powersync FOR TABLE a;', "SELECT 1; EXECUTE 'ALTER PUBLICATION powersync ADD TABLE b';"]),
+    ).toThrow(/powersync/);
   });
 
   it('les vraies migrations publient les tables connues (dont celles de T60 et T54)', () => {
