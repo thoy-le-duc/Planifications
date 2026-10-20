@@ -12,7 +12,8 @@
  * On MESURE ce qui a été apporté (règle 5) : aucune dose n'est conseillée ici.
  *
  * Teneur d'un produit : % de sa masse telle qu'apportée (kg, t) ; pour un liquide compté en L ou
- * m³, kg d'élément pour 100 L (densité prise à 1). Les teneurs ne sont pas figées dans l'apport :
+ * m³, kg d'élément pour 100 L (densité prise à 1). Un solide compté en L ou m³ (densité inconnue) est
+ * compté sans unités. Les teneurs ne sont pas figées dans l'apport :
  * corriger un produit après une analyse corrige son bilan passé, comme on l'attend d'un cahier.
  */
 import { estDateValide, type DateCalendaire } from '../dates/index.ts';
@@ -233,6 +234,8 @@ export function quantiteEnKg(q: Quantite): number | null {
   return null;
 }
 
+const estVolume = (q: Quantite): boolean => ['l', 'm3', 'm³'].includes(q.unite.trim().toLowerCase());
+
 function brutes(q: Quantite, t: Teneurs): Unites | null {
   const kg = quantiteEnKg(q);
   if (kg === null || (t.teneurN === null && t.teneurP2o5 === null && t.teneurK2o === null)) return null;
@@ -342,6 +345,7 @@ interface Produit {
   readonly id: string;
   readonly nom: string;
   readonly teneurs: Teneurs;
+  readonly liquide: boolean;
   readonly organique: boolean;
   readonly bio: boolean;
   readonly archive: boolean;
@@ -364,6 +368,7 @@ function contexte(tables: Tables, fermeId: string): Contexte {
       id: chaine(l.id).toLowerCase(),
       nom: chaine(l.nom),
       teneurs: { teneurN: nombreOuNul(l.teneur_n), teneurP2o5: nombreOuNul(l.teneur_p2o5), teneurK2o: nombreOuNul(l.teneur_k2o) },
+      liquide: l.forme === 'liquide',
       organique: l.organique === 1,
       bio: l.utilisable_en_bio === 1,
       archive: l.supprime_le !== null && l.supprime_le !== undefined,
@@ -421,8 +426,9 @@ function calcule(
 ): ApportCalcule {
   const p = produitDe(ctx, a.produitId, a.nom);
   const s = surface(ctx, a.emplacementIds);
-  // Arrondi une seule fois, à la fin : les kg/ha partent des kg exacts.
-  const kg = p === null ? null : brutes(a.quantite, p.teneurs);
+  // Arrondi une seule fois, à la fin : les kg/ha partent des kg exacts. Un solide compté en volume
+  // (L, m³ : compost, fumier) n'a pas de densité connue : sans unités plutôt qu'un azote faux.
+  const kg = p === null || (!p.liquide && estVolume(a.quantite)) ? null : brutes(a.quantite, p.teneurs);
   return {
     evenementId: a.evenementId,
     date: a.date,

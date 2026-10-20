@@ -201,7 +201,7 @@ function Formulaire({ ctx, produit, surFermer }: { readonly ctx: ContexteFertili
         {caseACocher('Utilisable en bio', bio, setBio)}
         {texte('Source', source, setSource, { large: true })}
       </div>
-      <p className="parc-aide">Teneur en % du produit tel qu’apporté ; pour un liquide compté en L ou m³, en kg pour 100 L. Laissez vide ce que vous ne connaissez pas.</p>
+      <p className="parc-aide">Teneur en % du produit tel qu’apporté ; pour un liquide compté en L ou m³, en kg pour 100 L. Un solide se compte en kg ou en t : compté en L ou m³, il n’a pas d’unités calculées. Laissez vide ce que vous ne connaissez pas.</p>
       {message !== null && (
         <p role="alert" className="parc-erreur">
           {message}
