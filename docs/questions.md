@@ -296,6 +296,12 @@ Question : quand une culture est traitée sur une partie de ses planches seuleme
 
 Réponse (2026-10-20) : « oui, on peut récolter les autres ». Le délai avant récolte ne bloque que les planches traitées ; la culture entière n'est bloquée que si le traitement ne désigne aucune planche (kiwis, asperges, culture sans emplacement). Ticket T69.
 
+### Q45 — Fertilisation : plafond par planche, teneurs corrigées après analyse (posée le 2026-10-20, T54)
+
+Questions : (1) le plafond de 170 kg N/ha sert de repère par planche, alors que la règle officielle porte sur les effluents d'élevage rapportés à la SAU de l'exploitation : ça convient comme repère ? (2) Corriger la teneur d'un produit après une analyse corrige aussi le bilan des apports passés : d'accord ?
+
+Réponse (2026-10-20) : « ok pour les deux points ». Repère par planche gardé ; teneurs non figées dans l'apport.
+
 ### Q44 — Engrais, phyto et suite du jumeau 3D (posée le 2026-10-19)
 
 Demande de Théophane : « avance la 3D aussi, on est en mode jumeau numérique ; penser aux engrais, phyto et traitements ». Arbitrage de Claude : le **registre phyto d'abord** (obligation légale, sert tous les jours, schéma déjà prêt), puis la base publique e-phy, puis le cahier de fertilisation ; en 3D, les traitements et le délai avant récolte visibles, pour que personne ne récolte une planche traitée. Tickets T52 à T55.

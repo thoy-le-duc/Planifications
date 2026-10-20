@@ -1,3 +1,5 @@
+import { vers } from './vers-aiguillage.ts';
+
 /** Marque posée au premier affichage de l'appli : les tests de performance la mesurent. */
 export const MARQUE_APP_PRETE = 'app-prete';
 
@@ -14,7 +16,7 @@ export const MARQUE_APP_PRETE = 'app-prete';
 export function marquerAppPrete(): void {
   if (performance.getEntriesByName(MARQUE_APP_PRETE, 'mark').length > 0) return;
   performance.mark(MARQUE_APP_PRETE);
-  import('./serviceWorker.ts').then(
+  vers('serviceWorker').then(
     (m) => {
       m.programmerEnregistrementServiceWorker();
     },

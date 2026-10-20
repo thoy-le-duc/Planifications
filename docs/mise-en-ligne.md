@@ -10,7 +10,7 @@ Le résultat : l'appli sur une adresse du type `https://appli-ferme.vercel.app`,
 - Le dépôt GitHub est **public jusqu'au 1er novembre** : tout ce qui y est écrit est lisible par n'importe qui. Raison de plus pour ne rien y mettre.
 - Ne commence que lorsque Claude t'a dit que ce guide et la mise en place de Vercel (tickets T38a et T38b) sont **fusionnés dans `main`** : avant, le dépôt n'a pas encore le fichier `vercel.json` et l'étape 5 échouera.
 - Garde un **gestionnaire de mots de passe** (ou, à défaut, un carnet papier) ouvert : plusieurs valeurs seront à recopier plus tard.
-- Ordre à suivre : Neon, migrations, secret GitHub des migrations automatiques, PowerSync, Brevo, Vercel, retour sur PowerSync, premier compte.
+- Ordre à suivre : Neon, migrations, secret GitHub des migrations automatiques, PowerSync, secrets GitHub des règles de synchro automatiques, Brevo, Vercel, retour sur PowerSync, premier compte.
 
 ### Ce que tu vas manipuler
 
@@ -21,7 +21,7 @@ Le résultat : l'appli sur une adresse du type `https://appli-ferme.vercel.app`,
 | Brevo | l'envoi du code à 6 chiffres par courriel | UE |
 | Vercel | l'appli et l'API (Paris) | Paris |
 | GitHub Codespaces | un petit terminal dans le navigateur, une seule fois, pour préparer la base | navigateur |
-| GitHub Actions | applique seul les nouvelles migrations après chaque mise à jour (étape 2 bis) | serveurs de GitHub |
+| GitHub Actions | applique seul les nouvelles migrations (étape 2 bis), puis déploie les règles de synchro (étape 3 bis), après chaque mise à jour | serveurs de GitHub |
 
 ### Les variables, en un coup d'œil
 
@@ -209,6 +209,8 @@ Pour changer l'adresse (nouveau mot de passe Neon) : même page **Environments**
 15. Clique sur **Deploy** (PowerSync vérifie les règles avant de les mettre en service).
 16. Ce que tu dois voir : « Valid » ou « Deployed » sans erreur. Si une erreur parle d'une table introuvable : les migrations (étape 2) n'ont pas été lancées sur cette base.
 
+Ce copier-coller ne se fait qu'**une fois**, à la création de l'instance. Ensuite, c'est l'étape 3 bis qui s'en charge à chaque mise à jour : ne modifie plus les règles dans cet éditeur, le prochain déploiement automatique les remplacerait par celles du dépôt.
+
 ### Noter l'adresse de l'instance
 
 17. Clique sur **Connect** dans la barre du haut : la fenêtre affiche l'**adresse** de l'instance (Instance URL). Copie-la. Elle ressemble à `https://xxxxxxxx.powersync.journeyapps.com`.
@@ -217,6 +219,41 @@ Pour changer l'adresse (nouveau mot de passe Neon) : même page **Environments**
 ### Authentification (à finir à l'étape 6)
 
 19. La vue **Client Auth** (adresse des clés publiques et audience) se remplit une fois l'appli en ligne : on y revient à l'étape 6. Rien à faire ici.
+
+---
+
+## Étape 3 bis — Poser les secrets PowerSync : règles de synchro automatiques
+
+Quand un ticket change les règles de synchro (`powersync/sync-config.yaml`), il faut les redéployer sur PowerSync, sinon les nouvelles données ne descendent sur aucun téléphone, sans aucune erreur visible (c'est arrivé le 20 octobre avec l'équipe et les produits fertilisants). Une fois ces deux secrets posés, plus de copier-coller : après chaque **Migrations de production** réussi, le workflow GitHub **Règles de synchro PowerSync** fait vérifier les règles par PowerSync, puis les déploie. Si PowerSync les refuse, le workflow passe au **rouge** et rien n'est déployé. Sans ces secrets, il ne fait rien (il reste vert, avec le message « secrets POWERSYNC_ADMIN_TOKEN et POWERSYNC_INSTANCE_ID absents »).
+
+Il utilise l'outil officiel de PowerSync, sa CLI (paquet `powersync@0.10.2`, figé dans le dépôt avec toutes ses dépendances, dossier `scripts/powersync-cli` ; voir https://docs.powersync.com/tools/cli et https://github.com/powersync-ja/powersync-cli), avec sa commande `deploy sync-config` : elle ne touche qu'aux règles, jamais à la connexion à Neon ni à l'authentification réglées à l'étape 3. Il lui faut deux choses :
+
+- `POWERSYNC_ADMIN_TOKEN` : un **jeton d'accès personnel** PowerSync (Personal Access Token). Il permet d'administrer ton compte PowerSync, comme un mot de passe.
+- `POWERSYNC_INSTANCE_ID` : l'**identifiant de l'instance** dont tu as collé les règles à l'étape 3 (celle de `VITE_POWERSYNC_URL`), 24 caractères, chiffres et lettres de `a` à `f`.
+
+Ce sont des secrets de GitHub, pas des variables de l'appli : ils ne vont ni dans Vercel ni dans le tableau « Les variables, en un coup d'œil ».
+
+Comme à l'étape 2 bis, ils vont dans l'environnement GitHub `production`, réservé à `main`, jamais en secret « de dépôt ».
+
+### Créer le jeton PowerSync
+
+1. Ouvre https://dashboard.powersync.com/account/access-tokens (ou, dans le tableau de bord PowerSync, les réglages de ton compte, rubrique des jetons d'accès).
+2. Crée un jeton. Nom : `github-regles-planifications`. Si PowerSync propose une durée de validité, prends la plus longue et **note la date d'expiration** dans ton gestionnaire : à cette date, le workflow passera au rouge et il faudra recommencer ces points 1 à 3 puis 9.
+3. Copie le jeton tout de suite (PowerSync ne le remontre pas) et range-le dans ton gestionnaire sous `Jeton PowerSync GitHub`.
+
+### Relever l'identifiant de l'instance
+
+4. Dans le tableau de bord PowerSync, ouvre ton projet `planifications`, puis l'instance de l'étape 3.
+5. Relève son identifiant (Instance ID) : 24 caractères, chiffres et lettres de `a` à `f`, par exemple `0123456789abcdef01234567` (celui-ci est inventé). Ce n'est pas un secret au sens strict, mais on le range avec le jeton. Si tu ne le trouves pas, demande à Claude **sans** lui donner le jeton : il te dira où cliquer.
+
+### Poser les deux secrets dans GitHub
+
+6. Ouvre https://github.com/thoy-le-duc/Planifications/settings/environments et clique sur `production` (créé à l'étape 2 bis ; sinon, refais-en les points 2 et 3 : environnement `production`, règle de branche `main` seule).
+7. Rubrique **Environment secrets** : clique sur **Add environment secret**, **Name** : écris exactement `POWERSYNC_ADMIN_TOKEN`, **Value** : colle le jeton, sans espace avant ni après, puis **Add secret**.
+8. Encore **Add environment secret** : **Name** `POWERSYNC_INSTANCE_ID`, **Value** : l'identifiant de l'instance, puis **Add secret**. Ce que tu dois voir : `POWERSYNC_ADMIN_TOKEN` et `POWERSYNC_INSTANCE_ID` dans la liste **Environment secrets**, sans leur valeur.
+9. Vérification : onglet **Actions**, vérifie d'abord que le dernier **Migrations de production** est vert (lancer les règles avant les migrations peut viser une table pas encore créée). Puis, à gauche, **Règles de synchro PowerSync**, bouton **Run workflow**, branche `main`, puis **Run workflow**. Au bout d'une à trois minutes, la ligne passe au vert. En l'ouvrant : l'étape « Valider les règles de synchro, ou arrêt propre si les secrets sont absents » se termine par **`Règles de synchro valides.`**, puis l'étape « Déployer les règles de synchro, ou arrêt propre si les secrets sont absents » par **`Règles de synchro déployées.`**
+
+Si l'étape de validation est rouge avec « mal formé » ou « absent », c'est le secret nommé qui est à recoller (crayon à côté du secret, **Update secret**). Le message ne montre jamais sa valeur. Une erreur d'authentification de PowerSync : le jeton a expiré ou a été révoqué, refais les points 1 à 3 et 7.
 
 ---
 
@@ -374,7 +411,7 @@ Tant que tu es seul à tester avec ta ferme, tu n'approcheras aucune de ces limi
 
 **La synchro ne part pas (rien n'apparaît sur l'autre appareil).**
 1. Dans PowerSync, l'instance est-elle en marche (pastille verte) et la connexion à la base valide ? Sinon refais l'étape 3, points 7 à 11.
-2. Y a-t-il une erreur dans les règles (étape 3, points 12 à 16) ?
+2. Y a-t-il une erreur dans les règles ? Onglet **Actions** de GitHub, **Règles de synchro PowerSync** : le dernier passage est-il vert, et a-t-il vraiment déployé (« Règles de synchro déployées. ») et non seulement constaté l'absence des secrets (étape 3 bis) ?
 3. L'adresse des clés (étape 6) est-elle exacte ? Ouvre-la toi-même dans le navigateur : elle doit afficher des clés.
 4. `VITE_POWERSYNC_URL` est-elle bien posée dans Vercel ? Une variable `VITE_…` n'agit qu'au moment de la construction : après l'avoir changée, il faut **Redeploy**.
 5. `JWT_AUDIENCE` (Vercel) et l'audience de PowerSync doivent être identiques : `powersync-planif`.
@@ -401,13 +438,18 @@ Tant que tu es seul à tester avec ta ferme, tu n'approcheras aucune de ces limi
 2. Erreur de connexion ou d'authentification : le secret contient peut-être l'adresse pooled, une adresse tronquée ou un ancien mot de passe ; remplace-le (étape 2 bis), puis **Re-run jobs**.
 3. Autre erreur : transmets-la à Claude (le message, sans adresse). En attendant, l'appli continue de tourner sur l'ancienne version des tables.
 
+**Le workflow « Règles de synchro PowerSync » est rouge (onglet Actions).**
+1. Ouvre-le. « mal formé » ou « absent » : recolle le secret nommé (étape 3 bis, points 7 et 8), puis **Re-run jobs**.
+2. Erreur d'authentification : le jeton PowerSync a expiré ou a été révoqué ; crée-en un autre (étape 3 bis, points 1 à 3) et remplace `POWERSYNC_ADMIN_TOKEN`.
+3. Règles refusées par PowerSync (validation en échec) : rien n'a été déployé, les téléphones gardent les anciennes règles. Transmets le message à Claude : cela vient du code, pas de toi.
+
 **Les migrations échouent (étape 2, à la main en secours).**
 1. `DATABASE_URL absente` : refais la saisie cachée (points 6 à 8).
 2. Erreur de connexion ou d'authentification : tu as peut-être collé l'adresse pooled ou une adresse tronquée ; recopie l'adresse **directe**.
 3. Tu peux relancer la commande sans risque : les migrations déjà passées ne sont pas rejouées.
 
 **J'ai collé un secret au mauvais endroit (conversation, ticket, fichier du dépôt).**
-1. Considère-le comme perdu et change-le tout de suite : mot de passe Neon (**Roles**, trois points, **Reset password**), clé SMTP Brevo (supprime-la et crée-en une autre), clés de signature (génère-en une nouvelle à l'étape 2). Après un nouveau mot de passe Neon, remplace aussi le secret `DATABASE_URL_PRODUCTION` (étape 2 bis).
+1. Considère-le comme perdu et change-le tout de suite : mot de passe Neon (**Roles**, trois points, **Reset password**), clé SMTP Brevo (supprime-la et crée-en une autre), clés de signature (génère-en une nouvelle à l'étape 2). Après un nouveau mot de passe Neon, remplace aussi le secret `DATABASE_URL_PRODUCTION` (étape 2 bis). Un jeton PowerSync : révoque-le sur https://dashboard.powersync.com/account/access-tokens, crée-en un autre et remplace `POWERSYNC_ADMIN_TOKEN` (étape 3 bis).
 2. Mets la nouvelle valeur dans Vercel et **Redeploy**. Un changement de `JWT_CLES_PRIVEES` déconnecte tout le monde : on se reconnecte avec un nouveau code.
 3. Un secret écrit dans le dépôt **public** reste visible dans l'historique même effacé : ne compte que sur le remplacement.
 
@@ -419,6 +461,7 @@ Tant que tu es seul à tester avec ta ferme, tu n'approcheras aucune de ces limi
 - Le dépôt est **public jusqu'au 1er novembre** : tout y est lisible. Les secrets restent chez Vercel, Neon, PowerSync et Brevo, et dans ton gestionnaire de mots de passe.
 - Le terminal de l'étape 2 ne garde pas l'adresse de la base (saisie cachée, codespace supprimé ensuite).
 - Le secret `DATABASE_URL_PRODUCTION` (étape 2 bis) est un secret de l'environnement `production`, réservé à `main` : il n'est donné qu'aux tâches qui tournent sur `main`, dans cet environnement (le workflow **Migrations de production**, lancé après une CI verte de `main` ou à la main) ; jamais à une autre branche, à une PR ni à une copie (fork) du dépôt. GitHub masque sa valeur dans les journaux, et `migrer` n'affiche en cas d'erreur ni l'adresse, ni l'hôte, ni l'utilisateur.
+- Les secrets `POWERSYNC_ADMIN_TOKEN` et `POWERSYNC_INSTANCE_ID` (étape 3 bis) sont rangés de la même façon, dans l'environnement `production` : seul le workflow **Règles de synchro PowerSync** les reçoit, sur `main`. Le jeton donne la main sur tout ton compte PowerSync (toutes les instances) : ne le colle nulle part ailleurs, et révoque-le au moindre doute. Le script qui l'utilise ne l'affiche jamais, et GitHub le masque dans les journaux.
 - La clé `JWT_CLES_PRIVEES` signe les connexions : qui la possède peut se faire passer pour n'importe qui. Elle ne sort que de ton terminal vers Vercel.
 - L'utilisateur `powersync_role` ne peut que **lire** la base. S'il fuite, change son mot de passe dans Neon et dans PowerSync.
 - L'adresse `https://<appli>/api/.well-known/jwks.json` est publique par nature : elle ne contient que la partie publique des clés.

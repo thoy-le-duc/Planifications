@@ -166,6 +166,59 @@ p {
   --couleur-pousse: var(--couleur-pousse-entete);
 }
 
+/*
+ * T66 — en-tête et barre de navigation (src/ui/composants.tsx) : leur mise en page, sortie des
+ * styles en ligne (JavaScript de démarrage). Couleurs, polices et cibles tactiles restent en ligne.
+ */
+.entete {
+  padding: 22px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+
+.entete-surtitre {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+
+.entete-titre {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.02;
+}
+
+.entete-pastilles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.barre-navigation {
+  background: var(--couleur-surface);
+  border-top: 1px solid var(--couleur-trait);
+  display: flex;
+  padding: 6px 0 max(10px, env(safe-area-inset-bottom));
+}
+
+.onglet-icone {
+  position: relative;
+  display: flex;
+}
+
+/* Point orange sur l'icône de l'onglet Ferme (T10i), cerclé de blanc pour se détacher du trait. */
+.pastille-onglet {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  width: 13px;
+  height: 13px;
+  border-radius: var(--rayon-pastille);
+  background: var(--couleur-orange);
+  box-shadow: 0 0 0 2.5px var(--couleur-surface);
+}
+
 /* Coquille : en-tête, contenu, barre de navigation collée au bas de l'écran. */
 .coquille {
   min-height: 100dvh;
