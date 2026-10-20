@@ -17,14 +17,18 @@
 # - Un seul des deux, ou une valeur mal formée : refus, sans afficher la valeur.
 # - Règles refusées par PowerSync : sortie non nulle, le workflow passe au rouge.
 #
+# La CLI est figée dans scripts/powersync-cli/ : version exacte en devDependency et pnpm-lock.yaml
+# (dépendances transitives et empreintes comprises), hors de l'espace de travail pnpm. Le workflow
+# l'installe avant, sans secret : `pnpm --dir scripts/powersync-cli install --frozen-lockfile
+# --ignore-workspace --ignore-scripts`. Pour changer de version : modifier package.json, lancer
+# `pnpm install --ignore-workspace` dans ce dossier, et le justifier dans la PR (et dans le guide).
+#
 # Ce script n'affiche jamais les secrets : pas d'écho des variables, pas de traçage du shell.
 set -euo pipefail
 set +x
 
-# Version exacte de la CLI, jamais `latest` : la relever se justifie dans la PR (et dans le guide).
-CLI_POWERSYNC='powersync@0.10.2'
-
 cd "$(dirname "$0")/.."
+racine="$(pwd)"
 
 mode="${1:-}"
 case "$mode" in
@@ -42,6 +46,8 @@ unset PS_ADMIN_TOKEN INSTANCE_ID API_URL ORG_ID PROJECT_ID
 
 jeton="${POWERSYNC_ADMIN_TOKEN:-}"
 instance="${POWERSYNC_INSTANCE_ID:-}"
+# Les valeurs ne passent plus que par les variables locales ci-dessus, puis à la seule CLI.
+unset POWERSYNC_ADMIN_TOKEN POWERSYNC_INSTANCE_ID
 
 if [ -z "$jeton" ] && [ -z "$instance" ]; then
   echo "secrets POWERSYNC_ADMIN_TOKEN et POWERSYNC_INSTANCE_ID absents : rien à faire, voir docs/mise-en-ligne.md (étape 3 bis)"
@@ -78,13 +84,15 @@ if ! jeton_bien_forme; then
 fi
 
 if [ "$mode" = valider ]; then
-  echo "Règles de synchro : validation par $CLI_POWERSYNC (deploy sync-config --dry-run), rien n'est déployé."
+  echo "Règles de synchro : validation par la CLI PowerSync figée (deploy sync-config --dry-run), rien n'est déployé."
 else
-  echo "Règles de synchro : déploiement par $CLI_POWERSYNC (deploy sync-config)."
+  echo "Règles de synchro : déploiement par la CLI PowerSync figée (deploy sync-config)."
 fi
 
+# `pnpm --dir … exec` lance la commande depuis scripts/powersync-cli : le dossier des règles est
+# donc donné en chemin absolu.
 if ! PS_ADMIN_TOKEN="$jeton" INSTANCE_ID="$instance" \
-  pnpm dlx "$CLI_POWERSYNC" deploy sync-config --directory=powersync "${options[@]}"; then
+  pnpm --dir scripts/powersync-cli exec powersync deploy sync-config --directory="$racine/powersync" "${options[@]}"; then
   echo "Règles de synchro refusées par PowerSync, ou PowerSync injoignable : voir le message de la CLI juste au-dessus." >&2
   exit 1
 fi

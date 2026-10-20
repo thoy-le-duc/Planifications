@@ -6,8 +6,8 @@ name: Règles de synchro PowerSync
 # depuis main (secours). Jamais sur une PR : le dépôt est public, une PR (ou un fork) ne doit
 # jamais approcher le jeton PowerSync.
 #
-# Voie officielle : la CLI PowerSync (https://docs.powersync.com/tools/cli), version épinglée dans
-# scripts/deployer-regles-powersync.sh. Secrets à poser : docs/mise-en-ligne.md, étape 3 bis.
+# Voie officielle : la CLI PowerSync (https://docs.powersync.com/tools/cli), figée par version
+# exacte et lockfile dans scripts/powersync-cli/. Secrets à poser : docs/mise-en-ligne.md, étape 3 bis.
 on:
   workflow_run:
     workflows: [Migrations de production]
@@ -26,11 +26,14 @@ concurrency:
 jobs:
   deployer:
     name: Valider puis déployer les règles de synchro
-    # Une exécution des migrations sans job lancé (CI rouge, autre branche) ne conclut pas
-    # `success` : rien n'est déployé.
+    # Une exécution des migrations sans job lancé (CI rouge, autre branche) conclut `skipped`, pas
+    # `success` : rien n'est déployé. Les migrations elles-mêmes ne partent que de la CI de main
+    # (`workflow_run`) ou d'un lancement à la main (`workflow_dispatch`) ; jamais `push`, qu'elles
+    # n'ont pas comme déclencheur.
     if: >-
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_run' &&
+      (github.event.workflow_run.event == 'workflow_run' || github.event.workflow_run.event == 'workflow_dispatch') &&
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.head_repository.full_name == github.repository)
@@ -49,6 +52,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
+      # Sans secret, et sans cache : la CLI et ses dépendances viennent du lockfile, empreintes
+      # vérifiées, sans aucun script d'installation.
+      - name: Installer la CLI PowerSync figée
+        run: pnpm --dir scripts/powersync-cli install --frozen-lockfile --ignore-workspace --ignore-scripts
       - name: Valider les règles de synchro, ou arrêt propre si les secrets sont absents
         env:
           POWERSYNC_ADMIN_TOKEN: ${{ secrets.POWERSYNC_ADMIN_TOKEN }}
