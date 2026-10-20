@@ -1,0 +1,61 @@
+name: Règles de synchro PowerSync
+
+# T67 : déploie powersync/sync-config.yaml sur l'instance PowerSync Cloud de production, sans
+# copier-coller dans le tableau de bord. Seulement après des « Migrations de production » réussies
+# sur main (les règles peuvent viser une table que la migration vient de créer), ou à la main
+# depuis main (secours). Jamais sur une PR : le dépôt est public, une PR (ou un fork) ne doit
+# jamais approcher le jeton PowerSync.
+#
+# Voie officielle : la CLI PowerSync (https://docs.powersync.com/tools/cli), version épinglée dans
+# scripts/deployer-regles-powersync.sh. Secrets à poser : docs/mise-en-ligne.md, étape 3 bis.
+on:
+  workflow_run:
+    workflows: [Migrations de production]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Un déploiement à la fois ; celui en cours n'est jamais annulé.
+concurrency:
+  group: regles-powersync
+  cancel-in-progress: false
+
+jobs:
+  deployer:
+    name: Valider puis déployer les règles de synchro
+    # Une exécution des migrations sans job lancé (CI rouge, autre branche) ne conclut pas
+    # `success` : rien n'est déployé.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    # Les secrets POWERSYNC_ADMIN_TOKEN et POWERSYNC_INSTANCE_ID sont des secrets de
+    # l'environnement « production », réservé à la branche main (Settings → Environments).
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Le commit que les migrations viennent d'appliquer (workflow_run), ou main (à la main).
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - name: Valider les règles de synchro, ou arrêt propre si les secrets sont absents
+        env:
+          POWERSYNC_ADMIN_TOKEN: ${{ secrets.POWERSYNC_ADMIN_TOKEN }}
+          POWERSYNC_INSTANCE_ID: ${{ secrets.POWERSYNC_INSTANCE_ID }}
+        run: bash scripts/deployer-regles-powersync.sh valider
+      - name: Déployer les règles de synchro, ou arrêt propre si les secrets sont absents
+        env:
+          POWERSYNC_ADMIN_TOKEN: ${{ secrets.POWERSYNC_ADMIN_TOKEN }}
+          POWERSYNC_INSTANCE_ID: ${{ secrets.POWERSYNC_INSTANCE_ID }}
+        run: bash scripts/deployer-regles-powersync.sh deployer
