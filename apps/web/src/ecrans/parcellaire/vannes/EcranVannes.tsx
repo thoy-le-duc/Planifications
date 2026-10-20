@@ -14,9 +14,8 @@ import { emplacementsArroses, nomDeVanne, validerVanne, vannesDuLot, type LienVa
 import type { PorteDonnees } from '@planif/sync';
 import '../parcellaire.css';
 import './vannes.css';
-import { EcritureRefusee, type ContexteParcellaire, type Enregistrement } from '../ecritures.ts';
-import { lireNombre } from '../regles.ts';
-import { creerVannes, enregistrerVanne, supprimerVanne } from './ecritures.ts';
+import type { ContexteParcellaire, Enregistrement } from '../ecritures.ts';
+import { creerVannes, EcritureRefusee, enregistrerVanne, supprimerVanne } from './ecritures.ts';
 
 /** Durée du bandeau « Annuler » (comme le parcellaire). */
 export const DELAI_ANNULATION_MS = 10_000;
@@ -55,6 +54,13 @@ function jourDuTelephone(): string {
 const maintenantParDefaut = () => new Date();
 const comparerCodes = (a: string, b: string) => a.localeCompare(b, 'fr', { numeric: true, sensitivity: 'base' });
 const messageEchec = (e: unknown): string => (e instanceof EcritureRefusee ? `Rien n’a été enregistré : ${e.message}.` : 'Rien n’a été enregistré : la base du téléphone a refusé l’écriture.');
+/** Nombre tapé (virgule ou point décimal), comme le parcellaire (../regles.ts) ; null s'il est illisible. */
+function lireNombre(texte: string): number | null {
+  const t = texte.trim().replace(',', '.');
+  if (!/^\d+(?:\.\d+)?$|^\.\d+$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
 const nombreFr = (n: number | null): string => (n === null ? '' : String(n).replace('.', ','));
 const planches = (n: number): string => (n === 0 ? 'aucune planche' : `${String(n)} ${n > 1 ? 'planches' : 'planche'}`);
 

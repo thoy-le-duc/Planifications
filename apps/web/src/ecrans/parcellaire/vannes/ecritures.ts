@@ -13,7 +13,14 @@ import { creerGenerateurId } from '@planif/core/identifiants';
 import { changerLiens, type ChangementLiens, type LienVanne, type SaisieVanne, type VanneDuLot } from '@planif/core/irrigation';
 import type { OrdreEcriture, VerificationEcriture } from '@planif/sync';
 import { ordreInsertion } from '@planif/sync/import';
-import { EcritureRefusee, type ContexteParcellaire, type Enregistrement } from '../ecritures.ts';
+import type { ContexteParcellaire, Enregistrement } from '../ecritures.ts';
+
+/**
+ * Écriture refusée avant l'envoi (règle du serveur), avec un message clair. Propre à ce morceau :
+ * importer celle du parcellaire ferait du morceau du parcellaire une dépendance de celui-ci (et
+ * alourdirait le JavaScript de démarrage d'un utilitaire de Vite).
+ */
+export class EcritureRefusee extends Error {}
 
 type Valeur = string | number | null;
 type Lire = Parameters<VerificationEcriture>[0];
@@ -50,7 +57,7 @@ async function ecrireVerifie(ctx: ContexteParcellaire, ordres: readonly OrdreEcr
 /** Les numéros `numeros` sont libres parmi les vannes non supprimées de la ferme, hors `sauf`. */
 async function verifierNumerosLibres(lire: Lire, fermeId: string, numeros: readonly number[], sauf: string | null): Promise<void> {
   const pris = await lire<{ id: string; numero_vanne: number }>('SELECT id, numero_vanne FROM secteur_irrigation WHERE ferme_id = ? AND supprime_le IS NULL', [fermeId]);
-  const occupes = new Set(pris.filter((p) => p.id !== sauf).map((p) => Number(p.numero_vanne)));
+  const occupes = new Set(pris.filter((p) => p.id !== sauf).map((p) => p.numero_vanne));
   const double = numeros.find((n) => occupes.has(n));
   if (double !== undefined) throw new EcritureRefusee(`le numéro de vanne ${String(double)} existe déjà : choisissez-en un autre`);
 }
