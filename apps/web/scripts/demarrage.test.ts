@@ -5,9 +5,11 @@
  * ── Contrat ───────────────────────────────────────────────────────────────────────────────────
  *   - Plafond : `jsInitialGzKio` de apps/web/budget.json revient à 71,2 Kio (relevé à 71,3 par
  *     T54 pour le seul nom haché du morceau `npk`).
- *   - Marge : le JavaScript de démarrage mesuré (scripts et modulepreload de index.html, gzip,
- *     comme scripts/budget.ts) tient sous le plafond moins 1 Kio, soit 70,2 Kio au plus. Un
- *     ticket qui mange cette marge le dit, et la justifie dans sa PR.
+ *   - Le JavaScript de démarrage mesuré (scripts et modulepreload de index.html, gzip, comme
+ *     scripts/budget.ts) tient sous ce plafond, lu dans budget.json. La marge d'au moins 1 Kio
+ *     (70,2 Kio au plus) était un critère ponctuel de T66, mesuré à la livraison
+ *     (docs/mesures/T66.md) ; elle n'est pas un second budget, plus strict que budget.json, que
+ *     chaque ticket devrait tenir (relecture de T66).
  *   - Garde-fou : rien des modules lourds chargés à la demande (export, phyto, fertilisation et
  *     npk, irrigation et vannes, vue 3D) n'entre dans le JavaScript de démarrage : ni leur code
  *     (dépendance statique), ni même leur nom de fichier (table de préchargement de Vite,
@@ -32,8 +34,6 @@ const RACINE = fileURLToPath(new URL('../../../', import.meta.url));
 
 /** Plafond du démarrage (T66 : retour à 71,2 Kio, relevé à 71,3 par T54). */
 const PLAFOND_DEMARRAGE_KIO = 71.2;
-/** Marge exigée par T66 sous ce plafond. */
-const MARGE_DEMARRAGE_KIO = 1;
 
 /** Modules lourds, chargés à la demande seulement (chemins depuis la racine du dépôt). */
 const MODULES_LOURDS: Readonly<Record<string, readonly string[]>> = {
@@ -107,9 +107,11 @@ describe('T66 : plafond et marge du démarrage', () => {
     expect(budget.jsInitialGzKio).toBe(PLAFOND_DEMARRAGE_KIO);
   });
 
-  it('JavaScript de démarrage mesuré sous 70,2 Kio : au moins 1 Kio de marge sous le plafond', () => {
+  it('JavaScript de démarrage mesuré sous le plafond de budget.json', () => {
+    const budget = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson;
+    expect(budget.jsInitialGzKio, 'budget.json : jsInitialGzKio').toBeTypeOf('number');
     const octets = demarrage.reduce((somme, f) => somme + gz(f), 0);
-    const limite = (PLAFOND_DEMARRAGE_KIO - MARGE_DEMARRAGE_KIO) * 1024;
+    const limite = (budget.jsInitialGzKio ?? 0) * 1024;
     const detail = demarrage.map((f) => `${f} ${String(gz(f))}`).join(', ');
     expect(octets, `démarrage ${String(octets)} octets gzip (${(octets / 1024).toFixed(2)} Kio) : ${detail} ; limite ${String(Math.floor(limite))}`).toBeLessThanOrEqual(limite);
   });
