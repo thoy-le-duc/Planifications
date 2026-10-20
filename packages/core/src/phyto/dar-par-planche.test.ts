@@ -141,3 +141,51 @@ describe('T69 : un traitement sans planche interdit toute la culture', () => {
     expect(m.interdictionRecolte([surP3, toute], [P3], '2027-05-11', TOMATES)?.recolteAutoriseeLe).toBe('2027-05-20');
   });
 });
+
+describe('T69 (relecture) : corrections, planche partagée, bornes de dates', () => {
+  it('correction qui change les planches : seules les planches de la correction restent interdites', () => {
+    const correction = { ...traitement(10, [P5], TOMATES), remplaceSorte: 'correction' as const, remplaceEvenementId: SUR_P3_P4.id };
+    const t = [SUR_P3_P4, correction];
+    for (const p of [P3, P4]) expect(m.interdictionRecolte(t, [p], '2027-05-11', TOMATES), p).toBeNull();
+    expect(m.interdictionRecolte(t, [P5], '2027-05-11', TOMATES)?.evenementId).toBe(correction.id);
+    expect(m.interdictionRecolte(t, PLANCHES, '2027-05-11', TOMATES)?.planches).toEqual([P5]);
+    expect(m.interdictionRecolte(t, [], '2027-05-11', TOMATES)?.planches).toEqual([P5]);
+  });
+
+  it('correction qui retire toutes les planches : toute la culture devient interdite ; l’inverse libère les autres planches', () => {
+    const versToute = { ...traitement(11, [], TOMATES), remplaceSorte: 'correction' as const, remplaceEvenementId: SUR_P3_P4.id };
+    const i = m.interdictionRecolte([SUR_P3_P4, versToute], [P1], '2027-05-11', TOMATES);
+    expect(i?.evenementId).toBe(versToute.id);
+    expect(i?.planches).toBeUndefined();
+    const toute = traitement(12, [], TOMATES);
+    const versP3 = { ...traitement(13, [P3], TOMATES), remplaceSorte: 'correction' as const, remplaceEvenementId: toute.id };
+    expect(m.interdictionRecolte([toute, versP3], [P1], '2027-05-11', TOMATES)).toBeNull();
+    expect(m.interdictionRecolte([toute, versP3], [P3], '2027-05-11', TOMATES)?.evenementId).toBe(versP3.id);
+    // La correction annulée : plus rien en vigueur dans la chaîne.
+    const annulation = { ...traitement(14, [P3], TOMATES), remplaceSorte: 'annulation' as const, remplaceEvenementId: versP3.id };
+    expect(m.interdictionRecolte([toute, versP3, annulation], [P3], '2027-05-11', TOMATES)).toBeNull();
+    expect(m.interdictionRecolte([toute, versP3, annulation], [], '2027-05-11', TOMATES)).toBeNull();
+  });
+
+  it('planche partagée par deux cultures : la planche traitée l’est pour les deux ; un traitement sans planche ne touche que sa culture', () => {
+    // Tomates traitées sur P3 ; la voisine (salade) occupe P3 et P1.
+    expect(m.interdictionRecolte([SUR_P3_P4], [P3], '2027-05-11', VOISINE)?.evenementId).toBe(SUR_P3_P4.id);
+    expect(m.interdictionRecolte([SUR_P3_P4], [P3, P1], '2027-05-11', VOISINE)?.planches).toEqual([P3]);
+    expect(m.interdictionRecolte([SUR_P3_P4], [P1], '2027-05-11', VOISINE)).toBeNull();
+    const toute = traitement(15, [], TOMATES);
+    expect(m.interdictionRecolte([toute], [P3], '2027-05-11', VOISINE)).toBeNull();
+    expect(m.interdictionRecolte([toute], [P3], '2027-05-11', TOMATES)?.evenementId).toBe(toute.id);
+  });
+
+  it('bornes : interdite du jour du traitement à la veille de la date autorisée, permise ce jour-là (J + DAR inclus)', () => {
+    for (const [jour, interdite] of [
+      ['2027-05-09', false],
+      ['2027-05-10', true],
+      ['2027-05-12', true],
+      ['2027-05-13', false],
+    ] as const) {
+      expect(m.interdictionRecolte([SUR_P3_P4], [P3], jour, TOMATES) !== null, jour).toBe(interdite);
+      expect(m.interdictionRecolte([SUR_P3_P4], [], jour, TOMATES) !== null, `${jour}, culture`).toBe(interdite);
+    }
+  });
+});
