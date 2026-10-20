@@ -343,6 +343,63 @@ function interopCommonJs3d(): Plugin {
   };
 }
 
+/**
+ * T66 — aide de préchargement légère. Vite enveloppe chaque `import()` dans son aide
+ * (`\0vite/preload-helper.js`), logée dans le morceau d'entrée parce que l'entrée s'en sert :
+ * ≈ 0,5 Kio gzip au démarrage pour précharger des écrans qui ne s'ouvrent qu'ensuite. Elle est
+ * remplacée par src/prechargement/aide.ts : au démarrage, l'import tel quel (et `vite:preloadError`
+ * en cas d'échec, comme Vite) ; le préchargement complet (src/prechargement/complet.ts, même
+ * comportement que l'aide de Vite) vient avec le morceau d'aiguillage. Échec franc du build si
+ * Vite renomme son aide : sans remplacement, l'ancienne reviendrait au démarrage sans bruit.
+ */
+const ID_AIDE_PRECHARGEMENT = '\0vite/preload-helper.js';
+const MODULE_AIDE_PRECHARGEMENT = fileURLToPath(new URL('src/prechargement/aide.ts', import.meta.url));
+
+interface AidePrechargement {
+  readonly plugin: Plugin;
+  /**
+   * build.modulePreload.resolveDependencies : retire des listes de préchargement les morceaux
+   * d'entrée (relevés au début de la génération). Toujours déjà chargés quand un autre morceau
+   * importe quoi que ce soit, Vite les y inscrivait pour chaque import fait hors de l'entrée : un
+   * lien `modulepreload` inutile, et un nom haché de plus dans la table de chaque morceau (celui
+   * de la vue 3D, par exemple). Si Vite ne passait plus par le relevé, rien ne serait retiré.
+   */
+  readonly sansEntrees: (fichier: string, deps: string[]) => string[];
+}
+
+function aidePrechargementLegere(): AidePrechargement {
+  let remplacee = false;
+  const fichiersEntree = new Set<string>();
+  const plugin: Plugin = {
+    name: 'planif:aide-prechargement',
+    apply: 'build',
+    enforce: 'pre',
+    buildStart() {
+      remplacee = false;
+      fichiersEntree.clear();
+    },
+    load(id) {
+      if (id !== ID_AIDE_PRECHARGEMENT) return null;
+      remplacee = true;
+      return `export { prechargerLeger as __vitePreload } from ${JSON.stringify(MODULE_AIDE_PRECHARGEMENT)};\n`;
+    },
+    generateBundle: {
+      // Avant l'analyse des imports de Vite, qui appelle sansEntrees.
+      order: 'pre',
+      handler(_options, paquet) {
+        for (const sortie of Object.values(paquet)) {
+          if (sortie.type === 'chunk' && sortie.isEntry) fichiersEntree.add(sortie.fileName);
+        }
+        const avecImportDynamique = Object.values(paquet).some((s) => s.type === 'chunk' && s.dynamicImports.length > 0);
+        if (avecImportDynamique && !remplacee) {
+          throw new Error(`aide de préchargement de Vite (${ID_AIDE_PRECHARGEMENT}) introuvable : src/prechargement/aide.ts ne la remplace plus (T66)`);
+        }
+      },
+    },
+  };
+  return { plugin, sansEntrees: (_fichier, deps) => deps.filter((d) => !fichiersEntree.has(d)) };
+}
+
 /** Entrées du build : l'appli seule en production, les pages de test seules pour les essais. */
 function entrees(essais: boolean): Record<string, string> {
   const chemin = (fichier: string): string => fileURLToPath(new URL(fichier, import.meta.url));
@@ -359,10 +416,12 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, import.meta.dirname, 'VITE_');
   const essais = mode === MODE_ESSAIS;
   const demo = mode === MODE_DEMO;
+  const prechargement = aidePrechargementLegere();
   return {
     plugins: [
       react(),
       interopCommonJs3d(),
+      prechargement.plugin,
       // Hors-ligne d'abord : le service worker met toute l'appli en cache dès la première visite.
       // Pas dans le build des essais : il écrirait un autre `sw.js` (T11c).
       !essais &&
@@ -408,7 +467,7 @@ export default defineConfig(({ mode }) => {
       // modulepreload est natif sur les navigateurs visés (Chrome Android, Safari 17+) ; ailleurs,
       // les mêmes fichiers se chargent sans préchargement. Le polyfill n'était que du JavaScript de
       // démarrage en plus (T16, budget de poids).
-      modulePreload: { polyfill: false },
+      modulePreload: { polyfill: false, resolveDependencies: prechargement.sansEntrees },
       ...(demo ? { outDir: DOSSIER_DEMO } : {}),
       // Build des essais : public/ est déjà dans la copie du build de production.
       copyPublicDir: !essais,
