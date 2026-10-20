@@ -4,7 +4,7 @@
  * cœur (`enVigueurDesTraitements`), dont le morceau ne s'ajoute ainsi ni au morceau 3D ni à la
  * liste de ce que la vue précharge avec ses travaux (budget `jsVue3dGzKio`).
  */
-import { enVigueurDesTraitements } from '@planif/core';
+import { ajouterJours, DAR_MAX_JOURS, enVigueurDesTraitements, type DateCalendaire } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 
 /** Un traitement phyto du jour, travail numéroté de la 3D. */
@@ -28,7 +28,10 @@ export async function lireTraitementsDuJour(porte: PorteDonnees, fermeId: string
   // Par import dynamique, comme l'écran : un module à la fois importé et chargé à la demande
   // ajoutait au démarrage l'assistant des objets d'espace de noms.
   const { lireTraitements } = await import('../aujourdhui/dar.ts');
-  const lus = await lireTraitements(porte, fermeId, aujourdhui);
+  // `lireTraitements` lit depuis DAR_MAX_JOURS + 1 jours avant la date donnée (plus les corrections
+  // et annulations plus anciennes) : décalée d'autant, la lecture part d'aujourd'hui, sans parcourir
+  // l'année de traitements d'une grande ferme pendant que la 3D lit ses travaux.
+  const lus = await lireTraitements(porte, fermeId, ajouterJours(aujourdhui as DateCalendaire, DAR_MAX_JOURS + 1));
   return enVigueurDesTraitements(lus.traitements)
     .filter((t) => t.date === aujourdhui)
     .sort((a, b) => (a.horodatage !== b.horodatage ? (a.horodatage < b.horodatage ? -1 : 1) : a.id < b.id ? -1 : 1))

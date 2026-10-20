@@ -9,6 +9,7 @@
  * Contrat : ./test/contrat-dar3d.ts.
  */
 import { useEffect, useMemo, useState, type PointerEventHandler, type ReactElement } from 'react';
+import { ajouterJours, DAR_MAX_JOURS, type DateCalendaire } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
 import type { TraitementsDar } from '../aujourdhui/dar.ts';
 import { reperesDar, TEXTE_REPERE_DAR, type RepereDar } from './dar3d.ts';
@@ -17,15 +18,19 @@ import './dar3d.css';
 
 /**
  * Les repères DAR des `volumes` le `date`, suivis dans la base (un traitement saisi ou annulé
- * ailleurs s'y voit). La lecture remonte à DAR_MAX_JOURS avant la plus ancienne date montrée
- * (aujourd'hui, ou une semaine passée choisie au curseur) : elle n'est refaite que lorsque le
- * curseur recule plus loin qu'il n'est jamais allé, pas à chaque semaine.
+ * ailleurs s'y voit). Une seule lecture couvre d'emblée l'année passée du curseur (tout ce qui peut
+ * interdire une récolte depuis un an avant aujourd'hui) : faire défiler les semaines ne relit pas
+ * la base (une relecture pendant le défilé disputait l'image au changement de semaine). Elle n'est
+ * refaite que si le curseur recule au-delà.
  */
 const AUCUN: TraitementsDar = { traitements: [], noms: new Map() };
 
 export function useReperesDar(porte: PorteDonnees, fermeId: string, volumes: readonly VolumeScene[], date: string, aujourdhui: string): readonly RepereDar[] {
   const [lus, setLus] = useState(AUCUN);
-  const [borne, setBorne] = useState(() => (date < aujourdhui ? date : aujourdhui));
+  const [borne, setBorne] = useState(() => {
+    const anPasse = ajouterJours(aujourdhui as DateCalendaire, -(DAR_MAX_JOURS + 1));
+    return date < anPasse ? date : anPasse;
+  });
   // État tiré du rendu (pas d'effet) : la borne ne fait que reculer.
   if (date < borne) setBorne(date);
   useEffect(() => {
