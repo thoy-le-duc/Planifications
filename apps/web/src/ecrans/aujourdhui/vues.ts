@@ -15,6 +15,7 @@ import {
   phraseDeTache,
   quand,
   quantiteAvecUnite,
+  tachesDeLEcran,
   VERBES,
   type EntreeHistorique,
   type EvenementLu,
@@ -144,6 +145,36 @@ export function vuesHistorique(entrees: readonly EntreeHistorique[], aujourdhui:
       quand: [quand(e.date, aujourdhui), codes].filter((x) => x !== null).join(' · '),
       nom: rang === 0 ? base : `${base} (${String(rang + 1)})`,
       retiree: h.culture === null,
+    };
+  });
+}
+
+/** T60 : un travail du jour tel que les consignes de l'équipe le montrent (attribution, fiche du jour). */
+export interface TravailVu {
+  readonly cle: string;
+  /** « Grelinette batavia ». */
+  readonly phrase: string;
+  /** Codes abrégés pour la liste (« T2-P01 · T2-P03 », « T2-P01 +2 »), ou null. */
+  readonly codes: string | null;
+  /** Tous les codes des emplacements (fiche du jour), ou « sans planche ». */
+  readonly planche: string;
+  /** Zone du premier emplacement (« Toute la zone … »), ou ''. */
+  readonly zone: string;
+  /** Outil du travail prévu, sinon ''. */
+  readonly outil: string;
+}
+
+/** T60 : les travaux de l'écran (en retard d'abord, comme ses cartes), pour les consignes de l'équipe. */
+export function travauxVus(taches: readonly TacheJour[]): TravailVu[] {
+  return tachesDeLEcran(taches).map((t) => {
+    const tous = t.tache.emplacements.map((e) => e.code).join(' · ');
+    return {
+      cle: t.cle,
+      phrase: capitale(phraseDeTache(t)),
+      codes: codesEmplacements(t.tache.emplacements),
+      planche: tous === '' ? 'sans planche' : tous,
+      zone: t.tache.emplacements[0]?.zone ?? '',
+      outil: t.tache.etape === 'travail' ? (t.tache.travail.outil ?? '') : '',
     };
   });
 }

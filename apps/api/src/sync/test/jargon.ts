@@ -70,6 +70,8 @@ function seuil(n: number): RegExp {
  */
 const MOTS_FRANCAIS_DU_SCHEMA = new Set([
   'assolement',
+  // T60 : tables de l'équipe, mots français écrits pareil (« une autre personne que vous »).
+  'attribution',
   'au',
   'avant',
   'campagne',
@@ -92,6 +94,7 @@ const MOTS_FRANCAIS_DU_SCHEMA = new Set([
   'nom',
   'note',
   'occupation',
+  'personne',
   'photos',
   'plantation',
   'position',

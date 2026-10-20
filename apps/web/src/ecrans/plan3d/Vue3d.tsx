@@ -55,7 +55,8 @@ import { CouchePastilles, placerPastilles, type PastilleDessinee, type PointPose
 import type { EtatVannes3d, ProprietesVannes3d } from './Vannes3d.tsx';
 import type { Camera as CameraThree } from 'three';
 import type { Masques } from '../aujourdhui/cache.ts';
-import type { LectureTravaux, tachesVisibles, travauxDuJour3d, TravauxDuJour3d } from './travaux.ts';
+import type { LectureTravaux, pourDe, tachesVisibles, travauxDuJour3d, TravauxDuJour3d } from './travaux.ts';
+import type { ModeEquipe } from '../aujourdhui/cache.ts';
 import { hauteurDalle, hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
 import { plantsDePlanche, type PlantsPlanche } from './plants.ts';
 import { mentionRecolte, phrasePlanchesARecolter, planchesARecolter } from './recolte.ts';
@@ -99,6 +100,8 @@ export interface ProprietesVue3d {
    */
   readonly porte?: PorteDonnees;
   readonly fermeId?: string;
+  /** T60 : l'utilisateur, pour numéroter ses travaux (« Mes travaux »). Absent : tous les travaux. */
+  readonly utilisateurId?: string | undefined;
 }
 
 /** Marques de performance (e2e/vue-3d.e2e.ts) ; celle du module est posée par l'écran Planches (./entree.ts). */
@@ -834,7 +837,7 @@ const ElementBatiment = memo(function ElementBatiment({ batiment, surAller }: { 
  */
 const VannesDifferees = lazy((): Promise<{ default: (p: ProprietesVannes3d) => ReactNode }> => import('./Vannes3d.tsx').catch(() => ({ default: () => null })));
 
-export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, invitationDemo = false, porte, fermeId }: ProprietesVue3d) {
+export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, invitationDemo = false, porte, fermeId, utilisateurId }: ProprietesVue3d) {
   // T28k (Q36) : le gérant place la ferme aussi au téléphone, à tout écran.
   const peutModifier = gerant && surModifierPlan !== undefined;
   const sansPlacement = useMemo(() => fermeSansPlacement(plan), [plan]);
@@ -888,7 +891,9 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   // Le moteur de l'écran Aujourd'hui se charge à part, à l'ouverture (précaché : hors ligne aussi), pour ne pas alourdir le morceau 3D.
   // T37b : les tâches cochées et pas encore relues (masques de l'écran) en sont retirées, reprises à chaque changement des masques.
   // Les fonctions du module, pas le module lui-même : garder l'espace de noms ajouterait un utilitaire au JavaScript de démarrage.
-  const [travauxLus, setTravauxLus] = useState<{ readonly calculer: typeof travauxDuJour3d; readonly visibles: typeof tachesVisibles; readonly lecture: LectureTravaux } | null>(null);
+  const [travauxLus, setTravauxLus] = useState<{ readonly calculer: typeof travauxDuJour3d; readonly visibles: typeof tachesVisibles; readonly pour: typeof pourDe; readonly lecture: LectureTravaux } | null>(null);
+  // T60 : « Mes travaux » ou « Tous », tel que choisi dans l'écran Aujourd'hui (null : le rôle décide).
+  const [modeEquipe, setModeEquipe] = useState<ModeEquipe | null>(null);
   const [erreurTravaux, setErreurTravaux] = useState(false);
   const [masques, setMasques] = useState<Masques | null>(null);
   const [toutVoir, setToutVoir] = useState(false);
@@ -902,13 +907,15 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           arreter = m.suivreMasques(porte, fermeId, () => {
             setMasques(m.masquesDe(porte, fermeId));
             setToutVoir(m.toutVoirDe(porte, fermeId));
+            setModeEquipe(m.modeEquipeDe(porte, fermeId));
           });
           setMasques(m.masquesDe(porte, fermeId));
           setToutVoir(m.toutVoirDe(porte, fermeId));
+          setModeEquipe(m.modeEquipeDe(porte, fermeId));
         }
-        const lecture = await m.lireTravaux(porte, fermeId, m.jourDuTelephone());
+        const lecture = await m.lireTravaux(porte, fermeId, m.jourDuTelephone(), undefined, utilisateurId);
         if (!actif) return;
-        setTravauxLus({ calculer: m.travauxDuJour3d, visibles: m.tachesVisibles, lecture });
+        setTravauxLus({ calculer: m.travauxDuJour3d, visibles: m.tachesVisibles, pour: m.pourDe, lecture });
         setErreurTravaux(false);
       })
       .catch((erreur: unknown) => {
@@ -919,11 +926,14 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
       actif = false;
       arreter();
     };
-  }, [porte, fermeId, plan]);
+  }, [porte, fermeId, plan, utilisateurId]);
   const [travailActif, setTravailActif] = useState<number | null>(null);
   const jour = useMemo<TravauxDuJour3d>(
-    () => (geometrie === null || travauxLus === null || masques === null ? { travaux: [], pastilles: [] } : travauxLus.calculer(travauxLus.visibles(travauxLus.lecture, masques, toutVoir), geometrie)),
-    [travauxLus, masques, toutVoir, geometrie],
+    () =>
+      geometrie === null || travauxLus === null || masques === null
+        ? { travaux: [], pastilles: [] }
+        : travauxLus.calculer(travauxLus.visibles(travauxLus.lecture, masques, toutVoir), geometrie, travauxLus.pour(travauxLus.lecture, modeEquipe)),
+    [travauxLus, masques, toutVoir, geometrie, modeEquipe],
   );
   const pastillesDessinees = useMemo<readonly PastilleDessinee[]>(() => jour.pastilles.map((pastille) => ({ pastille, retard: jour.travaux.some((t) => t.planche === pastille.planche && t.enRetard) })), [jour]);
   const couchePastilles = useRef<HTMLDivElement>(null);

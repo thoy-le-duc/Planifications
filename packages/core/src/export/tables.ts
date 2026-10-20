@@ -68,6 +68,12 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       source_import: texte('origine de l’import pour un assolement passé importé'),
       ...HORODATAGE,
     }),
+    attribution: table('Travaux du jour attribués à une personne de l’équipe (consignes par ouvrier).', {
+      ferme_id: FERME_ID,
+      personne_id: texte('personne à qui le travail est attribué (voir personne.csv)'),
+      cle_tache: texte('travail du jour attribué : culture (série ou campagne) et étape, ou travail prévu et sa date'),
+      ...HORODATAGE,
+    }),
     batiment: table('Bâtiments de la ferme (serres, hangar, magasin) : rectangles placés dans le repère local de la ferme.', {
       ferme_id: FERME_ID,
       nom: texte('nom du bâtiment'),
@@ -218,6 +224,12 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       prevu_au: date('fin d’occupation prévue (AAAA-MM-JJ)'),
       reel_du: date('début d’occupation réel (AAAA-MM-JJ)'),
       reel_au: date('fin d’occupation réelle (AAAA-MM-JJ)'),
+      ...HORODATAGE,
+    }),
+    personne: table('Équipe de la ferme : une personne par ligne, avec ou sans compte.', {
+      ferme_id: FERME_ID,
+      prenom: texte('prénom affiché'),
+      membre_id: texte('compte de la personne dans la ferme, vide pour un ouvrier sans compte (voir membre.csv)'),
       ...HORODATAGE,
     }),
     plantation: table('Plantations pérennes : kiwis, asperges, pivoines, fraisiers conservés plusieurs années.', {

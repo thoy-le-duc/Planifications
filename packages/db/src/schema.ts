@@ -1002,6 +1002,55 @@ export const membre = pgTable(
 );
 
 /**
+ * T60 (Q44) : une personne de l'équipe de la ferme, avec un prénom affiché. `membre_id` : son
+ * compte, s'il en a un ; nul pour un ouvrier sans téléphone (prénom seul, ses consignes
+ * s'impriment). Une personne active au plus par membre. Écrite par le gérant seul (le serveur le
+ * vérifie, apps/api/src/sync/equipe.ts) ; retirée en douceur (`supprime_le`). Publiée.
+ */
+export const personne = pgTable(
+  'personne',
+  {
+    id: idDe<'Personne'>('id').primaryKey(),
+    fermeId: fermeId(),
+    prenom: text('prenom').notNull(),
+    membreId: uuid('membre_id').references(() => membre.id),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('personne', 'prenom', sql`length(btrim(${t.prenom})) BETWEEN 1 AND 60`),
+    uniqueIndex('personne_membre_actif_idx')
+      .on(t.membreId)
+      .where(sql`${t.supprimeLe} IS NULL AND ${t.membreId} IS NOT NULL`),
+    index('personne_ferme_idx').on(t.fermeId),
+  ],
+);
+
+/**
+ * T60 : un travail du jour attribué à une personne de l'équipe. Le travail est désigné par la
+ * clé de sa tâche dans l'écran Aujourd'hui (`<série ou campagne>:<étape>` ou
+ * `<série>:travail:<indice>:<date prévue>`), stable tant que la tâche n'est pas faite : rien à
+ * recalculer en base. Une ligne par (travail, personne) ; retirer = `supprime_le`, rétablir =
+ * nul. Écrite par le gérant seul. Publiée.
+ */
+export const attribution = pgTable(
+  'attribution',
+  {
+    id: idDe<'Attribution'>('id').primaryKey(),
+    fermeId: fermeId(),
+    personneId: idDe<'Personne'>('personne_id')
+      .notNull()
+      .references(() => personne.id),
+    cleTache: text('cle_tache').notNull(),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('attribution', 'cle_tache', sql`length(${t.cleTache}) BETWEEN 1 AND 200`),
+    index('attribution_ferme_cle_idx').on(t.fermeId, t.cleTache),
+    index('attribution_personne_idx').on(t.personneId),
+  ],
+);
+
+/**
  * Code de connexion à usage unique, stocké haché (jamais en clair). En base plutôt qu'en mémoire :
  * plusieurs processus d'API, redémarrage sans perte, limite de fréquence calculée sur ces lignes.
  * Pas de clé vers `utilisateur` : un code précède la création du compte. NON publiée.

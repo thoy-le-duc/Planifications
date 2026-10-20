@@ -586,6 +586,16 @@
   color: var(--couleur-sur-orange);
 }
 
+/* T60 : planche qui ne porte que des travaux des autres : petite pastille grisée, sans numéro. */
+.plan3d-pastille-autre {
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  border-width: 2px;
+  background: var(--couleur-tertiaire);
+  opacity: 0.75;
+}
+
 .plan3d-pastille[data-actif='oui'] {
   z-index: 1;
   min-width: 60px;

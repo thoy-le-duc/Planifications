@@ -84,6 +84,13 @@ streams:
   membre:
     auto_subscribe: true
     query: SELECT * FROM membre WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  # T60 : l'équipe (prénoms, compte facultatif) et les travaux du jour attribués, à tous les membres.
+  personne:
+    auto_subscribe: true
+    query: SELECT * FROM personne WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  attribution:
+    auto_subscribe: true
+    query: SELECT * FROM attribution WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
 
   # Bibliothèque de référence : réglages propres à la ferme, puis lignes partagées (flux global).
   famille_ferme:

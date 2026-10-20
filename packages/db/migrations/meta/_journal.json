@@ -276,6 +276,13 @@
       "breakpoints": true
     },
     {
+      "idx": 39,
+      "version": "7",
+      "when": 1792462226543,
+      "tag": "0039_equipe_attribution",
+      "breakpoints": true
+    },
+    {
       "idx": 40,
       "version": "7",
       "when": 1792465833092,

@@ -326,6 +326,12 @@ describe('T41b : préparer une migration de bibliothèque (le script `bibliotheq
       return;
     }
     const r = db.preparerMigrationBibliotheque(DERNIERE, depot, options);
+    // T60 : une migration ordinaire (0039) la suit : elle est fusionnée et ne se réécrit plus.
+    if (depot.journal.entries.at(-1)?.tag !== DERNIERE) {
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.erreur).toContain('ne se réécrit jamais');
+      return;
+    }
     if (!r.ok) throw new Error(r.erreur);
     expect(r.fichiers.map((f) => f.chemin).sort()).toEqual([`bibliotheque/etats/${DERNIERE}.json`, `migrations/${DERNIERE}.sql`]);
     for (const f of r.fichiers) expect(f.contenu, f.chemin).toBe(lire(f.chemin));
