@@ -292,6 +292,21 @@ describe('T54 : bilan par planche et par saison (règle 3)', () => {
     expect(bilanDe(b, P1)?.realise).toMatchObject({ n: 130, apports: 2, sansUnites: 1 });
   });
 
+  it('relecture : solide compté en volume (m³, L) → sans unités (densité inconnue) ; liquide en L → densité 1', () => {
+    const LIQUIDE = uuid(0x24);
+    const liquide = { ...produit(LIQUIDE, 'Engrais liquide', { n: 2, unite: 'L' }), forme: 'liquide' };
+    const t = tables([
+      apport({ date: '2027-03-10', produit: 'Compost de déchets verts', produitId: COMPOST, quantite: 3, unite: 'm3' }),
+      apport({ date: '2027-03-11', produit: 'Engrais liquide', produitId: LIQUIDE, categorie: 'fertilisation', type: 'engrais', quantite: 100, unite: 'L' }),
+    ]);
+    const b = m.bilanFertilisation({ ...t, produit_fertilisant: [...(t.produit_fertilisant ?? []), liquide] }, FERME);
+    // 3 m³ de compost ne sont pas 3 t : aucune unité plutôt qu'un azote faux.
+    expect(b.apports.find((a) => a.date === '2027-03-10')).toMatchObject({ produitId: COMPOST, kg: null, kgParHa: null });
+    // 100 L × 2 kg pour 100 L = 2 kg N sur 100 m² → 200 kg N/ha.
+    expect(b.apports.find((a) => a.date === '2027-03-11')).toMatchObject({ produitId: LIQUIDE, kg: { n: 2 }, kgParHa: { n: 200 } });
+    expect(bilanDe(b, P1)?.realise).toMatchObject({ n: 200, apports: 2, sansUnites: 1 });
+  });
+
   it('plusieurs emplacements : la surface est leur somme, chacun reçoit la même dose par hectare', () => {
     // 1,2 t × 1 % = 12 kg N sur 120 m² → 1 000 kg N/ha sur P1 et sur P2.
     const b = m.bilanFertilisation(tables([apport({ date: '2027-03-10', produit: 'Compost de déchets verts', produitId: COMPOST, quantite: 1.2, emplacements: [P1, P2] })]), FERME);
