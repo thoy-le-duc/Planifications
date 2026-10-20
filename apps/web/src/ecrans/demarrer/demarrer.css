@@ -68,6 +68,16 @@
   gap: 0;
 }
 
+.dem[data-replie='oui'] .dem-tete {
+  row-gap: 0;
+}
+
+.dem[data-replie='oui'] .dem-etape {
+  min-height: 56px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
 .dem[data-replie='oui'] .dem-etape:not(.dem-etape-prochaine),
 .dem[data-replie='oui'] .dem-import,
 .dem[data-replie='oui'] .dem-textes > span {

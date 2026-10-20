@@ -33,6 +33,13 @@
   padding: 10px 12px;
 }
 
+/* T65 : replié, au plus serré (360 × 800 : le plan garde sa hauteur, le contenu ne défile pas). */
+.plan > .dem[data-replie='oui'] {
+  gap: 4px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
 .plan {
   flex: 1 1 auto;
   min-height: 0;
