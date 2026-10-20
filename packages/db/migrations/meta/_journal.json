@@ -288,6 +288,13 @@
       "when": 1792473823449,
       "tag": "0040_secteur_irrigation_placement",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1792509138233,
+      "tag": "0041_fertilisation",
+      "breakpoints": true
     }
   ]
 }

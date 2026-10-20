@@ -250,7 +250,8 @@ function gelerProfond<T>(v: T): T {
 
 function cheminsAttendus(): string[] {
   // T52 : l'archive gagne le registre phyto (registre-phyto.csv, ./registre-phyto.test.ts).
-  return ['ferme.json', 'LISEZMOI.txt', 'registre-phyto.csv', ...TABLES_ATTENDUES.map((t) => `${t}.csv`), ...TABLES_BIBLIOTHEQUE.map((t) => `bibliotheque/${t}.csv`)].sort();
+  // T54 : et le cahier de fertilisation (cahier-fertilisation.csv, ./cahier-fertilisation.test.ts).
+  return ['ferme.json', 'LISEZMOI.txt', 'registre-phyto.csv', 'cahier-fertilisation.csv', ...TABLES_ATTENDUES.map((t) => `${t}.csv`), ...TABLES_BIBLIOTHEQUE.map((t) => `bibliotheque/${t}.csv`)].sort();
 }
 
 function description(table: string): DescriptionTable {
@@ -379,7 +380,8 @@ describe('T15 : CSV lisibles par Excel en français', () => {
       expect(f.contenu.startsWith(BOM), f.chemin).toBe(true);
       expect(f.contenu.endsWith('\r\n'), f.chemin).toBe(true);
       // T52 : registre-phyto.csv n'est pas une table ; son en-tête (COLONNES_REGISTRE_PHYTO) est vérifié par ./registre-phyto.test.ts.
-      if (f.chemin === 'registre-phyto.csv') continue;
+      // T54 : de même pour cahier-fertilisation.csv (./cahier-fertilisation.test.ts).
+      if (f.chemin === 'registre-phyto.csv' || f.chemin === 'cahier-fertilisation.csv') continue;
       const table = tableDe(f.chemin.replace(/\.csv$/, ''));
       expect(f.contenu.slice(1).split('\r\n')[0], f.chemin).toBe(Object.keys(description(table).colonnes).join(';'));
     }
@@ -678,7 +680,9 @@ describe('T15 : LISEZMOI.txt', () => {
     // T52 : registre-phyto.csv n'est pas une table (ses colonnes sont décrites dans son bloc,
     // ./registre-phyto.test.ts) : il a son bloc, les colonnes contrôlées ici sont celles des tables.
     expect(b.has('registre-phyto.csv'), 'bloc « ## registre-phyto.csv »').toBe(true);
-    const csv = cheminsAttendus().filter((c) => c.endsWith('.csv') && c !== 'registre-phyto.csv');
+    // T54 : de même pour cahier-fertilisation.csv.
+    expect(b.has('cahier-fertilisation.csv'), 'bloc « ## cahier-fertilisation.csv »').toBe(true);
+    const csv = cheminsAttendus().filter((c) => c.endsWith('.csv') && c !== 'registre-phyto.csv' && c !== 'cahier-fertilisation.csv');
     // D'autres blocs (« ## ferme.json »…) sont permis ; chaque CSV a le sien.
     for (const chemin of csv) expect(b.has(chemin), `bloc « ## ${chemin} »`).toBe(true);
     for (const chemin of csv) {

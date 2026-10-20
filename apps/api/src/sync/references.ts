@@ -36,7 +36,7 @@ export const DETAIL_CHAINE_TROP_LONGUE = `chaîne de plus de ${String(PROFONDEUR
 
 interface Reference {
   /** Table Postgres visée. */
-  readonly table: 'serie' | 'campagne' | 'emplacement' | 'evenement' | 'secteur_irrigation' | 'produit_phyto';
+  readonly table: 'serie' | 'campagne' | 'emplacement' | 'evenement' | 'secteur_irrigation' | 'produit_phyto' | 'produit_fertilisant';
   readonly ids: readonly string[];
   /** Ce que le maraîcher lit dans le message. */
   readonly libelle: string;
@@ -91,6 +91,11 @@ function references(l: LigneEvenement): Reference[] {
       // L'écran de saisie ne propose déjà plus un produit archivé.
       supprimee: null,
     });
+  }
+  // T54 : produit fertilisant d'un apport, facultatif (texte libre sans lui) ; de la ferme
+  // seulement (pas de bibliothèque). Archivé : toujours référençable, comme un produit phyto.
+  if ('produitFertilisantId' in detail && typeof detail.produitFertilisantId === 'string') {
+    liste.push({ table: 'produit_fertilisant', ids: [detail.produitFertilisantId.toLowerCase()], libelle: 'produit fertilisant', supprimee: null });
   }
   return liste;
 }

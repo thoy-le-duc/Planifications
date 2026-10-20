@@ -74,6 +74,8 @@
  *   - `bibliotheque/<table>.csv` pour chaque table `bibliotheque: true` (lignes à ferme_id nul) ;
  *   - T52 : `registre-phyto.csv`, le registre des traitements en vigueur de la ferme (colonnes
  *     COLONNES_REGISTRE_PHYTO, ../registre-phyto.test.ts). `lignes` ne le compte pas.
+ *   - T54 : `cahier-fertilisation.csv`, les apports réalisés en vigueur de la ferme (colonnes
+ *     COLONNES_CAHIER_FERTILISATION, ../cahier-fertilisation.test.ts). `lignes` ne le compte pas.
  *
  * ferme.json (UTF-8 sans BOM, JSON valide) :
  *   {
@@ -351,6 +353,8 @@ export const TABLES_ATTENDUES = [
   // T60 : l'équipe de la ferme (prénom, compte facultatif).
   'personne',
   'plantation',
+  // T54 : produits fertilisants de la ferme (composition N, P₂O₅, K₂O).
+  'produit_fertilisant',
   'produit_phyto',
   'proposition',
   'saison',

@@ -52,6 +52,7 @@ erDiagram
   EVENEMENT }o--o{ EMPLACEMENT : "a lieu sur"
   EVENEMENT }o--o| SECTEUR_IRRIGATION : "irrigue"
   EVENEMENT }o--o| PRODUIT_PHYTO : "traitement : utilise"
+  EVENEMENT }o--o| PRODUIT_FERTILISANT : "apport : utilise"
   EVENEMENT ||--o| MOUVEMENT_STOCK : "récolte : entre en stock"
   EVENEMENT |o--o| EVENEMENT : "corrige ou annule"
   ARTICLE_STOCK ||--o{ MOUVEMENT_STOCK : "cumule"
@@ -210,7 +211,7 @@ Toute saisie au champ est un **événement** : quoi, où, combien, quand, par qu
 | --- | --- | --- |
 | Réalisé | événement | étape (semis pépinière, semis direct, plantation, arrachage), quantité réelle si différente du prévu |
 | Récolte | détail de l'événement (vue `recoltes`) | quantité, unité, catégorie (facultative) |
-| Intervention | détail de l'événement (vue `interventions`) | type, outil, produit et quantité pour un amendement ou un engrais, durée d'occupation pour une bâche |
+| Intervention | détail de l'événement (vue `interventions`) | type, outil, produit et quantité pour un amendement ou un engrais (avec, facultatif, `produitFertilisantId` : le produit fertilisant de la ferme choisi, T54), durée d'occupation pour une bâche |
 | Irrigation | événement | secteur, durée (min) ; sans culture ni emplacement : les planches arrosées sont celles de la vanne le jour de l'irrigation (liens datés), changer le réseau ne réécrit pas le passé (T57) |
 | Traitement phyto | détail de l'événement (vue `traitements`, registre phyto) | produit, dose, surface traitée (m²), cible, opérateur (vide si non précisé) ; date de récolte autorisée = jour du traitement + délai avant récolte du produit, **figée** à la saisie (T52) : jamais avant le jour du traitement |
 | Observation | événement | nature (ravageur, maladie, stade, autre), gravité (facultative) |
@@ -221,7 +222,7 @@ Types d'intervention proposés au départ, modifiables par chaque ferme :
 
 - **Travail du sol** : labour, décompactage, grelinette, rotobêche, herse, buttage, préparation de planche, faux semis.
 - **Couverture** : paillage, bâchage ou occultation, solarisation. Une couverture longue réserve l'emplacement : elle crée une occupation.
-- **Fertilisation et amendement** : compost, fumier, engrais (produit et quantité, pour le cahier de fertilisation).
+- **Fertilisation et amendement** : compost, fumier, engrais (produit et quantité, pour le cahier de fertilisation). Le produit est un produit fertilisant de la ferme (T54, section 6) ou un texte libre, compté sans unités ; « Fait » sur un travail prévu garde le texte de l'itinéraire, relié au produit de la ferme de même nom.
 - **Entretien** : désherbage, taille, palissage, effeuillage, éclaircissage, autre.
 
 ## 6. Stocks et registre phyto
@@ -235,6 +236,23 @@ Types d'intervention proposés au départ, modifiables par chaque ferme :
 Registre phyto (T52) : une ligne par traitement **en vigueur** (sans les annulés ni ceux remplacés par une correction) : date, produit, AMM, substance active, bio, dose et unité, surface traitée, emplacements, culture, cible, opérateur, récolte autorisée le. Une seule règle (`lignesRegistrePhyto`, `packages/core/src/phyto`) pour l'écran « Registre phyto » de l'onglet Ferme (saison en cours, filtre bio / non bio) et pour `registre-phyto.csv`, fichier de plus de l'export (colonnes en français), calculé, hors de `ferme.json`.
 
 Délai avant récolte (T52) : un traitement en vigueur interdit la récolte sur ses emplacements du jour du traitement (compris) à la date de récolte autorisée (exclue) ; plusieurs traitements : la date la plus tardive l'emporte ; une annulation libère, une correction recalcule. Modifier le produit ensuite ne change rien aux traitements passés. Dans Aujourd'hui, une récolte sur un emplacement sous délai affiche « Récolte interdite jusqu'au JJ/MM (Produit, traité le JJ/MM) » et demande une confirmation ; la récolte reste possible, l'avertissement est gardé dans sa note. Une dose au-dessus de la dose maximale déclarée (même unité) est signalée, jamais refusée.
+
+### Cahier de fertilisation (T54, Q44)
+
+| Entité | Champs principaux | Remarques |
+| --- | --- | --- |
+| Produit fertilisant (`produit_fertilisant`) | nom (1 à 200 caractères), forme (solide, liquide), unité (kg, t, L, m3), teneurs N, P₂O₅, K₂O en % (facultatives, 0 à 100), azote d'origine organique oui/non, utilisable en bio oui/non, source (300 caractères au plus) | Toujours de la ferme (`ferme_id` obligatoire) : pas de bibliothèque commune. La liste de départ (`FERTILISANTS_DEPART`, `packages/core/src/npk/`) est copiée dans la ferme en un tap, puis modifiable. Créés, modifiés et archivés (suppression douce) par le téléphone. |
+| Option de la ferme | `ferme.zone_vulnerable_nitrates` (booléen, faux par défaut) | Cochée : plan prévisionnel et alerte de plafond dans le cahier. Décochée : ni l'un ni l'autre. |
+
+Teneur : % de la masse du produit tel qu'apporté (kg, t) ; pour un liquide compté en L ou m³, kg d'élément pour 100 L (densité prise à 1). Un solide saisi en L ou m³ (densité inconnue) est compté sans unités. Les teneurs ne sont **pas figées** dans l'apport (contrairement au délai avant récolte d'un traitement) : corriger un produit après une analyse corrige le bilan de ses apports passés.
+
+Liste de départ : teneurs moyennes d'azote tirées de la seule fiche technique 19 « Composition des effluents » de la DRAAF Auvergne-Rhône-Alpes (mise à jour du 15/07/2025, d'après CORPEN, IPT, ITAVI et, pour les engrais utilisables en bio, ITAB, *Guide des matières organiques*, tome 2, 2001) : fumier de bovin 0,55 %, compost de fumier de bovin 0,8 %, fumier de cheval 0,62 %, corne broyée 12,2 %, farine de plumes 10,1 %, sang séché 11,4 %, guano 16 %, tourteau de ricin 5,7 %. Sans teneur : compost de déchets verts (la fiche renvoie à l'analyse du lot) et vinasse (valeur citée douteuse). P₂O₅ et K₂O laissés vides, faute de source publique sûre. Source et date dans le champ `source` de chaque produit.
+
+Bilan (`bilanFertilisation`, `packages/core/src/npk/`) : unités = quantité en kg (t × 1 000, L = kg, m³ × 1 000) × teneur ÷ 100, ramenées en kg/ha sur la surface des emplacements de l'apport (somme longueur × largeur ; une largeur manquante : kg comptés, kg/ha inconnus), totalisées par emplacement et par période (la saison de la ferme qui contient le jour, à défaut l'année). Seuls les apports **réalisés en vigueur** comptent ; les **prévus** (occurrences des travaux prévus fertilisation et amendement des séries prévues ou en cours, non soldées) s'affichent à part. Un apport sans produit de la ferme, sans teneur ou dans une unité inconnue est compté « sans unités ». Arrondi au centième, une seule fois. Aucune dose n'est conseillée : on mesure.
+
+Zone vulnérable (`alertesAzoteOrganique`) : alerte non bloquante quand l'azote d'origine organique d'un emplacement dépasse **170 kg N/ha** sur l'année civile, réalisé (`realise`) ou réalisé + prévu (`prevu`). Repère par planche : le plafond réglementaire se calcule sur la SAU de l'exploitation.
+
+Écrans : onglet Ferme, carte « Fertilisation » : « Produits fertilisants » et « Cahier de fertilisation » (bilan par planche de la saison, fiche « Fertilisation » d'une planche avec ses apports, et le plan prévisionnel en zone vulnérable) ; Aujourd'hui : bouton « Fertilisation » (planches, produit au doigt ou texte libre, quantité). Export : `produit_fertilisant.csv` (table) et `cahier-fertilisation.csv` (une ligne par apport réalisé en vigueur, colonnes `COLONNES_CAHIER_FERTILISATION`), calculé, hors de `ferme.json`. Fertirrigation (T56) : à faire entrer dans le même bilan.
 
 Le stock n'est jamais un compteur stocké : c'est la somme des mouvements. Deux téléphones hors ligne ne peuvent donc pas se contredire.
 
@@ -301,6 +319,18 @@ Le serveur (`apps/api/src/sync/phyto.ts`) accepte les produits phyto **de la fer
 - **Historique** : une ligne `modification` par écriture (`ProduitPhyto` ; création, modification, suppression).
 - **Téléphone** : index local `ferme_type` (`ferme_id`, `type`, `date`) sur `evenement`, pour lire les traitements sans parcourir le journal (aucune migration serveur).
 
+### Produits fertilisants écrits par le téléphone (T54)
+
+Le serveur (`apps/api/src/sync/fertilisation.ts`) accepte les produits fertilisants **de la ferme** comme les produits phyto (T52) :
+
+- **Écritures** : PUT (création ; la liste de départ part en un lot), PATCH (modification ; archiver = `supprime_le`, rétablir = `supprime_le` nul). DELETE refusé. Tout ou rien avec le reste du lot, sous le verrou de la ferme.
+- **Droits** : tout membre actif. **Isolement** : le produit d'une autre ferme se comporte comme introuvable ; `ferme_id` ne change jamais et n'est jamais nul.
+- **Validation** : `validerProduitFertilisant` du cœur, sur la ligne complète ; mêmes bornes en base (CHECK).
+- **Apport** (événement intervention) : `detail.produitFertilisantId`, s'il est là, désigne un produit de la ferme, archivé compris (apport fait hors ligne avant l'archivage) ; sinon refusé.
+- **Option de la ferme** : PATCH de `ferme.zone_vulnerable_nitrates` (0/1) par tout membre actif (`structure-origine.ts`), à côté de l'origine du plan (gérant seul) ; toute autre colonne de `ferme` reste refusée.
+- **Historique** : une ligne `modification` par écriture (`ProduitFertilisant`, `Ferme`).
+- **Migration** `0041_fertilisation` (générée, avec l'ajout à la publication `powersync`) ; stream `produit_fertilisant` dans `powersync/sync-config.yaml`.
+
 ## 7 bis. Équipe et consignes — v1.x (T60, Q36 et Q44)
 
 Le gérant attribue les travaux du jour à des personnes de l'équipe ; chacun voit les siens dans Aujourd'hui et numérotés dans la 3D.
@@ -333,6 +363,7 @@ Règles :
 | Stock | somme des mouvements |
 | Alertes (rotation, conflit, délai avant récolte) | occupations, familles, traitements (délai avant récolte : date de récolte autorisée figée dans chaque traitement en vigueur, T52) |
 | Registre phyto (écran et `registre-phyto.csv`) | traitements en vigueur, produits, emplacements, cultures (T52) |
+| Cahier de fertilisation (écran, fiche d'une planche et `cahier-fertilisation.csv`) | interventions fertilisation et amendement en vigueur, produits fertilisants, surfaces des emplacements, saisons ; prévus : travaux prévus des séries et leurs occupations (T54) |
 | Dernière irrigation d'une planche (filtre « Irrigation » de la 3D, T57) | irrigations en vigueur et liens datés vanne ↔ emplacement à la date de chaque irrigation |
 
 ## Choix par défaut, modifiables

@@ -44,7 +44,9 @@ export const PRECISION_ORIGINE_FIGEE =
 /** T28s (décision du chef) : aucun placement tant que l'origine du plan n'est pas posée. */
 export const PRECISION_SANS_ORIGINE = 'posez d’abord le point de départ du plan de la ferme, avant d’y placer des éléments';
 export const PRECISION_ORIGINE_INVALIDE = 'le point de départ du plan doit avoir une latitude et une longitude valables';
-export const PRECISION_FERME_SEULE_ORIGINE = 'de la ferme, seul le point de départ du plan se modifie ici';
+export const PRECISION_FERME_SEULE_ORIGINE = 'de la ferme, seuls le point de départ du plan et l’option « zone vulnérable nitrates » se modifient ici';
+/** T54 : option « zone vulnérable nitrates » ni oui ni non. */
+export const PRECISION_ZONE_VULNERABLE_INVALIDE = 'l’option « zone vulnérable nitrates » se coche ou se décoche';
 export const PRECISION_ZONE_A_UN_CONTOUR = 'cette zone a ses propres contours : effacez-les avant de l’abriter sous un bâtiment';
 export const PRECISION_ZONE_DEJA_ABRITEE = 'cette zone est déjà abritée par un autre bâtiment';
 export const PRECISION_ZONE_ABRITEE_SUPPRIMEE = 'cette zone est abritée par un bâtiment : supprimez le bâtiment ou détachez-le de la zone d’abord';
