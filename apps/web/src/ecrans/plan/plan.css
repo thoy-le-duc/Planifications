@@ -21,23 +21,16 @@
   padding-bottom: var(--espace-s);
 }
 
-/* T50 : sur Planches, le bandeau « Démarrer votre ferme » se replie sur sa prochaine étape (titre,
-   compte, une étape) : il ne prend plus la hauteur du plan. Le bandeau complet reste sur
-   Aujourd'hui. CSS seul : rien au JavaScript de démarrage. */
+/* T50 : sur Planches, le bandeau « Démarrer votre ferme » est plus serré ; T65 : replié ou déplié
+   comme partout (demarrer.css) ; déplié, 30 % de l'écran au plus (40 % ailleurs) : la bande des
+   zones et la barre d'outils le suivent, le plan doit rester à portée de doigt. */
 .plan > .dem {
   flex: 0 0 auto;
+  max-height: 30vh;
+  max-height: 30dvh;
   gap: 6px;
   margin: 0;
   padding: 10px 12px;
-}
-
-.plan > .dem .dem-etapes {
-  gap: 0;
-}
-
-.plan > .dem .dem-etape:not(.dem-etape-prochaine),
-.plan > .dem .dem-import {
-  display: none;
 }
 
 .plan {
