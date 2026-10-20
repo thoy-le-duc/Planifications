@@ -388,6 +388,8 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
       'LISEZMOI.txt',
       // T52 : le registre phyto (packages/core/src/export/registre-phyto.test.ts).
       'registre-phyto.csv',
+      // T54 : le cahier de fertilisation (packages/core/src/export/cahier-fertilisation.test.ts).
+      'cahier-fertilisation.csv',
       ...Object.keys(TABLES_EXPORTEES).map((t) => `${t}.csv`),
       ...[...TABLES_BIBLIOTHEQUE].map((t) => `bibliotheque/${t}.csv`),
     ].sort();
