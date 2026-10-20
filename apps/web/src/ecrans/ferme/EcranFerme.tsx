@@ -37,6 +37,11 @@
  * Le parcours guidé (Aujourd'hui, Planches) arrive ici par une demande (../demarrer/etapes.ts),
  * prise à l'ouverture de l'écran : elle ouvre « Ma ferme », « Mes itinéraires » ou l'import.
  *
+ * Traitements phyto (T52) : carte « Traitements phyto », lignes « Produits phyto » et « Registre
+ * phyto », actives comme « Mes itinéraires ». Un tap charge les écrans (`import('./phyto/index.ts')`,
+ * jamais un import statique : ni l'entrée ni ce morceau ne les portent) et montre celui demandé
+ * avec la porte du contexte.
+ *
  * Saisies refusées (T10i) : les refus de synchro de l'utilisateur (porte.surveillerRefus), en
  * tête de l'écran quand il y en a (./Refus.tsx). Marque MARQUE_REFUS_AFFICHES une fois par
  * ouverture, quand la liste est lue et dessinée (même vide).
@@ -112,6 +117,10 @@ type ModuleItineraires = Awaited<ReturnType<typeof chargerItineraires>>;
 /** « Ma ferme : saisons, zones, planches » (T49), chargé à la demande (morceau à part). */
 const chargerParcellaire = () => import('../parcellaire/index.ts');
 type EcranParcellaireCharge = Awaited<ReturnType<typeof chargerParcellaire>>['EcranParcellaire'];
+
+/** Produits phyto et registre (T52), chargés à la demande (morceau à part). */
+const chargerPhyto = () => import('./phyto/index.ts');
+type ModulePhyto = Awaited<ReturnType<typeof chargerPhyto>>;
 
 /** L'écran d'import d'un tableur (T14b), chargé à la demande (morceau à part). */
 const chargerImport = () => import('../import/index.ts');
@@ -372,6 +381,20 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Traitements phyto (T52) : chargés au tap, montrés avec la porte du contexte.
+  const [phyto, setPhyto] = useState<{ readonly module: ModulePhyto; readonly ecran: 'produits' | 'registre' } | null>(null);
+  function ouvrirPhyto(ecran: 'produits' | 'registre'): void {
+    if (!itinerairesPossibles) return;
+    chargerPhyto().then(
+      (module) => {
+        setPhyto({ module, ecran });
+      },
+      (e: unknown) => {
+        console.error('Écrans phyto introuvables', e);
+      },
+    );
+  }
+
   // Éditeur de placement (T28b) : chargé au tap, montré avec la porte du contexte.
   const [EditeurPlacement, setEditeurPlacement] = useState<EditeurPlacementCharge | null>(null);
   // Focus rendu au bouton d'ouverture une fois l'éditeur retiré (T28g).
@@ -581,6 +604,47 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
           }}
         />
       )}
+      <Carte titre="Traitements phyto">
+        <Ligne
+          nom="Produits phyto"
+          detail="Vos produits, leur n° AMM et leur délai avant récolte."
+          signe="›"
+          couleur="var(--couleur-foret)"
+          desactivee={!itinerairesPossibles}
+          surTap={() => {
+            ouvrirPhyto('produits');
+          }}
+        />
+        <Ligne
+          nom="Registre phyto"
+          detail="Les traitements de la saison, pour le contrôle. Aussi dans l’export."
+          signe="›"
+          couleur="var(--couleur-foret)"
+          desactivee={!itinerairesPossibles}
+          surTap={() => {
+            ouvrirPhyto('registre');
+          }}
+        />
+      </Carte>
+      {phyto !== null && ouverte !== null && (phyto.ecran === 'produits' ? (
+        <phyto.module.EcranProduitsPhyto
+          key={ouverte.fermeId}
+          porte={ouverte.porte}
+          fermeId={ouverte.fermeId}
+          surFermer={() => {
+            setPhyto(null);
+          }}
+        />
+      ) : (
+        <phyto.module.EcranRegistrePhyto
+          key={ouverte.fermeId}
+          porte={ouverte.porte}
+          fermeId={ouverte.fermeId}
+          surFermer={() => {
+            setPhyto(null);
+          }}
+        />
+      ))}
       <Carte titre="Plan de la ferme">
         <div ref={boutonPlacement}>
           <Ligne

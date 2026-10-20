@@ -212,7 +212,7 @@ Toute saisie au champ est un **événement** : quoi, où, combien, quand, par qu
 | Récolte | détail de l'événement (vue `recoltes`) | quantité, unité, catégorie (facultative) |
 | Intervention | détail de l'événement (vue `interventions`) | type, outil, produit et quantité pour un amendement ou un engrais, durée d'occupation pour une bâche |
 | Irrigation | événement | secteur, durée (min) |
-| Traitement phyto | détail de l'événement (vue `traitements`, registre phyto) | produit, dose, surface traitée (m²), cible, opérateur ; date de récolte autorisée calculée avec le délai avant récolte |
+| Traitement phyto | détail de l'événement (vue `traitements`, registre phyto) | produit, dose, surface traitée (m²), cible, opérateur (vide si non précisé) ; date de récolte autorisée = jour du traitement + délai avant récolte du produit, **figée** à la saisie (T52) : jamais avant le jour du traitement |
 | Observation | événement | nature (ravageur, maladie, stade, autre), gravité (facultative) |
 
 Réponse à Q10 (2026-09-29) : tous les types sont un seul **événement** du journal, en ajout seul, avec un détail propre au type. Il n'y a pas de tables Récolte, Intervention ni Traitement : les vues SQL `recoltes`, `interventions` et `traitements` les présentent pour les exports et le registre phyto, en ne montrant que la version en vigueur (sans les événements annulés ni ceux remplacés par une correction). Une correction ou une annulation est un nouvel événement de la même ferme et du même type. Détails dans `packages/db/README.md` (T08).
@@ -230,7 +230,11 @@ Types d'intervention proposés au départ, modifiables par chaque ferme :
 | --- | --- | --- |
 | Article de stock | espèce, variété (facultative), unité, catégorie | Ce qui se compte en chambre froide ou au magasin. |
 | Mouvement de stock | article, quantité (+ ou −), motif (récolte, vente, perte, ajustement), récolte liée | Une récolte validée crée automatiquement son entrée en stock. |
-| Produit phyto | nom commercial, n° AMM, substance active, délai avant récolte (jours), utilisable en bio oui/non, dose maximale | Le registre et l'export pour le contrôle bio se lisent dans les traitements. |
+| Produit phyto | nom commercial, n° AMM, substance active, délai avant récolte (jours), utilisable en bio oui/non, dose maximale | Le registre et l'export pour le contrôle bio se lisent dans les traitements. Produits de la ferme créés, modifiés et archivés (suppression douce) par le téléphone (T52) ; ceux de la bibliothèque commune (ferme_id nul) en lecture seule. |
+
+Registre phyto (T52) : une ligne par traitement **en vigueur** (sans les annulés ni ceux remplacés par une correction) : date, produit, AMM, substance active, bio, dose et unité, surface traitée, emplacements, culture, cible, opérateur, récolte autorisée le. Une seule règle (`lignesRegistrePhyto`, `packages/core/src/phyto`) pour l'écran « Registre phyto » de l'onglet Ferme (saison en cours, filtre bio / non bio) et pour `registre-phyto.csv`, fichier de plus de l'export (colonnes en français), calculé, hors de `ferme.json`.
+
+Délai avant récolte (T52) : un traitement en vigueur interdit la récolte sur ses emplacements du jour du traitement (compris) à la date de récolte autorisée (exclue) ; plusieurs traitements : la date la plus tardive l'emporte ; une annulation libère, une correction recalcule. Modifier le produit ensuite ne change rien aux traitements passés. Dans Aujourd'hui, une récolte sur un emplacement sous délai affiche « Récolte interdite jusqu'au JJ/MM (Produit, traité le JJ/MM) » et demande une confirmation ; la récolte reste possible, l'avertissement est gardé dans sa note. Une dose au-dessus de la dose maximale déclarée (même unité) est signalée, jamais refusée.
 
 Le stock n'est jamais un compteur stocké : c'est la somme des mouvements. Deux téléphones hors ligne ne peuvent donc pas se contredire.
 
@@ -276,6 +280,18 @@ Le serveur (`structure.ts`, `structure-lignes.ts`, `structure-origine.ts`) accep
 - **Tout ou rien et concurrence** : `batiment` et `ferme` rejoignent les envois tout ou rien, écrits sous le verrou de chaque ferme touchée ; interblocage ou échec de sérialisation : erreur à réessayer (5xx), jamais un refus définitif.
 - **Historique** : une ligne `modification` par ligne touchée (`Batiment`, `Zone`, `Emplacement`, `Ferme`).
 
+### Produits phyto écrits par le téléphone (T52)
+
+Le serveur (`apps/api/src/sync/phyto.ts`) accepte les produits phyto **de la ferme**, hors ligne compris :
+
+- **Écritures** : PUT (création), PATCH (modification ; archiver = `supprime_le`, rétablir = `supprime_le` nul). DELETE refusé. Tout ou rien avec le reste du lot, sous le verrou de la ferme.
+- **Droits** : tout membre actif (gérant ou équipier), comme les itinéraires.
+- **Isolement** : un produit de la bibliothèque ou d'une autre ferme se comporte comme introuvable ; `ferme_id` ne change jamais.
+- **Validation** : `validerProduitPhyto` du cœur, sur la ligne complète : nom de 1 à 200 caractères, AMM de 40 au plus (vide permis : purin, produit sans AMM), substance de 200 au plus, délai avant récolte entier de 0 à 365 jours, bio 0/1, dose maximale nulle ou valeur > 0 (100 000 au plus) avec une unité de 20 caractères au plus.
+- **Traitement** (événement) : en plus des règles de T10b, la date de récolte autorisée n'est jamais avant le jour du traitement ; un produit archivé n'est plus accepté pour un nouveau traitement (les anciens le gardent).
+- **Historique** : une ligne `modification` par écriture (`ProduitPhyto` ; création, modification, suppression).
+- **Téléphone** : index local `ferme_type` (`ferme_id`, `type`, `date`) sur `evenement`, pour lire les traitements sans parcourir le journal (aucune migration serveur).
+
 ## 8. Ce qui est calculé, pas stocké
 
 | Vue | Calculée à partir de |
@@ -284,7 +300,8 @@ Le serveur (`structure.ts`, `structure-lignes.ts`, `structure-origine.ts`) accep
 | Assolement réel (vue par année) | occupations par emplacement et par saison, complétées par l'assolement passé enregistré |
 | Besoins en semences et en plants | longueurs des séries + densité, graines par motte, germination et marge de l'itinéraire |
 | Stock | somme des mouvements |
-| Alertes (rotation, conflit, délai avant récolte) | occupations, familles, traitements |
+| Alertes (rotation, conflit, délai avant récolte) | occupations, familles, traitements (délai avant récolte : date de récolte autorisée figée dans chaque traitement en vigueur, T52) |
+| Registre phyto (écran et `registre-phyto.csv`) | traitements en vigueur, produits, emplacements, cultures (T52) |
 
 ## Choix par défaut, modifiables
 

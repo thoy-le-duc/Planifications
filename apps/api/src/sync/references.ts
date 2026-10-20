@@ -5,7 +5,7 @@
  *
  * Vérifié dans la transaction de l'insertion, lignes verrouillées (FOR SHARE) jusqu'à la fin :
  * pas de fenêtre où la ligne visée changerait de ferme ou disparaîtrait entre la vérification
- * et l'écriture. Une ligne supprimée (supprime_le non nul) ne se référence plus (relecture T10, R4).
+ * et l'écriture. Une ligne supprimée (supprime_le non nul) ne se référence plus (relecture T10, R4), sauf un produit phyto archivé (relecture T52).
  *
  * T10d : la ferme est filtrée dans la requête même du verrou. Une ligne d'une autre ferme n'est
  * ni lue ni verrouillée (la requête n'attend jamais le verrou d'une autre ferme), et elle se
@@ -78,7 +78,12 @@ function references(l: LigneEvenement): Reference[] {
       ids: [detail.produitPhytoId.toLowerCase()],
       libelle: 'produit phytosanitaire',
       bibliothequeAcceptee: true,
-      supprimee: 'produit phytosanitaire supprimé',
+      // T52 (relecture) : un produit archivé reste référençable. Le serveur ne distingue pas un
+      // nouveau traitement d'un traitement fait hors ligne avant l'archivage (un autre téléphone
+      // a archivé puis s'est synchronisé d'abord), ni d'une correction ou d'une annulation d'un
+      // traitement passé : les refuser effacerait du registre un traitement réellement fait.
+      // L'écran de saisie ne propose déjà plus un produit archivé.
+      supprimee: null,
     });
   }
   return liste;
