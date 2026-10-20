@@ -85,6 +85,15 @@ function lus(lignes: readonly LigneDar[]): TraitementsDar {
   return { traitements, noms };
 }
 
+/**
+ * Lecture unique des traitements qui peuvent interdire une récolte le `aujourdhui` (même requête
+ * que le suivi) : la récolte validée avant que le suivi ait rendu sa première lecture.
+ */
+export async function lireTraitements(porte: PorteDonnees, fermeId: string, aujourdhui: string): Promise<TraitementsDar> {
+  const depuis = ajouterJours(aujourdhui as DateCalendaire, -(DAR_MAX_JOURS + 1));
+  return lus(await porte.lire<LigneDar>(SQL_TRAITEMENTS, [fermeId, depuis, fermeId, depuis]));
+}
+
 /** Calme du journal attendu avant de relire après un changement venu d'ailleurs. */
 export const ATTENTE_RELECTURE_MS = 1_500;
 

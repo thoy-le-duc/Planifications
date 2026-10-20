@@ -764,6 +764,19 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
     (c: Culture): string | null => (dar === null ? null : dar.alerte(dar.t, c.emplacements.map((e) => e.id), jour, c.cibleId)),
     [dar, jour],
   );
+  /**
+   * T52 (règle 4) : suivi pas encore prêt (morceau en chargement, première lecture en cours) :
+   * la récolte validée attend ./dar.ts et une lecture des traitements avant d'écrire. Jamais
+   * appelé au démarrage ni à la relecture de la journée : seulement à « Valider ».
+   */
+  const verifierInterdiction = useCallback(
+    async (c: Culture): Promise<string | null> => {
+      if (porte === null) return null;
+      const m = await chargerDar();
+      return m.alerteRecolte(await m.lireTraitements(porte, fermeId, jour), c.emplacements.map((e) => e.id), jour, c.cibleId);
+    },
+    [porte, fermeId, jour],
+  );
   /** T52 : la saisie d'un traitement, une fois chargée ; ouverte ou non. */
   const [SaisieTraitement, setSaisieTraitement] = useState<SaisieTraitementChargee | null>(null);
   const [traitementOuvert, setTraitementOuvert] = useState(false);
@@ -1438,6 +1451,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
           dernieres={journee?.dernieresRecoltes ?? new Map()}
           erreur={erreur}
           interdiction={interdiction}
+          verifierInterdiction={dar === null ? verifierInterdiction : undefined}
           surValider={surValiderRecolte}
           surFermer={() => {
             setDialogue(null);

@@ -39,7 +39,7 @@ let conteneur: HTMLDivElement;
 let racine: Root;
 
 beforeAll(async () => {
-  ecran = (await import(/* @vite-ignore */ './index.ts')) as ModuleEcranAujourdhui;
+  ecran = (await import(/* @vite-ignore */ './index.ts'));
 });
 
 beforeEach(async () => {
