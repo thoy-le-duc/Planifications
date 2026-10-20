@@ -6,6 +6,7 @@
 import { useState, type ComponentType, type ReactElement } from 'react';
 import type { PorteDonnees } from '@planif/sync';
 import type { ProprietesSaisieIrrigation } from './SaisieIrrigation.tsx';
+import './bouton-irrigation.css';
 
 export function BoutonIrrigation({ porte, fermeId, aujourdhui }: { readonly porte: PorteDonnees | null; readonly fermeId: string; readonly aujourdhui: string }): ReactElement {
   const [Saisie, setSaisie] = useState<ComponentType<ProprietesSaisieIrrigation> | null>(null);
@@ -25,7 +26,10 @@ export function BoutonIrrigation({ porte, fermeId, aujourdhui }: { readonly port
   }
   return (
     <>
-      <button type="button" className="auj-bouton-secondaire" disabled={porte === null} onClick={ouvrir}>
+      <button type="button" className="irr-ouvrir" disabled={porte === null} onClick={ouvrir}>
+        <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3c3.5 4.2 6 7.6 6 10.5a6 6 0 0 1-12 0C6 10.6 8.5 7.2 12 3z" />
+        </svg>
         Irrigation
       </button>
       {ouverte && Saisie !== null && porte !== null && (
