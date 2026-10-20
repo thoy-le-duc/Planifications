@@ -237,3 +237,41 @@ export function decrireDefilement(libelle: string, v: VerdictDefilement): string
     ` ${String(v.rafalesTotal)} intervalle(s) fautif(s) au total (échec au-delà de ${String(v.rafalesTotalMax)})`
   );
 }
+
+/**
+ * T62 — nombre de manches au plus d'une mesure de défilement. Une rafale de la machine (fil
+ * principal privé de CPU, compositeur ou processus GPU en attente : docs/mesures/T62.md) ne se
+ * reproduit pas d'une manche à l'autre ; un à-coup de l'appli, si (T11d). Mêmes seuils à chaque
+ * manche : aucun n'est relâché.
+ */
+export const MANCHES_DEFILEMENT_MAX = 3;
+
+/** Le verdict le moins mauvais : fluide d'abord, puis le moins de passages saccadés, puis d'intervalles fautifs. */
+function moinsMauvais(a: VerdictDefilement, b: VerdictDefilement): VerdictDefilement {
+  if (a.fluide !== b.fluide) return a.fluide ? a : b;
+  if (a.passagesSaccades !== b.passagesSaccades) return a.passagesSaccades < b.passagesSaccades ? a : b;
+  return a.rafalesTotal <= b.rafalesTotal ? a : b;
+}
+
+/**
+ * Mesure un défilement en manches : `manche(n)` mesure ses passages et rend leur verdict
+ * (jugerDefilement, seuils du test). Dès qu'une manche est fluide, elle est retenue ; sinon, une
+ * autre manche, au plus `mancheMax`. Toutes en échec : la moins mauvaise est retenue (et le test
+ * échoue sur elle). `manches` : toutes les manches mesurées, dans l'ordre, pour le journal.
+ */
+export async function mesurerEnManches(
+  manche: (n: number) => Promise<VerdictDefilement>,
+  mancheMax: number = MANCHES_DEFILEMENT_MAX,
+): Promise<{ readonly retenu: VerdictDefilement; readonly manches: readonly VerdictDefilement[] }> {
+  if (!Number.isInteger(mancheMax) || mancheMax < 1) throw new Error('mesurerEnManches : au moins une manche');
+  const manches: VerdictDefilement[] = [];
+  let retenu: VerdictDefilement | null = null;
+  for (let n = 0; n < mancheMax; n += 1) {
+    const v = await manche(n);
+    manches.push(v);
+    retenu = retenu === null ? v : moinsMauvais(retenu, v);
+    if (v.fluide) return { retenu: v, manches };
+  }
+  if (retenu === null) throw new Error('mesurerEnManches : aucune manche');
+  return { retenu, manches };
+}

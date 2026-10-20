@@ -1,0 +1,87 @@
+/**
+ * T62 — défilement de Planches mesuré en manches (plan-performances.e2e.ts).
+ *
+ * Constat (docs/mesures/T62.md) : les intervalles fautifs du défilement viennent surtout de la
+ * machine (fil principal sans CPU, compositeur ou processus GPU en attente, jusqu'à 350 ms) et,
+ * plus rarement, d'une image de rendu qui croise un ramasse-miettes. Un à-coup de l'appli, lui,
+ * se reproduit d'un passage à l'autre (T11d). D'où : si une manche de 10 passages échoue, une
+ * autre manche est mesurée, au plus MANCHES_DEFILEMENT_MAX, avec les MÊMES seuils
+ * (jugerDefilement) ; la première manche fluide est retenue, sinon la moins mauvaise, et le test
+ * échoue. Comme T31 pour les tests unitaires de temps.
+ *
+ * Contrat (apps/web/e2e/outils.ts) :
+ *   MANCHES_DEFILEMENT_MAX = 3
+ *   mesurerEnManches(manche: (n) => Promise<VerdictDefilement>, mancheMax?)
+ *     → { retenu: VerdictDefilement; manches: readonly VerdictDefilement[] }
+ */
+import { describe, expect, it } from 'vitest';
+import { jugerDefilement, MANCHES_DEFILEMENT_MAX, mesurerEnManches, type PassageDefilement, type VerdictDefilement } from './outils.ts';
+
+const IMAGE = 1000 / 60;
+/** Mêmes seuils que plan-performances.e2e.ts : 2 images perdues, échec à 2 passages saccadés, plus de 2 fautifs. */
+const juger = (passages: readonly PassageDefilement[]): VerdictDefilement => jugerDefilement(passages, 2, 2, 2);
+
+/** Un passage de 300 images à 60 Hz, avec des intervalles de `fautif` ms aux positions données. */
+function passage(fautifs: readonly number[] = [], fautif = 100): PassageDefilement {
+  const intervalles = Array.from({ length: 300 }, () => IMAGE);
+  for (const i of fautifs) intervalles[i] = fautif;
+  return { intervalles };
+}
+
+/** Une manche de 10 passages ; `saccades` : indices des passages qui ont une image de 100 ms. */
+const manche = (saccades: readonly number[] = []): VerdictDefilement => juger(Array.from({ length: 10 }, (_, i) => passage(saccades.includes(i) ? [150] : [])));
+
+/** Une appli qui gèle 100 ms toutes les secondes : chaque passage en souffre (témoin de plan.e2e.ts). */
+const saccadeReguliere = (): VerdictDefilement => juger(Array.from({ length: 10 }, () => passage([40, 100, 160, 220, 280])));
+
+describe('T62 : défilement mesuré en manches, seuils inchangés', () => {
+  it('trois manches au plus', () => {
+    expect(MANCHES_DEFILEMENT_MAX).toBe(3);
+  });
+
+  it('première manche fluide : une seule manche mesurée', async () => {
+    let n = 0;
+    const r = await mesurerEnManches(() => {
+      n += 1;
+      return Promise.resolve(manche([3]));
+    });
+    expect(n).toBe(1);
+    expect(r.manches).toHaveLength(1);
+    expect(r.retenu.fluide).toBe(true);
+  });
+
+  it('une rafale de la machine dans la première manche : la deuxième, fluide, est retenue', async () => {
+    const suite = [manche([0, 4, 7]), manche([])];
+    const r = await mesurerEnManches((i) => Promise.resolve(suite[i] ?? manche()));
+    expect(r.manches).toHaveLength(2);
+    expect(r.manches[0]?.fluide).toBe(false);
+    expect(r.retenu).toBe(r.manches[1]);
+    expect(r.retenu.fluide).toBe(true);
+  });
+
+  it('un à-coup régulier de l’appli échoue dans chaque manche : le test échoue après trois manches', async () => {
+    const r = await mesurerEnManches(() => Promise.resolve(saccadeReguliere()));
+    expect(r.manches).toHaveLength(MANCHES_DEFILEMENT_MAX);
+    expect(r.manches.every((m) => !m.fluide)).toBe(true);
+    expect(r.retenu.fluide).toBe(false);
+    expect(r.retenu.passagesSaccades).toBe(10);
+  });
+
+  it('toutes les manches échouent : la moins mauvaise est retenue (passages saccadés, puis fautifs)', async () => {
+    const suite = [manche([0, 1, 2, 3]), manche([5, 6]), manche([1, 2, 3])];
+    const r = await mesurerEnManches((i) => Promise.resolve(suite[i] ?? manche()));
+    expect(r.manches).toHaveLength(3);
+    expect(r.retenu).toBe(r.manches[1]);
+    expect(r.retenu.fluide).toBe(false);
+  });
+
+  it('les seuils restent ceux de la manche : deux passages saccadés sur 10 échouent toujours', async () => {
+    const r = await mesurerEnManches(() => Promise.resolve(manche([2, 8])), 1);
+    expect(r.retenu.fluide).toBe(false);
+    expect(r.retenu.passagesSaccades).toBe(2);
+  });
+
+  it('refuse moins d’une manche', async () => {
+    await expect(mesurerEnManches(() => Promise.resolve(manche()), 0)).rejects.toThrow(/manche/);
+  });
+});
