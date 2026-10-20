@@ -56,7 +56,7 @@
  *   `lireTravaux` lit aussi les traitements EN VIGUEUR datés d'aujourd'hui (même lecture que
  *   l'écran Aujourd'hui, ../aujourdhui/dar.ts). `tachesVisibles` les ajoute APRÈS les cartes
  *   dessinées par l'écran (la carte n° i reste le travail n° i). `travauxDuJour3d` les numérote :
- *   texte « <rang>. Traitement <produit> — <codes des planches> » (« 10. Traitement Bouillie
+ *   texte « <rang>. Traitement fait : <produit> — <codes des planches> » (« 10. Traitement fait : Bouillie
  *   bordelaise — T2-P07 »), `cle` « traitement:<id> », `planche` = premier emplacement placé, et
  *   la pastille de la planche porte son rang. `lireTachesDuJour` reste les seules cartes de l'écran.
  */

@@ -127,7 +127,9 @@ export function travauxDuJour3d(toutes: readonly TravailDuJour[], scene: { reado
       if (numeros === undefined) parPlanche.set(id, [rang]);
       else if (numeros[numeros.length - 1] !== rang) numeros.push(rang);
     }
-    if (estTraitement(t)) return { rang, cle: t.cle, texte: `${String(rang)}. Traitement ${t.traitement.produit} — ${lieuDuTraitement(t, codes)}`, planche, enRetard: false };
+    // « fait » : un traitement du journal est déjà passé (aucun traitement prévu n'est une carte de
+    // l'écran) ; sans ce mot, le travail numéroté se lirait « à faire » et inviterait à retraiter.
+    if (estTraitement(t)) return { rang, cle: t.cle, texte: `${String(rang)}. Traitement fait : ${t.traitement.produit} — ${lieuDuTraitement(t, codes)}`, planche, enRetard: false };
     return { rang, cle: t.cle, texte: `${String(rang)}. ${capitale(phraseDeTache(t))} — ${lieuDe(t)}`, planche, enRetard: t.tache.enRetard };
   });
   const pastilles: Pastille3d[] = [];

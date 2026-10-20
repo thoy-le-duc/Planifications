@@ -96,7 +96,7 @@ describe('T55 règle 3 : le traitement du jour figure dans la liste numérotée'
     expect(j.travaux.map((t) => t.cle)).toEqual(ferme.attendu.taches);
   });
 
-  it('traitement fait aujourd’hui sur T2-P07 : travail n° 10, « Traitement Bouillie bordelaise — T2-P07 », pastille sur T2-P07', async () => {
+  it('traitement fait aujourd’hui sur T2-P07 : travail n° 10, « Traitement fait : Bouillie bordelaise — T2-P07 », pastille sur T2-P07', async () => {
     await traiter(DU_JOUR, AUJOURDHUI, [EMPLACEMENT.t2p07]);
     const j = await travaux();
     expect(j.travaux.slice(0, ferme.attendu.taches.length).map((t) => t.cle)).toEqual(ferme.attendu.taches);
@@ -104,7 +104,7 @@ describe('T55 règle 3 : le traitement du jour figure dans la liste numérotée'
     const t = j.travaux.at(-1);
     expect(t?.rang).toBe(10);
     expect(t?.cle).toBe(`traitement:${DU_JOUR}`);
-    expect(norme(t?.texte ?? '')).toBe('10. Traitement Bouillie bordelaise — T2-P07');
+    expect(norme(t?.texte ?? '')).toBe('10. Traitement fait : Bouillie bordelaise — T2-P07');
     expect(t?.planche).toBe(EMPLACEMENT.t2p07);
     expect(t?.enRetard).toBe(false);
     expect(j.pastilles.find((p) => p.planche === EMPLACEMENT.t2p07)?.numeros).toContain(10);
@@ -114,11 +114,11 @@ describe('T55 règle 3 : le traitement du jour figure dans la liste numérotée'
 
   it('plusieurs planches : codes comme les cartes (« T2-P01 · T2-P03 », « PC-P01 +2 ») ; la pastille va aux planches placées', async () => {
     await traiter(DU_JOUR, AUJOURDHUI, [EMPLACEMENT.t2p01, EMPLACEMENT.t2p03]);
-    expect(norme((await travaux()).travaux.at(-1)?.texte ?? '')).toBe('10. Traitement Bouillie bordelaise — T2-P01 · T2-P03');
+    expect(norme((await travaux()).travaux.at(-1)?.texte ?? '')).toBe('10. Traitement fait : Bouillie bordelaise — T2-P01 · T2-P03');
     await traiter('0192f0c1-5555-7000-8000-000000000303', AUJOURDHUI, [EMPLACEMENT.pcp01, EMPLACEMENT.t2p01, EMPLACEMENT.t2p03]);
     const j = await travaux();
     const t = j.travaux.at(-1);
-    expect(norme(t?.texte ?? '')).toBe('11. Traitement Bouillie bordelaise — PC-P01 +2');
+    expect(norme(t?.texte ?? '')).toBe('11. Traitement fait : Bouillie bordelaise — PC-P01 +2');
     // PC-P01 n'est pas placée : la caméra va à T2-P01, pas de pastille sur PC-P01.
     expect(t?.planche).toBe(EMPLACEMENT.t2p01);
     expect(j.pastilles.find((p) => p.planche === EMPLACEMENT.t2p03)?.numeros).toEqual(expect.arrayContaining([10, 11]));
