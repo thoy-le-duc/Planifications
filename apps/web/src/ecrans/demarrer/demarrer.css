@@ -1,9 +1,14 @@
 /*
  * Bandeau « Démarrer votre ferme » et états vides qui guident (T49). Jetons seulement ; toute
  * commande fait au moins 56 × 56 px ; à 360 px de large, rien ne déborde.
+ * T65 : replié (titre, compte, prochaine étape) ou déplié ; déplié, jamais plus de 40 % de la
+ * hauteur de l'écran : la liste défile à l'intérieur, l'écran reste visible dessous.
  */
 
 .dem {
+  box-sizing: border-box;
+  max-height: 40vh;
+  max-height: 40dvh;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -18,14 +23,16 @@
 }
 
 .dem-tete {
+  flex: 0 0 auto;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  padding: 0 0 0 4px;
 }
 
 .dem-tete h2 {
+  flex: 1 1 auto;
   margin: 0;
   font-family: var(--police-titre);
   font-weight: 800;
@@ -39,7 +46,56 @@
   color: var(--couleur-secondaire);
 }
 
+/* T65 : la liste (et l'import) défile dans le bandeau, jamais la page à sa place. */
+.dem-corps {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* Le contour de focus (3 px + 2 px de décalage, ui/base.css) sort des boutons : sans cette marge
+     intérieure, le défilement le rogne sur les côtés et en haut de la première étape. */
+  margin: -5px;
+  padding: 5px;
+}
+
+/* T65 : replié, seule la prochaine étape reste, à un tap ; serré pour laisser voir l'écran. */
+.dem[data-replie='oui'] {
+  gap: 6px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.dem[data-replie='oui'] .dem-etapes {
+  gap: 0;
+}
+
+.dem[data-replie='oui'] .dem-tete {
+  row-gap: 0;
+}
+
+.dem[data-replie='oui'] .dem-etape {
+  min-height: 56px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.dem[data-replie='oui'] .dem-etape:not(.dem-etape-prochaine),
+.dem[data-replie='oui'] .dem-import,
+.dem[data-replie='oui'] .dem-textes > span {
+  display: none;
+}
+
+.dem[data-replie='oui'] .dem-etape-prochaine .dem-textes::before {
+  content: 'Prochaine étape';
+  font-size: 13px;
+  color: var(--couleur-secondaire);
+}
+
 .dem-etapes {
+  flex: 0 0 auto;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -121,6 +177,7 @@
 }
 
 .dem-import {
+  flex: 0 0 auto;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -131,6 +188,7 @@
   color: var(--couleur-secondaire);
 }
 
+.dem-bascule,
 .dem-bouton-import,
 .dem-bouton-vide {
   min-width: 56px;
@@ -141,6 +199,7 @@
   font-size: 16px;
 }
 
+.dem-bascule,
 .dem-bouton-import {
   border: 2px solid var(--couleur-trait);
   background: var(--couleur-surface);

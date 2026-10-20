@@ -94,6 +94,9 @@ test('ferme neuve → saison en un tap → zone + 10 planches → série de la b
     await expect(bandeau(page)).toBeVisible({ timeout: 15_000 });
     await expect(bandeau(page).locator('[data-testid="etape-demarrage"][data-faite="non"]')).toHaveCount(4);
     await expect(page.getByTestId('aujourdhui')).toContainText('Aucune série');
+    // T65 : téléphone (Pixel 7) : replié à l'ouverture, la prochaine étape (la saison) à un tap.
+    await expect(bandeau(page)).toHaveAttribute('data-replie', 'oui');
+    await expect(etape(page, 'saison')).toBeVisible();
     await verifierCibles(bandeau(page), 'bandeau');
   });
 
@@ -136,6 +139,10 @@ test('ferme neuve → saison en un tap → zone + 10 planches → série de la b
     await expect(etape(page, 'saison')).toHaveAttribute('data-faite', 'oui');
     await expect(etape(page, 'planches')).toHaveAttribute('data-faite', 'oui');
     await expect(etape(page, 'serie')).toHaveAttribute('data-faite', 'non');
+    // T65 : sur téléphone, le bandeau est replié sur sa prochaine étape (les itinéraires) ; on le
+    // déplie pour atteindre l'étape 4.
+    await expect(bandeau(page)).toHaveAttribute('data-replie', 'oui');
+    await bandeau(page).getByRole('button', { name: 'Voir les étapes', exact: true }).click();
     await etape(page, 'serie').click();
     const f = page.getByRole('dialog', { name: 'Nouvelle série' });
     await expect(f).toBeVisible({ timeout: 15_000 });
