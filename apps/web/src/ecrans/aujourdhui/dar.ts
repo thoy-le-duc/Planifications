@@ -30,14 +30,18 @@ const COLONNES = `e.id, e.date, e.horodatage, e.emplacement_ids, e.remplace_sort
 const JOINTURE = `LEFT JOIN produit_phyto p ON p.id = lower(json_extract(e.detail, '$.produitPhytoId'))`;
 
 /**
- * Paramètres : ferme, depuis, ferme, depuis. Les deux parties lisent l'index local ferme_type
- * (ferme_id, type, date) : seuls les traitements sont parcourus, jamais tout le journal.
+ * Paramètres : ferme, depuis, ferme, depuis. La première partie lit l'index local ferme_type
+ * (ferme_id, type, date) : seuls les traitements de la fenêtre sont parcourus, jamais tout le
+ * journal. T68 : la seconde (corrections et annulations d'avant la fenêtre) lit l'index
+ * remplacement (`>= ''` : toute valeur non nulle, comme `IS NOT NULL`, que SQLite ne cherche pas
+ * dans un index d'expression ; la ferme, le type et la date écartés des index par `+`, comme
+ * fait-unique.ts) : par ferme_type, elle relisait tous les traitements de plus d'un an.
  */
 export const SQL_TRAITEMENTS = `SELECT ${COLONNES} FROM evenement e ${JOINTURE}
   WHERE e.ferme_id = ? AND e.type = 'traitement' AND e.date >= ? AND json_valid(e.detail)
   UNION ALL
   SELECT ${COLONNES} FROM evenement e ${JOINTURE}
-  WHERE e.ferme_id = ? AND e.type = 'traitement' AND e.date < ? AND e.remplace_evenement_id IS NOT NULL AND json_valid(e.detail)`;
+  WHERE e.remplace_evenement_id >= '' AND +e.ferme_id = ? AND +e.type = 'traitement' AND +e.date < ? AND json_valid(e.detail)`;
 
 interface LigneDar {
   readonly id: string;
