@@ -112,7 +112,8 @@ async function verifierDeplie(page: Page, ou: string): Promise<void> {
   await vuSansDefiler(replier(page), `${ou} : « Replier »`);
   expect(await partDeLEcran(page), `${ou} : déplié, au plus 40 % de l’écran`).toBeLessThanOrEqual(PART_MAX + 0.001);
   await expect(etapes(page)).toHaveCount(4);
-  // La 4e étape s'atteint en faisant défiler la liste à l'intérieur du bandeau (jamais la page).
+  // La 4e étape s'atteint en faisant défiler la liste à l'intérieur du bandeau (jamais la page) :
+  // le conteneur défilant est dans le bandeau, et la 4e étape y tient en entier.
   const m = await etapes(page)
     .last()
     .evaluate((derniere) => {
@@ -120,7 +121,9 @@ async function verifierDeplie(page: Page, ou: string): Promise<void> {
       let c: HTMLElement | null = derniere.parentElement;
       while (c !== null && c !== dem && !/(auto|scroll)/.test(getComputedStyle(c).overflowY)) c = c.parentElement;
       if (c === null || c === dem || dem === null) return { defilant: false, vue: false, detail: 'aucun conteneur défilant dans le bandeau' };
-      c.scrollTop = c.scrollHeight;
+      // Défiler la liste jusqu'à la 4e étape (l'import la suit : le bout de la liste, c'est lui).
+      const avant = c.getBoundingClientRect();
+      c.scrollTop += derniere.getBoundingClientRect().top - avant.top;
       const rc = c.getBoundingClientRect();
       const r = derniere.getBoundingClientRect();
       const rd = dem.getBoundingClientRect();
