@@ -46,10 +46,29 @@
  * emplacement, relecture PR #211) et interdisent la récolte le `date`, celui dont
  * recolteAutoriseeLe est la plus tardive ; null si aucun.
  *
- * ── texteInterdiction(interdiction, nomProduit) ─────────────────────────────────────────────
+ * T69 (Q46, « on peut récolter les autres ») : la culture ne compte plus pour un traitement qui
+ * désigne des emplacements.
+ *   - Traitement AVEC emplacements : il interdit la récolte sur ces emplacements SEULEMENT. Une
+ *     récolte sur d'autres emplacements de la même culture est permise. Une récolte de sa culture
+ *     sans emplacement (`emplacementIds` vide, `cultureId` = sa culture) est interdite.
+ *   - Traitement SANS emplacement (kiwis, asperges, campagne sans occupation) : il interdit la
+ *     récolte de toute sa culture (`cultureId`), quels que soient les emplacements demandés.
+ *   - `planches` : présent seulement quand l'interdiction est PARTIELLE, c'est-à-dire quand la
+ *     récolte ne nomme aucun emplacement (récolte de la culture) ou en nomme qui ne sont pas tous
+ *     sous DAR. Ce sont alors les emplacements interdits, dans l'ordre des emplacements demandés
+ *     (récolte sans emplacement : dans l'ordre des traitements, puis de leurs emplacements), sans
+ *     doublon (casse ignorée), écrits comme dans la récolte demandée (sans emplacement : comme dans
+ *     le traitement). Absent quand toute la récolte est
+ *     interdite (un seul emplacement traité demandé, ou tous) ou par un traitement sans emplacement.
+ *     Plusieurs traitements : leurs emplacements interdits s'ajoutent ; la date rendue reste la plus
+ *     tardive.
+ *
+ * ── texteInterdiction(interdiction, nomProduit, codes?) ─────────────────────────────────────
  *
  * « Récolte interdite jusqu’au 13/05 (Bouillie bordelaise, traité le 10/05) » : jusqu'au =
  * recolteAutoriseeLe, traité le = date du traitement, JJ/MM.
+ * T69 : `codes` (codes des planches interdites, ceux de `planches`, facultatif) non vide →
+ * « Récolte interdite sur P3, P4 jusqu’au 13/05 (Bouillie bordelaise, traité le 10/05) ».
  *
  * ── surfaceEmplacements(emplacements) ───────────────────────────────────────────────────────
  *
@@ -128,6 +147,8 @@ export interface InterdictionRecolte {
   readonly dateTraitement: string;
   /** Premier jour où la récolte est permise. */
   readonly recolteAutoriseeLe: string;
+  /** T69 : emplacements interdits quand l'interdiction est partielle ; absent sinon. */
+  readonly planches?: readonly string[];
 }
 
 export interface ProduitPhytoEcrit {
@@ -166,7 +187,7 @@ export interface ModulePhyto {
   detailTraitement(produit: ProduitPourTraitement, saisie: SaisieTraitement, date: DateCalendaire): DetailTraitement;
   avertissementDose(dose: Quantite, doseMaximale: Quantite | null): string | null;
   interdictionRecolte(traitements: readonly TraitementLu[], emplacementIds: readonly string[], date: string, cultureId?: string | null): InterdictionRecolte | null;
-  texteInterdiction(interdiction: InterdictionRecolte, nomProduit: string): string;
+  texteInterdiction(interdiction: InterdictionRecolte, nomProduit: string, codes?: readonly string[]): string;
   surfaceEmplacements(emplacements: readonly { readonly longueurM: number; readonly largeurM: number | null }[]): number;
   validerProduitPhyto(entree: unknown): Resultat<ProduitPhytoEcrit>;
   lignesRegistrePhyto(tables: Readonly<Record<string, readonly LigneLocale[] | undefined>>, fermeId: string): LigneRegistre[];
