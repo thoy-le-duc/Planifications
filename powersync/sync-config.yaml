@@ -95,6 +95,10 @@ streams:
   produit_fertilisant:
     auto_subscribe: true
     query: SELECT * FROM produit_fertilisant WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  # T56 : recettes de fertirrigation de la ferme (engrais, taux d'injection, EC et pH cibles).
+  recette_fertirrigation:
+    auto_subscribe: true
+    query: SELECT * FROM recette_fertirrigation WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
 
   # Bibliothèque de référence : réglages propres à la ferme, puis lignes partagées (flux global).
   famille_ferme:
