@@ -66,8 +66,8 @@ erDiagram
 | Ferme | nom, fuseau horaire, position (pour la météo), unités | Chaque ligne de chaque table porte `ferme_id` : c'est la frontière de la synchro et de l'export. |
 | Zone | nom, zone parente (facultative), type d'abri (plein champ, tunnel, serre, hors-sol), surface | Un tunnel, une serre, un îlot, le verger. Une zone peut contenir des sous-zones : une serre multichapelle contient ses chapelles, un îlot ses sous-îlots. |
 | Emplacement | code court, sorte (planche, rang, gouttière), longueur (m), largeur (m), nombre de places (gouttière), actif du / au, remplace (anciens emplacements) | Le code (`P3`, `T2-P03`) est unique **dans sa zone** parmi les emplacements non supprimés et en service (une planche retirée, `actif au` renseigné, ne réserve plus son code, même si la date de retrait est encore à venir), sans tenir compte des majuscules ni des espaces autour (Q27) : deux « P3 » dans deux tunnels sont permis, c'est la zone qui les distingue quand la voix reconnaît « planche 3 du tunnel 2 ». Le lien « remplace » garde l'historique de rotation quand on redessine des planches. |
-| Secteur d'irrigation | numéro de vanne, nom, débit (facultatif), adresse Modbus (phase 3) | Les 60 vannes. |
-| Secteur ↔ emplacement | secteur, emplacement, du / au | Plusieurs emplacements par vanne, éventuellement dans plusieurs zones. Datée pour garder l'historique si le réseau change. |
+| Secteur d'irrigation | numéro de vanne, nom, débit (facultatif), position sur le plan x, y (facultative, T57), adresse Modbus (phase 3) | Les 60 vannes. Numéro de 1 à 9 999, unique dans la ferme parmi les vannes non supprimées (index partiel, migration 0040). Position dans le repère de la ferme (mètres), les deux ou aucune, à 5 km au plus de l'origine ; sans position, la vanne s'affiche en tête de sa première planche (plus petit code), au bout opposé à son cap. |
+| Secteur ↔ emplacement | secteur, emplacement, du / au | Plusieurs emplacements par vanne, éventuellement dans plusieurs zones. Datée pour garder l'historique si le réseau change : actif du `du` au `au` compris ; retirer une planche ferme son lien la veille (un lien né le jour même est supprimé), en ajouter une crée un lien du jour (`changerLiens`, `@planif/core/irrigation`). |
 
 ## 1 bis. Placement réel — v1.x (validée le 2026-10-07, Q31)
 
@@ -210,7 +210,7 @@ Toute saisie au champ est un **événement** : quoi, où, combien, quand, par qu
 | Réalisé | événement | étape (semis pépinière, semis direct, plantation, arrachage), quantité réelle si différente du prévu |
 | Récolte | détail de l'événement (vue `recoltes`) | quantité, unité, catégorie (facultative) |
 | Intervention | détail de l'événement (vue `interventions`) | type, outil, produit et quantité pour un amendement ou un engrais, durée d'occupation pour une bâche |
-| Irrigation | événement | secteur, durée (min) |
+| Irrigation | événement | secteur, durée (min) ; sans culture ni emplacement : les planches arrosées sont celles de la vanne le jour de l'irrigation (liens datés), changer le réseau ne réécrit pas le passé (T57) |
 | Traitement phyto | détail de l'événement (vue `traitements`, registre phyto) | produit, dose, surface traitée (m²), cible, opérateur ; date de récolte autorisée calculée avec le délai avant récolte |
 | Observation | événement | nature (ravageur, maladie, stade, autre), gravité (facultative) |
 
@@ -275,6 +275,15 @@ Le serveur (`structure.ts`, `structure-lignes.ts`, `structure-origine.ts`) accep
 - **Tout ou rien et concurrence** : `batiment` et `ferme` rejoignent les envois tout ou rien, écrits sous le verrou de chaque ferme touchée ; interblocage ou échec de sérialisation : erreur à réessayer (5xx), jamais un refus définitif.
 - **Historique** : une ligne `modification` par ligne touchée (`Batiment`, `Zone`, `Emplacement`, `Ferme`).
 
+### Vannes écrites par le téléphone (T57)
+
+Le serveur (`structure.ts`, `structure-lignes.ts`) accepte `secteur_irrigation` et `secteur_emplacement` comme le parcellaire (T10s) : PUT, PATCH (suppression douce, rétablissement), jamais de DELETE, tout ou rien avec le reste du lot, sous le verrou de la ferme, une ligne `modification` par ligne touchée (`SecteurIrrigation`, `SecteurEmplacement`).
+
+- **Colonnes** : vanne : numéro, nom, débit, `placement_x_m`, `placement_y_m` (l'adresse Modbus n'est pas écrite par le téléphone) ; lien : vanne, emplacement, du, au.
+- **Droits** : tout membre actif déclare ses vannes et coche ce qu'elles arrosent ; poser, déplacer ou retirer une vanne du plan est un placement (Q31) : gérant seulement, jamais sans origine du plan, et une vanne placée fige l'origine comme les autres placements. Côté téléphone : `porte.placer` (`{ sorte: 'vanne', id, position }`) rejoue les mêmes règles.
+- **Validation** : règles du cœur (`@planif/core/irrigation` : `validerVanne`, `validerPositionVanne`), fin d'un lien ≥ son début ; numéro unique dans la ferme ; vanne et emplacement d'un lien de la ferme et non supprimés (une ligne d'une autre ferme est introuvable) ; deux liens non supprimés de la même vanne au même emplacement ne se chevauchent pas.
+- **Suppression** : une vanne qui arrose encore (lien non supprimé sans fin, ou fini aujourd'hui ou après) ne se supprime pas ; un lien fermé plus haut dans le même lot ne la retient plus.
+
 ## 8. Ce qui est calculé, pas stocké
 
 | Vue | Calculée à partir de |
@@ -284,6 +293,7 @@ Le serveur (`structure.ts`, `structure-lignes.ts`, `structure-origine.ts`) accep
 | Besoins en semences et en plants | longueurs des séries + densité, graines par motte, germination et marge de l'itinéraire |
 | Stock | somme des mouvements |
 | Alertes (rotation, conflit, délai avant récolte) | occupations, familles, traitements |
+| Dernière irrigation d'une planche (filtre « Irrigation » de la 3D, T57) | irrigations en vigueur et liens datés vanne ↔ emplacement à la date de chaque irrigation |
 
 ## Choix par défaut, modifiables
 
