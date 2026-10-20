@@ -205,8 +205,9 @@ describe('T56 : répartition au prorata des surfaces (règle 3)', () => {
     ]);
     const n = (parts ?? []).map((p) => p.kg.n ?? 0);
     expect(n.reduce((a, b) => a + b, 0)).toBeCloseTo(0.31, 9);
-    expect(n[0]).toBeCloseTo(0.0775, 3);
-    expect(n[1]).toBeCloseTo(0.2325, 3);
+    // Au gramme, 77,5 g et 232,5 g tombent pile sur un demi-gramme : chaque part est à 1 g près.
+    expect(Math.abs((n[0] ?? 0) - 0.0775)).toBeLessThanOrEqual(0.0005 + 1e-12);
+    expect(Math.abs((n[1] ?? 0) - 0.2325)).toBeLessThanOrEqual(0.0005 + 1e-12);
     expect((parts ?? []).map((p) => p.kgParHa.n)).toEqual([15.5, 15.5]);
   });
 
