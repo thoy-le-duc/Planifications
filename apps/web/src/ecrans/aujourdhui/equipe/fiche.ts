@@ -4,6 +4,7 @@
  */
 import { travauxDe } from '@planif/core';
 import type { TravailVu } from '../vues.ts';
+import { COULEURS } from '../../../ui/jetons.ts';
 
 export interface LigneFiche {
   readonly cle: string;
@@ -40,10 +41,10 @@ export async function ficheEnImage(titre: string, lignes: readonly LigneFiche[])
   toile.height = 160 + Math.max(1, lignes.length) * hauteurLigne;
   const c = toile.getContext('2d');
   if (c === null) return null;
-  // Image partagée hors de l'appli : couleurs fixes, lisibles sur tout écran (fond clair, encre foncée).
-  c.fillStyle = '#ffffff';
+  // Image partagée hors de l'appli : thème clair, lisible sur tout écran.
+  c.fillStyle = COULEURS.surface;
   c.fillRect(0, 0, toile.width, toile.height);
-  c.fillStyle = '#1c2b22';
+  c.fillStyle = COULEURS.encre;
   c.font = 'bold 44px sans-serif';
   c.fillText(titre, 40, 80);
   c.font = '32px sans-serif';
