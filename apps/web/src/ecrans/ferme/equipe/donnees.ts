@@ -19,7 +19,7 @@ export interface PersonneLue {
 export interface MembreLu {
   readonly id: string;
   readonly gerant: boolean;
-  /** Les 4 derniers caractères de l'id, en majuscules : ce que l'équipier dit au gérant pour être lié. */
+  /** Les 4 derniers caractères de l'id, en majuscules (plus s'ils sont ceux d'un autre membre) : ce que l'équipier dit au gérant pour être lié. */
   readonly code: string;
 }
 
@@ -49,14 +49,30 @@ const SQL_MEMBRES = "SELECT id, utilisateur_id, role FROM membre WHERE ferme_id 
 const texte = (v: Valeur | undefined): string => (typeof v === 'string' ? v : v === null || v === undefined ? '' : String(v));
 export const codeDuMembre = (id: string): string => id.slice(-4).toUpperCase();
 
+/**
+ * Code de chaque membre (clé : id en minuscules) : ses 4 derniers caractères, allongés tant qu'un
+ * autre membre de la ferme a le même (relecture T60 : un code partagé ferait lier le mauvais compte).
+ */
+export function codesDesMembres(ids: readonly string[]): ReadonlyMap<string, string> {
+  const nus = [...new Set(ids.map((i) => i.toLowerCase()))].map((i) => [i, i.replace(/-/g, '')] as const);
+  const codes = new Map<string, string>();
+  for (const [i, nu] of nus) {
+    let n = 4;
+    while (n < nu.length && nus.some(([j, autre]) => j !== i && autre.endsWith(nu.slice(-n)))) n++;
+    codes.set(i, nu.slice(-n).toUpperCase());
+  }
+  return codes;
+}
+
 /** L'équipe active et les membres de la ferme, vus par l'utilisateur. Lecture seule. */
 export async function lireEquipe(porte: PorteDonnees, fermeId: string, utilisateurId: string): Promise<EquipeLue> {
   const [personnes, membres] = await Promise.all([
     porte.lire<Ligne>('SELECT id, prenom, membre_id FROM personne WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY prenom, id', [fermeId]),
     porte.lire<Ligne>(SQL_MEMBRES, [fermeId]),
   ]);
+  const codes = codesDesMembres(membres.map((m) => texte(m.id)));
   const lus = membres
-    .map((m) => ({ id: texte(m.id).toLowerCase(), gerant: m.role === 'gerant', code: codeDuMembre(texte(m.id)), utilisateur: texte(m.utilisateur_id).toLowerCase() }))
+    .map((m) => ({ id: texte(m.id).toLowerCase(), gerant: m.role === 'gerant', code: codes.get(texte(m.id).toLowerCase()) ?? codeDuMembre(texte(m.id)), utilisateur: texte(m.utilisateur_id).toLowerCase() }))
     .sort((a, b) => Number(b.gerant) - Number(a.gerant) || a.code.localeCompare(b.code));
   const moi = lus.find((m) => m.utilisateur === utilisateurId.toLowerCase());
   return {
