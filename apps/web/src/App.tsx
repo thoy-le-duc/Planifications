@@ -11,6 +11,10 @@
  *   - l'écran « Créer ma ferme » (T39), base ouverte sans ferme : ecrans/creer-ferme/.
  * Tous sont dans le précache du service worker : ils s'ouvrent aussi hors ligne.
  *
+ * T66 : ces imports passent par le morceau d'aiguillage (./aiguillage.ts, demandé avant le premier
+ * rendu, ./vers-aiguillage.ts) ; la table des fichiers que Vite précharge avec chaque écran est
+ * dans ce morceau, plus dans le JavaScript de démarrage.
+ *
  * T11 : connecté, l'appli ouvre la base locale (src/donnees/appli.ts, chargé à la demande, puis
  * PowerSync s'il y a une base à ouvrir), la garde ouverte pour les écrans et la ferme à la
  * déconnexion, avant l'effacement. Les écrans reçoivent la ferme par ContexteFerme.
@@ -30,6 +34,7 @@ import { lireRefusVus, noterRefusVus, refusNonVus } from './donnees/refus-vus.ts
 import { marquerAppPrete } from './perf.ts';
 import { BarreNavigation, EnTete, ONGLETS, type Onglet } from './ui/composants.tsx';
 import type { ModuleExport } from './ecrans/ferme/EcranFerme.tsx';
+import { chargerAiguillage, vers } from './vers-aiguillage.ts';
 
 /**
  * Écran chargé à la demande, sans <Suspense> : React retient l'affichage d'un contenu suspendu
@@ -87,17 +92,19 @@ export function differe<P extends object>(charger: () => Promise<{ default: Comp
   };
 }
 
-const accueil = differe(() => import('./ecrans/accueil/Accueil.tsx'));
-const ferme = differe(() => import('./ecrans/ferme/EcranFerme.tsx'));
-const planches = differe(() => import('./ecrans/plan/index.ts'));
-const aujourdhui = differe(() => import('./ecrans/aujourdhui/index.ts'));
-const creerFerme = differe(() => import('./ecrans/creer-ferme/EcranCreerFerme.tsx'));
+const accueil = differe(() => vers('accueil'));
+const ferme = differe(() => vers('ferme'));
+const planches = differe(() => vers('planches'));
+const aujourdhui = differe(() => vers('aujourdhui'));
+const creerFerme = differe(() => vers('creerFerme'));
 /**
  * À attendre avant le premier rendu (main.tsx) : sans session, la carte de connexion est le
  * premier écran, son chargement part tout de suite et l'appli s'affiche d'un coup, carte
  * comprise, au lieu de deux rendus successifs.
  */
 export function avantPremierRendu(): Promise<unknown> {
+  // L'aiguillage part tout de suite, avant le premier rendu : les écrans n'attendent pas sa venue.
+  void chargerAiguillage().catch(() => undefined);
   return lireSession(stockageNavigateur()) === null ? accueil.precharger() : Promise.resolve();
 }
 
@@ -219,7 +226,7 @@ export function App() {
     // rendu), par donnees/precharger.ts, chargé à la demande.
     void planches.precharger();
     void aujourdhui.precharger();
-    const prechargement = import('./donnees/precharger.ts').catch(() => null);
+    const prechargement = vers('precharger').catch(() => null);
     let prechargee: FermeOuverte | null = null;
     const surEtat = (e: EtatDonnees) => {
       if (fermee) return;
@@ -230,7 +237,7 @@ export function App() {
         void prechargement.then((m) => m?.prechargerFerme(f));
       }
     };
-    import('./donnees/appli.ts').then(
+    vers('donneesAppli').then(
       (m) => {
         if (!fermee) ouverte = m.ouvrirDonneesAppli(utilisateurId, surEtat);
       },

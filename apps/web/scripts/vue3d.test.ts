@@ -7,7 +7,7 @@
  *     n'y est pas.
  *   - Le JavaScript de démarrage (index.html : scripts, modulepreload, et tout ce qu'ils importent
  *     statiquement) ne contient rien de three ni de react-three-fiber : le budget de démarrage
- *     `jsInitialGzKio` reste à 71,3 Kio (71,1 depuis T11b, relevé par T40 : capture de beforeinstallprompt ; par T54 : nom du morceau npk), inchangé.
+ *     `jsInitialGzKio` reste à 71,2 Kio (71,1 depuis T11b, relevé par T40 : capture de beforeinstallprompt ; par T54 à 71,3 : nom du morceau npk ; ramené à 71,2 par T66), inchangé.
  *   - Le morceau 3D (les fichiers JavaScript qui portent three et fiber, avec ce qu'ils importent
  *     statiquement hors démarrage) est chargé par import dynamique seulement, et son poids gzip
  *     total est sous `jsVue3dGzKio` de apps/web/budget.json (clé à créer, ≈ 220, entre 100 et 260 :
@@ -31,7 +31,7 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 const WEB = fileURLToPath(new URL('..', import.meta.url));
 
 const MARQUEURS_3D = ['WebGLRenderer', '__r3f'] as const;
-const BUDGET_DEMARRAGE_KIO = 71.3; // T40 : 71,1 → 71,2 (capture de beforeinstallprompt, morceau de l’installation) ; T54 : 71,2 → 71,3 (nom du morceau npk)
+const BUDGET_DEMARRAGE_KIO = 71.2; // T40 : 71,1 → 71,2 (capture de beforeinstallprompt, morceau de l’installation) ; T54 : 71,2 → 71,3 (nom du morceau npk) ; T66 : 71,3 → 71,2 (démarrage allégé)
 const BORNES_BUDGET_3D_KIO = { min: 100, max: 260 } as const;
 
 interface BudgetJson {
@@ -149,7 +149,7 @@ describe('T27 : budgets (build de production)', () => {
     }
   });
 
-  it('budget de démarrage inchangé (71,3 Kio) et poids du démarrage dessous', () => {
+  it('budget de démarrage inchangé (71,2 Kio) et poids du démarrage dessous', () => {
     const budget = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson;
     expect(budget.jsInitialGzKio, 'budget.json : jsInitialGzKio relevé sans justification').toBe(BUDGET_DEMARRAGE_KIO);
     const html = lire('index.html');

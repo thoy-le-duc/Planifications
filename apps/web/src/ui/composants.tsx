@@ -5,6 +5,11 @@
  *
  * CSS et React seuls. Styles en ligne : les dimensions qui comptent pour les gants en px, les
  * couleurs, polices, rayons et ombres par les variables CSS des jetons (./jetons.ts).
+ *
+ * T66 : la mise en page de l'en-tête et de la barre de navigation (marges, flex, pastille de
+ * l'onglet Ferme) est dans src/ui/base.css, comme celle des onglets (T15e) : même rendu, hors du
+ * JavaScript de démarrage. Restent en ligne les cibles tactiles, couleurs et polices du contrat
+ * (./composants.test.tsx).
  */
 import type { ReactNode } from 'react';
 
@@ -26,35 +31,16 @@ export interface ProprietesEnTete {
 export function EnTete({ titre, surtitre, children }: ProprietesEnTete) {
   const taille = surtitre === undefined ? 32 : 34;
   return (
-    <header
-      className="zone-entete"
-      style={{
-        background: 'var(--couleur-foret)',
-        color: 'var(--couleur-sur-foret)',
-        padding: '22px 20px 20px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        overflowWrap: 'anywhere',
-      }}
-    >
+    <header className="zone-entete entete" style={{ background: 'var(--couleur-foret)', color: 'var(--couleur-sur-foret)' }}>
       {surtitre !== undefined && (
-        <span style={{ fontFamily: 'var(--police-code)', fontSize: 13, letterSpacing: '.06em', color: 'var(--couleur-sur-foret-doux)' }}>
+        <span className="entete-surtitre" style={{ fontFamily: 'var(--police-code)', color: 'var(--couleur-sur-foret-doux)' }}>
           {surtitre}
         </span>
       )}
-      <h1
-        style={{
-          fontFamily: 'var(--police-titre)',
-          fontWeight: 800,
-          fontSize: `clamp(20px, 9vw, ${String(taille)}px)`,
-          letterSpacing: '-0.01em',
-          lineHeight: 1.02,
-        }}
-      >
+      <h1 className="entete-titre" style={{ fontFamily: 'var(--police-titre)', fontSize: `clamp(20px, 9vw, ${String(taille)}px)` }}>
         {titre}
       </h1>
-      {children !== undefined && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{children}</div>}
+      {children !== undefined && <div className="entete-pastilles">{children}</div>}
     </header>
   );
 }
@@ -128,18 +114,6 @@ export interface ProprietesBarreNavigation {
   readonly pastilleFerme?: boolean;
 }
 
-/** Point orange sur l'icône de l'onglet Ferme (T10i), cerclé de blanc pour se détacher du trait. */
-const PASTILLE_ONGLET = {
-  position: 'absolute',
-  top: -3,
-  right: -5,
-  width: 13,
-  height: 13,
-  borderRadius: 'var(--rayon-pastille)',
-  background: 'var(--couleur-orange)',
-  boxShadow: '0 0 0 2.5px var(--couleur-surface)',
-} as const;
-
 /**
  * Barre basse : quatre onglets de même largeur, 48 px au moins (quatre tiennent dans 195 px, un
  * téléphone zoomé à 200 %), l'actif en forêt ; les libellés se replient plutôt que de déborder.
@@ -148,15 +122,7 @@ const PASTILLE_ONGLET = {
  */
 export function BarreNavigation({ actif, surChoix, pastilleFerme = false }: ProprietesBarreNavigation) {
   return (
-    <nav
-      aria-label="Navigation principale"
-      style={{
-        background: 'var(--couleur-surface)',
-        borderTop: '1px solid var(--couleur-trait)',
-        display: 'flex',
-        padding: '6px 0 max(10px, env(safe-area-inset-bottom))',
-      }}
-    >
+    <nav aria-label="Navigation principale" className="barre-navigation">
       {ONGLETS.map(({ id, libelle }) => {
         const courant = id === actif;
         const pastille = id === 'ferme' && pastilleFerme;
@@ -174,7 +140,7 @@ export function BarreNavigation({ actif, surChoix, pastilleFerme = false }: Prop
             // démarrage (T15e) ; ici les cibles tactiles et la couleur de l'onglet actif.
             style={{ minWidth: 48, minHeight: 60, color: courant ? 'var(--couleur-foret)' : 'var(--couleur-tertiaire)' }}
           >
-            <span style={{ position: 'relative', display: 'flex' }}>
+            <span className="onglet-icone">
               <svg
                 aria-hidden="true"
                 width="26"
@@ -188,7 +154,8 @@ export function BarreNavigation({ actif, surChoix, pastilleFerme = false }: Prop
               >
                 {ICONES[id]}
               </svg>
-              {pastille && <span data-testid="pastille-refus" aria-hidden="true" style={PASTILLE_ONGLET} />}
+              {/* Point orange sur l'icône (T10i), cerclé de blanc : classe pastille-onglet (src/ui/base.css). */}
+              {pastille && <span data-testid="pastille-refus" aria-hidden="true" className="pastille-onglet" />}
             </span>
             {libelle}
           </button>
