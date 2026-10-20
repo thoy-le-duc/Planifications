@@ -12,7 +12,7 @@
  * Contrat détaillé : ./test/contrat.ts.
  */
 import { REGISTRE_PHYTO, TABLES_EXPORTEES, type DescriptionTable, type TypeExport } from './tables.ts';
-import { ligneCsvRegistre, lignesRegistrePhyto, TABLES_REGISTRE_PHYTO, type LigneLocaleRegistre } from '../phyto/index.ts';
+import { ligneCsvRegistre, lignesRegistrePhytoParPaquets, TABLES_REGISTRE_PHYTO, type LigneLocaleRegistre } from '../phyto/index.ts';
 import { annulable, dateDos, EN_VOL, lancerEntree, partiesZip, verifierAnnulation, type Compressee, type Compresseur, type EntreeLancee, type MorceauZip, type SignalAnnulation } from './zip.ts';
 
 export { TABLES_EXPORTEES, type DescriptionColonne, type DescriptionTable, type TypeExport } from './tables.ts';
@@ -185,9 +185,20 @@ function reduite(nom: string, l: LigneLocale): LigneLocaleRegistre {
   return r;
 }
 
-/** Lignes du registre, au format des CSV de l'export. */
-function lignesRegistre(tables: Readonly<Record<string, readonly LigneLocaleRegistre[] | undefined>>, fermeId: string): LigneLocale[] {
-  return lignesRegistrePhyto(tables, fermeId).map(ligneCsvRegistre);
+/**
+ * Lignes du registre, au format des CSV de l'export. Générateur (T63) : il s'arrête par paquets de
+ * lignes, comme `repartir`, pour que `construireArchive` rende la main ; d'une traite, à la fin de
+ * l'export, ce calcul faisait sa plus longue tâche (jusqu'à 26 ms de CPU sous Node, ferme de T07).
+ */
+function* lignesRegistre(tables: Readonly<Record<string, readonly LigneLocaleRegistre[] | undefined>>, fermeId: string): Generator<void, LigneLocale[], undefined> {
+  const registre = yield* lignesRegistrePhytoParPaquets(tables, fermeId);
+  const r: LigneLocale[] = [];
+  for (let i = 0; i < registre.length; i++) {
+    if (i % PAQUET_LIGNES === PAQUET_LIGNES - 1) yield;
+    const l = registre[i];
+    if (l !== undefined) r.push(ligneCsvRegistre(l));
+  }
+  return r;
 }
 
 // ── Producteurs ──────────────────────────────────────────────────────────────────────────────
@@ -364,7 +375,7 @@ function* planifier(entree: EntreeExport): Generator<void, Plan, undefined> {
     }
   }
 
-  const registre = lignesRegistre(entree.tables, fermeId);
+  const registre = yield* lignesRegistre(entree.tables, fermeId);
   const csvRegistre: FichierPrevu = { chemin: CHEMIN_REGISTRE, bom: true, lignes: registre.length, produire: (c) => csv(REGISTRE_PHYTO, registre, c) };
 
   const nomFerme = entree.tables.ferme?.find((l) => l.id === fermeId)?.nom;
@@ -757,7 +768,14 @@ export function creerConstructeurArchive(options: OptionsConstructeurArchive): C
     );
     remiseFin.tenir(compteur);
     // T52 : le registre phyto, une fois toutes les tables lues (hors de la barre d'avancement).
-    const registre = lignesRegistre(pourRegistre, fermeId);
+    // Par paquets (T63) : d'une traite, il faisait la plus longue tâche de l'export.
+    const calcul = lignesRegistre(pourRegistre, fermeId);
+    let etape = calcul.next();
+    while (etape.done !== true) {
+      await peutEtreRendre();
+      etape = calcul.next();
+    }
+    const registre = etape.value;
     for (const nom of Object.keys(pourRegistre)) Reflect.deleteProperty(pourRegistre, nom);
     const r = await lancer(placeRegistre, CHEMIN_REGISTRE, flux(true, csv(REGISTRE_PHYTO, registre, { lignes: 0 })));
     const titre = typeof nomFerme === 'string' && nomFerme.trim() !== '' ? nomFerme : fermeId;
