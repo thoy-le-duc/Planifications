@@ -19,9 +19,20 @@
  *   - secret mal formé (identifiant d'instance hors BSON ObjectID de 24 caractères hexadécimaux,
  *     jeton avec blanc ou caractère non imprimable) : refus en non-zéro qui le nomme, sans
  *     jamais afficher sa valeur, et sans lancer la CLI ;
- *   - sinon : `pnpm dlx powersync@X.Y.Z deploy sync-config --directory=powersync`, avec
- *     `--dry-run` pour valider, sans pour déployer ; la CLI reçoit PS_ADMIN_TOKEN et INSTANCE_ID,
- *     jamais API_URL (contexte auto-hébergé) ; un refus de la CLI sort en non-zéro.
+ *   - sinon : `pnpm --dir scripts/powersync-cli exec powersync deploy sync-config
+ *     --directory=<racine>/powersync`, avec `--dry-run` pour valider, sans pour déployer ; la CLI
+ *     reçoit PS_ADMIN_TOKEN et INSTANCE_ID, jamais API_URL (contexte auto-hébergé) ni les
+ *     variables POWERSYNC_* d'origine ; un refus de la CLI sort en non-zéro.
+ *
+ * Relecture (PR #222) :
+ * - chaîne d'approvisionnement : plus de `pnpm dlx` (dépendances transitives résolues à chaque
+ *   exécution). La CLI est une devDependency exacte de `scripts/powersync-cli/package.json`, avec
+ *   son propre `pnpm-lock.yaml` (hors de l'espace de travail : l'appli, son build et toutes les
+ *   autres installations n'en sont pas touchés), installée par le workflow avec
+ *   `--frozen-lockfile --ignore-scripts`, dans une étape qui ne voit aucun secret ;
+ * - déclencheur : la conclusion `success` ne suffit pas, l'exécution des migrations doit venir de
+ *   `workflow_run` (la CI de main) ou de `workflow_dispatch`. Pas `push` : « Migrations de
+ *   production » n'a jamais de déclencheur push, son `workflow_run.event` vaut `workflow_run`.
  */
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -37,6 +48,7 @@ const CHEMIN_MIGRATIONS = `${RACINE}.github/workflows/migrations-production.yml`
 const CHEMIN_CI = `${RACINE}.github/workflows/ci.yml`;
 const CHEMIN_SCRIPT = `${RACINE}scripts/deployer-regles-powersync.sh`;
 const CHEMIN_GUIDE = `${RACINE}docs/mise-en-ligne.md`;
+const DOSSIER_CLI = `${RACINE}scripts/powersync-cli/`;
 const MESSAGE_ABSENT =
   'secrets POWERSYNC_ADMIN_TOKEN et POWERSYNC_INSTANCE_ID absents : rien à faire, voir docs/mise-en-ligne.md';
 const SECRETS = ['POWERSYNC_ADMIN_TOKEN', 'POWERSYNC_INSTANCE_ID'];
@@ -117,6 +129,10 @@ describe('T67 : workflow « Règles de synchro PowerSync »', () => {
     expect(condition).toContain("github.event.workflow_run.head_branch == 'main'");
     expect(condition).toContain('github.event.workflow_run.head_repository.full_name == github.repository');
     expect(condition).toContain("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'");
+    // Relecture : l'exécution des migrations elle-même vient de la CI de main ou d'un lancement à la main.
+    expect(condition).toContain(
+      "(github.event.workflow_run.event == 'workflow_run' || github.event.workflow_run.event == 'workflow_dispatch')",
+    );
   });
 
   it('tourne dans l’environnement production (secrets réservés à main)', () => {
@@ -173,6 +189,20 @@ describe('T67 : workflow « Règles de synchro PowerSync »', () => {
     expect(deployer).toBeGreaterThan(valider);
     for (const etape of etapes(workflow)) expect(etape['continue-on-error'], etape.name).toBeUndefined();
     for (const [, job] of jobs(workflow)) expect(job['continue-on-error']).toBeUndefined();
+  });
+
+  it('installe la CLI figée par son lockfile, sans script d’installation, avant toute étape à secret', () => {
+    const liste = etapes(workflow);
+    const commandes = liste.map((etape) => etape.run?.trim() ?? '');
+    const installation = commandes.indexOf(
+      'pnpm --dir scripts/powersync-cli install --frozen-lockfile --ignore-workspace --ignore-scripts',
+    );
+    expect(installation).toBeGreaterThanOrEqual(0);
+    expect(JSON.stringify(liste[installation] ?? {})).not.toContain('secrets.');
+    const premiereASecret = liste.findIndex((etape) => JSON.stringify(etape).includes('secrets.'));
+    expect(installation).toBeLessThan(premiereASecret);
+    // Aucune autre installation (ni dlx, ni npx) : le seul code tiers lancé est celui du lockfile.
+    for (const commande of commandes) expect(commande).not.toMatch(/\bdlx\b|\bnpx\b|pnpm install(?! --frozen-lockfile)/);
   });
 
   it('lit seulement les deux secrets PowerSync, et seulement dans les étapes du script', () => {
@@ -233,7 +263,8 @@ function fauxPnpm(code: number): FauxPnpm {
 jeton=non; [ "\${PS_ADMIN_TOKEN:-}" = "${JETON_FACTICE}" ] && jeton=oui
 instance=non; [ "\${INSTANCE_ID:-}" = "${INSTANCE_FACTICE}" ] && instance=oui
 api=non; [ -n "\${API_URL:-}" ] && api=oui
-printf '%s | jeton=%s instance=%s api_url=%s\\n' "$*" "$jeton" "$instance" "$api" >> "${journal}"
+brut=non; [ -n "\${POWERSYNC_ADMIN_TOKEN:-}\${POWERSYNC_INSTANCE_ID:-}" ] && brut=oui
+printf '%s | jeton=%s instance=%s api_url=%s brut=%s\\n' "$*" "$jeton" "$instance" "$api" "$brut" >> "${journal}"
 exit ${String(code)}
 `,
   );
@@ -252,9 +283,16 @@ function lancer(mode: string, env: NodeJS.ProcessEnv): { code: number | null; so
   return { code: resultat.status, sortie: `${resultat.stdout}${resultat.stderr}` };
 }
 
+/** Version de la CLI figée dans scripts/powersync-cli/package.json (vide si absente). */
 function versionCli(): string {
-  return /\bpowersync@(\d+\.\d+\.\d+)\b/.exec(lireTexte(CHEMIN_SCRIPT))?.[1] ?? '';
+  const paquet = lireTexte(`${DOSSIER_CLI}package.json`);
+  if (paquet === '') return '';
+  const dependances = objet((JSON.parse(paquet) as Objet).devDependencies ?? {}, 'devDependencies');
+  const version = dependances.powersync;
+  return typeof version === 'string' ? version : '';
 }
+
+const APPEL_CLI = `--dir scripts/powersync-cli exec powersync deploy sync-config --directory=${RACINE}powersync`;
 
 describe('T67 : scripts/deployer-regles-powersync.sh, sans secret', () => {
   for (const mode of ['valider', 'deployer']) {
@@ -348,10 +386,29 @@ describe('T67 : scripts/deployer-regles-powersync.sh, secret incomplet ou mal fo
 describe('T67 : scripts/deployer-regles-powersync.sh, avec la CLI', () => {
   const secrets = { POWERSYNC_ADMIN_TOKEN: JETON_FACTICE, POWERSYNC_INSTANCE_ID: INSTANCE_FACTICE };
 
-  it('épingle une version exacte de la CLI officielle (jamais latest)', () => {
-    const script = lireTexte(CHEMIN_SCRIPT);
+  it('fige la CLI officielle : version exacte, lockfile pnpm, hors de l’espace de travail', () => {
     expect(versionCli()).toMatch(/^\d+\.\d+\.\d+$/);
-    expect(script).not.toMatch(/powersync@(latest|next|\^|~)/);
+    const paquet = JSON.parse(lireTexte(`${DOSSIER_CLI}package.json`)) as Objet;
+    expect(paquet.private).toBe(true);
+    expect(Object.keys(objet(paquet.devDependencies, 'devDependencies'))).toEqual(['powersync']);
+    expect(paquet).not.toHaveProperty('dependencies');
+    // Lockfile écrit par pnpm, qui fige toutes les dépendances transitives (intégrité comprise).
+    const verrou = lireYaml(`${DOSSIER_CLI}pnpm-lock.yaml`);
+    const importateur = objet(objet(verrou.importers ?? {}, 'importers')['.'] ?? {}, 'importer .');
+    const entree = objet(objet(importateur.devDependencies ?? {}, 'devDependencies').powersync ?? {}, 'powersync');
+    expect(entree.specifier).toBe(versionCli());
+    // « 0.10.2 », éventuellement suivi des pairs résolus : « 0.10.2(@types/node@…) ».
+    expect(String(entree.version)).toMatch(new RegExp(`^${versionCli().replaceAll('.', '\\.')}(\\(|$)`));
+    const paquets = objet(verrou.packages ?? {}, 'packages');
+    expect(Object.keys(paquets).length).toBeGreaterThan(1);
+    for (const [nom, entree] of Object.entries(paquets)) {
+      expect(String(objet(objet(entree, nom).resolution ?? {}, 'resolution').integrity), nom).toMatch(/^sha512-/);
+    }
+    // Hors de l'espace de travail : ni l'appli ni les autres installations ne l'emportent.
+    const espace = lireYaml(`${RACINE}pnpm-workspace.yaml`);
+    expect(espace.packages).toEqual(['apps/*', 'packages/*']);
+    const script = lireTexte(CHEMIN_SCRIPT);
+    expect(script).not.toMatch(/\bdlx\b|\bnpx\b/);
   });
 
   it('valider : dry-run de deploy sync-config, avec le jeton et l’instance, sans API_URL', () => {
@@ -359,7 +416,7 @@ describe('T67 : scripts/deployer-regles-powersync.sh, avec la CLI', () => {
     const { code, sortie } = lancer('valider', { ...pnpm.env, ...secrets, API_URL: 'https://auto-heberge.invalid' });
     expect(code).toBe(0);
     expect(pnpm.appels()).toEqual([
-      `dlx powersync@${versionCli()} deploy sync-config --directory=powersync --dry-run | jeton=oui instance=oui api_url=non`,
+      `${APPEL_CLI} --dry-run | jeton=oui instance=oui api_url=non brut=non`,
     ]);
     expect(sortie).not.toContain(JETON_FACTICE);
   });
@@ -369,7 +426,7 @@ describe('T67 : scripts/deployer-regles-powersync.sh, avec la CLI', () => {
     const { code, sortie } = lancer('deployer', { ...pnpm.env, ...secrets });
     expect(code).toBe(0);
     expect(pnpm.appels()).toEqual([
-      `dlx powersync@${versionCli()} deploy sync-config --directory=powersync | jeton=oui instance=oui api_url=non`,
+      `${APPEL_CLI} | jeton=oui instance=oui api_url=non brut=non`,
     ]);
     expect(sortie).not.toContain(JETON_FACTICE);
   });
