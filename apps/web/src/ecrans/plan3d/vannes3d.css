@@ -121,6 +121,7 @@
 
 /* Pendant le vol de la caméra (data-vol de la toile, 0,6 s), les repères se retirent : soixante
    boutons replacés à chaque image ralentissaient le vol ; ils reviennent à leur place à l'arrivée. */
-.plan3d-toile[data-vol='oui'] ~ .plan3d-vannes {
+.plan3d-toile[data-vol='oui'] ~ .plan3d-vannes,
+.plan3d-vannes[data-glisse='oui'] {
   display: none;
 }

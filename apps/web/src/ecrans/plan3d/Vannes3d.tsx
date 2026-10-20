@@ -160,6 +160,28 @@ export function Vannes3d({ porte, fermeId, volumes, couche, surEtat, aujourdhui 
     geste.current = null;
   }
 
+  // Pendant un glissé sur la toile, les repères se retirent (comme pendant le vol, ./vannes3d.css) :
+  // soixante boutons replacés à chaque image saccadaient la rotation ; ils reviennent au lâcher.
+  useEffect(() => {
+    const c = couche.current;
+    const toile = c?.parentElement?.querySelector('canvas');
+    if (c === null || toile === null || toile === undefined) return undefined;
+    const retirer = (): void => {
+      c.dataset.glisse = 'oui';
+    };
+    const remettre = (): void => {
+      delete c.dataset.glisse;
+    };
+    toile.addEventListener('pointerdown', retirer);
+    toile.addEventListener('pointerup', remettre);
+    toile.addEventListener('pointercancel', remettre);
+    return () => {
+      toile.removeEventListener('pointerdown', retirer);
+      toile.removeEventListener('pointerup', remettre);
+      toile.removeEventListener('pointercancel', remettre);
+    };
+  }, [couche]);
+
   useEffect(() => {
     surEtat({
       reperes: reperes.map((r) => ({ pastille: { x: r.x, z: r.z } })),
