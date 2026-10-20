@@ -143,6 +143,114 @@ export function garderInstantane(stockage: StockageInstantane, ids: { readonly u
   }
 }
 
+// ── T64 : « Fait » écrit, retiré de l'instantané rangé ────────────────────────────────────────
+
+/** T64 : carte retirée de l'instantané rangé, et sa place, pour la remettre si le « Fait » est annulé. */
+export interface CarteRetiree {
+  readonly carte: CarteVue;
+  readonly index: number;
+}
+
+const moins = (champ: unknown, n: number): unknown => (estEntier(champ) ? Math.max(0, champ - n) : champ);
+const plus = (champ: unknown, n: number): unknown => (estEntier(champ) ? champ + n : champ);
+
+/** Instantané rangé de cet utilisateur pour cette ferme, ses cartes et son historique ; sinon null. */
+function lireRange(stockage: StockageInstantane, ids: { readonly utilisateurId: string; readonly fermeId: string }): { lu: Objet; taches: CarteVue[]; historique: SaisieVue[] } | null {
+  if (lireSession(stockage)?.utilisateurId !== ids.utilisateurId) return null;
+  const brut = stockage.getItem(cleInstantane(ids.utilisateurId));
+  if (brut === null) return null;
+  const lu: unknown = JSON.parse(brut);
+  if (!estObjet(lu) || lu.utilisateurId !== ids.utilisateurId || lu.fermeId !== ids.fermeId) return null;
+  const taches = liste(lu.taches, carte);
+  const historique = liste(lu.historique, saisie);
+  if (taches === null || historique === null) return null;
+  return { lu, taches, historique };
+}
+
+/**
+ * T64 : la tâche `cle` est faite (son « Fait » est écrit, ou déjà noté) : elle quitte l'instantané
+ * rangé tout de suite, et la saisie écrite (`ecrite`) entre en tête de son historique (au plus
+ * `max` saisies). Avant, l'instantané n'était réécrit que depuis une journée relue : appli fermée
+ * ou rechargée avant elle (5 à 8 s sur une grande ferme à froid), le lancement suivant montrait
+ * la tâche « à faire » jusqu'à la relecture. Rien d'autre ne change (« Fait » en attente compris) ;
+ * session d'un autre compte, autre ferme, illisible ou refusé : rien. Plein : la carte part quand
+ * même, sans la saisie en tête (l'enregistrement raccourcit). Rend la carte retirée et sa place.
+ */
+export function retirerDeInstantane(
+  stockage: StockageInstantane,
+  ids: { readonly utilisateurId: string; readonly fermeId: string },
+  cle: string,
+  ecrite: SaisieVue | null,
+  max: number,
+): CarteRetiree | null {
+  try {
+    const range = lireRange(stockage, ids);
+    if (range === null) return null;
+    const { lu, taches, historique } = range;
+    const index = taches.findIndex((c) => c.cle === cle);
+    const faite = index < 0 ? undefined : taches[index];
+    const ajout = ecrite !== null && !historique.some((h) => h.id === ecrite.id);
+    if (faite === undefined && !ajout) return null;
+    const note: Record<string, unknown> = { ...lu };
+    if (faite !== undefined) {
+      note.taches = taches.filter((c) => c !== faite);
+      note.retard = moins(lu.retard, faite.retard ? 1 : 0);
+      note.cetteSemaine = moins(lu.cetteSemaine, faite.retard ? 0 : 1);
+      note.charge = moins(lu.charge, faite.travail ? (faite.minutes ?? 0) : 0);
+    }
+    const retiree = faite === undefined ? null : { carte: faite, index };
+    if (ajout) {
+      try {
+        stockage.setItem(cleInstantane(ids.utilisateurId), JSON.stringify({ ...note, historique: [ecrite, ...historique].slice(0, max), saisies: plus(lu.saisies, 1) }));
+        return retiree;
+      } catch {
+        // Plein, sans doute : la carte seule (l'enregistrement raccourcit) ; l'historique attend la journée relue.
+        if (faite === undefined) return null;
+      }
+    }
+    stockage.setItem(cleInstantane(ids.utilisateurId), JSON.stringify(note));
+    return retiree;
+  } catch {
+    // Illisible ou refusé : le prochain lancement relit la base, comme avant.
+    return null;
+  }
+}
+
+/**
+ * T64 (relecture) : le « Fait » qui avait retiré `retiree` est annulé : la carte revient à sa
+ * place dans l'instantané rangé (compteurs tenus), et la saisie annulée (`evenementId`) quitte son
+ * historique. Carte déjà là (journée relue gardée depuis), autre compte, autre ferme, illisible,
+ * plein ou refusé : rien (la journée relue la rendra).
+ */
+export function remettreDansInstantane(
+  stockage: StockageInstantane,
+  ids: { readonly utilisateurId: string; readonly fermeId: string },
+  retiree: CarteRetiree,
+  evenementId: string | null,
+): void {
+  try {
+    const range = lireRange(stockage, ids);
+    if (range === null) return;
+    const { lu, taches, historique } = range;
+    const { carte: c, index } = retiree;
+    if (taches.some((x) => x.cle === c.cle)) return;
+    const note: Record<string, unknown> = {
+      ...lu,
+      taches: [...taches.slice(0, index), c, ...taches.slice(index)],
+      retard: plus(lu.retard, c.retard ? 1 : 0),
+      cetteSemaine: plus(lu.cetteSemaine, c.retard ? 0 : 1),
+      charge: plus(lu.charge, c.travail ? (c.minutes ?? 0) : 0),
+    };
+    if (evenementId !== null && historique.some((h) => h.id === evenementId)) {
+      note.historique = historique.filter((h) => h.id !== evenementId);
+      note.saisies = moins(lu.saisies, 1);
+    }
+    stockage.setItem(cleInstantane(ids.utilisateurId), JSON.stringify(note));
+  } catch {
+    // Illisible, plein ou refusé : la journée relue la rendra.
+  }
+}
+
 // ── T13k : « Fait » tapés avant la base, pas encore écrits ────────────────────────────────────
 
 /**
