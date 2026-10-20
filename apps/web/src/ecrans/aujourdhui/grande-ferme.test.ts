@@ -14,8 +14,9 @@
  *    (index ferme_date contraint par la seule ferme). Avant T13b : la montée de `CHAINES`,
  *    `SQL_REALISES`, `SQL_INTERVENTIONS` et `SQL_RECENTS` parcourent tout le journal de la ferme.
  *
- * 3. Vitesse : `lireJournee` en moins de 250 ms, médiane de 5, après une lecture de chauffe :
- *    garde-fou de régression (décision du chef, voir le test).
+ * 3. Vitesse : `lireJournee` en moins de 250 ms, mesurée selon la règle de T31 (`mesurerAsync` :
+ *    échauffement, médiane de 7 en min(mural, CPU), jusqu'à 3 manches) : garde-fou de
+ *    régression (décision du chef, voir le test).
  *
  * 4. Équivalence : la journée calculée (`calculerJournee(lireJournee(…))`) est identique à la
  *    référence figée ci-dessous, relevée sur le code AVANT l'allègement (commit a1a0cbc) :
@@ -27,6 +28,7 @@ import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { creerPorte, SCHEMA_LOCAL, type PorteDonnees } from '@planif/sync';
 import type { Id } from '@planif/core';
+import { mesurerAsync } from '../../../../../packages/core/src/test/mesurer.ts';
 import { calculerJournee, lireJournee, type Journee } from './calculs.ts';
 import { creerBasePowerSync, type BasePowerSync, type SchemaJson } from './test/base-powersync.ts';
 import { ecrireGrandeFerme, FERME_GRANDE, SERIES_ACTIVES, UTILISATEUR_GRANDE, type GrandeFerme } from './test/grande-ferme.ts';
@@ -34,7 +36,6 @@ import { ecrireGrandeFerme, FERME_GRANDE, SERIES_ACTIVES, UTILISATEUR_GRANDE, ty
 const AUJOURDHUI = '2026-09-30';
 const MAINTENANT = new Date('2026-09-30T10:00:00.000Z');
 const BUDGET_LECTURE_MS = 250;
-const REPETITIONS = 5;
 
 const SCHEMA = SCHEMA_LOCAL.toJSON() as SchemaJson;
 
@@ -150,8 +151,6 @@ describe('T13b : les requêtes de la journée se servent des index du journal', 
 
 // ── 3. Vitesse ───────────────────────────────────────────────────────────────────────────────
 
-const mediane = (valeurs: readonly number[]): number => [...valeurs].sort((a, b) => a - b)[Math.floor(valeurs.length / 2)] ?? Number.NaN;
-
 /**
  * Garde-fou de régression, plus le critère de vitesse du ticket (décision du chef, T13b).
  * Le ticket visait 100 ms ; mesuré sur ce banc (stockage PowerSync, node:sqlite) :
@@ -160,18 +159,19 @@ const mediane = (valeurs: readonly number[]): number => [...valeurs].sort((a, b)
  * requêtes seules : le budget du lancement à froid (1 s, e2e) part dans T13d (instantané de la
  * journée affiché au lancement, puis rafraîchi). Budget relevé à 250 ms : une marge sur la
  * mesure actuelle, et un échec net si la lecture repart vers les parcours complets du journal.
+ *
+ * T70 : mesure selon la règle de T31 (`mesurerAsync`), borne inchangée. En temps mural seul, sur
+ * une seule série de 5, le test oscillait autour de la borne quand la machine est chargée (CI du
+ * 2026-10-20 sur 8c2b9a3 : 258 / 282 / 273 / 213 / 227 ms), sans régression du code : 12 passages
+ * alternés par version, médiane des médianes 139 ms sur 8c2b9a3, 133 ms sur 6cd7a87, 144 ms sur
+ * a55d6d0 (à vide, 4 cœurs). La lecture est synchrone dans ce processus (node:sqlite) : à vide,
+ * le CPU vaut le mural ; une lecture vraiment plus lente dépasse la borne à chaque manche.
  */
 describe('T13b : lecture de la journée sur la grande ferme', { timeout: 120_000 }, () => {
-  it(`lireJournee en moins de ${String(BUDGET_LECTURE_MS)} ms (médiane de ${String(REPETITIONS)}, après une lecture de chauffe)`, async () => {
-    await lireJournee(porte, FERME_GRANDE, AUJOURDHUI, MAINTENANT);
-    const serie: number[] = [];
-    for (let k = 0; k < REPETITIONS; k++) {
-      const t0 = performance.now();
-      await lireJournee(porte, FERME_GRANDE, AUJOURDHUI, MAINTENANT);
-      serie.push(Math.round(performance.now() - t0));
-    }
-    console.log(`T13b, lireJournee sur la grande ferme : ${serie.join(' / ')} ms (médiane ${String(mediane(serie))} ms)`);
-    expect(mediane(serie), `lireJournee : ${serie.join(' / ')} ms`).toBeLessThan(BUDGET_LECTURE_MS);
+  it(`lireJournee en moins de ${String(BUDGET_LECTURE_MS)} ms (règle de T31 : médiane de 7 en min(mural, CPU), après échauffement, jusqu'à 3 manches)`, async () => {
+    const m = await mesurerAsync(() => lireJournee(porte, FERME_GRANDE, AUJOURDHUI, MAINTENANT), { borneMs: BUDGET_LECTURE_MS });
+    console.log(`T13b, lireJournee sur la grande ferme : ${m.detail} (médiane ${m.mediane.toFixed(1)} ms)`);
+    expect(m.mediane, `lireJournee : ${m.detail}`).toBeLessThan(BUDGET_LECTURE_MS);
   });
 });
 
