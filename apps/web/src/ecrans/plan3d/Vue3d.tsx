@@ -833,9 +833,15 @@ const ElementBatiment = memo(function ElementBatiment({ batiment, surAller }: { 
 /**
  * T57 : les vannes, chargées à la demande. Leur arrivée ne rend que ce composant, jamais la vue (un
  * rendu de la vue redessine la scène : la 3D au repos ne dessine aucune image). Morceau introuvable
- * (hors ligne avant tout précache) : la 3D reste entière, sans repères.
+ * (hors ligne avant tout précache) : la 3D reste entière, sans repères. Chargées par un relais
+ * (./vannes-differees.ts) : la liste de leurs dépendances n'alourdit pas le morceau 3D.
  */
-const VannesDifferees = lazy((): Promise<{ default: (p: ProprietesVannes3d) => ReactNode }> => import('./Vannes3d.tsx').catch(() => ({ default: () => null })));
+const VannesDifferees = lazy(
+  (): Promise<{ default: (p: ProprietesVannes3d) => ReactNode }> =>
+    import('./vannes-differees.ts')
+      .then((m) => m.chargerVannes3d())
+      .catch(() => ({ default: () => null })),
+);
 
 export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, invitationDemo = false, porte, fermeId, utilisateurId }: ProprietesVue3d) {
   // T28k (Q36) : le gérant place la ferme aussi au téléphone, à tout écran.
