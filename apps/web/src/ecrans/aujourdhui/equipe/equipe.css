@@ -1,0 +1,172 @@
+/*
+ * T60 — consignes par ouvrier (Aujourd'hui). Chargé avec ./Consignes.tsx, à la demande. Jetons
+ * seulement ; toute commande fait au moins 56 × 56 px (utilisable avec des gants).
+ */
+
+.auj-equipe {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-s);
+}
+
+.auj-filtre {
+  display: flex;
+  flex: 1 0 100%;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  overflow: hidden;
+}
+
+.auj-filtre-bouton {
+  flex: 1 1 0;
+  min-height: 56px;
+  padding: 0 12px;
+  border: 0;
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.auj-filtre-bouton[aria-pressed='true'] {
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+}
+
+.auj-equipe-bouton {
+  flex: 1 1 0;
+  min-height: 56px;
+  min-width: 56px;
+  padding: 0 16px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-weight: 700;
+  font-size: 17px;
+}
+
+/* Prénoms d'un travail attribué, sur sa carte. */
+.auj-attribue-a {
+  display: block;
+  margin-top: 4px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--couleur-foret);
+  overflow-wrap: anywhere;
+}
+
+.auj-equipe-groupe {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-s);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.auj-equipe-zones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espace-s);
+}
+
+.auj-equipe-zone {
+  min-height: 56px;
+  padding: 0 14px;
+  border: 2px solid var(--couleur-tertiaire);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.auj-equipe-choix {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 6px 12px;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+
+.auj-equipe-choix input {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  accent-color: var(--couleur-foret);
+}
+
+.auj-equipe-qui {
+  color: var(--couleur-secondaire);
+  font-weight: 700;
+}
+
+/* ── Fiche du jour ───────────────────────────────────────────────────────────────────────── */
+
+.auj-fiche-titre {
+  font-weight: 800;
+  font-size: 19px;
+}
+
+.auj-fiche-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 16px;
+  color: var(--couleur-encre);
+}
+
+.auj-fiche-table th,
+.auj-fiche-table td {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--couleur-trait);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.auj-fiche-table td[data-colonne='numero'] {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.auj-fiche-tous {
+  color: var(--couleur-secondaire);
+}
+
+.auj-fiche-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-s);
+}
+
+/* Imprimer : la fiche seule, sur fond blanc, sans les commandes de l'écran. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .auj-fiche,
+  .auj-fiche * {
+    visibility: visible;
+  }
+
+  .auj-fiche {
+    position: absolute;
+    inset: 0 auto auto 0;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    background: none;
+  }
+
+  .auj-fiche .auj-fiche-ecran {
+    display: none;
+  }
+}

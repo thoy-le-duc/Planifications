@@ -42,6 +42,9 @@
  * jamais un import statique : ni l'entrée ni ce morceau ne les portent) et montre celui demandé
  * avec la porte du contexte.
  *
+ * Équipe (T60) : carte « Équipe », ligne « Équipe de la ferme », active comme « Mes itinéraires ».
+ * Un tap charge l'écran (`import('./equipe/index.ts')`, jamais un import statique).
+ *
  * Saisies refusées (T10i) : les refus de synchro de l'utilisateur (porte.surveillerRefus), en
  * tête de l'écran quand il y en a (./Refus.tsx). Marque MARQUE_REFUS_AFFICHES une fois par
  * ouverture, quand la liste est lue et dessinée (même vide).
@@ -121,6 +124,10 @@ type EcranParcellaireCharge = Awaited<ReturnType<typeof chargerParcellaire>>['Ec
 /** Produits phyto et registre (T52), chargés à la demande (morceau à part). */
 const chargerPhyto = () => import('./phyto/index.ts');
 type ModulePhyto = Awaited<ReturnType<typeof chargerPhyto>>;
+
+/** L'équipe de la ferme (T60), chargée à la demande (morceau à part). */
+const chargerEquipe = () => import('./equipe/index.ts');
+type EcranEquipeCharge = Awaited<ReturnType<typeof chargerEquipe>>['EcranEquipe'];
 
 /** L'écran d'import d'un tableur (T14b), chargé à la demande (morceau à part). */
 const chargerImport = () => import('../import/index.ts');
@@ -381,6 +388,20 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Équipe (T60) : chargée au tap, montrée avec la porte du contexte.
+  const [EcranEquipe, setEcranEquipe] = useState<EcranEquipeCharge | null>(null);
+  function ouvrirEquipe(): void {
+    if (!itinerairesPossibles) return;
+    chargerEquipe().then(
+      (m) => {
+        setEcranEquipe(() => m.EcranEquipe);
+      },
+      (e: unknown) => {
+        console.error('Écran de l’équipe introuvable', e);
+      },
+    );
+  }
+
   // Traitements phyto (T52) : chargés au tap, montrés avec la porte du contexte.
   const [phyto, setPhyto] = useState<{ readonly module: ModulePhyto; readonly ecran: 'produits' | 'registre' } | null>(null);
   function ouvrirPhyto(ecran: 'produits' | 'registre'): void {
@@ -601,6 +622,27 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
           utilisateurId={session.utilisateurId}
           surFermer={() => {
             setItinerairesOuverts(false);
+          }}
+        />
+      )}
+      <Carte titre="Équipe">
+        <Ligne
+          nom="Équipe de la ferme"
+          detail="Les prénoms, avec ou sans compte : à qui attribuer les travaux du jour."
+          signe="›"
+          couleur="var(--couleur-foret)"
+          desactivee={!itinerairesPossibles}
+          surTap={ouvrirEquipe}
+        />
+      </Carte>
+      {EcranEquipe !== null && ouverte !== null && (
+        <EcranEquipe
+          key={ouverte.fermeId}
+          porte={ouverte.porte}
+          fermeId={ouverte.fermeId}
+          utilisateurId={session.utilisateurId}
+          surFermer={() => {
+            setEcranEquipe(null);
           }}
         />
       )}

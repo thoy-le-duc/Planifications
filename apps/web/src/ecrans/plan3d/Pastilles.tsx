@@ -4,6 +4,7 @@
  * près) : ce sont de petits disques HTML posés sur la toile, replacés à chaque image dessinée par la
  * projection du point de la planche sur l'écran. Taille fixe à l'écran, donc lisibles de loin ; leur
  * chiffre est du vrai texte, net à toute distance. La pastille du travail choisi est plus grande.
+ * T60 : la planche qui ne porte que des travaux des autres a une pastille grisée, sans numéro.
  */
 import type { RefObject } from 'react';
 import { Vector3, type Camera } from 'three';
@@ -23,7 +24,13 @@ export function CouchePastilles({ pastilles, actif, couche }: { readonly pastill
   return (
     <div ref={couche} data-testid="pastilles-3d" className="plan3d-pastilles" aria-hidden="true">
       {pastilles.map(({ pastille, retard }) => (
-        <span key={pastille.planche} data-planche={pastille.planche} data-actif={pastille.planche === actif ? 'oui' : 'non'} className={retard ? 'plan3d-pastille plan3d-pastille-retard' : 'plan3d-pastille'}>
+        <span
+          key={pastille.planche}
+          data-planche={pastille.planche}
+          data-actif={pastille.planche === actif ? 'oui' : 'non'}
+          data-autre={pastille.autre === true ? 'oui' : 'non'}
+          className={pastille.autre === true ? 'plan3d-pastille plan3d-pastille-autre' : retard ? 'plan3d-pastille plan3d-pastille-retard' : 'plan3d-pastille'}
+        >
           {pastille.libelle}
         </span>
       ))}

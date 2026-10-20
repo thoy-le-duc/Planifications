@@ -174,11 +174,14 @@ test('téléphone : point de départ, serre, glisser, tourner à deux doigts, en
     x0 = await nombre(serre, 'data-x');
     y0 = await nombre(serre, 'data-y');
     const c = await centreDe(serre);
+    // La page derrière l'éditeur plein écran a pu défiler pour atteindre le bouton d'entrée
+    // (onglet Ferme plus long que l'écran) : on vérifie que le glissé, lui, ne la fait pas bouger.
+    const defilementAvant = await page.evaluate(() => [window.scrollX, window.scrollY]);
     await glisser(cdp, c, pt(c.x + 60, c.y));
     await expect(editeur(page)).toHaveAttribute('data-geste', 'aucun');
     expect(await nombre(serre, 'data-x')).toBeCloseTo(x0 + 60 * MPP_19, 0);
     expect(await nombre(serre, 'data-y')).toBeCloseTo(y0, 0);
-    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    expect(await page.evaluate(() => [window.scrollX, window.scrollY]), 'le glissé ne fait pas défiler la page').toEqual(defilementAvant);
   });
 
   let cap = 0;
