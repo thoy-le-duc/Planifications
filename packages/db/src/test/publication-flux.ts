@@ -37,10 +37,16 @@ function listeDeTables(texte: string): string[] {
 export function tablesPublieesPowerSync(migrations: readonly string[]): string[] {
   let tables = new Set<string>();
   for (const migration of migrations) {
-    const instructions = sansCommentaires(migration).split(';');
-    for (const brute of instructions) {
+    const texte = sansCommentaires(migration);
+    // Relecture : une mention de la publication hors d'une instruction de premier niveau (bloc DO,
+    // EXECUTE d'une chaîne) échappe au découpage sur « ; » ; on compte les mentions et on exige
+    // qu'elles aient toutes été rejouées.
+    const mentions = [...texte.matchAll(new RegExp(`\\bpublication\\s+(?:if\\s+exists\\s+)?"?${PUBLICATION}"?(?![a-z0-9_])`, 'gi'))].length;
+    let rejouees = 0;
+    for (const brute of texte.split(';')) {
       const instruction = brute.replace(/\s+/g, ' ').trim();
-      if (!new RegExp(`^(create|alter|drop) publication ("?)${PUBLICATION}\\2(\\s|$)`, 'i').test(instruction)) continue;
+      if (!new RegExp(`^(create|alter|drop) publication (if exists )?("?)${PUBLICATION}\\3(\\s|$)`, 'i').test(instruction)) continue;
+      rejouees += 1;
 
       const creation = /^create publication "?powersync"? for table (.+?)(?: with \(.*\))?$/i.exec(instruction);
       if (creation !== null) {
@@ -65,6 +71,11 @@ export function tablesPublieesPowerSync(migrations: readonly string[]): string[]
         continue;
       }
       throw new Error(`publication ${PUBLICATION} : instruction non reconnue « ${instruction} »`);
+    }
+    if (mentions !== rejouees) {
+      throw new Error(
+        `publication ${PUBLICATION} : ${String(mentions - rejouees)} mention(s) hors d'une instruction CREATE, ALTER ou DROP PUBLICATION de premier niveau (bloc DO, EXECUTE…) : forme non rejouable`,
+      );
     }
   }
   return [...tables].sort();
