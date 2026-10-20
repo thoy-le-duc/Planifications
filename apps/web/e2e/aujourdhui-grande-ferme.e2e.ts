@@ -260,19 +260,41 @@ async function armerFaitAvantBase(page: Page): Promise<void> {
   }, DRAPEAU_FAIT_AVANT_BASE);
 }
 
+/** T64 : drapeau (sessionStorage) qui arme `releverApresRechargement` pour le chargement suivant. */
+const DRAPEAU_APRES_RECHARGEMENT = 'e2e-t64-apres-rechargement';
+
 /**
- * T64 : à chaque chargement, note (window.__instantaneGarde) la première écriture de l'instantané
- * de `utilisateurId` (contrat T13d : localStorage). Sans geste, seule une journée relue le réécrit.
+ * T64 : au chargement suivant seulement (drapeau), note (window.__instantaneGarde) la première
+ * écriture de l'instantané de `utilisateurId` (contrat T13d : localStorage ; sans geste, seule une
+ * journée relue le réécrit), et (window.__faitesVues) chaque carte de `cles` dessinée, ne
+ * serait-ce qu'un instant, depuis le début du chargement jusqu'à cette écriture. Relevé coupé
+ * ensuite : rien ne pèse sur les mesures des étapes suivantes.
  */
-async function relevesInstantaneGarde(page: Page, utilisateurId: string): Promise<void> {
-  await page.addInitScript((cle) => {
-    const f = window as unknown as { __instantaneGarde?: number };
-    const ecrire = Object.getOwnPropertyDescriptor(Storage.prototype, 'setItem')?.value as (this: Storage, k: string, v: string) => void;
-    Storage.prototype.setItem = function (this: Storage, k: string, v: string) {
-      if (k === cle && f.__instantaneGarde === undefined) f.__instantaneGarde = performance.now();
-      ecrire.call(this, k, v);
-    };
-  }, cleInstantane(utilisateurId));
+async function releverApresRechargement(page: Page, utilisateurId: string, cles: readonly string[]): Promise<void> {
+  await page.addInitScript(
+    ({ cle, cles: suivies, drapeau }) => {
+      if (sessionStorage.getItem(drapeau) !== 'oui') return;
+      sessionStorage.removeItem(drapeau);
+      const f = window as unknown as { __instantaneGarde?: number; __faitesVues?: string[] };
+      const vues: string[] = [];
+      f.__faitesVues = vues;
+      const relever = () => {
+        for (const c of suivies) if (!vues.includes(c) && document.querySelector(`[data-testid="tache"][data-cle="${c}"]`) !== null) vues.push(c);
+      };
+      const observateur = new MutationObserver(relever);
+      observateur.observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-cle'] });
+      const ecrire = Object.getOwnPropertyDescriptor(Storage.prototype, 'setItem')?.value as (this: Storage, k: string, v: string) => void;
+      Storage.prototype.setItem = function (this: Storage, k: string, v: string) {
+        if (k === cle && f.__instantaneGarde === undefined) {
+          relever();
+          observateur.disconnect();
+          f.__instantaneGarde = performance.now();
+        }
+        ecrire.call(this, k, v);
+      };
+    },
+    { cle: cleInstantane(utilisateurId), cles, drapeau: DRAPEAU_APRES_RECHARGEMENT },
+  );
 }
 
 /** Nombre de saisies en attente d'envoi, d'après l'état de la synchro (« Hors ligne · N saisies en attente »). */
@@ -468,7 +490,10 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
     for (const cle of fait.cles) await expect(page.locator(`[data-testid="tache"][data-cle="${cle}"]`), `${cle} faite, ne revient pas`).toHaveCount(0);
 
     // Rechargement, toujours hors ligne : les trois restent faites, rien de plus n'est écrit.
-    await relevesInstantaneGarde(page, ferme.utilisateurId);
+    await releverApresRechargement(page, ferme.utilisateurId, fait.cles);
+    await page.evaluate((drapeau) => {
+      sessionStorage.setItem(drapeau, 'oui');
+    }, DRAPEAU_APRES_RECHARGEMENT);
     await page.reload();
     await expect(page.getByTestId('app')).toHaveAttribute('data-base', 'prete', { timeout: 30_000 });
     await expect(taches(page).first()).toBeVisible({ timeout: 30_000 });
@@ -481,6 +506,12 @@ test('grande ferme : Aujourd’hui au tap et à froid, relecture après « Fait 
     // partent, comme avant, d'un écran au repos, et non pendant la relecture complète à froid.
     await page.waitForFunction(() => (window as unknown as { __instantaneGarde?: number }).__instantaneGarde !== undefined, undefined, { timeout: 60_000 });
     for (const cle of fait.cles) await expect(page.locator(`[data-testid="tache"][data-cle="${cle}"]`), `${cle} reste faite dans la journée relue`).toHaveCount(0);
+    // T64 (relecture) : les vérifications ci-dessus attendent (jusqu'à 5 s) que la carte parte ; une
+    // carte redessinée depuis l'instantané puis retirée par la journée relue y échapperait. Ici,
+    // aucune des trois n'a été dessinée, pas même un instant, entre le rechargement et la journée relue.
+    const vues = await page.evaluate(() => (window as unknown as { __faitesVues?: string[] }).__faitesVues ?? null);
+    expect(vues, 'relevé des cartes armé pour ce chargement').not.toBeNull();
+    expect(vues, 'aucune tâche faite redessinée « à faire » après le rechargement, même un instant').toEqual([]);
   });
 
   await test.step(`tap sur « Aujourd’hui » depuis Planches : écran affiché en moins de ${String(BUDGET_TAP_MS)} ms (base ouverte), médiane de 5`, async () => {
