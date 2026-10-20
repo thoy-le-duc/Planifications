@@ -761,7 +761,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   }, [suiviDar, porte, fermeId, jour]);
   const dar = traitementsDar !== null && traitementsDar.porte === porte ? traitementsDar : null;
   const interdiction = useCallback(
-    (c: Culture): string | null => (dar === null ? null : dar.alerte(dar.t, c.emplacements.map((e) => e.id), jour)),
+    (c: Culture): string | null => (dar === null ? null : dar.alerte(dar.t, c.emplacements.map((e) => e.id), jour, c.cibleId)),
     [dar, jour],
   );
   /** T52 : la saisie d'un traitement, une fois chargée ; ouverte ou non. */

@@ -91,6 +91,8 @@ export interface TraitementLu {
   readonly remplaceEvenementId: string | null;
   readonly produitPhytoId: string;
   readonly recolteAutoriseeLe: string;
+  /** Série ou campagne du traitement ; absente ou null sans culture. */
+  readonly cultureId?: string | null;
 }
 
 /** Ce que la résolution des chaînes lit d'un événement. */
@@ -179,17 +181,20 @@ export interface InterdictionRecolte {
 }
 
 /**
- * Traitement en vigueur qui interdit la récolte le `date` sur l'un des `emplacementIds` (du jour
- * du traitement compris à recolteAutoriseeLe exclue) ; s'il y en a plusieurs, celui dont la date
- * autorisée est la plus tardive. null si la récolte est permise.
+ * Traitement en vigueur qui interdit la récolte le `date` sur l'un des `emplacementIds`, ou sur la
+ * culture `cultureId` (série ou campagne : une culture sans emplacement, des kiwis par exemple),
+ * du jour du traitement compris à recolteAutoriseeLe exclue ; s'il y en a plusieurs, celui dont la
+ * date autorisée est la plus tardive. null si la récolte est permise.
  */
-export function interdictionRecolte(traitements: readonly TraitementLu[], emplacementIds: readonly string[], date: string): InterdictionRecolte | null {
-  if (emplacementIds.length === 0 || traitements.length === 0) return null;
+export function interdictionRecolte(traitements: readonly TraitementLu[], emplacementIds: readonly string[], date: string, cultureId: string | null = null): InterdictionRecolte | null {
+  const culture = cultureId?.toLowerCase() ?? null;
+  if ((emplacementIds.length === 0 && culture === null) || traitements.length === 0) return null;
   const vises = new Set(emplacementIds.map((e) => e.toLowerCase()));
   let meilleur: TraitementLu | null = null;
   for (const t of enVigueurDesTraitements(traitements)) {
     if (!(t.date <= date && date < t.recolteAutoriseeLe)) continue;
-    if (!t.emplacementIds.some((e) => vises.has(e.toLowerCase()))) continue;
+    const memeCulture = culture !== null && typeof t.cultureId === 'string' && t.cultureId.toLowerCase() === culture;
+    if (!memeCulture && !t.emplacementIds.some((e) => vises.has(e.toLowerCase()))) continue;
     if (meilleur === null || t.recolteAutoriseeLe > meilleur.recolteAutoriseeLe || (t.recolteAutoriseeLe === meilleur.recolteAutoriseeLe && t.id > meilleur.id)) meilleur = t;
   }
   return meilleur === null ? null : { evenementId: meilleur.id, produitPhytoId: meilleur.produitPhytoId, dateTraitement: meilleur.date, recolteAutoriseeLe: meilleur.recolteAutoriseeLe };

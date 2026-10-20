@@ -24,7 +24,7 @@ export interface TraitementsDar {
 
 export const AUCUN_TRAITEMENT: TraitementsDar = { traitements: [], noms: new Map() };
 
-const COLONNES = `e.id, e.date, e.horodatage, e.emplacement_ids, e.remplace_sorte, e.remplace_evenement_id,
+const COLONNES = `e.id, e.date, e.horodatage, e.emplacement_ids, e.remplace_sorte, e.remplace_evenement_id, e.serie_id, e.campagne_id,
   json_extract(e.detail, '$.produitPhytoId') AS produit, json_extract(e.detail, '$.recolteAutoriseeLe') AS autorisee,
   p.nom_commercial AS nom`;
 const JOINTURE = `LEFT JOIN produit_phyto p ON p.id = lower(json_extract(e.detail, '$.produitPhytoId'))`;
@@ -46,6 +46,8 @@ interface LigneDar {
   readonly emplacement_ids: string | null;
   readonly remplace_sorte: string | null;
   readonly remplace_evenement_id: string | null;
+  readonly serie_id: string | null;
+  readonly campagne_id: string | null;
   readonly produit: unknown;
   readonly autorisee: unknown;
   readonly nom: string | null;
@@ -77,6 +79,7 @@ function lus(lignes: readonly LigneDar[]): TraitementsDar {
       remplaceEvenementId: l.remplace_evenement_id,
       produitPhytoId: produit,
       recolteAutoriseeLe: l.autorisee,
+      cultureId: l.serie_id ?? l.campagne_id,
     });
   }
   return { traitements, noms };
@@ -137,8 +140,11 @@ export function suivreTraitements(porte: PorteDonnees, fermeId: string, aujourdh
   };
 }
 
-/** L'alerte d'une récolte le `date` sur ces emplacements, ou null si elle est permise. */
-export function alerteRecolte(t: TraitementsDar, emplacementIds: readonly string[], date: string): string | null {
-  const i = interdictionRecolte(t.traitements, emplacementIds, date);
+/**
+ * L'alerte d'une récolte le `date` sur ces emplacements ou sur la culture `cultureId` (série ou
+ * campagne : une culture sans emplacement), ou null si elle est permise.
+ */
+export function alerteRecolte(t: TraitementsDar, emplacementIds: readonly string[], date: string, cultureId: string | null = null): string | null {
+  const i = interdictionRecolte(t.traitements, emplacementIds, date, cultureId);
   return i === null ? null : texteInterdiction(i, t.noms.get(i.produitPhytoId) ?? 'produit inconnu');
 }
