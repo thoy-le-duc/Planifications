@@ -13,7 +13,8 @@
  * teneur_p2o5, teneur_k2o (en %, facultatives : null, ou nombre fini de 0 à 100), organique (0/1
  * ou booléen : azote d'origine organique, pour le plafond de la zone vulnérable),
  * utilisable_en_bio (0/1 ou booléen), source (texte de 300 caractères au plus, vide permis),
- * cree_le, modifie_le (tolérées), supprime_le (archivage). Clé inconnue → 'cle_inconnue'.
+ * cree_le, modifie_le (tolérées), supprime_le (archivage). Colonne inconnue → 'colonne_inconnue'
+ * (même code que validerProduitPhyto, T52).
  * `validerProduitFertilisant(ligne)` → { ok, valeur: ProduitFertilisantEcrit } ou { ok: false, erreur }.
  *
  * Teneur : % de la masse du produit tel qu'apporté (kg et t) ; pour un liquide compté en L ou m³,

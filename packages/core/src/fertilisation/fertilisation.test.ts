@@ -199,7 +199,7 @@ describe('T54 : produits fertilisants de la ferme (règle 1)', () => {
   it('colonne inconnue : refusée', () => {
     const r = m.validerProduitFertilisant(ligne({ dose_conseillee: 3 }));
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.erreur.code).toBe('cle_inconnue');
+    if (!r.ok) expect(r.erreur.code).toBe('colonne_inconnue');
   });
 
   it('liste de départ : chaque produit est valide, sourcé, et la liste du ticket y est', () => {
