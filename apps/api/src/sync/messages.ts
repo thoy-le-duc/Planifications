@@ -59,6 +59,10 @@ export const PRECISION_ECART_NON_NUMERIQUE = 'l’écart entre rangs doit être 
 /** T48 : écart entre rangs donné avec un semis à la volée, qui n'a pas de rangs. */
 export const PRECISION_ECART_A_LA_VOLEE = 'un semis à la volée n’a pas de rangs : l’écart entre rangs ne s’y donne pas';
 
+/** T51 : densité en contenants (trous par pain) sur une planche ou un rang. */
+export const PRECISION_CONTENANTS_HORS_GOUTTIERE =
+  'une culture comptée en trous par pain se place sur une gouttière : choisissez une gouttière, ou comptez autrement pour une planche';
+
 /** Message enregistré dans refus_synchro : seul 'ecriture_invalide' porte une précision. */
 export function messageRefus(refus: Refus): string {
   if (refus.motif !== 'ecriture_invalide') return MESSAGES[refus.motif];
@@ -128,6 +132,11 @@ const LIBELLES_DES_CHAMPS: Readonly<Record<string, string>> = {
   longueur_m: 'longueur',
   nombre_plants: 'nombre de plants',
   nombre_places: 'nombre de places',
+  // T51 : gouttières en pains, densité en contenants.
+  nombre_pains: 'nombre de pains',
+  trousParContenant: 'trous par pain',
+  plantsParTrou: 'plants par trou',
+  grainesParTrou: 'graines par trou',
   position_m: 'position',
   statut: 'statut',
   rotation_acceptee: 'décision de rotation',
@@ -200,6 +209,7 @@ export function precisionDuCoeur(erreur: ErreurSaisie): string {
     if (erreur.raison === 'non_numerique') return PRECISION_ECART_NON_NUMERIQUE;
     return PRECISION_ECART_HORS_BORNES;
   }
+  if (erreur.raison === 'contenants_hors_gouttiere') return PRECISION_CONTENANTS_HORS_GOUTTIERE;
   const libelle = libelleDuChamp(erreur.champ);
   return libelle === null ? texte : `${texte} (${libelle})`;
 }

@@ -83,7 +83,8 @@ describe('T32a : schéma Drizzle et migration générée', () => {
 
   it('les fermes existantes ne changent pas : la migration du ticket n’écrit aucune ligne', () => {
     const nouvelles = readdirSync(DOSSIER)
-      .filter((f) => /^\d{4}_.*\.sql$/.test(f) && Number(f.slice(0, 4)) > DERNIERE_AVANT_T32A)
+      // Les migrations de bibliothèque (T41b) écrivent les lignes à ferme_id nul, profil nul compris : hors de ce contrôle.
+      .filter((f) => /^\d{4}_.*\.sql$/.test(f) && Number(f.slice(0, 4)) > DERNIERE_AVANT_T32A && !f.includes('_bibliotheque_'))
       .map((f) => ({ f, sql: readFileSync(new URL(f, DOSSIER), 'utf8') }))
       .filter(({ sql }) => sql.includes('profil_croissance'));
     expect(nouvelles.length, 'au moins une migration T32a (0029 ou après)').toBeGreaterThan(0);

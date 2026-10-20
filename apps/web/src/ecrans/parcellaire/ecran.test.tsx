@@ -244,7 +244,7 @@ describe('T49 : zones et planches', () => {
     expect(b.transactions(), 'un geste, une transaction').toBe(1);
     expect(codesActifs(tunnel)).toEqual(['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']);
     for (const e of actifs(emplacements(b))) {
-      expect(e).toMatchObject({ ferme_id: FERME, zone_id: tunnel, sorte: 'planche', longueur_m: 30, largeur_m: 0.8, nombre_places: null, actif_au: null, remplace: '[]' });
+      expect(e).toMatchObject({ ferme_id: FERME, zone_id: tunnel, sorte: 'planche', longueur_m: 30, largeur_m: 0.8, nombre_places: null, nombre_pains: null, actif_au: null, remplace: '[]' });
       expect(String(e.actif_du) <= AUJOURDHUI, 'en service dès aujourd’hui').toBe(true);
     }
     await attendre(() => d.querySelectorAll('[data-testid="planche"]').length === 10, '10 planches listées dans la zone');
@@ -279,11 +279,11 @@ describe('T49 : zones et planches', () => {
 
     await remplir(champ('Code', f), 'G1');
     await remplir(liste('Sorte', f), 'gouttiere');
-    await remplir(champ('Nombre de places', f), '120');
+    await remplir(champ('Nombre de pains', f), '30');
     await toucher(bouton('Enregistrer', f));
     await attendre(() => actifs(emplacements(b)).some((e) => e.code === 'G1'), 'P3 devenue G1');
     expect(b.transactions()).toBe(1);
-    expect(actifs(emplacements(b)).find((e) => e.id === p3.id)).toMatchObject({ code: 'G1', sorte: 'gouttiere', nombre_places: 120 });
+    expect(actifs(emplacements(b)).find((e) => e.id === p3.id)).toMatchObject({ code: 'G1', sorte: 'gouttiere', nombre_pains: 30, nombre_places: null });
 
     await toucher(bouton('Modifier G1', d));
     f = dialogueOuEchec('Modifier G1');

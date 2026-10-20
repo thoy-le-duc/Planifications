@@ -960,7 +960,8 @@ decrireAvecBase('T10s')('T10s : POST /sync/upload accepte le parcellaire et le c
       ['emplacement de longueur négative', () => putEmplacement(zoneFerme, { longueur_m: -30 })],
       ['emplacement d’une sorte inconnue', () => putEmplacement(zoneFerme, { sorte: 'bac' })],
       ['emplacement sans code', () => putEmplacement(zoneFerme, { code: '' })],
-      ['gouttière sans nombre de places', () => putEmplacement(zoneFerme, { sorte: 'gouttiere', nombre_places: null })],
+      // T51 : une gouttière sans ancien nombre de places est acceptée (1 pain par mètre) ; zéro pain est refusé.
+      ['gouttière à zéro pain', () => putEmplacement(zoneFerme, { sorte: 'gouttiere', nombre_pains: 0 })],
       ['planche avec un nombre de places', () => putEmplacement(zoneFerme, { nombre_places: 12 })],
       ['emplacement actif jusqu’avant son début', () => putEmplacement(zoneFerme, { actif_du: '2026-06-01', actif_au: '2026-05-01' })],
       ['emplacement à une date qui n’existe pas', () => putEmplacement(zoneFerme, { actif_du: '2026-02-30' })],

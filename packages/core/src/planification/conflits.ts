@@ -75,7 +75,8 @@ function quantite(place: PlaceOccupee): number {
 }
 
 function capacite(emplacement: Emplacement): number {
-  return emplacement.sorte === 'gouttiere' ? emplacement.nombrePlaces : centimetres(emplacement.longueurM);
+  // T51 : une gouttière se remplit par pains ; son ancien nombre de places ne compte plus.
+  return emplacement.sorte === 'gouttiere' ? emplacement.nombrePains : centimetres(emplacement.longueurM);
 }
 
 function versSegment(occupation: Occupation, rang: number): Segment {

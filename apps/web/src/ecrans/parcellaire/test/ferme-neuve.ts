@@ -50,7 +50,21 @@ export const PARAMETRES_BIBLIOTHEQUE: Readonly<Record<string, unknown>> = {
 export interface OptionsFermeNeuve {
   /** Rôle de UTILISATEUR. Défaut : 'gerant'. */
   readonly role?: 'gerant' | 'equipier';
+  /**
+   * T50 : la ferme « juste après Ma ferme » : la saison de l'année, `zones` zones de `planches`
+   * planches chacune (codes Z1-P1…), et `series` séries de Batavia (une par planche, depuis la
+   * première). Défaut : rien de tout cela (ferme neuve de T49).
+   */
+  readonly zones?: number;
+  readonly planches?: number;
+  readonly series?: number;
 }
+
+/** T50 : la saison de l'année (avec `zones`). */
+export const SAISON_NEUVE = id(0x100);
+const ZONE_NEUVE = 0x200;
+const PLANCHE_NEUVE = 0x1000;
+const SERIE_NEUVE = 0x8000;
 
 export interface FermeNeuve {
   readonly utilisateurId: string;
@@ -92,6 +106,75 @@ export function fermeNeuve(options: OptionsFermeNeuve = {}): FermeNeuve {
     parametres: JSON.stringify(PARAMETRES_BIBLIOTHEQUE),
     ...horo,
   });
+  const zones = options.zones ?? 0;
+  if (zones > 0) {
+    const annee = new Date().getFullYear();
+    ajouter('saison', { id: SAISON_NEUVE, ferme_id: FERME, nom: String(annee), debut: `${String(annee)}-01-01`, fin: `${String(annee)}-12-31`, ...horo });
+    const planches: string[] = [];
+    for (let z = 0; z < zones; z++) {
+      const zid = id(ZONE_NEUVE + z);
+      ajouter('zone', { id: zid, ferme_id: FERME, nom: `Tunnel ${String(z + 1)}`, zone_parente_id: null, type_abri: 'tunnel', surface_m2: null, contour: null, ...horo });
+      for (let p = 0; p < (options.planches ?? 0); p++) {
+        const pid = id(PLANCHE_NEUVE + z * 256 + p);
+        planches.push(pid);
+        ajouter('emplacement', {
+          id: pid,
+          ferme_id: FERME,
+          zone_id: zid,
+          code: `Z${String(z + 1)}-P${String(p + 1)}`,
+          sorte: 'planche',
+          longueur_m: 30,
+          largeur_m: 0.8,
+          nombre_places: null,
+          actif_du: '2026-01-01',
+          actif_au: null,
+          remplace: '[]',
+          ...horo,
+        });
+      }
+    }
+    const debut = `${String(annee)}-05-04`;
+    const fin = `${String(annee)}-06-29`;
+    for (let n = 0; n < Math.min(options.series ?? 0, planches.length); n++) {
+      const sid = id(SERIE_NEUVE + n);
+      ajouter('serie', {
+        id: sid,
+        ferme_id: FERME,
+        saison_id: SAISON_NEUVE,
+        espece_id: ESPECE_BIBLIOTHEQUE,
+        variete_id: null,
+        itineraire_id: ITINERAIRE_BIBLIOTHEQUE,
+        parametres: JSON.stringify(PARAMETRES_BIBLIOTHEQUE),
+        ancre_type: 'plantation',
+        ancre_date: debut,
+        prevu_semis_pepiniere: `${String(annee)}-04-13`,
+        prevu_mise_en_place: debut,
+        prevu_debut_recolte: `${String(annee)}-06-01`,
+        prevu_fin_recolte: fin,
+        longueur_m: 30,
+        nombre_plants: null,
+        statut: 'prevue',
+        rotation_acceptee: null,
+        ...horo,
+      });
+      ajouter('occupation', {
+        id: id(SERIE_NEUVE + 0x800 + n),
+        ferme_id: FERME,
+        emplacement_id: planches[n] ?? null,
+        serie_id: sid,
+        plantation_id: null,
+        evenement_id: null,
+        longueur_m: 30,
+        nombre_places: null,
+        position_m: 0,
+        prevu_du: debut,
+        prevu_au: fin,
+        reel_du: null,
+        reel_au: null,
+        ...horo,
+      });
+    }
+  }
   const total = Object.values(lignes).reduce((n, l) => n + l.length, 0);
   return { utilisateurId: UTILISATEUR, fermeId: FERME, lignes, total };
 }

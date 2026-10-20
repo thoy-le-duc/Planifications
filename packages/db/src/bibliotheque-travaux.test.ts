@@ -31,10 +31,12 @@ import {
 } from '@planif/core';
 import { describe, expect, it } from 'vitest';
 import * as db from './index.ts';
+import { sourceALEtat } from './test/bibliotheque-a-l-etat.ts';
 
 const MIGRATION_TRAVAUX = '0034_bibliotheque_travaux';
 
-const source = db.lireBibliothequeDepart();
+// T51 : les lignes de la bibliothèque de ce ticket (celles ajoutées depuis ont leurs tests).
+const source = sourceALEtat();
 const lignes = db.convertirBibliotheque(source);
 
 /** Les types de la liste de départ, au format attendu par validerTravauxPrevus. */

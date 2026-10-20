@@ -40,10 +40,16 @@ export type CodeErreurSaisie =
 /** T48 : pourquoi l'écart entre rangs est refusé, pour des messages sans lire le texte. */
 export type RaisonEcartEntreRangs = 'hors_bornes' | 'non_numerique' | 'volee';
 
+/** T51 : une densité en contenants (trous par pain) posée ailleurs que sur une gouttière. */
+export type RaisonContenants = 'contenants_hors_gouttiere';
+
 export interface ErreurSaisie {
   readonly code: CodeErreurSaisie;
-  /** T48 : seulement pour l'écart entre rangs (`parametres.densite.ecartEntreRangsCm`). */
-  readonly raison?: RaisonEcartEntreRangs;
+  /**
+   * T48 : pour l'écart entre rangs (`parametres.densite.ecartEntreRangsCm`) ; T51 : densité en
+   * contenants hors d'une gouttière (`verifierDensiteSurEmplacement`).
+   */
+  readonly raison?: RaisonEcartEntreRangs | RaisonContenants;
   /** Colonne reçue ('date', 'emplacement_ids'…) ou chemin dans le détail ('detail.quantite', 'detail.dose.valeur'). */
   readonly champ: string | null;
   /** Explication en français, 200 caractères au plus. */

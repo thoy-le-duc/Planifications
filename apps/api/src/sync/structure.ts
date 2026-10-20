@@ -742,7 +742,12 @@ async function modifier(
       .filter(([c]) => colonnesEcrites.has(c))
       .map(([c, x]) => [c, COLONNES_TEXTE_JSON.has(c) && x !== null ? JSON.stringify(x) : x]),
   );
-  const v = validerStructure(e.table, { ...base, ...e.donnees, id: avant.id });
+  const fusion: Record<string, unknown> = { ...base, ...e.donnees, id: avant.id };
+  // T51 : un téléphone d'avant T51 ne connaît pas nombre_pains ; quand il change une gouttière en
+  // planche ou en rang sans le dire, les pains existants s'effacent avec la sorte (un nombre de
+  // pains REÇU hors gouttière reste refusé).
+  if (e.table === 'emplacement' && !Object.hasOwn(e.donnees, 'nombre_pains') && fusion.sorte !== 'gouttiere') fusion.nombre_pains = null;
+  const v = validerStructure(e.table, fusion);
   if (!v.ok) return refusDeLigne(v, fermeId);
   const ligne = v.ligne;
   const id = String(ligne.id);
