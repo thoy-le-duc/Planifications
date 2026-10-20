@@ -927,7 +927,8 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
 
   // Vannes (T57) : chargées à part du morceau 3D ; leurs repères sont posés sur la toile comme les pastilles.
   const [Vannes, setVannes] = useState<ComponentType<ProprietesVannes3d> | null>(null);
-  const [etatVannes, setEtatVannes] = useState<EtatVannes3d | null>(null);
+  // Seule une coloration active (filtre « Irrigation », vanne choisie) redessine la vue : les repères arrivés de la base sont posés sans rendu.
+  const [coloration, setColoration] = useState<{ readonly colorer: EtatVannes3d['colorer'] } | null>(null);
   const coucheVannes = useRef<HTMLDivElement>(null);
   const reperesRef = useRef<readonly PointPose[]>([]);
   useEffect(() => {
@@ -951,7 +952,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const options = useMemo(() => (scene === null ? { familles: [], cultures: [], zones: [] } : optionsFiltres(scene)), [scene]);
   const filtreeBrute = useMemo(() => (scene === null ? null : appliquerFiltres(scene, filtres)), [scene, filtres]);
   // T57 : filtre « Irrigation » et planches de la vanne choisie, posés sur la scène filtrée.
-  const filtree = useMemo(() => (filtreeBrute === null || etatVannes === null ? filtreeBrute : etatVannes.colorer(filtreeBrute)), [filtreeBrute, etatVannes]);
+  const filtree = useMemo(() => (filtreeBrute === null || coloration === null ? filtreeBrute : coloration.colorer(filtreeBrute)), [filtreeBrute, coloration]);
   const univers = useCallback(
     (dimension: DimensionFiltre): readonly string[] => (dimension === 'zones' ? options.zones.map((z) => z.id) : options[dimension]),
     [options],
@@ -1034,6 +1035,13 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   }, []);
 
   const toileRef = useRef<HTMLCanvasElement>(null);
+  const surEtatVannes = useCallback((e: EtatVannes3d) => {
+    reperesRef.current = e.reperes;
+    const taille = derniereTaille.current;
+    if (coucheVannes.current !== null && derniereCamera.current !== null && taille !== null) placerPastilles(coucheVannes.current, derniereCamera.current, taille.width, taille.height, e.reperes);
+    const active = e.irrigation || e.evidence !== null;
+    setColoration((avant) => (active ? { colorer: e.colorer } : avant === null ? avant : null));
+  }, []);
   /** Donné par la caméra : les boutons de la liste s'en servent pour voler vers une zone (T29). */
   const pilote = useRef<Pilote | null>(null);
   const aller = useCallback((cible: CibleVol) => {
@@ -1045,11 +1053,6 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     const taille = derniereTaille.current;
     if (couchePastilles.current !== null && derniereCamera.current !== null && taille !== null) placerPastilles(couchePastilles.current, derniereCamera.current, taille.width, taille.height, pastillesDessinees);
   }, [pastillesDessinees]);
-  useLayoutEffect(() => {
-    reperesRef.current = etatVannes?.reperes ?? [];
-    const taille = derniereTaille.current;
-    if (coucheVannes.current !== null && derniereCamera.current !== null && taille !== null) placerPastilles(coucheVannes.current, derniereCamera.current, taille.width, taille.height, reperesRef.current);
-  }, [etatVannes]);
 
   // Un travail choisi (tap d'une ligne, « Suivant ») : la caméra vole vers sa planche, qui est mise en évidence.
   const choisirTravail = useCallback(
@@ -1284,10 +1287,10 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               {zoneChoisie !== null && <p>Vue sur la zone {zoneChoisie}</p>}
             </div>
           )}
-          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-fruits={0} data-balises={0} data-lignes-rangs={0} data-active-en-detail="" data-planches-a-recolter={nbARecolter} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-travaux-erreur={erreurTravaux ? 'oui' : 'non'} data-vannes={etatVannes?.reperes.length ?? 0} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
+          <canvas ref={toileRef} data-testid="toile-3d" data-volumes={nbVolumes} data-batiments={nbBatiments} data-arceaux={nbArceaux} data-placees={nbPlacees} data-rendus={0} data-geometries={0} data-estompes={0} data-plants={0} data-fruits={0} data-balises={0} data-lignes-rangs={0} data-active-en-detail="" data-planches-a-recolter={nbARecolter} data-formes-plants={0} data-hauteurs-plants="{}" data-semaine-plants={-1} data-vols={0} data-vol="non" data-travaux={jour.travaux.length} data-pastilles={JSON.stringify(jour.pastilles.map((p) => ({ planche: p.planche, x: p.x, z: p.z, numeros: p.numeros })))} data-travail-actif={travailActif === null ? '' : String(travailActif)} data-planche-active={plancheActive ?? ''} data-travaux-erreur={erreurTravaux ? 'oui' : 'non'} data-champ={CHAMP_DEGRES} role="img" aria-label={description} tabIndex={0} className="plan3d-toile" />
           <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} erreur={erreurTravaux} />
-          {Vannes !== null && porte !== undefined && fermeId !== undefined && geometrie !== null && <Vannes porte={porte} fermeId={fermeId} volumes={geometrie.volumes} couche={coucheVannes} surEtat={setEtatVannes} />}
+          {Vannes !== null && porte !== undefined && fermeId !== undefined && geometrie !== null && <Vannes porte={porte} fermeId={fermeId} volumes={geometrie.volumes} couche={coucheVannes} surEtat={surEtatVannes} />}
         </div>
         <aside id={idPanneau} data-testid="panneau-3d" className={filtresOuverts ? 'plan3d-cote' : 'plan3d-cote plan3d-cote-replie'} aria-label="Légende, filtres et liste des planches">
           {/* T37c : replié au téléphone, le panneau n'a plus de taille mais la liste des planches (l'alternative texte de la toile) reste lisible au lecteur d'écran : seul le reste est `hidden`. */}
