@@ -240,7 +240,8 @@ function typeAttendu(colonne: string, typeLocal: 'texte' | 'entier' | 'reel'): T
   const JSON_ = new Set(['position', 'unites', 'parametres', 'rendement_prevu', 'dose_maximale', 'changements', 'avant', 'apres', 'detail', 'emplacement_ids', 'photos', 'remplace', 'origine_plan', 'contour', 'profil_croissance']);
   const DATES = new Set(['actif_du', 'actif_au', 'ancre_date', 'du', 'au', 'date', 'date_arrachage', 'date_plantation', 'debut', 'fin', 'debut_recolte_prevu', 'fin_recolte_prevue', 'prevu_du', 'prevu_au', 'reel_du', 'reel_au', 'prevu_debut_recolte', 'prevu_fin_recolte', 'prevu_mise_en_place', 'prevu_semis_pepiniere']);
   const INSTANTS = new Set(['cree_le', 'modifie_le', 'supprime_le', 'decide_le', 'horodatage', 'invite_le']);
-  const BOOLEENS = new Set(['perenne', 'utilisable_en_bio']);
+  // T54 : azote d'origine organique (produit_fertilisant) et option « zone vulnérable nitrates » (ferme).
+  const BOOLEENS = new Set(['perenne', 'utilisable_en_bio', 'organique', 'zone_vulnerable_nitrates']);
   if (BOOLEENS.has(colonne)) return 'booleen';
   if (typeLocal === 'entier') return 'entier';
   if (typeLocal === 'reel') return 'reel';
@@ -388,6 +389,8 @@ describe('T15 : exporterFerme, depuis la base locale, ferme de T07', () => {
       'LISEZMOI.txt',
       // T52 : le registre phyto (packages/core/src/export/registre-phyto.test.ts).
       'registre-phyto.csv',
+      // T54 : le cahier de fertilisation (packages/core/src/export/cahier-fertilisation.test.ts).
+      'cahier-fertilisation.csv',
       ...Object.keys(TABLES_EXPORTEES).map((t) => `${t}.csv`),
       ...[...TABLES_BIBLIOTHEQUE].map((t) => `bibliotheque/${t}.csv`),
     ].sort();

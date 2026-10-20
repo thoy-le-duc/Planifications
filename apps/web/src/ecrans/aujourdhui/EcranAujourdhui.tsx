@@ -70,9 +70,10 @@ import {
 } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
 import { BoutonIrrigation } from './BoutonIrrigation.tsx';
+import { BoutonFertilisation } from './BoutonFertilisation.tsx';
 import type { ProprietesBandeauInstallation } from '../../installation/BandeauInstallation.tsx';
 import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
-import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
+import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, remettreDansInstantane, retirerDeInstantane, stockageParDefaut, type CarteRetiree, type StockageInstantane, type VueJournee } from './instantane.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
 import type { TraitementsDar } from './dar.ts';
 import type { ProprietesSaisieTraitement } from './traitement/index.ts';
@@ -710,6 +711,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   const [occupe, setOccupe] = useState(false);
   /** T13l : saisies dont l'annulation est en file ou écrite : une seule annulation par saisie. */
   const annulations = useRef(new Set<string>());
+  /** T64 (relecture) : cartes retirées de l'instantané rangé par un « Fait » écrit, par saisie : son annulation les remet. */
+  const retireesDeInstantane = useRef(new Map<string, CarteRetiree>());
   const [enAnnulation, setEnAnnulation] = useState<ReadonlySet<string>>(() => new Set());
   /**
    * T13t : « Fait » écrits depuis l'instantané, la plus récente d'abord. Ils sont écrits dans la
@@ -1183,13 +1186,17 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
     // alors que la saisie est écrite.
     const n = (ecritures.current > 0 || avantLaBase) && provisoire !== null ? montrerAnnulable(null, ecrite, provisoire.titre, provisoire.texte) : null;
     const avant = numero.current;
+    /** T64 : la saisie écrite, pour l'historique de l'instantané rangé. */
+    let entree: EntreeHistorique | null = null;
     void ecrire(async () => {
       let fait: FaitEcrit | null = null;
       try {
         const t = await tache();
         if (t !== null) fait = await ecrireFait(t);
         const ecrit = fait?.evenement;
-        if (t !== null && ecrit !== undefined && journee === null) setEcritsSurInstantane((l) => [{ evenement: ecrit, culture: t.culture }, ...l]);
+        if (t !== null && ecrit !== undefined) entree = { evenement: ecrit, culture: t.culture };
+        const e = entree;
+        if (e !== null && journee === null) setEcritsSurInstantane((l) => [e, ...l]);
       } finally {
         lever();
         // Avant le tour de l'annulation éventuelle, rangée derrière dans la file.
@@ -1201,6 +1208,13 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
       }
     }, true).then((ok) => {
       if (abandonne) return;
+      // T64 : faite (écrite ou déjà notée) : l'instantané rangé ne la montre plus, même si l'appli
+      // est fermée avant la journée relue (seule à réécrire l'instantané).
+      if (ok && !changee && utilisateurId !== undefined && stockage !== null) {
+        const e: EntreeHistorique | null = entree;
+        const retiree = retirerDeInstantane(stockage, { utilisateurId, fermeId }, cle, e === null ? null : (vuesHistorique([e], jour)[0] ?? null), SAISIES_HISTORIQUE);
+        if (retiree !== null && e !== null) retireesDeInstantane.current.set(e.evenement.id, retiree);
+      }
       masquer(cle, ok && !changee ? marquerEcriture() : undefined);
       if (!avantLaBase) return;
       // Le masque du cache a pris le relais (ou la carte revient : tâche changée, échec).
@@ -1258,6 +1272,13 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         return;
       }
       setAnnulable((a) => (a?.evenement?.id === ev.id ? null : a));
+      // T64 (relecture) : la carte que son « Fait » avait retirée de l'instantané rangé y revient
+      // (appli fermée avant la journée relue : la tâche annulée est de nouveau à faire).
+      const retiree = retireesDeInstantane.current.get(ev.id);
+      if (retiree !== undefined) {
+        retireesDeInstantane.current.delete(ev.id);
+        if (utilisateurId !== undefined && stockage !== null) remettreDansInstantane(stockage, { utilisateurId, fermeId }, retiree, ev.id);
+      }
       // Aucun masque n'est retiré (T13f) : l'annulation provoque une relecture de sa culture, plus
       // récente que les masques, qui fait revenir la tâche annulée ; les autres tâches masquées
       // tiennent tant que leur culture n'a pas été relue.
@@ -1372,6 +1393,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         </button>
         {/* T57 : seul point d'entrée de la saisie d'irrigation (fichier à part, chargé au premier tap). */}
         <BoutonIrrigation porte={porte} fermeId={fermeId} aujourdhui={jour} />
+        {/* T54 : saisir un apport (fertilisation, amendement), fichier à part chargé au premier tap. */}
+        <BoutonFertilisation porte={porte} fermeId={fermeId} aujourdhui={jour} />
         {/* L'historique est en bas de l'écran : ce bouton y mène d'un geste. */}
         <button
           type="button"

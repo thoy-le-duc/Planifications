@@ -32,6 +32,8 @@ export type NomEntite =
   | 'ArticleStock'
   | 'MouvementStock'
   | 'ProduitPhyto'
+  /** Produit fertilisant de la ferme : compost, fumier, engrais, avec ses teneurs (T54). */
+  | 'ProduitFertilisant'
   | 'Proposition'
   | 'Modification'
   /** Compte d'une personne (défini avec les comptes, T09) ; auteur des événements. */
