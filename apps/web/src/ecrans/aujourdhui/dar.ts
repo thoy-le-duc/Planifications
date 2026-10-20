@@ -7,6 +7,11 @@
  * Lecture bornée : les traitements des DAR_MAX_JOURS + 1 derniers jours (un traitement plus
  * ancien n'interdit plus rien : le DAR d'un produit ne dépasse pas DAR_MAX_JOURS), plus toutes
  * leurs corrections et annulations, pour que la chaîne en vigueur soit juste.
+ *
+ * Relecture paresseuse : la lecture parcourt le journal de l'année ; refaite à chaque écriture
+ * du journal (chaque « Fait »), elle disputait la base à la relecture de la journée (e2e de la
+ * grande ferme). Elle est donc refaite tout de suite après un traitement saisi ici (`relire`),
+ * et sinon (synchro, autre onglet) une fois le journal calme, au repos.
  */
 import { ajouterJours, DAR_MAX_JOURS, interdictionRecolte, texteInterdiction, type DateCalendaire, type TraitementLu } from '@planif/core';
 import type { PorteDonnees } from '@planif/sync';
@@ -24,12 +29,15 @@ const COLONNES = `e.id, e.date, e.horodatage, e.emplacement_ids, e.remplace_sort
   p.nom_commercial AS nom`;
 const JOINTURE = `LEFT JOIN produit_phyto p ON p.id = lower(json_extract(e.detail, '$.produitPhytoId'))`;
 
-/** Paramètres : ferme, depuis, ferme, depuis. */
-const SQL_TRAITEMENTS = `SELECT ${COLONNES} FROM evenement e ${JOINTURE}
-  WHERE e.ferme_id = ? AND e.date >= ? AND e.type = 'traitement' AND json_valid(e.detail)
+/**
+ * Paramètres : ferme, depuis, ferme, depuis. Les deux parties lisent l'index local ferme_type
+ * (ferme_id, type, date) : seuls les traitements sont parcourus, jamais tout le journal.
+ */
+export const SQL_TRAITEMENTS = `SELECT ${COLONNES} FROM evenement e ${JOINTURE}
+  WHERE e.ferme_id = ? AND e.type = 'traitement' AND e.date >= ? AND json_valid(e.detail)
   UNION ALL
   SELECT ${COLONNES} FROM evenement e ${JOINTURE}
-  WHERE e.remplace_evenement_id IS NOT NULL AND e.ferme_id = ? AND e.date < ? AND e.type = 'traitement' AND json_valid(e.detail)`;
+  WHERE e.ferme_id = ? AND e.type = 'traitement' AND e.date < ? AND e.remplace_evenement_id IS NOT NULL AND json_valid(e.detail)`;
 
 interface LigneDar {
   readonly id: string;
@@ -74,12 +82,59 @@ function lus(lignes: readonly LigneDar[]): TraitementsDar {
   return { traitements, noms };
 }
 
+/** Calme du journal attendu avant de relire après un changement venu d'ailleurs. */
+export const ATTENTE_RELECTURE_MS = 1_500;
+
+export interface SuiviTraitements {
+  /** Relit tout de suite (un traitement vient d'être saisi ou annulé sur ce téléphone). */
+  readonly relire: () => void;
+  readonly arreter: () => void;
+}
+
 /** Suit les traitements de la ferme qui peuvent interdire une récolte le `aujourdhui` ou après. */
-export function suivreTraitements(porte: PorteDonnees, fermeId: string, aujourdhui: string, rappel: (t: TraitementsDar) => void): () => void {
+export function suivreTraitements(porte: PorteDonnees, fermeId: string, aujourdhui: string, rappel: (t: TraitementsDar) => void): SuiviTraitements {
   const depuis = ajouterJours(aujourdhui as DateCalendaire, -(DAR_MAX_JOURS + 1));
-  return porte.surveiller<LigneDar>({ sql: SQL_TRAITEMENTS, parametres: [fermeId, depuis, fermeId, depuis], tables: ['evenement', 'produit_phyto'] }, (lignes) => {
-    rappel(lus(lignes));
+  let actif = true;
+  let numero = 0;
+  let minuterie: ReturnType<typeof setTimeout> | null = null;
+  const g = globalThis as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number };
+  const lire = () => {
+    if (minuterie !== null) clearTimeout(minuterie);
+    minuterie = null;
+    const n = ++numero;
+    porte.lire<LigneDar>(SQL_TRAITEMENTS, [fermeId, depuis, fermeId, depuis]).then(
+      (lignes) => {
+        if (actif && n === numero) rappel(lus(lignes));
+      },
+      (e: unknown) => {
+        console.error('Traitements illisibles', e);
+      },
+    );
+  };
+  const plusTard = () => {
+    if (minuterie !== null) clearTimeout(minuterie);
+    minuterie = setTimeout(() => {
+      minuterie = null;
+      if (g.requestIdleCallback === undefined) lire();
+      else g.requestIdleCallback(lire, { timeout: 2_000 });
+    }, ATTENTE_RELECTURE_MS);
+  };
+  // Requête vide : seul le signal de changement sert (la vraie lecture est différée).
+  let premiere = true;
+  const fin = porte.surveiller({ sql: 'SELECT 1 AS signal', tables: ['evenement', 'produit_phyto'] }, () => {
+    if (premiere) {
+      premiere = false;
+      lire();
+    } else plusTard();
   });
+  return {
+    relire: lire,
+    arreter: () => {
+      actif = false;
+      if (minuterie !== null) clearTimeout(minuterie);
+      fin();
+    },
+  };
 }
 
 /** L'alerte d'une récolte le `date` sur ces emplacements, ou null si elle est permise. */

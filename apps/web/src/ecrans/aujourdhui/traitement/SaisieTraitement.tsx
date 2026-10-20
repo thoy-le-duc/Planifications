@@ -30,6 +30,8 @@ export interface ProprietesSaisieTraitement {
   /** Jour du téléphone, 'AAAA-MM-JJ'. */
   readonly aujourdhui: string;
   readonly surFermer: () => void;
+  /** Un traitement vient d'être écrit ou annulé : l'écran relit les délais avant récolte. */
+  readonly surEcrit?: () => void;
 }
 
 const UNITE_PAR_DEFAUT = 'L/ha';
@@ -223,7 +225,7 @@ function Formulaire({ culture, produits, aujourdhui, occupe, message, surEnregis
 
 type Etape = { readonly sorte: 'culture' } | { readonly sorte: 'formulaire'; readonly culture: CultureEnPlace } | { readonly sorte: 'enregistre'; readonly culture: CultureEnPlace; readonly ecrit: TraitementEcrit; readonly annule: boolean };
 
-export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer }: ProprietesSaisieTraitement): ReactElement {
+export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcrit }: ProprietesSaisieTraitement): ReactElement {
   const idTitre = useId();
   const titre = useRef<HTMLHeadingElement>(null);
   const [lu, setLu] = useState<{ readonly cultures: readonly CultureEnPlace[]; readonly produits: readonly ProduitUtilisable[] } | null>(null);
@@ -258,6 +260,7 @@ export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer }: Prop
       (ecrit) => {
         setOccupe(false);
         setEtape({ sorte: 'enregistre', culture, ecrit, annule: false });
+        surEcrit?.();
       },
       (e: unknown) => {
         console.error('Traitement non enregistré', e);
@@ -275,6 +278,7 @@ export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer }: Prop
         setOccupe(false);
         setMessage(null);
         setEtape({ ...etape, annule: true });
+        surEcrit?.();
       },
       (e: unknown) => {
         console.error('Traitement non annulé', e);

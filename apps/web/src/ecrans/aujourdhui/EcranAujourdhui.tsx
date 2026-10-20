@@ -732,18 +732,21 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   // le morceau d'Aujourd'hui ni dans ses dépendances préchargées.
   const [traitementsDar, setTraitementsDar] = useState<{ readonly porte: PorteDonnees; readonly t: TraitementsDar; readonly alerte: AlerteDar } | null>(null);
   const [suiviDar, setSuiviDar] = useState(false);
+  /** Relit les traitements tout de suite (traitement saisi ou annulé sur ce téléphone). */
+  const relireDar = useRef<(() => void) | null>(null);
   // Une fois lancé, le suivi reste (état dérivé, posé pendant le rendu).
   if (journeeLue && !suiviDar) setSuiviDar(true);
   useEffect(() => {
     if (!suiviDar || porte === null) return undefined;
-    let fin: (() => void) | null = null;
+    let suivi: { readonly relire: () => void; readonly arreter: () => void } | null = null;
     let actif = true;
     chargerDar().then(
       (m) => {
         if (!actif) return;
-        fin = m.suivreTraitements(porte, fermeId, jour, (t) => {
+        suivi = m.suivreTraitements(porte, fermeId, jour, (t) => {
           setTraitementsDar({ porte, t, alerte: m.alerteRecolte });
         });
+        relireDar.current = suivi.relire;
       },
       (e: unknown) => {
         // Sans le morceau (hors ligne, cache vidé) : pas d'alerte, l'écran reste utilisable.
@@ -752,7 +755,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
     );
     return () => {
       actif = false;
-      fin?.();
+      relireDar.current = null;
+      suivi?.arreter();
     };
   }, [suiviDar, porte, fermeId, jour]);
   const dar = traitementsDar !== null && traitementsDar.porte === porte ? traitementsDar : null;
@@ -1445,6 +1449,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
           porte={porte}
           fermeId={fermeId}
           aujourdhui={jourCourant()}
+          surEcrit={() => {
+            relireDar.current?.();
+          }}
           surFermer={() => {
             setTraitementOuvert(false);
           }}
