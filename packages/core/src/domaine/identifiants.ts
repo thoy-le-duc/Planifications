@@ -35,7 +35,13 @@ export type NomEntite =
   | 'Proposition'
   | 'Modification'
   /** Compte d'une personne (défini avec les comptes, T09) ; auteur des événements. */
-  | 'Utilisateur';
+  | 'Utilisateur'
+  /** Appartenance d'un compte à une ferme, avec son rôle (T09). */
+  | 'Membre'
+  /** Personne de l'équipe de la ferme, avec ou sans compte (T60). */
+  | 'Personne'
+  /** Travail du jour attribué à une personne de l'équipe (T60). */
+  | 'Attribution';
 
 /**
  * Identifiant UUID v7 d'une entité : `Id<'Serie'>`, `Id<'Emplacement'>`…

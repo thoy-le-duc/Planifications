@@ -744,9 +744,11 @@ export type ValeursLigne = Readonly<Record<string, unknown>>;
 
 /**
  * Tables des données de la ferme, que l'on peut créer, modifier ou supprimer. Le journal de
- * validation (propositions, modifications) et les comptes n'en font pas partie.
+ * validation (propositions, modifications) et les comptes n'en font pas partie. L'équipe et les
+ * attributions (T60) non plus : consignes du jour, pas données de culture, elles ne passent pas
+ * par le journal des modifications (docs/modele-donnees.md, « Équipe et consignes »).
  */
-export type TableDeFerme = Exclude<NomEntite, 'Modification' | 'Proposition' | 'Utilisateur'>;
+export type TableDeFerme = Exclude<NomEntite, 'Modification' | 'Proposition' | 'Utilisateur' | 'Membre' | 'Personne' | 'Attribution'>;
 
 /** Ligne visée : la table et l'Id de la même entité, liés par le typage. */
 export type ReferenceLigne<T extends NomEntite = TableDeFerme> = {
