@@ -72,7 +72,7 @@ import { useFocusDuDialogue } from './dialogue.ts';
 import { BoutonIrrigation } from './BoutonIrrigation.tsx';
 import type { ProprietesBandeauInstallation } from '../../installation/BandeauInstallation.tsx';
 import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
-import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, retirerDeInstantane, stockageParDefaut, type StockageInstantane, type VueJournee } from './instantane.ts';
+import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, remettreDansInstantane, retirerDeInstantane, stockageParDefaut, type CarteRetiree, type StockageInstantane, type VueJournee } from './instantane.ts';
 import { IconeCoche, IconePanier, Recolte } from './Recolte.tsx';
 import type { TraitementsDar } from './dar.ts';
 import type { ProprietesSaisieTraitement } from './traitement/index.ts';
@@ -710,6 +710,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
   const [occupe, setOccupe] = useState(false);
   /** T13l : saisies dont l'annulation est en file ou écrite : une seule annulation par saisie. */
   const annulations = useRef(new Set<string>());
+  /** T64 (relecture) : cartes retirées de l'instantané rangé par un « Fait » écrit, par saisie : son annulation les remet. */
+  const retireesDeInstantane = useRef(new Map<string, CarteRetiree>());
   const [enAnnulation, setEnAnnulation] = useState<ReadonlySet<string>>(() => new Set());
   /**
    * T13t : « Fait » écrits depuis l'instantané, la plus récente d'abord. Ils sont écrits dans la
@@ -1208,7 +1210,9 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
       // T64 : faite (écrite ou déjà notée) : l'instantané rangé ne la montre plus, même si l'appli
       // est fermée avant la journée relue (seule à réécrire l'instantané).
       if (ok && !changee && utilisateurId !== undefined && stockage !== null) {
-        retirerDeInstantane(stockage, { utilisateurId, fermeId }, cle, entree === null ? null : (vuesHistorique([entree], jour)[0] ?? null), SAISIES_HISTORIQUE);
+        const e: EntreeHistorique | null = entree;
+        const retiree = retirerDeInstantane(stockage, { utilisateurId, fermeId }, cle, e === null ? null : (vuesHistorique([e], jour)[0] ?? null), SAISIES_HISTORIQUE);
+        if (retiree !== null && e !== null) retireesDeInstantane.current.set(e.evenement.id, retiree);
       }
       masquer(cle, ok && !changee ? marquerEcriture() : undefined);
       if (!avantLaBase) return;
@@ -1267,6 +1271,13 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         return;
       }
       setAnnulable((a) => (a?.evenement?.id === ev.id ? null : a));
+      // T64 (relecture) : la carte que son « Fait » avait retirée de l'instantané rangé y revient
+      // (appli fermée avant la journée relue : la tâche annulée est de nouveau à faire).
+      const retiree = retireesDeInstantane.current.get(ev.id);
+      if (retiree !== undefined) {
+        retireesDeInstantane.current.delete(ev.id);
+        if (utilisateurId !== undefined && stockage !== null) remettreDansInstantane(stockage, { utilisateurId, fermeId }, retiree, ev.id);
+      }
       // Aucun masque n'est retiré (T13f) : l'annulation provoque une relecture de sa culture, plus
       // récente que les masques, qui fait revenir la tâche annulée ; les autres tâches masquées
       // tiennent tant que leur culture n'a pas été relue.
