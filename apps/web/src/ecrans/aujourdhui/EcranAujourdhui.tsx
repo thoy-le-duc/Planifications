@@ -70,6 +70,7 @@ import {
 } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
 import { BoutonIrrigation } from './BoutonIrrigation.tsx';
+import { BoutonFertilisation } from './BoutonFertilisation.tsx';
 import type { ProprietesBandeauInstallation } from '../../installation/BandeauInstallation.tsx';
 import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
 import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, remettreDansInstantane, retirerDeInstantane, stockageParDefaut, type CarteRetiree, type StockageInstantane, type VueJournee } from './instantane.ts';
@@ -1392,6 +1393,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         </button>
         {/* T57 : seul point d'entrée de la saisie d'irrigation (fichier à part, chargé au premier tap). */}
         <BoutonIrrigation porte={porte} fermeId={fermeId} aujourdhui={jour} />
+        {/* T54 : saisir un apport (fertilisation, amendement), fichier à part chargé au premier tap. */}
+        <BoutonFertilisation porte={porte} fermeId={fermeId} aujourdhui={jour} />
         {/* L'historique est en bas de l'écran : ce bouton y mène d'un geste. */}
         <button
           type="button"
