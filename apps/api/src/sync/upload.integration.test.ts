@@ -933,7 +933,6 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
       ['serie_id', () => ({ serie_id: supprimees.serie })],
       ['campagne_id', () => ({ campagne_id: supprimees.campagne })],
       ['un des emplacement_ids', () => ({ emplacement_ids: JSON.stringify([supprimees.emplacement]) })],
-      ['detail.secteurIrrigationId', () => ({ type: 'irrigation', detail: JSON.stringify(irrigation(supprimees.secteurIrrigation)) })],
     ])('%s supprimé : ecriture_invalide, rien d’écrit, 200, le reste du lot passe', async (_cas, champs) => {
       const mauvaise = putRecolte(theo.id, ferme, 1, champs());
       const bonne = putRecolte(theo.id, ferme, 2);
@@ -953,6 +952,15 @@ decrireAvecBase('T10')('T10 : POST /sync/upload', { timeout: 30_000 }, () => {
       ['produit de la bibliothèque', () => phytoBibliothequeSupprime],
     ])('detail.produitPhytoId (%s) archivé : accepté (registre phyto)', async (_cas, produit) => {
       const e = putRecolte(theo.id, ferme, 1, { type: 'traitement', detail: JSON.stringify(traitement(produit())) });
+      expect(await lot([e], theo.jeton)).toEqual({ refus: [] });
+      expect(await evenements(e.id)).toBe(1);
+    });
+
+    // T57 (relecture PR #213) : depuis T57 une vanne se supprime ; elle reste référençable pour la
+    // même raison (irrigation faite hors ligne avant la suppression, annulation d'une irrigation
+    // passée). Ce cas passait de « refusé » à « accepté ».
+    it('detail.secteurIrrigationId supprimé : accepté (irrigation faite avant la suppression)', async () => {
+      const e = putRecolte(theo.id, ferme, 1, { type: 'irrigation', detail: JSON.stringify(irrigation(supprimees.secteurIrrigation)) });
       expect(await lot([e], theo.jeton)).toEqual({ refus: [] });
       expect(await evenements(e.id)).toBe(1);
     });

@@ -328,4 +328,36 @@ decrireAvecBase('T57')('T57 : POST /sync/upload accepte les vannes et ce qu’el
     await accepte([v, irrigation]);
     expect(await compter(`SELECT 1 FROM evenement WHERE id = $1 AND type = 'irrigation'`, [irrigation.id])).toBe(1);
   });
+
+  it('relecture : une irrigation faite hors ligne sur une vanne supprimée depuis par un autre téléphone, et son annulation, sont acceptées', async () => {
+    const v = putVanne(numeroLibre());
+    await accepte([v]);
+    // Un autre téléphone supprime la vanne et se synchronise d'abord.
+    await accepte([patch('secteur_irrigation', v.id, { supprime_le: '2026-10-19T08:00:00.000Z' })]);
+    const irrigation = (remplace: { readonly sorte: 'annulation'; readonly id: string } | null): EcritureEnvoyee => ({
+      op: 'PUT',
+      table: 'evenement',
+      id: nouvelId(),
+      donnees: {
+        ferme_id: ferme,
+        type: 'irrigation',
+        date: '2026-10-19',
+        horodatage: '2026-10-19T05:00:00.000Z',
+        auteur_id: theo.id,
+        source: 'tap',
+        serie_id: null,
+        campagne_id: null,
+        emplacement_ids: '[]',
+        note: null,
+        photos: '[]',
+        remplace_sorte: remplace?.sorte ?? null,
+        remplace_evenement_id: remplace?.id ?? null,
+        detail: JSON.stringify({ secteurIrrigationId: v.id, dureeMinutes: 20 }),
+      },
+    });
+    const faite = irrigation(null);
+    await accepte([faite]);
+    await accepte([irrigation({ sorte: 'annulation', id: faite.id })]);
+    expect(await compter(`SELECT 1 FROM evenement WHERE ferme_id = $1 AND type = 'irrigation' AND detail->>'secteurIrrigationId' = $2`, [ferme, v.id])).toBe(2);
+  });
 });

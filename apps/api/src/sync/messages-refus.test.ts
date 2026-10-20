@@ -188,8 +188,9 @@ describe('T10j (relecture) : filet des tables de messages.ts et de references.ts
     const libelles = lire('libelle');
     const supprimees = lire('supprimee');
     expect(libelles.length, 'libellés lus').toBeGreaterThanOrEqual(6);
-    // 4 depuis la relecture T52 : un produit phyto archivé reste référençable (plus de texte « supprimé »).
-    expect(supprimees.length, 'textes « supprimée » lus').toBeGreaterThanOrEqual(4);
+    // 3 depuis la relecture T57 : une vanne supprimée reste référençable ; 4 depuis la relecture T52 :
+    // un produit phyto archivé reste référençable (plus de texte « supprimé » pour l'un ni l'autre).
+    expect(supprimees.length, 'textes « supprimée » lus').toBeGreaterThanOrEqual(3);
     const precisions = [...libelles.map((l) => `${l} introuvable`), ...supprimees];
     const fautifs = precisions
       .map((precision) => messageRefus({ motif: 'ecriture_invalide', precision }))
