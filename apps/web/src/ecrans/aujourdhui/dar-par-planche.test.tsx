@@ -31,7 +31,7 @@ import { validerSaisie, type Id } from '@planif/core';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
 import type { ModuleEcranAujourdhui } from './test/contrat.ts';
 import { CAMPAGNE, cleTache, EMPLACEMENT, ecrireFermeDuJour, FERME, PLANTATION, SERIE, UTILISATEUR } from './test/ferme-du-jour.ts';
-import { attendre, bouton, champ, dialogue, dialogueOuEchec, texte, toucher } from '../itineraires/test/outils.ts';
+import { attendre, bouton, champ, dialogue, dialogueOuEchec, liste, remplir, texte, toucher } from '../itineraires/test/outils.ts';
 
 const CHEMIN_ECRAN = './index.ts';
 const AUJOURDHUI = '2026-09-30';
@@ -274,5 +274,54 @@ describe('T69 : carte « Peser » d’une culture en partie traitée', () => {
     const fraise = () => tache(cleTache(CAMPAGNE.fraise, 'debut_recolte'));
     await attendre(() => alerte(fraise()) !== '', 'alerte sur la carte de la fraise');
     expect(alerte(fraise())).toBe('Récolte interdite sur S1-G01 jusqu’au 01/10 (Bouillie bordelaise, traité le 30/09)');
+  });
+});
+
+/** « Traitement », puis la culture : le formulaire du traitement. */
+async function ouvrirTraitement(cible: string): Promise<HTMLElement> {
+  await toucher(bouton('Traitement', conteneur));
+  await attendre(() => dialogue('Traitement') !== undefined, 'dialogue « Traitement » chargé et ouvert');
+  await attendre(() => dialogueOuEchec('Traitement').querySelector(`[data-testid="choix-traitement"][data-cible="${cible}"]`) !== null, `culture ${cible} proposée`);
+  const choix = dialogueOuEchec('Traitement').querySelector<HTMLElement>(`[data-testid="choix-traitement"][data-cible="${cible}"]`);
+  if (choix === null) throw new Error('culture absente');
+  await toucher(choix);
+  await attendre(() => [...dialogueOuEchec('Traitement').querySelectorAll('select')].length > 0, 'formulaire du traitement');
+  return dialogueOuEchec('Traitement');
+}
+
+describe('T69 (relecture) : un traitement d’une culture qui a des planches en désigne au moins une', () => {
+  it('la dernière planche cochée ne se décoche pas ; le traitement s’écrit sur les planches cochées', async () => {
+    await rendre();
+    const d = await ouvrirTraitement(SERIE.tomate);
+    expect(champ('T2-P07', d).checked).toBe(true);
+    expect(champ('T2-P09', d).checked).toBe(true);
+    expect(champ('T2-P07', d).disabled).toBe(false);
+    expect(champ('T2-P09', d).disabled).toBe(false);
+    await toucher(champ('T2-P09', d));
+    expect(champ('T2-P09', d).checked).toBe(false);
+    // T2-P07 est la dernière cochée : elle ne se décoche pas.
+    expect(champ('T2-P07', d).disabled).toBe(true);
+    await toucher(champ('T2-P07', d));
+    expect(champ('T2-P07', d).checked).toBe(true);
+    expect(champ('Surface traitée (m²)', d).value).toBe('24');
+    await remplir(liste('Produit', d), BOUILLIE);
+    await remplir(champ('Dose', d), '2');
+    await remplir(champ('Cible', d), 'mildiou');
+    await toucher(bouton('Enregistrer', d));
+    await attendre(() => nouveaux().length === 1, 'traitement écrit');
+    const [t] = nouveaux();
+    valide(t);
+    expect(t?.type).toBe('traitement');
+    expect(emplacementsDe(t)).toEqual([EMPLACEMENT.t2p07]);
+  });
+
+  it('recocher une planche rend la précédente décochable', async () => {
+    await rendre();
+    const d = await ouvrirTraitement(SERIE.tomate);
+    await toucher(champ('T2-P07', d));
+    expect(champ('T2-P09', d).disabled).toBe(true);
+    await toucher(champ('T2-P07', d));
+    expect(champ('T2-P07', d).disabled).toBe(false);
+    expect(champ('T2-P09', d).disabled).toBe(false);
   });
 });
