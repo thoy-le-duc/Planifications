@@ -273,12 +273,15 @@ describe('T52 : saisir un traitement depuis Aujourd’hui, au doigt, hors ligne'
     valide(nouveaux()[0]);
   });
 
-  it('emplacement décoché : il n’est pas traité, la surface suit', async () => {
+  // T69 (relecture) : la seule planche de la culture ne se décoche plus (un traitement d'une culture
+  // qui a des planches en désigne au moins une) ; le décochage d'une planche parmi deux est vérifié
+  // dans dar-par-planche.test.tsx.
+  it('seule planche de la culture : elle reste cochée ; la surface reste modifiable', async () => {
     await rendre();
     const d = await ouvrirTraitement(SERIE.tomate);
+    expect(champ('T2-P07', d).disabled).toBe(true);
     await toucher(champ('T2-P07', d));
-    expect(champ('Surface traitée (m²)', d).value).toBe('0');
-    await toucher(champ('T2-P07', d));
+    expect(champ('T2-P07', d).checked).toBe(true);
     expect(champ('Surface traitée (m²)', d).value).toBe('24');
     await remplir(champ('Surface traitée (m²)', d), '12,5');
     await remplir(liste('Produit', d), BOUILLIE);
