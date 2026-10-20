@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { CLE_SESSION } from '../../connexion/session.ts';
 import { cleInstantane } from './cle-instantane.ts';
-import { lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, retirerDeInstantane, VERSION_INSTANTANE, type StockageInstantane } from './instantane.ts';
+import { lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, remettreDansInstantane, retirerDeInstantane, VERSION_INSTANTANE, type StockageInstantane } from './instantane.ts';
 import type { CarteVue, SaisieVue } from './vues.ts';
 
 const U = 'u-1';
@@ -112,5 +112,61 @@ describe('T64 : « Fait » écrit retiré de l’instantané rangé', () => {
     s.setItem(cleInstantane(U), '{pas du json');
     retirerDeInstantane(s, ids, 'a:semis_direct', saisie('e-2'), 20);
     expect(s.getItem(cleInstantane(U))).toBe('{pas du json');
+  });
+});
+
+describe('T64 (relecture) : stockage plein, « Fait » annulé', () => {
+  it('plein : la carte part quand même (l’enregistrement raccourcit), sans la saisie en tête', () => {
+    const s = avec();
+    const ecrire = s.setItem;
+    const brut = s.getItem(cleInstantane(U)) ?? '';
+    // Quota : refuse tout enregistrement plus long que l'actuel.
+    s.setItem = (c, v) => {
+      if (v.length > brut.length) throw new DOMException('plein', 'QuotaExceededError');
+      ecrire(c, v);
+    };
+    retirerDeInstantane(s, ids, 'a:semis_direct', saisie('e-2'.repeat(200)), 20);
+    const i = lireInstantane(s, attendu);
+    expect(i?.taches.map((c) => c.cle)).toEqual(['b:travail:1:2026-09-30', 'c:plantation']);
+    expect(i?.historique.map((h) => h.id)).toEqual(['e-1']);
+    expect(i?.saisies).toBe(1);
+  });
+
+  it('refusé : aucune exception, l’instantané reste lisible', () => {
+    const s = avec();
+    s.setItem = () => {
+      throw new DOMException('refusé', 'SecurityError');
+    };
+    expect(() => {
+      retirerDeInstantane(s, ids, 'a:semis_direct', saisie('e-2'), 20);
+    }).not.toThrow();
+    expect(lireInstantane(s, attendu)?.taches).toHaveLength(3);
+  });
+
+  it('annulé : la carte retirée revient à sa place, compteurs et historique rétablis', () => {
+    const s = avec();
+    const retiree = retirerDeInstantane(s, ids, 'b:travail:1:2026-09-30', saisie('e-2'), 20);
+    expect(retiree?.carte.cle).toBe('b:travail:1:2026-09-30');
+    if (retiree === null) return;
+    remettreDansInstantane(s, ids, retiree, 'e-2');
+    const i = lireInstantane(s, attendu);
+    expect(i?.taches.map((c) => c.cle)).toEqual(['a:semis_direct', 'b:travail:1:2026-09-30', 'c:plantation']);
+    expect([i?.retard, i?.cetteSemaine, i?.charge]).toEqual([1, 2, 30]);
+    expect(i?.historique.map((h) => h.id)).toEqual(['e-1']);
+    expect(i?.saisies).toBe(1);
+  });
+
+  it('annulé : rien si la carte est déjà revenue (journée relue), autre compte ou autre ferme', () => {
+    const s = avec();
+    const retiree = retirerDeInstantane(s, ids, 'a:semis_direct', null, 20);
+    if (retiree === null) throw new Error('carte retirée attendue');
+    s.setItem(cleInstantane(U), JSON.stringify(instantane));
+    remettreDansInstantane(s, ids, retiree, null);
+    expect(lireInstantane(s, attendu)?.taches).toHaveLength(3);
+    remettreDansInstantane(s, { utilisateurId: U, fermeId: 'autre' }, { ...retiree, carte: { ...retiree.carte, cle: 'x:semis_direct' } }, null);
+    expect(lireInstantane(s, attendu)?.taches).toHaveLength(3);
+    const autre = avec('u-2');
+    remettreDansInstantane(autre, ids, { ...retiree, carte: { ...retiree.carte, cle: 'x:semis_direct' } }, null);
+    expect(autre.getItem(cleInstantane(U))).toBe(JSON.stringify(instantane));
   });
 });

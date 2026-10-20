@@ -299,3 +299,32 @@ describe("T64, R3 (témoin T13k) : appli fermée avant la base, rien d’écrit"
     expect(messages().join(" "), "le lancement suivant dit que des « Fait » n’ont peut-être pas été enregistrés").toMatch(/enregistr/);
   });
 });
+
+describe("T64 (relecture), R4 : « Fait » puis « Annuler » sur l’instantané, appli rechargée avant la journée relue", () => {
+  it("annulé, la tâche redevient « à faire » au lancement suivant", async () => {
+    const stockage = stockageMemoire();
+    await ouvrirEtGarder(stockage);
+    await relancerAvantBase(stockage);
+    await rendre(nouvellePorte(true), FERME, stockage);
+    await unTour();
+    remiseAZero();
+    await taperFait(CAROTTE);
+    await attendre(() => clesEcrites().length >= 1, "réalisé de la carotte écrit");
+    await attendre(() => clesRangees(stockage).length > 0 && !clesRangees(stockage).includes(CAROTTE), "carotte retirée de l’instantané rangé");
+    const b = conteneur.querySelector<HTMLElement>('[data-testid="saisie-annulable"]');
+    const annuler = b === null ? undefined : [...b.querySelectorAll<HTMLButtonElement>("button")].find((x) => x.textContent.trim() === "Annuler");
+    expect(annuler, "« Annuler » au bandeau").toBeDefined();
+    if (annuler === undefined) return;
+    await act(async () => {
+      annuler.click();
+      await Promise.resolve();
+    });
+    const annulee = () => evenements().some((e) => !avant.has(e.id) && e.remplace_sorte === "annulation");
+    await attendre(annulee, "annulation écrite");
+    await patienter(100);
+
+    await relancerAvantBase(stockage);
+    expect(tache(CAROTTE), `carotte annulée : de nouveau « à faire » au lancement suivant (tâches : ${cles().join(", ")})`).toBeDefined();
+    expect(tache(CHOU), "le reste de l’instantané est là").toBeDefined();
+  });
+});
