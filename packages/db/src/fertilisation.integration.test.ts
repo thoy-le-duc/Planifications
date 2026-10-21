@@ -83,6 +83,15 @@ describe('T54 : schéma Drizzle', () => {
     expect(t?.columns.find((c) => c.name === 'ferme_id')?.notNull).toBe(true);
   });
 
+  it('T72 : produit_fertilisant.densite_kg_par_l, nombre à virgule facultatif', () => {
+    const c = tables()
+      .find((x) => x.name === 'produit_fertilisant')
+      ?.columns.find((x) => x.name === 'densite_kg_par_l');
+    expect(c, 'colonne produit_fertilisant.densite_kg_par_l').toBeDefined();
+    expect(c?.getSQLType()).toBe('double precision');
+    expect(c?.notNull).toBe(false);
+  });
+
   it('@planif/db déclare ferme.zone_vulnerable_nitrates, booléen non nul, faux par défaut', () => {
     const c = tables()
       .find((x) => x.name === 'ferme')
@@ -192,6 +201,27 @@ decrireAvecBase('T54 : produits fertilisants (PostgreSQL)', { timeout: 120_000 }
       await inserer({ id, teneur_n: null });
       const r = await c.query<{ source: string }>(`SELECT source FROM produit_fertilisant WHERE id = $1`, [id]);
       expect(r.rows[0]?.source).toBe('');
+    });
+
+    it('T72 : densité facultative ; produits existants et nouveaux sans densité : null', async () => {
+      const id = randomUUID();
+      await inserer({ id });
+      expect((await c.query<{ d: number | null }>(`SELECT densite_kg_par_l AS d FROM produit_fertilisant WHERE id = $1`, [id])).rows[0]?.d).toBeNull();
+    });
+
+    it.each([0.5, 1.25, 2.5])('T72 : liquide de densité %s kg/L : accepté', async (d) => {
+      const id = randomUUID();
+      await inserer({ id, forme: 'liquide', unite: 'L', densite_kg_par_l: d });
+      expect((await c.query<{ d: number }>(`SELECT densite_kg_par_l AS d FROM produit_fertilisant WHERE id = $1`, [id])).rows[0]?.d).toBe(d);
+    });
+
+    it.each([
+      ['densité sous 0,5', { forme: 'liquide', unite: 'L', densite_kg_par_l: 0.49 }],
+      ['densité au-delà de 2,5', { forme: 'liquide', unite: 'L', densite_kg_par_l: 2.51 }],
+      ['densité nulle', { forme: 'liquide', unite: 'L', densite_kg_par_l: 0 }],
+      ['densité sur un produit solide', { forme: 'solide', unite: 'kg', densite_kg_par_l: 1.2 }],
+    ])('T72 : %s : refusé', async (_nom, autres) => {
+      expect(await codeErreur(inserer(autres))).toBe(VIOLATION_CHECK);
     });
 
     it('sans ferme : refusé (pas de bibliothèque commune)', async () => {

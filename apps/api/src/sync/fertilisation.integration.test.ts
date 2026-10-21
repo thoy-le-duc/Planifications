@@ -232,6 +232,42 @@ decrireAvecBase('T54')('T54 : produits fertilisants, zone vulnérable et apports
     expect(await ligne(id)).toMatchObject({ nom: 'Compost de déchets verts' });
   });
 
+  // ── T72 : densité des engrais liquides ────────────────────────────────────────────────────
+
+  const liquide = (autres: Record<string, unknown> = {}): Record<string, unknown> => ({ nom: 'Engrais liquide azoté', forme: 'liquide', unite: 'L', teneur_n: 10, teneur_p2o5: null, organique: 0, ...autres });
+
+  it('T72 PUT : liquide avec densité 1,25 kg/L créé et relu ; sans densité : null (comme avant)', async () => {
+    const avec = nouvelId();
+    const sans = nouvelId();
+    expect(await lot([put(avec, produit(ferme, liquide({ densite_kg_par_l: 1.25 }))), put(sans, produit(ferme, liquide({ nom: 'Sans densité' })))])).toEqual({ refus: [] });
+    expect(Number((await ligne(avec))?.densite_kg_par_l)).toBe(1.25);
+    expect((await ligne(sans))?.densite_kg_par_l).toBeNull();
+  });
+
+  it.each([
+    ['densité sous 0,5', { densite_kg_par_l: 0.49 }],
+    ['densité au-delà de 2,5', { densite_kg_par_l: 2.51 }],
+    ['densité nulle', { densite_kg_par_l: 0 }],
+    ['densité illisible', { densite_kg_par_l: '1,25' }],
+    ['densité sur un solide', { forme: 'solide', unite: 'kg', densite_kg_par_l: 1.25 }],
+  ])('T72 PUT refusé (%s) : ecriture_invalide, rien d’écrit', async (_cas, autres) => {
+    const id = nouvelId();
+    expect((await lot([put(id, produit(ferme, liquide(autres)))])).refus).toEqual([{ table: 'produit_fertilisant', id, motif: 'ecriture_invalide' }]);
+    expect(await ligne(id)).toBeUndefined();
+  });
+
+  it('T72 PATCH : poser, corriger et retirer la densité ; hors bornes et passage en solide avec densité refusés', async () => {
+    const id = await creerProduit(liquide());
+    expect(await lot([patch(id, { densite_kg_par_l: 1.25, modifie_le: '2027-03-10T06:00:00.000Z' })])).toEqual({ refus: [] });
+    expect(Number((await ligne(id))?.densite_kg_par_l)).toBe(1.25);
+    expect(await lot([patch(id, { densite_kg_par_l: 1.3, modifie_le: '2027-03-10T06:05:00.000Z' })])).toEqual({ refus: [] });
+    expect(Number((await ligne(id))?.densite_kg_par_l)).toBe(1.3);
+    expect((await lot([patch(id, { densite_kg_par_l: 3 })])).refus).toEqual([{ table: 'produit_fertilisant', id, motif: 'ecriture_invalide' }]);
+    expect((await lot([patch(id, { forme: 'solide', unite: 'kg' })])).refus).toEqual([{ table: 'produit_fertilisant', id, motif: 'ecriture_invalide' }]);
+    expect(await lot([patch(id, { forme: 'solide', unite: 'kg', densite_kg_par_l: null, modifie_le: '2027-03-10T06:10:00.000Z' })])).toEqual({ refus: [] });
+    expect(await ligne(id)).toMatchObject({ forme: 'solide', densite_kg_par_l: null });
+  });
+
   it('DELETE : table_interdite', async () => {
     const id = await creerProduit();
     expect((await lot([{ op: 'DELETE', table: 'produit_fertilisant', id }])).refus).toEqual([{ table: 'produit_fertilisant', id, motif: 'table_interdite' }]);

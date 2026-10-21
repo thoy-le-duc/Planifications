@@ -91,3 +91,22 @@ export async function ecrireRecette(
   });
   return rid;
 }
+
+// ── T72 : densité des engrais liquides ───────────────────────────────────────────────────────
+
+/** Engrais liquide azoté à 10 % N, compté en L, densité 1,25 kg/L : 100 L = 125 kg = 12,5 kg N. */
+export const LIQUIDE = id(0x43);
+/** Même engrais liquide, densité non renseignée (1 kg/L supposé). */
+export const LIQUIDE_SANS = id(0x44);
+/** Engrais solide en poudre à 20 % N, compté en kg. */
+export const POUDRE = id(0x45);
+
+export async function ecrireEngraisT72(b: Pick<Banc, 'base'>): Promise<void> {
+  await b.base.writeTransaction(async (tx) => {
+    const p = `INSERT INTO produit_fertilisant (id, ferme_id, nom, forme, unite, teneur_n, teneur_p2o5, teneur_k2o, organique, utilisable_en_bio, source, densite_kg_par_l, cree_le, modifie_le, supprime_le)
+      VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0, 'étiquette', ?, ?, ?, NULL)`;
+    await tx.execute(p, [LIQUIDE, FERME, 'Engrais liquide azoté', 'liquide', 'L', 10, 1.25, HORO, HORO]);
+    await tx.execute(p, [LIQUIDE_SANS, FERME, 'Engrais liquide sans densité', 'liquide', 'L', 10, null, HORO, HORO]);
+    await tx.execute(p, [POUDRE, FERME, 'Engrais en poudre', 'solide', 'kg', 20, null, HORO, HORO]);
+  });
+}
