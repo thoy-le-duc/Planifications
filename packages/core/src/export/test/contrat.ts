@@ -340,19 +340,29 @@ export const TABLES_ATTENDUES = [
   // T28a : bâtiments de la ferme (serres, hangar, magasin), placés dans le repère local.
   'batiment',
   'campagne',
+  // T61 : chemins du plan (lignes tracées point par point).
+  'chemin',
   'emplacement',
   'espece',
   'evenement',
   'famille',
   'ferme',
   'itineraire',
+  // T61 : lieux de rangement (un bâtiment ou un point du plan).
+  'lieu_rangement',
   'membre',
   'modification',
   'mouvement_stock',
   'occupation',
+  // T61 : outils de la ferme et leur lieu de rangement.
+  'outil',
   // T60 : l'équipe de la ferme (prénom, compte facultatif).
   'personne',
+  // T61 : emplacements nommés dans un lieu de rangement (« mur nord »).
+  'place_rangement',
   'plantation',
+  // T61 : points d'eau et autres repères nommés du plan.
+  'point_plan',
   // T54 : produits fertilisants de la ferme (composition N, P₂O₅, K₂O).
   'produit_fertilisant',
   'produit_phyto',

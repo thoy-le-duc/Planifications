@@ -51,7 +51,7 @@ describe('T28a : @planif/core exporte le module de placement', () => {
     expect(m.CONTOUR_SOMMETS_MAX).toBe(200);
     expect(m.AIRE_MIN_M2).toBe(0.1);
     expect(m.PLAFONDS_BATIMENT).toEqual({ longueurM: 500, largeurM: 200, hauteurM: 30 });
-    expect([...m.TYPES_BATIMENT].sort()).toEqual(['autre', 'hangar', 'magasin', 'serre_chapelle', 'serre_tunnel']);
+    expect([...m.TYPES_BATIMENT].sort()).toEqual(['autre', 'chambre_froide', 'hangar', 'local', 'magasin', 'serre_chapelle', 'serre_tunnel']); // T61 : local et chambre froide
   });
 });
 
