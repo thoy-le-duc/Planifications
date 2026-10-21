@@ -47,7 +47,18 @@ export interface ProprietesSaisieTraitement {
   readonly chargerCatalogue?: () => Promise<CatalogueEphy>;
 }
 
-const chargerCatalogueParDefaut = (): Promise<CatalogueEphy> => import('../../ferme/phyto/catalogue.ts').then((m) => m.chargerCatalogueEphy());
+/** Catalogue gardé en mémoire pour la session : une seule lecture ; un échec se retente à l'ouverture suivante. */
+let catalogueEnMemoire: Promise<CatalogueEphy> | null = null;
+
+function chargerCatalogueParDefaut(): Promise<CatalogueEphy> {
+  catalogueEnMemoire ??= import('../../ferme/phyto/catalogue.ts')
+    .then((m) => m.chargerCatalogueEphy())
+    .catch((e: unknown) => {
+      catalogueEnMemoire = null;
+      throw e;
+    });
+  return catalogueEnMemoire;
+}
 
 /** Ce que l'e-phy dit du produit pour la culture traitée ; null : produit hors e-phy (ou catalogue absent). */
 interface UsagesCulture {
