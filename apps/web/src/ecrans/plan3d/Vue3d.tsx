@@ -48,8 +48,9 @@ import {
 
 } from './scene.ts';
 import { fermeSansPlacement } from './invitation.ts';
-import { cultureAu, lireCultures, type CulturesLues } from './donnees-plants.ts';
-import { Plants } from './Plants.tsx';
+// T71 : la couche des plants (lecture, calcul, rendu) se charge à la demande (./couche-plants.ts) ; ici, ses types seulement.
+import type { cultureAu, CulturesLues } from './donnees-plants.ts';
+import type { Plants } from './Plants.tsx';
 import { PanneauTravaux3d } from './PanneauTravaux.tsx';
 import { CouchePastilles, placerPastilles, type PastilleDessinee, type PointPose } from './Pastilles.tsx';
 import type { EtatVannes3d, ProprietesVannes3d } from './Vannes3d.tsx';
@@ -57,8 +58,9 @@ import type { Camera as CameraThree } from 'three';
 import type { Masques } from '../aujourdhui/cache.ts';
 import type { LectureTravaux, pourDe, tachesVisibles, travauxDuJour3d, TravauxDuJour3d } from './travaux.ts';
 import type { ModeEquipe } from '../aujourdhui/cache.ts';
-import { hauteurDalle, hauteurDeMasse, RenduPlants, type BilanPlants } from './plants-rendu.ts';
-import { plantsDePlanche, type PlantsPlanche } from './plants.ts';
+import { hauteurDalle, hauteurDeMasse } from './hauteurs-plants.ts';
+import type { BilanPlants, RenduPlants } from './plants-rendu.ts';
+import type { plantsDePlanche, PlantsPlanche } from './plants.ts';
 import { mentionRecolte, phrasePlanchesARecolter, planchesARecolter } from './recolte.ts';
 import type { PorteDonnees } from '@planif/sync';
 import { TEXTE_INVITATION } from '../../demo/invitation.ts';
@@ -368,7 +370,8 @@ function Volumes({
   readonly filtree: SceneFiltree;
   /** T32b : les plants de chaque volume (même ordre), ou nul tant qu'ils ne sont pas lus. */
   readonly plants: readonly (PlantsPlanche | null)[] | null;
-  readonly rendu: RenduPlants;
+  /** T71 : nul tant que la couche des plants n'est pas chargée (il n'y a alors pas de plants). */
+  readonly rendu: RenduPlants | null;
   readonly surGeometrie: () => void;
   readonly surCouleurs: (r: Recoloration) => void;
 }) {
@@ -388,7 +391,7 @@ function Volumes({
     scene.volumes.forEach((v, i) => {
       const p = plants?.[i] ?? null;
       const base = hauteurRendue(v);
-      const masse = p !== null && !rendu.enDetail(i);
+      const masse = p !== null && rendu !== null && !rendu.enDetail(i);
       const h = masse ? hauteurDeMasse(base, p) : hauteurDalle(base, p);
       const y0 = !masse && p !== null ? p.surelevationM : 0;
       temporaire.position.set(v.x, y0 + h / 2, v.z);
@@ -401,11 +404,11 @@ function Volumes({
     m.computeBoundingSphere();
   }, [scene, plants, rendu]);
   useLayoutEffect(() => {
-    rendu.lierDalles(poserDalles);
+    rendu?.lierDalles(poserDalles);
     poserDalles();
     invalider();
     return () => {
-      rendu.lierDalles(null);
+      rendu?.lierDalles(null);
     };
   }, [poserDalles, rendu, invalider]);
   // Compteur lu par les tests : les matrices ont été posées pour un nouveau plan ou une nouvelle semaine (pas pour les plants lus après, ni un filtre).
@@ -701,6 +704,15 @@ function Camera({
   return null;
 }
 
+/** T71 : la couche des plants chargée (./couche-plants.ts) et les cultures lues de la base. */
+interface CouchePlants {
+  readonly cultureAu: typeof cultureAu;
+  readonly plantsDePlanche: typeof plantsDePlanche;
+  readonly Plants: typeof Plants;
+  readonly rendu: RenduPlants;
+  readonly cultures: CulturesLues;
+}
+
 /** Une erreur dans la 3D (shader, contexte) ne casse pas l'écran : retour à la 2D. */
 class GardeErreur extends Component<{ readonly surErreur: () => void; readonly children: ReactNode }, { readonly erreur: boolean }> {
   override state = { erreur: false };
@@ -868,32 +880,38 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const { centre, rayon } = useMemo(() => (geometrie === null ? { centre: { x: 0, y: 0, z: 0 }, rayon: 1 } : empriseDe(geometrie)), [geometrie]);
 
   // Plants (T32b) : ce que la 3D lit en plus du plan, une fois, en lecture seule ; sans lui, pas de plants.
-  const [cultures, setCultures] = useState<CulturesLues | null>(null);
+  // T71 : la couche des plants (lecture, calcul, rendu, moteur de croissance) se charge à la demande, à
+  // l'ouverture (précachée : hors ligne aussi), hors du morceau 3D : les plants ne se dessinent de toute
+  // façon qu'après la lecture de la base. Module et cultures arrivent ensemble : un seul rendu de la vue.
+  const [couche, setCouche] = useState<CouchePlants | null>(null);
   useEffect(() => {
     if (porte === undefined || fermeId === undefined) return undefined;
     let actif = true;
-    lireCultures(porte, fermeId).then(
-      (c) => {
-        if (actif) setCultures(c);
-      },
-      (erreur: unknown) => {
+    import('./couche-plants.ts')
+      .then(async (m) => {
+        const cultures = await m.lireCultures(porte, fermeId);
+        if (!actif) return;
+        // Le rendu des plants est créé une fois par ouverture, gardé quand le plan est relu.
+        setCouche((avant) => ({ cultureAu: m.cultureAu, plantsDePlanche: m.plantsDePlanche, Plants: m.Plants, rendu: avant?.rendu ?? new m.RenduPlants(), cultures }));
+      })
+      .catch((erreur: unknown) => {
         console.error('Plants 3D : lecture impossible', erreur);
-      },
-    );
+      });
     return () => {
       actif = false;
     };
   }, [porte, fermeId, plan]);
   const lundi = plan.semaines[semaineBornee]?.lundi;
   const plants = useMemo<readonly (PlantsPlanche | null)[] | null>(() => {
-    if (scene === null || cultures === null || lundi === undefined) return null;
+    if (scene === null || couche === null || lundi === undefined) return null;
+    const { cultures, cultureAu: cultureDu, plantsDePlanche: plantsDe } = couche;
     const jour = lundi as DateCalendaire;
     return scene.volumes.map((v) => {
       const c = v.occupationId === null ? undefined : cultures.parOccupation.get(v.occupationId);
-      return c === undefined ? null : plantsDePlanche({ volume: v, culture: cultureAu(c, jour), jour, horsSol: cultures.horsSol.has(v.id) });
+      return c === undefined ? null : plantsDe({ volume: v, culture: cultureDu(c, jour), jour, horsSol: cultures.horsSol.has(v.id) });
     });
-  }, [scene, cultures, lundi]);
-  const [rendu] = useState(() => new RenduPlants());
+  }, [scene, couche, lundi]);
+  const rendu = couche?.rendu ?? null;
 
   // Travaux du jour (T37) : les tâches de l'écran Aujourd'hui, relues quand la base change (le plan se relit à chaque écriture), en lecture seule.
   // Le moteur de l'écran Aujourd'hui se charge à part, à l'ouverture (précaché : hors ligne aussi), pour ne pas alourdir le morceau 3D.
@@ -1217,7 +1235,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         <Sol scene={geometrie} />
         <Batiments scene={geometrie} />
         <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} plants={plants} rendu={rendu} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
-        {plants !== null && <Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={rendu} surBilan={surBilan} appelsHorsPlants={appelsFerme} plancheActive={plancheActive} />}
+        {plants !== null && couche !== null && <couche.Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={couche.rendu} surBilan={surBilan} appelsHorsPlants={appelsFerme} plancheActive={plancheActive} />}
         <Camera rayon={rayon} centre={centre} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
         <Rendu surImage={surImage} />
       </GardeErreur>,
