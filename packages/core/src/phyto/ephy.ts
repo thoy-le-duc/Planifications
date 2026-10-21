@@ -270,9 +270,8 @@ const memeDose = (a: DoseEphy, b: DoseEphy | null): boolean => b !== null && b.v
 
 /** DAR commun (un nombre) à tous les usages, sinon null. */
 function darCommun(usages: readonly UsageEphy[]): number | null {
-  const [premier] = usages;
-  if (premier === undefined || premier.dar === null) return null;
-  const d = premier.dar;
+  const d = usages[0]?.dar ?? null;
+  if (d === null) return null;
   return usages.every((u) => u.dar === d) ? d : null;
 }
 
