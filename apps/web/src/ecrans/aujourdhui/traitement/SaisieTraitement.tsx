@@ -564,6 +564,7 @@ export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcr
       porte,
       lot.map((l) => l.saisie),
       annoncer,
+      aujourdhui,
     ).then(
       (ecrits) => {
         setOccupe(false);

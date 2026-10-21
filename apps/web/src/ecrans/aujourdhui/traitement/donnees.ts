@@ -17,6 +17,7 @@ import {
 } from '@planif/core';
 import type { PorteDonnees, SaisieEvenement } from '@planif/sync';
 import { chaineDe } from '@planif/sync/fait-unique';
+import { jourDuTelephone } from '../jour.ts';
 
 /**
  * Annonce de la saisie à la journée suivie d'Aujourd'hui (annoncerSaisie de ../cache.ts) : le
@@ -208,23 +209,25 @@ export async function ecrireTraitement(porte: PorteDonnees, s: SaisieDuTraitemen
  * culture, avec ses emplacements et SON DAR figé), dans l'ordre, en UNE transaction. Tout ou rien :
  * une saisie refusée par les règles du serveur, ou un lot vide → TraitementRefuse, rien d'écrit.
  */
-export async function ecrireLotTraitement(porte: PorteDonnees, saisies: readonly SaisieDuTraitement[], annoncer?: Annoncer): Promise<TraitementEcrit[]> {
+export async function ecrireLotTraitement(porte: PorteDonnees, saisies: readonly SaisieDuTraitement[], annoncer?: Annoncer, aujourdhui: string = jourDuTelephone()): Promise<TraitementEcrit[]> {
   const lot = saisies.map(saisieDe);
   const ids = await ecrire(
     porte,
     lot.map((l) => l.saisie),
     annoncer,
     (fermeId) => async (lire) => {
-      // Relecture : un emplacement supprimé ou désactivé entre l'affichage et l'écriture refuse tout le lot.
+      // Relecture : un emplacement supprimé, ou actif ni à la date du traitement ni aujourd'hui (le formulaire
+      // propose ceux d'aujourd'hui, un traitement se note après coup), refuse tout le lot.
       for (const s of saisies) {
         if (s.emplacementIds.length === 0) continue;
         const actifs = await lire<{ id: string }>(
-          `SELECT id FROM emplacement WHERE id IN (${s.emplacementIds.map(() => '?').join(', ')}) AND ferme_id = ? AND supprime_le IS NULL AND actif_du <= ? AND (actif_au IS NULL OR actif_au > ?)`,
-          [...s.emplacementIds, fermeId, s.date, s.date],
+          `SELECT id FROM emplacement WHERE id IN (${s.emplacementIds.map(() => '?').join(', ')}) AND ferme_id = ? AND supprime_le IS NULL
+            AND ((actif_du <= ? AND (actif_au IS NULL OR actif_au > ?)) OR (actif_du <= ? AND (actif_au IS NULL OR actif_au > ?)))`,
+          [...s.emplacementIds, fermeId, s.date, s.date, aujourdhui, aujourdhui],
         );
         const vus = new Set(actifs.map((a) => a.id.toLowerCase()));
         if (s.emplacementIds.some((e) => !vus.has(e.toLowerCase()))) {
-          throw new TraitementRefuse('un emplacement traité a été supprimé ou n’est plus actif à cette date ; rien n’a été enregistré, rouvrez la saisie');
+          throw new TraitementRefuse('un emplacement traité a été supprimé ou n’est actif ni à la date du traitement ni aujourd’hui ; rien n’a été enregistré, rouvrez la saisie');
         }
       }
     },
