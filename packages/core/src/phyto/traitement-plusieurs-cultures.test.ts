@@ -143,7 +143,7 @@ let m: ModulePhyto;
 let brut: { detailsLotTraitement?: DetailsLot };
 beforeAll(async () => {
   m = await chargerPhyto();
-  brut = (await import(/* @vite-ignore */ '../index.ts')) as typeof brut;
+  brut = (await import(/* @vite-ignore */ '../index.ts'));
 });
 /** Échoue test par test (message clair) tant que le cœur n'exporte pas la fonction. */
 const detailsLot: DetailsLot = (...a) => {
