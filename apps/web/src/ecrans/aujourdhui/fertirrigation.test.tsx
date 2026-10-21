@@ -220,6 +220,46 @@ describe('T56 : recopier la veille en un tap', () => {
     expect(duJour()[1]).toMatchObject({ remplace_sorte: 'annulation', remplace_evenement_id: e?.id ?? '' });
   });
 
+  it('relecture : deux taps sur « Recopier » (d’un coup, puis après l’écriture) écrivent UNE irrigation ; la recopie faite n’est plus proposée ; annulée, elle revient', async () => {
+    const d = await ouvrir({
+      avant: () => {
+        irrigationFaite(HIER, DETAIL_HIER);
+        irrigationFaite(HIER, { secteurIrrigationId: VANNE_13, dureeMinutes: 10 });
+      },
+    });
+    await attendre(() => recopies(d).length === 2, 'deux irrigations de la veille à recopier');
+    const b = bouton('Recopier : V12, Fraise floraison, 20 min', d);
+    // Gant ou doigt qui rebondit : deux taps avant que l'écran ne se redessine.
+    await act(async () => {
+      b.click();
+      b.click();
+      await Promise.resolve();
+    });
+    await attendre(() => statut() !== null, 'recopie notée');
+    expect(duJour()).toHaveLength(1);
+    // Second tap, une fois la recopie écrite : rien de plus (sinon l'apport compterait double).
+    const encore = recopies(d).find((x) => texte(x) === 'Recopier : V12, Fraise floraison, 20 min');
+    if (encore !== undefined) await toucher(encore);
+    expect(duJour()).toHaveLength(1);
+    await attendre(() => recopies(d).length === 1, 'la recopie faite n’est plus proposée');
+    expect(recopies(d).map((x) => texte(x))).toEqual(['Recopier : V13, 10 min']);
+    // Annulée : elle se recopie de nouveau.
+    await toucher(bouton('Annuler', statut() ?? document));
+    await attendre(() => recopies(d).length === 2, 'recopie annulée : de nouveau proposée');
+  });
+
+  it('relecture : saisie rouverte le jour même après la recopie : plus de bouton pour l’irrigation déjà recopiée', async () => {
+    const d = await ouvrir({
+      avant: () => {
+        irrigationFaite(HIER, DETAIL_HIER);
+        irrigationFaite(AUJOURDHUI, DETAIL_HIER);
+        irrigationFaite(HIER, { secteurIrrigationId: VANNE_13, dureeMinutes: 10 });
+      },
+    });
+    await attendre(() => recopies(d).length === 1, 'seule l’irrigation pas encore recopiée');
+    expect(texte(recopies(d)[0] ?? d)).toBe('Recopier : V13, 10 min');
+  });
+
   it('rien la veille : aucun bouton « Recopier »', async () => {
     const d = await ouvrir({ avant: () => irrigationFaite('2026-10-17', DETAIL_HIER) });
     expect(recopies(d)).toEqual([]);
