@@ -1,0 +1,141 @@
+/**
+ * Tests d'acceptation T53 — catalogue e-phy côté cœur (docs/backlog/T53-base-e-phy.md, règles 2
+ * et 4) : recherche, correspondance espèce → usage, choix du DAR. Pur, sans réseau.
+ *
+ * Contrat attendu de ./ephy.ts (exporté par `@planif/core/ephy`, jamais par l'index du cœur :
+ * rien du catalogue au démarrage de l'appli) :
+ *   - `validerCatalogueEphy(x)` : le catalogue s'il a la bonne forme, sinon null ;
+ *   - `chercherProduitsEphy(catalogue, texte, max?)` : 2 lettres au moins ; chaque mot tapé doit
+ *     se trouver (sans casse ni accents) dans le nom, un second nom, l'AMM ou une substance ;
+ *     autorisés d'abord, puis le nom qui commence par le texte, puis l'ordre alphabétique ;
+ *   - `culturesEphyPourEspece(nomEspece)` : cultures e-phy qui couvrent l'espèce de la ferme ;
+ *   - `usagesPourEspeces(produit, especes)` : les usages du produit pour ces espèces ;
+ *   - `propositionUsage(produit, especes)` : { candidats, dar, dose } — DAR (et dose) proposés
+ *     seulement quand tous les usages candidats sont d'accord ; sinon null : l'utilisateur choisit.
+ */
+import { describe, expect, it } from 'vitest';
+import * as index from '../index.ts';
+import { chercherProduitsEphy, culturesEphyPourEspece, propositionUsage, usagesPourEspeces, validerCatalogueEphy, type CatalogueEphy, type ProduitEphy, type UsageEphy } from './ephy.ts';
+
+const u = (culture: string, cible: string, dar: number | null, dose: UsageEphy['dose'] = { valeur: 0.2, unite: 'L/ha' }): UsageEphy => ({ culture, mode: 'Trt Part.Aer.', cible, dose, dar });
+
+const SUCCESS: ProduitEphy = {
+  amm: '2060098',
+  nom: 'SUCCESS 4',
+  autresNoms: ['MUSDO 4'],
+  substances: ['spinosad 480 g/L'],
+  bio: true,
+  retire: false,
+  retireLe: null,
+  usages: [u('Tomate', 'Thrips', 3), u('Tomate', 'Chenilles phytophages', 3, { valeur: 0.015, unite: 'L/hL' }), u('Fraisier', 'Thrips', 1), u('Laitue', 'Thrips', 3), u('Vigne', 'Thrips', 14)],
+};
+const SOUFRE: ProduitEphy = { amm: '9200352', nom: 'SODIEX', autresNoms: [], substances: ['soufre micronisé 80 %'], bio: true, retire: true, retireLe: '2020-09-22', usages: [u('Melon', 'Oïdium(s)', null)] };
+const THIOVIT: ProduitEphy = { amm: '9000186', nom: 'THIOVIT JET MICROBILLES', autresNoms: [], substances: ['soufre 80 %'], bio: true, retire: false, retireLe: null, usages: [u('Cultures légumières', 'Oïdium(s)', 3)] };
+const SUCCESSEUR: ProduitEphy = { amm: '2200001', nom: 'LE SUCCESSEUR', autresNoms: [], substances: ['huile de colza'], bio: false, retire: false, retireLe: null, usages: [u('Kiwi', 'Cochenilles', 0), u('Cultures florales et plantes vertes', 'Pucerons', 0)] };
+
+const CATALOGUE: CatalogueEphy = {
+  format: 1,
+  source: 'E-Phy, Anses (data.gouv.fr)',
+  licence: 'Licence Ouverte 2.0',
+  dateBase: '2026-10-14',
+  produits: [SUCCESSEUR, SOUFRE, SUCCESS, THIOVIT],
+};
+
+describe('T53 : hors de l’index du cœur', () => {
+  it('le catalogue e-phy ne passe que par @planif/core/ephy (rien au démarrage de l’appli)', () => {
+    const noms = Object.keys(index);
+    for (const n of ['chercherProduitsEphy', 'culturesEphyPourEspece', 'propositionUsage', 'validerCatalogueEphy']) expect(noms).not.toContain(n);
+  });
+});
+
+describe('T53 : validation du catalogue', () => {
+  it('accepte le catalogue, refuse une forme inattendue', () => {
+    expect(validerCatalogueEphy(JSON.parse(JSON.stringify(CATALOGUE)))).toEqual(CATALOGUE);
+    expect(validerCatalogueEphy({ ...CATALOGUE, format: 2 })).toBeNull();
+    expect(validerCatalogueEphy({ ...CATALOGUE, produits: [{ ...SUCCESS, usages: [{ culture: 'Tomate' }] }] })).toBeNull();
+    expect(validerCatalogueEphy(null)).toBeNull();
+    expect(validerCatalogueEphy('[]')).toBeNull();
+    // Catalogue initial du dépôt : vide, sans date, mais valide.
+    expect(validerCatalogueEphy({ ...CATALOGUE, dateBase: null, produits: [] })).toEqual({ ...CATALOGUE, dateBase: null, produits: [] });
+  });
+});
+
+describe('T53 : recherche « quelques lettres »', () => {
+  it('par le nom, sans casse ; autorisés d’abord, puis le nom qui commence par le texte', () => {
+    expect(chercherProduitsEphy(CATALOGUE, 'succ').map((p) => p.nom)).toEqual(['SUCCESS 4', 'LE SUCCESSEUR']);
+  });
+
+  it('par la substance, sans accents ; le produit retiré après les autorisés', () => {
+    expect(chercherProduitsEphy(CATALOGUE, 'soufre').map((p) => p.nom)).toEqual(['THIOVIT JET MICROBILLES', 'SODIEX']);
+    expect(chercherProduitsEphy(CATALOGUE, 'micronise').map((p) => p.nom)).toEqual(['SODIEX']);
+  });
+
+  it('par un second nom, par l’AMM, par plusieurs mots', () => {
+    expect(chercherProduitsEphy(CATALOGUE, 'musdo').map((p) => p.nom)).toEqual(['SUCCESS 4']);
+    expect(chercherProduitsEphy(CATALOGUE, '2060098').map((p) => p.nom)).toEqual(['SUCCESS 4']);
+    expect(chercherProduitsEphy(CATALOGUE, 'spinosad success').map((p) => p.nom)).toEqual(['SUCCESS 4']);
+  });
+
+  it('moins de 2 lettres : rien ; plafond de résultats', () => {
+    expect(chercherProduitsEphy(CATALOGUE, 's')).toEqual([]);
+    expect(chercherProduitsEphy(CATALOGUE, '  ')).toEqual([]);
+    expect(chercherProduitsEphy(CATALOGUE, 'su', 1)).toHaveLength(1);
+  });
+});
+
+describe('T53 : correspondance espèce → usage', () => {
+  it('tomate, fraise, laitue (au moins), sans casse ni accents ni pluriel', () => {
+    expect(culturesEphyPourEspece('Tomate')).toContain('Tomate');
+    expect(culturesEphyPourEspece('tomates')).toContain('Tomate');
+    expect(culturesEphyPourEspece('Tomate cerise')).toContain('Tomate');
+    expect(culturesEphyPourEspece('Fraise')).toEqual(['Fraisier']);
+    expect(culturesEphyPourEspece('Fraisier')).toEqual(['Fraisier']);
+    expect(culturesEphyPourEspece('Laitue')).toContain('Laitue');
+    expect(culturesEphyPourEspece('Batavia')).toContain('Laitue');
+    expect(culturesEphyPourEspece('Salade')).toContain('Laitue');
+  });
+
+  it('les cultures de la ferme : kiwi, pivoine, asperge ; les légumes couverts par « Cultures légumières »', () => {
+    expect(culturesEphyPourEspece('Kiwi')).toEqual(['Kiwi']);
+    expect(culturesEphyPourEspece('Pivoine')).toEqual(['Cultures florales et plantes vertes']);
+    expect(culturesEphyPourEspece('Asperge')).toContain('Asperge');
+    expect(culturesEphyPourEspece('Tomate')).toContain('Cultures légumières');
+    expect(culturesEphyPourEspece('Laitue')).toContain('Cultures légumières');
+    // La fraise n'est pas rangée dans les cultures légumières : pas de DAR emprunté à un autre usage.
+    expect(culturesEphyPourEspece('Fraise')).not.toContain('Cultures légumières');
+    expect(culturesEphyPourEspece('Kiwi')).not.toContain('Cultures légumières');
+  });
+
+  it('espèce inconnue : son propre nom seulement (aucune devinette)', () => {
+    expect(culturesEphyPourEspece('Poireau')).toEqual(['Poireau', 'Cultures légumières']);
+    expect(culturesEphyPourEspece('Plante mystère')).toEqual(['Plante mystère']);
+  });
+
+  it('usages d’un produit pour les espèces de la ferme', () => {
+    expect(usagesPourEspeces(SUCCESS, ['Tomate'])).toEqual([SUCCESS.usages[0], SUCCESS.usages[1]]);
+    expect(usagesPourEspeces(SUCCESS, ['Fraise', 'Laitue'])).toEqual([SUCCESS.usages[2], SUCCESS.usages[3]]);
+    expect(usagesPourEspeces(SUCCESS, ['Kiwi'])).toEqual([]);
+    expect(usagesPourEspeces(THIOVIT, ['Tomate'])).toEqual(THIOVIT.usages);
+    expect(usagesPourEspeces(SUCCESSEUR, ['Pivoine'])).toEqual([SUCCESSEUR.usages[1]]);
+  });
+});
+
+describe('T53 : DAR proposé selon l’usage', () => {
+  it('une seule culture, DAR identique pour tous ses usages : DAR proposé ; doses différentes : pas de dose', () => {
+    expect(propositionUsage(SUCCESS, ['Tomate'])).toEqual({ candidats: [SUCCESS.usages[0], SUCCESS.usages[1]], dar: 3, dose: null });
+  });
+
+  it('un seul usage : DAR et dose proposés', () => {
+    expect(propositionUsage(SUCCESS, ['Fraise'])).toEqual({ candidats: [SUCCESS.usages[2]], dar: 1, dose: { valeur: 0.2, unite: 'L/ha' } });
+  });
+
+  it('DAR différents (tomate 3 j, fraise 1 j) : rien de proposé, l’utilisateur choisit l’usage', () => {
+    expect(propositionUsage(SUCCESS, ['Tomate', 'Fraise'])).toEqual({ candidats: [SUCCESS.usages[0], SUCCESS.usages[1], SUCCESS.usages[2]], dar: null, dose: null });
+  });
+
+  it('aucun usage pour les cultures de la ferme, ou DAR non précisé : rien de proposé', () => {
+    expect(propositionUsage(SUCCESS, ['Kiwi'])).toEqual({ candidats: [], dar: null, dose: null });
+    expect(propositionUsage(SUCCESS, [])).toEqual({ candidats: [], dar: null, dose: null });
+    expect(propositionUsage(SOUFRE, ['Melon'])).toEqual({ candidats: SOUFRE.usages, dar: null, dose: { valeur: 0.2, unite: 'L/ha' } });
+  });
+});

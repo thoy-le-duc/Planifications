@@ -1,14 +1,17 @@
 /**
  * Produits phyto de la ferme (T52, règle 1) : nom commercial, AMM, substance active, délai avant
- * récolte, bio, dose maximale. Créer, modifier, archiver, rétablir ; saisie à la main (l'import
- * e-phy est T53). Chargé à la demande depuis l'onglet Ferme ; reçoit la porte, marche hors ligne.
- * Contrat : ./test/contrat.ts.
+ * récolte, bio, dose maximale. Créer, modifier, archiver, rétablir ; saisie à la main, ou remplie
+ * d'un tap depuis la base e-phy (T53, ./RechercheEphy.tsx). Chargé à la demande depuis l'onglet
+ * Ferme ; reçoit la porte, marche hors ligne. Contrat : ./test/contrat.ts.
  */
 import { useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from 'react';
 import '../../parcellaire/parcellaire.css';
 import { archiverProduit, creerProduit, modifierProduit, ProduitRefuse, retablirProduit, SQL_PRODUITS_FERME, type ContextePhyto, type LigneProduit, type ValeursProduit } from './donnees.ts';
 import type { ProprietesEcranPhyto } from './test/contrat.ts';
 import { Feuille } from './Feuille.tsx';
+import { chargerCatalogueEphy } from './catalogue.ts';
+import { ChoixUsage, RechercheEphy, type ChargerCatalogue } from './RechercheEphy.tsx';
+import { propositionUsage, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
 
 interface Produit {
   readonly id: string;
@@ -85,7 +88,23 @@ function Saisie({ titre, surFermer, children }: { readonly titre: string; readon
   );
 }
 
-function Formulaire({ ctx, produit, surFermer }: { readonly ctx: ContextePhyto; readonly produit: Produit | null; readonly surFermer: () => void }): ReactElement {
+/** Espèces cultivées par la ferme (séries et plantations en cours) : le DAR proposé en dépend (T53). */
+const SQL_ESPECES_CULTIVEES = `SELECT DISTINCT e.nom AS nom FROM espece e
+  WHERE e.supprime_le IS NULL AND (e.ferme_id = ? OR e.ferme_id IS NULL)
+    AND e.id IN (SELECT espece_id FROM serie WHERE ferme_id = ? AND supprime_le IS NULL
+                 UNION SELECT espece_id FROM plantation WHERE ferme_id = ? AND supprime_le IS NULL)
+  ORDER BY e.nom`;
+
+/** Produit e-phy choisi : ses usages proposés (ceux des cultures de la ferme, ou tous). */
+interface ChoixEphy {
+  readonly produit: ProduitEphy;
+  readonly usages: readonly UsageEphy[];
+  readonly pourLaFerme: boolean;
+  readonly darPropose: boolean;
+  readonly horsCultures: boolean;
+}
+
+function Formulaire({ ctx, produit, chargerCatalogue, surFermer }: { readonly ctx: ContextePhyto; readonly produit: Produit | null; readonly chargerCatalogue: ChargerCatalogue; readonly surFermer: () => void }): ReactElement {
   const id = useId();
   const [nom, setNom] = useState(produit?.nomCommercial ?? '');
   const [amm, setAmm] = useState(produit?.numeroAmm ?? '');
@@ -96,6 +115,50 @@ function Formulaire({ ctx, produit, surFermer }: { readonly ctx: ContextePhyto; 
   const [unite, setUnite] = useState(produit?.doseMaximale?.unite ?? 'L/ha');
   const [message, setMessage] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
+  const [especes, setEspeces] = useState<readonly string[]>([]);
+  const [choix, setChoix] = useState<ChoixEphy | null>(null);
+  const [usageChoisi, setUsageChoisi] = useState<number | null>(null);
+
+  useEffect(() => {
+    let vivant = true;
+    ctx.porte.lire<{ nom: string }>(SQL_ESPECES_CULTIVEES, [ctx.fermeId, ctx.fermeId, ctx.fermeId]).then(
+      (l) => {
+        if (vivant) setEspeces(l.map((x) => x.nom));
+      },
+      (e: unknown) => {
+        console.error('Espèces de la ferme illisibles', e);
+      },
+    );
+    return () => {
+      vivant = false;
+    };
+  }, [ctx.porte, ctx.fermeId]);
+
+  function remplirDose(d: UsageEphy['dose']): void {
+    setDoseMax(d === null ? '' : enFrancais(d.valeur));
+    if (d !== null) setUnite(d.unite);
+  }
+
+  /** Un tap sur une suggestion e-phy : la fiche est remplie, rien n'est écrit, tout reste modifiable. */
+  function choisirEphy(p: ProduitEphy): void {
+    setNom(p.nom);
+    setAmm(p.amm);
+    setSubstance(p.substances.join(' + ').slice(0, 200));
+    setBio(p.bio);
+    setMessage(null);
+    const prop = propositionUsage(p, especes);
+    setDar(prop.dar === null ? '' : String(prop.dar));
+    remplirDose(prop.dose);
+    setUsageChoisi(null);
+    const pourLaFerme = prop.candidats.length > 0;
+    setChoix({ produit: p, usages: pourLaFerme ? prop.candidats : p.usages, pourLaFerme, darPropose: prop.dar !== null, horsCultures: !pourLaFerme && especes.length > 0 });
+  }
+
+  function choisirUsage(i: number, u: UsageEphy): void {
+    setUsageChoisi(i);
+    setDar(u.dar === null ? '' : String(u.dar));
+    remplirDose(u.dose);
+  }
 
   async function faire(action: () => Promise<unknown>): Promise<void> {
     setOccupe(true);
@@ -142,6 +205,22 @@ function Formulaire({ ctx, produit, surFermer }: { readonly ctx: ContextePhyto; 
 
   return (
     <Saisie titre={produit === null ? 'Nouveau produit' : 'Modifier le produit'} surFermer={surFermer}>
+      <RechercheEphy chargerCatalogue={chargerCatalogue} surChoisir={choisirEphy} />
+      {choix !== null && (
+        <ChoixUsage
+          produit={choix.produit}
+          usages={choix.usages}
+          pourLaFerme={choix.pourLaFerme}
+          darPropose={choix.darPropose}
+          horsCultures={choix.horsCultures}
+          choisi={usageChoisi}
+          surChoisir={choisirUsage}
+          surTous={() => {
+            setUsageChoisi(null);
+            setChoix({ ...choix, usages: choix.produit.usages, pourLaFerme: false });
+          }}
+        />
+      )}
       <div className="parc-grille">
         {texte('Nom commercial', nom, setNom, { large: true })}
         {texte('N° AMM', amm, setAmm)}
@@ -182,7 +261,7 @@ function detailProduit(p: Produit): string {
     .join(' · ');
 }
 
-export function EcranProduitsPhyto({ porte, fermeId, surFermer, maintenant = () => new Date() }: ProprietesEcranPhyto): ReactElement {
+export function EcranProduitsPhyto({ porte, fermeId, surFermer, maintenant = () => new Date(), chargerCatalogue = chargerCatalogueEphy }: ProprietesEcranPhyto): ReactElement {
   const [produits, setProduits] = useState<readonly Produit[] | null>(null);
   const [edition, setEdition] = useState<{ readonly produit: Produit | null } | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -279,6 +358,7 @@ export function EcranProduitsPhyto({ porte, fermeId, surFermer, maintenant = () 
         <Formulaire
           ctx={ctx}
           produit={edition.produit}
+          chargerCatalogue={chargerCatalogue}
           surFermer={() => {
             setEdition(null);
           }}

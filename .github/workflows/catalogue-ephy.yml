@@ -1,0 +1,183 @@
+name: Catalogue e-phy
+
+# T53 : met à jour le catalogue e-phy servi par l'appli (apps/web/public/ephy/catalogue.json)
+# depuis les données ouvertes de l'Anses (data.gouv.fr, « Données ouvertes du catalogue E-Phy »,
+# Licence Ouverte 2.0). L'Anses publie chaque semaine, dans la nuit du mardi au mercredi : le
+# workflow passe le mercredi matin, ou à la main. Il ne pousse jamais sur main : il pousse la
+# branche dédiée catalogue-ephy/mise-a-jour et ouvre (ou met à jour) une PR, fusionnée comme les
+# autres quand la CI est verte.
+#
+# Sécurité : l'archive vient de l'extérieur. Elle n'est ouverte que dans le premier travail, qui
+# n'a aucun droit d'écriture ni aucun jeton : décompression contrôlée (fichiers .csv ordinaires
+# seulement, à plat, sans lien ni chemin, taille plafonnée), extraction sans réseau, build et
+# budget. Le second travail, seul à avoir les droits d'écriture, n'installe rien et n'exécute
+# aucun code du dépôt : il reprend le seul catalogue.json, vérifie sa forme, pousse la branche.
+on:
+  schedule:
+    - cron: '23 6 * * 3'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: catalogue-ephy
+  cancel-in-progress: false
+
+env:
+  # Jeu de données et ressource « decisionamm-intrant-format-CSV-UTF-8 » (archive ZIP de CSV).
+  JEU_EPHY: donnees-ouvertes-du-catalogue-e-phy-des-produits-phytopharmaceutiques-matieres-fertilisantes-et-supports-de-culture-adjuvants-produits-mixtes-et-melanges
+  RESSOURCE_EPHY: 98f7cac6-6b29-4859-8739-51b825196959
+  BRANCHE: catalogue-ephy/mise-a-jour
+  CATALOGUE: apps/web/public/ephy/catalogue.json
+
+jobs:
+  extraire:
+    name: Télécharger e-phy, extraire, vérifier (sans droit d'écriture)
+    # Jamais depuis un fork, jamais depuis une autre branche que main.
+    if: github.repository == 'thoy-le-duc/Planifications' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      change: ${{ steps.diff.outputs.change }}
+      date_base: ${{ steps.telecharger.outputs.date_base }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Télécharger l'archive e-phy (CSV, UTF-8)
+        id: telecharger
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 300 --max-filesize 209715200 --proto '=https' \
+            -o "$RUNNER_TEMP/ephy.zip" "https://www.data.gouv.fr/api/1/datasets/r/$RESSOURCE_EPHY"
+          # Date de la base : dernière modification de la ressource sur data.gouv.fr ; à défaut, aujourd'hui.
+          date_base="$(curl -fsSL --retry 3 --max-time 60 --proto '=https' "https://www.data.gouv.fr/api/1/datasets/$JEU_EPHY/" \
+            | jq -r --arg r "$RESSOURCE_EPHY" '.resources[] | select(.id == $r) | .last_modified' | cut -c1-10)" || date_base=""
+          if ! [[ "$date_base" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then date_base="$(date -u +%F)"; fi
+          echo "date_base=$date_base" >> "$GITHUB_OUTPUT"
+
+      - name: Décompresser sans risque (fichiers .csv ordinaires, à plat, taille plafonnée)
+        # Pas d'unzip : il recrée les liens symboliques et suit les chemins. Python lit l'archive
+        # (-I : isolé), refuse liens et fichiers spéciaux, garde le seul nom de fichier (aucun
+        # « ../ » ni chemin absolu possible), ne crée que des fichiers neufs (« xb ») et s'arrête
+        # au-delà de 1 Gio décompressé (bombe) ou de 200 entrées.
+        run: |
+          python3 -I - "$RUNNER_TEMP/ephy.zip" "$RUNNER_TEMP/ephy" <<'PY'
+          import os, re, stat, sys, zipfile
+          archive, dest = sys.argv[1], sys.argv[2]
+          MAX_ENTREES, MAX_OCTETS = 200, 1024 ** 3
+          NOM = re.compile(r'\w[\w. -]{0,150}\.csv', re.IGNORECASE)
+          os.makedirs(dest, exist_ok=True)
+          with zipfile.ZipFile(archive) as z:
+              infos = z.infolist()
+              if len(infos) > MAX_ENTREES:
+                  sys.exit(f'Archive refusée : {len(infos)} entrées (maximum {MAX_ENTREES}).')
+              total = 0
+              for i in infos:
+                  if i.is_dir():
+                      continue
+                  if stat.S_IFMT(i.external_attr >> 16) not in (0, stat.S_IFREG):
+                      sys.exit(f'Archive refusée : {i.filename!r} n’est pas un fichier ordinaire (lien ?).')
+                  nom = i.filename.replace('\\', '/').rsplit('/', 1)[-1]
+                  if NOM.fullmatch(nom) is None:
+                      print(f'Ignoré : {i.filename!r}')
+                      continue
+                  cible = os.path.join(dest, nom)
+                  if os.path.lexists(cible):
+                      sys.exit(f'Archive refusée : deux fichiers {nom!r}.')
+                  with z.open(i) as entree, open(cible, 'xb') as sortie:
+                      while bloc := entree.read(1 << 20):
+                          total += len(bloc)
+                          if total > MAX_OCTETS:
+                              sys.exit(f'Archive refusée : plus de {MAX_OCTETS} octets décompressés.')
+                          sortie.write(bloc)
+                  print(f'{nom} : {total} octets décompressés au total')
+          PY
+
+      - name: Extraire le catalogue (sans réseau ni secret)
+        env:
+          DATE_BASE: ${{ steps.telecharger.outputs.date_base }}
+        run: node packages/db/src/ephy/cli.ts "$RUNNER_TEMP/ephy" "$CATALOGUE" --date "$DATE_BASE" --minimum 1000
+
+      - name: Catalogue changé ?
+        id: diff
+        run: |
+          if git diff --quiet -- "$CATALOGUE"; then echo "change=non" >> "$GITHUB_OUTPUT"; echo "Catalogue inchangé."; else echo "change=oui" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Budget du catalogue (build de l'appli)
+        if: steps.diff.outputs.change == 'oui'
+        run: |
+          pnpm --filter @planif/web build
+          pnpm budget
+
+      - name: Garder le catalogue pour le travail suivant
+        if: steps.diff.outputs.change == 'oui'
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalogue-ephy
+          path: ${{ env.CATALOGUE }}
+          if-no-files-found: error
+          retention-days: 3
+
+  proposer:
+    name: Pousser la branche, ouvrir la PR, lancer la CI
+    needs: extraire
+    if: needs.extraire.outputs.change == 'oui'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # Pousser la branche catalogue-ephy/mise-a-jour (jamais main).
+      contents: write
+      # Ouvrir la PR de mise à jour.
+      pull-requests: write
+      # Lancer la CI sur la branche : un push fait avec le jeton du workflow ne déclenche aucun
+      # workflow (règle de GitHub), seul un lancement à la main (workflow_dispatch) le peut.
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          # Le jeton n'est pas laissé dans .git/config : il ne sert qu'à l'étape du push.
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: catalogue-ephy
+          path: ${{ runner.temp }}/catalogue
+      - name: Vérifier la forme du catalogue et la date
+        env:
+          DATE_BASE: ${{ needs.extraire.outputs.date_base }}
+        run: |
+          set -euo pipefail
+          [[ "$DATE_BASE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "Date de base illisible : $DATE_BASE"; exit 1; }
+          f="$RUNNER_TEMP/catalogue/catalogue.json"
+          jq -e --arg d "$DATE_BASE" '.format == 1 and .dateBase == $d and (.produits | type == "array" and length >= 1000)' "$f" > /dev/null
+          cp -- "$f" "$CATALOGUE"
+          git diff --stat -- "$CATALOGUE"
+      - name: Pousser la branche, ouvrir la PR, lancer la CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DATE_BASE: ${{ needs.extraire.outputs.date_base }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCHE"
+          git add -- "$CATALOGUE"
+          git commit -m "Catalogue e-phy : base du $DATE_BASE" -m "Source : E-Phy, Anses (data.gouv.fr), Licence Ouverte 2.0. Workflow « Catalogue e-phy » (T53)."
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$BRANCHE"
+          if [ -z "$(gh pr list --head "$BRANCHE" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base main --head "$BRANCHE" \
+              --title "Catalogue e-phy : base du $DATE_BASE" \
+              --body "Mise à jour automatique du catalogue e-phy (workflow « Catalogue e-phy », T53). Source : E-Phy, Anses — « Données ouvertes du catalogue E-Phy », data.gouv.fr, Licence Ouverte 2.0. Base du $DATE_BASE. Fusion quand la CI est verte (docs/boucle.md)."
+          fi
+          gh workflow run ci.yml --ref "$BRANCHE"
