@@ -209,7 +209,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T73](T73-powersync-org-projet.md) | Donner l'organisation et le projet PowerSync à la CLI | T67 | fait |
 | [T74](T74-powersync-diagnostic.md) | Lier l'instance PowerSync par cli.yaml, et diagnostiquer le jeton | T67, T73 | fait |
 | [T75](T75-ephy-cultures-2026.md) | e-phy : correspondance espèce → culture sur les noms de 2026 | T53 | fait |
-| [T76](T76-ephy-dar-culture-traitee.md) | E-Phy : proposer le délai avant récolte selon la culture traitée, pas toutes les cultures de la ferme | T52, T53, T75 | à faire |
+| [T76](T76-ephy-dar-culture-traitee.md) | E-Phy : proposer le délai avant récolte selon la culture traitée, pas toutes les cultures de la ferme | T52, T53, T75 | en revue |
 | [T77](T77-3d-prete-avec-plants.md) | Jumeau 3D : ne se dire « prête » qu'une fois les plants posés | T71 | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
