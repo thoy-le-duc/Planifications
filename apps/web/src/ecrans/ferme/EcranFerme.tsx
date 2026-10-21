@@ -425,8 +425,8 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
   }
 
   // Fertilisation (T54) : chargés au tap, montrés avec la porte du contexte.
-  const [fertilisation, setFertilisation] = useState<{ readonly module: ModuleFertilisation; readonly ecran: 'produits' | 'cahier' } | null>(null);
-  function ouvrirFertilisation(ecran: 'produits' | 'cahier'): void {
+  const [fertilisation, setFertilisation] = useState<{ readonly module: ModuleFertilisation; readonly ecran: 'produits' | 'cahier' | 'recettes' } | null>(null);
+  function ouvrirFertilisation(ecran: 'produits' | 'cahier' | 'recettes'): void {
     if (!itinerairesPossibles) return;
     chargerFertilisation().then(
       (module) => {
@@ -730,9 +730,28 @@ export default function EcranFerme({ session, baseLocale, surDeconnecte, etatBas
             ouvrirFertilisation('cahier');
           }}
         />
+        <Ligne
+          nom="Recettes de fertirrigation"
+          detail="La solution nutritive des vannes : engrais, taux d’injection, EC et pH."
+          signe="›"
+          couleur="var(--couleur-foret)"
+          desactivee={!itinerairesPossibles}
+          surTap={() => {
+            ouvrirFertilisation('recettes');
+          }}
+        />
       </Carte>
       {fertilisation !== null && ouverte !== null && (fertilisation.ecran === 'produits' ? (
         <fertilisation.module.EcranProduitsFertilisants
+          key={ouverte.fermeId}
+          porte={ouverte.porte}
+          fermeId={ouverte.fermeId}
+          surFermer={() => {
+            setFertilisation(null);
+          }}
+        />
+      ) : fertilisation.ecran === 'recettes' ? (
+        <fertilisation.module.EcranRecettesFertirrigation
           key={ouverte.fermeId}
           porte={ouverte.porte}
           fermeId={ouverte.fermeId}

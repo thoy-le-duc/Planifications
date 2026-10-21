@@ -6,3 +6,5 @@
  */
 export { EcranProduitsFertilisants } from './EcranProduitsFertilisants.tsx';
 export { EcranCahierFertilisation } from './EcranCahierFertilisation.tsx';
+// T56 : recettes de fertirrigation (même morceau, chargé à la demande).
+export { EcranRecettesFertirrigation } from './EcranRecettesFertirrigation.tsx';
