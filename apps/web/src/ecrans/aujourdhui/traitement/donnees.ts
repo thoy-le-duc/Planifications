@@ -228,7 +228,15 @@ function textes(v: string | null): string[] {
   }
 }
 
-type LigneTraitement = { date: string; serie_id: string | null; campagne_id: string | null; emplacement_ids: string | null; note: string | null; photos: string | null; detail: string };
+interface LigneTraitement {
+  readonly date: string;
+  readonly serie_id: string | null;
+  readonly campagne_id: string | null;
+  readonly emplacement_ids: string | null;
+  readonly note: string | null;
+  readonly photos: string | null;
+  readonly detail: string;
+}
 
 /** L'annulation du traitement `id` de la ferme : même détail, même culture, ses emplacements encore actifs le `jour`. */
 async function annulationDe(porte: PorteDonnees, fermeId: string, id: string, jour: string): Promise<SaisieEvenement> {
