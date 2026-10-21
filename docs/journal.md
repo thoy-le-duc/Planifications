@@ -2,6 +2,18 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-21 (soir) — T59 : dérouler la saison dans la vue 3D
+
+- **Fait** : bouton Lecture / Pause à côté du curseur, 1 ou 4 semaines par seconde, arrêt seul en fin de saison, pause dès qu'on touche le curseur, caméra libre. « Prévu seul » montre le plan sans les écarts : plants, couleurs des planches et liste texte suivent la même source. Successions visibles (arrachage, planche nue, jeunes plants). Changement de semaine : 25 à 30 ms par image (CPU ×4, seuil 50 ms), contre 65 à 70 ms avant optimisation ; vue 3D 199,5 Kio sur 207,9, budget non relevé. PR #240 fusionnée, CI verte.
+- **Décidé** : la scène est recolorée et non reconstruite à chaque semaine ; les plants de la semaine suivante se calculent d'avance, une seule fois. Deux tests modifiés après le commit de tests rouges, annoncés dans la PR : l'e2e de fluidité mesure l'intervalle entre images pendant le glissé de caméra (seuil inchangé), et le retour au réalisé accepte « au plus +2 » calculs (les plants préparés d'avance sont repris). Relecture puis contre-relecture : aucun bloquant, trois remarques corrigées dans la PR.
+- **Bloquant** : rien. Le relais des vannes (T55) refait un rendu à chaque semaine, à alléger si la fluidité se dégrade.
+
+## 2026-10-21 (soir) — Session : T77 fusionnée, branche T76 en double abandonnée, PowerSync débloqué
+
+- **Fait** : PR #236 (T77, ouverte par la session de 15 h 50) fusionnée après CI verte ; CI de `main` verte ensuite. T76 était lancé en parallèle ici (tests du testeur, puis code) alors qu'une autre session le traitait aussi : arrêté sur demande de Théophane, T76 a été livré par la PR #237. La branche `ticket/T76-ephy-dar-culture-traitee` (5 commits, sans PR) reste sur GitHub, abandonnée : rien à fusionner, à supprimer.
+- **Décidé** : la règle des 6 h de `docs/demarrage.md` (fusionnée pendant cette session) évite désormais ce doublon. Le workflow « Règles de synchro PowerSync » a réellement validé et déployé les règles après la fusion de T77 (« Deployment operation completed successfully », journal lu par `lecteur-ci`) : le jeton est accepté, le blocage du matin est levé.
+- **Bloquant** : à vérifier par Théophane : l'instance visée par la CLI s'appelle « Development » ; s'assurer que c'est bien celle de l'appli en ligne.
+
 ## 2026-10-21 — T77 : la vue 3D n'est « prête » qu'une fois les plants posés
 
 - **Fait** : `data-etat="pret"` attend la couche des plants chargée et posée (échec de la couche ou absence de base : prête quand même, sans plants) ; logique pure dans `plan3d/pret-3d.ts` (11 tests), branchée dans `Vue3d.tsx`. La marque de première image (budget d'affichage) n'a pas bougé. Mesure e2e `vue-3d-jumeau`, changement de semaine (5 changements, ms) : avant 31, 131, 18, 156, 82 (échec : pic 155,7 ms) ; après 14, 15, 33, 66, 14 (médiane 15 ms). Affichage après chargement du module : médiane 194 ms avant, 216 ms après (budget 1000 ms, bruit de la machine).
