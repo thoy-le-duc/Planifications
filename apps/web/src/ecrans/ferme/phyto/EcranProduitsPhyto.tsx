@@ -11,7 +11,7 @@ import type { ProprietesEcranPhyto } from './test/contrat.ts';
 import { Feuille } from './Feuille.tsx';
 import { chargerCatalogueEphy } from './catalogue.ts';
 import { ChoixUsage, RechercheEphy, type ChargerCatalogue } from './RechercheEphy.tsx';
-import { propositionUsage, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
+import { propositionUsage, usagesParEspece, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
 
 interface Produit {
   readonly id: string;
@@ -102,6 +102,8 @@ interface ChoixEphy {
   readonly pourLaFerme: boolean;
   readonly darPropose: boolean;
   readonly horsCultures: boolean;
+  /** T76 : usages par culture de la ferme ; vide = non homologué sur cette culture. */
+  readonly parEspece: ReturnType<typeof usagesParEspece>;
 }
 
 function Formulaire({ ctx, produit, chargerCatalogue, surFermer }: { readonly ctx: ContextePhyto; readonly produit: Produit | null; readonly chargerCatalogue: ChargerCatalogue; readonly surFermer: () => void }): ReactElement {
@@ -151,7 +153,7 @@ function Formulaire({ ctx, produit, chargerCatalogue, surFermer }: { readonly ct
     remplirDose(prop.dose);
     setUsageChoisi(null);
     const pourLaFerme = prop.candidats.length > 0;
-    setChoix({ produit: p, usages: pourLaFerme ? prop.candidats : p.usages, pourLaFerme, darPropose: prop.dar !== null, horsCultures: !pourLaFerme && especes.length > 0 });
+    setChoix({ produit: p, usages: pourLaFerme ? prop.candidats : p.usages, pourLaFerme, darPropose: prop.dar !== null, horsCultures: !pourLaFerme && especes.length > 0, parEspece: usagesParEspece(p, especes) });
   }
 
   function choisirUsage(i: number, u: UsageEphy): void {
@@ -213,6 +215,7 @@ function Formulaire({ ctx, produit, chargerCatalogue, surFermer }: { readonly ct
           pourLaFerme={choix.pourLaFerme}
           darPropose={choix.darPropose}
           horsCultures={choix.horsCultures}
+          parEspece={choix.parEspece}
           choisi={usageChoisi}
           surChoisir={choisirUsage}
           surTous={() => {
