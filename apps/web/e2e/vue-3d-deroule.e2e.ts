@@ -24,7 +24,8 @@ import { ralentirCpu, RALENTISSEMENT_CPU, surveillerCsp } from './outils.ts';
  *      lecture, l'intervalle moyen entre images reste sous 50 ms. (Pendant un glissé, l'image d'une
  *      semaine attend la file d'images du WebGL logiciel, SwiftShader, saturée par le glissé : ce
  *      temps-là mesure le banc, pas l'appli ; c'est l'intervalle entre images qui compte.)
- *   5. les plants ne se recalculent qu'une fois par semaine affichée (`data-calculs-plants`) ;
+ *   5. les plants ne se calculent qu'une fois par semaine affichée (`data-calculs-plants` compte les vrais
+ *      calculs : préparés d'avance pendant la lecture et faits sur place) ;
  *   6. à 1 semaine par seconde : 2 semaines en 2 s environ ;
  *   7. « Prévu seul » recalcule les plants une fois, sans lancer la lecture ; aucune violation de la CSP.
  */
@@ -259,8 +260,12 @@ test('déroulé de la saison 3D : grande ferme de T07 placée, CPU ×4', async (
     await page.getByTestId(TESTID_DEROULE.prevuSeul).check();
     await expect.poll(() => calculsPlants(page)).toBe(avant + 1);
     await expect(vue(page)).toHaveAttribute(ATTRIBUTS_DEROULE.lecture, 'pause');
+    // Retour au réalisé : les plants réalisés de la semaine, déjà calculés d'avance pendant la lecture,
+    // peuvent être repris sans calcul (data-calculs-plants compte les vrais calculs) : un calcul au plus.
     await page.getByTestId(TESTID_DEROULE.prevuSeul).uncheck();
-    await expect.poll(() => calculsPlants(page)).toBe(avant + 2);
+    await expect(toile(page)).toHaveAttribute('data-semaine-plants', String(max));
+    await page.waitForTimeout(500);
+    expect(await calculsPlants(page), 'retour au réalisé : un calcul au plus').toBeLessThanOrEqual(avant + 2);
   });
 
   await test.step('toucher le curseur pendant la lecture la met en pause', async () => {
