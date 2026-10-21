@@ -35,6 +35,10 @@ import {
   COULEUR_TOMATE_MURE_3D,
 } from '../../ui/jetons.ts';
 import { hauteurRendue, type Scene, type SceneFiltree } from './scene.ts';
+import { hauteurDalle, hauteurDeMasse } from './hauteurs-plants.ts';
+
+// T71 : les hauteurs des dalles vivent dans ./hauteurs-plants.ts (la vue s'en sert dès l'ouverture, avant ce module chargé à la demande).
+export { EPAISSEUR_DALLE_PLANTS_M, hauteurDalle, hauteurDeMasse } from './hauteurs-plants.ts';
 
 /** Un fruit se dessine tant qu'il fait au moins ce nombre de pixels de large (les plants : LARGEUR_VISIBLE_PX). */
 const FRUIT_VISIBLE_PX = 2;
@@ -127,27 +131,12 @@ interface BalisePosee {
   readonly couleur: string;
 }
 
-/** Hauteur de la planche vue de loin : la dalle, plus la gouttière, plus le feuillage ou la structure. */
-export function hauteurDeMasse(base: number, p: PlantsPlanche | null): number {
-  return p === null ? base : base + p.surelevationM + Math.max(p.echelleVerticale, p.structureM);
-}
-
-/**
- * Épaisseur de la dalle d'une planche qui porte des plants, vue de près (m de scène) : les jeunes plants
- * ne s'enfouissent plus. 1/32 m (3,1 cm), exactement représentable en flottant 32 bits : la pose des instances ne l'arrondit pas.
- */
-export const EPAISSEUR_DALLE_PLANTS_M = 0.03125;
 /** Les tuteurs dépassent le plant de cette hauteur (m) : ficelle et tige se lisent même sur un plant de 5 cm. */
 const DEPASSEMENT_TUTEUR_M = 0.1;
 /** Ton du tuteur : sa géométrie est blanche, l'instance l'assombrit comme l'ancienne géométrie de bois. */
 const TON_TUTEUR = 0.45;
 /** Largeur du tuteur (échelle horizontale, m). */
 const LARGEUR_TUTEUR_M = 0.04;
-
-/** Hauteur rendue de la dalle EN DÉTAIL : fine quand elle porte des plants, inchangée sinon. */
-export function hauteurDalle(base: number, p: PlantsPlanche | null): number {
-  return p === null ? base : Math.min(base, EPAISSEUR_DALLE_PLANTS_M);
-}
 
 /** Capacité d'un InstancedMesh : la puissance de deux au-dessus du besoin, pour ne pas le recréer à chaque semaine. */
 export const capacite = (n: number): number => Math.max(64, 2 ** Math.ceil(Math.log2(Math.max(1, n))));

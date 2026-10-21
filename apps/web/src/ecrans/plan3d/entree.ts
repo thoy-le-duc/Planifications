@@ -12,8 +12,13 @@
  */
 export const MARQUE_MODULE_3D = 'planif:vue-3d-module';
 
-/** Le morceau 3D (three, fiber), chargé à la demande seulement. */
-export const chargerVue3d = () => import('./index.ts');
+/**
+ * Le morceau 3D (three, fiber), chargé à la demande seulement. T71 : seule la vue en est lue, pas
+ * l'espace de noms du module. Le morceau 3D exporte aussi ce que la couche des plants (chargée à la
+ * demande, ./couche-plants.ts) lui prend (three, fiber) ; rendre l'espace de noms entier obligerait
+ * le morceau à le fabriquer, avec une aide qui s'ajouterait au JavaScript de démarrage.
+ */
+export const chargerVue3d = () => import('./index.ts').then((m) => ({ Vue3d: m.Vue3d }));
 
 /**
  * WebGL utilisable sur cet appareil : un contexte se crée (puis est rendu aussitôt). Sans lui,
