@@ -7,8 +7,9 @@
  *
  * Correspondance espèce → usage : une table courte et explicite (tomate, fraise, laitue, et les
  * cultures de la ferme de Théophane), sur les noms du catalogue de 2026 (T75). Aucune devinette :
- * une espèce inconnue ne correspond qu'à l'usage qui porte son nom. Le DAR n'est proposé que si tous les usages retenus sont d'accord ;
- * sinon l'utilisateur choisit l'usage (règle 2 du ticket).
+ * une espèce inconnue ne correspond qu'à l'usage qui porte son nom. Le DAR proposé vient des usages de la culture
+ * traitée (`darPourCulture`, T76) ; au niveau de la ferme, il n'est fixé que si toutes les espèces
+ * sont couvertes et d'accord. Sinon l'utilisateur choisit l'usage.
  */
 
 export interface DoseEphy {
@@ -256,18 +257,55 @@ export function usagesPourEspeces(produit: ProduitEphy, especes: readonly string
 
 export interface PropositionUsage {
   readonly candidats: readonly UsageEphy[];
-  /** DAR commun à tous les candidats, sinon null (l'utilisateur choisit). */
+  /**
+   * DAR fixé au niveau de la ferme (T76) : seulement si CHAQUE espèce de la ferme a au moins un
+   * usage et que tous les candidats ont le même DAR en jours ; sinon null (usages par culture).
+   */
   readonly dar: number | null;
-  /** Dose commune à tous les candidats (même valeur, même unité), sinon null. */
+  /** Dose commune à tous les candidats (même valeur, même unité), sous la même condition de couverture, sinon null. */
   readonly dose: DoseEphy | null;
+}
+
+const memeDose = (a: DoseEphy, b: DoseEphy | null): boolean => b !== null && b.valeur === a.valeur && b.unite === a.unite;
+
+/** DAR commun (un nombre) à tous les usages, sinon null. */
+function darCommun(usages: readonly UsageEphy[]): number | null {
+  const [premier] = usages;
+  if (premier === undefined || premier.dar === null) return null;
+  const d = premier.dar;
+  return usages.every((u) => u.dar === d) ? d : null;
+}
+
+/** Dose commune (même valeur, même unité) à tous les usages, sinon null. */
+function doseCommune(usages: readonly UsageEphy[]): DoseEphy | null {
+  const [premier] = usages;
+  const d = premier?.dose ?? null;
+  return d !== null && usages.every((u) => memeDose(d, u.dose)) ? d : null;
 }
 
 export function propositionUsage(produit: ProduitEphy, especes: readonly string[]): PropositionUsage {
   const candidats = usagesPourEspeces(produit, especes);
-  const [premier] = candidats;
-  if (premier === undefined) return { candidats, dar: null, dose: null };
-  const dar = premier.dar !== null && candidats.every((u) => u.dar === premier.dar) ? premier.dar : null;
-  const d = premier.dose;
-  const dose = d !== null && candidats.every((u) => u.dose !== null && u.dose.valeur === d.valeur && u.dose.unite === d.unite) ? d : null;
-  return { candidats, dar, dose };
+  const toutesCouvertes = especes.length > 0 && especes.every((e) => usagesPourEspeces(produit, [e]).length > 0);
+  if (!toutesCouvertes) return { candidats, dar: null, dose: null };
+  return { candidats, dar: darCommun(candidats), dose: doseCommune(candidats) };
+}
+
+/**
+ * Le DAR à proposer pour la culture réellement traitée (T76), à partir des seuls usages du produit
+ * pour cette espèce. Jamais de DAR d'une autre culture, jamais de DAR deviné (Q47).
+ */
+export type DarPourCulture =
+  | { readonly sorte: 'propose'; readonly dar: number; readonly dose: DoseEphy | null; readonly usages: readonly UsageEphy[] }
+  | { readonly sorte: 'a_choisir'; readonly usages: readonly UsageEphy[] }
+  | { readonly sorte: 'dar_absent'; readonly usages: readonly UsageEphy[] }
+  | { readonly sorte: 'non_homologue' };
+
+export function darPourCulture(produit: ProduitEphy, espece: string): DarPourCulture {
+  if (espece.trim() === '') return { sorte: 'non_homologue' };
+  const usages = usagesPourEspeces(produit, [espece]);
+  if (usages.length === 0) return { sorte: 'non_homologue' };
+  if (usages.every((u) => u.dar === null)) return { sorte: 'dar_absent', usages };
+  const dar = darCommun(usages);
+  if (dar === null) return { sorte: 'a_choisir', usages };
+  return { sorte: 'propose', dar, dose: doseCommune(usages), usages };
 }
