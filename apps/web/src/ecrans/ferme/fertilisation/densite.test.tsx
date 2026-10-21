@@ -12,7 +12,7 @@ import * as coeur from '@planif/core';
 import type { ModuleFertilisationFerme, ModuleRecettesFertirrigation, ProprietesEcranFertilisation } from './test/contrat.ts';
 import { FERME } from '../../parcellaire/test/ferme-neuve.ts';
 import { AUJOURDHUI, creerBanc, lire, MAINTENANT, type Banc, type Ligne } from '../../parcellaire/test/outils.ts';
-import { aChamp, attendre, bouton, champ, dialogue, dialogueOuEchec, liste, remplir, texte, toucher } from '../../itineraires/test/outils.ts';
+import { aBouton, aChamp, attendre, bouton, champ, dialogue, dialogueOuEchec, liste, remplir, texte, toucher } from '../../itineraires/test/outils.ts';
 import { ecrireApport, ecrireEngraisT72, ecrireJeu, LIQUIDE, LIQUIDE_SANS, POUDRE } from './test/jeu.ts';
 
 const CHEMIN = './index.ts';
@@ -204,7 +204,7 @@ describe('T72 : cahier de fertilisation, densité des liquides (règles 2 et 3)'
 describe('T72 : recettes de fertirrigation, engrais en volume (règle 5)', () => {
   async function ouvrirNouvelle(): Promise<HTMLElement> {
     await rendre('EcranRecettesFertirrigation', 'Recettes de fertirrigation');
-    await attendre(() => bouton('Nouvelle recette') !== undefined, 'bouton « Nouvelle recette »');
+    await attendre(() => aBouton('Nouvelle recette'), 'bouton « Nouvelle recette »');
     await toucher(bouton('Nouvelle recette'));
     const d = dialogueOuEchec('Nouvelle recette');
     await attendre(() => d.querySelector(`option[value="${LIQUIDE}"]`) !== null, 'engrais de la ferme proposés');

@@ -6,9 +6,10 @@
  * ligne. Contrat : ./test/contrat.ts.
  */
 import { useEffect, useId, useState, type ReactElement } from 'react';
-import type { EngraisRecette, Id, UniteEngrais } from '@planif/core';
+import type { EngraisRecette, FormeFertilisant, Id, UniteEngrais } from '@planif/core';
 import '../../parcellaire/parcellaire.css';
 import { Feuille } from '../phyto/Feuille.tsx';
+import { avertissementVolume } from './avertissements.ts';
 import { Saisie } from './EcranProduitsFertilisants.tsx';
 import { ProduitRefuse, SQL_PRODUITS_FERME, type ContexteFertilisation, type LigneProduit } from './donnees.ts';
 import { archiverRecette, creerRecette, modifierRecette, retablirRecette, SQL_RECETTES_FERME, type LigneRecette, type ValeursRecette } from './recettes.ts';
@@ -22,6 +23,8 @@ interface Recette extends ValeursRecette {
 interface ProduitLu {
   readonly id: string;
   readonly nom: string;
+  readonly forme: FormeFertilisant;
+  readonly densiteKgParL: number | null;
   readonly archive: boolean;
 }
 
@@ -161,6 +164,8 @@ function Formulaire({ ctx, recette, produits, surFermer }: { readonly ctx: Conte
       <p className="parc-aide">{parMere ? 'Quantités pour 1 000 L de solution mère, injectée à ce taux dans l’eau (1 % = 10 L de mère par m³).' : 'Sans taux : quantités par m³ d’eau d’irrigation.'}</p>
       {engrais.map((e, i) => {
         const n = String(i + 1);
+        // T72 : liquide en L sans densité (1 kg/L supposé) ou solide en L (aucune unité comptée).
+        const avert = avertissementVolume(proposes.find((p) => p.id === e.produitId) ?? null, e.unite);
         return (
           <div key={n} className="parc-grille">
             <div className="parc-champ-bloc parc-large">
@@ -202,6 +207,11 @@ function Formulaire({ ctx, recette, produits, surFermer }: { readonly ctx: Conte
                 <option value="L">L</option>
               </select>
             </div>
+            {avert !== null && (
+              <p data-testid="avertissement-volume" className={avert.sorte === 'solide' ? 'parc-erreur parc-large' : 'parc-aide parc-large'}>
+                {avert.texte}
+              </p>
+            )}
           </div>
         );
       })}
@@ -259,7 +269,7 @@ export function EcranRecettesFertirrigation({ porte, fermeId, surFermer, mainten
   useEffect(
     () =>
       porte.surveiller<LigneProduit>({ sql: SQL_PRODUITS_FERME, parametres: [fermeId], tables: ['produit_fertilisant'] }, (l) => {
-        setProduits(l.map((p) => ({ id: String(p.id), nom: String(p.nom ?? ''), archive: p.supprime_le !== null })));
+        setProduits(l.map((p) => ({ id: String(p.id), nom: String(p.nom ?? ''), forme: p.forme === 'liquide' ? 'liquide' : 'solide', densiteKgParL: nombreOuNul(p.densite_kg_par_l), archive: p.supprime_le !== null })));
       }),
     [porte, fermeId],
   );

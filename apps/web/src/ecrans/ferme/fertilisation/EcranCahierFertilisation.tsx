@@ -12,6 +12,7 @@ import { PLAFOND_AZOTE_ORGANIQUE_KG_HA, type AlerteAzote, type ApportCalcule, ty
 import { useEffect, useState, type ReactElement } from 'react';
 import '../../parcellaire/parcellaire.css';
 import { Feuille } from '../phyto/Feuille.tsx';
+import { TEXTE_DENSITE_SUPPOSEE } from './avertissements.ts';
 import { ecrireZoneVulnerable, lireCahier, periodeDuCahier, SQL_FERME, TABLES_CAHIER, type CahierLu } from './donnees.ts';
 import type { ProprietesEcranFertilisation } from './test/contrat.ts';
 
@@ -47,6 +48,7 @@ function LigneApport({ a }: { readonly a: ApportCalcule }): ReactElement {
         <span>
           {nombre(a.quantite)} {a.unite} · {valeurs}
         </span>
+        {a.densiteSupposee && <span data-testid="densite-supposee">{TEXTE_DENSITE_SUPPOSEE}</span>}
       </span>
     </li>
   );

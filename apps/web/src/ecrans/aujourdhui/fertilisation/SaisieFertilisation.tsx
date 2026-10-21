@@ -9,6 +9,7 @@
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import type { PorteDonnees } from '@planif/sync';
 import '../../parcellaire/parcellaire.css';
+import { avertissementVolume } from '../../ferme/fertilisation/avertissements.ts';
 import { ApportRefuse, ecrireApport, lirePlanches, lireProduits, type PlancheActive, type ProduitChoisissable } from './donnees.ts';
 
 export interface ProprietesSaisieFertilisation {
@@ -81,6 +82,8 @@ export function SaisieFertilisation({ porte, fermeId, aujourdhui, surFermer, sur
   }, [porte, fermeId, aujourdhui]);
 
   const produit = lu?.produits.find((p) => p.id === produitId) ?? null;
+  // T72 : liquide en L ou m³ sans densité (1 kg/L supposé), ou solide en volume (rien de compté).
+  const avertissement = avertissementVolume(produit, unite);
 
   function basculer(e: string): void {
     setPlanches((c) => {
@@ -230,6 +233,11 @@ export function SaisieFertilisation({ porte, fermeId, aujourdhui, surFermer, sur
                   <input id={`${id}-unite`} className="parc-champ" autoComplete="off" value={unite} onChange={(e) => { setUnite(e.target.value); }} />
                 </div>
               </div>
+              {avertissement !== null && (
+                <p role="status" data-testid="avertissement-volume" className={avertissement.sorte === 'solide' ? 'parc-erreur' : 'parc-aide'}>
+                  {avertissement.texte}
+                </p>
+              )}
               <fieldset className="parc-champ-bloc" style={{ border: 0, margin: 0, padding: 0, display: 'flex', gap: 16 }}>
                 <legend className="parc-etiquette">Nature</legend>
                 {(['fertilisation', 'amendement'] as const).map((c) => (

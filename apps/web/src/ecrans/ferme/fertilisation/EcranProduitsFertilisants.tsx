@@ -23,6 +23,8 @@ import {
 } from './donnees.ts';
 import type { ProprietesEcranFertilisation } from './test/contrat.ts';
 
+const MESSAGE_DENSITE = 'densité : de 0,5 à 2,5 kg/L';
+
 interface Produit extends ValeursProduit {
   readonly id: string;
   readonly archive: boolean;
@@ -44,6 +46,7 @@ function produitDe(l: LigneProduit): Produit {
     organique: l.organique === 1,
     utilisableEnBio: l.utilisable_en_bio === 1,
     source: String(l.source ?? ''),
+    densiteKgParL: nombreOuNul(l.densite_kg_par_l),
     archive: l.supprime_le !== null,
   };
 }
@@ -108,6 +111,7 @@ function Formulaire({ ctx, produit, surFermer }: { readonly ctx: ContexteFertili
   const [organique, setOrganique] = useState(produit?.organique ?? false);
   const [bio, setBio] = useState(produit?.utilisableEnBio ?? false);
   const [source, setSource] = useState(produit?.source ?? '');
+  const [densite, setDensite] = useState(enFrancais(produit?.densiteKgParL ?? null));
   const [message, setMessage] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
 
@@ -129,6 +133,11 @@ function Formulaire({ ctx, produit, surFermer }: { readonly ctx: ContexteFertili
       setMessage('Teneurs : un nombre en % (virgule acceptée), ou rien si vous ne la connaissez pas.');
       return;
     }
+    const dens = lireTeneur(densite);
+    if (forme === 'liquide' && dens === undefined) {
+      setMessage(`Produit refusé : ${MESSAGE_DENSITE}`);
+      return;
+    }
     const v: ValeursProduit = {
       nom,
       forme,
@@ -139,6 +148,7 @@ function Formulaire({ ctx, produit, surFermer }: { readonly ctx: ContexteFertili
       organique,
       utilisableEnBio: bio,
       source,
+      densiteKgParL: forme === 'liquide' ? (dens ?? null) : null,
     };
     void faire(() => (produit === null ? creerProduit(ctx, v) : modifierProduit(ctx, produit.id, v)));
   }
@@ -194,6 +204,7 @@ function Formulaire({ ctx, produit, surFermer }: { readonly ctx: ContexteFertili
             ))}
           </select>
         </div>
+        {forme === 'liquide' && texte('Densité (kg/L)', densite, setDensite, { mode: 'decimal' })}
         {texte('Azote N (%)', n, setN, { mode: 'decimal' })}
         {texte('Phosphore P₂O₅ (%)', p, setP, { mode: 'decimal' })}
         {texte('Potasse K₂O (%)', k, setK, { mode: 'decimal' })}
@@ -201,7 +212,7 @@ function Formulaire({ ctx, produit, surFermer }: { readonly ctx: ContexteFertili
         {caseACocher('Utilisable en bio', bio, setBio)}
         {texte('Source', source, setSource, { large: true })}
       </div>
-      <p className="parc-aide">Teneur en % du produit tel qu’apporté ; pour un liquide compté en L ou m³, en kg pour 100 L. Un solide se compte en kg ou en t : compté en L ou m³, il n’a pas d’unités calculées. Laissez vide ce que vous ne connaissez pas.</p>
+      <p className="parc-aide">Teneur en % de la masse du produit tel qu’apporté. Un liquide compté en L ou m³ pèse volume × densité (de 0,5 à 2,5 kg/L ; sans densité, 1 kg/L est supposé). Un solide se compte en kg ou en t : compté en L ou m³, il n’a pas d’unités calculées. Laissez vide ce que vous ne connaissez pas.</p>
       {message !== null && (
         <p role="alert" className="parc-erreur">
           {message}
@@ -227,7 +238,7 @@ function Formulaire({ ctx, produit, surFermer }: { readonly ctx: ContexteFertili
 const tiret = (x: number | null): string => (x === null ? '–' : `${enFrancais(x)} %`);
 
 function detailProduit(p: Produit): string {
-  return [`N ${tiret(p.teneurN)}`, `P₂O₅ ${tiret(p.teneurP2o5)}`, `K₂O ${tiret(p.teneurK2o)}`, `en ${p.unite === 'm3' ? 'm³' : p.unite}`, p.organique ? 'organique' : null, p.utilisableEnBio ? 'bio' : null]
+  return [`N ${tiret(p.teneurN)}`, `P₂O₅ ${tiret(p.teneurP2o5)}`, `K₂O ${tiret(p.teneurK2o)}`, `en ${p.unite === 'm3' ? 'm³' : p.unite}`, p.forme === 'liquide' && p.densiteKgParL !== null ? `densité ${enFrancais(p.densiteKgParL)} kg/L` : null, p.organique ? 'organique' : null, p.utilisableEnBio ? 'bio' : null]
     .filter((x) => x !== null)
     .join(' · ');
 }
