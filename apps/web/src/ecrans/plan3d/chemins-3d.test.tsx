@@ -96,7 +96,8 @@ let m: ModuleSceneT61;
 
 beforeAll(async () => {
   calculs = (await import(/* @vite-ignore */ CHEMIN_CALCULS)) as ModuleCalculsPlan;
-  m = (await import(/* @vite-ignore */ CHEMIN_SCENE)) as unknown as ModuleSceneT61;
+  const module: unknown = await import(/* @vite-ignore */ CHEMIN_SCENE);
+  m = module as ModuleSceneT61;
 });
 
 const ligneChemin = (n: number, nom: string | null, points: readonly { x: number; y: number }[], largeur: number, supprime: string | null = null) => ({
