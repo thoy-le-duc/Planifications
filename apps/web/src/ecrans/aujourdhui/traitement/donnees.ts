@@ -150,8 +150,13 @@ export interface TraitementEcrit {
   readonly recolteAutoriseeLe: string;
 }
 
-/** Écrit les saisies en UNE transaction, chacune vérifiée par les règles du serveur avant ; tout ou rien. */
-async function ecrire(porte: PorteDonnees, saisies: readonly SaisieEvenement[], annoncer: Annoncer | undefined, verifier?: Parameters<PorteDonnees['ecrireEnsemble']>[1]): Promise<string[]> {
+type Verification = NonNullable<Parameters<PorteDonnees['ecrireEnsemble']>[1]>;
+
+/**
+ * Écrit les saisies en UNE transaction, chacune vérifiée par les règles du serveur avant ; tout ou rien.
+ * `verifier` reçoit la ferme des lignes préparées et rend la vérification lue DANS la transaction.
+ */
+async function ecrire(porte: PorteDonnees, saisies: readonly SaisieEvenement[], annoncer: Annoncer | undefined, verifier?: (fermeId: string) => Verification): Promise<string[]> {
   if (saisies.length === 0) throw new TraitementRefuse('aucune culture à traiter');
   const preparees = saisies.map((saisie) => {
     const e = porte.preparerSaisie(saisie);
@@ -161,9 +166,10 @@ async function ecrire(porte: PorteDonnees, saisies: readonly SaisieEvenement[], 
   });
   const retraits = annoncer === undefined ? [] : saisies.flatMap((saisie) => (saisie.culture === null ? [] : [annoncer(saisie.culture)]));
   try {
+    const ferme = preparees[0]?.ligne.ferme_id ?? '';
     await porte.ecrireEnsemble(
       preparees.map((e) => e.ordre),
-      verifier,
+      verifier?.(ferme),
     );
   } catch (erreur) {
     for (const retirer of retraits) retirer();
@@ -208,6 +214,20 @@ export async function ecrireLotTraitement(porte: PorteDonnees, saisies: readonly
     porte,
     lot.map((l) => l.saisie),
     annoncer,
+    (fermeId) => async (lire) => {
+      // Relecture : un emplacement supprimé ou désactivé entre l'affichage et l'écriture refuse tout le lot.
+      for (const s of saisies) {
+        if (s.emplacementIds.length === 0) continue;
+        const actifs = await lire<{ id: string }>(
+          `SELECT id FROM emplacement WHERE id IN (${s.emplacementIds.map(() => '?').join(', ')}) AND ferme_id = ? AND supprime_le IS NULL AND actif_du <= ? AND (actif_au IS NULL OR actif_au > ?)`,
+          [...s.emplacementIds, fermeId, s.date, s.date],
+        );
+        const vus = new Set(actifs.map((a) => a.id.toLowerCase()));
+        if (s.emplacementIds.some((e) => !vus.has(e.toLowerCase()))) {
+          throw new TraitementRefuse('un emplacement traité a été supprimé ou n’est plus actif à cette date ; rien n’a été enregistré, rouvrez la saisie');
+        }
+      }
+    },
   );
   return lot.map((l, i) => ({ id: ids[i] ?? '', recolteAutoriseeLe: l.recolteAutoriseeLe }));
 }
@@ -287,7 +307,7 @@ export async function annulerLotTraitement(porte: PorteDonnees, fermeId: string,
   if (new Set(ids.map((i) => i.toLowerCase())).size !== ids.length) throw new TraitementRefuse('le même traitement figure deux fois dans le lot');
   const annulations: SaisieEvenement[] = [];
   for (const id of ids) annulations.push(await annulationDe(porte, fermeId, id, jour));
-  return ecrire(porte, annulations, annoncer, async (lire) => {
+  return ecrire(porte, annulations, annoncer, () => async (lire) => {
     for (const id of ids) {
       const c = await chaineDe(lire, fermeId, id);
       if (c.annulee || c.enVigueur !== id) throw new TraitementPlusEnVigueur('ce traitement a déjà été annulé ou corrigé');
