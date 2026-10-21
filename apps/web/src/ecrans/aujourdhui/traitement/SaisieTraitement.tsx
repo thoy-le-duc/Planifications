@@ -11,7 +11,9 @@
  * Produit venu d'e-phy (son AMM est dans le catalogue) : prérempli du DAR de l'usage de LA culture
  * traitée s'il est unique ; usages de DAR différents : l'utilisateur choisit ; aucun usage :
  * avertissement « non homologué » (non bloquant), DAR à saisir ; DAR absent d'e-phy (Q47) : vide,
- * jamais deviné. Produit hors e-phy, ou catalogue indisponible : DAR de la fiche du produit.
+ * jamais deviné. Produit sans N° AMM, ou dont l'AMM n'est pas dans le catalogue : DAR de la fiche.
+ * Produit avec N° AMM et catalogue en chargement ou indisponible : champ vide et avis « e-phy
+ * indisponible » (non bloquant) ; jamais le DAR de la fiche, qui peut être celui d'une autre culture.
  */
 import { useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react';
 import { avertissementDose, DAR_MAX_JOURS, jourMois, surfaceEmplacements } from '@planif/core';
@@ -110,7 +112,7 @@ function IconeFermer() {
 interface ProprietesFormulaire {
   readonly culture: CultureEnPlace;
   readonly produits: readonly ProduitUtilisable[];
-  /** null : pas (encore) chargé, ou indisponible. */
+  /** null : en chargement, ou indisponible. */
   readonly catalogue: CatalogueEphy | null;
   readonly aujourdhui: string;
   readonly occupe: boolean;
@@ -137,7 +139,9 @@ function Formulaire({ culture, produits, catalogue, aujourdhui, occupe, message,
   const surfaceAuto = useMemo(() => surfaceEmplacements(culture.emplacements.filter((e) => coches.has(e.id))), [culture, coches]);
   const surface = surfaceSaisie ?? enFrancais(surfaceAuto);
   const ephy = useMemo(() => usagesCulture(catalogue, produit, culture.espece), [catalogue, produit, culture.espece]);
-  const darPropose = produit === null ? '' : ephy === null ? String(produit.delaiAvantRecolteJours) : ephy.dar === null ? '' : String(ephy.dar);
+  /** Produit avec N° AMM, catalogue absent : l'usage de cette culture est inconnu, rien n'est proposé. */
+  const ephyInconnu = produit !== null && produit.numeroAmm !== '' && catalogue === null;
+  const darPropose = produit === null || ephyInconnu ? '' : ephy === null ? String(produit.delaiAvantRecolteJours) : ephy.dar === null ? '' : String(ephy.dar);
   const dar = darSaisi ?? darPropose;
   const choixUsage = ephy !== null && ephy.dar === null && ephy.candidats.length > 1;
   const valeurDose = lireNombre(dose);
@@ -230,6 +234,11 @@ function Formulaire({ culture, produits, catalogue, aujourdhui, occupe, message,
           ))}
         </select>
       </div>
+      {ephyInconnu && (
+        <p data-testid="avertissement-ephy" role="status" className="parc-erreur">
+          e-phy indisponible sur ce téléphone : vérifiez le DAR pour cette culture, puis saisissez-le.
+        </p>
+      )}
       {ephy !== null && !ephy.homologue && (
         <p data-testid="avertissement-culture" role="status" className="parc-erreur">
           Produit non homologué sur cette culture dans e-phy ({culture.espece}). Vérifiez avant de traiter ; le délai avant récolte est à saisir.
