@@ -704,6 +704,24 @@ function Camera({
   return null;
 }
 
+/**
+ * T71 : la couche des plants, demandée dès l'évaluation du morceau 3D (avant même le montage de la
+ * vue) : à l'ouverture, le module est déjà là et la lecture des cultures part aussitôt, comme quand
+ * la couche était dans le morceau. Échec (hors ligne avant tout précache) : redemandée à la prochaine ouverture.
+ */
+let couchePlants: ReturnType<typeof demanderCouchePlants> | null = null;
+function demanderCouchePlants() {
+  return import('./couche-plants.ts');
+}
+function chargerCouchePlants(): ReturnType<typeof demanderCouchePlants> {
+  couchePlants ??= demanderCouchePlants().catch((erreur: unknown) => {
+    couchePlants = null;
+    throw erreur;
+  });
+  return couchePlants;
+}
+void chargerCouchePlants().catch(() => undefined);
+
 /** T71 : la couche des plants chargée (./couche-plants.ts) et les cultures lues de la base. */
 interface CouchePlants {
   readonly cultureAu: typeof cultureAu;
@@ -887,7 +905,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   useEffect(() => {
     if (porte === undefined || fermeId === undefined) return undefined;
     let actif = true;
-    import('./couche-plants.ts')
+    chargerCouchePlants()
       .then(async (m) => {
         const cultures = await m.lireCultures(porte, fermeId);
         if (!actif) return;
