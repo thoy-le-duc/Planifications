@@ -170,3 +170,16 @@
     display: none;
   }
 }
+
+/* T61 : « Grelinette — hangar, mur nord » : à toucher (la 3D montre le lieu et la planche), 44 px au moins. */
+.auj-rangement {
+  min-height: 44px;
+  padding: 0.25rem 0.5rem;
+  border: 2px solid var(--couleur-foret);
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}

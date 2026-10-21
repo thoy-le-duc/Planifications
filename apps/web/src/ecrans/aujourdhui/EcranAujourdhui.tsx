@@ -110,6 +110,11 @@ export interface ProprietesEcranAujourdhui {
    * ferme » et un état vide qui mène à la prochaine étape ; sans lui, comme avant.
    */
   readonly surOnglet?: (onglet: 'ferme' | 'planches') => void;
+  /**
+   * T61 : un tap sur l'outil d'une consigne (« Grelinette — hangar, mur nord », fiche du jour) :
+   * l'appli ouvre la 3D, le lieu de rangement et la planche surlignés. Sans elle, rien ne se passe.
+   */
+  readonly surMontrerRangement?: (cible: { readonly outilId: string; readonly cle: string; readonly plancheId: string | null }) => void;
 }
 
 /** Marque de performance posée quand les tâches (ou « rien à faire ») sont dessinées. */
@@ -688,7 +693,7 @@ function nouvelleAttente(): AttentePorte {
   return { promesse, rendre };
 }
 
-function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage, abandonnes, surAbandon, oublierAbandon, surOnglet }: ProprietesEcran) {
+function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage, abandonnes, surAbandon, oublierAbandon, surOnglet, surMontrerRangement }: ProprietesEcran) {
   // T49 : parcours guidé d'une ferme qui démarre (lu après l'affichage, seulement si l'appli sait changer d'onglet).
   const demarrage = useDemarrage(porte, fermeId, surOnglet !== undefined);
   /** Jour du téléphone maintenant (relu à chaque écriture : l'écran peut rester ouvert à minuit). */
@@ -1428,6 +1433,7 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
             changerModeEquipe(porte, fermeId, m);
           }}
           demande={demandeAttribution}
+          surMontrerRangement={surMontrerRangement}
         />
       )}
       {erreur !== null && (
