@@ -233,13 +233,31 @@ describe('T76 : traitement — DAR absent d’E-Phy (Q47) et produit hors E-Phy'
     expect(recolteEcrite()).toBe('2026-10-04');
   });
 
-  it('catalogue indisponible (hors ligne, échec de chargement) : la saisie marche comme avant, DAR de la fiche du produit', async () => {
+  it('catalogue indisponible (hors ligne, échec de chargement) : produit à N° AMM, champ vide (jamais le DAR de la fiche, peut-être celui d’une autre culture), avis « e-phy indisponible », DAR à saisir', async () => {
     const d = await ouvrir(SERIE.tomate, () => Promise.reject(new Error('catalogue illisible')));
     await remplir(liste('Produit', d), FRAISIOR);
-    expect(champ(DAR, d).value).toBe('1');
+    expect(champ(DAR, d).value).toBe('');
     expect(avertissement()).toBeNull();
+    expect(texte(document.querySelector('[data-testid="avertissement-ephy"]'))).toMatch(/e-phy indisponible sur ce téléphone : vérifiez le DAR pour cette culture/i);
+    await remplir(champ(DAR, d), '1');
     await remplirEtEnregistrer(d);
     await attendre(() => nouveaux().length === 1, 'traitement écrit');
     expect(recolteEcrite()).toBe('2026-10-01');
+  });
+
+  it('catalogue encore en chargement : même avis, champ vide ; produit sans N° AMM : DAR de sa fiche, sans avis', async () => {
+    const h = '2026-01-01T08:00:00.000Z';
+    await base.execute(
+      `INSERT INTO produit_phyto (id, ferme_id, nom_commercial, numero_amm, substance_active, delai_avant_recolte_jours, utilisable_en_bio, dose_maximale, cree_le, modifie_le, supprime_le)
+        VALUES (?, ?, 'Savon noir', '', 'savon', 2, 0, NULL, ?, ?, NULL)`,
+      [id(5), FERME, h, h],
+    );
+    const d = await ouvrir(SERIE.tomate, () => new Promise<CatalogueEphy>(() => undefined));
+    await remplir(liste('Produit', d), FRAISIOR);
+    expect(champ(DAR, d).value).toBe('');
+    expect(document.querySelector('[data-testid="avertissement-ephy"]')).not.toBeNull();
+    await remplir(liste('Produit', d), id(5));
+    expect(champ(DAR, d).value).toBe('2');
+    expect(document.querySelector('[data-testid="avertissement-ephy"]')).toBeNull();
   });
 });
