@@ -135,7 +135,11 @@ beforeEach(async () => {
   conteneur = document.createElement('div');
   document.body.append(conteneur);
   racine = createRoot(conteneur);
-  vi.stubGlobal('fetch', () => Promise.reject(new Error('hors ligne : aucun appel réseau attendu')));
+  // Hors ligne, sauf le catalogue e-phy (fichier de l'appli), ici sans ces produits : DAR de leur fiche (T76).
+  const catalogueVide = { format: 1, source: 'E-Phy, Anses', licence: 'Licence Ouverte 2.0', dateBase: '2026-10-14', produits: [] };
+  vi.stubGlobal('fetch', (url: unknown) =>
+    String(url).endsWith('/ephy/catalogue.json') ? Promise.resolve(new Response(JSON.stringify(catalogueVide))) : Promise.reject(new Error('hors ligne : aucun appel réseau attendu')),
+  );
   remiseAZero();
 });
 
