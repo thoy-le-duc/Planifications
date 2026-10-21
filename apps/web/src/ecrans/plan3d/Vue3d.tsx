@@ -51,7 +51,7 @@ import {
 import { fermeSansPlacement } from './invitation.ts';
 // T71 : la couche des plants (lecture, calcul, rendu) se charge à la demande (./couche-plants.ts) ; ici, ses types seulement.
 import type { CulturesLues } from './donnees-plants.ts';
-import type { AvancePlants, ModeDates, occupationsParPlanche, plantsDeLaSemaine } from './deroule-plants.ts';
+import type { AvancePlants, ModeDates, occupationsParPlanche, sceneSelonMode } from './deroule-plants.ts';
 import { MARQUE_LECTURE, piloterLecture, VITESSE_DEROULE_PAR_DEFAUT, VITESSES_DEROULE, type HorlogeDeroule, type PiloteDeroule, type VitesseDeroule } from './deroule.ts';
 import type { Plants } from './Plants.tsx';
 import { PanneauTravaux3d } from './PanneauTravaux.tsx';
@@ -753,10 +753,10 @@ void chargerCouchePlants().catch(() => undefined);
 
 /** T71 : la couche des plants chargée (./couche-plants.ts) et les cultures lues de la base. */
 interface CouchePlants {
-  /** T59 : les plants de la semaine selon l'option « Prévu / Réalisé » (moteur de T32a). */
-  readonly plantsDeLaSemaine: typeof plantsDeLaSemaine;
+  /** T59 : la scène selon l'option « Prévu / Réalisé » (planches et liste comme les plants). */
+  readonly sceneSelonMode: typeof sceneSelonMode;
   readonly occupationsParPlanche: typeof occupationsParPlanche;
-  /** T59 : les plants de la semaine suivante, calculés d'avance pendant la lecture. */
+  /** T59 : les plants de la semaine (moteur de T32a), la suivante calculée d'avance pendant la lecture ; compte tous les calculs. */
   readonly avance: AvancePlants;
   readonly Plants: typeof Plants;
   readonly rendu: RenduPlants;
@@ -967,7 +967,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     setEnLecture(lecteur.current !== null);
   }, [semaineBornee, nbSemaines, vitesse]);
   // T59 : la scène de la semaine recolore la géométrie, sans refaire placements ni rangements (lecture fluide).
-  const scene = useMemo(() => (geometrie === null ? null : sceneDeLaSemaine(geometrie, plan, semaineBornee)), [geometrie, plan, semaineBornee]);
+  const sceneBrute = useMemo(() => (geometrie === null ? null : sceneDeLaSemaine(geometrie, plan, semaineBornee)), [geometrie, plan, semaineBornee]);
   const { centre, rayon } = useMemo(() => (geometrie === null ? { centre: { x: 0, y: 0, z: 0 }, rayon: 1 } : empriseDe(geometrie)), [geometrie]);
 
   // Plants (T32b) : ce que la 3D lit en plus du plan, une fois, en lecture seule ; sans lui, pas de plants.
@@ -984,7 +984,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         if (!actif) return;
         // Le rendu des plants est créé une fois par ouverture, gardé quand le plan est relu.
         setCoucheEnEchec(null);
-        setCouche((avant) => ({ plantsDeLaSemaine: m.plantsDeLaSemaine, occupationsParPlanche: m.occupationsParPlanche, avance: avant?.avance ?? new m.AvancePlants(), Plants: m.Plants, rendu: avant?.rendu ?? new m.RenduPlants(), cultures }));
+        setCouche((avant) => ({ sceneSelonMode: m.sceneSelonMode, occupationsParPlanche: m.occupationsParPlanche, avance: avant?.avance ?? new m.AvancePlants(), Plants: m.Plants, rendu: avant?.rendu ?? new m.RenduPlants(), cultures }));
       })
       .catch((erreur: unknown) => {
         console.error('Plants 3D : lecture impossible', erreur);
@@ -999,12 +999,18 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const [prevuSeul, setPrevuSeul] = useState(false);
   const mode: ModeDates = prevuSeul ? 'prevu' : 'realise';
   const occupations = useMemo(() => (couche === null ? null : couche.occupationsParPlanche(plan)), [couche, plan]);
+  // « Prévu seul » : planches et liste texte suivent la même source que les plants (aucune contradiction).
+  const scene = useMemo(
+    () => (sceneBrute === null || couche === null || occupations === null || lundi === undefined ? sceneBrute : couche.sceneSelonMode(sceneBrute, plan, occupations, couche.cultures, lundi as DateCalendaire, mode)),
+    [sceneBrute, couche, occupations, plan, lundi, mode],
+  );
   // Un seul calcul de croissance par semaine affichée (ou par changement d'option ou de données), jamais à chaque image.
   const plants = useMemo<readonly (PlantsPlanche | null)[] | null>(() => {
     if (scene === null || couche === null || occupations === null || lundi === undefined) return null;
     const entree = { scene, occupations, cultures: couche.cultures, jour: lundi as DateCalendaire, mode };
-    // Pendant la lecture, la semaine a souvent été calculée d'avance (au repos) : reprise telle quelle.
-    return couche.avance.prendre(entree) ?? couche.plantsDeLaSemaine(entree);
+    // Pendant la lecture, la semaine a souvent été calculée d'avance (au repos) : reprise telle quelle, sans
+    // effet de bord sur l'avance (un second appel, en StrictMode, rend le même tableau sans recalcul).
+    return couche.avance.plantsPour(entree);
   }, [scene, couche, occupations, lundi, mode]);
   // T59 : pendant la lecture, la semaine suivante se calcule quand le navigateur est au repos, pas au changement de semaine.
   useEffect(() => {
@@ -1013,18 +1019,17 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     const lundiSuivant = plan.semaines[suivante]?.lundi;
     if (lundiSuivant === undefined) return undefined;
     return auRepos(() => {
-      couche.avance.preparer({ scene: sceneDeLaSemaine(geometrie, plan, suivante), occupations, cultures: couche.cultures, jour: lundiSuivant as DateCalendaire, mode });
+      const jour = lundiSuivant as DateCalendaire;
+      couche.avance.preparer({ scene: couche.sceneSelonMode(sceneDeLaSemaine(geometrie, plan, suivante), plan, occupations, couche.cultures, jour, mode), occupations, cultures: couche.cultures, jour, mode });
     });
   }, [enLecture, couche, occupations, geometrie, plan, semaineBornee, mode]);
   const rendu = couche?.rendu ?? null;
-  // T59 : calculs des plants depuis l'ouverture, lus par l'e2e (un par semaine affichée au plus) ; écrits sans rendu.
+  // T59 : les vrais calculs de plants depuis l'ouverture (préparés d'avance et faits sur place), lus par l'e2e ; écrits sans rendu.
   const vueRef = useRef<HTMLElement>(null);
-  const calculsPlants = useRef(0);
   useEffect(() => {
-    if (plants === null) return;
-    calculsPlants.current += 1;
-    if (vueRef.current !== null) vueRef.current.dataset.calculsPlants = String(calculsPlants.current);
-  }, [plants]);
+    if (plants === null || couche === null) return;
+    if (vueRef.current !== null) vueRef.current.dataset.calculsPlants = String(couche.avance.total);
+  }, [plants, couche]);
   const prete = vueEstPrete({ premiereImage, couche: etatDeLaCouche({ aUneBase: porte !== undefined && fermeId !== undefined, chargee: couche !== null, echec: coucheEnEchec, montable: plants !== null }), plantsPoses });
 
   // Travaux du jour (T37) : les tâches de l'écran Aujourd'hui, relues quand la base change (le plan se relit à chaque écriture), en lecture seule.

@@ -14,10 +14,11 @@
  */
 import type { DateCalendaire } from '@planif/core';
 import type { DatesCroissance } from '@planif/core/croissance';
-import type { Plan } from '../plan/calculs.ts';
+import type { BarrePlan, Plan } from '../plan/calculs.ts';
+import { FAMILLES } from '../../ui/jetons.ts';
 import { cultureAu, type CultureLue, type CulturesLues } from './donnees-plants.ts';
 import { plantsDePlanche, type PlantsPlanche } from './plants.ts';
-import type { Scene } from './scene.ts';
+import { COULEUR_NEUTRE, type Scene, type VolumeScene } from './scene.ts';
 
 export type ModeDates = 'realise' | 'prevu';
 export const MODE_DATES_PAR_DEFAUT: ModeDates = 'realise';
@@ -83,25 +84,64 @@ function occupationPrevue(ids: readonly string[], cultures: CulturesLues, lundi:
 /** Une planche porte-t-elle une occupation annuelle (série) parmi les siennes ? */
 const aDesAnnuelles = (ids: readonly string[], cultures: CulturesLues): boolean => ids.some((id) => (cultures.parOccupation.get(id)?.annuelle ?? null) !== null);
 
+/**
+ * L'occupation montrée sur une planche : celle de la scène en « realise » ; en « prevu », l'occupation
+ * annuelle prévue de la semaine (une planche sans série, ou dont la scène montre une pérenne, garde
+ * celle de la scène). `lundi` : jour absolu du lundi de la semaine.
+ */
+function occupationSelonMode(v: VolumeScene, ids: readonly string[], cultures: CulturesLues, lundi: number, mode: ModeDates): string | null {
+  const id = v.occupationId;
+  if (mode === 'realise' || !aDesAnnuelles(ids, cultures)) return id;
+  const scenePerenne = id !== null && (cultures.parOccupation.get(id)?.perenne ?? null) !== null;
+  return scenePerenne ? id : occupationPrevue(ids, cultures, lundi);
+}
+
 /** Un élément par volume de la scène, dans le même ordre ; nul quand la planche est nue. */
 export function plantsDeLaSemaine(e: EntreePlantsSemaine): readonly (PlantsPlanche | null)[] {
   const { scene, occupations, cultures, jour, mode } = e;
   const lundi = mode === 'prevu' ? jourAbsolu(jour) : 0;
   return scene.volumes.map((v) => {
-    let id = v.occupationId;
-    if (mode === 'prevu') {
-      const ids = occupations.get(v.id) ?? [];
-      // Une planche sans série (pérenne seule, ou rien) garde l'occupation de la scène.
-      if (aDesAnnuelles(ids, cultures)) {
-        const scenePerenne = id !== null && (cultures.parOccupation.get(id)?.perenne ?? null) !== null;
-        if (!scenePerenne) id = occupationPrevue(ids, cultures, lundi);
-      }
-    }
+    const id = occupationSelonMode(v, occupations.get(v.id) ?? [], cultures, lundi, mode);
     const lue = id === null ? undefined : cultures.parOccupation.get(id);
     if (lue === undefined) return null;
     const c = mode === 'prevu' && lue.annuelle !== null ? { ...lue, annuelle: prevuesSeules(lue.annuelle) } : lue;
     return plantsDePlanche({ volume: v, culture: cultureAu(c, jour), jour, horsSol: cultures.horsSol.has(v.id) });
   });
+}
+
+/** Les barres de chaque planche du plan, par occupation, calculées une fois par plan. */
+const barresDuPlan = new WeakMap<Plan, ReadonlyMap<string, BarrePlan>>();
+function barresDe(plan: Plan): ReadonlyMap<string, BarrePlan> {
+  let m = barresDuPlan.get(plan);
+  if (m === undefined) {
+    const n = new Map<string, BarrePlan>();
+    for (const l of plan.lignes) if (l.sorte === 'emplacement') for (const b of l.barres) n.set(b.occupationId, b);
+    m = n;
+    barresDuPlan.set(plan, m);
+  }
+  return m;
+}
+
+/**
+ * La scène selon l'option de dates : en « realise », la scène telle quelle ; en « prevu », chaque
+ * planche prend la culture (couleur, nom, occupation) que ses plants montrent (`plantsDeLaSemaine`) :
+ * nue si rien n'est prévu cette semaine. Planches, liste texte et plants ne se contredisent pas.
+ * Géométrie, socles et bâtiments inchangés (mêmes références).
+ */
+export function sceneSelonMode(scene: Scene, plan: Plan, occupations: ReadonlyMap<string, readonly string[]>, cultures: CulturesLues, jour: DateCalendaire, mode: ModeDates): Scene {
+  if (mode === 'realise') return scene;
+  const lundi = jourAbsolu(jour);
+  const barres = barresDe(plan);
+  return {
+    ...scene,
+    volumes: scene.volumes.map((v) => {
+      const id = occupationSelonMode(v, occupations.get(v.id) ?? [], cultures, lundi, mode);
+      if (id === v.occupationId) return v;
+      const b = id === null ? undefined : barres.get(id);
+      if (b === undefined) return { ...v, couleur: COULEUR_NEUTRE, cleFamille: null, culture: null, occupationId: null };
+      return { ...v, couleur: b.cleFamille === null ? COULEUR_NEUTRE : FAMILLES[b.cleFamille].bande, cleFamille: b.cleFamille, culture: b.libelle, occupationId: b.occupationId };
+    }),
+  };
 }
 
 /**
@@ -115,10 +155,29 @@ export class AvancePlants {
   #entree: EntreePlantsSemaine | null = null;
   #plants: readonly (PlantsPlanche | null)[] | null = null;
   #calculs = 0;
+  #directs = 0;
 
   /** Calculs faits par `preparer` (lu par les tests). */
   get calculs(): number {
     return this.#calculs;
+  }
+
+  /** Tous les calculs de plants : préparés d'avance et faits sur place par `plantsPour`. */
+  get total(): number {
+    return this.#calculs + this.#directs;
+  }
+
+  /** Les plants préparés pour cette entrée, ou nul, SANS les oublier : sans effet, donc sûr dans un rendu. */
+  consulter(entree: EntreePlantsSemaine): readonly (PlantsPlanche | null)[] | null {
+    return this.#entree !== null && this.#plants !== null && concordent(this.#entree, entree) ? this.#plants : null;
+  }
+
+  /** Les plants de l'entrée : ceux préparés s'ils concordent, sinon calculés sur place (et comptés). */
+  plantsPour(entree: EntreePlantsSemaine): readonly (PlantsPlanche | null)[] {
+    const pret = this.consulter(entree);
+    if (pret !== null) return pret;
+    this.#directs += 1;
+    return plantsDeLaSemaine(entree);
   }
 
   preparer(entree: EntreePlantsSemaine): void {
@@ -130,7 +189,7 @@ export class AvancePlants {
 
   /** Les plants préparés pour cette entrée, ou nul ; repris, ils sont oubliés. */
   prendre(entree: EntreePlantsSemaine): readonly (PlantsPlanche | null)[] | null {
-    const pret = this.#entree !== null && this.#plants !== null && concordent(this.#entree, entree) ? this.#plants : null;
+    const pret = this.consulter(entree);
     if (pret !== null) {
       this.#entree = null;
       this.#plants = null;
