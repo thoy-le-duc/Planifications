@@ -13,7 +13,7 @@
  *     placée est rangée dans cette zone (./disposition.ts).
  */
 import { coinsEmprise, depuisRepereZone, repereZone, versRepereZone, type RepereZone } from '@planif/core/placement';
-import type { BatimentPlan, CleFamille, LigneEmplacementPlan, LigneZonePlan, Plan, PointPlan, SemainePlan } from '../plan/calculs.ts';
+import type { BatimentPlan, CheminPlan, CleFamille, LigneEmplacementPlan, LigneZonePlan, Plan, PointPlan, SemainePlan } from '../plan/calculs.ts';
 import { COULEUR_ESTOMPEE, COULEURS, FAMILLES } from '../../ui/jetons.ts';
 import { rangerDansZone, type Conteneur, type RectZone, type Taille } from './disposition.ts';
 
@@ -90,7 +90,38 @@ export interface Scene {
   readonly socles: readonly SocleScene[];
   readonly volumes: readonly VolumeScene[];
   readonly batiments: readonly BatimentScene[];
+  /** T61 : chemins posés au sol, en bandes plates ; versScene le rend toujours (vide sans chemin). */
+  readonly chemins?: readonly CheminScene[];
 }
+
+/** T61 : une bande d'un chemin, rectangle de la famille des bâtiments (longueur selon z local, angle = −cap). */
+export interface SegmentScene {
+  readonly cx: number;
+  readonly cz: number;
+  readonly longueur: number;
+  readonly angle: number;
+}
+
+export interface CheminScene {
+  readonly id: string;
+  readonly nom: string | null;
+  readonly largeur: number;
+  /** Épaisseur de la bande, posée au sol (quelques centimètres). */
+  readonly epaisseur: number;
+  readonly segments: readonly SegmentScene[];
+}
+
+/** T61 : une étiquette à la demande (nom d'un chemin ou d'un bâtiment), en repère de scène. */
+export interface EtiquetteScene {
+  readonly id: string;
+  readonly sorte: 'chemin' | 'batiment';
+  readonly nom: string;
+  readonly x: number;
+  readonly z: number;
+}
+
+/** Épaisseur d'une bande de chemin : posée au sol, au-dessus du terrain sans masquer les planches. */
+export const EPAISSEUR_CHEMIN_M = 0.02;
 
 /** Planche vide (ou barre sans famille, plan écrit à la main) : le trait des maquettes, discret. */
 export const COULEUR_NEUTRE: string = COULEURS.trait;
@@ -129,9 +160,9 @@ const COULEUR_BATIMENT: Readonly<Record<BatimentPlan['type'], string>> = {
   serre_tunnel: COULEURS.surface,
   serre_chapelle: COULEURS.surface,
   hangar: COULEURS.foretClair,
-  // T61 : un local se lit comme un hangar ; une chambre froide, claire comme une serre.
-  local: COULEURS.foretClair,
-  chambre_froide: COULEURS.surface,
+  // T61 : local et chambre froide se distinguent du hangar (et l'un de l'autre).
+  local: COULEURS.secondaire,
+  chambre_froide: COULEURS.surForetDoux,
   magasin: COULEURS.orange,
   autre: COULEURS.trait,
 };
@@ -169,6 +200,35 @@ function versBatimentScene(b: BatimentPlan): BatimentScene {
     opacite: forme === 'volume' ? 1 : OPACITE_BACHE,
     couleur: COULEUR_BATIMENT[b.type],
   };
+}
+
+/** T61 : un segment par paire de points qui se suivent ; milieu en repère de scène (x, −y), angle = −cap. */
+function versCheminScene(c: CheminPlan): CheminScene {
+  const segments: SegmentScene[] = [];
+  for (let i = 1; i < c.points.length; i++) {
+    const a = c.points[i - 1];
+    const b = c.points[i];
+    if (a === undefined || b === undefined) continue;
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    segments.push({ cx: (a.x + b.x) / 2, cz: -(a.y + b.y) / 2, longueur: Math.hypot(dx, dy), angle: -Math.atan2(dx, dy) });
+  }
+  return { id: c.id, nom: c.nom, largeur: c.largeurM, epaisseur: EPAISSEUR_CHEMIN_M, segments };
+}
+
+/**
+ * T61 : étiquettes à la demande : les chemins nommés (au milieu de leur plus long segment, le
+ * premier à égalité), puis les bâtiments (à leur centre), dans l'ordre de la scène ; un nom blanc n'en a pas.
+ */
+export function etiquettesScene(scene: Pick<Scene, 'chemins' | 'batiments'>): EtiquetteScene[] {
+  const r: EtiquetteScene[] = [];
+  for (const c of scene.chemins ?? []) {
+    const nom = c.nom?.trim() ?? '';
+    const s = c.segments.reduce<SegmentScene | undefined>((m, x) => (m === undefined || x.longueur > m.longueur ? x : m), undefined);
+    if (nom !== '' && s !== undefined) r.push({ id: c.id, sorte: 'chemin', nom, x: s.cx, z: s.cz });
+  }
+  for (const b of scene.batiments) if (b.nom.trim() !== '') r.push({ id: b.id, sorte: 'batiment', nom: b.nom.trim(), x: b.x, z: b.z });
+  return r;
 }
 
 // ── Géométrie de la partie placée ────────────────────────────────────────────────────────────
@@ -377,6 +437,9 @@ export function versScene(plan: Plan, semaine: number): Scene {
   let emprise: Boite2 | null = null;
 
   for (const b of batimentsPlan) emprise = etendre(emprise, coinsEmprise(b.centre, b.longueurM, b.largeurM, b.orientationDeg).map((p) => ({ x: p.x, z: -p.y })));
+  // T61 : les chemins sont placés aussi (repère de la ferme).
+  const chemins = (plan.chemins ?? []).map(versCheminScene);
+  for (const c of plan.chemins ?? []) emprise = etendre(emprise, c.points.map((p) => ({ x: p.x, z: -p.y })));
 
   const volumeDe = (l: LigneEmplacementPlan, x: number, z: number, angle: number, placee: boolean): VolumeScene => ({
     id: l.id,
@@ -504,7 +567,7 @@ export function versScene(plan: Plan, semaine: number): Scene {
     const v = volumesPar.get(l.id);
     if (v !== undefined) volumes.push(v);
   }
-  return { semaine, libelleSemaine, socles: sortieSocles, volumes, batiments };
+  return { semaine, libelleSemaine, socles: sortieSocles, volumes, batiments, chemins };
 }
 
 // ── Filtres (T27b) ───────────────────────────────────────────────────────────────────────────

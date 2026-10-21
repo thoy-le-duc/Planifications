@@ -34,6 +34,7 @@ import {
   basculerFiltre,
   cocherRien,
   cocherTout,
+  etiquettesScene,
   COULEUR_ESTOMPEE,
   COULEUR_NEUTRE,
   FILTRES_TOUT,
@@ -58,6 +59,7 @@ import { PanneauTravaux3d } from './PanneauTravaux.tsx';
 import { CouchePastilles, placerPastilles, type PastilleDessinee, type PointPose } from './Pastilles.tsx';
 import type { EtatVannes3d, ProprietesVannes3d } from './Vannes3d.tsx';
 import type { EtatRangement3d, ProprietesRangement3d } from './Rangement3d.tsx';
+import { Etiquettes3d } from './Etiquettes3d.tsx';
 import type { Camera as CameraThree } from 'three';
 import type { Masques } from '../aujourdhui/cache.ts';
 import type { LectureTravaux, pourDe, tachesVisibles, travauxDuJour3d, TravauxDuJour3d } from './travaux.ts';
@@ -266,7 +268,41 @@ export function appelsHorsPlants(scene: Scene): number {
   const arceaux = serres.reduce((n, b) => n + b.arceaux.length * b.nefs, 0);
   const nefs = serres.reduce((n, b) => n + b.nefs, 0);
   const volumes = scene.batiments.length - serres.length;
-  return (scene.socles.length > 0 ? 1 : 0) + (scene.volumes.length > 0 ? 1 : 0) + (arceaux > 0 ? 1 : 0) + (nefs > 0 ? 2 : 0) + (volumes > 0 ? 2 : 0);
+  // T61 : les bandes des chemins, un InstancedMesh.
+  const chemins = (scene.chemins ?? []).some((c) => c.segments.length > 0) ? 1 : 0;
+  return (scene.socles.length > 0 ? 1 : 0) + (scene.volumes.length > 0 ? 1 : 0) + (arceaux > 0 ? 1 : 0) + (nefs > 0 ? 2 : 0) + (volumes > 0 ? 2 : 0) + chemins;
+}
+
+/** T61 : les chemins au sol, une bande plate par segment, en UN InstancedMesh (géométrie unique, échelle par bande). */
+function Chemins({ scene }: { readonly scene: Scene }) {
+  const invalider = useThree((s) => s.invalidate);
+  const bandes = useMemo(() => (scene.chemins ?? []).flatMap((c) => c.segments.map((g) => ({ c, g }))), [scene.chemins]);
+  const forme = useMemo(() => geometrieMurs(), []);
+  useEffect(() => () => {
+    forme.dispose();
+  }, [forme]);
+  const m = useRef<InstancedMesh>(null);
+  useLayoutEffect(() => {
+    const mesh = m.current;
+    if (mesh === null) return;
+    bandes.forEach(({ c, g }, i) => {
+      temporaire.position.set(g.cx, c.epaisseur / 2, g.cz);
+      temporaire.rotation.set(0, g.angle, 0);
+      // Les bandes se rejoignent : chaque segment déborde d'une demi-largeur à ses bouts.
+      temporaire.scale.set(c.largeur, c.epaisseur, g.longueur + c.largeur);
+      temporaire.updateMatrix();
+      mesh.setMatrixAt(i, temporaire.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    invalider();
+  }, [bandes, invalider]);
+  if (bandes.length === 0) return null;
+  return (
+    <instancedMesh key={`c${String(bandes.length)}`} ref={m} args={[forme, undefined, bandes.length]} frustumCulled={false}>
+      <meshLambertMaterial color={COULEURS.texteOrange} />
+    </instancedMesh>
+  );
 }
 
 /** Part de la hauteur d'un volume simple occupée par les murs ; le reste est le toit. */
@@ -1109,6 +1145,10 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const [colorationRangement, setColorationRangement] = useState<{ readonly colorer: EtatRangement3d['colorer'] } | null>(null);
   const coucheRangement = useRef<HTMLDivElement>(null);
   const reperesRangement = useRef<readonly PointPose[]>([]);
+  // T61 : étiquettes à la demande (chemins nommés, bâtiments), posées sur la toile comme les pastilles.
+  const coucheEtiquettes = useRef<HTMLDivElement>(null);
+  const pointsEtiquettes = useRef<readonly PointPose[]>([]);
+  const [etiquettesOuvertes, setEtiquettesOuvertes] = useState(false);
   const coucheVannes = useRef<HTMLDivElement>(null);
   const reperesRef = useRef<readonly PointPose[]>([]);
   const colorationActive = useRef(false);
@@ -1160,6 +1200,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     if (couchePastilles.current !== null) placerPastilles(couchePastilles.current, camera, size.width, size.height, pastillesRef.current);
     if (coucheVannes.current !== null) placerPastilles(coucheVannes.current, camera, size.width, size.height, reperesRef.current);
     if (coucheRangement.current !== null) placerPastilles(coucheRangement.current, camera, size.width, size.height, reperesRangement.current);
+    if (coucheEtiquettes.current !== null) placerPastilles(coucheEtiquettes.current, camera, size.width, size.height, pointsEtiquettes.current);
     s.rendus += 1;
     const ds = gl.domElement.dataset;
     ds.rendus = String(s.rendus);
@@ -1223,6 +1264,13 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     colorationActive.current = active;
     setColoration(active ? { colorer: e.colorer } : null);
   }, []);
+  const etiquettes = useMemo(() => (geometrie === null ? [] : etiquettesScene(geometrie)), [geometrie]);
+  // Étiquettes ouvertes ou fermées : replacées tout de suite (nouvelle liste, pour que la pose ne soit pas sautée).
+  useLayoutEffect(() => {
+    pointsEtiquettes.current = etiquettesOuvertes ? etiquettes.map((e) => ({ pastille: { x: e.x, z: e.z } })) : [];
+    const taille = derniereTaille.current;
+    if (coucheEtiquettes.current !== null && derniereCamera.current !== null && taille !== null) placerPastilles(coucheEtiquettes.current, derniereCamera.current, taille.width, taille.height, pointsEtiquettes.current);
+  }, [etiquettes, etiquettesOuvertes]);
   const surEtatRangement = useCallback((e: EtatRangement3d) => {
     reperesRangement.current = e.points;
     const taille = derniereTaille.current;
@@ -1392,6 +1440,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         <directionalLight position={[rayon * 0.3, rayon, rayon * 0.5]} intensity={1.8} />
         <Sol scene={geometrie} />
         <Batiments scene={geometrie} />
+        <Chemins scene={geometrie} />
         <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} plants={plants} rendu={rendu} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
         {plants !== null && couche !== null && <couche.Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={couche.rendu} surBilan={surBilan} appelsHorsPlants={appelsFerme} plancheActive={plancheActive} />}
         <Camera rayon={rayon} centre={centre} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
@@ -1528,6 +1577,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} erreur={erreurTravaux} />
           {porte !== undefined && fermeId !== undefined && geometrie !== null && <Suspense><VannesDifferees porte={porte} fermeId={fermeId} volumes={geometrie.volumes} couche={coucheVannes} surEtat={surEtatVannes} jour={lundi} /></Suspense>}
+          {etiquettes.length > 0 && <Etiquettes3d etiquettes={etiquettes} couche={coucheEtiquettes} surBascule={setEtiquettesOuvertes} />}
           {porte !== undefined && fermeId !== undefined && geometrie !== null && rangement !== null && (
             <Suspense>
               <RangementDiffere porte={porte} fermeId={fermeId} volumes={geometrie.volumes} couche={coucheRangement} cible={rangement} surEtat={surEtatRangement} {...(surFermerRangement === undefined ? {} : { surFermer: surFermerRangement })} />

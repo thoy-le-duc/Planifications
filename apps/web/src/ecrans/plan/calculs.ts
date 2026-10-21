@@ -47,6 +47,8 @@ export interface DonneesPlan {
   readonly famille: readonly LigneLocale[];
   /** Bâtiments de la ferme (T28c) : facultatif, une ferme qui ne place rien n'en a pas. */
   readonly batiment?: readonly LigneLocale[];
+  /** T61 : chemins de la ferme (`points` en texte JSON) : facultatif. */
+  readonly chemin?: readonly LigneLocale[];
 }
 
 export interface SaisonPlan {
@@ -151,6 +153,16 @@ export interface Plan {
   readonly lignes: readonly LignePlan[];
   /** T28c : bâtiments non supprimés de la ferme (ordre : nom puis id) ; absent = aucun. */
   readonly batiments?: readonly BatimentPlan[];
+  /** T61 : chemins non supprimés (nom, sans nom en dernier, puis id) ; absent = aucun. */
+  readonly chemins?: readonly CheminPlan[];
+}
+
+/** T61 : un chemin, ligne ouverte dans le repère de la ferme. */
+export interface CheminPlan {
+  readonly id: string;
+  readonly nom: string | null;
+  readonly points: readonly PointPlan[];
+  readonly largeurM: number;
 }
 
 export interface OptionsPlan {
@@ -207,11 +219,12 @@ const nombre = (v: Valeur): number => (typeof v === 'number' ? v : Number(v));
 const nombreOuNul = (v: Valeur): number | null => (v === null || v === undefined ? null : nombre(v));
 
 /** Contour d'une zone : texte JSON `[{"x":…,"y":…},…]` de la base ; nul s'il est absent ou illisible (le moteur le valide à l'écriture). */
-function lireContour(v: Valeur): readonly PointPlan[] | null {
+/** Liste JSON de points {x, y} d'au moins `min` points (contour : 3 ; chemin, T61 : 2), ou null. */
+function lireContour(v: Valeur, min = 3): readonly PointPlan[] | null {
   if (typeof v !== 'string' || v === '') return null;
   try {
     const brut: unknown = JSON.parse(v);
-    if (!Array.isArray(brut) || brut.length < 3) return null;
+    if (!Array.isArray(brut) || brut.length < min) return null;
     const points: PointPlan[] = [];
     for (const p of brut as unknown[]) {
       const x = (p as { x?: unknown } | null)?.x;
@@ -602,7 +615,14 @@ export function construirePlan(donnees: DonneesPlan, options: OptionsPlan): Plan
     .filter((b) => b.supprime_le === null || b.supprime_le === undefined)
     .map(versBatiment)
     .sort((a, b) => comparerTexte(a.nom, a.id, b.nom, b.id));
-  return { saison, semaines, semaineCourante, lignes, ...(batiments.length === 0 ? {} : { batiments }) };
+  // T61 : chemins recopiés de même (tracé relu) ; sans nom, en dernier.
+  const chemins = (donnees.chemin ?? []).flatMap((c): CheminPlan[] => {
+    const points = c.supprime_le == null ? lireContour(c.points, 2) : null;
+    const largeurM = c.largeur_m;
+    return points === null || typeof largeurM !== 'number' ? [] : [{ id: texte(c.id), nom: texteOuNul(c.nom), points, largeurM }];
+  });
+  chemins.sort((a, b) => (a.nom === null) !== (b.nom === null) ? (a.nom === null ? 1 : -1) : comparerTexte(a.nom ?? '', a.id, b.nom ?? '', b.id));
+  return { saison, semaines, semaineCourante, lignes, ...(batiments.length === 0 ? {} : { batiments }), ...(chemins.length === 0 ? {} : { chemins }) };
 }
 
 // ── Lecture par la porte ─────────────────────────────────────────────────────────────────────
@@ -617,7 +637,7 @@ export async function chargerSaisons(porte: PorteDonnees, fermeId: string): Prom
 }
 
 /** Lignes qui décrivent la ferme : zones, emplacements, bibliothèque (espèces, variétés, familles). */
-type StructurePlan = Pick<DonneesPlan, 'zone' | 'emplacement' | 'espece' | 'variete' | 'famille'> & { readonly batiment: readonly LigneLocale[] };
+type StructurePlan = Pick<DonneesPlan, 'zone' | 'emplacement' | 'espece' | 'variete' | 'famille' | 'chemin'> & { readonly batiment: readonly LigneLocale[] };
 /** Ce qui occupe les emplacements : occupations, et les séries et plantations qu'elles portent. */
 type OccupationsPlan = Pick<DonneesPlan, 'occupation' | 'serie' | 'plantation'>;
 
@@ -672,15 +692,16 @@ function sansZonesSupprimees(
 
 /** Zones, emplacements et bibliothèque de la ferme (référence commune comprise : ferme_id nul). */
 async function lireStructure(porte: PorteDonnees, fermeId: string): Promise<StructurePlan> {
-  const [zones, emplacements, espece, variete, famille, batiment] = await Promise.all([
+  const [zones, emplacements, espece, variete, famille, batiment, chemin] = await Promise.all([
     porte.lire<LigneLocale>(`SELECT ${COLONNES.zone} FROM zone WHERE ferme_id = ?`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.emplacement} FROM emplacement WHERE ferme_id = ?`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.reference}, famille_id FROM espece WHERE ferme_id = ? OR ferme_id IS NULL`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.reference} FROM variete WHERE ferme_id = ? OR ferme_id IS NULL`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.reference} FROM famille WHERE ferme_id = ? OR ferme_id IS NULL`, [fermeId]),
     porte.lire<LigneLocale>(`SELECT ${COLONNES.batiment} FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL`, [fermeId]),
+    porte.lire<LigneLocale>('SELECT id, nom, points, largeur_m, supprime_le FROM chemin WHERE ferme_id = ? AND supprime_le IS NULL', [fermeId]),
   ]);
-  return { ...sansZonesSupprimees(zones, emplacements, batiment), espece, variete, famille };
+  return { ...sansZonesSupprimees(zones, emplacements, batiment), espece, variete, famille, chemin };
 }
 
 const marques = (n: number) => Array.from({ length: n }, () => '?').join(', ');

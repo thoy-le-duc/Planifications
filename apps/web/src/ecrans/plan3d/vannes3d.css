@@ -125,3 +125,26 @@
 .plan3d-vannes[data-glisse='oui'] {
   display: none;
 }
+
+/* T61 : étiquettes à la demande (chemins nommés, bâtiments), posées sur la toile. */
+.plan3d-etiquette {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 2px 6px;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.plan3d-bascule-etiquettes {
+  position: absolute;
+  bottom: var(--espace-s);
+  right: var(--espace-s);
+  z-index: 2;
+  min-height: 44px;
+  padding: 0 14px;
+}
