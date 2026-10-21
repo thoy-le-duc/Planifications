@@ -187,6 +187,15 @@ describe('T75 : espèces de la ferme → noms de cultures e-phy de 2026', () => 
     expect(propositionUsage(p, ['Haricot vert']).dar).toBe(3);
   });
 
+  it('« Pois » seul est ambigu (écossé ou mangetout) : les deux familles, l’utilisateur tranche si leurs DAR diffèrent', () => {
+    expect(culturesEphyPourEspece('Pois')).toEqual(['Haricots et Pois écossés frais', 'Haricots et pois non écossés frais', LEG]);
+    expect(culturesEphyPourEspece('Petit pois')).toEqual(['Haricots et Pois écossés frais', LEG]);
+    const p: ProduitEphy = { ...SUCCESS, usages: [u('Haricots et Pois écossés frais', 'Thrips', 7), u('Haricots et Pois non écossés frais', 'Thrips', 3)] };
+    expect(propositionUsage(p, ['Pois']).dar).toBeNull();
+    expect(propositionUsage(p, ['Petit pois']).dar).toBe(7);
+    expect(propositionUsage(p, ['Pois mangetout']).dar).toBe(3);
+  });
+
   it('kiwi → « Kiwi » ; pivoine → « Cultures florales et plantes vertes »', () => {
     expect(culturesEphyPourEspece('Kiwi')).toEqual(['Kiwi']);
     expect(culturesEphyPourEspece('Pivoine')).toEqual(['Cultures florales et plantes vertes']);
@@ -259,6 +268,8 @@ describe('T75 : repli « premier mot » encadré', () => {
     expect(culturesEphyPourEspece('Chou chinois')).not.toContain('Choux pommés');
     expect(culturesEphyPourEspece('Chou de Chine')).toEqual(['Chou de Chine']);
     expect(culturesEphyPourEspece('Tomate en arbre')).toEqual(['Tomate en arbre']);
+    expect(culturesEphyPourEspece('Tomate en arbre rouge')).toEqual(['Tomate en arbre rouge']);
+    expect(culturesEphyPourEspece('Tomates arbres')).toEqual(['Tomates arbres']);
     expect(culturesEphyPourEspece('Salade de blé')).toEqual(['Salade de blé']);
     expect(culturesEphyPourEspece('Kiwi de Sibérie')).toEqual(['Kiwi de Sibérie']);
     expect(culturesEphyPourEspece('Asperge des bois')).toEqual(['Asperge des bois']);

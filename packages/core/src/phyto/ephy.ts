@@ -202,7 +202,8 @@ export const CORRESPONDANCES: Readonly<Record<string, readonly string[]>> = {
   'Haricot beurre': NON_ECOSSES,
   'Haricot mangetout': NON_ECOSSES,
   'Pois mangetout': NON_ECOSSES,
-  Pois: ['Haricots et Pois écossés frais', LEGUMIERES],
+  // « Pois » seul : écossé ou mangetout ? Les deux familles, l'utilisateur tranche si leurs DAR diffèrent.
+  Pois: ['Haricots et Pois écossés frais', 'Haricots et pois non écossés frais', LEGUMIERES],
   'Petit pois': ['Haricots et Pois écossés frais', LEGUMIERES],
   // Racines, bulbes, pérennes
   Carotte: ['Carotte', LEGUMIERES],
@@ -220,7 +221,7 @@ export const CORRESPONDANCES: Readonly<Record<string, readonly string[]>> = {
  * kiwaï), « asperge » (asperge des bois), « épinard » (épinard-fraise), « pois » (pois chiche).
  */
 const TETES_SURES: readonly string[] = ['Tomate', 'Laitue', 'Batavia', 'Fraise', 'Fraisier', 'Poireau', 'Carotte', 'Oignon', 'Poivron', 'Courgette'];
-/** Exceptions aux têtes sûres : une autre plante sous le même premier mot. */
+/** Exceptions aux têtes sûres : une autre plante sous le même premier mot (aussi suivies d'un mot : « Tomate en arbre rouge »). */
 const EXCEPTIONS_TETES: readonly string[] = ['Tomate en arbre', 'Tomate arbre'];
 
 /** Clé de comparaison : normalisée, tirets en espaces, chaque mot sans « s » ni « x » final. */
@@ -234,6 +235,8 @@ let parCle: ReadonlyMap<string, readonly string[]> | undefined;
 let tetes: ReadonlySet<string> | undefined;
 let exceptions: ReadonlySet<string> | undefined;
 
+const estException = (k: string): boolean => [...(exceptions ?? [])].some((e) => k === e || k.startsWith(`${e} `));
+
 /** Cultures e-phy qui couvrent l'espèce de la ferme ; espèce inconnue : son propre nom seulement. */
 export function culturesEphyPourEspece(nomEspece: string): string[] {
   parCle ??= new Map(Object.entries(CORRESPONDANCES).map(([k, v]) => [cle(k), v] as const));
@@ -241,7 +244,7 @@ export function culturesEphyPourEspece(nomEspece: string): string[] {
   exceptions ??= new Set(EXCEPTIONS_TETES.map(cle));
   const k = cle(nomEspece);
   const tete = k.split(' ')[0] ?? '';
-  const connue = parCle.get(k) ?? (tetes.has(tete) && !exceptions.has(k) ? parCle.get(tete) : undefined);
+  const connue = parCle.get(k) ?? (tetes.has(tete) && !estException(k) ? parCle.get(tete) : undefined);
   return connue === undefined ? [nomEspece.trim()] : [...connue];
 }
 
