@@ -161,6 +161,57 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 | [T13s](T13s-horodatages-modifications.md) | Horodatages : la table des modifications aussi (relecture T13q) | T13q | fait |
 | [T13r](T13r-morceau-identifiants.md) | L'éditeur de placement ne charge plus la règle « déjà fait » (relecture T13n) | T13n | fait |
 
+
+## Phase 1 — Mise en ligne, usage réel, jumeau, phyto et fertilisation (octobre 2026)
+
+Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : T76 (sécurité sanitaire), puis T77, puis T58, T59, T61.
+
+| Ticket | Sujet | Dépend de | Statut |
+| --- | --- | --- | --- |
+| [T39](T39-creer-sa-ferme.md) | Créer sa ferme depuis l'appli (premier compte) | T09, T11 | fait |
+| [T39b](T39b-creer-ferme-suites.md) | Suites de T39 : jamais deux fermes, jamais d'attente muette | T39 | fait |
+| [T40](T40-installer-appli.md) | Installer l'appli sur le téléphone (web app) | T16, T20 | fait |
+| [T40b](T40b-installer-suites.md) | Suites de T40 : le bouton d'installation revient après un refus | T40 | fait |
+| [T41](T41-bibliotheque-depart.md) | Bibliothèque commune de départ : familles, espèces, itinéraires | T24, T32g | fait |
+| [T41b](T41b-bibliotheque-suites.md) | Suites de T41 : migration de la bibliothèque figée, mise à jour par nouvelle migration | T41 | fait |
+| [T42](T42-bibliotheque-travaux.md) | Bibliothèque : travaux prévus et écartements partout | T41, T41b, T22, T23 | fait |
+| [T42b](T42b-travaux-suites.md) | Suites de T42 : ordre et cohérence agronomique des travaux de la bibliothèque | T42 | fait |
+| [T43](T43-ecart-entre-rangs.md) | Écart entre rangs : une vraie donnée de l'itinéraire, visible partout | T42, T41b, T35a | fait |
+| [T44](T44-migrations-auto.md) | Migrations de la base de production lancées automatiquement après chaque fusion | T38a, T38b, T41b | fait |
+| [T45](T45-ci-parallele.md) | CI en parallèle : de ~35 min à ~12 min | T20, T31 | fait |
+| [T46](T46-rangs-3d.md) | Matérialiser l'écart entre rangs dans la vue 3D | T43, T35b, T37b | fait |
+| [T47](T47-export-tache-longue.md) | Export en arrière-plan : tâche longue intermittente (249 ms) en CI | T15d, T15e, T31 | fait |
+| [T48](T48-libelle-un-rang.md) | Écart entre rangs : libellés plus clairs au champ | T43 | fait |
+| [T49](T49-demarrer-sa-ferme.md) | Démarrer sa ferme sans import : saisons, zones et planches à la main, parcours guidé | T11, T12, T14, T28, T39 | fait |
+| [T50](T50-planches-defilement-tel.md) | Planches : impossible de descendre sur le téléphone (bug bloquant) | T11, T11b, T11e, T49 | fait |
+| [T51](T51-hors-sol-pains.md) | Hors-sol : gouttières en pains, trous par pain selon la variété | T49, T05, T12, T43 | fait |
+| [T52](T52-registre-phyto.md) | Traitements phyto : saisie au champ, délai avant récolte, registre | T08, T10, T15 | fait |
+| [T53](T53-base-e-phy.md) | Produits phyto : chercher dans la base publique e-phy | T52 | fait |
+| [T54](T54-cahier-fertilisation.md) | Cahier de fertilisation : composition des engrais et bilan par planche | T22, T10, T15 | fait |
+| [T55](T55-3d-traitements.md) | Jumeau 3D : traitements et délai avant récolte visibles | T52, T37 | fait |
+| [T56](T56-fertirrigation.md) | Fertirrigation : recettes et apports par vanne, hors-sol et pleine terre | T57, T54 | fait |
+| [T57](T57-vannes-irrigation.md) | Vannes d'irrigation : secteurs, planches arrosées, vannes dans la 3D | T49, T28, T37 | fait |
+| [T58](T58-etat-serres.md) | État des serres : ouvrants, chauffage, bâches, dans la 3D | T28c, T49 | à faire |
+| [T59](T59-deroule-saison-3d.md) | Jumeau 3D : dérouler la saison | T32, T27 | à faire |
+| [T60](T60-consignes-par-ouvrier.md) | Consignes par ouvrier : chacun ses travaux du jour | T09, T37 | fait |
+| [T61](T61-chemins-outils.md) | Jumeau 3D : chemins, bâtiments et rangement des outils | T28, T60, T22 | à faire |
+| [T62](T62-tests-temps-instables.md) | Tests de temps instables : défilement de Planches, Aujourd'hui grande ferme | T31, T19 | fait |
+| [T63](T63-export-leger-main-verte.md) | Main verte : le registre phyto de l'export rend la main au fil | T15b, T52 | fait |
+| [T64](T64-fait-perdu-avant-base.md) | Un « Fait » tapé avant que la base soit prête ne doit jamais se perdre | T13k, T13u, T62 | fait |
+| [T65](T65-bandeau-demarrer-repliable.md) | Bandeau « Démarrer votre ferme » : repliable partout, ne cache jamais l'écran | T49, T50 | fait |
+| [T66](T66-alleger-demarrage.md) | Alléger le démarrage : revenir sous 71,2 Kio avec de la marge | T54 | fait |
+| [T67](T67-regles-powersync-auto.md) | Déployer les règles de synchro PowerSync automatiquement | T44, T45 | fait |
+| [T68](T68-main-verte-3d.md) | Main verte : la vue 3D de la grande ferme au repos après T55 | T55 | fait |
+| [T69](T69-dar-par-planche.md) | Délai avant récolte : bloquer les planches traitées, pas toute la culture | T52, T55 | fait |
+| [T70](T70-lire-journee-main-verte.md) | Main verte : `lireJournee` sur la grande ferme après T69 | T69 | fait |
+| [T71](T71-alleger-vue-3d.md) | Alléger la vue 3D : retrouver une marge durable | T66, T55, T57 | fait |
+| [T72](T72-densite-engrais-liquides.md) | Densité des engrais liquides (kg/L) | T54, T56 | fait |
+| [T73](T73-powersync-org-projet.md) | Donner l'organisation et le projet PowerSync à la CLI | T67 | fait |
+| [T74](T74-powersync-diagnostic.md) | Lier l'instance PowerSync par cli.yaml, et diagnostiquer le jeton | T67, T73 | fait |
+| [T75](T75-ephy-cultures-2026.md) | e-phy : correspondance espèce → culture sur les noms de 2026 | T53 | fait |
+| [T76](T76-ephy-dar-culture-traitee.md) | E-Phy : proposer le délai avant récolte selon la culture traitée, pas toutes les cultures de la ferme | T52, T53, T75 | à faire |
+| [T77](T77-3d-prete-avec-plants.md) | Jumeau 3D : ne se dire « prête » qu'une fois les plants posés | T71 | à faire |
+
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 
 Suite du jumeau (Q32, 2026-10-08) : T28f et T32a en parallèle (fichiers disjoints), puis T32b. T32c ensuite (stockage validé : champ `profil_croissance` sur l'espèce).
