@@ -108,7 +108,7 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
   );
 }
 
-function libelleUsage(u: UsageEphy): string {
+export function libelleUsage(u: UsageEphy): string {
   const dose = u.dose === null ? 'dose non précisée' : `${enFrancais(u.dose.valeur)} ${u.dose.unite}`;
   const dar = u.dar === null ? 'DAR non précisé' : `DAR ${String(u.dar)} j`;
   return `${u.culture} · ${u.cible} · ${dose} · ${dar}`;
@@ -121,6 +121,7 @@ export function ChoixUsage({
   pourLaFerme,
   darPropose,
   horsCultures,
+  parEspece = [],
   choisi,
   surChoisir,
   surTous,
@@ -131,6 +132,11 @@ export function ChoixUsage({
   readonly darPropose: boolean;
   /** La ferme a des cultures, mais aucun usage du produit ne les couvre. */
   readonly horsCultures: boolean;
+  /**
+   * T76 : usages par culture de la ferme. Le DAR d'une culture ne vaut pas pour une autre : la
+   * fiche ne fixe un DAR que si toutes les cultures sont couvertes et d'accord.
+   */
+  readonly parEspece?: readonly { readonly espece: string; readonly usages: readonly UsageEphy[] }[];
   readonly choisi: number | null;
   readonly surChoisir: (i: number, u: UsageEphy) => void;
   readonly surTous: () => void;
@@ -147,6 +153,16 @@ export function ChoixUsage({
         <p role="alert" className="parc-erreur">
           Aucun usage autorisé pour vos cultures dans e-phy : ce produit ne peut pas y être employé. Les usages ci-dessous sont ceux d’autres cultures.
         </p>
+      )}
+      {parEspece.length > 0 && (
+        <ul className="parc-liste" aria-label="Usages par culture de la ferme">
+          {parEspece.map((x) => (
+            <li key={x.espece} data-testid="usages-culture" data-culture={x.espece} className={x.usages.length === 0 ? 'parc-erreur' : 'parc-aide'}>
+              <strong>{x.espece}</strong> :{' '}
+              {x.usages.length === 0 ? 'non homologué dans e-phy, ne pas employer sur cette culture' : x.usages.map(libelleUsage).join(' ; ')}
+            </li>
+          ))}
+        </ul>
       )}
       <p className="parc-aide">
         {usages.length === 0
