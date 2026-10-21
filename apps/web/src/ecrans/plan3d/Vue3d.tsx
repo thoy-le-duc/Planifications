@@ -57,6 +57,7 @@ import type { Plants } from './Plants.tsx';
 import { PanneauTravaux3d } from './PanneauTravaux.tsx';
 import { CouchePastilles, placerPastilles, type PastilleDessinee, type PointPose } from './Pastilles.tsx';
 import type { EtatVannes3d, ProprietesVannes3d } from './Vannes3d.tsx';
+import type { EtatRangement3d, ProprietesRangement3d } from './Rangement3d.tsx';
 import type { Camera as CameraThree } from 'three';
 import type { Masques } from '../aujourdhui/cache.ts';
 import type { LectureTravaux, pourDe, tachesVisibles, travauxDuJour3d, TravauxDuJour3d } from './travaux.ts';
@@ -108,6 +109,13 @@ export interface ProprietesVue3d {
   readonly fermeId?: string;
   /** T60 : l'utilisateur, pour numéroter ses travaux (« Mes travaux »). Absent : tous les travaux. */
   readonly utilisateurId?: string | undefined;
+  /**
+   * T61 : « Grelinette — hangar, mur nord » touché dans la fiche du jour : le lieu de rangement de
+   * l'outil et la planche de la tâche sont surlignés (./Rangement3d.tsx, chargé à part). Absent ou
+   * nul : rien. « Fermer » appelle `surFermerRangement`, qui retire la cible.
+   */
+  readonly rangement?: { readonly outilId: string; readonly plancheId: string | null } | null;
+  readonly surFermerRangement?: () => void;
 }
 
 /** Marques de performance (e2e/vue-3d.e2e.ts) ; celle du module est posée par l'écran Planches (./entree.ts). */
@@ -866,6 +874,8 @@ const NOMS_TYPES: Readonly<Record<BatimentScene['type'], string>> = {
   serre_tunnel: 'serre tunnel',
   serre_chapelle: 'serre à chapelles',
   hangar: 'hangar',
+  local: 'local',
+  chambre_froide: 'chambre froide',
   magasin: 'magasin',
   autre: 'bâtiment',
 };
@@ -907,7 +917,12 @@ const VannesDifferees = lazy(
       .catch(() => ({ default: () => null })),
 );
 
-export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, invitationDemo = false, porte, fermeId, utilisateurId }: ProprietesVue3d) {
+/** T61 : le lieu de rangement et la planche d'une consigne, chargés à la demande (seulement avec une cible). */
+const RangementDiffere = lazy(
+  (): Promise<{ default: (p: ProprietesRangement3d) => ReactNode }> => import('./Rangement3d.tsx').catch(() => ({ default: () => null })),
+);
+
+export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = false, invitationDemo = false, porte, fermeId, utilisateurId, rangement = null, surFermerRangement }: ProprietesVue3d) {
   // T28k (Q36) : le gérant place la ferme aussi au téléphone, à tout écran.
   const peutModifier = gerant && surModifierPlan !== undefined;
   const sansPlacement = useMemo(() => fermeSansPlacement(plan), [plan]);
@@ -1090,6 +1105,10 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   // Vannes (T57) : chargées à part du morceau 3D (VannesDifferees) ; leurs repères sont posés sur la toile comme les pastilles.
   // Seule une coloration active (filtre « Irrigation », vanne choisie) redessine la vue : les repères arrivés de la base sont posés sans rendu.
   const [coloration, setColoration] = useState<{ readonly colorer: EtatVannes3d['colorer'] } | null>(null);
+  // T61 : repères du rangement (lieu, planche) et mise en évidence de la planche, par-dessus les vannes.
+  const [colorationRangement, setColorationRangement] = useState<{ readonly colorer: EtatRangement3d['colorer'] } | null>(null);
+  const coucheRangement = useRef<HTMLDivElement>(null);
+  const reperesRangement = useRef<readonly PointPose[]>([]);
   const coucheVannes = useRef<HTMLDivElement>(null);
   const reperesRef = useRef<readonly PointPose[]>([]);
   const colorationActive = useRef(false);
@@ -1099,7 +1118,11 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const options = useMemo(() => (scene === null ? { familles: [], cultures: [], zones: [] } : optionsFiltres(scene)), [scene]);
   const filtreeBrute = useMemo(() => (scene === null ? null : appliquerFiltres(scene, filtres)), [scene, filtres]);
   // T57 : filtre « Irrigation » et planches de la vanne choisie, posés sur la scène filtrée.
-  const filtree = useMemo(() => (filtreeBrute === null || coloration === null ? filtreeBrute : coloration.colorer(filtreeBrute)), [filtreeBrute, coloration]);
+  const filtree = useMemo(() => {
+    if (filtreeBrute === null) return null;
+    const f = coloration === null ? filtreeBrute : coloration.colorer(filtreeBrute);
+    return colorationRangement === null ? f : colorationRangement.colorer(f);
+  }, [filtreeBrute, coloration, colorationRangement]);
   const univers = useCallback(
     (dimension: DimensionFiltre): readonly string[] => (dimension === 'zones' ? options.zones.map((z) => z.id) : options[dimension]),
     [options],
@@ -1136,6 +1159,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     // Taille de la toile lue par fiber (T37b) : aucune lecture de mise en page à chaque image.
     if (couchePastilles.current !== null) placerPastilles(couchePastilles.current, camera, size.width, size.height, pastillesRef.current);
     if (coucheVannes.current !== null) placerPastilles(coucheVannes.current, camera, size.width, size.height, reperesRef.current);
+    if (coucheRangement.current !== null) placerPastilles(coucheRangement.current, camera, size.width, size.height, reperesRangement.current);
     s.rendus += 1;
     const ds = gl.domElement.dataset;
     ds.rendus = String(s.rendus);
@@ -1198,6 +1222,12 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     if (!active && !colorationActive.current) return;
     colorationActive.current = active;
     setColoration(active ? { colorer: e.colorer } : null);
+  }, []);
+  const surEtatRangement = useCallback((e: EtatRangement3d) => {
+    reperesRangement.current = e.points;
+    const taille = derniereTaille.current;
+    if (coucheRangement.current !== null && derniereCamera.current !== null && taille !== null) placerPastilles(coucheRangement.current, derniereCamera.current, taille.width, taille.height, e.points);
+    setColorationRangement((c) => (e.evidence === null ? (c === null ? c : null) : { colorer: e.colorer }));
   }, []);
   /** Donné par la caméra : les boutons de la liste s'en servent pour voler vers une zone (T29). */
   const pilote = useRef<Pilote | null>(null);
@@ -1498,6 +1528,11 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} erreur={erreurTravaux} />
           {porte !== undefined && fermeId !== undefined && geometrie !== null && <Suspense><VannesDifferees porte={porte} fermeId={fermeId} volumes={geometrie.volumes} couche={coucheVannes} surEtat={surEtatVannes} jour={lundi} /></Suspense>}
+          {porte !== undefined && fermeId !== undefined && geometrie !== null && rangement !== null && (
+            <Suspense>
+              <RangementDiffere porte={porte} fermeId={fermeId} volumes={geometrie.volumes} couche={coucheRangement} cible={rangement} surEtat={surEtatRangement} {...(surFermerRangement === undefined ? {} : { surFermer: surFermerRangement })} />
+            </Suspense>
+          )}
         </div>
         <aside id={idPanneau} data-testid="panneau-3d" className={filtresOuverts ? 'plan3d-cote' : 'plan3d-cote plan3d-cote-replie'} aria-label="Légende, filtres et liste des planches">
           {/* T37c : replié au téléphone, le panneau n'a plus de taille mais la liste des planches (l'alternative texte de la toile) reste lisible au lecteur d'écran : seul le reste est `hidden`. */}

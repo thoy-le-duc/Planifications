@@ -129,6 +129,9 @@ const COULEUR_BATIMENT: Readonly<Record<BatimentPlan['type'], string>> = {
   serre_tunnel: COULEURS.surface,
   serre_chapelle: COULEURS.surface,
   hangar: COULEURS.foretClair,
+  // T61 : un local se lit comme un hangar ; une chambre froide, claire comme une serre.
+  local: COULEURS.foretClair,
+  chambre_froide: COULEURS.surface,
   magasin: COULEURS.orange,
   autre: COULEURS.trait,
 };
