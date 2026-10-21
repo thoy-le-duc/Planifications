@@ -60,6 +60,14 @@ export function changerVitesseLecture(l: LectureDeroule, vitesse: VitesseDeroule
   return { ...l, semaineDepart: semaineDeLecture(l, maintenantMs).semaine, departMs: maintenantMs, vitesse };
 }
 
+/** Au-delà de ce retard (ms) sur l'échéance d'une semaine, la lecture saute à la semaine du moment (onglet en arrière-plan). */
+export const RETARD_RATTRAPE_MAX_MS = 1000;
+/** En retard de moins que cela, les semaines manquées passent une à une, à cet intervalle (ms) : chacune a le temps d'être dessinée. */
+export const DELAI_RATTRAPAGE_MS = 60;
+
+/** Retard (ms) sur l'échéance de la semaine `semaine` de la lecture. */
+const retardMs = (l: LectureDeroule, semaine: number, maintenantMs: number): number => maintenantMs - (l.departMs + (semaine - l.semaineDepart) * dureeSemaineMs(l.vitesse));
+
 /** Horloge injectée : temps monotone (ms) et minuterie ; `programmer` rend de quoi annuler. */
 export interface HorlogeDeroule {
   maintenant(): number;
@@ -103,14 +111,22 @@ export function piloterLecture(o: OptionsPilote): PiloteDeroule | null {
   function tic(): void {
     annuler = null;
     if (!active || lecture === null) return;
-    const { semaine, finie } = semaineDeLecture(lecture, horloge.maintenant());
-    if (semaine !== annoncee) {
-      annoncee = semaine;
-      o.surSemaine(semaine);
+    const maintenant = horloge.maintenant();
+    const { semaine, finie } = semaineDeLecture(lecture, maintenant);
+    // Léger retard (fil occupé un instant) : une semaine à la fois, rattrapée vite ; aucune ne saute.
+    // Gros retard (onglet en arrière-plan) : droit à la semaine du moment.
+    const suivante = semaine > annoncee + 1 && retardMs(lecture, annoncee + 1, maintenant) < RETARD_RATTRAPE_MAX_MS ? annoncee + 1 : semaine;
+    if (suivante !== annoncee) {
+      annoncee = suivante;
+      o.surSemaine(suivante);
     }
-    if (finie) {
+    if (suivante >= lecture.derniere || (finie && suivante === semaine)) {
       arreter();
       o.surFin();
+      return;
+    }
+    if (suivante < semaine) {
+      annuler = horloge.programmer(tic, DELAI_RATTRAPAGE_MS);
       return;
     }
     programmer();
