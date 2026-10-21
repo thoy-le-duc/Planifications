@@ -95,7 +95,7 @@ async function ouvrir(o: { readonly fertirrigation?: boolean; readonly vanneId?:
   await ecrireFermeVannes(base, { vannes: true });
   await ecrireNitrate({ base });
   await ecrireRecette({ base });
-  await ecrireRecette({ base, id: ANCIENNE, nom: 'Ancienne recette', supprimeLe: '2026-09-01T08:00:00.000Z' });
+  await ecrireRecette({ base }, { id: ANCIENNE, nom: 'Ancienne recette', supprimeLe: '2026-09-01T08:00:00.000Z' });
   o.avant?.();
   porte = porteSur(base, UTILISATEUR, FERME);
   await act(async () => {
