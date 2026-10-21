@@ -114,11 +114,27 @@ interface Notee {
   readonly annulee: boolean;
 }
 
-/** Une irrigation en vigueur de la veille : ni annulée, ni elle-même un remplacement. */
-const SQL_VEILLE = `SELECT e.id, e.detail FROM evenement e
-  WHERE e.ferme_id = ? AND e.type = 'irrigation' AND e.date = ? AND e.remplace_sorte IS NULL
-    AND NOT EXISTS (SELECT 1 FROM evenement r WHERE r.ferme_id = e.ferme_id AND r.remplace_evenement_id = e.id)
-  ORDER BY e.horodatage, e.id`;
+/**
+ * Irrigations en vigueur de la veille (ni annulées, ni elles-mêmes un remplacement) pas encore
+ * recopiées aujourd'hui. Relecture de T56 : une irrigation du jour en vigueur, même vanne, même
+ * durée, même recette (ou sans), « consomme » une irrigation de la veille ; deux taps sur
+ * « Recopier » (ou la saisie rouverte) n'écrivent donc jamais deux fois le même apport. Annulée,
+ * la recopie est de nouveau proposée.
+ */
+const SQL_VEILLE = `WITH en_vigueur AS (
+    SELECT e.id, e.date, e.detail, e.horodatage,
+      lower(json_extract(e.detail, '$.secteurIrrigationId')) || '|' || json_extract(e.detail, '$.dureeMinutes') || '|' ||
+        ifnull(lower(json_extract(e.detail, '$.recetteFertirrigationId')), '') AS cle
+    FROM evenement e
+    WHERE e.ferme_id = ? AND e.type = 'irrigation' AND e.date IN (?, ?) AND e.remplace_sorte IS NULL AND json_valid(e.detail)
+      AND NOT EXISTS (SELECT 1 FROM evenement r WHERE r.ferme_id = e.ferme_id AND r.remplace_evenement_id = e.id)
+  ),
+  veille AS (
+    SELECT id, detail, horodatage, cle, ROW_NUMBER() OVER (PARTITION BY cle ORDER BY horodatage, id) AS rang FROM en_vigueur WHERE date = ?
+  )
+  SELECT v.id, v.detail FROM veille v
+  WHERE v.rang > (SELECT count(*) FROM en_vigueur j WHERE j.date = ? AND j.cle = v.cle)
+  ORDER BY v.horodatage, v.id`;
 
 export function SaisieIrrigation({ porte, fermeId, vanneId = null, surFermer, aujourdhui = jourDuTelephone, fertirrigation = false }: ProprietesSaisieIrrigation): ReactElement {
   const id = useId();
@@ -139,6 +155,8 @@ export function SaisieIrrigation({ porte, fermeId, vanneId = null, surFermer, au
   const [message, setMessage] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
   const [notee, setNotee] = useState<Notee | null>(null);
+  /** Écriture en cours, lu sans attendre le rendu : deux taps d'un coup n'écrivent qu'une fois. */
+  const enCours = useRef(false);
 
   useEffect(() => {
     titre.current?.focus();
@@ -210,7 +228,7 @@ export function SaisieIrrigation({ porte, fermeId, vanneId = null, surFermer, au
     return porte.surveiller<IrrigationDeLaVeille | null>(
       {
         sql: SQL_VEILLE,
-        parametres: [fermeId, hier],
+        parametres: [fermeId, hier, jour, hier, jour],
         tables: ['evenement'],
         convertir: (l) => {
           const d = lireDetail(l.detail);
@@ -256,6 +274,8 @@ export function SaisieIrrigation({ porte, fermeId, vanneId = null, surFermer, au
   });
 
   async function noter(detail: DetailIrrigation): Promise<void> {
+    if (enCours.current) return;
+    enCours.current = true;
     setOccupe(true);
     setMessage(null);
     try {
@@ -265,6 +285,7 @@ export function SaisieIrrigation({ porte, fermeId, vanneId = null, surFermer, au
       console.error('Irrigation non enregistrée', e);
       setMessage('Rien n’a été enregistré : la base du téléphone a refusé l’écriture.');
     } finally {
+      enCours.current = false;
       setOccupe(false);
     }
   }
@@ -300,7 +321,8 @@ export function SaisieIrrigation({ porte, fermeId, vanneId = null, surFermer, au
   }
 
   async function annuler(n: Notee): Promise<void> {
-    if (occupe) return;
+    if (enCours.current) return;
+    enCours.current = true;
     setOccupe(true);
     try {
       await ecrire(saisieDe(n.detail, { sorte: 'annulation', evenementId: n.id as Id<'Evenement'> }));
@@ -309,6 +331,7 @@ export function SaisieIrrigation({ porte, fermeId, vanneId = null, surFermer, au
       console.error('Irrigation non annulée', e);
       setMessage('L’irrigation n’a pas pu être annulée : la base du téléphone a refusé l’écriture.');
     } finally {
+      enCours.current = false;
       setOccupe(false);
     }
   }
