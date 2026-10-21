@@ -10,7 +10,7 @@ import { archiverProduit, creerProduit, modifierProduit, ProduitRefuse, retablir
 import type { ProprietesEcranPhyto } from './test/contrat.ts';
 import { Feuille } from './Feuille.tsx';
 import { chargerCatalogueEphy } from './catalogue.ts';
-import { ChoixUsage, RechercheEphy, type ChargerCatalogue } from './RechercheEphy.tsx';
+import { ChoixUsage, RechercheEphy, UsagesParCulture, type ChargerCatalogue } from './RechercheEphy.tsx';
 import { propositionUsage, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
 
 interface Produit {
@@ -221,6 +221,7 @@ function Formulaire({ ctx, produit, chargerCatalogue, surFermer }: { readonly ct
           }}
         />
       )}
+      {choix !== null && especes.length > 0 && <UsagesParCulture produit={choix.produit} especes={especes} />}
       <div className="parc-grille">
         {texte('Nom commercial', nom, setNom, { large: true })}
         {texte('N° AMM', amm, setAmm)}

@@ -4,7 +4,7 @@
  * Puis le choix de l'usage, dont dépend le délai avant récolte. Contrat : ./test/contrat.ts.
  */
 import { useId, useRef, useState, type ReactElement } from 'react';
-import { chercherProduitsEphy, type CatalogueEphy, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
+import { chercherProduitsEphy, darPourCulture, type CatalogueEphy, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
 
 export type ChargerCatalogue = () => Promise<CatalogueEphy>;
 
@@ -108,7 +108,7 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
   );
 }
 
-function libelleUsage(u: UsageEphy): string {
+export function libelleUsage(u: UsageEphy): string {
   const dose = u.dose === null ? 'dose non précisée' : `${enFrancais(u.dose.valeur)} ${u.dose.unite}`;
   const dar = u.dar === null ? 'DAR non précisé' : `DAR ${String(u.dar)} j`;
   return `${u.culture} · ${u.cible} · ${dose} · ${dar}`;
@@ -178,6 +178,39 @@ export function ChoixUsage({
           Voir tous les usages ({produit.usages.length})
         </button>
       )}
+    </section>
+  );
+}
+
+/**
+ * Usages du produit pour chaque espèce cultivée par la ferme (T76, règle 1) : le DAR dépend de la
+ * culture traitée, la fiche n'en fixe un que si toutes les cultures sont d'accord.
+ */
+export function UsagesParCulture({ produit, especes }: { readonly produit: ProduitEphy; readonly especes: readonly string[] }): ReactElement {
+  return (
+    <section className="parc-section" aria-label="Usages par culture" data-testid="usages-par-culture">
+      <p className="parc-aide">Le délai avant récolte dépend de la culture traitée : il sera repris à la saisie du traitement.</p>
+      <ul className="parc-liste">
+        {[...especes]
+          .sort((a, b) => a.localeCompare(b, 'fr'))
+          .map((e) => {
+            const r = darPourCulture(produit, e);
+            return (
+              <li key={e} data-testid="usage-culture" data-culture={e}>
+                <strong>{e}</strong>
+                {r.sorte === 'non_homologue' ? (
+                  <span className="parc-erreur"> : non homologué sur cette culture</span>
+                ) : (
+                  <ul>
+                    {r.usages.map((u, i) => (
+                      <li key={`${String(i)}-${libelleUsage(u)}`}>{libelleUsage(u)}</li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+      </ul>
     </section>
   );
 }
