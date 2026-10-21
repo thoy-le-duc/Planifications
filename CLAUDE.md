@@ -51,6 +51,7 @@ Règles de la boucle :
 - **Pas de travail inventé.** Backlog vide ou ticket flou : arrête-toi et écris tes questions dans `docs/questions.md`. Mieux vaut trois tickets nets par session que dix vagues.
 - **Environnement isolé.** Mode sans demande de permission autorisé uniquement dans un conteneur dédié, sans accès aux données ni aux secrets de production.
 - **Git-centré** : une branche par ticket, commits atomiques, jamais de push direct sur `main`.
+- **Sous-agents à modèle déclaré** : le chef d'équipe orchestre et ne code pas ; il ne lance que les agents de `.claude/agents/`, jamais un sous-agent sans modèle explicite. Il n'appelle jamais `mcp__github__get_job_logs` lui-même : une CI rouge se lit par l'agent `lecteur-ci`, qui la résume en 20 lignes au plus.
 - **Journal** : à la fin de chaque ticket, ajoute trois lignes à `docs/journal.md` (fait, décidé, bloquant). C'est ce que Théophane lit le matin.
 - **Communication en français**, directe, sans jargon inutile.
 
