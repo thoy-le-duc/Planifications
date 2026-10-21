@@ -6,8 +6,8 @@
  * démarrage de l'appli. Le catalogue est produit par `packages/db/src/ephy/extraire.ts`.
  *
  * Correspondance espèce → usage : une table courte et explicite (tomate, fraise, laitue, et les
- * cultures de la ferme de Théophane). Aucune devinette : une espèce inconnue ne correspond qu'à
- * l'usage qui porte son nom. Le DAR n'est proposé que si tous les usages retenus sont d'accord ;
+ * cultures de la ferme de Théophane), sur les noms du catalogue de 2026 (T75). Aucune devinette :
+ * une espèce inconnue ne correspond qu'à l'usage qui porte son nom. Le DAR n'est proposé que si tous les usages retenus sont d'accord ;
  * sinon l'utilisateur choisit l'usage (règle 2 du ticket).
  */
 
@@ -129,46 +129,122 @@ export function chercherProduitsEphy(catalogue: CatalogueEphy, texte: string, ma
 // ── Espèce → usage ───────────────────────────────────────────────────────────────────────────
 
 const LEGUMIERES = 'Cultures légumières';
+const TOMATE_AUBERGINE = 'Tomate - Aubergine';
+const PEAU_COMESTIBLE = 'Cucurbitacées à peau comestible';
+const PEAU_NON_COMESTIBLE = 'Cucurbitacées à peau non comestible';
+const CHOUX = 'Choux';
+const LAITUE = ['Laitue', LEGUMIERES] as const;
+const POMMES = ['Choux pommés', CHOUX, LEGUMIERES] as const;
+const FEUILLUS = ['Choux feuillus', CHOUX, LEGUMIERES] as const;
+const INFLORESCENCE = ['Choux à inflorescence', CHOUX, LEGUMIERES] as const;
+const NON_ECOSSES = ['Haricots et pois non écossés frais', LEGUMIERES] as const;
+const COURGES = [PEAU_NON_COMESTIBLE, LEGUMIERES] as const;
 
 /**
- * Espèces connues (clé normalisée, au singulier) → cultures e-phy, la plus précise d'abord.
- * « Cultures légumières » seulement pour les légumes (pas la fraise, ni les fruits, ni les fleurs).
+ * Formes de 2020 (base sur laquelle T53 a été écrit), absentes du catalogue de 2026 mais gardées au
+ * cas où les noms changeraient encore. Seules exemptées du test de cohérence avec le catalogue réel.
  */
-const CORRESPONDANCES: Readonly<Record<string, readonly string[]>> = {
-  tomate: ['Tomate', LEGUMIERES],
-  fraise: ['Fraisier'],
-  fraisier: ['Fraisier'],
-  laitue: ['Laitue', LEGUMIERES],
-  salade: ['Laitue', LEGUMIERES],
-  batavia: ['Laitue', LEGUMIERES],
-  romaine: ['Laitue', LEGUMIERES],
-  'feuille de chene': ['Laitue', LEGUMIERES],
-  kiwi: ['Kiwi'],
-  pivoine: ['Cultures florales et plantes vertes'],
-  asperge: ['Asperge', LEGUMIERES],
-  melon: ['Melon', LEGUMIERES],
-  concombre: ['Concombre', LEGUMIERES],
-  poivron: ['Poivron', LEGUMIERES],
-  carotte: ['Carotte', LEGUMIERES],
-  poireau: ['Poireau', LEGUMIERES],
-  oignon: ['Oignon', LEGUMIERES],
-  chou: ['Choux', LEGUMIERES],
-  haricot: ['Haricots', LEGUMIERES],
-  epinard: ['Epinard', LEGUMIERES],
-  'betterave potagere': ['Betterave potagère', LEGUMIERES],
+export const ANCIENNES_FORMES: readonly string[] = ['Tomate', 'Aubergine', 'Courgette', 'Concombre', 'Melon', 'Pastèque'];
+
+/**
+ * Espèces connues → cultures e-phy, la plus précise d'abord (T53, noms mis à jour par T75 sur le
+ * catalogue du 2026-10-20). Clés écrites en clair : la comparaison ignore casse, accents, pluriel
+ * et tirets. « Cultures légumières » seulement pour les légumes (ni fraise, ni fruits, ni fleurs).
+ * Nom ambigu : la culture générique seulement (« Chou » → « Choux »), jamais une famille devinée.
+ * Chaque nom visé existe dans le catalogue réel, sauf `ANCIENNES_FORMES` (test de cohérence).
+ */
+export const CORRESPONDANCES: Readonly<Record<string, readonly string[]>> = {
+  // Solanacées
+  Tomate: [TOMATE_AUBERGINE, 'Tomate', LEGUMIERES],
+  Aubergine: [TOMATE_AUBERGINE, 'Aubergine', LEGUMIERES],
+  Poivron: ['Poivron', LEGUMIERES],
+  // Fraise, fruits, fleurs : pas de « Cultures légumières »
+  Fraise: ['Fraisier'],
+  Fraisier: ['Fraisier'],
+  Kiwi: ['Kiwi'],
+  Pivoine: ['Cultures florales et plantes vertes'],
+  // Salades
+  Laitue: LAITUE,
+  Salade: LAITUE,
+  Batavia: LAITUE,
+  Romaine: LAITUE,
+  'Feuille de chêne': LAITUE,
+  Épinard: ['Epinard', LEGUMIERES],
+  // Cucurbitacées
+  Courgette: [PEAU_COMESTIBLE, 'Courgette', LEGUMIERES],
+  Concombre: [PEAU_COMESTIBLE, 'Concombre', LEGUMIERES],
+  Cornichon: [PEAU_COMESTIBLE, LEGUMIERES],
+  Melon: [PEAU_NON_COMESTIBLE, 'Melon', LEGUMIERES],
+  Pastèque: [PEAU_NON_COMESTIBLE, 'Pastèque', LEGUMIERES],
+  'Melon d’eau': [PEAU_NON_COMESTIBLE, 'Pastèque', LEGUMIERES],
+  Potimarron: COURGES,
+  Potiron: COURGES,
+  Courge: COURGES,
+  'Courge butternut': COURGES,
+  Butternut: COURGES,
+  // Choux
+  Chou: [CHOUX, LEGUMIERES],
+  'Chou pommé': POMMES,
+  'Chou cabus': POMMES,
+  'Chou rouge': POMMES,
+  'Chou de Milan': POMMES,
+  'Chou de Bruxelles': POMMES,
+  'Chou kale': FEUILLUS,
+  Kale: FEUILLUS,
+  'Chou chinois': FEUILLUS,
+  Brocoli: INFLORESCENCE,
+  'Chou-fleur': INFLORESCENCE,
+  'Chou romanesco': INFLORESCENCE,
+  'Chou-rave': ['Choux-raves', CHOUX, LEGUMIERES],
+  // Légumineuses
+  Haricot: ['Haricots', LEGUMIERES],
+  'Haricot vert': NON_ECOSSES,
+  'Haricot beurre': NON_ECOSSES,
+  'Haricot mangetout': NON_ECOSSES,
+  'Pois mangetout': NON_ECOSSES,
+  // « Pois » seul : écossé ou mangetout ? Les deux familles, l'utilisateur tranche si leurs DAR diffèrent.
+  Pois: ['Haricots et Pois écossés frais', 'Haricots et pois non écossés frais', LEGUMIERES],
+  'Petit pois': ['Haricots et Pois écossés frais', LEGUMIERES],
+  // Racines, bulbes, pérennes
+  Carotte: ['Carotte', LEGUMIERES],
+  Betterave: ['Betterave potagère', LEGUMIERES],
+  'Betterave potagère': ['Betterave potagère', LEGUMIERES],
+  Poireau: ['Poireau', LEGUMIERES],
+  Oignon: ['Oignon', LEGUMIERES],
+  Asperge: ['Asperge', LEGUMIERES],
 };
 
-/** Clé de comparaison : normalisée, chaque mot sans « s » ni « x » final. */
+/**
+ * Repli « premier mot » (T53, encadré par T75) : seulement pour ces têtes, dont toute variété reste
+ * dans la même culture (« Tomate cerise », « Batavia de printemps »). Pas « melon » (melon d'eau),
+ * « chou » (famille à préciser), « salade » (salade de blé = mâche), « kiwi » (kiwi de Sibérie =
+ * kiwaï), « asperge » (asperge des bois), « épinard » (épinard-fraise), « pois » (pois chiche).
+ */
+const TETES_SURES: readonly string[] = ['Tomate', 'Laitue', 'Batavia', 'Fraise', 'Fraisier', 'Poireau', 'Carotte', 'Oignon', 'Poivron', 'Courgette'];
+/** Exceptions aux têtes sûres : une autre plante sous le même premier mot (aussi suivies d'un mot : « Tomate en arbre rouge »). */
+const EXCEPTIONS_TETES: readonly string[] = ['Tomate en arbre', 'Tomate arbre'];
+
+/** Clé de comparaison : normalisée, tirets en espaces, chaque mot sans « s » ni « x » final. */
 const cle = (t: string): string =>
-  normaliserEphy(t)
+  normaliserEphy(t.replace(/-/g, ' '))
     .split(' ')
     .map((m) => (m.length > 3 ? m.replace(/[sx]$/, '') : m))
     .join(' ');
 
+let parCle: ReadonlyMap<string, readonly string[]> | undefined;
+let tetes: ReadonlySet<string> | undefined;
+let exceptions: ReadonlySet<string> | undefined;
+
+const estException = (k: string): boolean => [...(exceptions ?? [])].some((e) => k === e || k.startsWith(`${e} `));
+
 /** Cultures e-phy qui couvrent l'espèce de la ferme ; espèce inconnue : son propre nom seulement. */
 export function culturesEphyPourEspece(nomEspece: string): string[] {
+  parCle ??= new Map(Object.entries(CORRESPONDANCES).map(([k, v]) => [cle(k), v] as const));
+  tetes ??= new Set(TETES_SURES.map(cle));
+  exceptions ??= new Set(EXCEPTIONS_TETES.map(cle));
   const k = cle(nomEspece);
-  const connue = CORRESPONDANCES[k] ?? CORRESPONDANCES[k.split(' ')[0] ?? ''];
+  const tete = k.split(' ')[0] ?? '';
+  const connue = parCle.get(k) ?? (tetes.has(tete) && !estException(k) ? parCle.get(tete) : undefined);
   return connue === undefined ? [nomEspece.trim()] : [...connue];
 }
 

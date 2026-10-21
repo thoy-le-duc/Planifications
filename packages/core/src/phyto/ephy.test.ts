@@ -15,7 +15,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import * as index from '../index.ts';
-import { chercherProduitsEphy, culturesEphyPourEspece, propositionUsage, usagesPourEspeces, validerCatalogueEphy, type CatalogueEphy, type ProduitEphy, type UsageEphy } from './ephy.ts';
+import { ANCIENNES_FORMES, CORRESPONDANCES, chercherProduitsEphy, culturesEphyPourEspece, propositionUsage, usagesPourEspeces, validerCatalogueEphy, type CatalogueEphy, type ProduitEphy, type UsageEphy } from './ephy.ts';
+import { CULTURES_EPHY_2026 } from './test/cultures-ephy-2026.ts';
 
 const u = (culture: string, cible: string, dar: number | null, dose: UsageEphy['dose'] = { valeur: 0.2, unite: 'L/ha' }): UsageEphy => ({ culture, mode: 'Trt Part.Aer.', cible, dose, dar });
 
@@ -137,5 +138,143 @@ describe('T53 : DAR proposé selon l’usage', () => {
     expect(propositionUsage(SUCCESS, ['Kiwi'])).toEqual({ candidats: [], dar: null, dose: null });
     expect(propositionUsage(SUCCESS, [])).toEqual({ candidats: [], dar: null, dose: null });
     expect(propositionUsage(SOUFRE, ['Melon'])).toEqual({ candidats: SOUFRE.usages, dar: null, dose: { valeur: 0.2, unite: 'L/ha' } });
+  });
+});
+
+/**
+ * Tests d'acceptation T75 (docs/backlog/T75-ephy-cultures-2026.md) : les noms de cultures du
+ * catalogue réel du 2026-10-20 (« Tomate - Aubergine », « Cucurbitacées à peau comestible »…).
+ * Un faux négatif est grave, un faux positif (DAR d'une autre culture) plus encore.
+ */
+const LEG = 'Cultures légumières';
+
+describe('T75 : espèces de la ferme → noms de cultures e-phy de 2026', () => {
+  it('tomate et aubergine → « Tomate - Aubergine » (l’ancienne forme reste acceptée, chacune la sienne)', () => {
+    expect(culturesEphyPourEspece('Tomate')).toEqual(['Tomate - Aubergine', 'Tomate', LEG]);
+    expect(culturesEphyPourEspece('Aubergine')).toEqual(['Tomate - Aubergine', 'Aubergine', LEG]);
+    expect(culturesEphyPourEspece('Aubergine')).not.toContain('Tomate');
+  });
+
+  it('fraise → « Fraisier » ; laitue, batavia, salade → « Laitue »', () => {
+    expect(culturesEphyPourEspece('Fraise')).toEqual(['Fraisier']);
+    for (const e of ['Laitue', 'Batavia', 'Salade', 'Romaine', 'Feuille de chêne']) expect(culturesEphyPourEspece(e)).toEqual(['Laitue', LEG]);
+  });
+
+  it('courgette, concombre → peau comestible ; melon, pastèque → peau non comestible', () => {
+    expect(culturesEphyPourEspece('Courgette')).toEqual(['Cucurbitacées à peau comestible', 'Courgette', LEG]);
+    expect(culturesEphyPourEspece('Concombre')).toEqual(['Cucurbitacées à peau comestible', 'Concombre', LEG]);
+    expect(culturesEphyPourEspece('Melon')).toEqual(['Cucurbitacées à peau non comestible', 'Melon', LEG]);
+    expect(culturesEphyPourEspece('Pastèque')).toEqual(['Cucurbitacées à peau non comestible', 'Pastèque', LEG]);
+    expect(culturesEphyPourEspece('Potimarron')).toEqual(['Cucurbitacées à peau non comestible', LEG]);
+    expect(culturesEphyPourEspece('Courge butternut')).toEqual(['Cucurbitacées à peau non comestible', LEG]);
+  });
+
+  it('choux : chacun sa famille, plus « Choux » (générique) ; « Chou » seul : le générique seulement', () => {
+    expect(culturesEphyPourEspece('Chou pommé')).toEqual(['Choux pommés', 'Choux', LEG]);
+    expect(culturesEphyPourEspece('Chou kale')).toEqual(['Choux feuillus', 'Choux', LEG]);
+    expect(culturesEphyPourEspece('Kale')).toEqual(['Choux feuillus', 'Choux', LEG]);
+    expect(culturesEphyPourEspece('Brocoli')).toEqual(['Choux à inflorescence', 'Choux', LEG]);
+    expect(culturesEphyPourEspece('Chou-fleur')).toEqual(['Choux à inflorescence', 'Choux', LEG]);
+    expect(culturesEphyPourEspece('Chou fleur')).toEqual(['Choux à inflorescence', 'Choux', LEG]);
+    expect(culturesEphyPourEspece('Chou-rave')).toEqual(['Choux-raves', 'Choux', LEG]);
+    expect(culturesEphyPourEspece('Chou')).toEqual(['Choux', LEG]);
+  });
+
+  it('haricot vert → « Haricots et pois non écossés frais », casse indifférente', () => {
+    expect(culturesEphyPourEspece('Haricot vert')).toEqual(['Haricots et pois non écossés frais', LEG]);
+    const p: ProduitEphy = { ...SUCCESS, usages: [u('Haricots et Pois non écossés frais', 'Thrips', 3), u('Haricots et pois non écossés frais', 'Pucerons', 3), u('Haricots et Pois écossés frais', 'Thrips', 7)] };
+    expect(usagesPourEspeces(p, ['Haricots verts'])).toEqual([p.usages[0], p.usages[1]]);
+    expect(propositionUsage(p, ['Haricot vert']).dar).toBe(3);
+  });
+
+  it('« Pois » seul est ambigu (écossé ou mangetout) : les deux familles, l’utilisateur tranche si leurs DAR diffèrent', () => {
+    expect(culturesEphyPourEspece('Pois')).toEqual(['Haricots et Pois écossés frais', 'Haricots et pois non écossés frais', LEG]);
+    expect(culturesEphyPourEspece('Petit pois')).toEqual(['Haricots et Pois écossés frais', LEG]);
+    const p: ProduitEphy = { ...SUCCESS, usages: [u('Haricots et Pois écossés frais', 'Thrips', 7), u('Haricots et Pois non écossés frais', 'Thrips', 3)] };
+    expect(propositionUsage(p, ['Pois']).dar).toBeNull();
+    expect(propositionUsage(p, ['Petit pois']).dar).toBe(7);
+    expect(propositionUsage(p, ['Pois mangetout']).dar).toBe(3);
+  });
+
+  it('kiwi → « Kiwi » ; pivoine → « Cultures florales et plantes vertes »', () => {
+    expect(culturesEphyPourEspece('Kiwi')).toEqual(['Kiwi']);
+    expect(culturesEphyPourEspece('Pivoine')).toEqual(['Cultures florales et plantes vertes']);
+  });
+
+  it('asperge, carotte, poivron, poireau, oignon, épinard, betterave : nom exact de 2026', () => {
+    expect(culturesEphyPourEspece('Asperge')).toEqual(['Asperge', LEG]);
+    expect(culturesEphyPourEspece('Carotte')).toEqual(['Carotte', LEG]);
+    expect(culturesEphyPourEspece('Poivron')).toEqual(['Poivron', LEG]);
+    expect(culturesEphyPourEspece('Poireau')).toEqual(['Poireau', LEG]);
+    expect(culturesEphyPourEspece('Oignon')).toEqual(['Oignon', LEG]);
+    expect(culturesEphyPourEspece('Épinard')).toEqual(['Epinard', LEG]);
+    expect(culturesEphyPourEspece('Betterave')).toEqual(['Betterave potagère', LEG]);
+    expect(culturesEphyPourEspece('Betterave potagère')).toEqual(['Betterave potagère', LEG]);
+  });
+
+  it('Success 4 (usages du catalogue réel) : tomate → « Tomate - Aubergine », DAR 3 j ; jamais le DAR d’une autre culture', () => {
+    const success2026: ProduitEphy = {
+      ...SUCCESS,
+      usages: [u('Poivron', 'Thrips', 3), u('Tomate - Aubergine', 'Chenilles phytophages', 3), u('Tomate - Aubergine', 'Thrips', 3), u('Artichaut', 'Chenilles phytophages', 7), u('Fraisier', 'Thrips', 3), u('Cucurbitacées à peau non comestible', 'Thrips', 3), u('Oignon', 'Thrips', 7), u('Bananier', 'Thrips', 56)],
+    };
+    expect(propositionUsage(success2026, ['Tomate'])).toEqual({ candidats: [success2026.usages[1], success2026.usages[2]], dar: 3, dose: { valeur: 0.2, unite: 'L/ha' } });
+    expect(usagesPourEspeces(success2026, ['Courgette'])).toEqual([]);
+    expect(usagesPourEspeces(success2026, ['Melon'])).toEqual([success2026.usages[5]]);
+    expect(usagesPourEspeces(success2026, ['Kiwi', 'Pivoine'])).toEqual([]);
+  });
+});
+
+describe('T75 : cohérence avec le catalogue réel (liste figée du 2026-10-20)', () => {
+  const reels = new Set(CULTURES_EPHY_2026);
+  const anciennes = new Set(ANCIENNES_FORMES);
+
+  it('la fixture a les 126 cultures, sans doublon', () => {
+    expect(CULTURES_EPHY_2026).toHaveLength(126);
+    expect(reels.size).toBe(126);
+  });
+
+  it('chaque culture visée par CORRESPONDANCES existe dans le catalogue, hors anciennes formes déclarées', () => {
+    const absentes = Object.entries(CORRESPONDANCES).flatMap(([espece, cultures]) => cultures.filter((c) => !anciennes.has(c) && !reels.has(c)).map((c) => `${espece} → ${c}`));
+    expect(absentes).toEqual([]);
+  });
+
+  it('aucune espèce de la table n’en masque une autre (casse, accents, pluriel, tirets)', () => {
+    for (const espece of Object.keys(CORRESPONDANCES)) expect(culturesEphyPourEspece(espece), espece).toEqual(CORRESPONDANCES[espece]);
+  });
+
+  it('chaque espèce garde au moins une culture du catalogue réel ; une ancienne forme n’est pas un nom actuel', () => {
+    for (const [espece, cultures] of Object.entries(CORRESPONDANCES)) expect(cultures.some((c) => reels.has(c)), espece).toBe(true);
+    for (const c of ANCIENNES_FORMES) expect(reels.has(c), c).toBe(false);
+  });
+});
+
+describe('T75 : repli « premier mot » encadré', () => {
+  it('têtes sûres : la variété garde la culture de l’espèce', () => {
+    expect(culturesEphyPourEspece('Tomate cerise')).toEqual(culturesEphyPourEspece('Tomate'));
+    expect(culturesEphyPourEspece('Tomates anciennes')).toEqual(culturesEphyPourEspece('Tomate'));
+    expect(culturesEphyPourEspece('Batavia de printemps')).toEqual(['Laitue', LEG]);
+    expect(culturesEphyPourEspece('Fraise des bois')).toEqual(['Fraisier']);
+    expect(culturesEphyPourEspece('Poireau perpétuel')).toEqual(['Poireau', LEG]);
+  });
+
+  it('« Melon d’eau » est la pastèque, jamais « Melon »', () => {
+    expect(culturesEphyPourEspece('Melon d’eau')).toEqual(['Cucurbitacées à peau non comestible', 'Pastèque', LEG]);
+    expect(culturesEphyPourEspece("Melon d'eau")).not.toContain('Melon');
+    const p: ProduitEphy = { ...SUCCESS, usages: [u('Melon', 'Oïdium(s)', 3)] };
+    expect(usagesPourEspeces(p, ['Melon d’eau'])).toEqual([]);
+  });
+
+  it('hors des têtes sûres, ou exception connue : aucun rattachement deviné (son propre nom seulement)', () => {
+    expect(culturesEphyPourEspece('Chou chinois')).not.toContain('Choux pommés');
+    expect(culturesEphyPourEspece('Chou de Chine')).toEqual(['Chou de Chine']);
+    expect(culturesEphyPourEspece('Tomate en arbre')).toEqual(['Tomate en arbre']);
+    expect(culturesEphyPourEspece('Tomate en arbre rouge')).toEqual(['Tomate en arbre rouge']);
+    expect(culturesEphyPourEspece('Tomates arbres')).toEqual(['Tomates arbres']);
+    expect(culturesEphyPourEspece('Salade de blé')).toEqual(['Salade de blé']);
+    expect(culturesEphyPourEspece('Kiwi de Sibérie')).toEqual(['Kiwi de Sibérie']);
+    expect(culturesEphyPourEspece('Asperge des bois')).toEqual(['Asperge des bois']);
+    expect(culturesEphyPourEspece('Épinard fraise')).toEqual(['Épinard fraise']);
+    expect(culturesEphyPourEspece('Pois chiche')).toEqual(['Pois chiche']);
+    expect(culturesEphyPourEspece('Betterave sucrière')).toEqual(['Betterave sucrière']);
   });
 });

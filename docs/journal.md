@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-21 — T75 : e-phy, correspondance espèce → culture sur les noms de 2026
+
+- **Fait** : `CORRESPONDANCES` vise les noms du catalogue réel du 2026-10-20 (PR #231) : tomate et aubergine → « Tomate - Aubergine », courgette, concombre → « Cucurbitacées à peau comestible », melon, pastèque, courges → « … non comestible », choux par famille (pommé, feuillu, à inflorescence, chou-rave, plus « Choux »), haricot vert → « Haricots et pois non écossés frais » (casse indifférente), « Epinard », « Betterave potagère »… ; anciennes formes de 2020 gardées dans `ANCIENNES_FORMES`. Test de cohérence sur une liste figée des 126 cultures (noms seulement, source et date). Success 4 sur une tomate : « Tomate - Aubergine », DAR 3 j. Typage, lint, tests core/phyto (98) et ecrans/ferme (116), build, budgets (démarrage 70,0 Kio) passent.
+- **Décidé** : repli « premier mot » gardé mais encadré : seulement pour des têtes sûres (tomate, laitue, batavia, fraise, poireau, carotte, oignon, poivron, courgette), sauf « Tomate en arbre » ; « Melon d'eau » rattaché explicitement à la pastèque ; « Chou » seul → « Choux » générique, jamais une famille devinée ; « Haricots » (usages marqués « (1) ») non proposé pour un haricot vert. Relecture (PR #233) : correspondances et familles de choux vérifiées sur les 126 noms (aucune confusion de culture, seuls des doublons de casse se rejoignent) ; corrigé « Pois » seul (visait les seuls écossés, désormais les deux familles : l'utilisateur tranche si les DAR diffèrent) et les exceptions du repli suivies d'un mot (« Tomate en arbre rouge »). Réserve non corrigée : `propositionUsage` propose un DAR dès que les usages retenus concordent, même si une espèce de la ferme n'en a aucun.
+- **Bloquant** : rien. À confirmer par Théophane : « Salade » → Laitue, chou chinois → feuillus, chou de Bruxelles → pommés, « Pois » → écossés et non écossés, pivoine sans « Cultures ornementales ».
+
 ## 2026-10-21 — T74 : liaison PowerSync par cli.yaml et diagnostic du jeton
 
 - **Fait** : T73 était sans effet (la CLI 0.10.2 ne lit `org_id` et `project_id` que dans `cli.yaml`). Le script copie `powersync/` dans un dossier temporaire, y écrit un `cli.yaml` (instance, organisation, projet, jamais le jeton) et lance la CLI dessus ; si elle échoue, `powersync fetch instances` dit si le jeton est reconnu, quelles instances il voit et si la nôtre en fait partie. Guide et tests à jour.
