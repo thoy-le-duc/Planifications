@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-21 — T75 : e-phy, correspondance espèce → culture sur les noms de 2026
+
+- **Fait** : `CORRESPONDANCES` vise les noms du catalogue réel du 2026-10-20 (PR #231) : tomate et aubergine → « Tomate - Aubergine », courgette, concombre → « Cucurbitacées à peau comestible », melon, pastèque, courges → « … non comestible », choux par famille (pommé, feuillu, à inflorescence, chou-rave, plus « Choux »), haricot vert → « Haricots et pois non écossés frais » (casse indifférente), « Epinard », « Betterave potagère »… ; anciennes formes de 2020 gardées dans `ANCIENNES_FORMES`. Test de cohérence sur une liste figée des 126 cultures (noms seulement, source et date). Success 4 sur une tomate : « Tomate - Aubergine », DAR 3 j. Typage, lint, tests core/phyto (98) et ecrans/ferme (116), build, budgets (démarrage 70,0 Kio) passent.
+- **Décidé** : repli « premier mot » gardé mais encadré : seulement pour des têtes sûres (tomate, laitue, batavia, fraise, poireau, carotte, oignon, poivron, courgette), sauf « Tomate en arbre » ; « Melon d'eau » rattaché explicitement à la pastèque ; « Chou » seul → « Choux » générique, jamais une famille devinée ; « Haricots » (usages marqués « (1) ») non proposé pour un haricot vert.
+- **Bloquant** : rien. À confirmer par Théophane : « Salade » → Laitue, chou chinois → feuillus, chou de Bruxelles → pommés, « Pois » → écossés frais, pivoine sans « Cultures ornementales ».
+
 ## 2026-10-21 — T73 : organisation et projet PowerSync transmis à la CLI
 
 - **Fait** : le script passe `ORG_ID` et `PROJECT_ID` à la CLI (lus dans les variables GitHub `POWERSYNC_ORG_ID` et `POWERSYNC_PROJECT_ID` de l'environnement `production`, passées par le workflow), ce qui évite l'appel qui masquait l'erreur sous « Instance … was not found ». Refus clair d'un seul des deux ou d'une valeur mal formée ; sans eux, comportement inchangé. Diagnostic en cas d'échec de la CLI : jeton d'une autre organisation, révoqué ou expiré, identifiants erronés. Guide (étape 3 bis) et tests à jour.
