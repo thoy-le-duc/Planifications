@@ -1,0 +1,18 @@
+numero AMM;nom produit;identifiant usage; date decision;stade cultural min (BBCH);tade cultural max (BBCH);etat usage;dose retenue;dose retenue unite;delai avant recolte jour;delai avant recolte bbch;nombre max d'application;date fin distribution;date fin utilisation;condition emploi;ZNT aquatique (en m);ZNT arthropodes non cibles (en m);ZNT plantes non cibles (en m);mentions autorisees;intervalle minimum entre applications (jour)
+8800006;DIMATE BF 400;Laitue*Trt Part.Aer.*Pucerons;;;;Retrait;0.6;L/ha;;;1;;;;;;;;
+8800006;DIMATE BF 400;Cerisier*Trt.Part.Aer.* Mouches;01/02/2016;;;Retrait;0.375;L/ha;14;;1;15/02/2016;15/02/2016;;;;;;
+2060098;SUCCESS 4;Tomate*Trt Part.Aer.*Chenilles phytophages;20/01/2010;;;Autorisé;0.015;L/hL;3;;2;;;;;;;;
+2060098;SUCCESS 4;Tomate*Trt Part.Aer.*Thrips;20/01/2010;;;Autorisé;0.02;L/hL;3;;2;;;;;;;;
+2060098;SUCCESS 4;Tomate*Trt Part.Aer.*Thrips;20/01/2010;;;Autorisé;0.2;L/ha;3;;2;;;;;;;;
+2060098;SUCCESS 4;Tomate*Trt Part.Aer.*Thrips;20/01/2010;;;Autorisé;0.2;L/ha;3;;2;;;;;;;;
+2060098;SUCCESS 4;Fraisier*Trt Part.Aer.*Thrips;06/06/2011;;;Autorisé;0.2;L/ha;3;;2;;;;;;;;
+2060098;SUCCESS 4;Laitue*Trt Part.Aer.*Thrips;06/06/2011;;;Autorisé;0.2;L/ha;3;;2;;;"Usage d'essai ; texte sur
+deux lignes, avec ""guillemets"".";;;;;
+2060098;SUCCESS 4;Maïs*Trt Part.Aer.*Pyrale(s) (1);05/11/2012;;59;Autorisé (Provisoire);0.2;L/ha;;59;1;;;;;;;;
+2060098;SUCCESS 4;Vigne*Trt Part.Aer.*Thrips;06/06/2011;;69;Retrait;0.2;L/ha;;69;1;;;;;;;;
+9200352;SODIEX;Melon*Trt Part.Aer.*Oïdium(s);22/09/2020;;;Retrait;7.5;kg/ha;;;;31/01/2021;31/01/2022;;;;;;
+9200352;SODIEX;Vigne*Trt Part.Aer.*Acariens;22/09/2020;;;Retrait;;;;;;31/01/2021;31/01/2022;;;;;;
+2010509;BOUILLIE BORDELAISE NC 20 K;Laitue*Trt Part.Aer.*Mildiou(s);01/11/2010;;;Autorisé;12.5;kg/ha;;;;;;;;;;;
+2010509;BOUILLIE BORDELAISE NC 20 K;Oignon*Trt Part.Aer.*Mildiou(s);01/11/2010;;;Autorisé;25.0;kg/ha;;;;;;;;;;;
+2090080;DECANO;Maïs*Désherbage;31/07/2009;;;Autorisé;1.5;L/ha;;;1;;;;5.0;;;;
+9700095;ACTILANDES TM;Adjuvants*Bouillie herbicide;;;;Autorisé;0.5;L/hL;;;;;;;;;;;
