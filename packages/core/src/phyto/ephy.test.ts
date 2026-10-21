@@ -229,6 +229,10 @@ describe('T75 : cohérence avec le catalogue réel (liste figée du 2026-10-20)'
     expect(absentes).toEqual([]);
   });
 
+  it('aucune espèce de la table n’en masque une autre (casse, accents, pluriel, tirets)', () => {
+    for (const espece of Object.keys(CORRESPONDANCES)) expect(culturesEphyPourEspece(espece), espece).toEqual(CORRESPONDANCES[espece]);
+  });
+
   it('chaque espèce garde au moins une culture du catalogue réel ; une ancienne forme n’est pas un nom actuel', () => {
     for (const [espece, cultures] of Object.entries(CORRESPONDANCES)) expect(cultures.some((c) => reels.has(c)), espece).toBe(true);
     for (const c of ANCIENNES_FORMES) expect(reels.has(c), c).toBe(false);
