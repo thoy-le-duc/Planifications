@@ -1,5 +1,7 @@
 {
   "jsInitialGzKio": 71.2,
   "jsVue3dGzKio": 207.9,
-  "jsPlacementGzKio": 21.1
+  "jsPlacementGzKio": 21.1,
+  "catalogueEphyGzKio": 400,
+  "catalogueEphyKio": 4096
 }

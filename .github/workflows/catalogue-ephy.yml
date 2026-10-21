@@ -1,0 +1,98 @@
+name: Catalogue e-phy
+
+# T53 : met à jour le catalogue e-phy servi par l'appli (apps/web/public/ephy/catalogue.json)
+# depuis les données ouvertes de l'Anses (data.gouv.fr, « Données ouvertes du catalogue E-Phy »,
+# Licence Ouverte 2.0). L'Anses publie chaque semaine, dans la nuit du mardi au mercredi : le
+# workflow passe le mercredi matin, ou à la main. Il ne pousse jamais sur main : il pousse la
+# branche dédiée catalogue-ephy/mise-a-jour et ouvre (ou met à jour) une PR, fusionnée comme les
+# autres quand la CI est verte.
+on:
+  schedule:
+    - cron: '23 6 * * 3'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: catalogue-ephy
+  cancel-in-progress: false
+
+env:
+  # Jeu de données et ressource « decisionamm-intrant-format-CSV-UTF-8 » (archive ZIP de CSV).
+  JEU_EPHY: donnees-ouvertes-du-catalogue-e-phy-des-produits-phytopharmaceutiques-matieres-fertilisantes-et-supports-de-culture-adjuvants-produits-mixtes-et-melanges
+  RESSOURCE_EPHY: 98f7cac6-6b29-4859-8739-51b825196959
+  BRANCHE: catalogue-ephy/mise-a-jour
+  CATALOGUE: apps/web/public/ephy/catalogue.json
+
+jobs:
+  mettre-a-jour:
+    name: Télécharger e-phy, extraire, proposer la PR
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # Pousser la branche catalogue-ephy/mise-a-jour (jamais main).
+      contents: write
+      # Ouvrir la PR de mise à jour.
+      pull-requests: write
+      # Lancer la CI sur la branche : un push fait avec le jeton du workflow ne déclenche aucun
+      # workflow (règle de GitHub), seul un lancement à la main (workflow_dispatch) le peut.
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          # Le jeton n'est pas laissé dans .git/config : ni l'installation ni le script ne le voient.
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Télécharger l'archive e-phy (CSV, UTF-8)
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 300 -o "$RUNNER_TEMP/ephy.zip" "https://www.data.gouv.fr/api/1/datasets/r/$RESSOURCE_EPHY"
+          mkdir -p "$RUNNER_TEMP/ephy"
+          unzip -q -o "$RUNNER_TEMP/ephy.zip" -d "$RUNNER_TEMP/ephy"
+          ls -la "$RUNNER_TEMP/ephy"
+          # Date de la base : dernière modification de la ressource sur data.gouv.fr ; à défaut, aujourd'hui.
+          date_base="$(curl -fsSL --retry 3 --max-time 60 "https://www.data.gouv.fr/api/1/datasets/$JEU_EPHY/" \
+            | jq -r --arg r "$RESSOURCE_EPHY" '.resources[] | select(.id == $r) | .last_modified' | cut -c1-10)" || date_base=""
+          if ! [[ "$date_base" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then date_base="$(date -u +%F)"; fi
+          echo "DATE_BASE=$date_base" >> "$GITHUB_ENV"
+
+      - name: Extraire le catalogue (sans réseau ni secret)
+        run: node packages/db/src/ephy/cli.ts "$RUNNER_TEMP/ephy" "$CATALOGUE" --date "$DATE_BASE" --minimum 1000
+
+      - name: Catalogue changé ?
+        id: diff
+        run: |
+          if git diff --quiet -- "$CATALOGUE"; then echo "change=non" >> "$GITHUB_OUTPUT"; echo "Catalogue inchangé."; else echo "change=oui" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Budget du catalogue (build de l'appli)
+        if: steps.diff.outputs.change == 'oui'
+        run: |
+          pnpm --filter @planif/web build
+          pnpm budget
+
+      - name: Pousser la branche, ouvrir la PR, lancer la CI
+        if: steps.diff.outputs.change == 'oui'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCHE"
+          git add -- "$CATALOGUE"
+          git commit -m "Catalogue e-phy : base du $DATE_BASE" -m "Source : E-Phy, Anses (data.gouv.fr), Licence Ouverte 2.0. Workflow « Catalogue e-phy » (T53)."
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/$BRANCHE"
+          if [ -z "$(gh pr list --head "$BRANCHE" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base main --head "$BRANCHE" \
+              --title "Catalogue e-phy : base du $DATE_BASE" \
+              --body "Mise à jour automatique du catalogue e-phy (workflow « Catalogue e-phy », T53). Source : E-Phy, Anses — « Données ouvertes du catalogue E-Phy », data.gouv.fr, Licence Ouverte 2.0. Base du $DATE_BASE. Fusion quand la CI est verte (docs/boucle.md)."
+          fi
+          gh workflow run ci.yml --ref "$BRANCHE"

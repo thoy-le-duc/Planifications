@@ -7,16 +7,25 @@
  *   - jsPlacementGzKio (T28b) : le morceau de l'éditeur de placement sur la photo aérienne, chargé
  *     à la demande seulement — les fichiers hors démarrage qui portent la couche de l'orthophoto,
  *     avec leurs imports statiques hors démarrage (même mesure que scripts/placement.test.ts).
+ *   - catalogueEphyGzKio et catalogueEphyKio (T53) : le catalogue e-phy (`dist/ephy/catalogue.json`),
+ *     compressé et brut, chargé à la demande seulement (premier usage de la recherche) : jamais dans
+ *     le précache du service worker, toujours lisible par l'appli. Le brut borne le temps de
+ *     JSON.parse sur un téléphone milieu de gamme. Repère : la base d'octobre 2020 extraite par
+ *     packages/db/src/ephy (2 337 produits, 19 324 usages) pèse 2,7 Mio, 235 Kio compressés ;
+ *     limites : 400 Kio compressés et 4 Mio bruts, pour la croissance de la base depuis 2020.
  * Relever une limite se justifie dans la PR.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { gzipSync } from 'node:zlib';
+import { validerCatalogueEphy } from '@planif/core/ephy';
 
 interface Budget {
   jsInitialGzKio: number;
   jsVue3dGzKio: number;
   jsPlacementGzKio: number;
+  catalogueEphyGzKio: number;
+  catalogueEphyKio: number;
 }
 
 /** Chaînes qui survivent à la minification : messages de three, propriété posée par fiber. */
@@ -127,5 +136,21 @@ for (const fichier of [...fermeture(porteursPlacement, demarrage)].sort()) {
   console.log(`${kio.toFixed(1).padStart(7)} Kio  ${fichier} (éditeur de placement, à la demande)`);
 }
 verdict('éditeur de placement', totalPlacementKio, budget.jsPlacementGzKio);
+
+// ── Catalogue e-phy (T53) ────────────────────────────────────────────────────────────────────
+{
+  const chemin = join(dist, 'ephy', 'catalogue.json');
+  const octets = readFileSync(chemin);
+  if (validerCatalogueEphy(JSON.parse(octets.toString('utf8'))) === null) {
+    console.error('dist/ephy/catalogue.json illisible pour l’appli (validerCatalogueEphy).');
+    process.exit(1);
+  }
+  if (lire('sw.js').includes('ephy/catalogue.json') || tousLesJs(dist).some((f) => f.startsWith('workbox-') && lire(f).includes('ephy/catalogue.json'))) {
+    console.error('Le catalogue e-phy est dans le précache du service worker : il doit rester chargé à la demande (T53).');
+    process.exit(1);
+  }
+  verdict('catalogue e-phy compressé (à la demande)', gzipSync(octets).length / 1024, budget.catalogueEphyGzKio);
+  verdict('catalogue e-phy brut (à la demande)', octets.length / 1024, budget.catalogueEphyKio);
+}
 
 if (depasses.length > 0) process.exit(1);
