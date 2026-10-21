@@ -20,8 +20,8 @@
  * - Pas d'historique dans `modification` (comme l'équipe) : ce sont des repères du plan, pas des
  *   données de culture. Rien ne s'efface : retirer = `supprime_le`.
  *
- * Les précisions des refus ne disent ni « chemin » ni « outil » : ce sont des noms de tables du
- * schéma, que le filet des messages (test/jargon.ts) interdit ; on dit « passage » et « matériel ».
+ * Les précisions des refus disent « chemin » et « outil », mots français que le filet des messages
+ * (test/jargon.ts) permet.
  *
  * Tout se fait dans la transaction du lot (upload.ts), sous le verrou consultatif de la ferme.
  */
@@ -59,24 +59,24 @@ export const estTablePlan = (table: string): table is TablePlan => (TABLES_PLAN 
 /** Texte JSON du tracé reçu : au plus ce nombre de caractères, mesuré avant de le lire. */
 export const POINTS_CARACTERES_MAX = 16_384;
 
-export const PRECISION_PLAN_SANS_ORIGINE = 'posez d’abord l’origine du plan de la ferme (son point de départ), avant d’y tracer un passage ou d’y poser un repère';
-export const PRECISION_TRACE_ILLISIBLE = 'le tracé du passage est illisible : une liste de repères en mètres est attendue';
-export const PRECISION_TRACE_TROP_LONG = 'le tracé du passage est trop long';
-export const PRECISION_TRACE_TROP_COURT = 'un passage tracé relie au moins un point de départ et un point d’arrivée';
-export const PRECISION_TRACE_TROP_D_ETAPES = 'un passage tracé compte 200 étapes au plus, point de départ compris';
-export const PRECISION_TRACE_COORDONNEES = 'chaque étape du tracé a des coordonnées en mètres';
-export const PRECISION_TRACE_TROP_LOIN = 'une étape du tracé est trop loin de l’origine du plan (5 km au plus)';
-export const PRECISION_TRACE_CONFONDU = 'deux étapes qui se suivent dans le tracé sont au même endroit';
-export const PRECISION_LARGEUR_PASSAGE = 'la largeur du passage doit être un nombre de mètres plus grand que zéro';
-export const PRECISION_LARGEUR_PASSAGE_MAX = 'la largeur du passage dépasse le maximum permis (20 m)';
-export const PRECISION_NOM_PASSAGE = 'le nom du passage a de 1 à 80 caractères, ou pas de nom du tout';
+export const PRECISION_PLAN_SANS_ORIGINE = 'posez d’abord l’origine du plan de la ferme (son point de départ), avant d’y tracer un chemin ou d’y poser un repère';
+export const PRECISION_TRACE_ILLISIBLE = 'le tracé du chemin est illisible : une liste de repères en mètres est attendue';
+export const PRECISION_TRACE_TROP_LONG = 'le tracé du chemin est trop long';
+export const PRECISION_TRACE_TROP_COURT = 'un chemin relie au moins un point de départ et un point d’arrivée';
+export const PRECISION_TRACE_TROP_D_ETAPES = 'un chemin compte 200 étapes au plus, point de départ compris';
+export const PRECISION_TRACE_COORDONNEES = 'chaque étape du chemin a des coordonnées en mètres';
+export const PRECISION_TRACE_TROP_LOIN = 'une étape du chemin est trop loin de l’origine du plan (5 km au plus)';
+export const PRECISION_TRACE_CONFONDU = 'deux étapes qui se suivent dans le chemin sont au même endroit';
+export const PRECISION_LARGEUR_CHEMIN = 'la largeur du chemin doit être un nombre de mètres plus grand que zéro';
+export const PRECISION_LARGEUR_CHEMIN_MAX = 'la largeur du chemin dépasse le maximum permis (20 m)';
+export const PRECISION_NOM_CHEMIN = 'le nom du chemin a de 1 à 80 caractères, ou pas de nom du tout';
 export const PRECISION_REPERE_NOM = 'un repère du plan a un nom, de 80 caractères au plus';
 export const PRECISION_REPERE_SORTE = 'la sorte d’un repère du plan est inconnue : point d’eau ou autre repère';
 export const PRECISION_REPERE_POSITION = 'la position du repère doit être un nombre de mètres';
 export const PRECISION_REPERE_TROP_LOIN = 'le repère est trop loin de l’origine du plan (5 km au plus)';
 export const PRECISION_PLACE_NOM = 'une place de rangement a un nom, de 60 caractères au plus';
-export const PRECISION_MATERIEL_NOM = 'le matériel rangé a un nom, de 80 caractères au plus';
-export const PRECISION_MATERIEL_SANS_LIEU = 'un matériel se range toujours quelque part : choisissez son lieu de rangement';
+export const PRECISION_OUTIL_NOM = 'un outil a un nom, de 80 caractères au plus';
+export const PRECISION_OUTIL_SANS_LIEU = 'un outil se range toujours quelque part : choisissez son lieu de rangement';
 export const PRECISION_PLACE_ILLISIBLE = 'la place de rangement choisie est illisible';
 export const PRECISION_LIEU_UN_ELEMENT = 'un lieu de rangement est un bâtiment ou un repère du plan, l’un des deux';
 export const PRECISION_LIEU_DEJA = 'ce bâtiment ou ce repère est déjà un lieu de rangement';
@@ -84,10 +84,10 @@ export const PRECISION_LIEU_FIGE = 'un lieu de rangement ne change pas de bâtim
 export const PRECISION_ELEMENT_INTROUVABLE = 'le bâtiment ou le repère choisi est introuvable dans la ferme, ou retiré';
 export const PRECISION_LIEU_INTROUVABLE = 'le lieu de rangement choisi est introuvable dans la ferme, ou retiré';
 export const PRECISION_PLACE_INTROUVABLE = 'la place de rangement choisie est introuvable dans la ferme, ou retirée';
-export const PRECISION_PLACE_HORS_LIEU = 'cette place n’est pas dans le lieu de rangement choisi';
+export const PRECISION_PLACE_HORS_LIEU = 'cette place n’est pas dans le lieu de rangement de l’outil';
 export const PRECISION_PLACE_FIGEE = 'une place ne change pas de lieu de rangement : retirez-la, puis créez-en une autre';
 export const PRECISION_PLACE_DEJA = 'ce nom de place est déjà pris dans ce lieu de rangement';
-export const PRECISION_MATERIEL_DEJA = 'un matériel de ce nom existe déjà dans la ferme';
+export const PRECISION_OUTIL_DEJA = 'un outil de ce nom existe déjà dans la ferme';
 export const PRECISION_INFORMATION_INCONNUE = "la saisie contient une information que l'appli ne connaît pas";
 export const PRECISION_SUPPRESSION_ILLISIBLE = 'la date de suppression est illisible';
 export const PRECISION_REFERENCE_ILLISIBLE = 'un élément choisi est illisible';
@@ -127,8 +127,8 @@ const PRECISIONS_TRACE: Readonly<Partial<Record<CodeErreurPlacement, string>>> =
   coordonnee_invalide: PRECISION_TRACE_COORDONNEES,
   trop_loin: PRECISION_TRACE_TROP_LOIN,
   sommets_confondus: PRECISION_TRACE_CONFONDU,
-  dimension_invalide: PRECISION_LARGEUR_PASSAGE,
-  plafond_depasse: PRECISION_LARGEUR_PASSAGE_MAX,
+  dimension_invalide: PRECISION_LARGEUR_CHEMIN,
+  plafond_depasse: PRECISION_LARGEUR_CHEMIN_MAX,
 };
 
 function precisionDuPlan(table: TablePlan, e: ErreurPlacement): string {
@@ -139,8 +139,8 @@ function precisionDuPlan(table: TablePlan, e: ErreurPlacement): string {
     return e.code === 'trop_loin' ? PRECISION_REPERE_TROP_LOIN : PRECISION_REPERE_POSITION;
   }
   if (table === 'place_rangement') return PRECISION_PLACE_NOM;
-  if (e.champ === 'lieu_rangement_id') return PRECISION_MATERIEL_SANS_LIEU;
-  return e.champ === 'nom' ? PRECISION_MATERIEL_NOM : PRECISION_PLACE_ILLISIBLE;
+  if (e.champ === 'lieu_rangement_id') return PRECISION_OUTIL_SANS_LIEU;
+  return e.champ === 'nom' ? PRECISION_OUTIL_NOM : PRECISION_PLACE_ILLISIBLE;
 }
 
 const detailDuPlan = (e: ErreurPlacement): string => `plan ${e.code} champ ${e.champ ?? '-'}`;
@@ -165,7 +165,7 @@ function lire(table: TablePlan, l: Ligne, recues: ReadonlySet<string>, fermeId: 
   switch (table) {
     case 'chemin': {
       const nom = nomDeChemin(l.nom);
-      if (nom === undefined) return refuse(PRECISION_NOM_PASSAGE, fermeId);
+      if (nom === undefined) return refuse(PRECISION_NOM_CHEMIN, fermeId);
       const recu = recues.has('points');
       if (recu && typeof l.points === 'string' && l.points.length > POINTS_CARACTERES_MAX) return refuse(PRECISION_TRACE_TROP_LONG, fermeId, 'plan points trop long');
       const points = lirePoints(l.points, recu);
@@ -298,7 +298,7 @@ async function verifierEnBase(tx: TransactionDb, table: TablePlan, l: Ligne, fer
         sql`SELECT 1 FROM outil WHERE ferme_id = ${fermeId}::uuid AND supprime_le IS NULL
             AND id <> ${id}::uuid AND lower(btrim(nom)) = lower(btrim(${String(l.nom)}))`,
       );
-      return deja ? invalide(PRECISION_MATERIEL_DEJA, fermeId) : null;
+      return deja ? invalide(PRECISION_OUTIL_DEJA, fermeId) : null;
     }
   }
   return null;
