@@ -5,6 +5,7 @@
  */
 import { useId, useRef, useState, type ReactElement } from 'react';
 import { chercherProduitsEphy, darPourCulture, type CatalogueEphy, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
+import { libelleUsage } from './usage-ephy.ts';
 
 export type ChargerCatalogue = () => Promise<CatalogueEphy>;
 
@@ -16,8 +17,6 @@ type Etat =
 
 /** 'AAAA-MM-JJ' → 'JJ/MM/AAAA'. */
 export const dateFr = (iso: string): string => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
-
-const enFrancais = (n: number): string => String(n).replace('.', ',');
 
 export const mentionRetrait = (p: ProduitEphy): string => (p.retireLe === null ? 'retiré' : `retiré le ${dateFr(p.retireLe)}`);
 
@@ -106,12 +105,6 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
       </p>
     </section>
   );
-}
-
-export function libelleUsage(u: UsageEphy): string {
-  const dose = u.dose === null ? 'dose non précisée' : `${enFrancais(u.dose.valeur)} ${u.dose.unite}`;
-  const dar = u.dar === null ? 'DAR non précisé' : `DAR ${String(u.dar)} j`;
-  return `${u.culture} · ${u.cible} · ${dose} · ${dar}`;
 }
 
 /** Après le tap : avertissement de retrait, puis l'usage (DAR proposé, ou à choisir). */

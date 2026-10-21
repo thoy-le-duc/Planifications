@@ -6,11 +6,20 @@
  * possible tant que le dialogue est ouvert, puis depuis le registre (onglet Ferme).
  *
  * La dose au-dessus de la dose maximale du produit est dite (avertissement), jamais bloquée.
+ *
+ * Délai avant récolte (T76) : un champ, figé dans l'événement. Produit venu d'e-phy (son AMM est
+ * dans le catalogue) : le DAR proposé est celui de l'usage de l'espèce traitée (`darPourCulture`),
+ * jamais celui d'une autre culture ni un DAR deviné ; aucun usage pour cette espèce → avertissement
+ * non bloquant et champ vide ; DAR différents selon l'usage → l'utilisateur choisit. Produit saisi à
+ * la main ou catalogue indisponible : le DAR de la fiche (T52). Champ vide → enregistrement refusé.
  */
 import { useEffect, useId, useMemo, useRef, useState, type ReactElement } from 'react';
 import { avertissementDose, jourMois, surfaceEmplacements } from '@planif/core';
+import { darPourCulture, type CatalogueEphy, type DarPourCulture } from '@planif/core/ephy';
 import type { PorteDonnees } from '@planif/sync';
 import '../../parcellaire/parcellaire.css';
+import { chargerCatalogueEphy } from '../../ferme/phyto/catalogue.ts';
+import { libelleUsage } from '../../ferme/phyto/usage-ephy.ts';
 import { annoncerSaisie } from '../cache.ts';
 import {
   annulerTraitement,
@@ -32,6 +41,8 @@ export interface ProprietesSaisieTraitement {
   readonly surFermer: () => void;
   /** Un traitement vient d'être écrit ou annulé : l'écran relit les délais avant récolte. */
   readonly surEcrit?: () => void;
+  /** Catalogue e-phy (T76), chargé seulement quand un produit avec AMM est choisi. */
+  readonly chargerCatalogue?: () => Promise<CatalogueEphy>;
 }
 
 const UNITE_PAR_DEFAUT = 'L/ha';
@@ -68,9 +79,13 @@ interface ProprietesFormulaire {
   readonly message: string | null;
   readonly surEnregistrer: (s: Parameters<typeof ecrireTraitement>[1]) => void;
   readonly surMessage: (m: string | null) => void;
+  readonly catalogue: () => Promise<CatalogueEphy>;
 }
 
-function Formulaire({ culture, produits, aujourdhui, occupe, message, surEnregistrer, surMessage }: ProprietesFormulaire): ReactElement {
+/** Ce qu'e-phy dit du produit choisi pour l'espèce traitée. */
+type EtatEphy = { readonly sorte: 'hors_ephy' } | { readonly sorte: 'chargement' } | { readonly sorte: 'lu'; readonly r: DarPourCulture };
+
+function Formulaire({ culture, produits, aujourdhui, occupe, message, surEnregistrer, surMessage, catalogue }: ProprietesFormulaire): ReactElement {
   const id = useId();
   const [coches, setCoches] = useState<ReadonlySet<string>>(() => new Set(culture.emplacements.map((e) => e.id)));
   const [produitId, setProduitId] = useState('');
@@ -80,6 +95,13 @@ function Formulaire({ culture, produits, aujourdhui, occupe, message, surEnregis
   const [surfaceSaisie, setSurfaceSaisie] = useState<string | null>(null);
   const [cible, setCible] = useState('');
   const [operateur, setOperateur] = useState('');
+  const [dar, setDar] = useState('');
+  const [ephy, setEphy] = useState<EtatEphy>({ sorte: 'hors_ephy' });
+  const [usageChoisi, setUsageChoisi] = useState<number | null>(null);
+  /** Dernier produit choisi : une réponse du catalogue pour un produit précédent est ignorée. */
+  const demande = useRef(0);
+  /** Le maraîcher a écrit le délai lui-même : la réponse du catalogue ne l'écrase pas. */
+  const darTouche = useRef(false);
 
   const produit = produits.find((p) => p.id === produitId) ?? null;
   const surfaceAuto = useMemo(() => surfaceEmplacements(culture.emplacements.filter((e) => coches.has(e.id))), [culture, coches]);
@@ -101,14 +123,55 @@ function Formulaire({ culture, produits, aujourdhui, occupe, message, surEnregis
     setProduitId(v);
     const p = produits.find((x) => x.id === v);
     if (p?.doseMaximale != null) setUnite(p.doseMaximale.unite);
+    const n = ++demande.current;
+    darTouche.current = false;
+    setUsageChoisi(null);
+    if (p === undefined || p.numeroAmm === '') {
+      setEphy({ sorte: 'hors_ephy' });
+      setDar(p === undefined ? '' : String(p.delaiAvantRecolteJours));
+      return;
+    }
+    // Rien de proposé tant qu'e-phy n'a pas répondu : ni le DAR de la fiche, ni celui du produit précédent.
+    setEphy({ sorte: 'chargement' });
+    setDar('');
+    const deLaFiche = (): void => {
+      setEphy({ sorte: 'hors_ephy' });
+      if (!darTouche.current) setDar(String(p.delaiAvantRecolteJours));
+    };
+    catalogue().then(
+      (c) => {
+        if (n !== demande.current) return;
+        const pe = c.produits.find((x) => x.amm === p.numeroAmm);
+        if (pe === undefined) {
+          deLaFiche();
+          return;
+        }
+        const r = darPourCulture(pe, culture.espece);
+        setEphy({ sorte: 'lu', r });
+        if (!darTouche.current) setDar(r.sorte === 'propose' ? String(r.dar) : '');
+      },
+      (e: unknown) => {
+        console.error('Catalogue e-phy non chargé : DAR de la fiche produit', e);
+        if (n === demande.current) deLaFiche();
+      },
+    );
+  }
+
+  function choisirUsage(i: number, d: number | null): void {
+    setUsageChoisi(i);
+    darTouche.current = false;
+    setDar(d === null ? '' : String(d));
   }
 
   function enregistrer(): void {
     const s = lireNombre(surface);
+    const jours = dar.trim();
     const probleme =
       produit === null
         ? 'Choisissez le produit.'
-        : valeurDose === null
+        : !/^\d+$/.test(jours)
+          ? 'Indiquez le délai avant récolte en jours (un nombre entier, 0 si aucun).'
+          : valeurDose === null
           ? 'Indiquez la dose (un nombre, virgule acceptée).'
           : unite.trim() === ''
             ? 'Indiquez l’unité de la dose.'
@@ -129,7 +192,8 @@ function Formulaire({ culture, produits, aujourdhui, occupe, message, surEnregis
     surEnregistrer({
       culture: culture.cible,
       emplacementIds: culture.emplacements.filter((e) => coches.has(e.id)).map((e) => e.id),
-      produit,
+      // Le DAR du champ est figé dans l'événement (T52) ; la fiche produit n'est pas modifiée.
+      produit: { ...produit, delaiAvantRecolteJours: Number(jours) },
       date,
       dose: { valeur: valeurDose, unite: unite.trim() },
       surfaceTraiteeM2: s,
@@ -162,12 +226,30 @@ function Formulaire({ culture, produits, aujourdhui, occupe, message, surEnregis
           <option value="">Choisir…</option>
           {produits.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.nomCommercial} · DAR {p.delaiAvantRecolteJours} j{p.bio ? ' · bio' : ''}
+              {p.nomCommercial}
+              {p.bio ? ' · bio' : ''}
             </option>
           ))}
         </select>
       </div>
+      {produit !== null && <UsageEphyCulture espece={culture.espece} ephy={ephy} choisi={usageChoisi} nom={`${id}-usage`} surChoisir={choisirUsage} />}
       <div className="parc-grille">
+        <div className="parc-champ-bloc">
+          <label className="parc-etiquette" htmlFor={`${id}-dar`}>
+            Délai avant récolte (jours)
+          </label>
+          <input
+            id={`${id}-dar`}
+            className="parc-champ"
+            inputMode="numeric"
+            autoComplete="off"
+            value={dar}
+            onChange={(e) => {
+              darTouche.current = true;
+              setDar(e.target.value);
+            }}
+          />
+        </div>
         <div className="parc-champ-bloc">
           <label className="parc-etiquette" htmlFor={`${id}-dose`}>
             Dose
@@ -224,9 +306,62 @@ function Formulaire({ culture, produits, aujourdhui, occupe, message, surEnregis
   );
 }
 
+/** Ce qu'e-phy dit du produit pour l'espèce traitée : DAR repris, usage à choisir, ou avertissement. */
+function UsageEphyCulture({
+  espece,
+  ephy,
+  choisi,
+  nom,
+  surChoisir,
+}: {
+  readonly espece: string;
+  readonly ephy: EtatEphy;
+  readonly choisi: number | null;
+  readonly nom: string;
+  readonly surChoisir: (i: number, dar: number | null) => void;
+}): ReactElement | null {
+  if (ephy.sorte === 'hors_ephy') return null;
+  if (ephy.sorte === 'chargement') return <p className="parc-aide">Recherche de l’usage e-phy pour {espece}…</p>;
+  const r = ephy.r;
+  switch (r.sorte) {
+    case 'non_homologue':
+      return (
+        <p data-testid="avertissement-homologation" role="status" className="parc-erreur">
+          Produit non homologué sur cette culture ({espece}) dans e-phy. Vous restez maître de la décision : saisissez le délai avant récolte.
+        </p>
+      );
+    case 'propose':
+      return <p className="parc-aide">Délai avant récolte repris de l’usage e-phy pour {espece}.</p>;
+    case 'dar_absent':
+      return <p className="parc-aide">Délai avant récolte non précisé dans e-phy pour {espece} : saisissez-le.</p>;
+    case 'a_choisir':
+      return (
+        <fieldset className="parc-champ-bloc" style={{ border: 0, margin: 0, padding: 0 }}>
+          <legend className="parc-etiquette">Choisissez l’usage : le délai avant récolte en dépend</legend>
+          <div role="radiogroup" className="parc-liste">
+            {r.usages.map((u, i) => (
+              <label key={`${String(i)}-${libelleUsage(u)}`} className="parc-bouton-secondaire" style={{ display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left' }}>
+                <input
+                  type="radio"
+                  name={nom}
+                  checked={choisi === i}
+                  style={{ width: 24, height: 24, flex: 'none' }}
+                  onChange={() => {
+                    surChoisir(i, u.dar);
+                  }}
+                />
+                {libelleUsage(u)}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      );
+  }
+}
+
 type Etape = { readonly sorte: 'culture' } | { readonly sorte: 'formulaire'; readonly culture: CultureEnPlace } | { readonly sorte: 'enregistre'; readonly culture: CultureEnPlace; readonly ecrit: TraitementEcrit; readonly annule: boolean };
 
-export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcrit }: ProprietesSaisieTraitement): ReactElement {
+export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcrit, chargerCatalogue = chargerCatalogueEphy }: ProprietesSaisieTraitement): ReactElement {
   const idTitre = useId();
   const titre = useRef<HTMLHeadingElement>(null);
   const [lu, setLu] = useState<{ readonly cultures: readonly CultureEnPlace[]; readonly produits: readonly ProduitUtilisable[] } | null>(null);
@@ -234,6 +369,15 @@ export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcr
   const [etape, setEtape] = useState<Etape>({ sorte: 'culture' });
   const [occupe, setOccupe] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  /** Une lecture du catalogue par dialogue ; un échec (hors ligne) se retente au produit suivant. */
+  const catalogueLu = useRef<Promise<CatalogueEphy> | null>(null);
+  const catalogue = (): Promise<CatalogueEphy> => {
+    const c = (catalogueLu.current ??= chargerCatalogue());
+    c.catch(() => {
+      if (catalogueLu.current === c) catalogueLu.current = null;
+    });
+    return c;
+  };
 
   useEffect(() => {
     titre.current?.focus();
@@ -363,6 +507,7 @@ export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcr
               occupe={occupe}
               message={message}
               surMessage={setMessage}
+              catalogue={catalogue}
               surEnregistrer={(s) => {
                 enregistrer(etape.culture, s);
               }}

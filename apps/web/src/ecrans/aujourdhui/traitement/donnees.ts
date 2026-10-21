@@ -39,12 +39,17 @@ export interface EmplacementTraite {
 export interface CultureEnPlace {
   readonly cible: CultureConcernee;
   readonly cibleId: string;
+  /** Nom affiché : espèce et variété (« Tomate Cœur de bœuf »). */
   readonly nom: string;
+  /** Espèce seule (« Tomate ») : l'usage e-phy, donc le DAR proposé, en dépend (T76). */
+  readonly espece: string;
   readonly emplacements: readonly EmplacementTraite[];
 }
 
 export interface ProduitUtilisable extends ProduitPourTraitement {
   readonly bio: boolean;
+  /** N° AMM de la fiche ('' pour un produit saisi à la main) : le lien avec e-phy (T76). */
+  readonly numeroAmm: string;
 }
 
 /** Paramètres : ferme, jour, jour. */
@@ -67,7 +72,7 @@ const SQL_EMPLACEMENTS = `SELECT o.serie_id, o.plantation_id, em.id, em.code, co
     AND coalesce(o.reel_du, o.prevu_du) <= ? AND coalesce(o.reel_au, o.prevu_au) >= ?
     AND em.actif_du <= ? AND (em.actif_au IS NULL OR em.actif_au > ?)`;
 
-const SQL_PRODUITS = `SELECT id, nom_commercial, delai_avant_recolte_jours, dose_maximale, utilisable_en_bio FROM produit_phyto
+const SQL_PRODUITS = `SELECT id, nom_commercial, numero_amm, delai_avant_recolte_jours, dose_maximale, utilisable_en_bio FROM produit_phyto
   WHERE (ferme_id = ? OR ferme_id IS NULL) AND supprime_le IS NULL ORDER BY nom_commercial, id`;
 
 const nomDe = (espece: string, variete: string | null) => (variete === null || variete === '' ? espece : `${espece} ${variete}`);
@@ -94,11 +99,12 @@ export async function lireCulturesEnPlace(porte: PorteDonnees, fermeId: string, 
     return [...vus.values()].sort((a, b) => a.code.localeCompare(b.code, 'fr', { numeric: true }));
   };
   const cultures: CultureEnPlace[] = [
-    ...series.map((s) => ({ cible: { sorte: 'serie' as const, serieId: s.cible as Id<'Serie'> }, cibleId: s.cible, nom: nomDe(s.espece, s.variete), emplacements: de('serie_id', s.cible) })),
+    ...series.map((s) => ({ cible: { sorte: 'serie' as const, serieId: s.cible as Id<'Serie'> }, cibleId: s.cible, nom: nomDe(s.espece, s.variete), espece: s.espece, emplacements: de('serie_id', s.cible) })),
     ...campagnes.map((c) => ({
       cible: { sorte: 'campagne' as const, campagneId: c.cible as Id<'Campagne'> },
       cibleId: c.cible,
       nom: nomDe(c.espece, c.variete),
+      espece: c.espece,
       emplacements: de('plantation_id', c.plantation),
     })),
   ];
@@ -117,10 +123,11 @@ function quantite(v: unknown): Quantite | null {
 
 /** Produits non archivés de la ferme et de la bibliothèque commune. */
 export async function lireProduitsUtilisables(porte: PorteDonnees, fermeId: string): Promise<ProduitUtilisable[]> {
-  const lignes = await porte.lire<{ id: string; nom_commercial: string; delai_avant_recolte_jours: number; dose_maximale: string | null; utilisable_en_bio: number }>(SQL_PRODUITS, [fermeId]);
+  const lignes = await porte.lire<{ id: string; nom_commercial: string; numero_amm: string | null; delai_avant_recolte_jours: number; dose_maximale: string | null; utilisable_en_bio: number }>(SQL_PRODUITS, [fermeId]);
   return lignes.map((l) => ({
     id: l.id,
     nomCommercial: l.nom_commercial,
+    numeroAmm: (l.numero_amm ?? '').trim(),
     delaiAvantRecolteJours: l.delai_avant_recolte_jours,
     doseMaximale: quantite(l.dose_maximale),
     bio: l.utilisable_en_bio === 1,
