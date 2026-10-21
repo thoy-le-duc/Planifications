@@ -14,6 +14,7 @@ Chaque session part de zéro : rien n'est gardé d'une session à l'autre, tout 
 - PR ouvertes d'abord (CI rouge, conflit, commentaire de Théophane), puis **3 tickets au plus**, dont **2 en parallèle au plus**, indépendants (ni dépendance ni fichier commun).
 - **Pause du mardi 10 h au mercredi 10 h** (heure de Paris) : aucun nouveau ticket, on surveille et on fusionne seulement.
 - **Budget** : avant tout nouveau ticket, la section « Budget » de `docs/boucle.md` (dernière jauge donnée par Théophane ; au-delà de 70 % avant mardi, aucun nouveau ticket).
+- **Une seule session par ticket** : avant de prendre un ticket, `git fetch origin` et regarder les branches `ticket/<Txx>…`. Une branche **sans PR** dont le dernier commit date de **moins de 6 h**, ou qui pointe sur le même commit que `main`, appartient à une autre session en cours : prendre un autre ticket. Dès qu'il choisit un ticket, le chef pousse sa branche (`git push -u origin ticket/…`) avant de lancer les agents.
 - **2 passages de relecture au plus** par ticket (relecture, puis contre-relecture des correctifs). Domaine critique : jusqu'à zéro faille.
 - Backlog vide ou ticket flou : question dans `docs/questions.md` (branche + PR), puis arrêt.
 - Une branche et une PR par ticket, jamais de push direct sur `main`, worktree dans `/home/user/wt-<ticket>`.
