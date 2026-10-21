@@ -1,11 +1,8 @@
 {
-  "maj": "14 octobre 2026, matin (heure de Paris)",
-  "resume": "Du 11 au 13 octobre, 6 tickets fusionnés et 2 prêts. **3D au téléphone** : fluide de près, bouton « Filtres », liste des planches toujours accessible (T37b, T37c). **Planches** : plus de rechargement en pleine saisie, alertes plus lisibles, tests de temps jugés sur la médiane et le pire cas (T11b, T11e, T11f). **Aujourd'hui** : la relecture de la journée cède la place à une saisie (T13t). **Prêts, à fusionner** : premier « Fait » juste après l'ouverture de l'appli en environ 0,4 s au lieu de 1,6 s (T13u, PR #185), et ses suites (T13v, PR #186).",
-  "en_cours": {
-    "T13u": "PR #185 verte, à fusionner",
-    "T13v": "PR #186 verte, à fusionner après #185"
-  },
-  "attente": "Fusionner #185 puis #186 (« Merge commit ») : la fusion m'est refusée par les permissions de la session, ou autorise-la. Ta jauge Claude après la réinitialisation de mercredi 10 h. Mise en ligne : suivre docs/mise-en-ligne.md et me dire ce qui coince (sans jamais coller de clé). 1er novembre : repasser le dépôt en privé (rappel programmé). Fermer la PR #75.",
+  "maj": "21 octobre 2026, midi (heure de Paris)",
+  "resume": "Du 14 au 21 octobre : l'appli est en ligne (appli-ferme.vercel.app) et la ferme de Théophane s'y construit. **Fusionnés** : créer sa ferme et l'installer sur le téléphone (T39, T40), bibliothèque commune avec travaux et écartements (T41 à T43, T46, T48), démarrer sa ferme sans import (T49, T50, T65), hors-sol en pains (T51), **registre phyto** avec délai avant récolte par planche (T52, T55, T63, T69), **base E-Phy** de l'Anses (T53, T75, catalogue du 20/10), **cahier de fertilisation** et **fertirrigation** (T54, T56, T72), **les 60 vannes** (T57), **consignes par ouvrier** (T60), migrations et règles de synchro automatiques (T44, T67, T73, T74), allègements du démarrage et de la 3D (T66, T71), fiabilité (T47, T62, T64, T68, T70).",
+  "en_cours": {},
+  "attente": "Recréer le jeton PowerSync (le secret actuel est refusé : « Invalid JWT ») puis relancer « Règles de synchro PowerSync ». Répondre à Q47 (DAR absent dans E-Phy) et Q48 (correspondances E-Phy). 1er novembre : repasser le dépôt en privé (rappel programmé). Ne pas toucher à la PR #75.",
   "visuels": [
     {
       "titre": "Mode sombre",
