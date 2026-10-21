@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-21 — T72 : densité des engrais liquides (kg/L)
+
+- **Fait** : champ facultatif `densite_kg_par_l` sur `produit_fertilisant` (0,5 à 2,5 kg/L, liquides seulement ; refus en français sinon), migration `0043_densite_engrais` générée par drizzle-kit après 0042 (`main` à jour), schéma local, serveur, export. Le cœur compte un liquide en L ou m³ à volume × densité (100 L à 10 % N de densité 1,25 → 12,5 kg N), apports, cahier et fertirrigation (T56) compris ; fiche produit avec « Densité (kg/L) » (liquide seulement, clavier décimal), « densité non renseignée : 1 kg/L supposé » (saisie, recettes, cahier) et « produit solide saisi en volume : pas d’unités comptées, saisissez en kg ou t » (jamais bloquant). Typage, lint, tests (8 254 avec Postgres 16), build:essais et budgets passent ; démarrage inchangé à 70,0 Kio (plafond 71,2).
+- **Décidé** : sans densité, comportement d’avant (1 kg/L), aucun bilan existant ne change ; la densité n’est pas figée dans l’apport, la corriger corrige le passé comme les teneurs ; une densité sur un solide est refusée (`incoherent`, CHECK en base) et l’écran la vide en repassant en solide. Publication `powersync` (par table) et flux (`SELECT *`) inchangés : le garde-fou T67 reste vert.
+- **Bloquant** : rien. À renseigner par Théophane : la densité de ses engrais liquides (étiquette), sinon l’azote reste sous-estimé d’environ 25 % pour un azoté à 1,25 kg/L.
+
 ## 2026-10-21 — T75 : e-phy, correspondance espèce → culture sur les noms de 2026
 
 - **Fait** : `CORRESPONDANCES` vise les noms du catalogue réel du 2026-10-20 (PR #231) : tomate et aubergine → « Tomate - Aubergine », courgette, concombre → « Cucurbitacées à peau comestible », melon, pastèque, courges → « … non comestible », choux par famille (pommé, feuillu, à inflorescence, chou-rave, plus « Choux »), haricot vert → « Haricots et pois non écossés frais » (casse indifférente), « Epinard », « Betterave potagère »… ; anciennes formes de 2020 gardées dans `ANCIENNES_FORMES`. Test de cohérence sur une liste figée des 126 cultures (noms seulement, source et date). Success 4 sur une tomate : « Tomate - Aubergine », DAR 3 j. Typage, lint, tests core/phyto (98) et ecrans/ferme (116), build, budgets (démarrage 70,0 Kio) passent.
