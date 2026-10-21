@@ -58,6 +58,7 @@ import type { Camera as CameraThree } from 'three';
 import type { Masques } from '../aujourdhui/cache.ts';
 import type { LectureTravaux, pourDe, tachesVisibles, travauxDuJour3d, TravauxDuJour3d } from './travaux.ts';
 import type { ModeEquipe } from '../aujourdhui/cache.ts';
+import { etatDeLaCouche, vueEstPrete } from './pret-3d.ts';
 import { hauteurDalle, hauteurDeMasse } from './hauteurs-plants.ts';
 import type { BilanPlants, RenduPlants } from './plants-rendu.ts';
 import type { plantsDePlanche, PlantsPlanche } from './plants.ts';
@@ -881,7 +882,10 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const sansPlacement = useMemo(() => fermeSansPlacement(plan), [plan]);
   const nbSemaines = plan.semaines.length;
   const [semaine, setSemaine] = useState(() => Math.min(Math.max(0, nbSemaines - 1), plan.semaineCourante ?? 0));
-  const [prete, setPrete] = useState(false);
+  const [premiereImage, setPremiereImage] = useState(false);
+  // T77 : les plants sont posés (le bilan de la couche est arrivé) ; « prête » attend la couche (./pret-3d.ts).
+  const [plantsPoses, setPlantsPoses] = useState(false);
+  const [coucheEnEchec, setCoucheEnEchec] = useState(false);
   /** Dernière zone choisie par « Aller à » : citée dans l'encart, que les lecteurs d'écran annoncent (T28g). */
   const [zoneChoisie, setZoneChoisie] = useState<string | null>(null);
   const idCurseur = useId();
@@ -910,15 +914,18 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         const cultures = await m.lireCultures(porte, fermeId);
         if (!actif) return;
         // Le rendu des plants est créé une fois par ouverture, gardé quand le plan est relu.
+        setCoucheEnEchec(false);
         setCouche((avant) => ({ cultureAu: m.cultureAu, plantsDePlanche: m.plantsDePlanche, Plants: m.Plants, rendu: avant?.rendu ?? new m.RenduPlants(), cultures }));
       })
       .catch((erreur: unknown) => {
         console.error('Plants 3D : lecture impossible', erreur);
+        if (actif) setCoucheEnEchec(true);
       });
     return () => {
       actif = false;
     };
   }, [porte, fermeId, plan]);
+  const prete = vueEstPrete({ premiereImage, couche: etatDeLaCouche({ aUneBase: porte !== undefined && fermeId !== undefined, chargee: couche !== null, echec: coucheEnEchec }), plantsPoses });
   const lundi = plan.semaines[semaineBornee]?.lundi;
   const plants = useMemo<readonly (PlantsPlanche | null)[] | null>(() => {
     if (scene === null || couche === null || lundi === undefined) return null;
@@ -1051,6 +1058,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
       ds.hauteursPlants = b.hauteurs;
       ds.semainePlants = String(b.semaine);
       s.plantsEnAttente = null;
+      setPlantsPoses(true);
     }
     if (s.volEcrit !== s.vol) {
       ds.vol = s.vol ? 'oui' : 'non';
@@ -1063,7 +1071,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     if (!s.premiere) {
       s.premiere = true;
       performance.mark(MARQUE_AFFICHEE);
-      setPrete(true);
+      setPremiereImage(true);
     }
     if (s.semaineEnAttente !== null) {
       performance.mark(MARQUE_SEMAINE, { detail: { semaine: s.semaineEnAttente } });
