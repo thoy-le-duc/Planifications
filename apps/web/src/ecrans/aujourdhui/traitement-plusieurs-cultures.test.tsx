@@ -525,3 +525,103 @@ describe('T78 écran : Q47 par culture et catalogue indisponible', () => {
     expect(lignes()).toHaveLength(0);
   });
 });
+
+// ───────────────────────────── relecture critique (correctifs) ─────────────────────────────
+
+/**
+ * Correctifs de relecture, règles retenues (les plus simples pour le maraîcher) :
+ *   1. En lot, un DAR est lu comme dans le formulaire d'une culture : jours entiers en chiffres seulement
+ *      (« 5 »), rien d'autre. « 1e1 », « 0x5 », « 5. », « -1 », « 2,5 » sont refusés pour la culture
+ *      concernée (message qui la nomme), rien n'est écrit pour aucune culture.
+ *   2. Dose commune : une unité qui n'est pas « par hectare » (ni « /ha », ni « /hL ») est une quantité
+ *      totale ; en lot (2 cultures cochées ou plus), l'écran le dit : avis visible, non bloquant,
+ *      [data-testid="avertissement-unite-lot"] (role="status", cite « quantité totale » et « chaque culture »).
+ *      Aucun avis avec une seule culture, ni avec une unité par hectare (« L/ha », « kg/ha »).
+ *   3. Un emplacement supprimé ou désactivé (actif_au passé) entre l'affichage et l'écriture est revérifié
+ *      DANS la transaction du lot : lot entier refusé (TraitementRefuse côté données ; message role="alert"
+ *      qui cite « emplacement » côté écran), rien d'écrit à moitié.
+ */
+describe('T78 relecture 1 : DAR du lot lu comme celui d’une culture seule', () => {
+  it.each(['1e1', '0x5', '5.', '-1', '2,5', ' ', '+3', '1_0'])('« %s » refusé pour la tomate, rien d’écrit', async (mauvais) => {
+    const d = await ouvrirLot();
+    await remplir(liste('Produit', d), DECIS);
+    await communs(d, AUJOURDHUI);
+    await remplir(champ(`${DAR} · ${TOMATE}`, d), mauvais);
+    await toucher(bouton('Enregistrer', d));
+    await attendre(() => d.querySelector('[role="alert"]') !== null, `refus de « ${mauvais} »`);
+    expect(texte(d.querySelector('[role="alert"]'))).toContain(TOMATE);
+    expect(lignes()).toHaveLength(0);
+    expect(transactions).toBe(0);
+  });
+
+  it('la même saisie valide (« 5 ») passe, DAR figé à 5 jours', async () => {
+    const d = await ouvrirLot();
+    await remplir(liste('Produit', d), DECIS);
+    await communs(d, AUJOURDHUI);
+    await remplir(champ(`${DAR} · ${TOMATE}`, d), '5');
+    await toucher(bouton('Enregistrer', d));
+    await attendre(() => originaux().length === 2, 'lot écrit');
+    expect(detailDe(deTomate()).recolteAutoriseeLe).toBe('2026-10-05');
+  });
+});
+
+describe('T78 relecture 2 : dose commune et unité en quantité totale', () => {
+  const avis = (): HTMLElement | null => document.querySelector<HTMLElement>('[data-testid="avertissement-unite-lot"]');
+
+  it('lot et unité « L » ou « kg » : avis visible qui parle de quantité totale et de chaque culture ; l’enregistrement reste possible', async () => {
+    const d = await ouvrirLot();
+    await remplir(liste('Produit', d), DECIS);
+    expect(avis()).toBeNull();
+    for (const unite of ['L', 'kg']) {
+      await remplir(champ('Unité', d), unite);
+      await attendre(() => avis() !== null, `avis pour « ${unite} »`);
+      expect(texte(avis())).toMatch(/quantité totale/i);
+      expect(texte(avis())).toMatch(/chaque culture/i);
+    }
+    await communs(d);
+    await toucher(bouton('Enregistrer', d));
+    await attendre(() => originaux().length === 2, 'non bloquant : lot écrit');
+  });
+
+  it('pas d’avis avec une unité par hectare, ni avec une seule culture', async () => {
+    const d = await ouvrirLot();
+    await remplir(liste('Produit', d), DECIS);
+    await remplir(champ('Unité', d), 'kg/ha');
+    expect(avis()).toBeNull();
+    await remplir(champ('Unité', d), 'L');
+    await attendre(() => avis() !== null, 'avis en lot');
+    await toucher(champ(FRAISE, d));
+    await attendre(() => avis() === null, 'avis retiré avec une seule culture');
+  });
+});
+
+describe('T78 relecture 3 : emplacement supprimé ou désactivé avant l’écriture', () => {
+  it('données : emplacement de la fraise supprimé juste avant l’écriture → lot entier refusé, rien d’écrit pour la tomate non plus', async () => {
+    await base.execute('UPDATE emplacement SET supprime_le = ? WHERE id = ?', ['2026-09-09T08:00:00.000Z', EMPLACEMENT.s1g01]);
+    await expect(lot().ecrireLotTraitement(porte, LOT())).rejects.toBeInstanceOf(lot().TraitementRefuse);
+    expect(lignes()).toHaveLength(0);
+  });
+
+  it('données : emplacement de la tomate désactivé avant la date du traitement (actif_au passé) → lot entier refusé', async () => {
+    await base.execute('UPDATE emplacement SET actif_au = ? WHERE id = ?', ['2026-09-01', EMPLACEMENT.t2p07]);
+    await expect(lot().ecrireLotTraitement(porte, LOT())).rejects.toBeInstanceOf(lot().TraitementRefuse);
+    expect(lignes()).toHaveLength(0);
+  });
+
+  it('données : emplacements intacts → lot écrit (la revérification ne bloque pas le cas normal)', async () => {
+    await expect(lot().ecrireLotTraitement(porte, LOT())).resolves.toHaveLength(2);
+  });
+
+  it('écran : emplacement de la fraise supprimé entre l’affichage et « Enregistrer » → refus du lot entier, message sur l’emplacement, rien d’écrit', async () => {
+    const d = await ouvrirLot();
+    await remplir(liste('Produit', d), DECIS);
+    await communs(d);
+    await base.execute('UPDATE emplacement SET supprime_le = ? WHERE id = ?', ['2026-09-09T08:00:00.000Z', EMPLACEMENT.s1g01]);
+    await toucher(bouton('Enregistrer', d));
+    await attendre(() => d.querySelector('[role="alert"]') !== null, 'refus affiché');
+    expect(texte(d.querySelector('[role="alert"]'))).toMatch(/emplacement/i);
+    expect(lignes()).toHaveLength(0);
+    expect(document.querySelector('[data-testid="lot-culture"]')).toBeNull();
+  });
+});
+
