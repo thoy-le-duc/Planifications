@@ -9,9 +9,10 @@
 export type EtatCouche = 'sans' | 'attendue' | 'chargee' | 'echec';
 
 /** Où en est la couche des plants : base absente, en chargement, arrivée ou en échec (chargée prime : plan relu). */
-export function etatDeLaCouche(e: { readonly aUneBase: boolean; readonly chargee: boolean; readonly echec: boolean }): EtatCouche {
+export function etatDeLaCouche(e: { readonly aUneBase: boolean; readonly chargee: boolean; readonly echec: boolean; readonly montable?: boolean }): EtatCouche {
   if (!e.aUneBase) return 'sans';
-  if (e.chargee) return 'chargee';
+  // Couche chargée mais aucun plant à monter (plan sans semaine) : rien ne viendra, prête sans plants.
+  if (e.chargee) return e.montable === false ? 'sans' : 'chargee';
   return e.echec ? 'echec' : 'attendue';
 }
 

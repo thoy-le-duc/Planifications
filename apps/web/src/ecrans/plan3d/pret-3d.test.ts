@@ -23,6 +23,13 @@ describe('T77 : état de la couche des plants', () => {
   it('échec : la vue continue sans plants', () => {
     expect(etatDeLaCouche({ aUneBase: true, chargee: false, echec: true })).toBe('echec');
   });
+  it('couche chargée mais plants non montables (plan sans semaine) : rien à attendre', () => {
+    expect(etatDeLaCouche({ aUneBase: true, chargee: true, echec: false, montable: false })).toBe('sans');
+    expect(vueEstPrete({ premiereImage: true, couche: etatDeLaCouche({ aUneBase: true, chargee: true, echec: false, montable: false }), plantsPoses: false })).toBe(true);
+  });
+  it('couche chargée et plants montables : on attend la pose', () => {
+    expect(etatDeLaCouche({ aUneBase: true, chargee: true, echec: false, montable: true })).toBe('chargee');
+  });
   it('un plan relu après un échec qui réussit : chargée prime sur l’échec', () => {
     expect(etatDeLaCouche({ aUneBase: true, chargee: true, echec: true })).toBe('chargee');
   });
