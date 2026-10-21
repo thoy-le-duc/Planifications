@@ -127,7 +127,7 @@ export function validerPointPlan(ligne: unknown): ResultatPlacement<PointPlanVal
     if (nom === null) return refus('incomplet', 'nom', `Un point du plan a un nom, de ${String(NOM_POINT_PLAN_MAX)} caractères au plus.`);
     const sorte = ligne.sorte;
     if (typeof sorte !== 'string' || !(SORTES_POINT_PLAN as readonly string[]).includes(sorte)) {
-      return refus('entree_invalide', 'sorte', 'Un point du plan est un point d’eau ou un repère.');
+      return refus('entree_invalide', 'sorte', 'Sorte de point inconnue : un point du plan est un point d’eau ou un repère.');
     }
     const x = ligne.x_m;
     const y = ligne.y_m;

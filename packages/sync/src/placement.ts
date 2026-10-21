@@ -15,6 +15,7 @@
  * DELETE). Les messages de rejet sont en français (ceux du cœur pour ses règles).
  */
 import { identifiantNormalise, instantNormalise, TAILLE_MAX_PAR_LOT, TYPES_BATIMENT, validerPlacement, validerPositionVanne } from '@planif/core';
+import { placerElementPlan } from './plan-chemins.ts';
 import type { BaseLocale, ChangementPlacement, PointPlacement, TransactionLocale, ValeursBatiment } from './types.ts';
 
 export const SEUL_LE_GERANT = 'Seul le gérant peut placer les éléments de la ferme.';
@@ -68,18 +69,20 @@ async function verifierGerant(tx: TransactionLocale, ctx: ContextePlacement): Pr
 /** Décision du chef (T28s) : aucun placement tant que l'origine du plan de la ferme n'est pas posée. */
 async function exigerOrigine(tx: TransactionLocale, ctx: ContextePlacement): Promise<void> {
   const [ferme] = await lire<{ o: unknown }>(tx, 'SELECT origine_plan AS o FROM ferme WHERE id = ?', [ctx.fermeId]);
-  if (ferme === undefined || ferme.o === null) throw new Error('Posez d’abord le point de départ du plan de la ferme, avant d’y placer des éléments.');
+  if (ferme === undefined || ferme.o === null) throw new Error('Posez d’abord le point de départ du plan de la ferme (son origine), avant d’y placer des éléments.');
 }
 
-/** La ferme de la porte a-t-elle un placement (bâtiment, zone avec contour, emplacement placé, non supprimés) ? */
+/** La ferme de la porte a-t-elle un placement (bâtiment, zone avec contour, emplacement ou vanne placés, chemin ou point du plan (T61), non supprimés) ? */
 async function aUnPlacement(tx: TransactionLocale, ctx: ContextePlacement): Promise<boolean> {
   const [p] = await lire<{ existe: number }>(
     tx,
     `SELECT (EXISTS (SELECT 1 FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL)
           OR EXISTS (SELECT 1 FROM zone WHERE ferme_id = ? AND supprime_le IS NULL AND contour IS NOT NULL)
           OR EXISTS (SELECT 1 FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND placement_x_m IS NOT NULL)
-          OR EXISTS (SELECT 1 FROM secteur_irrigation WHERE ferme_id = ? AND supprime_le IS NULL AND placement_x_m IS NOT NULL)) AS existe`,
-    [ctx.fermeId, ctx.fermeId, ctx.fermeId, ctx.fermeId],
+          OR EXISTS (SELECT 1 FROM secteur_irrigation WHERE ferme_id = ? AND supprime_le IS NULL AND placement_x_m IS NOT NULL)
+          OR EXISTS (SELECT 1 FROM chemin WHERE ferme_id = ? AND supprime_le IS NULL)
+          OR EXISTS (SELECT 1 FROM point_plan WHERE ferme_id = ? AND supprime_le IS NULL)) AS existe`,
+    [ctx.fermeId, ctx.fermeId, ctx.fermeId, ctx.fermeId, ctx.fermeId, ctx.fermeId],
   );
   return p?.existe === 1;
 }
@@ -225,7 +228,7 @@ async function placerOrigine(
       : null;
   const change = avant === null ? origine !== null : avant.latitude !== origine?.latitude || avant.longitude !== origine.longitude;
   // Décision du chef (T28s) : l'origine ne se pose, ne se déplace ni ne s'efface tant qu'un placement existe.
-  if (change && (await aUnPlacement(tx, ctx))) throw new Error('Le point de départ du plan ne se déplace ni ne s’efface tant que des éléments sont placés.');
+  if (change && (await aUnPlacement(tx, ctx))) throw new Error('Le point de départ du plan (son origine) ne se déplace ni ne s’efface tant que des éléments sont placés.');
   // Seule l'origine change : le serveur refuse toute autre colonne de la ferme.
   await tx.execute('UPDATE ferme SET origine_plan = ? WHERE id = ?', [origine === null ? null : JSON.stringify({ latitude: origine.latitude, longitude: origine.longitude }), ctx.fermeId]);
   return { sorte: 'origine', origine: avant };
@@ -250,6 +253,12 @@ function appliquer(tx: TransactionLocale, ctx: ContextePlacement, c: ChangementP
       return placerOrigine(tx, ctx, c.origine);
     case 'vanne':
       return placerVanne(tx, ctx, id, c.position);
+    case 'chemin':
+    case 'point_plan':
+    case 'lieu_rangement':
+    case 'place_rangement':
+    case 'outil':
+      return placerElementPlan(tx, ctx, id, c);
   }
   return Promise.reject(new Error('Changement de placement inconnu.'));
 }
