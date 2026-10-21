@@ -150,7 +150,11 @@ async function modifier(tx: TransactionDb, ctx: Contexte, e: EcritureFertilisant
   const fermeDemandee = e.donnees.ferme_id;
   if (fermeDemandee !== undefined && (typeof fermeDemandee !== 'string' || fermeDemandee.toLowerCase() !== fermeId)) return invalide(PRECISION_CHANGE_DE_FERME, fermeId);
 
-  const lecture = validerProduitFertilisant({ ...avant, ...e.donnees, id: avant.id });
+  // T72 : un téléphone d'avant T72 qui passe un liquide en solide ne parle pas de la densité ;
+  // sans cela, la ligne complète serait refusée à chaque envoi. Une densité explicite reste jugée.
+  const rendNonLiquide = e.donnees.forme !== undefined && e.donnees.forme !== 'liquide';
+  const efface = rendNonLiquide && !Object.hasOwn(e.donnees, 'densite_kg_par_l') ? { densite_kg_par_l: null } : {};
+  const lecture = validerProduitFertilisant({ ...avant, ...efface, ...e.donnees, id: avant.id });
   if (!lecture.ok) return refusDuCoeur(lecture.erreur, fermeId);
   const ligne = ligneDe(lecture.valeur);
   if ((await identique(tx, ligne, lecture.valeur.id)) === true) return null;
