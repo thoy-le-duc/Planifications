@@ -287,3 +287,22 @@ export function ecrireCatalogue(dossier: string, sortie: string, dateBase: strin
   writeFileSync(sortie, json);
   return { produits: c.produits.length, usages: c.produits.reduce((n, p) => n + p.usages.length, 0), octets: Buffer.byteLength(json) };
 }
+
+// ── Garde-fou ────────────────────────────────────────────────────────────────────────────────
+
+/** Part des produits du catalogue en place en dessous de laquelle une nouvelle base est suspecte. */
+export const CHUTE_MAX = 0.8;
+
+/**
+ * Raison de refuser d'écrire le nouveau catalogue, ou null s'il est plausible. Un format mal lu
+ * (type, état, AMM ou colonne d'usage) donne peu de produits, des produits sans usages, ou une
+ * chute brutale par rapport au catalogue en place (la base bouge peu d'une semaine à l'autre).
+ */
+export function refusCatalogue(nouveau: { readonly produits: number; readonly usages: number }, ancien: { readonly produits: number } | null, minimum: number): string | null {
+  if (nouveau.produits < minimum) return `Seulement ${String(nouveau.produits)} produits lus (minimum ${String(minimum)}).`;
+  if (nouveau.produits > 0 && nouveau.usages < nouveau.produits) return `Seulement ${String(nouveau.usages)} usages pour ${String(nouveau.produits)} produits : usages mal lus.`;
+  if (ancien !== null && ancien.produits > 0 && nouveau.produits < ancien.produits * CHUTE_MAX) {
+    return `${String(nouveau.produits)} produits lus contre ${String(ancien.produits)} dans le catalogue en place : chute suspecte.`;
+  }
+  return null;
+}

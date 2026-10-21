@@ -28,7 +28,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { validerCatalogueEphy, type CatalogueEphy, type ProduitEphy } from '@planif/core/ephy';
-import { decoderCsv, ecrireCatalogue, ErreurFormatEphy, extraireCatalogue, trouverFichiers } from './extraire.ts';
+import { decoderCsv, ecrireCatalogue, ErreurFormatEphy, extraireCatalogue, refusCatalogue, trouverFichiers } from './extraire.ts';
 
 const EXTRAIT = fileURLToPath(new URL('./test/extrait/', import.meta.url));
 const EXTRAIT_1252 = fileURLToPath(new URL('./test/extrait-windows-1252/', import.meta.url));
@@ -165,5 +165,23 @@ describe('T53 : format tolérant, erreurs claires', () => {
     expect(r.produits).toBe(5);
     const lu: unknown = JSON.parse(readFileSync(sortie, 'utf8'));
     expect(validerCatalogueEphy(lu)).toEqual(catalogue());
+  });
+});
+
+describe('T53 : garde-fou du workflow (un format mal lu ne remplace pas le catalogue)', () => {
+  it('trop peu de produits : refus', () => {
+    expect(refusCatalogue({ produits: 999, usages: 9000 }, null, 1000)).toMatch(/999 produits/);
+    expect(refusCatalogue({ produits: 1000, usages: 9000 }, null, 1000)).toBeNull();
+  });
+
+  it('produits lus mais usages perdus (colonne ou AMM mal lus) : refus', () => {
+    expect(refusCatalogue({ produits: 2300, usages: 0 }, null, 1000)).toMatch(/usages/);
+    expect(refusCatalogue({ produits: 2300, usages: 2299 }, null, 1000)).toMatch(/usages/);
+  });
+
+  it('chute brutale par rapport au catalogue en place : refus ; catalogue initial vide : accepté', () => {
+    expect(refusCatalogue({ produits: 1500, usages: 15000 }, { produits: 2337 }, 1000)).toMatch(/2337/);
+    expect(refusCatalogue({ produits: 2200, usages: 19000 }, { produits: 2337 }, 1000)).toBeNull();
+    expect(refusCatalogue({ produits: 2200, usages: 19000 }, { produits: 0 }, 1000)).toBeNull();
   });
 });

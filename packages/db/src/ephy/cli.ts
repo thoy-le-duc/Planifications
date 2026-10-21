@@ -5,10 +5,24 @@
  *
  * `--date` : date de la base publiée (défaut : aujourd'hui, UTC). `--minimum` : nombre de produits
  * en dessous duquel on refuse d'écrire (garde-fou du workflow : un format mal lu ne remplace pas
- * le catalogue par un catalogue vide). Ni réseau, ni secret : le téléchargement est fait avant.
+ * le catalogue par un catalogue vide) ; refus aussi si les usages manquent ou si le nombre de
+ * produits chute de plus de 20 % par rapport au catalogue en place (`refusCatalogue`).
+ * Ni réseau, ni secret : le téléchargement est fait avant.
  */
-import { renameSync, rmSync } from 'node:fs';
-import { ecrireCatalogue, ErreurFormatEphy } from './extraire.ts';
+import { existsSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { validerCatalogueEphy } from '@planif/core/ephy';
+import { ecrireCatalogue, ErreurFormatEphy, refusCatalogue } from './extraire.ts';
+
+/** Nombre de produits du catalogue en place, ou null s'il est absent ou illisible. */
+function produitsEnPlace(sortie: string): { readonly produits: number } | null {
+  if (!existsSync(sortie)) return null;
+  try {
+    const c = validerCatalogueEphy(JSON.parse(readFileSync(sortie, 'utf8')));
+    return c === null ? null : { produits: c.produits.length };
+  } catch {
+    return null;
+  }
+}
 
 function option(args: readonly string[], nom: string): string | undefined {
   const i = args.indexOf(nom);
@@ -30,10 +44,12 @@ function principal(args: readonly string[]): number {
   }
   try {
     const temporaire = `${sortie}.tmp`;
+    const ancien = produitsEnPlace(sortie);
     const r = ecrireCatalogue(dossier, temporaire, date);
-    if (r.produits < minimum) {
+    const refus = refusCatalogue(r, ancien, minimum);
+    if (refus !== null) {
       rmSync(temporaire, { force: true });
-      console.error(`Seulement ${String(r.produits)} produits lus (minimum ${String(minimum)}) : catalogue non remplacé. Vérifier le format publié.`);
+      console.error(`${refus} Catalogue non remplacé : vérifier le format publié.`);
       return 1;
     }
     renameSync(temporaire, sortie);
