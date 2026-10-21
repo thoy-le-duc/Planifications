@@ -164,7 +164,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 
 ## Phase 1 — Mise en ligne, usage réel, jumeau, phyto et fertilisation (octobre 2026)
 
-Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : T79 et T78 (suites de T76, phyto), puis T58, T61.
+Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : T80 (démo, usage sur ordinateur), puis T79 et T78 (suites de T76, phyto), puis T58, T61.
 
 | Ticket | Sujet | Dépend de | Statut |
 | --- | --- | --- | --- |
