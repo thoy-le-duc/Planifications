@@ -23,6 +23,7 @@ import type {
   StatutSerie,
   TypeAbri,
   TypeAncreSerie,
+  SortePointPlan,
   TypeBatiment,
   TypeEvenement,
   UniteFertilisant,
@@ -39,7 +40,9 @@ function toutes<T extends string>() {
 }
 
 export const TYPES_ABRI = toutes<TypeAbri>()(['plein_champ', 'tunnel', 'serre', 'hors_sol']);
-export const TYPES_BATIMENT = toutes<TypeBatiment>()(['serre_tunnel', 'serre_chapelle', 'hangar', 'magasin', 'autre']);
+export const TYPES_BATIMENT = toutes<TypeBatiment>()(['serre_tunnel', 'serre_chapelle', 'hangar', 'local', 'chambre_froide', 'magasin', 'autre']);
+/** T61 : sortes d'un point du plan. */
+export const SORTES_POINT_PLAN = toutes<SortePointPlan>()(['point_eau', 'repere']);
 export const SORTES_EMPLACEMENT = toutes<SorteEmplacement>()(['planche', 'rang', 'gouttiere']);
 export const CATEGORIES_ESPECE = toutes<CategorieEspece>()([
   'legume',

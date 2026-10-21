@@ -42,6 +42,23 @@ streams:
   emplacement:
     auto_subscribe: true
     query: SELECT * FROM emplacement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  # T61 : chemins, points du plan, lieux de rangement, places et outils, à tous les membres
+  # (l'ouvrier trouve son chemin et l'outil de sa consigne) ; écrits par le gérant seul (serveur).
+  chemin:
+    auto_subscribe: true
+    query: SELECT * FROM chemin WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  point_plan:
+    auto_subscribe: true
+    query: SELECT * FROM point_plan WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  lieu_rangement:
+    auto_subscribe: true
+    query: SELECT * FROM lieu_rangement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  place_rangement:
+    auto_subscribe: true
+    query: SELECT * FROM place_rangement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  outil:
+    auto_subscribe: true
+    query: SELECT * FROM outil WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
   secteur_irrigation:
     auto_subscribe: true
     query: SELECT * FROM secteur_irrigation WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)

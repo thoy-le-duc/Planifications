@@ -71,6 +71,7 @@ import {
   TABLES_MODIFIABLES,
   TYPES_ABRI,
   TYPES_ANCRE,
+  SORTES_POINT_PLAN,
   TYPES_BATIMENT,
   TYPES_EVENEMENT,
   UNITES_FERTILISANT,
@@ -265,7 +266,7 @@ export const emplacement = pgTable(
 );
 
 /**
- * Bâtiment de la ferme (T28a, Q31) : serre, hangar, magasin. Un rectangle toujours placé dans le
+ * Bâtiment de la ferme (T28a, Q31 ; T61 : local, chambre froide) : serre, hangar, magasin. Un rectangle toujours placé dans le
  * repère local de la ferme (centre, orientation = cap de la longueur). Une serre abrite au plus
  * une zone de sa ferme ; une zone abritée n'a pas de contour (déclencheurs, migration 0028).
  * Bornes : celles de validerPlacement (@planif/core).
@@ -300,6 +301,8 @@ export const batiment = pgTable(
       foreignColumns: [zone.fermeId, zone.id],
     }),
     index('batiment_ferme_idx').on(t.fermeId),
+    /** T61 : cible de la clé étrangère composée de `lieu_rangement` (un lieu de rangement de la même ferme). */
+    unique('batiment_ferme_id_id_unique').on(t.fermeId, t.id),
     /** Au plus un bâtiment non supprimé par zone. */
     uniqueIndex('batiment_zone_actif_idx')
       .on(t.zoneId)
@@ -357,6 +360,129 @@ export const secteurEmplacement = pgTable(
     verif('secteur_emplacement', 'periode', sql`${t.au} IS NULL OR ${t.au} >= ${t.du}`),
     index('secteur_emplacement_secteur_idx').on(t.secteurIrrigationId),
     index('secteur_emplacement_emplacement_idx').on(t.emplacementId),
+  ],
+);
+
+/**
+ * T61 (Q44) : chemin de la ferme, ligne OUVERTE tracée point par point dans le repère local
+ * (`[{x, y}, …]` en mètres), avec sa largeur. Bornes simples ici (fonction de la migration 0044) ;
+ * les points confondus sont refusés par le cœur (validerChemin), rejoué par le serveur. Un chemin
+ * non supprimé fige l'origine du plan (apps/api/src/sync/structure-origine.ts). Publiée.
+ */
+export const chemin = pgTable(
+  'chemin',
+  {
+    id: uuid('id').primaryKey(),
+    fermeId: fermeId(),
+    nom: text('nom'),
+    points: jsonb('points').$type<readonly PointLocal[]>().notNull(),
+    largeurM: decimal('largeur_m').notNull(),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('chemin', 'nom', sql`${t.nom} IS NULL OR length(btrim(${t.nom})) BETWEEN 1 AND 80`),
+    verif('chemin', 'points_valides', sql`chemin_points_valides(${t.points})`),
+    verif('chemin', 'largeur', sql`${t.largeurM} > 0 AND ${t.largeurM} <= 20`),
+    index('chemin_ferme_idx').on(t.fermeId),
+  ],
+);
+
+/** T61 : point du plan nommé, point d'eau ou autre repère (portail, abri), dans le repère local. Publiée. */
+export const pointPlan = pgTable(
+  'point_plan',
+  {
+    id: uuid('id').primaryKey(),
+    fermeId: fermeId(),
+    nom: text('nom').notNull(),
+    sorte: text('sorte', { enum: SORTES_POINT_PLAN }).notNull(),
+    xM: decimal('x_m').notNull(),
+    yM: decimal('y_m').notNull(),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('point_plan', 'nom', sql`length(btrim(${t.nom})) BETWEEN 1 AND 80`),
+    verif('point_plan', 'sorte', parmi(t.sorte, SORTES_POINT_PLAN)),
+    verif('point_plan', 'distance', sql`${t.xM} * ${t.xM} + ${t.yM} * ${t.yM} <= 25000000`),
+    index('point_plan_ferme_idx').on(t.fermeId),
+    /** Cible de la clé étrangère composée de `lieu_rangement`. */
+    unique('point_plan_ferme_id_id_unique').on(t.fermeId, t.id),
+  ],
+);
+
+/**
+ * T61 : lieu de rangement des outils, un bâtiment OU un point du plan de la même ferme (clés
+ * étrangères composées) ; son nom est celui de l'élément. Un seul lieu non supprimé par élément. Publiée.
+ */
+export const lieuRangement = pgTable(
+  'lieu_rangement',
+  {
+    id: uuid('id').primaryKey(),
+    fermeId: fermeId(),
+    batimentId: uuid('batiment_id'),
+    pointPlanId: uuid('point_plan_id'),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('lieu_rangement', 'un_element', sql`(${t.batimentId} IS NULL) <> (${t.pointPlanId} IS NULL)`),
+    foreignKey({ name: 'lieu_rangement_batiment_meme_ferme_fk', columns: [t.fermeId, t.batimentId], foreignColumns: [batiment.fermeId, batiment.id] }),
+    foreignKey({ name: 'lieu_rangement_point_plan_meme_ferme_fk', columns: [t.fermeId, t.pointPlanId], foreignColumns: [pointPlan.fermeId, pointPlan.id] }),
+    index('lieu_rangement_ferme_idx').on(t.fermeId),
+    uniqueIndex('lieu_rangement_batiment_actif_idx')
+      .on(t.batimentId)
+      .where(sql`${t.supprimeLe} IS NULL AND ${t.batimentId} IS NOT NULL`),
+    uniqueIndex('lieu_rangement_point_plan_actif_idx')
+      .on(t.pointPlanId)
+      .where(sql`${t.supprimeLe} IS NULL AND ${t.pointPlanId} IS NOT NULL`),
+    /** Cible des clés étrangères composées de `place_rangement` et `outil`. */
+    unique('lieu_rangement_ferme_id_id_unique').on(t.fermeId, t.id),
+  ],
+);
+
+/** T61 : place nommée dans un lieu de rangement (« mur nord »), unique dans son lieu (casse et espaces ignorés). Publiée. */
+export const placeRangement = pgTable(
+  'place_rangement',
+  {
+    id: uuid('id').primaryKey(),
+    fermeId: fermeId(),
+    lieuRangementId: uuid('lieu_rangement_id').notNull(),
+    nom: text('nom').notNull(),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('place_rangement', 'nom', sql`length(btrim(${t.nom})) BETWEEN 1 AND 60`),
+    foreignKey({ name: 'place_rangement_lieu_meme_ferme_fk', columns: [t.fermeId, t.lieuRangementId], foreignColumns: [lieuRangement.fermeId, lieuRangement.id] }),
+    index('place_rangement_ferme_idx').on(t.fermeId),
+    uniqueIndex('place_rangement_nom_actif_idx')
+      .on(t.lieuRangementId, sql`lower(btrim(${t.nom}))`)
+      .where(sql`${t.supprimeLe} IS NULL`),
+    /** Cible de la clé étrangère composée de `outil` : la place d'un outil est dans le lieu de l'outil. */
+    unique('place_rangement_id_lieu_unique').on(t.id, t.lieuRangementId),
+  ],
+);
+
+/**
+ * T61 : outil de la ferme, avec son lieu de rangement (obligatoire, même ferme) et, s'il y a lieu,
+ * une place DE CE LIEU. Nom unique dans la ferme parmi les non supprimés (casse et espaces
+ * ignorés) : le travail prévu désigne l'outil par son nom. Publiée.
+ */
+export const outil = pgTable(
+  'outil',
+  {
+    id: uuid('id').primaryKey(),
+    fermeId: fermeId(),
+    nom: text('nom').notNull(),
+    lieuRangementId: uuid('lieu_rangement_id').notNull(),
+    placeRangementId: uuid('place_rangement_id'),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('outil', 'nom', sql`length(btrim(${t.nom})) BETWEEN 1 AND 80`),
+    foreignKey({ name: 'outil_lieu_meme_ferme_fk', columns: [t.fermeId, t.lieuRangementId], foreignColumns: [lieuRangement.fermeId, lieuRangement.id] }),
+    foreignKey({ name: 'outil_place_du_lieu_fk', columns: [t.placeRangementId, t.lieuRangementId], foreignColumns: [placeRangement.id, placeRangement.lieuRangementId] }),
+    index('outil_ferme_idx').on(t.fermeId),
+    uniqueIndex('outil_nom_actif_idx')
+      .on(t.fermeId, sql`lower(btrim(${t.nom}))`)
+      .where(sql`${t.supprimeLe} IS NULL`),
   ],
 );
 

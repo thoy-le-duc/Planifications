@@ -309,6 +309,27 @@
       "when": 1792574005009,
       "tag": "0043_densite_engrais",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1792619874199,
+      "tag": "0044_chemin_fonction_points",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1792619932527,
+      "tag": "0045_batiment_local_chambre_froide",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1792619933860,
+      "tag": "0046_plan_chemins_rangement",
+      "breakpoints": true
     }
   ]
 }
