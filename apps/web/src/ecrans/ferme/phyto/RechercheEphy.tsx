@@ -120,6 +120,7 @@ export function ChoixUsage({
   usages,
   pourLaFerme,
   darPropose,
+  horsCultures,
   choisi,
   surChoisir,
   surTous,
@@ -128,6 +129,8 @@ export function ChoixUsage({
   readonly usages: readonly UsageEphy[];
   readonly pourLaFerme: boolean;
   readonly darPropose: boolean;
+  /** La ferme a des cultures, mais aucun usage du produit ne les couvre. */
+  readonly horsCultures: boolean;
   readonly choisi: number | null;
   readonly surChoisir: (i: number, u: UsageEphy) => void;
   readonly surTous: () => void;
@@ -138,6 +141,11 @@ export function ChoixUsage({
       {produit.retire && (
         <p role="alert" className="parc-erreur">
           Produit {mentionRetrait(produit)} : son emploi n’est plus autorisé, sélection déconseillée. Vérifiez les délais d’écoulement des stocks.
+        </p>
+      )}
+      {horsCultures && usages.length > 0 && (
+        <p role="alert" className="parc-erreur">
+          Aucun usage autorisé pour vos cultures dans e-phy : ce produit ne peut pas y être employé. Les usages ci-dessous sont ceux d’autres cultures.
         </p>
       )}
       <p className="parc-aide">

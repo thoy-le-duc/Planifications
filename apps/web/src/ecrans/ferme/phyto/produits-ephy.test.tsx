@@ -211,6 +211,8 @@ describe('T53 : recherche e-phy dans la fiche produit', () => {
     await chercher(d, 'succ');
     await toucher(suggestion('SUCCESS 4'));
     expect(champ('Délai avant récolte (jours)', d).value).toBe('');
+    // Relecture : employer un produit sans usage autorisé pour la culture est interdit ; le dire.
+    expect(texte(d)).toMatch(/aucun usage autorisé pour vos cultures/i);
     await toucher(radio('Vigne · Thrips · 0,2 L/ha · DAR 14 j', d));
     expect(champ('Délai avant récolte (jours)', d).value).toBe('14');
   });

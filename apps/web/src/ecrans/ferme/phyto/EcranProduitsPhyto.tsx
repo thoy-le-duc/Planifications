@@ -101,6 +101,7 @@ interface ChoixEphy {
   readonly usages: readonly UsageEphy[];
   readonly pourLaFerme: boolean;
   readonly darPropose: boolean;
+  readonly horsCultures: boolean;
 }
 
 function Formulaire({ ctx, produit, chargerCatalogue, surFermer }: { readonly ctx: ContextePhyto; readonly produit: Produit | null; readonly chargerCatalogue: ChargerCatalogue; readonly surFermer: () => void }): ReactElement {
@@ -150,7 +151,7 @@ function Formulaire({ ctx, produit, chargerCatalogue, surFermer }: { readonly ct
     remplirDose(prop.dose);
     setUsageChoisi(null);
     const pourLaFerme = prop.candidats.length > 0;
-    setChoix({ produit: p, usages: pourLaFerme ? prop.candidats : p.usages, pourLaFerme, darPropose: prop.dar !== null });
+    setChoix({ produit: p, usages: pourLaFerme ? prop.candidats : p.usages, pourLaFerme, darPropose: prop.dar !== null, horsCultures: !pourLaFerme && especes.length > 0 });
   }
 
   function choisirUsage(i: number, u: UsageEphy): void {
@@ -211,6 +212,7 @@ function Formulaire({ ctx, produit, chargerCatalogue, surFermer }: { readonly ct
           usages={choix.usages}
           pourLaFerme={choix.pourLaFerme}
           darPropose={choix.darPropose}
+          horsCultures={choix.horsCultures}
           choisi={usageChoisi}
           surChoisir={choisirUsage}
           surTous={() => {
