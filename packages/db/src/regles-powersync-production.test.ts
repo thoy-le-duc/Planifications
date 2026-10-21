@@ -52,6 +52,8 @@ const DOSSIER_CLI = `${RACINE}scripts/powersync-cli/`;
 const MESSAGE_ABSENT =
   'secrets POWERSYNC_ADMIN_TOKEN et POWERSYNC_INSTANCE_ID absents : rien à faire, voir docs/mise-en-ligne.md';
 const SECRETS = ['POWERSYNC_ADMIN_TOKEN', 'POWERSYNC_INSTANCE_ID'];
+// T73 : variables (non secrètes) de l'environnement production.
+const VARIABLES = ['POWERSYNC_ORG_ID', 'POWERSYNC_PROJECT_ID'];
 
 type Objet = Record<string, unknown>;
 
@@ -216,6 +218,16 @@ describe('T67 : workflow « Règles de synchro PowerSync »', () => {
     }
   });
 
+  it('T73 : passe l’organisation et le projet en variables (pas en secrets) aux deux étapes du script', () => {
+    const references = [...new Set(texte.match(/vars\.[A-Za-z_]+/g) ?? [])].sort();
+    expect(references).toEqual(VARIABLES.map((nom) => `vars.${nom}`));
+    const avecScript = etapes(workflow).filter((etape) => etape.run?.includes('deployer-regles-powersync.sh'));
+    expect(avecScript.length).toBe(2);
+    for (const etape of avecScript) {
+      for (const nom of VARIABLES) expect(etape.env?.[nom]).toBe(`\${{ vars.${nom} }}`);
+    }
+  });
+
   it('n’a aucune commande qui affiche les secrets', () => {
     expect(etapes(workflow).length).toBeGreaterThan(0);
     for (const etape of etapes(workflow)) {
@@ -232,10 +244,12 @@ describe('T67 : workflow « Règles de synchro PowerSync »', () => {
 
 const INSTANCE_FACTICE = '0123456789abcdef01234567';
 const JETON_FACTICE = 'jeton-factice-t67-0123456789abcdef';
+const ORG_FACTICE = '1123456789abcdef01234567';
+const PROJET_FACTICE = '2123456789abcdef01234567';
 
 /** Environnement du test, sans aucune variable que le script ou la CLI pourrait lire. */
 function environnementSans(): NodeJS.ProcessEnv {
-  const retirees = new Set([...SECRETS, 'PS_ADMIN_TOKEN', 'INSTANCE_ID', 'API_URL', 'ORG_ID', 'PROJECT_ID']);
+  const retirees = new Set([...SECRETS, ...VARIABLES, 'PS_ADMIN_TOKEN', 'INSTANCE_ID', 'API_URL', 'ORG_ID', 'PROJECT_ID']);
   return Object.fromEntries(Object.entries(process.env).filter(([nom]) => !retirees.has(nom)));
 }
 
@@ -263,8 +277,8 @@ function fauxPnpm(code: number): FauxPnpm {
 jeton=non; [ "\${PS_ADMIN_TOKEN:-}" = "${JETON_FACTICE}" ] && jeton=oui
 instance=non; [ "\${INSTANCE_ID:-}" = "${INSTANCE_FACTICE}" ] && instance=oui
 api=non; [ -n "\${API_URL:-}" ] && api=oui
-brut=non; [ -n "\${POWERSYNC_ADMIN_TOKEN:-}\${POWERSYNC_INSTANCE_ID:-}" ] && brut=oui
-printf '%s | jeton=%s instance=%s api_url=%s brut=%s\\n' "$*" "$jeton" "$instance" "$api" "$brut" >> "${journal}"
+brut=non; [ -n "\${POWERSYNC_ADMIN_TOKEN:-}\${POWERSYNC_INSTANCE_ID:-}\${POWERSYNC_ORG_ID:-}\${POWERSYNC_PROJECT_ID:-}" ] && brut=oui
+printf '%s | jeton=%s instance=%s api_url=%s brut=%s org=%s projet=%s\\n' "$*" "$jeton" "$instance" "$api" "$brut" "\${ORG_ID:-non}" "\${PROJECT_ID:-non}" >> "${journal}"
 exit ${String(code)}
 `,
   );
@@ -416,7 +430,7 @@ describe('T67 : scripts/deployer-regles-powersync.sh, avec la CLI', () => {
     const { code, sortie } = lancer('valider', { ...pnpm.env, ...secrets, API_URL: 'https://auto-heberge.invalid' });
     expect(code).toBe(0);
     expect(pnpm.appels()).toEqual([
-      `${APPEL_CLI} --dry-run | jeton=oui instance=oui api_url=non brut=non`,
+      `${APPEL_CLI} --dry-run | jeton=oui instance=oui api_url=non brut=non org=non projet=non`,
     ]);
     expect(sortie).not.toContain(JETON_FACTICE);
   });
@@ -426,7 +440,7 @@ describe('T67 : scripts/deployer-regles-powersync.sh, avec la CLI', () => {
     const { code, sortie } = lancer('deployer', { ...pnpm.env, ...secrets });
     expect(code).toBe(0);
     expect(pnpm.appels()).toEqual([
-      `${APPEL_CLI} | jeton=oui instance=oui api_url=non brut=non`,
+      `${APPEL_CLI} | jeton=oui instance=oui api_url=non brut=non org=non projet=non`,
     ]);
     expect(sortie).not.toContain(JETON_FACTICE);
   });
@@ -450,6 +464,90 @@ describe('T67 : scripts/deployer-regles-powersync.sh, avec la CLI', () => {
       expect(ligne).not.toMatch(/set -x|\bprintenv\b|\bdeclare -p\b|\bexport -p\b/);
     }
   });
+});
+
+describe('T73 : scripts/deployer-regles-powersync.sh, organisation et projet', () => {
+  const secrets = { POWERSYNC_ADMIN_TOKEN: JETON_FACTICE, POWERSYNC_INSTANCE_ID: INSTANCE_FACTICE };
+  const identifiants = { POWERSYNC_ORG_ID: ORG_FACTICE, POWERSYNC_PROJECT_ID: PROJET_FACTICE };
+
+  for (const mode of ['valider', 'deployer']) {
+    it(`${mode} : transmet ORG_ID et PROJECT_ID à la CLI quand les deux sont fournis`, () => {
+      const pnpm = fauxPnpm(0);
+      const { code, sortie } = lancer(mode, { ...pnpm.env, ...secrets, ...identifiants });
+      expect(code).toBe(0);
+      const option = mode === 'valider' ? ' --dry-run' : '';
+      expect(pnpm.appels()).toEqual([
+        `${APPEL_CLI}${option} | jeton=oui instance=oui api_url=non brut=non org=${ORG_FACTICE} projet=${PROJET_FACTICE}`,
+      ]);
+      expect(sortie).not.toContain(JETON_FACTICE);
+    });
+  }
+
+  it('sans aucun des deux : comportement inchangé, la CLI ne reçoit ni ORG_ID ni PROJECT_ID', () => {
+    const pnpm = fauxPnpm(0);
+    const { code } = lancer('deployer', { ...pnpm.env, ...secrets, POWERSYNC_ORG_ID: '', POWERSYNC_PROJECT_ID: '' });
+    expect(code).toBe(0);
+    expect(pnpm.appels()).toEqual([`${APPEL_CLI} | jeton=oui instance=oui api_url=non brut=non org=non projet=non`]);
+  });
+
+  it('ne reprend jamais un ORG_ID ou un PROJECT_ID déjà posés ailleurs', () => {
+    const pnpm = fauxPnpm(0);
+    const heritage = { ORG_ID: 'ffffffffffffffffffffffff', PROJECT_ID: 'eeeeeeeeeeeeeeeeeeeeeeee' };
+    const sans = lancer('deployer', { ...pnpm.env, ...secrets, ...heritage });
+    expect(sans.code).toBe(0);
+    const avec = lancer('deployer', { ...pnpm.env, ...secrets, ...identifiants, ...heritage });
+    expect(avec.code).toBe(0);
+    expect(pnpm.appels()).toEqual([
+      `${APPEL_CLI} | jeton=oui instance=oui api_url=non brut=non org=non projet=non`,
+      `${APPEL_CLI} | jeton=oui instance=oui api_url=non brut=non org=${ORG_FACTICE} projet=${PROJET_FACTICE}`,
+    ]);
+  });
+
+  it('un seul des deux : refus qui nomme celui qui manque, CLI non lancée', () => {
+    const pnpm = fauxPnpm(0);
+    const sansProjet = lancer('valider', { ...pnpm.env, ...secrets, POWERSYNC_ORG_ID: ORG_FACTICE });
+    expect(sansProjet.code).not.toBe(0);
+    expect(sansProjet.sortie).toContain('POWERSYNC_PROJECT_ID absent');
+    const sansOrg = lancer('valider', { ...pnpm.env, ...secrets, POWERSYNC_PROJECT_ID: PROJET_FACTICE });
+    expect(sansOrg.code).not.toBe(0);
+    expect(sansOrg.sortie).toContain('POWERSYNC_ORG_ID absent');
+    expect(pnpm.appels()).toEqual([]);
+  });
+
+  const malFormes = ['pas-un-identifiant', '1123456789abcdef0123456', '1123456789abcdef012345678', '1123456789abcdef0123456z', ` ${ORG_FACTICE}`, `${ORG_FACTICE}\n`];
+  for (const valeur of malFormes) {
+    for (const nom of VARIABLES) {
+      it(`${nom} mal formé (${JSON.stringify(valeur)}) : refus clair, CLI non lancée`, () => {
+        const pnpm = fauxPnpm(0);
+        const { code, sortie } = lancer('deployer', { ...pnpm.env, ...secrets, ...identifiants, [nom]: valeur });
+        expect(code).not.toBe(0);
+        expect(sortie).toContain(`${nom} mal formé`);
+        expect(sortie).toContain('24 caractères hexadécimaux');
+        expect(sortie).not.toContain(JETON_FACTICE);
+        expect(pnpm.appels()).toEqual([]);
+      });
+    }
+  }
+
+  it('avec les identifiants mais sans secrets : arrêt propre inchangé', () => {
+    const pnpm = fauxPnpm(0);
+    const { code, sortie } = lancer('deployer', { ...pnpm.env, ...identifiants });
+    expect(code).toBe(0);
+    expect(sortie).toContain(MESSAGE_ABSENT);
+    expect(pnpm.appels()).toEqual([]);
+  });
+
+  for (const mode of ['valider', 'deployer']) {
+    it(`${mode} : CLI en échec, rappelle les causes probables sans afficher le jeton`, () => {
+      const pnpm = fauxPnpm(1);
+      const { code, sortie } = lancer(mode, { ...pnpm.env, ...secrets, ...identifiants });
+      expect(code).not.toBe(0);
+      expect(sortie).toContain('autre organisation');
+      expect(sortie).toContain('révoqué');
+      expect(sortie).toContain('POWERSYNC_ORG_ID');
+      expect(sortie).not.toContain(JETON_FACTICE);
+    });
+  }
 });
 
 describe('T67 : guide de mise en ligne, étape 3 bis', () => {
@@ -476,6 +574,14 @@ describe('T67 : guide de mise en ligne, étape 3 bis', () => {
       expect(etape.name).toBeDefined();
       expect(guide).toContain(`« ${etape.name ?? ''} »`);
     }
+  });
+
+  it('T73 : explique les deux variables d’environnement et où les lire dans l’adresse du tableau de bord', () => {
+    const etape = /^## Étape 3 bis — [\s\S]*?(?=^## )/m.exec(guide)?.[0] ?? '';
+    for (const nom of VARIABLES) expect(etape).toContain(`\`${nom}\``);
+    expect(etape).toContain('Environment variables');
+    expect(etape).toContain('Add environment variable');
+    expect(etape).toContain('/org/<ORG>/project/<PROJET>/<INSTANCE>/');
   });
 
   it('donne la version de la CLI utilisée par le script', () => {
