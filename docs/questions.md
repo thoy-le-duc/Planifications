@@ -470,6 +470,12 @@ Question : quand quelqu'un quitte une ferme (ou en est retiré), ses anciens ref
 
 Réponse (2026-10-07) : les effacer ; rien d'une ferme ne reste chez quelqu'un qui n'en fait plus partie. Ticket T10u. Les refus de synchro restent hors de l'export complet (confirmé le 2026-10-07).
 
+### Q47 — Usage e-phy sans délai avant récolte (posée le 2026-10-21, T53)
+
+Question : dans e-phy, beaucoup d'usages n'ont pas de délai avant récolte en jours (case vide, ou seulement un stade BBCH, par exemple le soufre sur melon). La réglementation prévoit un délai par défaut quand la décision n'en fixe pas ; l'appli ne le devine pas : elle laisse la case « Délai avant récolte » vide et vous la remplissez. Proposition : garder ce fonctionnement (rien d'inventé), avec la mention « DAR non précisé » dans le choix de l'usage. Préfères-tu qu'on propose un délai par défaut (lequel, et sur quel texte) ?
+
+Deux réglages GitHub pour le workflow « Catalogue e-phy » : Settings → Actions → General → « Allow GitHub Actions to create and approve pull requests » doit être coché, sinon la PR hebdomadaire ne peut pas s'ouvrir ; puis un premier lancement à la main (Actions → Catalogue e-phy → Run workflow) remplit le catalogue, vide dans le dépôt.
+
 ### À suivre
 
 ## Questions ouvertes du brief
