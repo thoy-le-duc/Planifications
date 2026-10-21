@@ -182,6 +182,8 @@ export function App() {
   /** Échec de la dernière déconnexion, montré sur l'écran de connexion. */
   const [erreur, setErreur] = useState<string | null>(null);
   const [onglet, setOnglet] = useState<Onglet>('aujourdhui');
+  /** T61 : outil et planche d'une consigne à montrer dans la 3D (tap dans la fiche du jour) ; nul en quittant Planches. */
+  const [rangement, setRangement] = useState<{ readonly outilId: string; readonly plancheId: string | null } | null>(null);
   /** Morceau de l'export (T15e), donné par l'écran Ferme une fois chargé : il porte le bandeau. */
   const [exportCharge, setExportCharge] = useState<ModuleExport | null>(null);
 
@@ -288,7 +290,6 @@ export function App() {
   }
 
   const titre = ONGLETS.find((o) => o.id === onglet)?.libelle ?? '';
-  const EcranDeLaFerme = onglet === 'planches' ? planches.Composant : aujourdhui.Composant;
   // T39 : base ouverte, aucune ferme → « Créer ma ferme » (en tête de l'onglet Ferme).
   const creation = donnees.base === 'sans-ferme' && <creerFerme.Composant session={session} synchro={donnees.synchro} />;
   return (
@@ -312,7 +313,29 @@ export function App() {
             // montrée, puis reçoit la porte (un écran par utilisateur et par ferme, clé posée par
             // l'écran). L'utilisateur de la session, pour l'instantané.
             donnees.ferme !== null || donnees.base === 'ouverture' ? (
-              <EcranDeLaFerme porte={donnees.ferme?.porte ?? null} fermeId={donnees.ferme?.fermeId ?? null} utilisateurId={session.utilisateurId} surOnglet={setOnglet} />
+              onglet === 'planches' ? (
+                <planches.Composant
+                  porte={donnees.ferme?.porte ?? null}
+                  fermeId={donnees.ferme?.fermeId ?? null}
+                  utilisateurId={session.utilisateurId}
+                  surOnglet={setOnglet}
+                  rangement={rangement}
+                  surFermerRangement={() => {
+                    setRangement(null);
+                  }}
+                />
+              ) : (
+                <aujourdhui.Composant
+                  porte={donnees.ferme?.porte ?? null}
+                  fermeId={donnees.ferme?.fermeId ?? null}
+                  utilisateurId={session.utilisateurId}
+                  surOnglet={setOnglet}
+                  surMontrerRangement={(c) => {
+                    setRangement({ outilId: c.outilId, plancheId: c.plancheId });
+                    setOnglet('planches');
+                  }}
+                />
+              )
             ) : (
               // Sans ferme : « Créer ma ferme » (T39) ; sinon la base n'a pas pu s'ouvrir.
               creation || <p className="attente">Les données de ce téléphone n’ont pas pu s’ouvrir. Rechargez l’appli ; si cela recommence, signalez-le.</p>
@@ -328,6 +351,7 @@ export function App() {
         // dans le tap (mesuré : 55 à 57 ms, CPU ×4, au retour sur Ferme pendant un export).
         surChoix={(o) => {
           startTransition(() => {
+            if (o !== 'planches') setRangement(null);
             setOnglet(o);
           });
         }}
