@@ -24,7 +24,7 @@ import type { TransactionDb } from './references.ts';
 export const TABLE_FERTILISANT = 'produit_fertilisant';
 
 /** Colonnes écrites (sans cree_le ni modifie_le, remplies par le serveur). */
-const COLONNES = ['id', 'ferme_id', 'nom', 'forme', 'unite', 'teneur_n', 'teneur_p2o5', 'teneur_k2o', 'organique', 'utilisable_en_bio', 'source', 'supprime_le'] as const;
+const COLONNES = ['id', 'ferme_id', 'nom', 'forme', 'unite', 'teneur_n', 'teneur_p2o5', 'teneur_k2o', 'organique', 'utilisable_en_bio', 'source', 'densite_kg_par_l', 'supprime_le'] as const;
 
 type Ligne = Readonly<Record<string, unknown>>;
 
@@ -56,6 +56,7 @@ function ligneDe(p: ProduitFertilisantEcrit): Ligne {
     organique: p.organique,
     utilisable_en_bio: p.utilisableEnBio,
     source: p.source,
+    densite_kg_par_l: p.densiteKgParL,
     supprime_le: p.supprimeLe === null ? null : new Date(p.supprimeLe).toISOString(),
   };
 }

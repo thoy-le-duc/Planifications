@@ -925,6 +925,7 @@ export const produitFertilisant = pgTable(
     organique: boolean('organique').notNull(),
     utilisableEnBio: boolean('utilisable_en_bio').notNull(),
     source: text('source').notNull().default(''),
+    densiteKgParL: doublePrecision('densite_kg_par_l'),
     ...horodatages(),
   },
   (t) => [
@@ -935,6 +936,8 @@ export const produitFertilisant = pgTable(
     verif('produit_fertilisant', 'teneur_p2o5', sql`${t.teneurP2o5} IS NULL OR ${t.teneurP2o5} BETWEEN 0 AND 100`),
     verif('produit_fertilisant', 'teneur_k2o', sql`${t.teneurK2o} IS NULL OR ${t.teneurK2o} BETWEEN 0 AND 100`),
     verif('produit_fertilisant', 'source', sql`length(${t.source}) <= 300`),
+    // T72 : densité d'un liquide (kg/L), facultative ; sans objet pour un solide.
+    verif('produit_fertilisant', 'densite', sql`${t.densiteKgParL} IS NULL OR (${t.forme} = 'liquide' AND ${t.densiteKgParL} BETWEEN 0.5 AND 2.5)`),
     index('produit_fertilisant_ferme_idx').on(t.fermeId),
   ],
 );
