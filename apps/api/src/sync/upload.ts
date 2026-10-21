@@ -63,6 +63,8 @@
  * - T60 : l'équipe (personne) et l'attribution des travaux du jour (attribution ; equipe.ts),
  *   réservées au gérant de la ferme, tout ou rien avec le reste du lot, sous le verrou de la ferme.
  *   Contrat : equipe.integration.test.ts.
+ * - T61 : chemins, points du plan, lieux de rangement, places et outils (plan-chemins.ts), écrits
+ *   par le gérant seul, tout ou rien avec le reste du lot. Contrat : plan-chemins.integration.test.ts.
  */
 import { ECRITURES_MAX_PAR_LOT, type Id } from '@planif/core';
 import {
@@ -96,6 +98,7 @@ import { ecrireProduitPhyto, TABLE_PHYTO } from './phyto.ts';
 import { ecrireProduitFertilisant, TABLE_FERTILISANT } from './fertilisation.ts';
 import { ecrireRecetteFertirrigation, TABLE_RECETTE } from './fertirrigation.ts';
 import { ecrireEquipe, estTableEquipe, fermesDesLignesEquipe, TABLES_EQUIPE } from './equipe.ts';
+import { ecrirePlan, estTablePlan, fermesDesLignesPlan, TABLES_PLAN } from './plan-chemins.ts';
 import { completerStock, ecrireArticle, ecrireMouvement, type RemplacementEcrit } from './stock.ts';
 
 export type { MotifRefus } from './motifs.ts';
@@ -142,7 +145,7 @@ const TABLES_STOCK = new Set(['article_stock', 'mouvement_stock']);
  * ferme) : un lot qui en écrit une est accepté ou refusé en entier, sous le verrou de chaque
  * ferme touchée.
  */
-const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE, ...TABLES_ITINERAIRE, ...TABLES_STRUCTURE, 'ferme', TABLE_PHYTO, TABLE_FERTILISANT, TABLE_RECETTE, ...TABLES_EQUIPE]);
+const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE, ...TABLES_ITINERAIRE, ...TABLES_STRUCTURE, 'ferme', TABLE_PHYTO, TABLE_FERTILISANT, TABLE_RECETTE, ...TABLES_EQUIPE, ...TABLES_PLAN]);
 /**
  * Tables que le téléphone écrit (T10 : le journal ; T10c : le stock ; T10e : les séries ; T23 : les
  * itinéraires ; T10s : le parcellaire et le catalogue ; les autres suivront avec leurs écrans).
@@ -493,6 +496,10 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       // T60 : une personne de l'équipe ou une attribution se modifie (retrait et rétablissement compris), par le gérant.
       return ecrireEquipe(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, gerees);
     }
+    if (e.op === 'PATCH' && estTablePlan(e.table)) {
+      // T61 : un chemin, un point du plan, un lieu, une place ou un outil se modifie (retrait et rétablissement compris), par le gérant.
+      return ecrirePlan(tx, ctx, { op: 'PATCH', table: e.table, id: e.id, donnees: e.donnees ?? {} }, fermeDonnee, fermes, gerees);
+    }
     if (e.op !== 'PUT') return modificationRefusee(tx, e, fermes);
 
     if (fermeDonnee !== null && !fermes.has(fermeDonnee)) return { motif: 'ferme_interdite', fermeId: fermeDonnee };
@@ -512,6 +519,7 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     if (e.table === TABLE_FERTILISANT) return ecrireProduitFertilisant(tx, ctx, { op: 'PUT', id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
     if (e.table === TABLE_RECETTE) return ecrireRecetteFertirrigation(tx, ctx, { op: 'PUT', id: e.id, donnees }, fermeDonnee, fermes, utilisateurId);
     if (estTableEquipe(e.table)) return ecrireEquipe(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, gerees);
+    if (estTablePlan(e.table)) return ecrirePlan(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, gerees);
     if (estTableStructure(e.table)) return ecrireStructure(tx, ctx, { op: 'PUT', table: e.table, id: e.id, donnees }, fermeDonnee, fermes, gerees, utilisateurId);
     // Stock : la ferme, validée par le cœur, est forcément celle de fermeDonnee (UUID de la ferme du jeton).
     const ferme = fermeDonnee ?? '';
@@ -550,7 +558,9 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
         // du plan, PATCH de la ferme elle-même, prend le verrou de cette ferme.
         // T60 : une personne ou une attribution modifiée prend le verrou de sa ferme.
         const equipe = await fermesDesLignesEquipe(tx, tout, fermes);
-        const verrous = [...new Set([...declarees, ...fermesDesOrigines(tout, fermes), ...(await fermesDesLignesVisees(tx, tout, fermes)), ...equipe])].sort();
+        // T61 : un chemin, un point, un lieu, une place ou un outil modifié prend le verrou de sa ferme.
+        const plan = await fermesDesLignesPlan(tx, tout, fermes);
+        const verrous = [...new Set([...declarees, ...fermesDesOrigines(tout, fermes), ...(await fermesDesLignesVisees(tx, tout, fermes)), ...equipe, ...plan])].sort();
         for (const ferme of verrous) await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`ferme:${ferme}`}, 0))`);
         // T28s (Q31) : rôle relu dans la transaction du lot, après les verrous ; seulement si le lot touche au parcellaire.
         const gerees = tout.length > 0 ? await fermesGerees(tx, utilisateurId, fermes) : new Set<string>();
