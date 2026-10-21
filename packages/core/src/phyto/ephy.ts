@@ -318,3 +318,17 @@ export function propositionUsagePourCulture(produit: ProduitEphy, espece: string
   const candidats = normaliserEphy(espece) === '' ? [] : usagesPourEspeces(produit, [espece]);
   return { homologue: candidats.length > 0, candidats, ...communs(candidats) };
 }
+
+export interface PropositionPourCulture extends PropositionUsageCulture {
+  /** Série ou campagne. */
+  readonly id: string;
+  readonly espece: string;
+}
+
+/**
+ * Plusieurs cultures traitées d'un même produit (T78) : la proposition T76 de chacune, dans l'ordre,
+ * sans fusionner deux cultures de même espèce. Le DAR d'une culture ne déteint jamais sur une autre.
+ */
+export function propositionsPourCultures(produit: ProduitEphy, cultures: readonly { readonly id: string; readonly espece: string }[]): PropositionPourCulture[] {
+  return cultures.map((c) => ({ id: c.id, espece: c.espece, ...propositionUsagePourCulture(produit, c.espece) }));
+}

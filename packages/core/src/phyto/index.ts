@@ -51,6 +51,69 @@ export function detailTraitement(produit: ProduitPourTraitement, saisie: SaisieT
   };
 }
 
+// ── Lot : un même produit sur plusieurs cultures (T78) ───────────────────────────────────────
+
+/** Une culture du lot : son id (série ou campagne), sa surface traitée, SON délai avant récolte. */
+export interface CultureDuLot {
+  readonly cultureId: string;
+  readonly surfaceTraiteeM2: number;
+  /** null : pas de DAR (non homologué ou absent d'E-Phy, Q47) ; le lot est refusé, rien n'est deviné. */
+  readonly delaiAvantRecolteJours: number | null;
+}
+
+/** Ce qui est commun à toutes les cultures du lot. */
+export interface CommunDuLot {
+  readonly dose: Quantite;
+  readonly cible: string;
+  readonly operateur: string | null;
+}
+
+export interface DetailDuLot {
+  readonly cultureId: string;
+  readonly detail: DetailTraitement;
+}
+
+export type CodeErreurLot = 'lot_vide' | 'dar_manquant' | 'dar_invalide' | 'culture_en_double';
+
+export type ResultatLotTraitement =
+  | { readonly ok: true; readonly valeur: readonly DetailDuLot[] }
+  | { readonly ok: false; readonly erreur: { readonly code: CodeErreurLot; readonly champ: string | null; readonly message: string } };
+
+const refusLot = (code: CodeErreurLot, champ: string | null, message: string): ResultatLotTraitement => ({ ok: false, erreur: { code, champ, message } });
+
+/**
+ * Le détail de chaque culture d'un traitement fait le `date` avec `produit` sur plusieurs cultures
+ * (T78) : un détail par culture, dans l'ordre, construit comme `detailTraitement` avec le DAR de
+ * CETTE culture (jamais celui de la fiche ni d'une autre culture). Tout ou rien : lot vide, DAR
+ * manquant ou invalide, culture en double → refus nommant la première culture fautive.
+ * `date` : 'AAAA-MM-JJ' (jour du traitement, déjà validé par l'écran ou le serveur).
+ */
+export function detailsLotTraitement(produit: Omit<ProduitPourTraitement, 'delaiAvantRecolteJours'>, commun: CommunDuLot, date: string, cultures: readonly CultureDuLot[]): ResultatLotTraitement {
+  if (cultures.length === 0) return refusLot('lot_vide', null, 'aucune culture cochée');
+  const vues = new Set<string>();
+  for (const c of cultures) {
+    const cle = c.cultureId.toLowerCase();
+    if (vues.has(cle)) return refusLot('culture_en_double', c.cultureId, 'la même culture est cochée deux fois');
+    vues.add(cle);
+    const dar = c.delaiAvantRecolteJours;
+    if (dar === null) return refusLot('dar_manquant', c.cultureId, 'délai avant récolte manquant pour une culture');
+    if (!Number.isSafeInteger(dar) || dar < 0 || dar > DAR_MAX_JOURS) {
+      return refusLot('dar_invalide', c.cultureId, `délai avant récolte : jours entiers, de 0 à ${String(DAR_MAX_JOURS)}`);
+    }
+  }
+  return {
+    ok: true,
+    valeur: cultures.map((c) => ({
+      cultureId: c.cultureId,
+      detail: detailTraitement(
+        { id: produit.id, nomCommercial: produit.nomCommercial, doseMaximale: produit.doseMaximale, delaiAvantRecolteJours: c.delaiAvantRecolteJours ?? 0 },
+        { dose: commun.dose, surfaceTraiteeM2: c.surfaceTraiteeM2, cible: commun.cible, operateur: commun.operateur },
+        date as DateCalendaire,
+      ),
+    })),
+  };
+}
+
 // ── Dose maximale ────────────────────────────────────────────────────────────────────────────
 
 /** « 2,5 » : virgule décimale, sans zéros inutiles. */

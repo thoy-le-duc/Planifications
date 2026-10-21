@@ -69,6 +69,7 @@ import {
   type TacheJour,
 } from './calculs.ts';
 import { useFocusDuDialogue } from './dialogue.ts';
+import { jourDuTelephone } from './jour.ts';
 import { BoutonIrrigation } from './BoutonIrrigation.tsx';
 import { BoutonFertilisation } from './BoutonFertilisation.tsx';
 import type { ProprietesBandeauInstallation } from '../../installation/BandeauInstallation.tsx';
@@ -161,13 +162,8 @@ export function texteFaitsAbandonnes(n: number): string {
   return `${n === 1 ? '1 « Fait » tapé' : `${String(n)} « Fait » tapés`} avant l’ouverture ${n === 1 ? 'n’a' : 'n’ont'} peut-être pas été ${n === 1 ? 'enregistré' : 'enregistrés'} : vérifiez la liste.`;
 }
 
-const deux = (n: number) => String(n).padStart(2, '0');
-
-/** Jour du téléphone, 'AAAA-MM-JJ' (heure locale, pas UTC). */
-export function jourDuTelephone(): string {
-  const d = new Date();
-  return `${String(d.getFullYear())}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`;
-}
+/** Jour du téléphone, 'AAAA-MM-JJ' (heure locale, pas UTC) : ./jour.ts, partagé avec la saisie d'un traitement. */
+export { jourDuTelephone };
 
 /** Saisie que le bandeau permet d'annuler. */
 interface Annulable {
