@@ -6,10 +6,10 @@ Deux fois par jour (7 h 17 et 17 h 17, heure de Paris), une session Claude Code 
 
 - **Point d'entrée** : `docs/demarrage.md`, lu en premier par chaque session. Il prime sur ce fichier pour l'état, les règles de session, les domaines critiques et le choix des agents.
 
-- **Sessions Claude Code on the web**, environnement cloud « Planification » : un conteneur isolé, recréé à chaque session et jeté ensuite. Chaque exécution de la routine ouvre une session neuve, sans mémoire de la précédente : elle attache et clone le dépôt, puis tout l'état se lit dans le dépôt (voir `docs/demarrage.md`).
+- **Sessions Claude Code on the web**, environnement cloud « Planification » : un conteneur isolé, recréé à chaque session et jeté ensuite. Chaque exécution ouvre une session neuve, sans mémoire de la précédente, avec le dépôt déjà cloné (le dépôt doit être choisi dans la tâche planifiée : une session qui l'attache après coup n'a ni le hook, ni les agents, ni les outils GitHub). Tout l'état se lit dans le dépôt (voir `docs/demarrage.md`).
 - Aucun accès aux données ni aux secrets de production : il n'y en a pas dans cet environnement, et il ne faut jamais en ajouter.
 - Au démarrage, le hook `.claude/hooks/session-start.sh` installe les dépendances et indique à Playwright le Chromium déjà présent.
-- Déclenchement : une routine Claude Code deux fois par jour (7 h 17 et 17 h 17, heure de Paris), voir « Budget ».
+- Déclenchement : deux tâches planifiées de claude.ai, « Boucle Planifications (sessions neuves) » à 7 h 17 et « … — soir » à 17 h 17 (heure de Paris), même message, dépôt `thoy-le-duc/Planifications`, environnement « Planification », modèle Opus, aucun connecteur. L'ancienne « Boucle Planifications (équipe) », qui tournait dans une seule conversation, est en pause depuis le 21 octobre 2026.
 
 ## Les branches
 
@@ -79,24 +79,23 @@ Décision de Théophane (2026-10-05) : chaque semaine, la boucle laisse **au moi
 - **Aucun nouveau ticket du mardi 10 h au mercredi 10 h** : les sessions de ce créneau surveillent et fusionnent seulement les PR déjà ouvertes.
 - **Jauge donnée par Théophane** : elle prime sur le compte de tickets. Si elle dépasse 70 % avant mardi, plus de nouveau ticket jusqu'au mercredi 10 h. Dernière valeur connue : **20 % le lundi 19 octobre 2026** (semaine du mercredi 14 octobre 10 h). Semaine du mercredi 21 octobre 10 h : aucune jauge connue, la demander à Théophane après 30 tickets. Repère précédent : 34 % le vendredi 9 octobre 2026 à 12 h 40 (25 tickets faits depuis le mercredi 7 octobre à 10 h).
 - **Économies systématiques** : agents Sonnet pour les tickets normaux (voir « L'équipe ») ; une session sans ticket s'arrête après la surveillance des PR, sans relancer d'agent.
-- **Fréquence** : la routine tourne deux fois par jour (7 h 17 et 17 h 17, heure de Paris), chaque fois dans une session neuve.
+- **Fréquence** : deux tâches planifiées, 7 h 17 et 17 h 17 (heure de Paris), chaque fois dans une session neuve. Si une session déborde sur la suivante, la règle des 6 h de `docs/demarrage.md` évite de prendre deux fois le même ticket.
 
 ## Statuts des tickets
 
 `à faire` → `en revue` (PR ouverte) → `fait` (fusionné dans `main`). `à préciser` : en attente d'une réponse de Théophane.
 
-## Message de la routine
+## Message des tâches planifiées
 
-Texte envoyé à chaque session neuve :
+Texte envoyé à chaque session neuve (identique matin et soir) :
 
 ```text
 Tu es le chef d'équipe de la boucle autonome du projet Planifications (dépôt GitHub thoy-le-duc/Planifications).
-Commence par attacher le dépôt thoy-le-duc/Planifications à ta session (accès en écriture) et le cloner,
-puis place-toi sur la branche main à jour.
+Le dépôt est déjà attaché et cloné : place-toi sur la branche main à jour (git fetch origin main puis git checkout main et git pull).
 Lis docs/demarrage.md et suis-le à la lettre. Écris en français.
 ```
 
 ## Arrêter ou modifier la boucle
 
-- Arrêter : demander à Claude de désactiver la routine, ou la désactiver dans la liste des routines de claude.ai.
-- Changer la fréquence ou le message : même chemin, sans perdre l'historique des exécutions.
+- Arrêter : désactiver les deux tâches planifiées dans claude.ai. Claude ne peut ni les modifier ni les désactiver, car elles ont été créées par Théophane.
+- Changer l'horaire, le message, le modèle ou les connecteurs : dans claude.ai, sur chacune des deux tâches.
