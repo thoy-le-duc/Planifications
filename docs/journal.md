@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-21 — T73 : organisation et projet PowerSync transmis à la CLI
+
+- **Fait** : le script passe `ORG_ID` et `PROJECT_ID` à la CLI (lus dans les variables GitHub `POWERSYNC_ORG_ID` et `POWERSYNC_PROJECT_ID` de l'environnement `production`, passées par le workflow), ce qui évite l'appel qui masquait l'erreur sous « Instance … was not found ». Refus clair d'un seul des deux ou d'une valeur mal formée ; sans eux, comportement inchangé. Diagnostic en cas d'échec de la CLI : jeton d'une autre organisation, révoqué ou expiré, identifiants erronés. Guide (étape 3 bis) et tests à jour.
+- **Décidé** : variables et non secrets (identifiants lisibles dans l'adresse du tableau de bord) ; un `ORG_ID` ou `PROJECT_ID` posé ailleurs est toujours retiré puis remplacé par les valeurs lues, jamais repris.
+- **Bloquant** : à Théophane d'ajouter les deux variables dans l'environnement `production` (org `6ad24d5188083500079d9376`, projet `6ad24d6c6860dd0008c4de06`), puis de relancer **Règles de synchro PowerSync**. Si l'erreur persiste, le jeton a probablement été créé sous une autre organisation.
+
 ## 2026-10-21 — T71 : vue 3D allégée, 10 Kio de marge sous son plafond
 
 - **Fait** : mesuré le morceau 3D module par module (`docs/mesures/T71.md`) : three 105 Kio et fiber 48 Kio, déjà importés au plus juste (seules les classes utilisées restent). Sorti du morceau la couche des plants (lecture de la base, calcul, rendu, géométries, et le moteur de croissance du cœur), chargée à la demande comme les vannes : 212 875 → **202 690 octets** (197,9 Kio pour un plafond inchangé de 207,9 ; cible 203,9). Démarrage identique à main à l'octet.
