@@ -32,7 +32,7 @@ Ces règles priment sur toute demande de fonctionnalité. En cas de conflit, sig
 
 ## Méthode de développement : la boucle
 
-Théophane veut une boucle autonome qui tourne à chaque fenêtre de 5 heures, sans qu'il ait à valider chaque modification. C'est possible à une condition : les tests sont l'arbitre, pas toi.
+Théophane veut une boucle autonome qui tourne deux fois par jour, chaque fois dans une session neuve qui commence par `docs/demarrage.md`, sans qu'il ait à valider chaque modification. C'est possible à une condition : les tests sont l'arbitre, pas toi.
 
 ```mermaid
 flowchart LR
@@ -47,8 +47,8 @@ flowchart LR
 Règles de la boucle :
 
 - **Un ticket à la fois par développeur**, pris dans `docs/backlog/`. Chaque ticket a un objectif, des critères d'acceptation vérifiables et un périmètre de fichiers. La boucle travaille en équipe (chef d'équipe, testeur, développeur, relecteur) et mène au plus deux tickets indépendants en parallèle : voir `docs/boucle.md`.
-- **Tests d'abord** : si le ticket n'a pas de tests, le testeur les écrit en premier, puis le développeur les fait passer. Ne modifie jamais un test pour qu'il passe sans le justifier dans la PR.
-- **Pas de travail inventé.** Backlog vide ou ticket flou : arrête-toi et écris tes questions dans `docs/questions.md`. Mieux vaut trois tickets nets par fenêtre que dix vagues.
+- **Tests d'abord** : si le ticket n'a pas de tests, ils s'écrivent en premier, dans un commit de tests rouges séparé, puis le développeur les fait passer. Ticket normal : le sous-agent `developpeur` écrit lui-même ce commit. Ticket critique (base, synchro, sécurité, isolement entre fermes, stock) : un sous-agent `testeur` séparé l'écrit. Voir `docs/demarrage.md`. Ne modifie jamais un test pour qu'il passe sans le justifier dans la PR.
+- **Pas de travail inventé.** Backlog vide ou ticket flou : arrête-toi et écris tes questions dans `docs/questions.md`. Mieux vaut trois tickets nets par session que dix vagues.
 - **Environnement isolé.** Mode sans demande de permission autorisé uniquement dans un conteneur dédié, sans accès aux données ni aux secrets de production.
 - **Git-centré** : une branche par ticket, commits atomiques, jamais de push direct sur `main`.
 - **Journal** : à la fin de chaque ticket, ajoute trois lignes à `docs/journal.md` (fait, décidé, bloquant). C'est ce que Théophane lit le matin.
@@ -86,7 +86,10 @@ Relever un budget (poids ou temps) se justifie dans la PR, jamais en silence.
 | `apps/api` | API Hono sur Node |
 | `apps/mcp` | Serveur MCP qui exposera la ferme à l'agent |
 | `docs/brief.md` | Contexte, périmètre, stack, risques, plan en phases, première mission |
+| `docs/demarrage.md` | Point d'entrée de chaque session de la boucle : état, règles, domaines critiques, choix des agents |
 | `docs/boucle.md` | Procédure de la boucle autonome, branches, message de la routine |
+| `.claude/agents/` | Sous-agents de la boucle, chacun avec son modèle déclaré |
+| `scripts/attendre-fusion.sh` | Attend la CI verte d'une PR puis la fusionne, avec garde-fous |
 | `.claude/hooks/session-start.sh` | Prépare chaque session web : dépendances, Chromium pour Playwright |
 | `docs/journal.md` | Journal de fin de ticket (fait, décidé, bloquant) |
 | `docs/questions.md` | Questions en attente de Théophane |
