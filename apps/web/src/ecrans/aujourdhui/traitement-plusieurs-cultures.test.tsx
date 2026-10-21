@@ -625,3 +625,58 @@ describe('T78 relecture 3 : emplacement supprimé ou désactivé avant l’écri
   });
 });
 
+/**
+ * Contre-relecture : la revérification de la transaction du lot accepte un emplacement de la ferme,
+ * non supprimé, et actif À LA DATE DU TRAITEMENT OU AUJOURD'HUI (le formulaire propose ceux d'aujourd'hui,
+ * un traitement peut être noté après coup). Sinon, lot entier refusé (les trois tests de course ci-dessus
+ * restent vrais avec cette règle). Contrat : `ecrireLotTraitement(porte, saisies, annoncer?, aujourdhui?)`,
+ * `aujourdhui` = 'AAAA-MM-JJ' (défaut : jour du téléphone) ; ici toujours 2026-09-30, `actif_au` exclu.
+ */
+describe('T78 contre-relecture : emplacement actif à la date du traitement ou aujourd’hui', () => {
+  const JOUR = '2026-09-30';
+  const NOUVELLE = id(0x600);
+  const tomate = { sorte: 'serie' as const, serieId: SERIE.tomate as Id<'Serie'> };
+  const fraise = { sorte: 'campagne' as const, campagneId: CAMPAGNE.fraise as Id<'Campagne'> };
+  const ecrire = (saisies: readonly SaisieLot[]) =>
+    (lot().ecrireLotTraitement as unknown as (p: PorteDonnees, s: readonly SaisieLot[], a: undefined, j: string) => Promise<readonly { id: string }[]>)(porte, saisies, undefined, JOUR);
+
+  async function redecouper(ancienneActifAu: string, nouvelleActifDu: string): Promise<void> {
+    await base.execute('UPDATE emplacement SET actif_au = ? WHERE id = ?', [ancienneActifAu, EMPLACEMENT.t2p07]);
+    await base.execute(
+      `INSERT INTO emplacement (id, ferme_id, zone_id, code, sorte, longueur_m, largeur_m, nombre_places, actif_du, actif_au, remplace, cree_le, modifie_le)
+       SELECT ?, ferme_id, zone_id, 'T2-P07b', sorte, longueur_m, largeur_m, nombre_places, ?, NULL, '[]', cree_le, modifie_le FROM emplacement WHERE id = ?`,
+      [NOUVELLE, nouvelleActifDu, EMPLACEMENT.t2p07],
+    );
+  }
+
+  it('planche redécoupée hier (ancienne désactivée hier, nouvelle active depuis hier), traitement d’il y a trois jours sur la nouvelle → accepté, seule et en lot', async () => {
+    await redecouper('2026-09-29', '2026-09-29');
+    const seule = await ecrire([saisieLot(tomate, NOUVELLE, 3, 24, '2026-09-27')]);
+    expect(seule).toHaveLength(1);
+    const enLot = await ecrire([saisieLot(tomate, NOUVELLE, 3, 24, '2026-09-27'), saisieLot(fraise, EMPLACEMENT.s1g01, 1, 40, '2026-09-27')]);
+    expect(enLot).toHaveLength(2);
+    expect(lignes()).toHaveLength(3);
+  });
+
+  it('sinon refusé : emplacement actif ni à la date du traitement ni aujourd’hui (pas encore créé, ou supprimé) → lot entier refusé, rien d’écrit', async () => {
+    await redecouper('2026-09-29', '2026-10-05');
+    await expect(ecrire([saisieLot(fraise, EMPLACEMENT.s1g01, 1, 40, '2026-09-27'), saisieLot(tomate, NOUVELLE, 3, 24, '2026-09-27')])).rejects.toBeInstanceOf(lot().TraitementRefuse);
+    expect(lignes()).toHaveLength(0);
+    await base.execute('UPDATE emplacement SET supprime_le = ? WHERE id = ?', ['2026-09-29T08:00:00.000Z', EMPLACEMENT.t2p07]);
+    await expect(ecrire([saisieLot(tomate, EMPLACEMENT.t2p07, 3, 24, '2026-09-27')])).rejects.toBeInstanceOf(lot().TraitementRefuse);
+    expect(lignes()).toHaveLength(0);
+  });
+
+  it('garde : traitement d’hier sur un emplacement désactivé aujourd’hui (actif_au = aujourd’hui) → accepté', async () => {
+    await base.execute('UPDATE emplacement SET actif_au = ? WHERE id = ?', [JOUR, EMPLACEMENT.t2p07]);
+    await expect(ecrire([saisieLot(tomate, EMPLACEMENT.t2p07, 3, 24, '2026-09-29')])).resolves.toHaveLength(1);
+  });
+
+  it('garde : culture sans emplacement (kiwis, campagne) → acceptée, seule et en lot', async () => {
+    const sans = (c: CultureConcernee, dar: number): SaisieLot => ({ ...saisieLot(c, EMPLACEMENT.t2p07, dar, 10, '2026-09-29'), emplacementIds: [] });
+    await expect(ecrire([sans(fraise, 1)])).resolves.toHaveLength(1);
+    await expect(ecrire([sans(fraise, 1), saisieLot(tomate, EMPLACEMENT.t2p07, 3, 24, '2026-09-29')])).resolves.toHaveLength(2);
+    expect(lignes()).toHaveLength(3);
+  });
+});
+
