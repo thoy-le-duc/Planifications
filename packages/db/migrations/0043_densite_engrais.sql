@@ -1,0 +1,2 @@
+ALTER TABLE "produit_fertilisant" ADD COLUMN "densite_kg_par_l" double precision;--> statement-breakpoint
+ALTER TABLE "produit_fertilisant" ADD CONSTRAINT "produit_fertilisant_densite" CHECK ("produit_fertilisant"."densite_kg_par_l" IS NULL OR ("produit_fertilisant"."forme" = 'liquide' AND "produit_fertilisant"."densite_kg_par_l" BETWEEN 0.5 AND 2.5));

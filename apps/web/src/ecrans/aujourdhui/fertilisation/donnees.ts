@@ -19,12 +19,15 @@ export interface ProduitChoisissable {
   readonly id: string;
   readonly nom: string;
   readonly unite: string;
+  /** T72 : pour avertir d'un liquide sans densité ou d'un solide compté en volume. */
+  readonly forme: 'solide' | 'liquide';
+  readonly densiteKgParL: number | null;
 }
 
 /** Paramètres : ferme, jour, jour. */
 const SQL_PLANCHES = `SELECT id, code FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND actif_du <= ? AND (actif_au IS NULL OR actif_au > ?)`;
 
-const SQL_PRODUITS = `SELECT id, nom, unite FROM produit_fertilisant WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY nom, id`;
+const SQL_PRODUITS = `SELECT id, nom, unite, forme, densite_kg_par_l FROM produit_fertilisant WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY nom, id`;
 
 export async function lirePlanches(porte: PorteDonnees, fermeId: string, jour: string): Promise<PlancheActive[]> {
   const l = await porte.lire<{ id: string; code: string }>(SQL_PLANCHES, [fermeId, jour, jour]);
@@ -32,8 +35,8 @@ export async function lirePlanches(porte: PorteDonnees, fermeId: string, jour: s
 }
 
 export async function lireProduits(porte: PorteDonnees, fermeId: string): Promise<ProduitChoisissable[]> {
-  const l = await porte.lire<{ id: string; nom: string; unite: string }>(SQL_PRODUITS, [fermeId]);
-  return l.map((x) => ({ id: x.id, nom: x.nom, unite: x.unite }));
+  const l = await porte.lire<{ id: string; nom: string; unite: string; forme: string; densite_kg_par_l: number | null }>(SQL_PRODUITS, [fermeId]);
+  return l.map((x) => ({ id: x.id, nom: x.nom, unite: x.unite, forme: x.forme === 'liquide' ? 'liquide' : 'solide', densiteKgParL: typeof x.densite_kg_par_l === 'number' ? x.densite_kg_par_l : null }));
 }
 
 export interface SaisieApport {

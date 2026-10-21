@@ -35,6 +35,8 @@ export interface ValeursProduit {
   readonly organique: boolean;
   readonly utilisableEnBio: boolean;
   readonly source: string;
+  /** T72 : kg/L d'un liquide (0,5 à 2,5) ; null : non renseignée. Écrite à null pour un solide. */
+  readonly densiteKgParL: number | null;
 }
 
 export interface ContexteFertilisation {
@@ -43,7 +45,7 @@ export interface ContexteFertilisation {
   readonly maintenant: () => Date;
 }
 
-const COLONNES = ['id', 'ferme_id', 'nom', 'forme', 'unite', 'teneur_n', 'teneur_p2o5', 'teneur_k2o', 'organique', 'utilisable_en_bio', 'source', 'cree_le', 'modifie_le', 'supprime_le'] as const;
+const COLONNES = ['id', 'ferme_id', 'nom', 'forme', 'unite', 'teneur_n', 'teneur_p2o5', 'teneur_k2o', 'organique', 'utilisable_en_bio', 'source', 'densite_kg_par_l', 'cree_le', 'modifie_le', 'supprime_le'] as const;
 
 /** Tous les produits de la ferme, archivés compris. */
 export const SQL_PRODUITS_FERME = `SELECT ${COLONNES.join(', ')} FROM produit_fertilisant WHERE ferme_id = ? ORDER BY nom, id`;
@@ -66,6 +68,7 @@ function colonnesDe(v: ValeursProduit): Record<string, Valeur> {
     organique: v.organique ? 1 : 0,
     utilisable_en_bio: v.utilisableEnBio ? 1 : 0,
     source: v.source.trim(),
+    densite_kg_par_l: v.forme === 'liquide' ? v.densiteKgParL : null,
   };
 }
 
@@ -96,7 +99,7 @@ export async function creerProduit(ctx: ContexteFertilisation, v: ValeursProduit
 /** Liste de départ (FERTILISANTS_DEPART) écrite dans la ferme, en UNE transaction. */
 export async function ajouterListeDeDepart(ctx: ContexteFertilisation): Promise<void> {
   const id = nouvelId(ctx.maintenant);
-  const lignes = FERTILISANTS_DEPART.map((p) => ligneNeuve(ctx, id(), p));
+  const lignes = FERTILISANTS_DEPART.map((p) => ligneNeuve(ctx, id(), { ...p, densiteKgParL: null }));
   for (const l of lignes) verifier(l);
   await ctx.porte.ecrireEnsemble(lignes.map((l) => ({ sql: INSERT, parametres: COLONNES.map((c) => l[c] ?? null) })));
 }

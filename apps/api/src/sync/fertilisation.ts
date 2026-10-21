@@ -24,7 +24,7 @@ import type { TransactionDb } from './references.ts';
 export const TABLE_FERTILISANT = 'produit_fertilisant';
 
 /** Colonnes écrites (sans cree_le ni modifie_le, remplies par le serveur). */
-const COLONNES = ['id', 'ferme_id', 'nom', 'forme', 'unite', 'teneur_n', 'teneur_p2o5', 'teneur_k2o', 'organique', 'utilisable_en_bio', 'source', 'supprime_le'] as const;
+const COLONNES = ['id', 'ferme_id', 'nom', 'forme', 'unite', 'teneur_n', 'teneur_p2o5', 'teneur_k2o', 'organique', 'utilisable_en_bio', 'source', 'densite_kg_par_l', 'supprime_le'] as const;
 
 type Ligne = Readonly<Record<string, unknown>>;
 
@@ -56,6 +56,7 @@ function ligneDe(p: ProduitFertilisantEcrit): Ligne {
     organique: p.organique,
     utilisable_en_bio: p.utilisableEnBio,
     source: p.source,
+    densite_kg_par_l: p.densiteKgParL,
     supprime_le: p.supprimeLe === null ? null : new Date(p.supprimeLe).toISOString(),
   };
 }
@@ -149,7 +150,11 @@ async function modifier(tx: TransactionDb, ctx: Contexte, e: EcritureFertilisant
   const fermeDemandee = e.donnees.ferme_id;
   if (fermeDemandee !== undefined && (typeof fermeDemandee !== 'string' || fermeDemandee.toLowerCase() !== fermeId)) return invalide(PRECISION_CHANGE_DE_FERME, fermeId);
 
-  const lecture = validerProduitFertilisant({ ...avant, ...e.donnees, id: avant.id });
+  // T72 : un téléphone d'avant T72 qui passe un liquide en solide ne parle pas de la densité ;
+  // sans cela, la ligne complète serait refusée à chaque envoi. Une densité explicite reste jugée.
+  const rendNonLiquide = e.donnees.forme !== undefined && e.donnees.forme !== 'liquide';
+  const efface = rendNonLiquide && !Object.hasOwn(e.donnees, 'densite_kg_par_l') ? { densite_kg_par_l: null } : {};
+  const lecture = validerProduitFertilisant({ ...avant, ...efface, ...e.donnees, id: avant.id });
   if (!lecture.ok) return refusDuCoeur(lecture.erreur, fermeId);
   const ligne = ligneDe(lecture.valeur);
   if ((await identique(tx, ligne, lecture.valeur.id)) === true) return null;

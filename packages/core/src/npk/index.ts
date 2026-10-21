@@ -12,8 +12,9 @@
  * On MESURE ce qui a été apporté (règle 5) : aucune dose n'est conseillée ici.
  *
  * Teneur d'un produit : % de sa masse telle qu'apportée (kg, t) ; pour un liquide compté en L ou
- * m³, kg d'élément pour 100 L (densité prise à 1). Un solide compté en L ou m³ (densité inconnue) est
- * compté sans unités. Les teneurs ne sont pas figées dans l'apport :
+ * m³, % de sa masse aussi, la masse étant le volume × la densité du produit (T72, `densite_kg_par_l`,
+ * de 0,5 à 2,5 kg/L ; non renseignée : 1 kg/L supposé, signalé à l'écran). Un solide compté en L ou
+ * m³ (densité inconnue) est compté sans unités. Les teneurs ne sont pas figées dans l'apport :
  * corriger un produit après une analyse corrige son bilan passé, comme on l'attend d'un cahier.
  */
 import { estDateValide, type DateCalendaire } from '../dates/index.ts';
@@ -42,6 +43,9 @@ export const LIMITES_PRODUIT_FERTILISANT = {
   nomCaracteres: 200,
   sourceCaracteres: 300,
   teneurMax: 100,
+  /** T72 : densité d'un liquide, en kg par litre. */
+  densiteMin: 0.5,
+  densiteMax: 2.5,
 } as const;
 
 /** Produit fertilisant écrit par un téléphone, validé. */
@@ -57,6 +61,8 @@ export interface ProduitFertilisantEcrit {
   readonly organique: boolean;
   readonly utilisableEnBio: boolean;
   readonly source: string;
+  /** T72 : kg par litre d'un liquide (0,5 à 2,5) ; null : non renseignée (1 kg/L supposé). */
+  readonly densiteKgParL: number | null;
   readonly supprimeLe: Instant | null;
 }
 
@@ -72,6 +78,7 @@ const COLONNES_PRODUIT: ReadonlySet<string> = /* @__PURE__ */ new Set([
   'organique',
   'utilisable_en_bio',
   'source',
+  'densite_kg_par_l',
   'cree_le',
   'modifie_le',
   'supprime_le',
@@ -91,6 +98,14 @@ function teneur(v: unknown, champ: string, libelle: string): Lu<number | null> {
   if (absent(v)) return lu(null);
   if (typeof v !== 'number' || !Number.isFinite(v)) return echec(erreur('champ_invalide', champ, `${libelle} : nombre attendu (en %)`));
   if (v < 0 || v > LIMITES_PRODUIT_FERTILISANT.teneurMax) return echec(erreur('hors_bornes', champ, `${libelle} : de 0 à 100 %`));
+  return lu(v);
+}
+
+/** T72 : densité d'un liquide en kg/L, facultative (null), de 0,5 à 2,5. */
+function densite(v: unknown): Lu<number | null> {
+  if (absent(v)) return lu(null);
+  if (typeof v !== 'number' || !Number.isFinite(v)) return echec(erreur('champ_invalide', 'densite_kg_par_l', 'densité : un nombre en kg/L'));
+  if (v < LIMITES_PRODUIT_FERTILISANT.densiteMin || v > LIMITES_PRODUIT_FERTILISANT.densiteMax) return echec(erreur('hors_bornes', 'densite_kg_par_l', 'densité : de 0,5 à 2,5 kg/L'));
   return lu(v);
 }
 
@@ -125,6 +140,9 @@ function lireProduit(l: Objet): Lu<ProduitFertilisantEcrit> {
   if (!bio.ok) return bio;
   const source = texte(l.source, 'source', 'source', { max: LIMITES_PRODUIT_FERTILISANT.sourceCaracteres, nonVide: false });
   if (!source.ok) return source;
+  const dens = densite(l.densite_kg_par_l);
+  if (!dens.ok) return dens;
+  if (dens.valeur !== null && l.forme !== 'liquide') return echec(erreur('incoherent', 'densite_kg_par_l', 'densité : réservée aux produits liquides'));
   const suppression = supprimeLe(l.supprime_le);
   if (!suppression.ok) return suppression;
   return lu({
@@ -139,6 +157,7 @@ function lireProduit(l: Objet): Lu<ProduitFertilisantEcrit> {
     organique: organique.valeur,
     utilisableEnBio: bio.valeur,
     source: source.valeur,
+    densiteKgParL: dens.valeur,
     supprimeLe: suppression.valeur,
   });
 }
@@ -230,19 +249,25 @@ export interface Unites {
 /** Au centième, sans 0,30000000000000004 (demi vers le haut). */
 const centieme = (x: number): number => Math.round((x + Number.EPSILON * Math.abs(x)) * 100) / 100;
 
-/** Quantité en kg (L : densité 1 ; m³ : 1 000 L) ; unité inconnue → null. */
-export function quantiteEnKg(q: Quantite): number | null {
+/**
+ * Quantité en kg : kg et t tels quels ; L et m³ (1 000 L) × la densité du liquide en kg/L (T72),
+ * 1 si elle n'est pas donnée ; unité inconnue → null.
+ */
+export function quantiteEnKg(q: Quantite, densiteKgParL: number | null = null): number | null {
   if (!Number.isFinite(q.valeur)) return null;
+  const d = densiteKgParL ?? 1;
   const u = q.unite.trim().toLowerCase();
-  if (u === 'kg' || u === 'l') return q.valeur;
-  if (u === 't' || u === 'm3' || u === 'm³') return q.valeur * 1000;
+  if (u === 'kg') return q.valeur;
+  if (u === 'l') return q.valeur * d;
+  if (u === 't') return q.valeur * 1000;
+  if (u === 'm3' || u === 'm³') return q.valeur * 1000 * d;
   return null;
 }
 
 const estVolume = (q: Quantite): boolean => ['l', 'm3', 'm³'].includes(q.unite.trim().toLowerCase());
 
-function brutes(q: Quantite, t: Teneurs): Unites | null {
-  const kg = quantiteEnKg(q);
+function brutes(q: Quantite, t: Teneurs, densiteKgParL: number | null): Unites | null {
+  const kg = quantiteEnKg(q, densiteKgParL);
   if (kg === null || (t.teneurN === null && t.teneurP2o5 === null && t.teneurK2o === null)) return null;
   const de = (x: number | null): number | null => (x === null ? null : (kg * x) / 100);
   return { n: de(t.teneurN), p2o5: de(t.teneurP2o5), k2o: de(t.teneurK2o) };
@@ -256,9 +281,12 @@ function hectareBrut(u: Unites, surfaceM2: number | null): Unites | null {
 
 const auCentieme = (u: Unites | null): Unites | null => (u === null ? null : { n: u.n === null ? null : centieme(u.n), p2o5: u.p2o5 === null ? null : centieme(u.p2o5), k2o: u.k2o === null ? null : centieme(u.k2o) });
 
-/** kg de N, P₂O₅, K₂O apportés (au centième) ; null : quantité non convertible ou aucune teneur. */
-export function unitesApport(q: Quantite, t: Teneurs): Unites | null {
-  return auCentieme(brutes(q, t));
+/**
+ * kg de N, P₂O₅, K₂O apportés (au centième) ; null : quantité non convertible ou aucune teneur.
+ * `densiteKgParL` (T72) : celle d'un liquide compté en L ou m³ ; absente, 1 kg/L.
+ */
+export function unitesApport(q: Quantite, t: Teneurs, densiteKgParL: number | null = null): Unites | null {
+  return auCentieme(brutes(q, t, densiteKgParL));
 }
 
 /** kg/ha (au centième) ; surface absente ou ≤ 0 → null. */
@@ -266,9 +294,12 @@ export function parHectare(u: Unites, surfaceM2: number | null): Unites | null {
   return auCentieme(hectareBrut(u, surfaceM2));
 }
 
-/** kg bruts d'un apport du produit : un solide compté en volume (densité inconnue) ou un produit inconnu → null. */
+/**
+ * kg bruts d'un apport du produit : un solide compté en volume (densité inconnue) ou un produit
+ * inconnu → null ; un liquide en volume pèse volume × densité du produit (1 kg/L si non renseignée).
+ */
 function kgDuProduit(p: Produit | null, q: Quantite): Unites | null {
-  return p === null || (!p.liquide && estVolume(q)) ? null : brutes(q, p.teneurs);
+  return p === null || (!p.liquide && estVolume(q)) ? null : brutes(q, p.teneurs, p.densite);
 }
 
 // ── Saisie d'un apport ───────────────────────────────────────────────────────────────────────
@@ -310,6 +341,8 @@ export interface ApportCalcule {
   readonly bio: boolean;
   readonly kg: Unites | null;
   readonly kgParHa: Unites | null;
+  /** T72 : liquide compté en L ou m³ sans densité renseignée, donc à 1 kg/L supposé (à signaler). */
+  readonly densiteSupposee: boolean;
   readonly serieId: string | null;
   readonly campagneId: string | null;
 }
@@ -359,6 +392,8 @@ interface Produit {
   readonly nom: string;
   readonly teneurs: Teneurs;
   readonly liquide: boolean;
+  /** T72 : kg/L d'un liquide, null si non renseignée (ou illisible : hors de 0,5 à 2,5). */
+  readonly densite: number | null;
   readonly organique: boolean;
   readonly bio: boolean;
   readonly archive: boolean;
@@ -376,12 +411,18 @@ function lignesDeLaFerme(tables: Tables, nom: string, fermeId: string): LigneLoc
   return (tables[nom] ?? []).filter((l) => typeof l.id === 'string' && l.ferme_id === fermeId);
 }
 
+function densiteLue(v: ValeurFertilisation | undefined): number | null {
+  const d = nombreOuNul(v);
+  return d !== null && d >= LIMITES_PRODUIT_FERTILISANT.densiteMin && d <= LIMITES_PRODUIT_FERTILISANT.densiteMax ? d : null;
+}
+
 function produitDeLigne(l: LigneLocaleFertilisation): Produit {
   return {
     id: chaine(l.id).toLowerCase(),
     nom: chaine(l.nom),
     teneurs: { teneurN: nombreOuNul(l.teneur_n), teneurP2o5: nombreOuNul(l.teneur_p2o5), teneurK2o: nombreOuNul(l.teneur_k2o) },
     liquide: l.forme === 'liquide',
+    densite: densiteLue(l.densite_kg_par_l),
     organique: l.organique === 1,
     bio: l.utilisable_en_bio === 1,
     archive: l.supprime_le !== null && l.supprime_le !== undefined,
@@ -472,6 +513,7 @@ function calcule(
     bio: p?.bio ?? false,
     kg: auCentieme(kg),
     kgParHa: kg === null ? null : auCentieme(hectareBrut(kg, s)),
+    densiteSupposee: kg !== null && p !== null && p.liquide && p.densite === null && estVolume(a.quantite),
     serieId: a.serieId,
     campagneId: a.campagneId,
   };
