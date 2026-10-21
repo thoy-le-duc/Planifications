@@ -256,18 +256,65 @@ export function usagesPourEspeces(produit: ProduitEphy, especes: readonly string
 
 export interface PropositionUsage {
   readonly candidats: readonly UsageEphy[];
-  /** DAR commun à tous les candidats, sinon null (l'utilisateur choisit). */
+  /**
+   * DAR commun à tous les candidats, sinon null (l'utilisateur choisit). Null aussi dès qu'une
+   * espèce de la ferme n'a aucun usage (T76) : le DAR d'une culture ne vaut pas pour une autre.
+   */
   readonly dar: number | null;
-  /** Dose commune à tous les candidats (même valeur, même unité), sinon null. */
+  /** Dose commune à tous les candidats (même valeur, même unité), sinon null ; même règle que le DAR. */
   readonly dose: DoseEphy | null;
 }
 
-export function propositionUsage(produit: ProduitEphy, especes: readonly string[]): PropositionUsage {
-  const candidats = usagesPourEspeces(produit, especes);
+/** DAR et dose communs aux usages retenus, sinon null (Q47 : un DAR absent n'est jamais deviné). */
+function communs(candidats: readonly UsageEphy[]): { readonly dar: number | null; readonly dose: DoseEphy | null } {
   const [premier] = candidats;
-  if (premier === undefined) return { candidats, dar: null, dose: null };
+  if (premier === undefined) return { dar: null, dose: null };
   const dar = premier.dar !== null && candidats.every((u) => u.dar === premier.dar) ? premier.dar : null;
   const d = premier.dose;
   const dose = d !== null && candidats.every((u) => u.dose !== null && u.dose.valeur === d.valeur && u.dose.unite === d.unite) ? d : null;
-  return { candidats, dar, dose };
+  return { dar, dose };
+}
+
+/** Espèces distinctes (casse, accents et espaces ignorés), dans l'ordre d'entrée ; les vides écartées. */
+function especesDistinctes(especes: readonly string[]): string[] {
+  const vues = new Set<string>();
+  const r: string[] = [];
+  for (const e of especes) {
+    const k = normaliserEphy(e);
+    if (k === '' || vues.has(k)) continue;
+    vues.add(k);
+    r.push(e.trim());
+  }
+  return r;
+}
+
+/** Usages par espèce de la ferme (fiche produit, T76) ; `usages` vide = non homologué sur cette espèce. */
+export function usagesParEspece(produit: ProduitEphy, especes: readonly string[]): { readonly espece: string; readonly usages: readonly UsageEphy[] }[] {
+  return especesDistinctes(especes).map((espece) => ({ espece, usages: usagesPourEspeces(produit, [espece]) }));
+}
+
+/**
+ * Niveau ferme (fiche produit) : les usages des espèces de la ferme, et un DAR (et une dose)
+ * seulement si CHAQUE espèce a au moins un usage et que tous concordent (T76).
+ */
+export function propositionUsage(produit: ProduitEphy, especes: readonly string[]): PropositionUsage {
+  const candidats = usagesPourEspeces(produit, especes);
+  const sansUsage = usagesParEspece(produit, especes).some((x) => x.usages.length === 0);
+  if (sansUsage) return { candidats, dar: null, dose: null };
+  return { candidats, ...communs(candidats) };
+}
+
+export interface PropositionUsageCulture extends PropositionUsage {
+  /** Au moins un usage autorisé pour la culture traitée. */
+  readonly homologue: boolean;
+}
+
+/**
+ * La culture réellement traitée (saisie d'un traitement, T76) : ses usages seulement, jamais ceux
+ * d'une autre culture de la ferme. DAR proposé si tous ses usages concordent en jours, sinon null
+ * (le maraîcher choisit l'usage ou saisit le DAR).
+ */
+export function propositionUsagePourCulture(produit: ProduitEphy, espece: string): PropositionUsageCulture {
+  const candidats = normaliserEphy(espece) === '' ? [] : usagesPourEspeces(produit, [espece]);
+  return { homologue: candidats.length > 0, candidats, ...communs(candidats) };
 }
