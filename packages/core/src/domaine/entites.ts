@@ -159,10 +159,11 @@ export interface Gouttiere extends EmplacementCommun {
 
 export type Emplacement = Planche | Rang | Gouttiere;
 
-export type TypeBatiment = 'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'magasin' | 'autre';
+/** T61 : `local` et `chambre_froide` s'ajoutent (lieux de rangement, Q44). */
+export type TypeBatiment = 'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'local' | 'chambre_froide' | 'magasin' | 'autre';
 
 /**
- * Bâtiment de la ferme (T28a, Q31) : serre, hangar, magasin. Toujours un rectangle placé dans le
+ * Bâtiment de la ferme (T28a, Q31 ; T61) : serre, hangar, local, chambre froide, magasin. Toujours un rectangle placé dans le
  * repère local de la ferme. Une serre peut abriter une zone de culture (au plus un bâtiment non
  * supprimé par zone) : la zone prend alors son rectangle et son repère.
  */

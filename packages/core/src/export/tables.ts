@@ -74,10 +74,10 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       cle_tache: texte('travail du jour attribué : culture (série ou campagne) et étape, ou travail prévu et sa date'),
       ...HORODATAGE,
     }),
-    batiment: table('Bâtiments de la ferme (serres, hangar, magasin) : rectangles placés dans le repère local de la ferme.', {
+    batiment: table('Bâtiments de la ferme (serres, hangar, local, chambre froide, magasin) : rectangles placés dans le repère local de la ferme.', {
       ferme_id: FERME_ID,
       nom: texte('nom du bâtiment'),
-      type: texte('type de bâtiment : serre_tunnel (tunnel), serre_chapelle, hangar, magasin, autre'),
+      type: texte('type de bâtiment : serre_tunnel (tunnel), serre_chapelle, hangar, local, chambre_froide (chambre froide), magasin, autre'),
       longueur_m: reel('longueur en mètres (côté qui donne l’orientation)'),
       largeur_m: reel('largeur en mètres'),
       hauteur_m: reel('hauteur en mètres'),
@@ -94,6 +94,13 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       debut_recolte_prevu: date('début de récolte prévu (AAAA-MM-JJ)'),
       fin_recolte_prevue: date('fin de récolte prévue (AAAA-MM-JJ)'),
       rendement_prevu: json('rendement prévu de l’année (quantité et unité, en JSON)'),
+      ...HORODATAGE,
+    }),
+    chemin: table('Chemins de la ferme : lignes tracées point par point sur le plan, avec leur largeur.', {
+      ferme_id: FERME_ID,
+      nom: texte('nom du chemin (facultatif)'),
+      points: json('tracé du chemin : liste JSON de points {x, y} en mètres dans le repère local de la ferme (x vers l’est, y vers le nord depuis ferme.origine_plan)'),
+      largeur_m: reel('largeur du chemin en mètres'),
       ...HORODATAGE,
     }),
     emplacement: table('Emplacements de culture : planches, rangs et gouttières de chaque zone.', {
@@ -182,6 +189,12 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       },
       true,
     ),
+    lieu_rangement: table('Lieux de rangement des outils : un bâtiment ou un point du plan (son nom est celui du bâtiment ou du point).', {
+      ferme_id: FERME_ID,
+      batiment_id: texte('bâtiment qui sert de lieu de rangement, vide si c’est un point du plan (voir batiment.csv)'),
+      point_plan_id: texte('point du plan qui sert de lieu de rangement, vide si c’est un bâtiment (voir point_plan.csv)'),
+      ...HORODATAGE,
+    }),
     membre: table('Membres de la ferme et leur rôle.', {
       utilisateur_id: texte('personne membre (voir utilisateur.csv)'),
       ferme_id: FERME_ID,
@@ -227,10 +240,23 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       reel_au: date('fin d’occupation réelle (AAAA-MM-JJ)'),
       ...HORODATAGE,
     }),
+    outil: table('Outils de la ferme et leur lieu de rangement (« Grelinette — hangar, mur nord »).', {
+      ferme_id: FERME_ID,
+      nom: texte('nom de l’outil, tel que les travaux prévus le désignent'),
+      lieu_rangement_id: texte('lieu où l’outil est rangé (voir lieu_rangement.csv)'),
+      place_rangement_id: texte('place dans ce lieu, facultative (voir place_rangement.csv)'),
+      ...HORODATAGE,
+    }),
     personne: table('Équipe de la ferme : une personne par ligne, avec ou sans compte.', {
       ferme_id: FERME_ID,
       prenom: texte('prénom affiché'),
       membre_id: texte('compte de la personne dans la ferme, vide pour un ouvrier sans compte (voir membre.csv)'),
+      ...HORODATAGE,
+    }),
+    place_rangement: table('Places nommées à l’intérieur d’un lieu de rangement (« mur nord », « étagère 2 »).', {
+      ferme_id: FERME_ID,
+      lieu_rangement_id: texte('lieu de rangement qui contient la place (voir lieu_rangement.csv)'),
+      nom: texte('nom de la place'),
       ...HORODATAGE,
     }),
     plantation: table('Plantations pérennes : kiwis, asperges, pivoines, fraisiers conservés plusieurs années.', {
@@ -240,6 +266,14 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       date_plantation: date('jour de plantation (AAAA-MM-JJ)'),
       nombre_plants: entier('nombre de plants'),
       date_arrachage: date('jour d’arrachage (AAAA-MM-JJ) ; vide tant que la plantation est en place'),
+      ...HORODATAGE,
+    }),
+    point_plan: table('Points du plan de la ferme : points d’eau et autres repères nommés.', {
+      ferme_id: FERME_ID,
+      nom: texte('nom du point'),
+      sorte: texte('sorte de point : point_eau (point d’eau) ou repere (autre repère nommé)'),
+      x_m: reel('position vers l’est, en mètres depuis l’origine du plan de la ferme (ferme.origine_plan)'),
+      y_m: reel('position vers le nord, en mètres depuis l’origine du plan de la ferme (ferme.origine_plan)'),
       ...HORODATAGE,
     }),
     produit_fertilisant: table('Produits fertilisants de la ferme (compost, fumier, engrais) et leur composition, pour le cahier de fertilisation.', {

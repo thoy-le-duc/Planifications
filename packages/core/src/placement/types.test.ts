@@ -11,7 +11,8 @@
  *   Zone.contour      : readonly PointLocal[] | null
  *   Emplacement (les trois sortes) :
  *     placementXM: Metres | null ; placementYM: Metres | null ; orientationDeg: Degres | null
- *   TypeBatiment      = 'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'magasin' | 'autre'
+ *   TypeBatiment      = 'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'local' | 'chambre_froide' |
+ *                       'magasin' | 'autre' (T61 : local et chambre froide)
  *   Batiment          ligne de ferme (id: Id<'Batiment'>, fermeId, supprimeLe) + nom: string,
  *                     type: TypeBatiment, longueurM, largeurM, hauteurM, centreXM, centreYM:
  *                     Metres, orientationDeg: Degres, zoneId: Id<'Zone'> | null
@@ -56,8 +57,8 @@ describe('T28a : types du domaine', () => {
     expectTypeOf<Batiment['zoneId']>().toEqualTypeOf<Id<'Zone'> | null>();
   });
 
-  it('TypeBatiment : les cinq valeurs du ticket, rien d’autre', () => {
-    expectTypeOf<TypeBatiment>().toEqualTypeOf<'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'magasin' | 'autre'>();
+  it('TypeBatiment : les sept valeurs (T28a, T61 : local et chambre froide), rien d’autre', () => {
+    expectTypeOf<TypeBatiment>().toEqualTypeOf<'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'local' | 'chambre_froide' | 'magasin' | 'autre'>();
     expectTypeOf<TypeBatiment>().toEqualTypeOf<TypeBatimentContrat>();
   });
 

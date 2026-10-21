@@ -21,7 +21,7 @@ export const PLAFONDS_BATIMENT: { readonly longueurM: number; readonly largeurM:
   largeurM: 200,
   hauteurM: 30,
 };
-export const TYPES_BATIMENT: readonly TypeBatiment[] = ['serre_tunnel', 'serre_chapelle', 'hangar', 'magasin', 'autre'];
+export const TYPES_BATIMENT: readonly TypeBatiment[] = ['serre_tunnel', 'serre_chapelle', 'hangar', 'local', 'chambre_froide', 'magasin', 'autre'];
 
 export type CodeErreurPlacement =
   | 'entree_invalide'
@@ -255,6 +255,11 @@ const DIMENSIONS = { longueur_m: 'La longueur', largeur_m: 'La largeur', hauteur
 const COLONNES_BATIMENT = ['longueur_m', 'largeur_m', 'hauteur_m', 'centre_x_m', 'centre_y_m', 'orientation_deg'] as const;
 
 function validerBatiment(ligne: Readonly<Record<string, unknown>>): ResultatPlacement<PlacementBatiment> {
+  // T61 : un type donné est l'une des sortes connues (absent : la ligne ne porte que le placement).
+  const type = ligne.type;
+  if (!estNul(type) && !(TYPES_BATIMENT as readonly unknown[]).includes(type)) {
+    return refus('entree_invalide', 'type', 'Type de bâtiment inconnu.');
+  }
   const manquante = COLONNES_BATIMENT.find((c) => estNul(ligne[c]));
   if (manquante !== undefined) {
     return refus('incomplet', manquante, `Un bâtiment est toujours placé : il manque ${libelle(manquante)}.`);
