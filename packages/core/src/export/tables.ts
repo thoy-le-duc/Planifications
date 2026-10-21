@@ -253,6 +253,7 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       organique: booleen('azote d’origine organique : oui ou non'),
       utilisable_en_bio: booleen('utilisable en agriculture biologique : oui ou non'),
       source: texte('source des teneurs (document, date, analyse)'),
+      densite_kg_par_l: reel('densité d’un produit liquide, en kg par litre, de 0,5 à 2,5 (vide si non renseignée : 1 kg/L supposé pour un volume en L ou m3)'),
       ...HORODATAGE,
     }),
     produit_phyto: table(

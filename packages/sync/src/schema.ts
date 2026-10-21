@@ -35,7 +35,7 @@ export const TABLES_LOCALES = {
   occupation: { ferme_id: T, emplacement_id: T, serie_id: T, plantation_id: T, evenement_id: T, longueur_m: 'reel', nombre_places: 'entier', position_m: 'reel', prevu_du: T, prevu_au: T, reel_du: T, reel_au: T, cree_le: T, modifie_le: T, supprime_le: T },
   personne: { ferme_id: T, prenom: T, membre_id: T, cree_le: T, modifie_le: T, supprime_le: T },
   plantation: { ferme_id: T, espece_id: T, variete_id: T, date_plantation: T, nombre_plants: 'entier', date_arrachage: T, cree_le: T, modifie_le: T, supprime_le: T },
-  produit_fertilisant: { ferme_id: T, nom: T, forme: T, unite: T, teneur_n: 'reel', teneur_p2o5: 'reel', teneur_k2o: 'reel', organique: 'entier', utilisable_en_bio: 'entier', source: T, cree_le: T, modifie_le: T, supprime_le: T },
+  produit_fertilisant: { ferme_id: T, nom: T, forme: T, unite: T, teneur_n: 'reel', teneur_p2o5: 'reel', teneur_k2o: 'reel', organique: 'entier', utilisable_en_bio: 'entier', source: T, densite_kg_par_l: 'reel', cree_le: T, modifie_le: T, supprime_le: T },
   produit_phyto: { ferme_id: T, nom_commercial: T, numero_amm: T, substance_active: T, delai_avant_recolte_jours: 'entier', utilisable_en_bio: 'entier', dose_maximale: T, cree_le: T, modifie_le: T, supprime_le: T },
   proposition: { ferme_id: T, source: T, auteur_id: T, statut: T, decide_le: T, changements: T, cree_le: T, modifie_le: T, supprime_le: T },
   recette_fertirrigation: { ferme_id: T, nom: T, taux_injection: 'reel', engrais: T, ec_cible: 'reel', ph_cible: 'reel', cree_le: T, modifie_le: T, supprime_le: T },
