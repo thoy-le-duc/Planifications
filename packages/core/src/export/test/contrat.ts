@@ -357,6 +357,8 @@ export const TABLES_ATTENDUES = [
   'produit_fertilisant',
   'produit_phyto',
   'proposition',
+  // T56 : recettes de fertirrigation de la ferme (engrais et doses, taux d'injection).
+  'recette_fertirrigation',
   'saison',
   'secteur_emplacement',
   'secteur_irrigation',

@@ -494,7 +494,7 @@ export async function fermesDesLignesVisees(
   // T23 : les itinéraires et les types d'intervention se modifient aussi, sous le même verrou ;
   // T10s : le parcellaire et le catalogue de la ferme de même.
   // T52 : les produits phyto de la ferme de même ; T54 : les produits fertilisants.
-  for (const table of ['serie', 'occupation', 'itineraire', 'type_intervention', 'produit_phyto', 'produit_fertilisant', ...TABLES_STRUCTURE]) {
+  for (const table of ['serie', 'occupation', 'itineraire', 'type_intervention', 'produit_phyto', 'produit_fertilisant', 'recette_fertirrigation', ...TABLES_STRUCTURE]) {
     const ids = [...new Set(ecritures.filter((e) => e.table === table && e.op === 'PATCH' && estUuid(e.id)).map((e) => e.id.toLowerCase()))];
     if (ids.length === 0) continue;
     const r = await tx.execute<{ ferme_id: string }>(

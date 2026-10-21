@@ -212,7 +212,7 @@ Toute saisie au champ est un **événement** : quoi, où, combien, quand, par qu
 | Réalisé | événement | étape (semis pépinière, semis direct, plantation, arrachage), quantité réelle si différente du prévu |
 | Récolte | détail de l'événement (vue `recoltes`) | quantité, unité, catégorie (facultative) |
 | Intervention | détail de l'événement (vue `interventions`) | type, outil, produit et quantité pour un amendement ou un engrais (avec, facultatif, `produitFertilisantId` : le produit fertilisant de la ferme choisi, T54), durée d'occupation pour une bâche |
-| Irrigation | événement | secteur, durée (min) ; sans culture ni emplacement : les planches arrosées sont celles de la vanne le jour de l'irrigation (liens datés), changer le réseau ne réécrit pas le passé (T57) |
+| Irrigation | événement | secteur, durée (min) ; sans culture ni emplacement : les planches arrosées sont celles de la vanne le jour de l'irrigation (liens datés), changer le réseau ne réécrit pas le passé (T57). Fertirrigation (T56), tout facultatif : `recetteFertirrigationId`, `volumeM3` (> 0, au plus 10 000 ; saisi, ou durée × débit de la vanne à la saisie), `ecMesuree` (0 à 20 mS/cm), `phMesure` (0 à 14), `engrais` (doses injectées **figées** à la saisie : produit fertilisant, nom, quantité en kg ou L ; 1 à 20). Une recette exige volume et doses ; des doses sans recette sont refusées (`incoherent`). |
 | Traitement phyto | détail de l'événement (vue `traitements`, registre phyto) | produit, dose, surface traitée (m²), cible, opérateur (vide si non précisé) ; date de récolte autorisée = jour du traitement + délai avant récolte du produit, **figée** à la saisie (T52) : jamais avant le jour du traitement |
 | Observation | événement | nature (ravageur, maladie, stade, autre), gravité (facultative) |
 
@@ -243,6 +243,7 @@ Délai avant récolte (T52, T69) : un traitement en vigueur interdit la récolte
 | --- | --- | --- |
 | Produit fertilisant (`produit_fertilisant`) | nom (1 à 200 caractères), forme (solide, liquide), unité (kg, t, L, m3), teneurs N, P₂O₅, K₂O en % (facultatives, 0 à 100), azote d'origine organique oui/non, utilisable en bio oui/non, source (300 caractères au plus) | Toujours de la ferme (`ferme_id` obligatoire) : pas de bibliothèque commune. La liste de départ (`FERTILISANTS_DEPART`, `packages/core/src/npk/`) est copiée dans la ferme en un tap, puis modifiable. Créés, modifiés et archivés (suppression douce) par le téléphone. |
 | Option de la ferme | `ferme.zone_vulnerable_nitrates` (booléen, faux par défaut) | Cochée : plan prévisionnel et alerte de plafond dans le cahier. Décochée : ni l'un ni l'autre. |
+| Recette de fertirrigation (`recette_fertirrigation`, T56) | nom (1 à 200 caractères), taux d'injection en % (plus de 0 à 100, facultatif), engrais (jsonb, tableau de 1 à 20 `{ produitFertilisantId, quantite: { valeur, unite } }`, kg ou L, un produit une fois), EC cible (0 à 20 mS/cm) et pH cible (0 à 14), facultatifs | Toujours de la ferme. Taux donné : quantités pour 1 000 L de solution mère injectée à ce taux (1 % = 10 L de mère par m³ d'eau) ; sans taux : quantités par m³ d'eau. Chaque engrais est un produit fertilisant de la ferme (ses teneurs font le bilan). Créées, modifiées et archivées par le téléphone ; règles `validerRecetteFertirrigation` (`packages/core/src/npk/fertirrigation.ts`), mêmes bornes en base (CHECK). |
 
 Teneur : % de la masse du produit tel qu'apporté (kg, t) ; pour un liquide compté en L ou m³, kg d'élément pour 100 L (densité prise à 1). Un solide saisi en L ou m³ (densité inconnue) est compté sans unités. Les teneurs ne sont **pas figées** dans l'apport (contrairement au délai avant récolte d'un traitement) : corriger un produit après une analyse corrige le bilan de ses apports passés.
 
@@ -252,7 +253,9 @@ Bilan (`bilanFertilisation`, `packages/core/src/npk/`) : unités = quantité en 
 
 Zone vulnérable (`alertesAzoteOrganique`) : alerte non bloquante quand l'azote d'origine organique d'un emplacement dépasse **170 kg N/ha** sur l'année civile, réalisé (`realise`) ou réalisé + prévu (`prevu`). Repère par planche : le plafond réglementaire se calcule sur la SAU de l'exploitation.
 
-Écrans : onglet Ferme, carte « Fertilisation » : « Produits fertilisants » et « Cahier de fertilisation » (bilan par planche de la saison, fiche « Fertilisation » d'une planche avec ses apports, et le plan prévisionnel en zone vulnérable) ; Aujourd'hui : bouton « Fertilisation » (planches, produit au doigt ou texte libre, quantité). Export : `produit_fertilisant.csv` (table) et `cahier-fertilisation.csv` (une ligne par apport réalisé en vigueur, colonnes `COLONNES_CAHIER_FERTILISATION`), calculé, hors de `ferme.json`. Fertirrigation (T56) : à faire entrer dans le même bilan.
+Écrans : onglet Ferme, carte « Fertilisation » : « Produits fertilisants » et « Cahier de fertilisation » (bilan par planche de la saison, fiche « Fertilisation » d'une planche avec ses apports, et le plan prévisionnel en zone vulnérable) ; Aujourd'hui : bouton « Fertilisation » (planches, produit au doigt ou texte libre, quantité). Export : `produit_fertilisant.csv` (table) et `cahier-fertilisation.csv` (une ligne par apport réalisé en vigueur, colonnes `COLONNES_CAHIER_FERTILISATION`), calculé, hors de `ferme.json`. Fertirrigation (T56) : onglet Ferme, « Recettes de fertirrigation » ; Aujourd'hui, « Fertirrigation » à côté d'« Irrigation » (même saisie, chargée à la demande).
+
+Fertirrigation (T56, Q44 : hors-sol et parfois pleine terre, seule la vanne compte) : dose de chaque engrais = quantité × taux ÷ 100 × volume (taux donné) ou quantité × volume (par m³), au milligramme, figée dans le détail de l'irrigation (`detailFertirrigation`) : modifier ou archiver une recette ne réécrit pas le passé. Le bilan et le cahier de T54 comptent chaque irrigation **en vigueur** qui porte des engrais : un apport de catégorie `fertirrigation` par engrais, sur les emplacements que la vanne arrosait **le jour de l'irrigation** (liens datés non supprimés), avec le calcul de T54 (teneurs actuelles, solide compté en L sans unités, kg/ha sur la surface des emplacements, ce qui revient à répartir les kg au prorata des surfaces). `repartitionAuProrata` donne la part de chaque planche au gramme (somme exacte), `unitesFertirrigation` les kg apportés au gramme. Une irrigation sans recette ne compte rien. Exemple : 10 kg de nitrate de calcium (15,5 % N) pour 1 000 L de mère, injection 1 %, 2 m³ d'eau → 0,2 kg de nitrate, 0,031 kg N (le ticket écrivait 0,31 : c'est la valeur à 10 %), sur 50 et 150 m² : 8 et 23 g N, 1,55 kg N/ha chacune. Pas de pilotage des vannes (phase 3). Export : `recette_fertirrigation.csv`.
 
 Le stock n'est jamais un compteur stocké : c'est la somme des mouvements. Deux téléphones hors ligne ne peuvent donc pas se contredire.
 
@@ -331,6 +334,10 @@ Le serveur (`apps/api/src/sync/fertilisation.ts`) accepte les produits fertilisa
 - **Historique** : une ligne `modification` par écriture (`ProduitFertilisant`, `Ferme`).
 - **Migration** `0041_fertilisation` (générée, avec l'ajout à la publication `powersync`) ; stream `produit_fertilisant` dans `powersync/sync-config.yaml`.
 
+### Recettes de fertirrigation écrites par le téléphone (T56)
+
+Le serveur (`apps/api/src/sync/fertirrigation.ts`) accepte les recettes **de la ferme** comme les produits fertilisants (T54) : PUT, PATCH (archiver, rétablir), jamais de DELETE ; tout membre actif ; tout ou rien avec le lot, sous le verrou de la ferme ; `validerRecetteFertirrigation` sur la ligne complète ; chaque engrais désigne un produit fertilisant de la ferme (archivé compris), sinon refusé ; une recette d'une autre ferme se comporte comme introuvable ; historique `RecetteFertirrigation`. Irrigation : `detail.recetteFertirrigationId` et les produits de `detail.engrais` désignent des lignes de la ferme, archivées comprises (saisie hors ligne avant l'archivage), sinon refusée. Migration `0042_fertirrigation` (générée, avec l'ajout à la publication `powersync`) ; stream `recette_fertirrigation`.
+
 ## 7 bis. Équipe et consignes — v1.x (T60, Q36 et Q44)
 
 Le gérant attribue les travaux du jour à des personnes de l'équipe ; chacun voit les siens dans Aujourd'hui et numérotés dans la 3D.
@@ -363,7 +370,7 @@ Règles :
 | Stock | somme des mouvements |
 | Alertes (rotation, conflit, délai avant récolte) | occupations, familles, traitements (délai avant récolte : date de récolte autorisée figée dans chaque traitement en vigueur, T52) |
 | Registre phyto (écran et `registre-phyto.csv`) | traitements en vigueur, produits, emplacements, cultures (T52) |
-| Cahier de fertilisation (écran, fiche d'une planche et `cahier-fertilisation.csv`) | interventions fertilisation et amendement en vigueur, produits fertilisants, surfaces des emplacements, saisons ; prévus : travaux prévus des séries et leurs occupations (T54) |
+| Cahier de fertilisation (écran, fiche d'une planche et `cahier-fertilisation.csv`) | interventions fertilisation et amendement en vigueur, fertirrigations en vigueur (doses figées) et liens datés vanne ↔ emplacement à leur date (T56), produits fertilisants, surfaces des emplacements, saisons ; prévus : travaux prévus des séries et leurs occupations (T54) |
 | Dernière irrigation d'une planche (filtre « Irrigation » de la 3D, T57) | irrigations en vigueur et liens datés vanne ↔ emplacement à la date de chaque irrigation |
 
 ## Choix par défaut, modifiables

@@ -38,6 +38,7 @@ export const TABLES_LOCALES = {
   produit_fertilisant: { ferme_id: T, nom: T, forme: T, unite: T, teneur_n: 'reel', teneur_p2o5: 'reel', teneur_k2o: 'reel', organique: 'entier', utilisable_en_bio: 'entier', source: T, cree_le: T, modifie_le: T, supprime_le: T },
   produit_phyto: { ferme_id: T, nom_commercial: T, numero_amm: T, substance_active: T, delai_avant_recolte_jours: 'entier', utilisable_en_bio: 'entier', dose_maximale: T, cree_le: T, modifie_le: T, supprime_le: T },
   proposition: { ferme_id: T, source: T, auteur_id: T, statut: T, decide_le: T, changements: T, cree_le: T, modifie_le: T, supprime_le: T },
+  recette_fertirrigation: { ferme_id: T, nom: T, taux_injection: 'reel', engrais: T, ec_cible: 'reel', ph_cible: 'reel', cree_le: T, modifie_le: T, supprime_le: T },
   refus_synchro: { utilisateur_id: T, ferme_id: T, nom_table: T, ligne_id: T, operation: T, motif: T, message: T, cree_le: T, saisie_type: T, saisie_culture: T, saisie_date: T, saisie_quantite: 'reel', saisie_unite: T, archive_le: T },
   saison: { ferme_id: T, nom: T, debut: T, fin: T, cree_le: T, modifie_le: T, supprime_le: T },
   secteur_emplacement: { ferme_id: T, secteur_irrigation_id: T, emplacement_id: T, du: T, au: T, cree_le: T, modifie_le: T, supprime_le: T },

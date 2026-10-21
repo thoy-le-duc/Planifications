@@ -99,6 +99,7 @@ export const TABLES_MODIFIABLES = toutes<Modification['table']>()([
   'MouvementStock',
   'ProduitPhyto',
   'ProduitFertilisant',
+  'RecetteFertirrigation',
   'Proposition',
   'TypeIntervention',
   'Batiment',

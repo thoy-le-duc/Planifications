@@ -16,6 +16,7 @@ import type {
   CategorieEspece,
   ChangementPropose,
   DateCalendaire,
+  EngraisRecette,
   Evenement,
   Id,
   ModeItineraire,
@@ -935,6 +936,37 @@ export const produitFertilisant = pgTable(
     verif('produit_fertilisant', 'teneur_k2o', sql`${t.teneurK2o} IS NULL OR ${t.teneurK2o} BETWEEN 0 AND 100`),
     verif('produit_fertilisant', 'source', sql`length(${t.source}) <= 300`),
     index('produit_fertilisant_ferme_idx').on(t.fermeId),
+  ],
+);
+
+/**
+ * T56 : recette de fertirrigation de la ferme (solution nutritive passée par les vannes, en
+ * hors-sol comme en pleine terre). `engrais` : tableau JSON `{ produitFertilisantId, quantite:
+ * { valeur, unite } }`, pour 1 000 L de solution mère injectée à `taux_injection` %, ou par m³
+ * d'eau quand le taux est nul. Les doses d'une irrigation sont figées dans son détail (evenement) :
+ * modifier une recette ne réécrit pas le passé. Règles : `validerRecetteFertirrigation` du cœur.
+ * Écrite par tout membre actif (apps/api/src/sync/fertirrigation.ts) ; archivée en douceur
+ * (`supprime_le`). Publiée.
+ */
+export const recetteFertirrigation = pgTable(
+  'recette_fertirrigation',
+  {
+    id: idDe<'RecetteFertirrigation'>('id').primaryKey(),
+    fermeId: fermeId(),
+    nom: text('nom').notNull(),
+    tauxInjection: doublePrecision('taux_injection'),
+    engrais: jsonb('engrais').$type<readonly EngraisRecette[]>().notNull(),
+    ecCible: doublePrecision('ec_cible'),
+    phCible: doublePrecision('ph_cible'),
+    ...horodatages(),
+  },
+  (t) => [
+    verif('recette_fertirrigation', 'nom', sql`length(btrim(${t.nom})) BETWEEN 1 AND 200`),
+    verif('recette_fertirrigation', 'taux_injection', sql`${t.tauxInjection} IS NULL OR (${t.tauxInjection} > 0 AND ${t.tauxInjection} <= 100)`),
+    verif('recette_fertirrigation', 'engrais', sql`jsonb_typeof(${t.engrais}) = 'array'`),
+    verif('recette_fertirrigation', 'ec_cible', sql`${t.ecCible} IS NULL OR ${t.ecCible} BETWEEN 0 AND 20`),
+    verif('recette_fertirrigation', 'ph_cible', sql`${t.phCible} IS NULL OR ${t.phCible} BETWEEN 0 AND 14`),
+    index('recette_fertirrigation_ferme_idx').on(t.fermeId),
   ],
 );
 

@@ -61,7 +61,7 @@ function messageEchec(e: unknown): string {
   return e instanceof ProduitRefuse ? `Produit refusé : ${e.message}` : 'Le produit n’a pas pu s’enregistrer sur ce téléphone. Réessayez ; si cela recommence, signalez-le.';
 }
 
-function Saisie({ titre, surFermer, children }: { readonly titre: string; readonly surFermer: () => void; readonly children: ReactNode }): ReactElement {
+export function Saisie({ titre, surFermer, children }: { readonly titre: string; readonly surFermer: () => void; readonly children: ReactNode }): ReactElement {
   const id = useId();
   const h = useRef<HTMLHeadingElement>(null);
   useEffect(() => {

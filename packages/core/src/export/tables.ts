@@ -278,6 +278,15 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       changements: json('changements proposés, en JSON'),
       ...HORODATAGE,
     }),
+    recette_fertirrigation: table('Recettes de fertirrigation de la ferme (solution nutritive passée par les vannes), pour le cahier de fertilisation.', {
+      ferme_id: FERME_ID,
+      nom: texte('nom de la recette, par exemple Fraise floraison'),
+      taux_injection: reel('taux d’injection de la solution mère dans l’eau, en % ; vide si les quantités sont par m³ d’eau'),
+      engrais: json('engrais de la recette (produit, voir produit_fertilisant.csv, et quantité en kg ou L pour 1 000 L de solution mère, ou par m³ d’eau sans taux), en JSON'),
+      ec_cible: reel('conductivité visée, en mS/cm (vide si non précisée)'),
+      ph_cible: reel('pH visé (vide si non précisé)'),
+      ...HORODATAGE,
+    }),
     saison: table('Saisons de culture.', {
       ferme_id: FERME_ID,
       nom: texte('nom de la saison, par exemple 2027'),
@@ -394,7 +403,7 @@ export const REGISTRE_PHYTO: DescriptionTable = /* @__PURE__ */ (() => ({
  */
 export const CAHIER_FERTILISATION: DescriptionTable = /* @__PURE__ */ (() => ({
   description:
-    'Cahier de fertilisation : un apport réalisé par ligne (fertilisation, amendement), tel qu’en vigueur (sans les apports annulés ni ceux remplacés par une correction), du plus ancien au plus récent. Unités calculées avec les teneurs actuelles des produits (produit_fertilisant.csv) ; vides si le produit est saisi en texte libre ou sans teneur.',
+    'Cahier de fertilisation : un apport réalisé par ligne (fertilisation, amendement, et un par engrais de chaque fertirrigation), tel qu’en vigueur (sans les apports annulés ni ceux remplacés par une correction), du plus ancien au plus récent. Unités calculées avec les teneurs actuelles des produits (produit_fertilisant.csv) ; vides si le produit est saisi en texte libre ou sans teneur.',
   bibliotheque: false,
   colonnes: {
     date: date('jour de l’apport (AAAA-MM-JJ)'),
@@ -402,7 +411,7 @@ export const CAHIER_FERTILISATION: DescriptionTable = /* @__PURE__ */ (() => ({
     emplacements: texte('codes des planches ou emplacements qui ont reçu l’apport, séparés par des virgules'),
     surface_m2: reel('surface de ces emplacements, en mètres carrés ; vide si une largeur manque'),
     culture: texte('culture concernée (espèce et variété) ; vide si l’apport ne vise pas une culture'),
-    categorie: texte('fertilisation ou amendement'),
+    categorie: texte('fertilisation, amendement ou fertirrigation (engrais injecté par une vanne, sur les planches qu’elle arrosait ce jour-là)'),
     produit: texte('produit apporté'),
     quantite: reel('quantité apportée'),
     unite: texte('unité de la quantité (kg, t, L, m3…)'),

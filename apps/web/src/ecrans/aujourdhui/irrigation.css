@@ -96,3 +96,10 @@
   background: var(--couleur-surface);
   font-weight: 700;
 }
+
+/* T56 : « Recopier » les irrigations de la veille, un bouton pleine largeur chacune. */
+.irr-veille {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

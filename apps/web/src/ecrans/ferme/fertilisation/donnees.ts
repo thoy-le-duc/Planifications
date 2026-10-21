@@ -132,7 +132,7 @@ export function retablirProduit(ctx: ContexteFertilisation, id: string): Promise
 // ── Cahier ───────────────────────────────────────────────────────────────────────────────────
 
 /** Tables dont un changement relit le cahier. */
-export const TABLES_CAHIER = ['evenement', 'produit_fertilisant', 'emplacement', 'saison', 'serie', 'occupation', 'ferme'] as const;
+export const TABLES_CAHIER = ['evenement', 'produit_fertilisant', 'emplacement', 'saison', 'serie', 'occupation', 'ferme', 'secteur_emplacement'] as const;
 
 export const SQL_FERME = 'SELECT zone_vulnerable_nitrates AS zone FROM ferme WHERE id = ?';
 
@@ -167,9 +167,10 @@ export interface CahierLu {
 /** Lit ce qu'il faut et calcule le bilan (règle du cœur, la même que l'export). */
 export async function lireCahier(porte: PorteDonnees, fermeId: string): Promise<CahierLu> {
   const f = [fermeId];
-  const [evenement, produit_fertilisant, emplacement, saison, serie, occupation, ferme] = await Promise.all([
+  const [evenement, produit_fertilisant, emplacement, saison, serie, occupation, ferme, secteur_emplacement] = await Promise.all([
+    // T56 : les irrigations aussi (une fertirrigation entre au cahier).
     porte.lire<LigneLocaleFertilisation>(
-      `SELECT id, ferme_id, type, date, horodatage, serie_id, campagne_id, emplacement_ids, remplace_sorte, remplace_evenement_id, detail FROM evenement WHERE ferme_id = ? AND type = 'intervention'`,
+      `SELECT id, ferme_id, type, date, horodatage, serie_id, campagne_id, emplacement_ids, remplace_sorte, remplace_evenement_id, detail FROM evenement WHERE ferme_id = ? AND type IN ('intervention', 'irrigation')`,
       f,
     ),
     porte.lire<LigneLocaleFertilisation>(SQL_PRODUITS_FERME, f),
@@ -181,8 +182,9 @@ export async function lireCahier(porte: PorteDonnees, fermeId: string): Promise<
     ),
     porte.lire<LigneLocaleFertilisation>('SELECT id, ferme_id, serie_id, emplacement_id, supprime_le FROM occupation WHERE ferme_id = ? AND serie_id IS NOT NULL', f),
     porte.lire<{ zone: number | null }>(SQL_FERME, f),
+    porte.lire<LigneLocaleFertilisation>('SELECT id, ferme_id, secteur_irrigation_id, emplacement_id, du, au, supprime_le FROM secteur_emplacement WHERE ferme_id = ?', f),
   ]);
-  const bilan = bilanFertilisation({ evenement, produit_fertilisant, emplacement, saison, serie, occupation }, fermeId);
+  const bilan = bilanFertilisation({ evenement, produit_fertilisant, emplacement, saison, serie, occupation, secteur_emplacement }, fermeId);
   const codes = new Map(emplacement.map((e) => [String(e.id).toLowerCase(), String(e.code ?? '')]));
   return { bilan, alertes: alertesAzoteOrganique(bilan), zoneVulnerable: ferme[0]?.zone === 1, codes };
 }

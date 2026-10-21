@@ -34,6 +34,8 @@ export type NomEntite =
   | 'ProduitPhyto'
   /** Produit fertilisant de la ferme : compost, fumier, engrais, avec ses teneurs (T54). */
   | 'ProduitFertilisant'
+  /** Recette de fertirrigation de la ferme : engrais solubles, taux d'injection, EC et pH cibles (T56). */
+  | 'RecetteFertirrigation'
   | 'Proposition'
   | 'Modification'
   /** Compte d'une personne (défini avec les comptes, T09) ; auteur des événements. */
