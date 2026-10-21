@@ -167,8 +167,8 @@ decrireAvecBase('T61 : chemins, rangement et outils en base (PostgreSQL)', { tim
       o.ferme_id ?? ferme,
       o.nom === undefined ? `Point ${id.slice(0, 6)}` : o.nom,
       o.sorte ?? 'point_eau',
-      o.x_m ?? 12.5,
-      o.y_m ?? -40,
+      'x_m' in o ? o.x_m : 12.5,
+      'y_m' in o ? o.y_m : -40,
     ]);
     return id;
   }

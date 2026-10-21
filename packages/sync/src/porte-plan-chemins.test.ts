@@ -334,8 +334,13 @@ describe('T61 : la porte écrit chemins, points, rangement et outils, et rend de
     const fermeVierge = (): void => {
       base.recevoir(`UPDATE ferme SET origine_plan = NULL WHERE id = ?`, [FERME]);
     };
+    /** Le décor a deux bâtiments actifs, qui figent déjà l'origine (T28s) : on les retire pour que seul le chemin ou le point la fige. */
+    const sansBatimentActif = (): void => {
+      base.recevoir(`UPDATE batiment SET supprime_le = ? WHERE ferme_id = ?`, [INSTANT.toISOString(), FERME]);
+    };
 
     it('aucun chemin ni point sans origine ; origine puis chemin dans le même appel : accepté, annulable dans l’ordre inverse', async () => {
+      sansBatimentActif();
       fermeVierge();
       await rejete([chemin(1)], /origine/iu);
       await rejete([{ sorte: 'point_plan', id: NOUVEAU(2), valeurs: { nom: 'a', sorte: 'repere', x_m: 0, y_m: 0 } }], /origine/iu);
@@ -352,6 +357,10 @@ describe('T61 : la porte écrit chemins, points, rangement et outils, et rend de
     });
 
     it('un chemin non supprimé fige l’origine ; supprimé, elle se déplace de nouveau', async () => {
+      sansBatimentActif();
+      // Sans bâtiment actif, l'origine se déplace librement : seul le chemin la fige ensuite.
+      await placer([{ sorte: 'origine', origine: { latitude: 44.5, longitude: 1.6 } }]);
+      await placer([{ sorte: 'origine', origine: ORIGINE }]);
       await placer([chemin(1)]);
       await rejete([{ sorte: 'origine', origine: { latitude: 45, longitude: 2 } }], /origine/iu);
       await rejete([{ sorte: 'origine', origine: null }], /origine/iu);
