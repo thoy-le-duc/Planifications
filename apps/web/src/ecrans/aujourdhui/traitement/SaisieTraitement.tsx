@@ -85,12 +85,18 @@ function usagesCultures(catalogue: CatalogueEphy | null, produit: ProduitUtilisa
   return p === undefined ? null : new Map(propositionsPourCultures(p, cultures.map((c) => ({ id: c.cibleId, espece: c.espece }))).map((x) => [x.id, x]));
 }
 
-/** DAR tapé pour le lot : vide → null (manquant) ; sinon le nombre lu, que le cœur juge (décimal, négatif, illisible → invalide). */
+/**
+ * DAR tapé pour le lot, même règle que `lireJours` (chiffres seuls) : vide → null (manquant) ;
+ * tout autre texte (« 1e1 », « 0x5 », « 5. », « +3 », « 2,5 ») → NaN, que le cœur refuse (invalide).
+ */
 function joursDuLot(texte: string): number | null {
   const t = texte.trim();
   if (t === '') return null;
-  return /^\d+$/.test(t) ? Number(t) : Number(t.replace(',', '.'));
+  return /^\d+$/.test(t) ? Number(t) : Number.NaN;
 }
+
+/** Unité par surface (« L/ha », « kg/ha », « g/hL ») ; sinon une quantité totale. */
+const unitePorteeParSurface = (unite: string): boolean => /\/\s*h[al]\b/i.test(unite.trim());
 
 /** « 12 » → 12 ; vide, décimal, négatif ou au-delà d'un an → null. */
 function lireJours(texte: string): number | null {
@@ -473,6 +479,11 @@ function Formulaire({ culture: initiale, cultures, produits, catalogue, aujourdh
           <input id={`${id}-operateur`} className="parc-champ" autoComplete="name" placeholder="facultatif" value={operateur} onChange={(e) => { setOperateur(e.target.value); }} />
         </div>
       </div>
+      {lot && unite.trim() !== '' && !unitePorteeParSurface(unite) && (
+        <p data-testid="avertissement-unite-lot" role="status" className="parc-erreur">
+          Unité « {unite.trim()} » : c’est une quantité totale, et elle sera notée telle quelle pour chaque culture. Préférez une dose par hectare (L/ha, kg/ha), ou saisissez chaque culture à part.
+        </p>
+      )}
       {avertissement !== null && (
         <p data-testid="avertissement-dose" role="status" className="parc-erreur">
           {avertissement}
