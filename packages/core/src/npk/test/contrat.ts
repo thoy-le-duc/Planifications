@@ -18,7 +18,8 @@
  * `validerProduitFertilisant(ligne)` → { ok, valeur: ProduitFertilisantEcrit } ou { ok: false, erreur }.
  *
  * Teneur : % de la masse du produit tel qu'apporté (kg et t) ; pour un liquide compté en L ou m³,
- * kg d'élément pour 100 L (densité prise à 1 : la teneur se saisit en conséquence).
+ * % de la masse, la masse étant le volume × la densité (T72 : `densite_kg_par_l`, facultative,
+ * de 0,5 à 2,5 kg/L, liquides seulement ; absente : 1 kg/L, comme avant).
  *
  * ## Liste de départ (règle 1)
  *
@@ -100,6 +101,8 @@ export interface ProduitFertilisantEcrit {
   readonly organique: boolean;
   readonly utilisableEnBio: boolean;
   readonly source: string;
+  /** T72 : kg par litre d'un liquide, de 0,5 à 2,5 ; null : non renseignée. */
+  readonly densiteKgParL: number | null;
   readonly supprimeLe: string | null;
 }
 
@@ -144,6 +147,8 @@ export interface ApportCalcule {
   /** null : sans unités (produit inconnu, sans teneur, unité non convertible). */
   readonly kg: Unites | null;
   readonly kgParHa: Unites | null;
+  /** T72 : liquide compté en L ou m³ sans densité renseignée (1 kg/L supposé). */
+  readonly densiteSupposee: boolean;
 }
 
 export interface TotalFertilisation {
@@ -180,13 +185,14 @@ export interface ModuleFertilisation {
   validerProduitFertilisant(entree: unknown): Resultat<ProduitFertilisantEcrit>;
   readonly FERTILISANTS_DEPART: readonly ProduitDeDepart[];
   readonly PLAFOND_AZOTE_ORGANIQUE_KG_HA: number;
-  quantiteEnKg(q: Quantite): number | null;
-  unitesApport(q: Quantite, t: Teneurs): Unites | null;
+  quantiteEnKg(q: Quantite, densiteKgParL?: number | null): number | null;
+  unitesApport(q: Quantite, t: Teneurs, densiteKgParL?: number | null): Unites | null;
   parHectare(u: Unites, surfaceM2: number | null): Unites | null;
   detailApport(categorie: 'fertilisation' | 'amendement', produit: { readonly id: string | null; readonly nom: string }, quantite: Quantite): DetailIntervention;
   bilanFertilisation(tables: Tables, fermeId: string): BilanFertilisation;
   alertesAzoteOrganique(bilan: BilanFertilisation, plafond?: number): AlerteAzote[];
   readonly COLONNES_CAHIER_FERTILISATION: readonly string[];
+  readonly LIMITES_PRODUIT_FERTILISANT: { readonly densiteMin: number; readonly densiteMax: number };
 }
 
 const CHEMIN_COEUR = '../../index.ts';
@@ -204,6 +210,7 @@ export async function chargerFertilisation(): Promise<ModuleFertilisation> {
     'bilanFertilisation',
     'alertesAzoteOrganique',
     'COLONNES_CAHIER_FERTILISATION',
+    'LIMITES_PRODUIT_FERTILISANT',
   ] as const;
   const absents = noms.filter((n) => m[n] === undefined);
   if (absents.length > 0) throw new Error(`@planif/core n’exporte pas encore : ${absents.join(', ')} (T54)`);

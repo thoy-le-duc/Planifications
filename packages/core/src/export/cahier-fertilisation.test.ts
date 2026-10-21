@@ -129,7 +129,7 @@ describe('T54 : cahier-fertilisation.csv dans l’export', () => {
 
   it('produit_fertilisant.csv : les produits de la ferme, avec leurs teneurs', () => {
     const csv = lireCsv(fichier(m.construireExport(entree()), 'produit_fertilisant.csv'));
-    expect(csv.entete).toEqual(expect.arrayContaining(['nom', 'forme', 'unite', 'teneur_n', 'teneur_p2o5', 'teneur_k2o', 'organique', 'utilisable_en_bio', 'source']));
+    expect(csv.entete).toEqual(expect.arrayContaining(['nom', 'forme', 'unite', 'teneur_n', 'teneur_p2o5', 'teneur_k2o', 'organique', 'utilisable_en_bio', 'source', 'densite_kg_par_l']));
     expect(csv.lignes).toHaveLength(1);
   });
 
