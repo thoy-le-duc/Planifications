@@ -18,14 +18,16 @@ import { CACHE_CATALOGUE_EPHY, CatalogueIndisponible, chargerCatalogueEphy, URL_
 const CATALOGUE: CatalogueEphy = { format: 1, source: 'E-Phy, Anses (data.gouv.fr)', licence: 'Licence Ouverte 2.0', dateBase: '2026-10-14', produits: [] };
 const NOUVEAU: CatalogueEphy = { ...CATALOGUE, dateBase: '2026-10-21' };
 
+const url = (r: RequestInfo | URL): string => (typeof r === 'string' ? r : r instanceof URL ? r.href : r.url);
+
 /** Double de la Cache API : un seul cache, des réponses rangées par URL. */
 function fauxCaches(): { caches: CacheStorage; ouverts: string[]; contenu: Map<string, Response> } {
   const contenu = new Map<string, Response>();
   const ouverts: string[] = [];
   const cache = {
-    match: (r: RequestInfo | URL) => Promise.resolve(contenu.get(String(r))?.clone()),
+    match: (r: RequestInfo | URL) => Promise.resolve(contenu.get(url(r))?.clone()),
     put: async (r: RequestInfo | URL, rep: Response) => {
-      contenu.set(String(r), rep.clone());
+      contenu.set(url(r), rep.clone());
       await Promise.resolve();
     },
   } as unknown as Cache;
@@ -41,7 +43,7 @@ function fauxCaches(): { caches: CacheStorage; ouverts: string[]; contenu: Map<s
 function reseau(reponse: () => Response): { fetch: typeof fetch; appels: string[] } {
   const appels: string[] = [];
   const f = ((r: RequestInfo | URL) => {
-    appels.push(String(r));
+    appels.push(url(r));
     return Promise.resolve(reponse());
   }) as typeof fetch;
   return { fetch: f, appels };

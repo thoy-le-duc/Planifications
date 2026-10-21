@@ -143,8 +143,8 @@ describe('T53 : format tolérant, erreurs claires', () => {
       erreur = e;
     }
     expect(erreur).toBeInstanceOf(ErreurFormatEphy);
-    expect(String((erreur as Error).message)).toMatch(/delai avant recolte jour/);
-    expect(String((erreur as Error).message)).toMatch(/produits_usages/);
+    expect((erreur as Error).message).toMatch(/delai avant recolte jour/);
+    expect((erreur as Error).message).toMatch(/produits_usages/);
   });
 
   it('fichiers repérés quel que soit le suffixe ; fichier absent : erreur claire', () => {
