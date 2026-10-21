@@ -24,6 +24,15 @@
  *     reçoit PS_ADMIN_TOKEN et INSTANCE_ID, jamais API_URL (contexte auto-hébergé) ni les
  *     variables POWERSYNC_* d'origine ; un refus de la CLI sort en non-zéro.
  *
+ * T74 (ces points remplacent, pour l'organisation et le projet, ce que T73 faisait) :
+ * - la CLI 0.10.2 ne lit `org_id` et `project_id` que dans le `cli.yaml` du dossier de projet
+ *   (CloudInstanceCommand.loadProject) : avec les deux identifiants, le script copie `powersync/` dans
+ *   un dossier temporaire, y écrit un `cli.yaml` (type, instance_id, org_id, project_id : jamais le
+ *   jeton) et lance la CLI avec `--directory` sur cette copie, supprimée à la sortie. `powersync/`
+ *   n'est jamais touché. Sans les deux : dossier du dépôt, comme avant ;
+ * - la CLI en échec : le script lance `powersync fetch instances` et conclut (jeton refusé, instance
+ *   invisible du jeton, ou jeton hors de cause), sans jamais afficher le jeton.
+ *
  * Relecture (PR #222) :
  * - chaîne d'approvisionnement : plus de `pnpm dlx` (dépendances transitives résolues à chaque
  *   exécution). La CLI est une devDependency exacte de `scripts/powersync-cli/package.json`, avec
@@ -35,7 +44,7 @@
  *   production » n'a jamais de déclencheur push, son `workflow_run.event` vaut `workflow_run`.
  */
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -258,27 +267,75 @@ afterEach(() => {
   for (const dossier of dossiers.splice(0)) rmSync(dossier, { recursive: true, force: true });
 });
 
+/** Ce que le faux `powersync fetch instances` fait : code de sortie, JSON écrit, avertissement. */
+interface FauxFetch {
+  readonly code?: number;
+  /** Instances visibles : identifiants d'organisation, de projet, d'instance. */
+  readonly visibles?: readonly (readonly [string, string, string])[];
+  /** Comme la vraie CLI : l'échec est avalé en avertissement, la sortie reste 0 et la liste est vide. */
+  readonly avertissement?: string;
+}
+
 interface FauxPnpm {
   readonly env: NodeJS.ProcessEnv;
   /** Un appel par ligne : arguments, puis ce que la CLI a reçu (sans jamais écrire les valeurs). */
   appels(): string[];
+  /** Dossier passé à `--directory` au dernier déploiement (vide si aucun). */
+  dernierDossier(): string;
 }
 
-/** Un faux `pnpm` en tête du PATH : note ses arguments et sort avec `code`. */
-function fauxPnpm(code: number): FauxPnpm {
+function jsonInstances(visibles: readonly (readonly [string, string, string])[]): string {
+  const organisations: Record<string, { id: string; name: string; projects: Record<string, unknown> }> = {};
+  for (const [org, projet, instance] of visibles) {
+    const o = (organisations[org] ??= { id: org, name: 'Organisation', projects: {} });
+    const p = (o.projects[projet] ??= { id: projet, name: 'Projet', instances: [] }) as { instances: unknown[] };
+    p.instances.push({ id: instance, name: 'Instance', has_config: true, deployable: true });
+  }
+  return JSON.stringify({ cloudInstances: organisations, linkedInstances: [] });
+}
+
+/** Un faux `pnpm` en tête du PATH : note ses arguments et sort avec `code` (le déploiement) ou selon `fetch`. */
+function fauxPnpm(code: number, fetch: FauxFetch = {}): FauxPnpm {
   const dossier = mkdtempSync(join(tmpdir(), 't67-pnpm-'));
   dossiers.push(dossier);
   const journal = join(dossier, 'appels.txt');
+  const dernier = join(dossier, 'dernier-dossier.txt');
   writeFileSync(journal, '');
+  writeFileSync(dernier, '');
+  const jsonFetch = join(dossier, 'instances.json');
+  writeFileSync(jsonFetch, jsonInstances(fetch.visibles ?? [[ORG_FACTICE, PROJET_FACTICE, INSTANCE_FACTICE]]));
   const faux = join(dossier, 'pnpm');
   writeFileSync(
     faux,
     `#!/usr/bin/env bash
+export LC_ALL=C
 jeton=non; [ "\${PS_ADMIN_TOKEN:-}" = "${JETON_FACTICE}" ] && jeton=oui
 instance=non; [ "\${INSTANCE_ID:-}" = "${INSTANCE_FACTICE}" ] && instance=oui
 api=non; [ -n "\${API_URL:-}" ] && api=oui
 brut=non; [ -n "\${POWERSYNC_ADMIN_TOKEN:-}\${POWERSYNC_INSTANCE_ID:-}\${POWERSYNC_ORG_ID:-}\${POWERSYNC_PROJECT_ID:-}" ] && brut=oui
-printf '%s | jeton=%s instance=%s api_url=%s brut=%s org=%s projet=%s\\n' "$*" "$jeton" "$instance" "$api" "$brut" "\${ORG_ID:-non}" "\${PROJECT_ID:-non}" >> "${journal}"
+etat="jeton=$jeton instance=$instance api_url=$api brut=$brut org=\${ORG_ID:-non} projet=\${PROJECT_ID:-non}"
+args=(); dossier_cli=""; sortie=""
+for a in "$@"; do
+  case "$a" in
+    --directory=*) dossier_cli="\${a#--directory=}"; args+=("--directory=<dossier>") ;;
+    --output-file=*) sortie="\${a#--output-file=}"; args+=("--output-file=<fichier>") ;;
+    *) args+=("$a") ;;
+  esac
+done
+if [[ " $* " == *" fetch instances "* ]]; then
+  printf '%s | %s\\n' "\${args[*]}" "$etat" >> "${journal}"
+  [ -n "$sortie" ] && cp "${jsonFetch}" "$sortie"
+  ${fetch.avertissement === undefined ? ':' : `echo ' ›  Warning: Failed to fetch cloud instances: ${fetch.avertissement}' >&2; echo '{"cloudInstances":{},"linkedInstances":[]}' > "$sortie"`}
+  exit ${String(fetch.code ?? 0)}
+fi
+if [ "$dossier_cli" = "${RACINE}powersync" ]; then
+  nature="depot"; cli="aucun"; fichiers="-"
+else
+  nature="temporaire"; cli="aucun"; [ -f "$dossier_cli/cli.yaml" ] && cli="$(tr '\\n' ';' < "$dossier_cli/cli.yaml")"
+  fichiers="$(ls -A "$dossier_cli" | tr '\\n' ',')"
+  printf '%s' "$dossier_cli" > "${dernier}"
+fi
+printf '%s | %s dossier=%s cli=%s fichiers=%s\\n' "\${args[*]}" "$etat" "$nature" "$cli" "$fichiers" >> "${journal}"
 exit ${String(code)}
 `,
   );
@@ -289,6 +346,7 @@ exit ${String(code)}
       readFileSync(journal, 'utf8')
         .split('\n')
         .filter((ligne) => ligne !== ''),
+    dernierDossier: () => readFileSync(dernier, 'utf8'),
   };
 }
 
@@ -306,7 +364,21 @@ function versionCli(): string {
   return typeof version === 'string' ? version : '';
 }
 
-const APPEL_CLI = `--dir scripts/powersync-cli exec powersync deploy sync-config --directory=${RACINE}powersync`;
+const APPEL_CLI = '--dir scripts/powersync-cli exec powersync deploy sync-config --directory=<dossier>';
+const ETAT_CLI = 'jeton=oui instance=oui api_url=non brut=non org=non projet=non';
+/** Sans organisation ni projet : le dossier du dépôt, sans cli.yaml. */
+const LIGNE_DEPOT = `| ${ETAT_CLI} dossier=depot cli=aucun fichiers=-`;
+const APPEL_FETCH = '--dir scripts/powersync-cli exec powersync fetch instances --output json --output-file=<fichier>';
+/** Avec organisation et projet : la copie temporaire et son cli.yaml (jamais le jeton). */
+const CLI_YAML = `type: cloud;instance_id: "${INSTANCE_FACTICE}";org_id: "${ORG_FACTICE}";project_id: "${PROJET_FACTICE}";`;
+const LIGNE_LIEE = `| ${ETAT_CLI} dossier=temporaire cli=${CLI_YAML} fichiers=${[
+  'cli.yaml',
+  ...readdirSync(`${RACINE}powersync`),
+]
+  .sort()
+  .map((nom) => `${nom},`)
+  .join('')}`;
+const LIGNE_FETCH = `| ${ETAT_CLI}`;
 
 describe('T67 : scripts/deployer-regles-powersync.sh, sans secret', () => {
   for (const mode of ['valider', 'deployer']) {
@@ -430,7 +502,7 @@ describe('T67 : scripts/deployer-regles-powersync.sh, avec la CLI', () => {
     const { code, sortie } = lancer('valider', { ...pnpm.env, ...secrets, API_URL: 'https://auto-heberge.invalid' });
     expect(code).toBe(0);
     expect(pnpm.appels()).toEqual([
-      `${APPEL_CLI} --dry-run | jeton=oui instance=oui api_url=non brut=non org=non projet=non`,
+      `${APPEL_CLI} --dry-run ${LIGNE_DEPOT}`,
     ]);
     expect(sortie).not.toContain(JETON_FACTICE);
   });
@@ -440,7 +512,7 @@ describe('T67 : scripts/deployer-regles-powersync.sh, avec la CLI', () => {
     const { code, sortie } = lancer('deployer', { ...pnpm.env, ...secrets });
     expect(code).toBe(0);
     expect(pnpm.appels()).toEqual([
-      `${APPEL_CLI} | jeton=oui instance=oui api_url=non brut=non org=non projet=non`,
+      `${APPEL_CLI} ${LIGNE_DEPOT}`,
     ]);
     expect(sortie).not.toContain(JETON_FACTICE);
   });
@@ -466,41 +538,61 @@ describe('T67 : scripts/deployer-regles-powersync.sh, avec la CLI', () => {
   });
 });
 
-describe('T73 : scripts/deployer-regles-powersync.sh, organisation et projet', () => {
+describe('T74 : scripts/deployer-regles-powersync.sh, liaison par cli.yaml', () => {
   const secrets = { POWERSYNC_ADMIN_TOKEN: JETON_FACTICE, POWERSYNC_INSTANCE_ID: INSTANCE_FACTICE };
   const identifiants = { POWERSYNC_ORG_ID: ORG_FACTICE, POWERSYNC_PROJECT_ID: PROJET_FACTICE };
 
   for (const mode of ['valider', 'deployer']) {
-    it(`${mode} : transmet ORG_ID et PROJECT_ID à la CLI quand les deux sont fournis`, () => {
+    it(`${mode} : lance la CLI sur une copie de powersync/ qui contient un cli.yaml (instance, organisation, projet)`, () => {
       const pnpm = fauxPnpm(0);
       const { code, sortie } = lancer(mode, { ...pnpm.env, ...secrets, ...identifiants });
       expect(code).toBe(0);
       const option = mode === 'valider' ? ' --dry-run' : '';
-      expect(pnpm.appels()).toEqual([
-        `${APPEL_CLI}${option} | jeton=oui instance=oui api_url=non brut=non org=${ORG_FACTICE} projet=${PROJET_FACTICE}`,
-      ]);
+      expect(pnpm.appels()).toEqual([`${APPEL_CLI}${option} ${LIGNE_LIEE}`]);
       expect(sortie).not.toContain(JETON_FACTICE);
     });
   }
 
-  it('sans aucun des deux : comportement inchangé, la CLI ne reçoit ni ORG_ID ni PROJECT_ID', () => {
+  it('le cli.yaml ne contient jamais le jeton, la copie est supprimée à la sortie, powersync/ reste intact', () => {
+    const avant = readdirSync(`${RACINE}powersync`).sort();
+    const pnpm = fauxPnpm(0);
+    const { code } = lancer('deployer', { ...pnpm.env, ...secrets, ...identifiants });
+    expect(code).toBe(0);
+    const ligne = pnpm.appels().join('\n');
+    expect(ligne).toContain(`cli=${CLI_YAML}`);
+    expect(ligne).not.toContain(JETON_FACTICE);
+    const copie = pnpm.dernierDossier();
+    expect(copie).not.toBe('');
+    expect(copie).not.toBe(`${RACINE}powersync`);
+    expect(existsSync(copie)).toBe(false);
+    expect(readdirSync(`${RACINE}powersync`).sort()).toEqual(avant);
+    expect(existsSync(`${RACINE}powersync/cli.yaml`)).toBe(false);
+  });
+
+  it('la copie est supprimée aussi quand la CLI échoue', () => {
+    const pnpm = fauxPnpm(1);
+    const { code } = lancer('valider', { ...pnpm.env, ...secrets, ...identifiants });
+    expect(code).not.toBe(0);
+    const copie = pnpm.dernierDossier();
+    expect(copie).not.toBe('');
+    expect(existsSync(copie)).toBe(false);
+  });
+
+  it('sans aucun des deux : comportement de T67, dossier du dépôt, sans cli.yaml, sans ORG_ID ni PROJECT_ID', () => {
     const pnpm = fauxPnpm(0);
     const { code } = lancer('deployer', { ...pnpm.env, ...secrets, POWERSYNC_ORG_ID: '', POWERSYNC_PROJECT_ID: '' });
     expect(code).toBe(0);
-    expect(pnpm.appels()).toEqual([`${APPEL_CLI} | jeton=oui instance=oui api_url=non brut=non org=non projet=non`]);
+    expect(pnpm.appels()).toEqual([`${APPEL_CLI} ${LIGNE_DEPOT}`]);
   });
 
-  it('ne reprend jamais un ORG_ID ou un PROJECT_ID déjà posés ailleurs', () => {
+  it('ne reprend jamais un ORG_ID ou un PROJECT_ID déjà posés ailleurs (ni en variable de la CLI, ni dans cli.yaml)', () => {
     const pnpm = fauxPnpm(0);
     const heritage = { ORG_ID: 'ffffffffffffffffffffffff', PROJECT_ID: 'eeeeeeeeeeeeeeeeeeeeeeee' };
     const sans = lancer('deployer', { ...pnpm.env, ...secrets, ...heritage });
     expect(sans.code).toBe(0);
     const avec = lancer('deployer', { ...pnpm.env, ...secrets, ...identifiants, ...heritage });
     expect(avec.code).toBe(0);
-    expect(pnpm.appels()).toEqual([
-      `${APPEL_CLI} | jeton=oui instance=oui api_url=non brut=non org=non projet=non`,
-      `${APPEL_CLI} | jeton=oui instance=oui api_url=non brut=non org=${ORG_FACTICE} projet=${PROJET_FACTICE}`,
-    ]);
+    expect(pnpm.appels()).toEqual([`${APPEL_CLI} ${LIGNE_DEPOT}`, `${APPEL_CLI} ${LIGNE_LIEE}`]);
   });
 
   it('un seul des deux : refus qui nomme celui qui manque, CLI non lancée', () => {
@@ -548,6 +640,93 @@ describe('T73 : scripts/deployer-regles-powersync.sh, organisation et projet', (
       expect(sortie).not.toContain(JETON_FACTICE);
     });
   }
+
+  it('CLI réussie : aucun diagnostic, fetch instances non lancé', () => {
+    const pnpm = fauxPnpm(0);
+    const { code, sortie } = lancer('valider', { ...pnpm.env, ...secrets, ...identifiants });
+    expect(code).toBe(0);
+    expect(sortie).not.toContain('Diagnostic');
+    expect(pnpm.appels().some((ligne) => ligne.includes('fetch instances'))).toBe(false);
+  });
+});
+
+describe('T74 : scripts/deployer-regles-powersync.sh, diagnostic du jeton', () => {
+  const secrets = { POWERSYNC_ADMIN_TOKEN: JETON_FACTICE, POWERSYNC_INSTANCE_ID: INSTANCE_FACTICE };
+  const identifiants = { POWERSYNC_ORG_ID: ORG_FACTICE, POWERSYNC_PROJECT_ID: PROJET_FACTICE };
+  const AUTRE_INSTANCE = 'abcdefabcdefabcdefabcdef';
+  const AUTRE_ORG = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+  const AUTRE_PROJET = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+  const CONCLUSION_INVISIBLE =
+    'le jeton ne voit pas cette instance : recréez-le en étant connecté au compte et à l\'organisation de l\'instance';
+
+  /** Les deux modes, avec ou sans organisation et projet : le diagnostic est le même. */
+  const cas: [string, string, Record<string, string>][] = [
+    ['valider', 'lié', identifiants],
+    ['deployer', 'lié', identifiants],
+    ['valider', 'non lié', {}],
+  ];
+  for (const [mode, nature, variables] of cas) {
+    it(`${mode} (${nature}) : instance attendue visible, le jeton n’est pas en cause`, () => {
+      const pnpm = fauxPnpm(1, { visibles: [[ORG_FACTICE, PROJET_FACTICE, INSTANCE_FACTICE], [AUTRE_ORG, AUTRE_PROJET, AUTRE_INSTANCE]] });
+      const { code, sortie } = lancer(mode, { ...pnpm.env, ...secrets, ...variables });
+      expect(code).not.toBe(0);
+      expect(pnpm.appels().filter((ligne) => ligne.includes('fetch instances'))).toEqual([`${APPEL_FETCH} ${LIGNE_FETCH}`]);
+      expect(sortie).toContain('jeton reconnu');
+      expect(sortie).toContain('instances visibles : 2');
+      expect(sortie).toContain(`organisation ${ORG_FACTICE}, projet ${PROJET_FACTICE}, instance ${INSTANCE_FACTICE}`);
+      expect(sortie).toContain(`organisation ${AUTRE_ORG}, projet ${AUTRE_PROJET}, instance ${AUTRE_INSTANCE}`);
+      expect(sortie).toContain('instance attendue : visible');
+      expect(sortie).not.toContain(CONCLUSION_INVISIBLE);
+      expect(sortie).not.toContain('jeton refusé');
+      expect(sortie).not.toContain(JETON_FACTICE);
+    });
+  }
+
+  it('instance attendue absente de la liste : conclut que le jeton ne la voit pas', () => {
+    const pnpm = fauxPnpm(1, { visibles: [[AUTRE_ORG, AUTRE_PROJET, AUTRE_INSTANCE]] });
+    const { code, sortie } = lancer('valider', { ...pnpm.env, ...secrets, ...identifiants });
+    expect(code).not.toBe(0);
+    expect(sortie).toContain('jeton reconnu');
+    expect(sortie).toContain('instances visibles : 1');
+    expect(sortie).toContain(`instance ${AUTRE_INSTANCE}`);
+    expect(sortie).toContain('instance attendue : absente');
+    expect(sortie).toContain(CONCLUSION_INVISIBLE);
+    expect(sortie).not.toContain('jeton refusé');
+    expect(sortie).not.toContain(JETON_FACTICE);
+  });
+
+  it('jeton reconnu mais aucune instance visible : même conclusion', () => {
+    const pnpm = fauxPnpm(1, { visibles: [] });
+    const { sortie } = lancer('deployer', { ...pnpm.env, ...secrets, ...identifiants });
+    expect(sortie).toContain('instances visibles : 0');
+    expect(sortie).toContain('instance attendue : absente');
+    expect(sortie).toContain(CONCLUSION_INVISIBLE);
+  });
+
+  it('fetch instances avale l’erreur (sortie 0, avertissement) : jeton refusé', () => {
+    const pnpm = fauxPnpm(1, { avertissement: `401 Unauthorized ${JETON_FACTICE}` });
+    const { code, sortie } = lancer('valider', { ...pnpm.env, ...secrets, ...identifiants });
+    expect(code).not.toBe(0);
+    expect(sortie).toContain('jeton refusé : recréez-le');
+    expect(sortie).not.toContain('instances visibles');
+    expect(sortie).not.toContain(CONCLUSION_INVISIBLE);
+    expect(sortie).not.toContain(JETON_FACTICE);
+  });
+
+  it('fetch instances sort en erreur : jeton refusé', () => {
+    const pnpm = fauxPnpm(1, { code: 2 });
+    const { code, sortie } = lancer('deployer', { ...pnpm.env, ...secrets });
+    expect(code).not.toBe(0);
+    expect(sortie).toContain('jeton refusé : recréez-le');
+    expect(sortie).not.toContain(JETON_FACTICE);
+  });
+
+  it('le diagnostic ne change pas le code de sortie : toujours non nul', () => {
+    for (const fetch of [{}, { visibles: [] }, { code: 2 }, { avertissement: 'refus' }]) {
+      const pnpm = fauxPnpm(1, fetch);
+      expect(lancer('valider', { ...pnpm.env, ...secrets }).code).not.toBe(0);
+    }
+  });
 });
 
 describe('T67 : guide de mise en ligne, étape 3 bis', () => {
@@ -582,6 +761,17 @@ describe('T67 : guide de mise en ligne, étape 3 bis', () => {
     expect(etape).toContain('Environment variables');
     expect(etape).toContain('Add environment variable');
     expect(etape).toContain('/org/<ORG>/project/<PROJET>/<INSTANCE>/');
+  });
+
+  it('T74 : explique que les variables alimentent cli.yaml et décrit le diagnostic du jeton', () => {
+    const etape = /^## Étape 3 bis — [\s\S]*?(?=^## )/m.exec(guide)?.[0] ?? '';
+    expect(etape).toContain('cli.yaml');
+    expect(etape).not.toMatch(/variables? d'environnement de la CLI/);
+    expect(etape).toContain('Diagnostic du jeton');
+    expect(etape).toContain('jeton refusé : recréez-le');
+    expect(etape).toContain('le jeton ne voit pas cette instance : recréez-le en étant connecté au compte et à l\'organisation de l\'instance');
+    expect(etape).toContain('instance attendue : visible');
+    expect(guide).toContain('Diagnostic du jeton');
   });
 
   it('donne la version de la CLI utilisée par le script', () => {

@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-21 — T74 : liaison PowerSync par cli.yaml et diagnostic du jeton
+
+- **Fait** : T73 était sans effet (la CLI 0.10.2 ne lit `org_id` et `project_id` que dans `cli.yaml`). Le script copie `powersync/` dans un dossier temporaire, y écrit un `cli.yaml` (instance, organisation, projet, jamais le jeton) et lance la CLI dessus ; si elle échoue, `powersync fetch instances` dit si le jeton est reconnu, quelles instances il voit et si la nôtre en fait partie. Guide et tests à jour.
+- **Décidé** : `fetch instances` avale ses erreurs (sortie 0, avertissement « Failed to fetch cloud instances ») : le script lit cet avertissement pour conclure « jeton refusé ». Sans organisation ni projet, comportement de T67 inchangé ; `powersync/` du dépôt n'est jamais touché.
+- **Bloquant** : à Théophane de relancer **Règles de synchro PowerSync** et de lire le « Diagnostic du jeton » en bas du journal : s'il dit que le jeton ne voit pas l'instance, le recréer dans la bonne organisation.
+
 ## 2026-10-21 — T73 : organisation et projet PowerSync transmis à la CLI
 
 - **Fait** : le script passe `ORG_ID` et `PROJECT_ID` à la CLI (lus dans les variables GitHub `POWERSYNC_ORG_ID` et `POWERSYNC_PROJECT_ID` de l'environnement `production`, passées par le workflow), ce qui évite l'appel qui masquait l'erreur sous « Instance … was not found ». Refus clair d'un seul des deux ou d'une valeur mal formée ; sans eux, comportement inchangé. Diagnostic en cas d'échec de la CLI : jeton d'une autre organisation, révoqué ou expiré, identifiants erronés. Guide (étape 3 bis) et tests à jour.
