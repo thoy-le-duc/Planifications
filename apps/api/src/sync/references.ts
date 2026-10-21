@@ -102,9 +102,17 @@ function references(l: LigneEvenement): Reference[] {
   if ('recetteFertirrigationId' in detail && typeof detail.recetteFertirrigationId === 'string') {
     liste.push({ table: 'recette_fertirrigation', ids: [detail.recetteFertirrigationId.toLowerCase()], libelle: 'recette de fertirrigation', supprimee: null });
   }
-  if ('engrais' in detail && Array.isArray(detail.engrais) && detail.engrais.length > 0) {
-    const ids = [...new Set(detail.engrais.map((e) => e.produitFertilisantId.toLowerCase()))];
-    liste.push({ table: 'produit_fertilisant', ids, libelle: 'produit fertilisant', supprimee: null });
+  const doses: unknown = 'engrais' in detail ? detail.engrais : null;
+  if (Array.isArray(doses)) {
+    const ids = [
+      ...new Set(
+        (doses as readonly unknown[]).flatMap((e) => {
+          const p = typeof e === 'object' && e !== null ? (e as { readonly produitFertilisantId?: unknown }).produitFertilisantId : undefined;
+          return typeof p === 'string' ? [p.toLowerCase()] : [];
+        }),
+      ),
+    ];
+    if (ids.length > 0) liste.push({ table: 'produit_fertilisant', ids, libelle: 'produit fertilisant', supprimee: null });
   }
   return liste;
 }
