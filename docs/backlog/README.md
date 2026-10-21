@@ -213,6 +213,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T77](T77-3d-prete-avec-plants.md) | Jumeau 3D : ne se dire « prête » qu'une fois les plants posés | T71 | fait |
 | [T78](T78-traitement-plusieurs-cultures.md) | Traitement : un même produit sur plusieurs cultures en une saisie | T52, T76 | à faire |
 | [T79](T79-ephy-saisie-suites.md) | Saisie d'un traitement : suites de la relecture de T76 | T76 | à faire |
+| [T80](T80-quitter-la-demo.md) | Démo : pouvoir en sortir et retrouver la vraie appli | T25b | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 

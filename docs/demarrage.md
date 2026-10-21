@@ -7,7 +7,8 @@ Chaque session part de zéro : rien n'est gardé d'une session à l'autre, tout 
 1. `docs/backlog/README.md` : **source de vérité** des statuts (« à faire », « en revue », « fait ») et de l'ordre de priorité.
 2. Les 15 premières lignes de `docs/journal.md` : `head -15 docs/journal.md`.
 3. Les questions ouvertes de `docs/questions.md` (sans « Réponse »).
-4. Les PR ouvertes de la boucle (branches `ticket/…`, `boucle/…`). **Ne jamais toucher à la PR #75.**
+4. `docs/idees.md` : le carnet d'idées de Théophane ; chaque idée claire devient un ticket (backlog + README), une idée floue une question, puis la ligne passe dans « Traité ».
+5. Les PR ouvertes de la boucle (branches `ticket/…`, `boucle/…`). **Ne jamais toucher à la PR #75.**
 
 ## Règles de la session
 
