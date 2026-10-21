@@ -25,6 +25,23 @@
  * - Chaque enregistrement est UNE transaction locale ; la ligne écrite est acceptée par
  *   validerProduitPhyto (règle du serveur). Jamais de DELETE : archiver pose supprime_le.
  *
+ * ## Recherche dans la base e-phy (T53, dans « Nouveau produit » et « Modifier le produit »)
+ *
+ * - Champ « Chercher dans e-phy » : au PREMIER usage seulement, le catalogue est chargé
+ *   (`chargerCatalogue`, défaut : ../catalogue.ts) ; jamais à l'ouverture de l'écran.
+ * - Suggestions [data-testid="suggestion-ephy"][data-amm=<AMM>] (boutons, texte commençant par le
+ *   nom commercial) ; un produit retiré porte « retiré le JJ/MM/AAAA ».
+ * - Sous la recherche : source (E-Phy, Anses, Licence Ouverte) et « base du JJ/MM/AAAA » ;
+ *   catalogue vide (base pas encore publiée) : un message qui le dit (« pas encore »).
+ * - Un tap remplit Nom commercial, N° AMM, Substance active, Utilisable en bio ; rien n'est écrit
+ *   avant « Enregistrer », tout reste modifiable. Produit retiré : avertissement (« retiré le … »,
+ *   emploi déconseillé).
+ * - DAR : proposé (avec la dose si elle aussi est unique) quand les usages du produit pour les
+ *   espèces de la ferme (séries et plantations non supprimées) ont tous le même DAR
+ *   (`propositionUsage` de @planif/core/ephy). Sinon « Choisissez l’usage » : radios nommés
+ *   « <culture> · <cible> · <dose> · DAR <n> j » (usages des cultures de la ferme, ou tous s'il
+ *   n'y en a pas) ; un tap remplit DAR, Dose maximale et Unité de la dose.
+ *
  * ## Registre phyto (dialogue « Registre phyto »)
  *
  * - Les traitements EN VIGUEUR de la saison (celle qui contient le jour ; à défaut l'année
@@ -38,6 +55,7 @@
  */
 import type { ReactElement } from 'react';
 import type { PorteDonnees } from '@planif/sync';
+import type { CatalogueEphy } from '@planif/core/ephy';
 
 export interface ProprietesEcranPhyto {
   readonly porte: PorteDonnees;
@@ -47,6 +65,8 @@ export interface ProprietesEcranPhyto {
   readonly aujourdhui?: () => string;
   /** Horodatages ; défaut : new Date(). */
   readonly maintenant?: () => Date;
+  /** T53 : catalogue e-phy ; défaut : `chargerCatalogueEphy` (../catalogue.ts), à la demande. */
+  readonly chargerCatalogue?: () => Promise<CatalogueEphy>;
 }
 
 export interface ModulePhyto {

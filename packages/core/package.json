@@ -10,7 +10,8 @@
     "./placement": "./src/placement/index.ts",
     "./croissance": "./src/croissance/index.ts",
     "./irrigation": "./src/irrigation/index.ts",
-    "./identifiants": "./src/domaine/identifiants.ts"
+    "./identifiants": "./src/domaine/identifiants.ts",
+    "./ephy": "./src/phyto/ephy.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
