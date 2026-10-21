@@ -47,6 +47,63 @@
   accent-color: var(--couleur-foret);
 }
 
+/* T59 : dérouler la saison (Lecture / Pause, vitesse, « Prévu seul »), à côté du curseur. */
+.plan3d-deroule {
+  display: flex;
+  align-items: center;
+  gap: var(--espace-s);
+}
+
+.plan3d-lecture {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  min-width: 7.5em;
+  padding: 0 12px;
+  border: 1px solid var(--couleur-foret);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-foret);
+  color: var(--couleur-surface);
+  font: inherit;
+  cursor: pointer;
+}
+
+.plan3d-lecture[aria-pressed='true'] {
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+}
+
+.plan3d-lecture:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.plan3d-vitesse {
+  min-height: 40px;
+  border: 1px solid var(--couleur-foret);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font: inherit;
+}
+
+.plan3d-prevu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.plan3d-prevu input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--couleur-foret);
+}
+
 .plan3d-semaine {
   min-width: 3.5em;
   font-family: var(--police-code);
@@ -496,6 +553,12 @@
 
   .plan3d-etiquette {
     margin-left: 0;
+  }
+
+  .plan3d-lecture,
+  .plan3d-vitesse,
+  .plan3d-prevu {
+    min-height: 48px;
   }
 
   .plan3d-corps {

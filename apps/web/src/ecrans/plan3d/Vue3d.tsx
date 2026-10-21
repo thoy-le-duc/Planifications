@@ -20,7 +20,7 @@
  *
  * Aucun calcul agronomique : tout vient de `versScene`, qui ne fait que placer le plan de la 2D.
  */
-import { createRoot, extend, useFrame, useThree, type ReconcilerRoot, type RootState } from '@react-three/fiber';
+import { createRoot, extend, flushSync, useFrame, useThree, type ReconcilerRoot, type RootState } from '@react-three/fiber';
 import { Component, lazy, memo, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type RefObject, type ReactNode } from 'react';
 import { AmbientLight, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
 import type { DateCalendaire } from '@planif/core';
@@ -39,6 +39,7 @@ import {
   FILTRES_TOUT,
   hauteurRendue,
   optionsFiltres,
+  sceneDeLaSemaine,
   versScene,
   type BatimentScene,
   type DimensionFiltre,
@@ -49,7 +50,9 @@ import {
 } from './scene.ts';
 import { fermeSansPlacement } from './invitation.ts';
 // T71 : la couche des plants (lecture, calcul, rendu) se charge à la demande (./couche-plants.ts) ; ici, ses types seulement.
-import type { cultureAu, CulturesLues } from './donnees-plants.ts';
+import type { CulturesLues } from './donnees-plants.ts';
+import type { AvancePlants, ModeDates, occupationsParPlanche, plantsDeLaSemaine } from './deroule-plants.ts';
+import { MARQUE_LECTURE, piloterLecture, VITESSE_DEROULE_PAR_DEFAUT, VITESSES_DEROULE, type HorlogeDeroule, type PiloteDeroule, type VitesseDeroule } from './deroule.ts';
 import type { Plants } from './Plants.tsx';
 import { PanneauTravaux3d } from './PanneauTravaux.tsx';
 import { CouchePastilles, placerPastilles, type PastilleDessinee, type PointPose } from './Pastilles.tsx';
@@ -61,7 +64,7 @@ import type { ModeEquipe } from '../aujourdhui/cache.ts';
 import { etatDeLaCouche, vueEstPrete } from './pret-3d.ts';
 import { hauteurDalle, hauteurDeMasse } from './hauteurs-plants.ts';
 import type { BilanPlants, RenduPlants } from './plants-rendu.ts';
-import type { plantsDePlanche, PlantsPlanche } from './plants.ts';
+import type { PlantsPlanche } from './plants.ts';
 import { mentionRecolte, phrasePlanchesARecolter, planchesARecolter } from './recolte.ts';
 import type { PorteDonnees } from '@planif/sync';
 import { TEXTE_INVITATION } from '../../demo/invitation.ts';
@@ -112,6 +115,31 @@ const MARQUE_AFFICHEE = 'planif:vue-3d-affichee';
 const MARQUE_SEMAINE = 'planif:vue-3d-semaine';
 const MARQUE_FILTRE = 'planif:vue-3d-filtre';
 const MARQUE_VOL_FIN = 'planif:vue-3d-vol-fin';
+
+/** T59 : horloge de la lecture de la saison, monotone (aucune Date, aucun fuseau) ; un rappel par semaine. */
+const HORLOGE_LECTURE: HorlogeDeroule = {
+  maintenant: () => performance.now(),
+  programmer: (rappel, delaiMs) => {
+    const id = window.setTimeout(rappel, delaiMs);
+    return () => {
+      window.clearTimeout(id);
+    };
+  },
+};
+
+/** T59 : `travail` quand le navigateur est au repos (au plus tard 200 ms après) ; rend de quoi l'annuler. */
+function auRepos(travail: () => void): () => void {
+  if (typeof window.requestIdleCallback === 'function') {
+    const id = window.requestIdleCallback(travail, { timeout: 200 });
+    return () => {
+      window.cancelIdleCallback(id);
+    };
+  }
+  const id = window.setTimeout(travail, 0);
+  return () => {
+    window.clearTimeout(id);
+  };
+}
 
 /** Épaisseur des socles (m de scène), posés sous le sol. */
 const EPAISSEUR_SOCLE = 0.2;
@@ -725,8 +753,11 @@ void chargerCouchePlants().catch(() => undefined);
 
 /** T71 : la couche des plants chargée (./couche-plants.ts) et les cultures lues de la base. */
 interface CouchePlants {
-  readonly cultureAu: typeof cultureAu;
-  readonly plantsDePlanche: typeof plantsDePlanche;
+  /** T59 : les plants de la semaine selon l'option « Prévu / Réalisé » (moteur de T32a). */
+  readonly plantsDeLaSemaine: typeof plantsDeLaSemaine;
+  readonly occupationsParPlanche: typeof occupationsParPlanche;
+  /** T59 : les plants de la semaine suivante, calculés d'avance pendant la lecture. */
+  readonly avance: AvancePlants;
   readonly Plants: typeof Plants;
   readonly rendu: RenduPlants;
   readonly cultures: CulturesLues;
@@ -883,6 +914,22 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const nbSemaines = plan.semaines.length;
   const [semaine, setSemaine] = useState(() => Math.min(Math.max(0, nbSemaines - 1), plan.semaineCourante ?? 0));
   const [premiereImage, setPremiereImage] = useState(false);
+  // T59 : lecture de la saison (Lecture / Pause), à 1 ou 4 semaines par seconde ; arrêt en fin de saison.
+  const [enLecture, setEnLecture] = useState(false);
+  const [vitesse, setVitesse] = useState<VitesseDeroule>(VITESSE_DEROULE_PAR_DEFAUT);
+  const lecteur = useRef<PiloteDeroule | null>(null);
+  const arreterLecture = useCallback(() => {
+    lecteur.current?.arreter();
+    lecteur.current = null;
+    setEnLecture(false);
+  }, []);
+  useEffect(
+    () => () => {
+      lecteur.current?.arreter();
+      lecteur.current = null;
+    },
+    [],
+  );
   // T77 : les plants sont posés (le bilan de la couche est arrivé) ; « prête » attend la couche (./pret-3d.ts).
   // Rattaché à la base et à la ferme où il a été constaté : autre ferme, autre base, il ne compte plus.
   const [plantsPosesPour, setPlantsPoses] = useState<{ readonly porte: typeof porte; readonly fermeId: typeof fermeId } | null>(null);
@@ -901,7 +948,26 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   // Géométrie : posée par le plan seul (la semaine ne change que les couleurs).
   const geometrie = useMemo(() => (nbSemaines === 0 ? null : versScene(plan, 0)), [plan, nbSemaines]);
   const semaineBornee = Math.min(semaine, Math.max(0, nbSemaines - 1));
-  const scene = useMemo(() => (nbSemaines === 0 ? null : versScene(plan, semaineBornee)), [plan, semaineBornee, nbSemaines]);
+  const lancerLecture = useCallback(() => {
+    lecteur.current?.arreter();
+    lecteur.current = piloterLecture({
+      horloge: HORLOGE_LECTURE,
+      semaine: semaineBornee,
+      nbSemaines,
+      vitesse,
+      surSemaine: (s) => {
+        performance.mark(MARQUE_LECTURE, { detail: { semaine: s } });
+        setSemaine(s);
+      },
+      surFin: () => {
+        lecteur.current = null;
+        setEnLecture(false);
+      },
+    });
+    setEnLecture(lecteur.current !== null);
+  }, [semaineBornee, nbSemaines, vitesse]);
+  // T59 : la scène de la semaine recolore la géométrie, sans refaire placements ni rangements (lecture fluide).
+  const scene = useMemo(() => (geometrie === null ? null : sceneDeLaSemaine(geometrie, plan, semaineBornee)), [geometrie, plan, semaineBornee]);
   const { centre, rayon } = useMemo(() => (geometrie === null ? { centre: { x: 0, y: 0, z: 0 }, rayon: 1 } : empriseDe(geometrie)), [geometrie]);
 
   // Plants (T32b) : ce que la 3D lit en plus du plan, une fois, en lecture seule ; sans lui, pas de plants.
@@ -918,7 +984,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         if (!actif) return;
         // Le rendu des plants est créé une fois par ouverture, gardé quand le plan est relu.
         setCoucheEnEchec(null);
-        setCouche((avant) => ({ cultureAu: m.cultureAu, plantsDePlanche: m.plantsDePlanche, Plants: m.Plants, rendu: avant?.rendu ?? new m.RenduPlants(), cultures }));
+        setCouche((avant) => ({ plantsDeLaSemaine: m.plantsDeLaSemaine, occupationsParPlanche: m.occupationsParPlanche, avance: avant?.avance ?? new m.AvancePlants(), Plants: m.Plants, rendu: avant?.rendu ?? new m.RenduPlants(), cultures }));
       })
       .catch((erreur: unknown) => {
         console.error('Plants 3D : lecture impossible', erreur);
@@ -929,16 +995,36 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     };
   }, [porte, fermeId, plan]);
   const lundi = plan.semaines[semaineBornee]?.lundi;
+  // T59 : « Prévu seul » ignore les dates réelles ; par défaut, elles remplacent les prévues (T32a).
+  const [prevuSeul, setPrevuSeul] = useState(false);
+  const mode: ModeDates = prevuSeul ? 'prevu' : 'realise';
+  const occupations = useMemo(() => (couche === null ? null : couche.occupationsParPlanche(plan)), [couche, plan]);
+  // Un seul calcul de croissance par semaine affichée (ou par changement d'option ou de données), jamais à chaque image.
   const plants = useMemo<readonly (PlantsPlanche | null)[] | null>(() => {
-    if (scene === null || couche === null || lundi === undefined) return null;
-    const { cultures, cultureAu: cultureDu, plantsDePlanche: plantsDe } = couche;
-    const jour = lundi as DateCalendaire;
-    return scene.volumes.map((v) => {
-      const c = v.occupationId === null ? undefined : cultures.parOccupation.get(v.occupationId);
-      return c === undefined ? null : plantsDe({ volume: v, culture: cultureDu(c, jour), jour, horsSol: cultures.horsSol.has(v.id) });
+    if (scene === null || couche === null || occupations === null || lundi === undefined) return null;
+    const entree = { scene, occupations, cultures: couche.cultures, jour: lundi as DateCalendaire, mode };
+    // Pendant la lecture, la semaine a souvent été calculée d'avance (au repos) : reprise telle quelle.
+    return couche.avance.prendre(entree) ?? couche.plantsDeLaSemaine(entree);
+  }, [scene, couche, occupations, lundi, mode]);
+  // T59 : pendant la lecture, la semaine suivante se calcule quand le navigateur est au repos, pas au changement de semaine.
+  useEffect(() => {
+    if (!enLecture || couche === null || occupations === null || geometrie === null) return undefined;
+    const suivante = semaineBornee + 1;
+    const lundiSuivant = plan.semaines[suivante]?.lundi;
+    if (lundiSuivant === undefined) return undefined;
+    return auRepos(() => {
+      couche.avance.preparer({ scene: sceneDeLaSemaine(geometrie, plan, suivante), occupations, cultures: couche.cultures, jour: lundiSuivant as DateCalendaire, mode });
     });
-  }, [scene, couche, lundi]);
+  }, [enLecture, couche, occupations, geometrie, plan, semaineBornee, mode]);
   const rendu = couche?.rendu ?? null;
+  // T59 : calculs des plants depuis l'ouverture, lus par l'e2e (un par semaine affichée au plus) ; écrits sans rendu.
+  const vueRef = useRef<HTMLElement>(null);
+  const calculsPlants = useRef(0);
+  useEffect(() => {
+    if (plants === null) return;
+    calculsPlants.current += 1;
+    if (vueRef.current !== null) vueRef.current.dataset.calculsPlants = String(calculsPlants.current);
+  }, [plants]);
   const prete = vueEstPrete({ premiereImage, couche: etatDeLaCouche({ aUneBase: porte !== undefined && fermeId !== undefined, chargee: couche !== null, echec: coucheEnEchec, montable: plants !== null }), plantsPoses });
 
   // Travaux du jour (T37) : les tâches de l'écran Aujourd'hui, relues quand la base change (le plan se relit à chaque écriture), en lecture seule.
@@ -1262,7 +1348,10 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   // La scène, rendue dans la racine fiber à chaque rendu de la vue (comme le fait <Canvas>).
   useLayoutEffect(() => {
     if (!configuree || geometrie === null || scene === null || filtree === null) return;
-    racine.current?.render(
+    const r = racine.current;
+    if (r === null) return;
+    // T59 : la scène fiber se réconcilie tout de suite (pas dans une tâche à part) : l'image d'une nouvelle semaine part à la prochaine image.
+    flushSync(() => r.render(
       <GardeErreur surErreur={surErreur}>
         <ambientLight intensity={1.6} />
         <directionalLight position={[rayon * 0.3, rayon, rayon * 0.5]} intensity={1.8} />
@@ -1273,13 +1362,13 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         <Camera rayon={rayon} centre={centre} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
         <Rendu surImage={surImage} />
       </GardeErreur>,
-    );
+    ));
   });
 
   const libelle = libelleCourant;
 
   return (
-    <section data-testid="vue-3d" data-etat={prete ? 'pret' : 'chargement'} data-semaine={semaineBornee} className="plan3d" aria-label="Vue 3D">
+    <section ref={vueRef} data-testid="vue-3d" data-etat={prete ? 'pret' : 'chargement'} data-semaine={semaineBornee} data-lecture={enLecture ? 'lecture' : 'pause'} data-calculs-plants={0} className="plan3d" aria-label="Vue 3D">
       <div className="plan3d-outils">
         <button type="button" data-testid="retour-2d" className="plan3d-retour" onClick={surRetour}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1302,12 +1391,57 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           aria-valuetext={libelle}
           disabled={nbSemaines === 0}
           onChange={(e) => {
+            // T59 : toucher le curseur reprend la main, la lecture se met en pause.
+            arreterLecture();
             setSemaine(Number(e.target.value));
           }}
         />
         <output data-testid="semaine-3d" htmlFor={idCurseur} className="plan3d-semaine">
           {libelle}
         </output>
+        <div className="plan3d-deroule">
+          <button
+            type="button"
+            data-testid="lecture-3d"
+            className="plan3d-lecture"
+            aria-pressed={enLecture}
+            disabled={nbSemaines < 2}
+            onClick={enLecture ? arreterLecture : lancerLecture}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              {enLecture ? <path d="M6 5h4v14H6zM14 5h4v14h-4z" /> : <path d="M7 4.5v15l12.5-7.5z" />}
+            </svg>
+            {enLecture ? 'Pause' : 'Lecture'}
+          </button>
+          <select
+            data-testid="vitesse-3d"
+            className="plan3d-vitesse"
+            aria-label="Vitesse de lecture"
+            value={String(vitesse)}
+            onChange={(e) => {
+              const v = VITESSES_DEROULE.find((x) => String(x) === e.target.value) ?? VITESSE_DEROULE_PAR_DEFAUT;
+              setVitesse(v);
+              lecteur.current?.changerVitesse(v);
+            }}
+          >
+            {VITESSES_DEROULE.map((v) => (
+              <option key={v} value={String(v)}>
+                {v === 1 ? '1 sem./s' : `${String(v)} sem./s`}
+              </option>
+            ))}
+          </select>
+          <label className="plan3d-prevu">
+            <input
+              type="checkbox"
+              data-testid="prevu-seul-3d"
+              checked={prevuSeul}
+              onChange={(e) => {
+                setPrevuSeul(e.target.checked);
+              }}
+            />
+            Prévu seul
+          </label>
+        </div>
         <button
           type="button"
           data-testid="vue-ensemble-3d"
