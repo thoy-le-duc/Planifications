@@ -4,4 +4,4 @@
  * L'annulation sert aussi au registre de la ferme (../../ferme/phyto/).
  */
 export { SaisieTraitement, SaisieTraitement as default, type ProprietesSaisieTraitement } from './SaisieTraitement.tsx';
-export { annulerTraitement, TraitementPlusEnVigueur } from './donnees.ts';
+export { annulerLotTraitement, annulerTraitement, ecrireLotTraitement, TraitementPlusEnVigueur, TraitementRefuse } from './donnees.ts';

@@ -150,36 +150,66 @@ export interface TraitementEcrit {
   readonly recolteAutoriseeLe: string;
 }
 
-async function ecrire(porte: PorteDonnees, saisie: SaisieEvenement, annoncer: Annoncer | undefined, verifier?: Parameters<PorteDonnees['ecrireEnsemble']>[1]): Promise<string> {
-  const e = porte.preparerSaisie(saisie);
-  const r = validerSaisie(e.ligne);
-  if (!r.ok) throw new TraitementRefuse(r.erreur.message);
-  const retirer = saisie.culture === null || annoncer === undefined ? () => undefined : annoncer(saisie.culture);
+/** Écrit les saisies en UNE transaction, chacune vérifiée par les règles du serveur avant ; tout ou rien. */
+async function ecrire(porte: PorteDonnees, saisies: readonly SaisieEvenement[], annoncer: Annoncer | undefined, verifier?: Parameters<PorteDonnees['ecrireEnsemble']>[1]): Promise<string[]> {
+  if (saisies.length === 0) throw new TraitementRefuse('aucune culture à traiter');
+  const preparees = saisies.map((saisie) => {
+    const e = porte.preparerSaisie(saisie);
+    const r = validerSaisie(e.ligne);
+    if (!r.ok) throw new TraitementRefuse(r.erreur.message);
+    return e;
+  });
+  const retraits = annoncer === undefined ? [] : saisies.flatMap((saisie) => (saisie.culture === null ? [] : [annoncer(saisie.culture)]));
   try {
-    await porte.ecrireEnsemble([e.ordre], verifier);
+    await porte.ecrireEnsemble(
+      preparees.map((e) => e.ordre),
+      verifier,
+    );
   } catch (erreur) {
-    retirer();
+    for (const retirer of retraits) retirer();
     throw erreur;
   }
-  return e.id;
+  return preparees.map((e) => e.id);
+}
+
+function saisieDe(s: SaisieDuTraitement): { readonly saisie: SaisieEvenement; readonly recolteAutoriseeLe: string } {
+  const detail = detailTraitement(s.produit, { dose: s.dose, surfaceTraiteeM2: s.surfaceTraiteeM2, cible: s.cible, operateur: s.operateur }, s.date as DateCalendaire);
+  return {
+    saisie: {
+      type: 'traitement',
+      date: s.date as DateCalendaire,
+      source: 'tap',
+      culture: s.culture,
+      emplacementIds: s.emplacementIds as Id<'Emplacement'>[],
+      note: null,
+      photos: [],
+      remplaceEvenement: null,
+      detail,
+    },
+    recolteAutoriseeLe: detail.recolteAutoriseeLe,
+  };
 }
 
 /** Écrit le traitement, DAR du produit figé ; rend son id et sa date de récolte autorisée. */
 export async function ecrireTraitement(porte: PorteDonnees, s: SaisieDuTraitement, annoncer?: Annoncer): Promise<TraitementEcrit> {
-  const detail = detailTraitement(s.produit, { dose: s.dose, surfaceTraiteeM2: s.surfaceTraiteeM2, cible: s.cible, operateur: s.operateur }, s.date as DateCalendaire);
-  const saisie: SaisieEvenement = {
-    type: 'traitement',
-    date: s.date as DateCalendaire,
-    source: 'tap',
-    culture: s.culture,
-    emplacementIds: s.emplacementIds as Id<'Emplacement'>[],
-    note: null,
-    photos: [],
-    remplaceEvenement: null,
-    detail,
-  };
-  const id = await ecrire(porte, saisie, annoncer);
-  return { id, recolteAutoriseeLe: detail.recolteAutoriseeLe };
+  const [ecrit] = await ecrireLotTraitement(porte, [s], annoncer);
+  if (ecrit === undefined) throw new TraitementRefuse('traitement non écrit');
+  return ecrit;
+}
+
+/**
+ * Un même produit sur plusieurs cultures (T78) : UN événement `traitement` par saisie (une par
+ * culture, avec ses emplacements et SON DAR figé), dans l'ordre, en UNE transaction. Tout ou rien :
+ * une saisie refusée par les règles du serveur, ou un lot vide → TraitementRefuse, rien d'écrit.
+ */
+export async function ecrireLotTraitement(porte: PorteDonnees, saisies: readonly SaisieDuTraitement[], annoncer?: Annoncer): Promise<TraitementEcrit[]> {
+  const lot = saisies.map(saisieDe);
+  const ids = await ecrire(
+    porte,
+    lot.map((l) => l.saisie),
+    annoncer,
+  );
+  return lot.map((l, i) => ({ id: ids[i] ?? '', recolteAutoriseeLe: l.recolteAutoriseeLe }));
 }
 
 /** La saisie visée n'est plus en vigueur (déjà annulée ou corrigée, ici ou ailleurs) : rien n'est écrit. */
@@ -198,47 +228,61 @@ function textes(v: string | null): string[] {
   }
 }
 
-/**
- * Annule le traitement `id` (en vigueur) : un événement d'annulation, même détail, même culture,
- * ses emplacements encore actifs le `jour`. Vérifié dans la transaction : `id` est toujours la
- * ligne en vigueur de sa chaîne (sinon TraitementPlusEnVigueur, rien d'écrit).
- */
-export async function annulerTraitement(porte: PorteDonnees, fermeId: string, id: string, jour: string, annoncer?: Annoncer): Promise<string> {
-  const l = (
-    await porte.lire<{ date: string; serie_id: string | null; campagne_id: string | null; emplacement_ids: string | null; note: string | null; photos: string | null; detail: string }>(SQL_TRAITEMENT, [
-      id,
-      fermeId,
-    ])
-  )[0];
+type LigneTraitement = { date: string; serie_id: string | null; campagne_id: string | null; emplacement_ids: string | null; note: string | null; photos: string | null; detail: string };
+
+/** L'annulation du traitement `id` de la ferme : même détail, même culture, ses emplacements encore actifs le `jour`. */
+async function annulationDe(porte: PorteDonnees, fermeId: string, id: string, jour: string): Promise<SaisieEvenement> {
+  const l = (await porte.lire<LigneTraitement>(SQL_TRAITEMENT, [id, fermeId]))[0];
   if (l === undefined) throw new TraitementPlusEnVigueur('ce traitement n’est plus sur ce téléphone');
   const ids = textes(l.emplacement_ids);
   const actifs =
     ids.length === 0
       ? []
       : await porte.lire<{ id: string }>(
-          `SELECT id FROM emplacement WHERE id IN (${ids.map(() => '?').join(', ')}) AND supprime_le IS NULL AND actif_du <= ? AND (actif_au IS NULL OR actif_au > ?)`,
-          [...ids, jour, jour],
+          `SELECT id FROM emplacement WHERE id IN (${ids.map(() => '?').join(', ')}) AND ferme_id = ? AND supprime_le IS NULL AND actif_du <= ? AND (actif_au IS NULL OR actif_au > ?)`,
+          [...ids, fermeId, jour, jour],
         );
   const garder = new Set(actifs.map((a) => a.id.toLowerCase()));
   const culture: CultureConcernee | null =
     l.serie_id !== null ? { sorte: 'serie', serieId: l.serie_id as Id<'Serie'> } : l.campagne_id !== null ? { sorte: 'campagne', campagneId: l.campagne_id as Id<'Campagne'> } : null;
-  return ecrire(
-    porte,
-    {
-      type: 'traitement',
-      date: l.date as DateCalendaire,
-      source: 'tap',
-      culture,
-      emplacementIds: ids.filter((e) => garder.has(e.toLowerCase())) as Id<'Emplacement'>[],
-      note: l.note,
-      photos: textes(l.photos),
-      remplaceEvenement: { sorte: 'annulation', evenementId: id as Id<'Evenement'> },
-      detail: JSON.parse(l.detail) as DetailTraitement,
-    },
-    annoncer,
-    async (lire) => {
+  return {
+    type: 'traitement',
+    date: l.date as DateCalendaire,
+    source: 'tap',
+    culture,
+    emplacementIds: ids.filter((e) => garder.has(e.toLowerCase())) as Id<'Emplacement'>[],
+    note: l.note,
+    photos: textes(l.photos),
+    remplaceEvenement: { sorte: 'annulation', evenementId: id as Id<'Evenement'> },
+    detail: JSON.parse(l.detail) as DetailTraitement,
+  };
+}
+
+/**
+ * Annule le traitement `id` (en vigueur) : un événement d'annulation, même détail, même culture,
+ * ses emplacements encore actifs le `jour`. Vérifié dans la transaction : `id` est toujours la
+ * ligne en vigueur de sa chaîne (sinon TraitementPlusEnVigueur, rien d'écrit).
+ */
+export async function annulerTraitement(porte: PorteDonnees, fermeId: string, id: string, jour: string, annoncer?: Annoncer): Promise<string> {
+  const [annulation] = await annulerLotTraitement(porte, fermeId, [id], jour, annoncer);
+  if (annulation === undefined) throw new TraitementPlusEnVigueur('ce traitement n’a pas pu être annulé');
+  return annulation;
+}
+
+/**
+ * Annule tous les traitements `ids` d'un lot (T78) en UNE transaction : une annulation chacun, comme
+ * `annulerTraitement`. Tout ou rien : un seul qui n'est plus en vigueur (déjà annulé ou corrigé) ou
+ * qui n'est pas de la ferme `fermeId` → TraitementPlusEnVigueur, aucune annulation écrite. Rend les
+ * ids des annulations, dans l'ordre de `ids`.
+ */
+export async function annulerLotTraitement(porte: PorteDonnees, fermeId: string, ids: readonly string[], jour: string, annoncer?: Annoncer): Promise<string[]> {
+  if (new Set(ids.map((i) => i.toLowerCase())).size !== ids.length) throw new TraitementRefuse('le même traitement figure deux fois dans le lot');
+  const annulations: SaisieEvenement[] = [];
+  for (const id of ids) annulations.push(await annulationDe(porte, fermeId, id, jour));
+  return ecrire(porte, annulations, annoncer, async (lire) => {
+    for (const id of ids) {
       const c = await chaineDe(lire, fermeId, id);
       if (c.annulee || c.enVigueur !== id) throw new TraitementPlusEnVigueur('ce traitement a déjà été annulé ou corrigé');
-    },
-  );
+    }
+  });
 }
