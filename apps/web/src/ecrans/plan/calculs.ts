@@ -233,7 +233,7 @@ function lirePlacement(l: LigneLocale): PlacementPlan | null {
   return x === null || y === null || orientationDeg === null || !Number.isFinite(x + y + orientationDeg) ? null : { x, y, orientationDeg };
 }
 
-const TYPES_BATIMENT_PLAN: ReadonlySet<string> = new Set<TypeBatiment>(['serre_tunnel', 'serre_chapelle', 'hangar', 'magasin', 'autre']);
+const TYPES_BATIMENT_PLAN: ReadonlySet<string> = new Set<TypeBatiment>(['serre_tunnel', 'serre_chapelle', 'hangar', 'local', 'chambre_froide', 'magasin', 'autre']);
 
 function versBatiment(l: LigneLocale): BatimentPlan {
   const type = texte(l.type);
