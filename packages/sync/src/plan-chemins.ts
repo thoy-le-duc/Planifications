@@ -194,11 +194,11 @@ export async function placerElementPlan(tx: TransactionLocale, ctx: ContextePlan
       [id, ctx.fermeId, ...colonnes.map((col) => ligne[col] ?? null), instant, instant],
     );
     // Annuler une création : suppression douce, à l'instant de la porte.
-    return { sorte: table, id, valeurs: { supprime_le: instant } } as ChangementPlacement;
+    return { sorte: table, id, valeurs: { supprime_le: instant } };
   }
   const modifiees = colonnes.filter((col) => Object.hasOwn(valeurs, col));
   if (modifiees.length > 0) {
     await tx.execute(`UPDATE ${table} SET ${modifiees.map((col) => `${col} = ?`).join(', ')}, modifie_le = ? WHERE id = ?`, [...modifiees.map((col) => ligne[col] ?? null), instant, id]);
   }
-  return { sorte: table, id, valeurs: Object.fromEntries(modifiees.map((col) => [col, valeurRendue(col, existante[col])])) } as ChangementPlacement;
+  return { sorte: table, id, valeurs: Object.fromEntries(modifiees.map((col) => [col, valeurRendue(col, existante[col])])) };
 }
