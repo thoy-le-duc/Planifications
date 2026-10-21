@@ -763,6 +763,17 @@ describe('T67 : guide de mise en ligne, étape 3 bis', () => {
     expect(etape).toContain('/org/<ORG>/project/<PROJET>/<INSTANCE>/');
   });
 
+  it('T74 : explique que les variables alimentent cli.yaml et décrit le diagnostic du jeton', () => {
+    const etape = /^## Étape 3 bis — [\s\S]*?(?=^## )/m.exec(guide)?.[0] ?? '';
+    expect(etape).toContain('cli.yaml');
+    expect(etape).not.toMatch(/variables? d'environnement de la CLI/);
+    expect(etape).toContain('Diagnostic du jeton');
+    expect(etape).toContain('jeton refusé : recréez-le');
+    expect(etape).toContain('le jeton ne voit pas cette instance : recréez-le en étant connecté au compte et à l\'organisation de l\'instance');
+    expect(etape).toContain('instance attendue : visible');
+    expect(guide).toContain('Diagnostic du jeton');
+  });
+
   it('donne la version de la CLI utilisée par le script', () => {
     expect(versionCli()).not.toBe('');
     expect(guide).toContain(`powersync@${versionCli()}`);
