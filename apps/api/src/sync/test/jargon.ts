@@ -76,6 +76,8 @@ const MOTS_FRANCAIS_DU_SCHEMA = new Set([
   'avant',
   'campagne',
   'changements',
+  // T61 : tables du plan et du rangement, les mots du maraîcher (« ce chemin », « cet outil »).
+  'chemin',
   'code',
   'date',
   'du',
@@ -97,6 +99,7 @@ const MOTS_FRANCAIS_DU_SCHEMA = new Set([
   'note',
   'occupation',
   'organique',
+  'outil',
   'personne',
   'photos',
   'plantation',
