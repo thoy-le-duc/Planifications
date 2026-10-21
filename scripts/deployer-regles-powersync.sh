@@ -9,12 +9,17 @@
 # Voie officielle : la CLI PowerSync (paquet npm `powersync`, https://docs.powersync.com/tools/cli,
 # https://github.com/powersync-ja/powersync-cli), commande `deploy sync-config`, qui ne touche
 # qu'aux règles et garde la connexion à Neon et l'authentification réglées dans le tableau de bord.
-# Elle lit le jeton personnel dans PS_ADMIN_TOKEN et l'instance dans INSTANCE_ID ; l'organisation
-# et le projet se déduisent de l'instance.
+# Elle lit le jeton personnel dans PS_ADMIN_TOKEN et l'instance dans INSTANCE_ID. Sans ORG_ID ni
+# PROJECT_ID, elle les déduit de l'instance par un appel d'API dont tout échec devient « Instance
+# … was not found or is not accessible with the current token » (T73) : on les lui donne donc.
 #
 # - Secrets POWERSYNC_ADMIN_TOKEN et POWERSYNC_INSTANCE_ID absents ou vides : rien à faire, succès.
 #   Jamais de repli sur PS_ADMIN_TOKEN ou INSTANCE_ID déjà posés ailleurs.
 # - Un seul des deux, ou une valeur mal formée : refus, sans afficher la valeur.
+# - T73 : variables (non secrètes) POWERSYNC_ORG_ID et POWERSYNC_PROJECT_ID de l'environnement
+#   production, transmises à la CLI comme ORG_ID et PROJECT_ID. Les deux ou aucune : un seul, ou une
+#   valeur mal formée (24 caractères hexadécimaux), est refusé. Aucune : la CLI déduit, comme avant.
+#   Jamais de reprise d'un ORG_ID ou PROJECT_ID déjà posés ailleurs.
 # - Règles refusées par PowerSync : sortie non nulle, le workflow passe au rouge.
 #
 # La CLI est figée dans scripts/powersync-cli/ : version exacte en devDependency et pnpm-lock.yaml
@@ -46,8 +51,10 @@ unset PS_ADMIN_TOKEN INSTANCE_ID API_URL ORG_ID PROJECT_ID
 
 jeton="${POWERSYNC_ADMIN_TOKEN:-}"
 instance="${POWERSYNC_INSTANCE_ID:-}"
+organisation="${POWERSYNC_ORG_ID:-}"
+projet="${POWERSYNC_PROJECT_ID:-}"
 # Les valeurs ne passent plus que par les variables locales ci-dessus, puis à la seule CLI.
-unset POWERSYNC_ADMIN_TOKEN POWERSYNC_INSTANCE_ID
+unset POWERSYNC_ADMIN_TOKEN POWERSYNC_INSTANCE_ID POWERSYNC_ORG_ID POWERSYNC_PROJECT_ID
 
 if [ -z "$jeton" ] && [ -z "$instance" ]; then
   echo "secrets POWERSYNC_ADMIN_TOKEN et POWERSYNC_INSTANCE_ID absents : rien à faire, voir docs/mise-en-ligne.md (étape 3 bis)"
@@ -83,6 +90,28 @@ if ! jeton_bien_forme; then
   exit 1
 fi
 
+# T73 : organisation et projet, les deux ou aucun (identifiants d'un tableau de bord, non secrets).
+if [ -n "$organisation" ] && [ -z "$projet" ]; then
+  echo "variable POWERSYNC_PROJECT_ID absente (POWERSYNC_ORG_ID est posée) : poser les deux ou aucune, voir docs/mise-en-ligne.md (étape 3 bis)" >&2
+  exit 1
+fi
+if [ -z "$organisation" ] && [ -n "$projet" ]; then
+  echo "variable POWERSYNC_ORG_ID absente (POWERSYNC_PROJECT_ID est posée) : poser les deux ou aucune, voir docs/mise-en-ligne.md (étape 3 bis)" >&2
+  exit 1
+fi
+identifiant_bien_forme() {
+  local LC_ALL=C
+  [[ $1 =~ ^[0-9a-fA-F]{24}$ ]]
+}
+if [ -n "$organisation" ] && ! identifiant_bien_forme "$organisation"; then
+  echo "variable POWERSYNC_ORG_ID mal formée : 24 caractères hexadécimaux attendus (l'organisation, lue dans l'adresse du tableau de bord PowerSync), voir docs/mise-en-ligne.md (étape 3 bis)" >&2
+  exit 1
+fi
+if [ -n "$projet" ] && ! identifiant_bien_forme "$projet"; then
+  echo "variable POWERSYNC_PROJECT_ID mal formée : 24 caractères hexadécimaux attendus (le projet, lu dans l'adresse du tableau de bord PowerSync), voir docs/mise-en-ligne.md (étape 3 bis)" >&2
+  exit 1
+fi
+
 if [ "$mode" = valider ]; then
   echo "Règles de synchro : validation par la CLI PowerSync figée (deploy sync-config --dry-run), rien n'est déployé."
 else
@@ -91,9 +120,20 @@ fi
 
 # `pnpm --dir … exec` lance la commande depuis scripts/powersync-cli : le dossier des règles est
 # donc donné en chemin absolu.
-if ! PS_ADMIN_TOKEN="$jeton" INSTANCE_ID="$instance" \
-  pnpm --dir scripts/powersync-cli exec powersync deploy sync-config --directory="$racine/powersync" "${options[@]}"; then
-  echo "Règles de synchro refusées par PowerSync, ou PowerSync injoignable : voir le message de la CLI juste au-dessus." >&2
+# Avec l'organisation et le projet, la CLI saute l'appel qui les déduit de l'instance.
+export PS_ADMIN_TOKEN="$jeton" INSTANCE_ID="$instance"
+if [ -n "$organisation" ]; then
+  export ORG_ID="$organisation" PROJECT_ID="$projet"
+fi
+if ! pnpm --dir scripts/powersync-cli exec powersync deploy sync-config --directory="$racine/powersync" "${options[@]}"; then
+  {
+    echo "La CLI PowerSync a échoué : voir son message juste au-dessus. Causes probables :"
+    echo "  - règles refusées par PowerSync (rien n'est déployé) ;"
+    echo "  - « Instance … was not found or is not accessible with the current token » : jeton créé sous une autre organisation que celle de l'instance, jeton révoqué ou expiré ;"
+    echo "  - identifiants erronés : POWERSYNC_INSTANCE_ID (secret), POWERSYNC_ORG_ID et POWERSYNC_PROJECT_ID (variables), à relire dans l'adresse du tableau de bord ;"
+    echo "  - PowerSync injoignable."
+    echo "Voir docs/mise-en-ligne.md (étape 3 bis)."
+  } >&2
   exit 1
 fi
 

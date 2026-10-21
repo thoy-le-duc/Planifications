@@ -7,7 +7,7 @@ name: Règles de synchro PowerSync
 # jamais approcher le jeton PowerSync.
 #
 # Voie officielle : la CLI PowerSync (https://docs.powersync.com/tools/cli), figée par version
-# exacte et lockfile dans scripts/powersync-cli/. Secrets à poser : docs/mise-en-ligne.md, étape 3 bis.
+# exacte et lockfile dans scripts/powersync-cli/. Secrets et variables à poser : docs/mise-en-ligne.md, étape 3 bis.
 on:
   workflow_run:
     workflows: [Migrations de production]
@@ -60,9 +60,17 @@ jobs:
         env:
           POWERSYNC_ADMIN_TOKEN: ${{ secrets.POWERSYNC_ADMIN_TOKEN }}
           POWERSYNC_INSTANCE_ID: ${{ secrets.POWERSYNC_INSTANCE_ID }}
+          # Identifiants non secrets (variables de l'environnement production) : sans eux, la CLI les
+          # déduit de l'instance et masque toute erreur derrière « Instance … was not found » (T73).
+          POWERSYNC_ORG_ID: ${{ vars.POWERSYNC_ORG_ID }}
+          POWERSYNC_PROJECT_ID: ${{ vars.POWERSYNC_PROJECT_ID }}
         run: bash scripts/deployer-regles-powersync.sh valider
       - name: Déployer les règles de synchro, ou arrêt propre si les secrets sont absents
         env:
           POWERSYNC_ADMIN_TOKEN: ${{ secrets.POWERSYNC_ADMIN_TOKEN }}
           POWERSYNC_INSTANCE_ID: ${{ secrets.POWERSYNC_INSTANCE_ID }}
+          # Identifiants non secrets (variables de l'environnement production) : sans eux, la CLI les
+          # déduit de l'instance et masque toute erreur derrière « Instance … was not found » (T73).
+          POWERSYNC_ORG_ID: ${{ vars.POWERSYNC_ORG_ID }}
+          POWERSYNC_PROJECT_ID: ${{ vars.POWERSYNC_PROJECT_ID }}
         run: bash scripts/deployer-regles-powersync.sh deployer
