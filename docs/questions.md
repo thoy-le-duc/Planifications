@@ -290,6 +290,10 @@ Question : quand une récolte a été annulée, peut-on encore la corriger, par 
 
 Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit une nouvelle ; entre deux corrections hors ligne, on garde la plus récente selon l'heure du téléphone. Ticket T10g.
 
+### Q48 — E-Phy : correspondances à confirmer (posée le 2026-10-21, T75)
+
+Question : « Salade » est rattachée à Laitue (une scarole ou une mâche saisies « Salade » recevraient le DAR de la laitue : les créer comme espèces à part) ; chou de Bruxelles avec les choux pommés, chou chinois avec les choux feuillus ; pivoine sur « Cultures florales et plantes vertes » seulement (pas « Cultures ornementales ») ; potimarron en « peau non comestible » (classement e-phy par espèce de courge). D'accord ? **En attente de Théophane** (sans urgence).
+
 ### Q46 — Délai avant récolte dans la 3D : toute la culture, ou les planches traitées ? (posée le 2026-10-20, relecture de T55)
 
 Question : quand une culture est traitée sur une partie de ses planches seulement (tomates sur P1, pas sur P2), l'écran Aujourd'hui (T52) bloque la récolte de **toute la culture** jusqu'à la fin du délai, par prudence. La 3D (T55) ne pose le repère « Ne pas récolter » que sur **les planches traitées** (P1) : P2 garde sa balise « à récolter ». Les deux se contredisent. Et une culture sans planche (kiwis ou asperges saisis sans rang) n'a pas de volume dans la 3D, donc pas de repère du tout. Proposition : aligner la 3D sur Aujourd'hui, repère sur toutes les planches de la culture traitée (ticket de suite, il faut faire de la place dans le poids de la vue 3D). L'autre choix : desserrer Aujourd'hui pour ne bloquer que les planches traitées. Lequel colle à ta pratique ?
