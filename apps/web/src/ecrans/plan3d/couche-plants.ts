@@ -7,6 +7,8 @@
  * morceau de l'appli : hors ligne, les plants viennent aussi.
  */
 export { cultureAu, lireCultures } from './donnees-plants.ts';
+// T59 : les plants de la semaine selon « Prévu / Réalisé », pendant le déroulé de la saison.
+export { AvancePlants, occupationsParPlanche, plantsDeLaSemaine, sceneSelonMode } from './deroule-plants.ts';
 export { plantsDePlanche } from './plants.ts';
 export { RenduPlants } from './plants-rendu.ts';
 export { Plants } from './Plants.tsx';

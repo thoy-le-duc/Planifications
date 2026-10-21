@@ -294,6 +294,43 @@ function cultureDeLaSemaine(ligne: LigneEmplacementPlan, i: number): Pick<Volume
 
 const largeurDe = (l: LigneEmplacementPlan): number => (l.largeurM ?? LARGEUR_PAR_DEFAUT_M) * ECHELLE;
 
+/** T59 : les planches du plan par id, calculées une fois par plan. */
+const planchesDuPlan = new WeakMap<Plan, ReadonlyMap<string, LigneEmplacementPlan>>();
+function planchesDe(plan: Plan): ReadonlyMap<string, LigneEmplacementPlan> {
+  let m = planchesDuPlan.get(plan);
+  if (m === undefined) {
+    const n = new Map<string, LigneEmplacementPlan>();
+    for (const l of plan.lignes) if (l.sorte === 'emplacement') n.set(l.id, l);
+    m = n;
+    planchesDuPlan.set(plan, m);
+  }
+  return m;
+}
+
+/**
+ * T59 : la scène de la semaine `semaine`, à partir d'une scène du même plan (`base`, celle de
+ * `versScene(plan, s)` pour n'importe quelle semaine `s`) : la géométrie ne dépend pas de la semaine,
+ * seules les cultures changent. Même résultat que `versScene(plan, semaine)`, sans refaire les
+ * placements ni les rangements : c'est ce qui rend la lecture de la saison fluide. Les socles et les
+ * bâtiments sont ceux de `base` (mêmes références).
+ */
+export function sceneDeLaSemaine(base: Scene, plan: Plan, semaine: number): Scene {
+  const semaines: readonly SemainePlan[] = plan.semaines;
+  if (!Number.isInteger(semaine) || semaine < 0 || semaine >= semaines.length) {
+    throw new RangeError(`semaine ${String(semaine)} hors du plan (0 à ${String(semaines.length - 1)})`);
+  }
+  const planches = planchesDe(plan);
+  return {
+    ...base,
+    semaine,
+    libelleSemaine: semaines[semaine]?.libelle ?? '',
+    volumes: base.volumes.map((v) => {
+      const l = planches.get(v.id);
+      return l === undefined ? v : { ...v, ...cultureDeLaSemaine(l, semaine) };
+    }),
+  };
+}
+
 /** Volumes et socles de la semaine d'indice `semaine` (colonne de la 2D). */
 export function versScene(plan: Plan, semaine: number): Scene {
   const semaines: readonly SemainePlan[] = plan.semaines;
