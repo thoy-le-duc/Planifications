@@ -58,6 +58,7 @@ import type { Camera as CameraThree } from 'three';
 import type { Masques } from '../aujourdhui/cache.ts';
 import type { LectureTravaux, pourDe, tachesVisibles, travauxDuJour3d, TravauxDuJour3d } from './travaux.ts';
 import type { ModeEquipe } from '../aujourdhui/cache.ts';
+import { etatDeLaCouche, vueEstPrete } from './pret-3d.ts';
 import { hauteurDalle, hauteurDeMasse } from './hauteurs-plants.ts';
 import type { BilanPlants, RenduPlants } from './plants-rendu.ts';
 import type { plantsDePlanche, PlantsPlanche } from './plants.ts';
@@ -881,7 +882,13 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const sansPlacement = useMemo(() => fermeSansPlacement(plan), [plan]);
   const nbSemaines = plan.semaines.length;
   const [semaine, setSemaine] = useState(() => Math.min(Math.max(0, nbSemaines - 1), plan.semaineCourante ?? 0));
-  const [prete, setPrete] = useState(false);
+  const [premiereImage, setPremiereImage] = useState(false);
+  // T77 : les plants sont posés (le bilan de la couche est arrivé) ; « prête » attend la couche (./pret-3d.ts).
+  // Rattaché à la base et à la ferme où il a été constaté : autre ferme, autre base, il ne compte plus.
+  const [plantsPosesPour, setPlantsPoses] = useState<{ readonly porte: typeof porte; readonly fermeId: typeof fermeId } | null>(null);
+  const [echecPour, setCoucheEnEchec] = useState<{ readonly porte: typeof porte; readonly fermeId: typeof fermeId } | null>(null);
+  const plantsPoses = plantsPosesPour?.porte === porte && plantsPosesPour?.fermeId === fermeId;
+  const coucheEnEchec = echecPour?.porte === porte && echecPour?.fermeId === fermeId;
   /** Dernière zone choisie par « Aller à » : citée dans l'encart, que les lecteurs d'écran annoncent (T28g). */
   const [zoneChoisie, setZoneChoisie] = useState<string | null>(null);
   const idCurseur = useId();
@@ -910,10 +917,12 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         const cultures = await m.lireCultures(porte, fermeId);
         if (!actif) return;
         // Le rendu des plants est créé une fois par ouverture, gardé quand le plan est relu.
+        setCoucheEnEchec(null);
         setCouche((avant) => ({ cultureAu: m.cultureAu, plantsDePlanche: m.plantsDePlanche, Plants: m.Plants, rendu: avant?.rendu ?? new m.RenduPlants(), cultures }));
       })
       .catch((erreur: unknown) => {
         console.error('Plants 3D : lecture impossible', erreur);
+        if (actif) setCoucheEnEchec({ porte, fermeId });
       });
     return () => {
       actif = false;
@@ -930,6 +939,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     });
   }, [scene, couche, lundi]);
   const rendu = couche?.rendu ?? null;
+  const prete = vueEstPrete({ premiereImage, couche: etatDeLaCouche({ aUneBase: porte !== undefined && fermeId !== undefined, chargee: couche !== null, echec: coucheEnEchec, montable: plants !== null }), plantsPoses });
 
   // Travaux du jour (T37) : les tâches de l'écran Aujourd'hui, relues quand la base change (le plan se relit à chaque écriture), en lecture seule.
   // Le moteur de l'écran Aujourd'hui se charge à part, à l'ouverture (précaché : hors ligne aussi), pour ne pas alourdir le morceau 3D.
@@ -1023,6 +1033,11 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     surEchecRef.current = surEchec;
   }, [surEchec]);
 
+  const baseRef = useRef({ porte, fermeId });
+  useLayoutEffect(() => {
+    baseRef.current = { porte, fermeId };
+  }, [porte, fermeId]);
+
   const surImage = useCallback(({ gl, camera, size }: RootState) => {
     const s = suivi.current;
     derniereCamera.current = camera;
@@ -1051,6 +1066,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
       ds.hauteursPlants = b.hauteurs;
       ds.semainePlants = String(b.semaine);
       s.plantsEnAttente = null;
+      setPlantsPoses(baseRef.current);
     }
     if (s.volEcrit !== s.vol) {
       ds.vol = s.vol ? 'oui' : 'non';
@@ -1063,7 +1079,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     if (!s.premiere) {
       s.premiere = true;
       performance.mark(MARQUE_AFFICHEE);
-      setPrete(true);
+      setPremiereImage(true);
     }
     if (s.semaineEnAttente !== null) {
       performance.mark(MARQUE_SEMAINE, { detail: { semaine: s.semaineEnAttente } });

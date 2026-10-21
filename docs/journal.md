@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-21 — T77 : la vue 3D n'est « prête » qu'une fois les plants posés
+
+- **Fait** : `data-etat="pret"` attend la couche des plants chargée et posée (échec de la couche ou absence de base : prête quand même, sans plants) ; logique pure dans `plan3d/pret-3d.ts` (11 tests), branchée dans `Vue3d.tsx`. La marque de première image (budget d'affichage) n'a pas bougé. Mesure e2e `vue-3d-jumeau`, changement de semaine (5 changements, ms) : avant 31, 131, 18, 156, 82 (échec : pic 155,7 ms) ; après 14, 15, 33, 66, 14 (médiane 15 ms). Affichage après chargement du module : médiane 194 ms avant, 216 ms après (budget 1000 ms, bruit de la machine).
+- **Décidé** : seuls l'état affiché et le moment de « prête » changent ; aucun seuil, aucun test de fluidité, aucun budget touché.
+- **Bloquant** : rien pour ce ticket. Sur cette machine (WebGL logiciel), la mesure reste bruitée (autres passes : pics ponctuels à 106 et 128 ms) et le test de navigation au pointeur échoue aussi sur `main` (5 passages saccadés) ; hors périmètre.
+
 ## 2026-10-21 — Passage aux sessions neuves : ce qui n'était que dans la conversation
 
 - **Fait** : inventaire de ce qui n'existait que dans la conversation persistante de la boucle (session_01HmBo…), reporté ici, dans `docs/questions.md` et dans deux tickets de suite (T76, T77). Depuis la semaine du 14 octobre : T39 à T75 fusionnés (sauf T58, T59, T61 à faire), mise en ligne complète (Neon, PowerSync, Brevo, Vercel), migrations de production automatiques (secret `DATABASE_URL_PRODUCTION` posé le 20/10 dans l'environnement GitHub `production`, migrations 0032 à 0043 appliquées), catalogue E-Phy réel fusionné (PR #231, base du 2026-10-20).
