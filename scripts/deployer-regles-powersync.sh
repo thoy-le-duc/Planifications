@@ -9,17 +9,26 @@
 # Voie officielle : la CLI PowerSync (paquet npm `powersync`, https://docs.powersync.com/tools/cli,
 # https://github.com/powersync-ja/powersync-cli), commande `deploy sync-config`, qui ne touche
 # qu'aux règles et garde la connexion à Neon et l'authentification réglées dans le tableau de bord.
-# Elle lit le jeton personnel dans PS_ADMIN_TOKEN et l'instance dans INSTANCE_ID. Sans ORG_ID ni
-# PROJECT_ID, elle les déduit de l'instance par un appel d'API dont tout échec devient « Instance
-# … was not found or is not accessible with the current token » (T73) : on les lui donne donc.
+# Elle lit le jeton personnel dans PS_ADMIN_TOKEN. L'instance, l'organisation et le projet, elle les
+# lit dans le `cli.yaml` du dossier de projet : seul instance_id accepte aussi un drapeau ou la
+# variable INSTANCE_ID ; org_id et project_id ne viennent QUE de ce fichier (@powersync/cli-core 0.10.2,
+# dist/command-types/CloudInstanceCommand.js, loadProject). Sans eux elle les déduit de l'instance par
+# un appel d'API dont tout échec devient « Instance … was not found or is not accessible with the
+# current token » : T73 les passait en variables d'environnement, ce qui n'avait aucun effet (T74).
 #
 # - Secrets POWERSYNC_ADMIN_TOKEN et POWERSYNC_INSTANCE_ID absents ou vides : rien à faire, succès.
 #   Jamais de repli sur PS_ADMIN_TOKEN ou INSTANCE_ID déjà posés ailleurs.
 # - Un seul des deux, ou une valeur mal formée : refus, sans afficher la valeur.
 # - T73 : variables (non secrètes) POWERSYNC_ORG_ID et POWERSYNC_PROJECT_ID de l'environnement
-#   production, transmises à la CLI comme ORG_ID et PROJECT_ID. Les deux ou aucune : un seul, ou une
-#   valeur mal formée (24 caractères hexadécimaux), est refusé. Aucune : la CLI déduit, comme avant.
-#   Jamais de reprise d'un ORG_ID ou PROJECT_ID déjà posés ailleurs.
+#   production. Les deux ou aucune : un seul, ou une valeur mal formée (24 caractères hexadécimaux),
+#   est refusé. Jamais de reprise d'un ORG_ID ou PROJECT_ID déjà posés ailleurs.
+# - T74 : avec les deux, le script copie powersync/ dans un dossier temporaire (supprimé à la sortie),
+#   y écrit un cli.yaml (type cloud, instance_id, org_id, project_id : des identifiants, jamais le
+#   jeton ; schéma ResolvedCloudCLIConfig de @powersync/cli-schemas, le même que `powersync link`
+#   écrit) et lance la CLI avec --directory sur cette copie. powersync/ du dépôt n'est jamais modifié.
+#   Sans les deux : dossier du dépôt, la CLI déduit, comme avant.
+# - T74 : si la CLI échoue, `powersync fetch instances` dit si le jeton est reconnu, quelles instances
+#   il voit, et si celle qu'on attend en fait partie (voir diagnostiquer_jeton).
 # - Règles refusées par PowerSync : sortie non nulle, le workflow passe au rouge.
 #
 # La CLI est figée dans scripts/powersync-cli/ : version exacte en devDependency et pnpm-lock.yaml
@@ -118,22 +127,81 @@ else
   echo "Règles de synchro : déploiement par la CLI PowerSync figée (deploy sync-config)."
 fi
 
-# `pnpm --dir … exec` lance la commande depuis scripts/powersync-cli : le dossier des règles est
-# donc donné en chemin absolu.
-# Avec l'organisation et le projet, la CLI saute l'appel qui les déduit de l'instance.
+# `pnpm --dir … exec` lance la commande depuis scripts/powersync-cli : les dossiers sont donc donnés
+# en chemin absolu.
 export PS_ADMIN_TOKEN="$jeton" INSTANCE_ID="$instance"
+
+# T74 : avec l'organisation et le projet, la CLI les lit dans le cli.yaml d'une copie temporaire de
+# powersync/ (jamais dans l'environnement). Le jeton n'y figure pas : il reste dans PS_ADMIN_TOKEN.
+dossier_cli="$racine/powersync"
+temporaire="$(mktemp -d)"
+trap 'rm -rf "$temporaire"' EXIT
 if [ -n "$organisation" ]; then
-  export ORG_ID="$organisation" PROJECT_ID="$projet"
+  copie="$temporaire/powersync"
+  cp -R "$racine/powersync" "$copie"
+  cat > "$copie/cli.yaml" <<CLI_YAML
+type: cloud
+instance_id: "$instance"
+org_id: "$organisation"
+project_id: "$projet"
+CLI_YAML
+  dossier_cli="$copie"
 fi
-if ! pnpm --dir scripts/powersync-cli exec powersync deploy sync-config --directory="$racine/powersync" "${options[@]}"; then
+
+# T74 : la CLI a échoué. `powersync fetch instances` (avec le même jeton) liste ce que le jeton voit ;
+# la CLI avale ses propres erreurs en avertissement « Failed to fetch cloud instances » et sort 0,
+# on lit donc aussi sa sortie. Rien de ce qu'elle affiche n'est repris tel quel : seulement le nombre
+# d'instances et leurs identifiants (non secrets), jamais le jeton.
+diagnostiquer_jeton() {
+  local liste="$temporaire/instances.json" sortie_cli code_fetch=0
+  echo "Diagnostic du jeton (powersync fetch instances) :" >&2
+  sortie_cli="$(NO_COLOR=1 pnpm --dir scripts/powersync-cli exec powersync fetch instances --output json --output-file="$liste" 2>&1)" || code_fetch=$?
+  if [ "$code_fetch" -ne 0 ] || [ ! -s "$liste" ] || [[ "$sortie_cli" == *"Failed to fetch cloud instances"* ]]; then
+    echo "  jeton refusé : recréez-le (PowerSync n'a pas listé les instances ; détail dans docs/mise-en-ligne.md, étape 3 bis)." >&2
+    return 0
+  fi
+  local resume
+  if ! resume="$(node -e '
+    const fs = require("node:fs");
+    const texte = fs.readFileSync(process.argv[1], "utf8").replace(/\u001b\[[0-9;]*m/g, "");
+    const lignes = [];
+    for (const org of Object.values(JSON.parse(texte).cloudInstances ?? {}))
+      for (const projet of Object.values(org.projects ?? {}))
+        for (const instance of projet.instances ?? [])
+          lignes.push([org.id, projet.id, instance.id]);
+    for (const [org, projet, instance] of lignes) console.log(`${org} ${projet} ${instance}`);
+  ' "$liste" 2>/dev/null)"; then
+    echo "  réponse de PowerSync illisible : relancez, ou voyez docs/mise-en-ligne.md (étape 3 bis)." >&2
+    return 0
+  fi
+  local nombre=0 visible=non org_vue projet_vu instance_vue
+  while read -r org_vue projet_vu instance_vue; do
+    [ -n "$instance_vue" ] || continue
+    nombre=$((nombre + 1))
+  done <<< "$resume"
+  echo "  jeton reconnu ; instances visibles : $nombre" >&2
+  while read -r org_vue projet_vu instance_vue; do
+    [ -n "$instance_vue" ] || continue
+    echo "    - organisation $org_vue, projet $projet_vu, instance $instance_vue" >&2
+    if [ "$instance_vue" = "$instance" ]; then visible=oui; fi
+  done <<< "$resume"
+  if [ "$visible" = oui ]; then
+    echo "  instance attendue : visible. Le jeton n'est pas en cause : relisez le message de la CLI plus haut et les identifiants POWERSYNC_ORG_ID et POWERSYNC_PROJECT_ID." >&2
+  else
+    echo "  instance attendue : absente. Conclusion : le jeton ne voit pas cette instance : recréez-le en étant connecté au compte et à l'organisation de l'instance." >&2
+  fi
+}
+
+if ! pnpm --dir scripts/powersync-cli exec powersync deploy sync-config --directory="$dossier_cli" "${options[@]}"; then
   {
     echo "La CLI PowerSync a échoué : voir son message juste au-dessus. Causes probables :"
     echo "  - règles refusées par PowerSync (rien n'est déployé) ;"
     echo "  - « Instance … was not found or is not accessible with the current token » : jeton créé sous une autre organisation que celle de l'instance, jeton révoqué ou expiré ;"
     echo "  - identifiants erronés : POWERSYNC_INSTANCE_ID (secret), POWERSYNC_ORG_ID et POWERSYNC_PROJECT_ID (variables), à relire dans l'adresse du tableau de bord ;"
     echo "  - PowerSync injoignable."
-    echo "Voir docs/mise-en-ligne.md (étape 3 bis)."
   } >&2
+  diagnostiquer_jeton
+  echo "Voir docs/mise-en-ligne.md (étape 3 bis)." >&2
   exit 1
 fi
 
