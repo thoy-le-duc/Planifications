@@ -1,4 +1,4 @@
--- T61 : bornes simples du tracé d'un chemin (table `chemin`, migration 0045), comme
+-- T61 : bornes simples du tracé d'un chemin (table `chemin`, migration 0046), comme
 -- contour_zone_valide (0025) pour les zones : tableau jsonb de 2 à 200 objets {x, y} numériques,
 -- à 5 000 m au plus de l'origine du plan, texte de 16 384 caractères au plus. Un chemin est une
 -- ligne ouverte : ni fermeture, ni auto-intersection, ni aire. Les points confondus et la
