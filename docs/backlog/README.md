@@ -164,7 +164,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 
 ## Phase 1 — Mise en ligne, usage réel, jumeau, phyto et fertilisation (octobre 2026)
 
-Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : T79 et T78 (suites de T76, phyto), puis T58, T61.
+Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : T79 (suites de T76, phyto ; y ajouter le refus d'une date future dans `ecrireLotTraitement`), puis T58.
 
 | Ticket | Sujet | Dépend de | Statut |
 | --- | --- | --- | --- |
@@ -194,7 +194,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T58](T58-etat-serres.md) | État des serres : ouvrants, chauffage, bâches, dans la 3D | T28c, T49 | à faire |
 | [T59](T59-deroule-saison-3d.md) | Jumeau 3D : dérouler la saison | T32, T27 | fait |
 | [T60](T60-consignes-par-ouvrier.md) | Consignes par ouvrier : chacun ses travaux du jour | T09, T37 | fait |
-| [T61](T61-chemins-outils.md) | Jumeau 3D : chemins, bâtiments et rangement des outils | T28, T60, T22 | à faire |
+| [T61](T61-chemins-outils.md) | Jumeau 3D : chemins, bâtiments et rangement des outils | T28, T60, T22 | fait |
 | [T62](T62-tests-temps-instables.md) | Tests de temps instables : défilement de Planches, Aujourd'hui grande ferme | T31, T19 | fait |
 | [T63](T63-export-leger-main-verte.md) | Main verte : le registre phyto de l'export rend la main au fil | T15b, T52 | fait |
 | [T64](T64-fait-perdu-avant-base.md) | Un « Fait » tapé avant que la base soit prête ne doit jamais se perdre | T13k, T13u, T62 | fait |
@@ -211,7 +211,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T75](T75-ephy-cultures-2026.md) | e-phy : correspondance espèce → culture sur les noms de 2026 | T53 | fait |
 | [T76](T76-ephy-dar-culture-traitee.md) | E-Phy : proposer le délai avant récolte selon la culture traitée, pas toutes les cultures de la ferme | T52, T53, T75 | fait |
 | [T77](T77-3d-prete-avec-plants.md) | Jumeau 3D : ne se dire « prête » qu'une fois les plants posés | T71 | fait |
-| [T78](T78-traitement-plusieurs-cultures.md) | Traitement : un même produit sur plusieurs cultures en une saisie | T52, T76 | à faire |
+| [T78](T78-traitement-plusieurs-cultures.md) | Traitement : un même produit sur plusieurs cultures en une saisie | T52, T76 | fait |
 | [T79](T79-ephy-saisie-suites.md) | Saisie d'un traitement : suites de la relecture de T76 | T76 | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
