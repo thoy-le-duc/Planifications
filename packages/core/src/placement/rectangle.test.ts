@@ -122,7 +122,7 @@ describe('T81 : rectangle englobant minimal', () => {
   });
 
   it('ne modifie pas son argument', () => {
-    const copie = structuredClone(TRAVERS_ANTIHORAIRE);
+    const copie = JSON.parse(JSON.stringify(TRAVERS_ANTIHORAIRE)) as unknown;
     rectangleEnglobantMinimal(TRAVERS_ANTIHORAIRE);
     expect(TRAVERS_ANTIHORAIRE).toEqual(copie);
   });
