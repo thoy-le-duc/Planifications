@@ -113,7 +113,15 @@ export interface Zone extends LigneDeFerme<'Zone'> {
    * rectangle du bâtiment).
    */
   readonly contour: readonly PointLocal[] | null;
+  /**
+   * T58 : équipements déclarés d'un abri (ouvrants, portes, chauffage, voile). Nulle ou absente
+   * (zones d'avant T58) : la liste par défaut de son type d'abri (`equipementsParDefaut`).
+   */
+  readonly equipementsAbri?: readonly EquipementAbri[] | null;
 }
+
+/** T58 : équipement d'un abri dont l'état se note au journal (événement `etat_abri`). */
+export type EquipementAbri = 'ouvrants_lateraux' | 'ouvrants_faitage' | 'portes' | 'chauffage' | 'voile';
 
 export type SorteEmplacement = 'planche' | 'rang' | 'gouttiere';
 
@@ -542,7 +550,7 @@ export type Assolement =
 // 5. Journal de terrain
 // ---------------------------------------------------------------------------------------------
 
-export type TypeEvenement = 'realise' | 'recolte' | 'intervention' | 'irrigation' | 'traitement' | 'observation';
+export type TypeEvenement = 'realise' | 'recolte' | 'intervention' | 'irrigation' | 'traitement' | 'observation' | 'etat_abri';
 
 export type SourceSaisie = 'tap' | 'voix' | 'agent' | 'photo' | 'import';
 
@@ -711,6 +719,18 @@ export interface DetailObservation {
   readonly gravite: 'faible' | 'moyenne' | 'forte' | null;
 }
 
+/**
+ * T58 : changement d'état d'un équipement d'abri (« ouvrants latéraux ouverts, 9 h »). Sans
+ * culture ni emplacement : la zone est dans le détail. L'état courant est le dernier événement en
+ * vigueur (`etatCourant`).
+ */
+export interface DetailEtatAbri {
+  readonly zoneId: Id<'Zone'>;
+  readonly equipement: EquipementAbri;
+  /** Vrai : ouverts, allumé, posé ; faux : fermés, éteint, retiré. */
+  readonly actif: boolean;
+}
+
 /** Toute saisie au champ ; le `type` choisit le détail. */
 export type Evenement =
   | (EvenementCommun & { readonly type: 'realise'; readonly detail: DetailRealise })
@@ -718,7 +738,8 @@ export type Evenement =
   | (EvenementCommun & { readonly type: 'intervention'; readonly detail: DetailIntervention })
   | (EvenementCommun & { readonly type: 'irrigation'; readonly detail: DetailIrrigation })
   | (EvenementCommun & { readonly type: 'traitement'; readonly detail: DetailTraitement })
-  | (EvenementCommun & { readonly type: 'observation'; readonly detail: DetailObservation });
+  | (EvenementCommun & { readonly type: 'observation'; readonly detail: DetailObservation })
+  | (EvenementCommun & { readonly type: 'etat_abri'; readonly detail: DetailEtatAbri });
 
 // ---------------------------------------------------------------------------------------------
 // 6. Stocks et registre phyto

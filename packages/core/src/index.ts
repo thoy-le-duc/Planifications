@@ -24,6 +24,8 @@ export * from './placement/index.ts';
 export * from './croissance/index.ts';
 // Vannes d'irrigation (T57) : lot, liens datés vanne ↔ emplacements, dernière irrigation.
 export * from './irrigation/index.ts';
+// État des serres (T58) : équipements d'un abri, état courant d'après le journal, rappel du soir.
+export * from './abris/index.ts';
 
 // Planification (T03), exposée pour la vue 2D (T11) : conflits de place et période effective
 // d'une occupation. Les écrans montrent ce que ce moteur trouve, sans réécrire de règle.
