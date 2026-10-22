@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-22 (soir) — T80 : le serveur refuse un traitement daté dans le futur
+
+- **Fait** : le serveur refuse un traitement phyto daté après son jour à Paris + 1 jour (le 22/10, le 23 passe, le 24 est refusé), avec « traitement daté dans le futur (24/10/2026) : corrigez la date », par le chemin des refus existant, sans bloquer les autres saisies de l'envoi. Correction et annulation suivent la même règle sur la date qu'elles portent. Les traitements déjà en base ne sont pas réécrits. Ticket critique : testeur séparé, relecture critique sans faille au premier passage. Avant T80, T58 (état des serres) a été fusionnée : sa CI rouge (budgets de temps et plan SQL de `annulation-chaine`) passait en local et est passée au vert à la relance, sans changement de code.
+- **Décidé** : le jour du serveur est injectable (`jourServeur`), en fuseau Europe/Paris. Un traitement futur déjà en base, renvoyé à l'identique par un téléphone, reste accepté sans rien écrire ; le même identifiant avec une autre date est refusé.
+- **Bloquant** : rien. À trancher avec Théophane : la même règle pour la récolte et le réalisé. Vercel sature (plus de 100 déploiements par jour, deux projets à chaque push de branche) : proposition faite à Théophane de ne déployer que `main`.
+
 ## 2026-10-22 (matin) — T79 : saisie d'un traitement, suites de la relecture de T76
 
 - **Fait** : la saisie d'un traitement dit « Chargement d'e-phy… » tant que le catalogue charge. « e-phy indisponible sur ce téléphone » n'apparaît qu'après un échec, avec un bouton « Réessayer » (jamais de nouvel essai automatique). Un AMM absent du catalogue reprend le DAR de la fiche, avec l'avis « AMM inconnu d'e-phy : vérifiez le DAR pour cette culture ». Un DAR tapé à la main est toujours gardé ; s'il diffère d'e-phy, un avis le dit sous le champ. `ecrireLotTraitement` refuse tout le lot si une date est dans le futur, illisible ou impossible : rien n'est écrit. PR #246, ticket critique (testeur séparé, trois passages de relecture jusqu'à zéro faille).
