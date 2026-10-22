@@ -499,6 +499,8 @@ function equipementsLus(brut: unknown): readonly EquipementAbri[] | null {
 }
 
 /** Cinq cases, pré-cochées selon la liste en vigueur ; un tap = une écriture, annulable. Pas pour le plein champ. */
+const cleDe = (l: { readonly liste: readonly EquipementAbri[]; readonly nulle: boolean }): string => `${l.nulle ? 'defaut' : 'liste'}:${l.liste.join(',')}`;
+
 function SectionEquipements({ ctx, zone, surEnregistre }: { readonly ctx: ContexteParcellaire; readonly zone: ZoneLue; readonly surEnregistre: (e: Enregistrement | null) => void }) {
   const typeAbri = TYPES_ABRI.find((t) => t === zone.typeAbri) ?? 'plein_champ';
   const depuisBase = { liste: equipementsDeZone({ typeAbri, equipementsAbri: zone.equipementsAbri }), nulle: zone.equipementsAbri === null };
@@ -512,8 +514,11 @@ function SectionEquipements({ ctx, zone, surEnregistre }: { readonly ctx: Contex
   });
   const chaine = useRef<Promise<void>>(Promise.resolve());
   const enVol = useRef(0);
+  // Base d'avant la première écriture de la file, et échec dans la file : décident de ce qu'on affiche à la fin.
+  const avantFile = useRef('');
+  const echecFile = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
-  const cle = `${depuisBase.nulle ? 'defaut' : 'liste'}:${depuisBase.liste.join(',')}`;
+  const cle = cleDe(depuisBase);
   useEffect(() => {
     // La base fait foi dès qu'aucune écriture n'est en cours.
     if (enVol.current === 0) {
@@ -528,6 +533,10 @@ function SectionEquipements({ ctx, zone, surEnregistre }: { readonly ctx: Contex
     courante.current = suivant;
     setLocal(suivant);
     setMessage(null);
+    if (enVol.current === 0) {
+      avantFile.current = cleDe(baseRecente.current);
+      echecFile.current = false;
+    }
     enVol.current++;
     chaine.current = chaine.current
       .then(async () => {
@@ -536,11 +545,13 @@ function SectionEquipements({ ctx, zone, surEnregistre }: { readonly ctx: Contex
       .catch((e: unknown) => {
         console.error('Équipements non enregistrés', e);
         setMessage(messageEchec(e));
+        echecFile.current = true;
       })
       .finally(() => {
         enVol.current--;
-        // File vide : la base fait foi (elle contient les écritures réussies et les changements venus d'ailleurs).
-        if (enVol.current === 0) {
+        // File vide. Sans échec et base pas encore relue (inchangée) : on garde l'état local, sans clignotement.
+        // Sinon la base fait foi (écritures réussies relues, changement venu d'un autre appareil, ou échec).
+        if (enVol.current === 0 && (echecFile.current || cleDe(baseRecente.current) !== avantFile.current)) {
           courante.current = baseRecente.current;
           setLocal(baseRecente.current);
         }
