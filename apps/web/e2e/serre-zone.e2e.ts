@@ -56,7 +56,7 @@ const zoneTunnel = (page: Page) => page.locator(`[data-testid="${TC.zoneChoix}"]
 const boutonEnregistrer = (page: Page) => page.getByRole('button', { name: 'Enregistrer', exact: true });
 
 async function amorcerEtOuvrir(page: Page): Promise<void> {
-  await page.goto('/diagnostic/amorcer.html?jeu=placement');
+  await page.goto('/diagnostic/amorcer.html?jeu=placement&tunnel=1');
   await expect(page).toHaveTitle('Amorçage de la base locale (tests)');
   const poignee = await page.waitForFunction(() => (window as unknown as { __amorcage?: unknown }).__amorcage, undefined, { timeout: DELAI_AMORCAGE_MS });
   const a = (await poignee.jsonValue()) as { erreur?: string; fermeId?: string };

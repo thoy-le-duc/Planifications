@@ -49,7 +49,7 @@ interface Options {
 
 async function creerBanc(o: Options): Promise<Banc> {
   const base = creerBaseMemoire(SCHEMA_LOCAL);
-  await ecrireFermePlacement(base, { origine: o.origine ?? true, ...(o.role === undefined ? {} : { role: o.role }) });
+  await ecrireFermePlacement(base, { origine: o.origine ?? true, zoneTunnel: true, ...(o.role === undefined ? {} : { role: o.role }) });
   o.avant?.(base);
   const reelle = creerPorte(base, { utilisateurId: UTILISATEUR as Id<'Utilisateur'>, fermeId: FERME as Id<'Ferme'>, maintenant: () => MAINTENANT });
   const placements: (readonly ChangementPlacement[])[] = [];
