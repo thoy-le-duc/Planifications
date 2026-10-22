@@ -485,7 +485,7 @@ function Batiments({ scene, couleurs = null }: { readonly scene: Scene; readonly
   // T58 : filtre « Serres » allumé : bâches teintées par instance (matériau blanc), plus opaques ;
   // la clé change avec lui, pour que l'éteindre rende des maillages sans teinte.
   const teinte = couleurs === null ? '' : 's';
-  const couleurBacheRendue = couleurs === null ? couleurBache : '#ffffff';
+  const couleurBacheRendue = couleurs === null ? couleurBache : COULEURS_SERRES_3D.texte;
   const opaciteRendue = couleurs === null ? opacite : Math.max(opacite, 0.55);
 
   return (

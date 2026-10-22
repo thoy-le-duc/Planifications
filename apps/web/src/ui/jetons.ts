@@ -375,7 +375,8 @@ export const COULEURS_REPERE_VANNE = { fond: '#1F6FB2', texte: '#FFFFFF' } as co
 /**
  * Vue 3D (T58) : filtre « Serres » et repères des abris. Ouverte : orange vif, ce qui reste à
  * fermer le soir ; fermée : vert calme. Ouvrants relevés et porte ouverte dessinés en orange vif ;
- * pastille du chauffage en rouge braise, du voile en blanc cassé. Une seule valeur pour les deux
+ * pastille du chauffage en rouge braise, du voile en blanc cassé. `texte` (blanc) sert aussi de
+ * teinte neutre aux bâches quand le filtre « Serres » les colore une à une. Une seule valeur pour les deux
  * thèmes, comme la scène.
  */
 export const COULEURS_SERRES_3D = { ouverte: '#F2542D', fermee: '#4F8A62', texte: '#FFFFFF', chauffage: '#C62828', voile: '#F4F1E6' } as const;
