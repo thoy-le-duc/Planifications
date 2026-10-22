@@ -52,6 +52,8 @@
  * - T52 : les produits phyto de la ferme (phyto.ts) se créent et se modifient (archivage = suppression
  *   douce), tout ou rien avec le reste du lot ; la bibliothèque commune reste en lecture seule.
  *   Contrat : phyto.integration.test.ts.
+ * - T80 : un traitement daté après le jour du serveur à Paris + 1 jour est refusé
+ *   (traitement-date.ts). Contrat : traitement-date-future.integration.test.ts.
  * - T56 : les recettes de fertirrigation de la ferme (fertirrigation.ts), de même ; chaque engrais
  *   est un produit fertilisant de la ferme. Contrat : fertirrigation.integration.test.ts.
  * - T58 : un changement d'état de serre (événement etat_abri) vise une zone de la ferme qui déclare
@@ -89,6 +91,7 @@ import { ligneDeJournal } from '../journal.ts';
 import { enregistrerEnvoiSynchro } from './debit.ts';
 import { verifierEtatAbri } from './etat-abri.ts';
 import { validerEvenement } from './evenement.ts';
+import { refusTraitementFutur } from './traitement-date.ts';
 import { messageRefus, refusDuCoeur } from './messages.ts';
 import type { MotifRefus, Refus } from './motifs.ts';
 import { archiverRefus, TABLE_REFUS } from './archiver-refus.ts';
@@ -401,6 +404,10 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     index: number,
   ): Promise<Refus | null> {
     const maintenant = ctx.maintenant();
+    // T80 : traitement daté après le jour du serveur + 1 (correction et annulation comprises). Un
+    // renvoi identique d'un traitement déjà en base reste accepté sans rien écrire (règle 4).
+    const refusFutur = refusTraitementFutur(l, ctx.jourServeur());
+    if (refusFutur !== null) return (await identique(tx, l)) ? null : refusFutur;
     const refusReference =
       (await verifierReferences(tx, l)) ?? (await verifierCorrection(tx, l)) ?? (await verifierRemplacementRecolte(tx, l)) ?? (await verifierEtatAbri(tx, l));
     if (refusReference !== null) return { ...refusReference, fermeId: l.fermeId };
