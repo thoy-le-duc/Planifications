@@ -404,3 +404,54 @@ describe('T79 suites : Réessayer, accessibilité et saisie du maraîcher', () =
     expect((JSON.parse(nouveaux()[0]?.detail ?? '{}') as { recolteAutoriseeLe: string }).recolteAutoriseeLe).toBe('2026-10-09');
   });
 });
+
+describe('T79 suites 2 : focus après un réessai réussi, avis « e-phy propose » silencieux', () => {
+  async function echecPuisReessai(saisie: string | null): Promise<HTMLElement> {
+    let appels = 0;
+    const charger = () => (++appels === 1 ? Promise.reject<CatalogueEphy>(new Error('hors ligne')) : Promise.resolve(CATALOGUE));
+    const d = await ouvrir(CAMPAGNE.fraise, charger);
+    await remplir(liste('Produit', d), FRAISIOR);
+    await attendre(() => boutonReessayer() !== null, 'bouton Réessayer');
+    if (saisie !== null) await remplir(champ(DAR, d), saisie);
+    await toucher(reessayer());
+    await attendre(() => appels === 2 && !/indisponible|chargement/i.test(avis()), 'second chargement réussi');
+    return d;
+  }
+  const vivante = (e: Element | null): boolean => {
+    for (let n = e; n !== null; n = n.parentElement) {
+      const role = n.getAttribute('role');
+      if (role === 'status' || role === 'alert' || role === 'log' || (n.hasAttribute('aria-live') && n.getAttribute('aria-live') !== 'off')) return true;
+    }
+    return false;
+  };
+  const propose = (): Element | null => [...document.querySelectorAll('p, div, span')].reverse().find((e) => /e-phy propose/i.test(e.textContent) && e.children.length === 0) ?? null;
+
+  it('Réessayer réussit (AMM au catalogue, avis disparu) : le focus reste dans le dialogue, sur le champ « Délai avant récolte »', async () => {
+    const d = await echecPuisReessai(null);
+    expect(document.querySelector('[data-testid="avertissement-ephy"]')).toBeNull();
+    const actif = document.activeElement;
+    expect(actif).not.toBe(document.body);
+    expect(d.contains(actif)).toBe(true);
+    expect(actif).toBe(champ(DAR, d));
+  });
+
+  it('« e-phy propose 1 j » n’est ni role="status" ni dans une région live, ni à l’affichage ni après une frappe', async () => {
+    const d = await echecPuisReessai('9');
+    await attendre(() => propose() !== null, 'avis « e-phy propose »');
+    expect(vivante(propose())).toBe(false);
+    await remplir(champ(DAR, d), '95');
+    expect(vivante(propose())).toBe(false);
+  });
+
+  it('taper « 01 » quand e-phy propose 1 j : pas d’avis « e-phy propose »', async () => {
+    await echecPuisReessai('01');
+    expect(texte(document.body)).not.toMatch(/e-phy propose/i);
+  });
+
+  it('garde : taper 9 quand e-phy propose 1 j affiche l’avis ; retaper 1 le retire', async () => {
+    const d = await echecPuisReessai('9');
+    await attendre(() => propose() !== null, 'avis « e-phy propose »');
+    await remplir(champ(DAR, d), '1');
+    expect(texte(document.body)).not.toMatch(/e-phy propose/i);
+  });
+});
