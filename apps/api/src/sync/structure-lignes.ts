@@ -33,6 +33,7 @@ import {
   PLAFONDS_VANNES,
   TYPES_BATIMENT,
   validerContour,
+  validerEquipementsAbri,
   validerPlacement,
   validerPositionVanne,
   validerProfilCroissance,
@@ -72,6 +73,9 @@ export const estTableStructure = (table: string): table is TableEcrite => TABLES
  */
 export const CONTOUR_CARACTERES_MAX = 16_384;
 
+/** T58 : longueur au plus de la liste d'équipements reçue (les cinq noms tiennent en 80 caractères). */
+const EQUIPEMENTS_CARACTERES_MAX = 400;
+
 /** Colonnes du placement réel (T28a, Q31) : les écrire est réservé au gérant (T28s). */
 export const COLONNES_PLACEMENT_EMPLACEMENT = ['placement_x_m', 'placement_y_m', 'orientation_deg'] as const;
 /** T57 : position d'une vanne sur le plan (repère de la ferme) : un placement, réservé au gérant. */
@@ -79,7 +83,9 @@ export const COLONNES_PLACEMENT_VANNE = ['placement_x_m', 'placement_y_m'] as co
 
 /** Colonnes écrites (sans cree_le ni modifie_le, remplies par le serveur). */
 export const COLONNES_STRUCTURE: Readonly<Record<TableEcrite, readonly string[]>> = {
-  zone: ['id', 'ferme_id', 'nom', 'zone_parente_id', 'type_abri', 'surface_m2', 'contour', 'supprime_le'],
+  // T58 : equipements_abri, liste d'équipements de l'abri ; un téléphone d'avant T58 ne l'envoie pas
+  // (PUT : nulle, défaut du type d'abri ; PATCH : la valeur en base est gardée).
+  zone: ['id', 'ferme_id', 'nom', 'zone_parente_id', 'type_abri', 'surface_m2', 'contour', 'equipements_abri', 'supprime_le'],
   emplacement: [
     'id',
     'ferme_id',
@@ -315,7 +321,21 @@ function lecteurs(l: Ligne) {
     return r.valeur;
   }
 
-  return { id, texte, choix, positif, entier, booleen, date, instant, identifiants, contour, profilCroissance };
+  /**
+   * T58 : équipements d'un abri, texte JSON (PowerSync ; la ligne existante d'une modification y
+   * est remise par structure.ts) d'au plus EQUIPEMENTS_CARACTERES_MAX caractères, ou nul (liste
+   * par défaut du type d'abri). La règle est celle du cœur (validerEquipementsAbri).
+   */
+  function equipementsAbri(c: string): unknown {
+    const v = brut(c);
+    if (absent(v)) return null;
+    if (typeof v !== 'string') return arreter('champ_invalide', c, `${c} : texte attendu`);
+    if (v.length > EQUIPEMENTS_CARACTERES_MAX) return arreter('trop_volumineux', c, `${c} trop volumineux`);
+    const r = validerEquipementsAbri(v);
+    return r.ok ? r.valeur : arreter('champ_invalide', c, r.message);
+  }
+
+  return { id, texte, choix, positif, entier, booleen, date, instant, identifiants, contour, profilCroissance, equipementsAbri };
 }
 
 type Lecteurs = ReturnType<typeof lecteurs>;
@@ -344,6 +364,7 @@ const LIRE: Readonly<Record<TableEcrite, (lire: Lecteurs, id: string, entree: Li
       surface_m2: lire.positif('surface_m2', false, PLAFONDS_STRUCTURE.surfaceM2),
       // T28s : la règle « zone abritée sans contour » demande la base (structure.ts).
       contour: lire.contour('contour'),
+      equipements_abri: lire.equipementsAbri('equipements_abri'),
     };
   },
   emplacement: (lire, id, entree) => {

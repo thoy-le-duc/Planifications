@@ -136,7 +136,7 @@ function refusDeLigne(v: Extract<ResultatStructure, { ok: false }>, fermeId: str
 }
 
 /** Colonnes jsonb écrites par le téléphone en texte JSON : la valeur existante y est remise sous cette forme. */
-const COLONNES_TEXTE_JSON: ReadonlySet<string> = new Set(['contour', 'profil_croissance']);
+const COLONNES_TEXTE_JSON: ReadonlySet<string> = new Set(['contour', 'profil_croissance', 'equipements_abri']);
 
 /** Deux valeurs de placement (nombres, contours) égales, quelle que soit leur provenance (reçue, ou to_jsonb de Postgres). */
 const memeValeur = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
