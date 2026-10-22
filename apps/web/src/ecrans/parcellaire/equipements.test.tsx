@@ -286,6 +286,44 @@ describe('T82 : équipements d’une serre', () => {
     expect(cochees(dialogueOuEchec('Serre A'))).toEqual([...NOMS]);
   });
 
+  it('le watcher ne repasse qu’après la fin de la file : la case décochée ne se recoche jamais entre-temps (pas de clignotement)', async () => {
+    let retenir = false;
+    const retenus: (() => void)[] = [];
+    const porte: PorteDonnees = {
+      ...b.porte,
+      surveiller: ((requete, rappel) =>
+        b.porte.surveiller(requete, (valeurs) => {
+          if (retenir) retenus.push(() => { rappel(valeurs); });
+          else rappel(valeurs);
+        })),
+    };
+    await ouvrir({ porte });
+    const tunnel = await creerZone('Tunnel 1', 'tunnel');
+    const d = await ouvrirZone('Tunnel 1');
+    retenir = true;
+    const vus: boolean[] = [];
+    const observateur = new MutationObserver(() => {
+      vus.push(caseDe(d, 'voile ou filet').checked);
+    });
+    observateur.observe(d, { attributes: true, childList: true, subtree: true });
+    await toucher(caseDe(d, 'voile ou filet'));
+    await attendre(() => equipementsDe(tunnel) !== null, 'écriture faite');
+    await toucher(d);
+    await toucher(d);
+    expect(caseDe(d, 'voile ou filet').checked, 'décochée après la file, base pas encore relue').toBe(false);
+    retenir = false;
+    await act(async () => {
+      retenus.splice(0).forEach((f) => {
+        f();
+      });
+      await Promise.resolve();
+    });
+    await toucher(d);
+    observateur.disconnect();
+    expect(caseDe(d, 'voile ou filet').checked).toBe(false);
+    expect(vus.includes(true), 'jamais recochée entre-temps').toBe(false);
+  });
+
   it('zone de plein champ : pas de section Équipements ; elle apparaît quand on passe la zone en tunnel', async () => {
     await ouvrir();
     await creerZone('Îlot', 'plein_champ');
