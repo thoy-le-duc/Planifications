@@ -45,6 +45,24 @@ export interface DependancesApp {
    * (`ligneDeJournal`, journal.ts).
    */
   readonly journal?: (ligne: string) => void;
+  /**
+   * Jour courant du serveur à Paris, en chaîne `AAAA-MM-JJ` (T80 : un traitement daté après ce
+   * jour + 1 est refusé). Par défaut, le jour de `maintenant()` dans le fuseau Europe/Paris
+   * (`jourAParis`). Injecté par les tests, jamais lu sur l'horloge réelle.
+   */
+  readonly jourServeur?: () => string;
+}
+
+/** Fuseau du jour du serveur (T80) : celui des fermes françaises. */
+const FUSEAU_SERVEUR = 'Europe/Paris';
+
+const formatJourParis = new Intl.DateTimeFormat('en-CA', { timeZone: FUSEAU_SERVEUR, year: 'numeric', month: '2-digit', day: '2-digit' });
+
+/** Jour calendaire `AAAA-MM-JJ` de l'instant `d` à Paris (heure d'été comprise). */
+export function jourAParis(d: Date): string {
+  const parties = formatJourParis.formatToParts(d);
+  const partie = (type: Intl.DateTimeFormatPartTypes): string => parties.find((p) => p.type === type)?.value ?? '';
+  return `${partie('year')}-${partie('month')}-${partie('day')}`;
 }
 
 /** Sortie par défaut du journal du serveur : la sortie d'erreur du processus. */
@@ -72,6 +90,7 @@ export function completer(deps: DependancesApp): Contexte {
     corsOrigines: deps.corsOrigines ?? [],
     proxyDeConfiance: deps.proxyDeConfiance ?? false,
     envoisMaxParMinute: deps.envoisMaxParMinute ?? ENVOIS_MAX_PAR_MINUTE,
+    jourServeur: deps.jourServeur ?? (() => jourAParis(maintenant())),
     // Toute entrée, quelle que soit la route, passe par le même nettoyage ; un journal en panne
     // ne change jamais la réponse.
     journal: journalSur(sortie),
