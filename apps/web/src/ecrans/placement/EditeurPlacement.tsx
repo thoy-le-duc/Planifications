@@ -690,6 +690,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           : modifie
             ? null
             : MESSAGES_ETAPES.rienAEnregistrer;
+  /** « Nouveau bâtiment » et « Tracer un chemin » attendent l'origine, et la fin d'une pose ou d'un tracé. */
+  const nouveauBloque = origine === null || pose !== null || trace !== null;
   const raisonNouveau = origine === null ? MESSAGES_ETAPES.sansOrigine : pose !== null ? MESSAGES_ETAPES.poseEnCours : MESSAGES_ETAPES.traceEnCours;
   const peutEnregistrer = raisonEnregistrer === null;
 
@@ -1334,15 +1336,15 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       <button
         type="button"
         className="pl-bouton"
-        disabled={origine === null || pose !== null || trace !== null}
-        aria-describedby={origine === null || pose !== null || trace !== null ? idRaisonNouveau : undefined}
+        disabled={nouveauBloque}
+        aria-describedby={nouveauBloque ? idRaisonNouveau : undefined}
         onClick={() => {
           setFormulaire(true);
         }}
       >
         Nouveau bâtiment
       </button>
-      {(origine === null || pose !== null || trace !== null) && (
+      {nouveauBloque && (
         <p id={idRaisonNouveau} className="pl-aide">
           {raisonNouveau}
         </p>
@@ -1351,8 +1353,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
         <button
           type="button"
           className="pl-bouton"
-          disabled={origine === null || pose !== null || trace !== null || chemin !== null}
-          aria-describedby={origine === null || pose !== null || trace !== null ? idRaisonNouveau : undefined}
+          disabled={nouveauBloque || chemin !== null}
+          aria-describedby={nouveauBloque ? idRaisonNouveau : undefined}
           onClick={() => {
             const id = nouvelId?.() ?? identifiantNeuf();
             void import('./chemins.tsx').then((m) => {
@@ -1554,7 +1556,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 </svg>
               )}
               {pret && (
-                <svg className="pl-svg" width={taille.w} height={taille.h} role="group" aria-label="Chemins">
+                <svg className="pl-svg" width={taille.w} height={taille.h}>
                   {lusC.map((c) => (
                     <polyline key={c.id} role="img" data-testid="chemin" data-id={c.id} data-points={c.points.length} data-largeur={c.largeurM} aria-label={c.nom ?? 'Chemin'} className="pl-chemin" strokeWidth={Math.max(2, c.largeurM / mpp)} points={enPoints(c.points)} />
                   ))}

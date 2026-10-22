@@ -85,7 +85,16 @@ function refus<T>(code: CodeErreurPlacement, champ: string | null, message: stri
 }
 
 const estNombre = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const tropLoin = (x: number, y: number): boolean => x * x + y * y > DISTANCE_MAX_ORIGINE_M * DISTANCE_MAX_ORIGINE_M;
+/**
+ * (x, y) à plus de 5 km de l'origine. Relecture T61 : la base compare en numeric EXACT
+ * (x² + y² ≤ 25 000 000), les flottants arrondissent (un millionième de m² près de la borne).
+ * Petite marge : à moins de 10⁻⁶ m² sous la borne, seules des coordonnées entières (calcul exact
+ * en flottants jusqu'à 5 km) sont acceptées ; un point juste au-delà est refusé ici, jamais par la base.
+ */
+export function tropLoin(x: number, y: number): boolean {
+  const d = x * x + y * y - DISTANCE_MAX_ORIGINE_M * DISTANCE_MAX_ORIGINE_M;
+  return d > 0 || (d > -1e-6 && (x % 1 !== 0 || y % 1 !== 0));
+}
 const orientationValide = (v: unknown): v is number => estNombre(v) && v >= 0 && v < 360;
 
 // ── Contour ──────────────────────────────────────────────────────────────────────────────────

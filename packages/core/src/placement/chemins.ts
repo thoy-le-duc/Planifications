@@ -7,7 +7,7 @@
  * Pures, sans exception quelle que soit l'entrée ; messages en français.
  */
 import type { PointLocal } from '../domaine/entites.ts';
-import { DISTANCE_MAX_ORIGINE_M, type CodeErreurPlacement, type ResultatPlacement } from './validation.ts';
+import { tropLoin, type CodeErreurPlacement, type ResultatPlacement } from './validation.ts';
 
 export const CHEMIN_POINTS_MIN = 2;
 export const CHEMIN_POINTS_MAX = 200;
@@ -49,7 +49,6 @@ function refus<T>(code: CodeErreurPlacement, champ: string | null, message: stri
 }
 
 const estNombre = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const tropLoin = (x: number, y: number): boolean => x * x + y * y > DISTANCE_MAX_ORIGINE_M * DISTANCE_MAX_ORIGINE_M;
 const estObjet = (v: unknown): v is Readonly<Record<string, unknown>> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Texte non vide après trim, `max` caractères au plus : le texte sans espaces autour, ou null. */
