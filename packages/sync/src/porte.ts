@@ -3,7 +3,7 @@
  * locale. Aucun réseau ici : une écriture change l'écran tout de suite, et part dans la file
  * d'envoi de PowerSync (voir envoi.ts) au retour du réseau.
  */
-import { creerGenerateurId, ECRITURES_MAX_PAR_LOT, TAILLE_MAX_PAR_LOT, type Id } from '@planif/core';
+import { creerGenerateurId, ECRITURES_MAX_PAR_LOT, TAILLE_MAX_PAR_LOT, validerSaisie, type Id } from '@planif/core';
 import type {
   BaseLocale,
   ChangementPlacement,
@@ -339,6 +339,12 @@ export function creerPorte(base: BaseLocale, options: OptionsPorte): PorteDonnee
       remplace_evenement_id: saisie.remplaceEvenement?.evenementId ?? null,
       detail: JSON.stringify(saisie.detail),
     };
+    // T58 : un changement d'état de serre (un tap, sans écran de confirmation) passe les règles du
+    // cœur avant d'entrer dans le journal : un détail faux ne part jamais dans la file d'envoi.
+    if (ligne.type === 'etat_abri') {
+      const r = validerSaisie(ligne);
+      if (!r.ok) throw new Error(`état de serre refusé : ${r.erreur.message}`);
+    }
     const ordre: OrdreEcriture = { sql: SQL_SAISIE, parametres: COLONNES_EVENEMENT.map((c) => ligne[c]) };
     // T13j : vérification « déjà fait » d'un « Fait » (réalisé nouveau sur une culture,
     // intervention nouvelle qui solde un travail prévu), selon la règle unique de faitDeLigne.

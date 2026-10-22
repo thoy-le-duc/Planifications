@@ -53,7 +53,8 @@ export const TABLES_LOCALES = {
   type_intervention: { ferme_id: T, categorie: T, libelle: T, masque: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
   utilisateur: { nom: T, cree_le: T, modifie_le: T, supprime_le: T },
   variete: { ferme_id: T, espece_id: T, nom: T, fournisseur: T, poids_mille_graines_g: 'reel', taux_germination: 'entier', cree_le: T, modifie_le: T, supprime_le: T },
-  zone: { ferme_id: T, nom: T, zone_parente_id: T, type_abri: T, surface_m2: 'reel', contour: T, cree_le: T, modifie_le: T, supprime_le: T },
+  // T58 : equipements_abri, liste JSON d'équipements (jsonb) ; nulle = défaut du type d'abri.
+  zone: { ferme_id: T, nom: T, zone_parente_id: T, type_abri: T, surface_m2: 'reel', contour: T, equipements_abri: T, cree_le: T, modifie_le: T, supprime_le: T },
 } as const satisfies Readonly<Record<string, Readonly<Record<string, TypeLocal>>>>;
 
 export type NomTableLocale = keyof typeof TABLES_LOCALES;
