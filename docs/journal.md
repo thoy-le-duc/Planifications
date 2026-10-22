@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-22 (soir) — T82 : modifier les équipements d'une serre
+
+- **Fait** : la fiche d'une zone abritée (Parcellaire) a une section « Équipements » avec cinq cases (ouvrants latéraux, ouvrants de faîtage, portes, chauffage, voile ou filet), pré-cochées selon la liste en vigueur. Un tap écrit tout de suite, avec « Annuler ». « Revenir aux équipements par défaut » remet la colonne à nulle. Une zone de plein champ n'a pas cette section. Un équipement décoché disparaît du panneau Serres, de la 3D et du rappel. Les événements passés restent.
+- **Décidé** : plusieurs taps rapides s'enchaînent dans une file. Aucun ne se perd, et chaque « Annuler » garde la bonne valeur d'avant. L'affichage ne clignote pas en attendant la relecture de la base. Après un échec, il revient à la base la plus récente. Ces trois défauts ont été trouvés en relecture et corrigés dans la PR, avec leurs tests.
+- **Bloquant** : rien. Limites connues : un « Annuler » tapé pendant une écriture de la file n'est pas mis en file (cas rare). Une zone repassée en plein champ garde sa liste personnalisée en base, sans effet visible.
+
 ## 2026-10-22 (soir) — T80 : le serveur refuse un traitement daté dans le futur
 
 - **Fait** : le serveur refuse un traitement phyto daté après son jour à Paris + 1 jour (le 22/10, le 23 passe, le 24 est refusé), avec « traitement daté dans le futur (24/10/2026) : corrigez la date », par le chemin des refus existant, sans bloquer les autres saisies de l'envoi. Correction et annulation suivent la même règle sur la date qu'elles portent. Les traitements déjà en base ne sont pas réécrits. Ticket critique : testeur séparé, relecture critique sans faille au premier passage. Avant T80, T58 (état des serres) a été fusionnée : sa CI rouge (budgets de temps et plan SQL de `annulation-chaine`) passait en local et est passée au vert à la relance, sans changement de code.

@@ -11,8 +11,9 @@
  * défait par une suppression douce, une modification ou une suppression en remettant les valeurs
  * d'avant, en une transaction, avec les mêmes vérifications.
  */
-import { creerGenerateurId } from '@planif/core';
+import { creerGenerateurId, type EquipementAbri } from '@planif/core';
 import type { OrdreEcriture, PorteDonnees, VerificationEcriture } from '@planif/sync';
+import { validerEquipementsAbri } from '@planif/core/abris';
 import { ordreInsertion } from '@planif/sync/import';
 import { cleCode, type EmplacementVerifie, type LotVerifie, type SaisieSaison, type SaisieZone } from './regles.ts';
 
@@ -342,6 +343,26 @@ export async function modifierZone(ctx: ContexteParcellaire, id: string, z: Sais
   const anciennes = Object.fromEntries(Object.keys(valeurs).map((c) => [c, avant[c] ?? null]));
   const parente = typeof avant.zone_parente_id === 'string' ? avant.zone_parente_id : null;
   return { texte: `Zone ${z.nom} modifiée`, annuler: remettre(ctx, 'zone', id, anciennes, (lire) => verifierParente(lire, ctx.fermeId, id, parente)) };
+}
+
+/**
+ * T82 : liste des équipements d'une zone abritée ; `null` revient à la liste par défaut de son type
+ * d'abri (colonne nulle). Texte JSON en ordre canonique, comme le serveur l'attend (T58). Ne touche
+ * pas au journal : les changements d'état passés restent. « Annuler » remet la valeur d'avant.
+ */
+export async function modifierEquipements(ctx: ContexteParcellaire, id: string, liste: readonly EquipementAbri[] | null): Promise<Enregistrement | null> {
+  const avant = await lireLigne(ctx, 'zone', id);
+  let valeur: string | null = null;
+  if (liste !== null) {
+    const v = validerEquipementsAbri(liste);
+    if (!v.ok) throw new EcritureRefusee(v.message);
+    valeur = JSON.stringify(v.valeur);
+  }
+  const valeurs = changees(avant, { equipements_abri: valeur });
+  if (Object.keys(valeurs).length === 0) return null;
+  await ctx.porte.ecrireEnsemble([miseAJour('zone', id, valeurs, ctx.maintenant().toISOString())]);
+  const ancienne = avant.equipements_abri ?? null;
+  return { texte: `Équipements de ${String(avant.nom)} modifiés`, annuler: remettre(ctx, 'zone', id, { equipements_abri: ancienne }) };
 }
 
 export async function supprimerZone(ctx: ContexteParcellaire, id: string): Promise<Enregistrement> {

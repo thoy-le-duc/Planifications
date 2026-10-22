@@ -409,3 +409,31 @@
   font-size: 22px;
   font-weight: 800;
 }
+
+/* T82 : cases des équipements d'une serre, assez grandes pour des gants. */
+.parc-equipements {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.parc-equipement {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 4px 14px;
+  border: 2px solid var(--couleur-trait);
+  border-radius: 12px;
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font-size: 1.05rem;
+}
+
+.parc-equipement input {
+  width: 56px;
+  height: 56px;
+  margin: 0;
+  flex: none;
+  accent-color: var(--couleur-foret);
+}
