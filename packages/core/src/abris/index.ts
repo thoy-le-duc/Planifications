@@ -169,7 +169,7 @@ interface Chaine {
   correction: EvenementEtatAbri | null;
   /** Maillon sans `remplace_sorte` mais rattaché (données anciennes) : l'origine de la chaîne. */
   origine: EvenementEtatAbri | null;
-  /** Heure du premier maillon connu, quand l'original manque au journal. */
+  /** Quand l'original manque au journal : le plus ancien horodatage des maillons présents. */
   depuis: string | null;
 }
 
@@ -182,7 +182,9 @@ type IndexEtats = Map<string, (EtatEquipement | undefined)[]>;
  * la correction la plus récente (heure, puis id) l'emporte, un cycle n'a rien en vigueur. Seuls les
  * maillons rattachés (corrections, annulations) remontent leur chaîne ; chaque événement en
  * vigueur vaut à l'heure de l'original de sa chaîne (une correction prend la place de l'événement
- * qu'elle corrige) et le dernier dont l'heure est passée l'emporte, par zone et par équipement.
+ * qu'elle corrige ; original absent : le plus ancien maillon présent) et la chaîne la plus récente
+ * dont l'heure est passée l'emporte, par zone et par équipement ; à heure égale, le plus grand id
+ * d'original (arbitrage du chef, contre-relecture).
  */
 function indexDesEtats(evenements: readonly EvenementEtatAbri[], instant: string): IndexEtats {
   const parId = new Map<string, EvenementEtatAbri>();
@@ -203,7 +205,6 @@ function indexDesEtats(evenements: readonly EvenementEtatAbri[], instant: string
     const chemin: EvenementEtatAbri[] = [];
     let courant = e;
     let tete: EvenementEtatAbri | string | null | undefined;
-    let haut: EvenementEtatAbri = e;
     for (;;) {
       tete = tetes.get(courant);
       if (tete !== undefined) break;
@@ -212,7 +213,6 @@ function indexDesEtats(evenements: readonly EvenementEtatAbri[], instant: string
         break;
       }
       chemin.push(courant);
-      haut = courant;
       if (courant.remplaceEvenementId === null) {
         tete = courant;
         break;
@@ -231,7 +231,7 @@ function indexDesEtats(evenements: readonly EvenementEtatAbri[], instant: string
       c = { annulee: false, correction: null, origine: null, depuis: null };
       chaines.set(tete, c);
     }
-    if (typeof tete === 'string' && haut.remplaceEvenementId !== null && trouver(haut.remplaceEvenementId) === undefined) c.depuis = haut.horodatage;
+    if (typeof tete === 'string' && (c.depuis === null || comparerInstants(e.horodatage, c.depuis) < 0)) c.depuis = e.horodatage;
     if (e.remplaceSorte === 'annulation') c.annulee = true;
     else if (e.remplaceSorte === 'correction') {
       const ordre = c.correction === null ? 1 : comparerInstants(e.horodatage, c.correction.horodatage);
@@ -241,32 +241,43 @@ function indexDesEtats(evenements: readonly EvenementEtatAbri[], instant: string
 
   // 2. Le dernier état en vigueur dont l'heure est passée, par zone et par équipement.
   const index: IndexEtats = new Map();
-  const retenir = (e: EvenementEtatAbri, depuis: string): void => {
+  // À heure égale entre deux chaînes, le plus grand identifiant d'ORIGINAL l'emporte : une
+  // correction ne change pas l'ordre entre chaînes.
+  const rangs = new Map<string, (string | undefined)[]>();
+  const retenir = (e: EvenementEtatAbri, depuis: string, identite: string): void => {
     if (comparerInstants(depuis, instant) > 0) return;
     let parZone = index.get(e.zoneId);
     if (parZone === undefined) {
       parZone = [undefined, undefined, undefined, undefined, undefined];
       index.set(e.zoneId, parZone);
     }
+    let identites = rangs.get(e.zoneId);
+    if (identites === undefined) {
+      identites = [undefined, undefined, undefined, undefined, undefined];
+      rangs.set(e.zoneId, identites);
+    }
     const rang = RANG[e.equipement];
     const r = parZone[rang];
-    if (r !== undefined) {
+    const autre = identites[rang];
+    if (r !== undefined && autre !== undefined) {
       const ordre = comparerInstants(depuis, r.depuis);
-      if (ordre < 0 || (ordre === 0 && e.id < r.evenementId)) return;
+      if (ordre < 0 || (ordre === 0 && identite < autre)) return;
     }
     parZone[rang] = { actif: e.actif, depuis, evenementId: e.id };
+    identites[rang] = identite;
   };
   for (const o of evenements) {
     if (o.remplaceEvenementId !== null) continue;
     const c = chaines.get(o);
-    if (c === undefined) retenir(o, o.horodatage);
-    else if (!c.annulee) retenir(c.correction ?? o, o.horodatage);
+    if (c === undefined) retenir(o, o.horodatage, o.id);
+    else if (!c.annulee) retenir(c.correction ?? o, o.horodatage, o.id);
   }
-  // Chaînes dont l'original manque au journal : à l'heure de leur premier maillon connu.
+  // Chaînes dont l'original manque au journal : à l'heure de leur plus ancien maillon présent,
+  // identifiées par l'id de l'original absent (le résultat ne dépend pas de l'ordre du journal).
   for (const [tete, c] of chaines) {
     if (typeof tete !== 'string' || c.annulee || c.depuis === null) continue;
     const e = c.correction ?? c.origine;
-    if (e !== null) retenir(e, c.depuis);
+    if (e !== null) retenir(e, c.depuis, tete);
   }
   return index;
 }
