@@ -126,12 +126,12 @@ function recues(table: SortePlan, valeurs: Ligne, existante: Ligne | undefined):
 async function ligneValidee(tx: TransactionLocale, ctx: ContextePlan, table: SortePlan, id: string, ligne: Ligne, existante: Ligne | undefined): Promise<Ligne> {
   const active = ligne.supprime_le === null;
   // Relecture T61 : retirer un lieu ou un point qui range encore des outils ou des places : rejet.
-  if (!active && existante !== undefined && existante.supprime_le === null) {
+  if (!active && existante?.supprime_le === null) {
     if (table === 'lieu_rangement') await exigerRangementVide(tx, ctx.fermeId, 'id', id);
     if (table === 'point_plan') await exigerRangementVide(tx, ctx.fermeId, 'point_plan_id', id);
   }
   /** La référence est à relire : création, rétablissement, ou valeur changée (un outil orphelin reste renommable). */
-  const relire = (c: string): boolean => existante === undefined || existante.supprime_le !== null || (existante[c] ?? null) !== (ligne[c] ?? null);
+  const relire = (c: string): boolean => existante?.supprime_le !== null || (existante[c] ?? null) !== (ligne[c] ?? null);
   switch (table) {
     case 'chemin': {
       const nom = nomDeChemin(ligne.nom);

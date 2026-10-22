@@ -207,6 +207,7 @@ export function App() {
     }
     setErreur(message);
     setOnglet('aujourdhui');
+    setRangement(null);
     setSession(null);
   }
 

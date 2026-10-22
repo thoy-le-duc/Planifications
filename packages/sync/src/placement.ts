@@ -126,7 +126,7 @@ async function placerBatiment(tx: TransactionLocale, ctx: ContextePlacement, id:
   if (zone !== null && supprime === null && zoneChange) await verifierZoneAbritee(tx, ctx, zone, id);
   if (supprime === null) await exigerOrigine(tx, ctx);
   // Relecture T61 : un bâtiment qui range encore des outils ou des places ne se retire pas.
-  if (supprime !== null && existant !== undefined && existant.supprime_le === null) await exigerRangementVide(tx, ctx.fermeId, 'batiment_id', id);
+  if (supprime !== null && existant?.supprime_le === null) await exigerRangementVide(tx, ctx.fermeId, 'batiment_id', id);
 
   const instant = ctx.maintenant().toISOString();
   if (existant === undefined) {
