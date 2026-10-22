@@ -447,7 +447,7 @@ describe('T81 : planches déjà placées dans la zone dont on remplace le contou
     await confirmerRemplacement();
     await enregistrer();
     await attendre(() => batimentsDeLaZone(b, ZONE_TUNNEL).length === 1, 'serre écrite');
-    await attendre(() => placementDe(b, PLANCHE_B).y !== 40, 'planche convertie');
+    await attendre(() => placementDe(b, PLANCHE_A).x !== 0, 'planches converties');
     for (const id of [PLANCHE_A, PLANCHE_B, PLANCHE_C]) expect(ligne(b, 'emplacement', id)?.placement_x_m, `${id} reste placée`).not.toBeNull();
   });
 
