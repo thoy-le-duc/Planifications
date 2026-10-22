@@ -346,7 +346,8 @@ function Formulaire({ culture: initiale, cultures, produits, etatCatalogue, surR
     const saisi = darsSaisis[c.cibleId]?.trim() ?? '';
     const propose = e?.dar ?? null;
     // DAR tapé (par exemple pendant qu'e-phy manquait) gardé, mais e-phy propose autre chose : on le dit, sans bloquer (T79).
-    const autreDar = propose !== null && saisi !== '' && saisi !== String(propose) ? propose : null;
+    // Nombres comparés, pas du texte : « 01 » vaut 1 j ; un texte qui n'est pas un nombre de jours diffère.
+    const autreDar = propose !== null && saisi !== '' && (!/^\d+$/.test(saisi) || Number(saisi) !== propose) ? propose : null;
     return (
       <>
         {e !== null && !e.homologue && (
