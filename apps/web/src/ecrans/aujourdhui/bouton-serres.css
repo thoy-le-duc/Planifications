@@ -1,0 +1,49 @@
+/* T58 — « Serres » dans la barre d'actions d'Aujourd'hui, sur sa propre ligne sous l'irrigation et
+   la fertilisation, au même gabarit (56 px ; rien ne déborde à 360 px) ; le rappel du soir en tête
+   de la barre. Jetons seulement. */
+
+.serres-ouvrir {
+  flex: 1 0 100%;
+  order: 6;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.serres-ouvrir:disabled {
+  border-color: var(--couleur-trait);
+  color: var(--couleur-secondaire);
+}
+
+.serres-rappel {
+  flex: 1 0 100%;
+  order: -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-orange);
+  color: var(--couleur-sur-orange);
+  font-weight: 800;
+}
+
+.serres-rappel-voir {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 2px solid currentColor;
+  border-radius: var(--rayon-bouton);
+  background: transparent;
+  color: inherit;
+  font-weight: 800;
+}
