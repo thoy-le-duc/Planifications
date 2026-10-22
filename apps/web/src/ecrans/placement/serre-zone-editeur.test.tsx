@@ -188,9 +188,8 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     await choisirZone(ZONE_TUNNEL);
     await toucher(bouton('Placer la serre'));
     await enregistrer();
-    await attendre(() => b.placements.length === 1, 'un appel à porte.placer');
-    const [ecrit] = batimentsDeLaZone(b, ZONE_TUNNEL);
-    expect(ecrit?.type).toBe('serre_chapelle');
+    await attendre(() => batimentsDeLaZone(b, ZONE_TUNNEL).length === 1, 'serre écrite');
+    expect(batimentsDeLaZone(b, ZONE_TUNNEL)[0]?.type).toBe('serre_chapelle');
   });
 
   it('« Enregistrer » : un seul porte.placer qui crée le bâtiment serre_tunnel ET le rattache à la zone ; « Annuler » retire les deux', async () => {
@@ -199,7 +198,8 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     await toucher(bouton('Placer la serre'));
     await remplir(champ('Longueur (m)', panneau()), '36');
     await enregistrer();
-    await attendre(() => b.placements.length === 1, 'un appel à porte.placer');
+    await attendre(() => batimentsDeLaZone(b, ZONE_TUNNEL).length === 1, 'serre écrite');
+    expect(b.placements).toHaveLength(1);
     const appel = b.placements[0] ?? [];
     expect(appel.map((c) => c.sorte)).toEqual(['batiment']);
     const [ecrit] = batimentsDeLaZone(b, ZONE_TUNNEL);
