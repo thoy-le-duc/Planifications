@@ -505,6 +505,11 @@ function SectionEquipements({ ctx, zone, surEnregistre }: { readonly ctx: Contex
   // Liste en vigueur tenue ici : deux taps rapides repartent de la liste du premier, pas de celle de la base (pas encore relue).
   const [local, setLocal] = useState(depuisBase);
   const courante = useRef(local);
+  // La base la plus récente (relue à chaque rendu) : c'est elle qu'on affiche quand la file se vide.
+  const baseRecente = useRef(depuisBase);
+  useEffect(() => {
+    baseRecente.current = depuisBase;
+  });
   const chaine = useRef<Promise<void>>(Promise.resolve());
   const enVol = useRef(0);
   const [message, setMessage] = useState<string | null>(null);
@@ -522,20 +527,23 @@ function SectionEquipements({ ctx, zone, surEnregistre }: { readonly ctx: Contex
   function ecrire(suivant: { readonly liste: EquipementAbri[]; readonly nulle: boolean }): void {
     courante.current = suivant;
     setLocal(suivant);
+    setMessage(null);
     enVol.current++;
     chaine.current = chaine.current
       .then(async () => {
         surEnregistre(await modifierEquipements(ctx, zone.id, suivant.nulle ? null : suivant.liste));
-        setMessage(null);
       })
       .catch((e: unknown) => {
         console.error('Équipements non enregistrés', e);
         setMessage(messageEchec(e));
-        courante.current = depuisBase;
-        setLocal(depuisBase);
       })
       .finally(() => {
         enVol.current--;
+        // File vide : la base fait foi (elle contient les écritures réussies et les changements venus d'ailleurs).
+        if (enVol.current === 0) {
+          courante.current = baseRecente.current;
+          setLocal(baseRecente.current);
+        }
       });
   }
 
