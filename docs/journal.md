@@ -2,6 +2,18 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-22 (soir) — T81 : placer une serre depuis sa zone, en un geste
+
+- **Fait** : dans l'éditeur de placement, une zone tunnel ou serre propose « Placer la serre » au lieu de « Tracer le contour ». Le rectangle se pose au centre de la vue, aux mesures du dernier bâtiment du même type (sinon 30 × 8 m), puis se déplace et se tourne aux poignées, souris ou doigt. Un seul Enregistrer crée le bâtiment et le rattache à la zone, et reste annulable. Une zone déjà tracée à la main, comme Manon 1, propose « Remplacer par une serre », à partir du rectangle de surface minimale de son contour. Les planches déjà placées restent au même endroit sur le terrain ; celles qui tomberaient hors de la serre sont signalées avant de confirmer. PR #252.
+- **Décidé** : le calcul du rectangle se charge à la demande, et le budget de l'éditeur (21,1 Kio) est tenu sans être relevé. La marge est à zéro : la prochaine addition à l'éditeur devra alléger ailleurs. Dans les tests de placement, « Tunnel 1 » est maintenant en plein champ par défaut, car les tests T28d y tracent un contour libre (aucune assertion touchée).
+- **Bloquant** : rien. La largeur type des tunnels attend la réponse de Théophane (Q50).
+
+## 2026-10-22 (soir) — Main verte : la requête « déjà fait » sous la nouvelle Node 22
+
+- **Fait** : la CI suit la dernière Node 22 (`.node-version` = « 22 »). Node 22.23.4 embarque SQLite 3.53.4, avec lequel la CTE récursive du « déjà fait » (`packages/sync/src/fait-unique.ts`) parcourait tout le journal : test d'index T13l rouge, refus à environ 100 ms au lieu de moins de 50. La faute a été reproduite sur `main` seule. Le correctif écrit le départ de la CTE en UNION ALL ; l'ensemble des membres ne change pas (relecture critique). PR #249 fusionnée. Le matin, `main` avait été rouge une fois sur l'e2e du déroulé 3D (une semaine sautée sous charge) : vert après une relance du même commit.
+- **Décidé** : PR à part, parce que T58 avait été fusionnée par la session du soir après une relance verte, juste avant que ce correctif arrive sur sa branche.
+- **Bloquant** : à décider, épingler une version précise de Node dans `.node-version` pour que la CI ne change plus sans prévenir.
+
 ## 2026-10-22 (soir) — T82 : modifier les équipements d'une serre
 
 - **Fait** : la fiche d'une zone abritée (Parcellaire) a une section « Équipements » avec cinq cases (ouvrants latéraux, ouvrants de faîtage, portes, chauffage, voile ou filet), pré-cochées selon la liste en vigueur. Un tap écrit tout de suite, avec « Annuler ». « Revenir aux équipements par défaut » remet la colonne à nulle. Une zone de plein champ n'a pas cette section. Un équipement décoché disparaît du panneau Serres, de la 3D et du rappel. Les événements passés restent.

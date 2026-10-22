@@ -486,6 +486,11 @@ Question : PowerSync, le service de synchro, limite à 1 000 le nombre de « par
 
 ### À suivre
 
+### Q50 — Serres : rappel après minuit, et largeur de tes tunnels (posée le 2026-10-22, T58 et T81)
+
+1. **Rappel des serres ouvertes** (T58) : il s'affiche dans Aujourd'hui de 18 h à minuit. Après minuit, une serre restée ouverte n'est plus signalée. Faut-il le garder le matin, par exemple jusqu'à 10 h, sous la forme « Serre Manon 1 ouverte depuis hier 9 h » ?
+2. **Largeur des tunnels** (T81, « Placer la serre ») : tes tunnels font-ils tous la même largeur et la même longueur ? Si oui, lesquelles ? Elles seront proposées par défaut (aujourd'hui, 30 m × 8 m).
+
 ## Questions ouvertes du brief
 
 - Nom du produit.
