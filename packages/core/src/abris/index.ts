@@ -299,6 +299,18 @@ export function etatsDesZones(evenements: readonly EvenementEtatAbri[], zones: r
   return new Map(zones.map((z) => [z.id, etatsAvec(index, z)]));
 }
 
+/**
+ * Une correction d'un changement d'état ne change que `actif` : même zone, même équipement que
+ * l'événement corrigé (sinon on annule, puis on ressaisit). Le serveur l'applique avec l'original
+ * relu en base (apps/api/src/sync/etat-abri.ts). Une annulation n'est pas soumise à cette règle.
+ */
+export function correctionEtatAbriPermise(
+  original: { readonly zoneId: string; readonly equipement: string },
+  correction: { readonly zoneId: string; readonly equipement: string },
+): boolean {
+  return original.zoneId.toLowerCase() === correction.zoneId.toLowerCase() && original.equipement === correction.equipement;
+}
+
 const COLLATOR = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
 
 /** Ordre des abris : nom (naturel, sans la casse), puis id. */

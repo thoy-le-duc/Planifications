@@ -3,7 +3,7 @@
  * `etatsDeLaZone`, en une seule passe sur le journal.
  */
 import { describe, expect, it } from 'vitest';
-import { etatsDeLaZone, etatsDesZones, type EvenementEtatAbri, type ZoneAbri } from './index.ts';
+import { correctionEtatAbriPermise, etatsDeLaZone, etatsDesZones, type EvenementEtatAbri, type ZoneAbri } from './index.ts';
 
 const ZONES: readonly ZoneAbri[] = [
   { id: 'z1', nom: 'Serre 1', typeAbri: 'serre', equipementsAbri: null },
@@ -46,5 +46,14 @@ describe('T58 : état de toutes les zones en une passe', () => {
       { equipement: 'chauffage', etat: { actif: false, depuis: '2026-10-22T05:00:00.000Z', evenementId: 'e5' } },
     ]);
     expect(toutes.get('z3')).toEqual([]);
+  });
+});
+
+describe('T58 : une correction ne change que l’état', () => {
+  const Z = '0192f0c1-5858-7000-8000-0000000000a1';
+  it('même zone (casse indifférente) et même équipement : permise ; autre zone ou autre équipement : non', () => {
+    expect(correctionEtatAbriPermise({ zoneId: Z, equipement: 'portes' }, { zoneId: Z.toUpperCase(), equipement: 'portes' })).toBe(true);
+    expect(correctionEtatAbriPermise({ zoneId: Z, equipement: 'portes' }, { zoneId: Z.replace('a1', 'a2'), equipement: 'portes' })).toBe(false);
+    expect(correctionEtatAbriPermise({ zoneId: Z, equipement: 'portes' }, { zoneId: Z, equipement: 'chauffage' })).toBe(false);
   });
 });
