@@ -865,6 +865,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setLusP(l.planches);
     setLusE(l.emplacements);
     setLusV(l.vannes);
+    setLusC(l.chemins);
   }
 
   /** Relit la base après une écriture réussie ; un échec ne défait rien : il est dit à part d'un refus. */
