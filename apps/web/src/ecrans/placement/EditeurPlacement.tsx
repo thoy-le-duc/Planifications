@@ -24,6 +24,7 @@ import { RechercheAdresse } from './RechercheAdresse.tsx';
 import { BandeauEtapes, etapeCourante, MESSAGES_ETAPES, type NumeroEtape } from './etapes.tsx';
 import { TEXTE_INVITATION } from '../../demo/invitation.ts';
 import { empriseDeContours, vueSurEmprise, type Emprise } from './sites.ts';
+import { dimensionsParDefaut, typeDeSerrePourZone } from './serre-zone.ts';
 import { deplacerSommet, insererMilieu, poserPoint, replacerPlanches, retirerSommet, toucheSommet, TOLERANCE_FERMETURE_PX, verifierContour } from './contours.ts';
 import {
   lireTout,
@@ -60,6 +61,7 @@ import {
   type RectanglePlace,
 } from './gestes.ts';
 import type * as ModuleChemins from './chemins.tsx';
+import type { RectangleEnglobant } from '@planif/core/placement';
 import { DELAI_RELANCE_TUILE_MS, depuisEcran, ESSAIS_TUILE_MAX, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_DEPART_SANS_POSITION, ZOOM_INITIAL, ZOOM_MIN_VUE, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
 
 export const MESSAGES_PLACEMENT = {
@@ -220,6 +222,7 @@ interface Trace {
 type Confirmation =
   | { readonly type: 'origine'; readonly position: Position }
   | { readonly type: 'zone'; readonly batimentId: string; readonly zoneId: string }
+  | { readonly type: 'remplacer'; readonly zoneId: string; readonly englobant: RectangleEnglobant | null; readonly avis: string | null; readonly converties: readonly (readonly [string, Planche])[] }
   | { readonly type: 'fermer' };
 
 interface NouveauBatiment {
@@ -588,8 +591,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const planchesAff = useMemo(
     () =>
       (lusP ?? []).map((p) => {
-        const base = brouillonP.get(p.id) ?? p;
         const info = zonesInfo.get(p.zoneId);
+        const base = brouillonP.get(p.id) ?? p;
         if (info === undefined || info.abritee || !info.change || info.zone.contour === null || info.effectif === null) return base;
         const [replacee] = replacerPlanches(info.zone.contour, info.effectif, [{ id: p.id, placement: base.placement }]);
         return replacee === undefined ? base : { ...base, placement: replacee.placement };
@@ -1137,26 +1140,49 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     selectionner(null);
   }
 
-  /** Pose le nouveau bâtiment au point donné (repère de la ferme) : au brouillon, sélectionné. */
-  function poserEn(local: Point): void {
-    if (pose === null) return;
+  /** Ajoute un bâtiment au brouillon, sélectionné (centre et mesures arrondies au millimètre). */
+  function ajouterBatiment(b: Omit<Batiment, 'id' | 'nouveau' | 'hauteurM'> & { readonly hauteurM?: number }): void {
     const id = nouvelId?.() ?? identifiantNeuf();
     setBrouillonB((prev) =>
       new Map(prev).set(id, {
+        hauteurM: 3.5,
+        ...b,
         id,
-        nom: pose.nom,
-        type: pose.type,
-        centre: { x: arrondi(local.x), y: arrondi(local.y) },
-        orientationDeg: 0,
-        longueurM: pose.longueurM,
-        largeurM: pose.largeurM,
-        hauteurM: pose.hauteurM,
-        zoneId: null,
         nouveau: true,
       }),
     );
     selectionner(id);
+  }
+
+  /** Pose le nouveau bâtiment au point donné (repère de la ferme) : au brouillon, sélectionné. */
+  function poserEn(local: Point): void {
+    if (pose === null) return;
+    ajouterBatiment({ ...pose, centre: { x: arrondi(local.x), y: arrondi(local.y) }, orientationDeg: 0, zoneId: null });
     setPose(null);
+  }
+
+  /**
+   * T81 : pose une serre pour la zone, au brouillon, rattachée à elle (un seul « Enregistrer » crée
+   * le bâtiment et efface le contour). Sans rectangle : au centre de la vue ; avec : sur le
+   * rectangle de surface minimale du contour tracé.
+   */
+  function placerSerre(zoneId: string, englobant: RectangleEnglobant | null): void {
+    const info = zonesInfo.get(zoneId);
+    const type = typeDeSerrePourZone(info?.zone.typeAbri);
+    if (info === undefined || type === null) return;
+    ajouterBatiment({ ...(englobant ?? { ...dimensionsParDefaut(batimentsAff, type), centre: { x: arrondi(vue.centre.x), y: arrondi(vue.centre.y) }, orientationDeg: 0 }), nom: info.zone.nom, type, zoneId });
+  }
+
+  /** Charge le calcul du rectangle englobant (à la demande), puis demande confirmation, avec ce qu'il faut savoir. */
+  function remplacerParSerre(zoneId: string): void {
+    void import('./serre-englobante.ts').then(
+      (m) => {
+        setConfirmation({ type: 'remplacer', zoneId, ...m.preparerRemplacement(zonesInfo.get(zoneId)?.affiche, planchesAff.filter((p) => p.zoneId === zoneId), reperes.get(zoneId)?.affichage) });
+      },
+      (e: unknown) => {
+        setErreur(messageDe(e));
+      },
+    );
   }
 
   function identifiantNeuf(): string {
@@ -1807,6 +1833,11 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                     demarrerTrace(zoneChoisie.zone.id);
                   }}
                   surRenoncer={abandonnerTrace}
+                  typeSerre={typeDeSerrePourZone(zoneChoisie.zone.typeAbri)}
+                  surSerre={() => {
+                    if (zoneChoisie.affiche === null) placerSerre(zoneChoisie.zone.id, null);
+                    else remplacerParSerre(zoneChoisie.zone.id);
+                  }}
                   surSommet={(index, point) => {
                     const contour = zoneChoisie.affiche;
                     if (contour !== null) majContour(zoneChoisie.zone.id, deplacerSommet(contour, index, point));
@@ -1885,7 +1916,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             </div>
           </Modale>
         )}
-        {confirmation?.type === 'zone' && (
+        {(confirmation?.type === 'zone' || confirmation?.type === 'remplacer') && (
           <Modale
             role="alertdialog"
             titre="Abriter cette zone ?"
@@ -1894,14 +1925,18 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             }}
           >
             <p>
-              {MESSAGES_PLACEMENT.contourRemplace}. {MESSAGES_CONTOURS.planchesSuivent}
+              {MESSAGES_PLACEMENT.contourRemplace}. {confirmation.type === 'remplacer' ? confirmation.avis : MESSAGES_CONTOURS.planchesSuivent}
             </p>
             <div className="pl-modale-actions">
               <button
                 type="button"
                 className="pl-bouton pl-principal"
                 onClick={() => {
-                  majBatiment(confirmation.batimentId, { zoneId: confirmation.zoneId });
+                  if (confirmation.type === 'zone') majBatiment(confirmation.batimentId, { zoneId: confirmation.zoneId });
+                  else {
+                    placerSerre(confirmation.zoneId, confirmation.englobant);
+                    setBrouillonP((prev) => new Map([...prev, ...confirmation.converties]));
+                  }
                   setConfirmation(null);
                 }}
               >
@@ -2012,10 +2047,14 @@ interface ProprietesPanneauZone {
   readonly conteneur: RefObject<HTMLDivElement | null>;
   readonly surTracer: () => void;
   readonly surRenoncer: () => void;
+  /** T81 : type de serre que la zone peut recevoir (tunnel, serre) ; null : la zone se trace. */
+  readonly typeSerre: TypeBatiment | null;
+  /** « Placer la serre » (zone sans contour) ou « Remplacer par une serre » (zone avec contour). */
+  readonly surSerre: () => void;
   readonly surSommet: (index: number, point: Point) => void;
 }
 
-function PanneauZone({ info, edition, origineSouhaitee, trace, message, conteneur, surTracer, surRenoncer, surSommet }: ProprietesPanneauZone): ReactElement {
+function PanneauZone({ info, edition, origineSouhaitee, trace, message, conteneur, surTracer, surRenoncer, typeSerre, surSerre, surSommet }: ProprietesPanneauZone): ReactElement {
   const idRaison = useId();
   const contour = info.affiche;
   const verdict = info.verdict ?? (contour === null ? null : verifierContour(contour));
@@ -2030,13 +2069,22 @@ function PanneauZone({ info, edition, origineSouhaitee, trace, message, conteneu
       {!info.abritee && !edition && (
         <p className="pl-aide">{contour === null ? 'Aucun contour tracé pour cette zone.' : `Contour de ${String(contour.length)} sommets.`}</p>
       )}
-      {!info.abritee && edition && trace === null && contour === null && (
+      {!info.abritee && edition && trace === null && (contour === null || typeSerre !== null) && (
         <>
-          <button type="button" className="pl-bouton" data-action="tracer" disabled={!origineSouhaitee} aria-describedby={origineSouhaitee ? undefined : idRaison} onClick={surTracer}>
-            Tracer le contour
+          <button
+            type="button"
+            className="pl-bouton"
+            data-action="tracer"
+            disabled={!origineSouhaitee}
+            aria-describedby={origineSouhaitee ? undefined : idRaison}
+            onClick={typeSerre === null ? surTracer : surSerre}
+          >
+            {typeSerre === null ? 'Tracer le contour' : contour === null ? 'Placer la serre' : 'Remplacer par une serre'}
           </button>
           <p id={idRaison} className="pl-aide">
-            {origineSouhaitee ? 'Posez les sommets un à un sur la photo, puis fermez le tracé.' : 'Posez d’abord le point de départ du plan, et finissez de poser le bâtiment en cours.'}
+            {origineSouhaitee
+              ? typeSerre === null && 'Posez les sommets un à un sur la photo, puis fermez le tracé.'
+              : 'Posez d’abord le point de départ du plan.'}
           </p>
         </>
       )}

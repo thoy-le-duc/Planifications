@@ -28,6 +28,8 @@ export interface Zone {
   readonly contour: readonly Point[] | null;
   /** Zone qui contient celle-ci ; null (ou absent) : zone de premier niveau, éventuellement un site à part. */
   readonly parenteId?: string | null;
+  /** Type d'abri de la zone (plein_champ, tunnel, serre, hors_sol) ; absent : inconnu. */
+  readonly typeAbri?: string | null;
 }
 
 export interface Planche {
@@ -120,12 +122,12 @@ export const requeteBatiments = (fermeId: string): RequeteSurveillee<Batiment | 
 });
 
 export const requeteZones = (fermeId: string): RequeteSurveillee<Zone | null> => ({
-  sql: 'SELECT id, nom, contour, zone_parente_id FROM zone WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY nom, id',
+  sql: 'SELECT id, nom, contour, zone_parente_id, type_abri FROM zone WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY nom, id',
   parametres: [fermeId],
   tables: ['zone'],
   convertir: (l: Ligne) => {
     const id = texte(l.id);
-    return id === null ? null : { id, nom: texte(l.nom) ?? '', contour: pointsDe(l.contour), parenteId: texte(l.zone_parente_id) };
+    return id === null ? null : { id, nom: texte(l.nom) ?? '', contour: pointsDe(l.contour), parenteId: texte(l.zone_parente_id), typeAbri: texte(l.type_abri) };
   },
 });
 

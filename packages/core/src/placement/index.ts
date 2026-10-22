@@ -34,6 +34,7 @@ export {
   type PlacementZone,
   type ResultatPlacement,
 } from './validation.ts';
+export { rectangleEnglobantMinimal, type RectangleEnglobant } from './rectangle.ts';
 export { validerPlacement } from './ligne.ts';
 // T61 : chemins, points du plan (point d'eau, repère) et rangement des outils.
 export {

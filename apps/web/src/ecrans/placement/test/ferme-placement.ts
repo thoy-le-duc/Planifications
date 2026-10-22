@@ -9,7 +9,7 @@
  *
  * Ferme « Ferme du placement (tests) », position météo 44° N, 1,5° E.
  *   UTILISATEUR : gérant actif (ou équipier, option `role`).
- *   Zones : « Tunnel 1 » (ZONE_TUNNEL, sans contour) ; « Plein champ » (ZONE_CHAMP).
+ *   Zones : « Tunnel 1 » (ZONE_TUNNEL, sans contour ; type d'abri tunnel avec l'option `zoneTunnel`, sinon plein champ) ; « Plein champ » (ZONE_CHAMP).
  *   Planche « PC-01 » (PLANCHE) dans Plein champ, 25 × 0,8 m.
  * Option `origine` (défaut : faux) : origine du plan = la position météo, ET les placements :
  *   - contour de Plein champ : (100, 0) (140, 0) (140, 30) (100, 30), antihoraire ; repère :
@@ -68,6 +68,12 @@ export interface OptionsFermePlacement {
    * Défaut : faux.
    */
   readonly deuxSites?: boolean;
+  /**
+   * T81 : « Tunnel 1 » est une vraie zone de type tunnel (le panneau propose alors « Placer la serre »).
+   * Défaut : faux, son type d'abri est « plein champ » : les tests des contours (T28d) y tracent un contour libre,
+   * ce que la règle de T81 réserve au plein champ et au hors-sol.
+   */
+  readonly zoneTunnel?: boolean;
 }
 
 export interface FermePlacement {
@@ -99,7 +105,7 @@ export function fermePlacement(options: OptionsFermePlacement = {}): FermePlacem
   });
   ajouter('membre', { id: MEMBRE, utilisateur_id: UTILISATEUR, ferme_id: FERME, role: options.role ?? 'gerant', etat: 'accepte', invite_par: null, invite_le: null, ...horo });
   if (options.saison === true) ajouter('saison', { id: SAISON, ferme_id: FERME, nom: '2026', debut: '2026-01-01', fin: '2026-12-31', ...horo });
-  ajouter('zone', { id: ZONE_TUNNEL, ferme_id: FERME, nom: 'Tunnel 1', zone_parente_id: null, type_abri: 'tunnel', surface_m2: 240, contour: null, ...horo });
+  ajouter('zone', { id: ZONE_TUNNEL, ferme_id: FERME, nom: 'Tunnel 1', zone_parente_id: null, type_abri: options.zoneTunnel === true ? 'tunnel' : 'plein_champ', surface_m2: 240, contour: null, ...horo });
   ajouter('zone', {
     id: ZONE_CHAMP,
     ferme_id: FERME,
