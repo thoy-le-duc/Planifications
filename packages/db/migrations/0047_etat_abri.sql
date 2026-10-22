@@ -1,0 +1,8 @@
+ALTER TABLE "evenement" DROP CONSTRAINT "evenement_type";--> statement-breakpoint
+ALTER TABLE "zone" ADD COLUMN "equipements_abri" jsonb;--> statement-breakpoint
+ALTER TABLE "evenement" ADD CONSTRAINT "evenement_detail_etat_abri" CHECK ("evenement"."type" <> 'etat_abri' OR (jsonb_typeof("evenement"."detail" -> 'zoneId') = 'string'
+        AND ("evenement"."detail" ->> 'zoneId') ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        AND "evenement"."detail" ->> 'equipement' IN ('ouvrants_lateraux', 'ouvrants_faitage', 'portes', 'chauffage', 'voile')
+        AND jsonb_typeof("evenement"."detail" -> 'actif') = 'boolean') IS TRUE);--> statement-breakpoint
+ALTER TABLE "evenement" ADD CONSTRAINT "evenement_type" CHECK ("evenement"."type" IN ('realise', 'recolte', 'intervention', 'irrigation', 'traitement', 'observation', 'etat_abri'));--> statement-breakpoint
+ALTER TABLE "zone" ADD CONSTRAINT "zone_equipements_abri" CHECK ("zone"."equipements_abri" IS NULL OR (CASE WHEN jsonb_typeof("zone"."equipements_abri") = 'array' THEN "zone"."equipements_abri" <@ '["ouvrants_lateraux","ouvrants_faitage","portes","chauffage","voile"]'::jsonb AND jsonb_array_length("zone"."equipements_abri") = ("zone"."equipements_abri" @> '["ouvrants_lateraux"]'::jsonb)::int + ("zone"."equipements_abri" @> '["ouvrants_faitage"]'::jsonb)::int + ("zone"."equipements_abri" @> '["portes"]'::jsonb)::int + ("zone"."equipements_abri" @> '["chauffage"]'::jsonb)::int + ("zone"."equipements_abri" @> '["voile"]'::jsonb)::int ELSE false END));

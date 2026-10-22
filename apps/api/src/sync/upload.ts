@@ -56,6 +56,9 @@
  *   (traitement-date.ts). Contrat : traitement-date-future.integration.test.ts.
  * - T56 : les recettes de fertirrigation de la ferme (fertirrigation.ts), de même ; chaque engrais
  *   est un produit fertilisant de la ferme. Contrat : fertirrigation.integration.test.ts.
+ * - T58 : un changement d'état de serre (événement etat_abri) vise une zone de la ferme qui déclare
+ *   l'équipement (etat-abri.ts) ; la liste d'équipements d'une zone s'écrit avec la zone
+ *   (structure.ts). Contrat : etat-abri.integration.test.ts.
  * - T54 : les produits fertilisants de la ferme (fertilisation.ts), de même ; l'option « zone
  *   vulnérable nitrates » de la ferme (structure-origine.ts). Contrat : fertilisation.integration.test.ts.
  * - T28s (Q31) : le placement réel (bâtiments, contours des zones, placement des emplacements ;
@@ -86,6 +89,7 @@ import { estUuid } from '../auth/jetons.ts';
 import type { Contexte } from '../dependances.ts';
 import { ligneDeJournal } from '../journal.ts';
 import { enregistrerEnvoiSynchro } from './debit.ts';
+import { verifierEtatAbri } from './etat-abri.ts';
 import { validerEvenement } from './evenement.ts';
 import { refusTraitementFutur } from './traitement-date.ts';
 import { messageRefus, refusDuCoeur } from './messages.ts';
@@ -156,6 +160,13 @@ const TABLES_TOUT_OU_RIEN = new Set([...TABLES_STOCK, ...TABLES_SERIE, ...TABLES
 const TABLES_ECRITES = new Set(['evenement', ...TABLES_TOUT_OU_RIEN]);
 /** Tables en ajout seul : ni modification ni suppression (sinon : création seule, 'table_interdite'). */
 const TABLES_AJOUT_SEUL = new Set(['evenement', 'mouvement_stock']);
+
+/**
+ * T58 : un lot qui porte un changement d'état de serre (événement etat_abri, lu sans confiance :
+ * il ne sert qu'à choisir le mode) est accepté ou refusé en entier, comme le stock : une
+ * transaction du téléphone, un lot, tout ou rien.
+ */
+const changeEtatAbri = (e: EcritureRecue): boolean => e.table === 'evenement' && e.donnees?.type === 'etat_abri';
 
 /** Précision du refus des autres écritures d'une saisie refusée en entier. */
 const PRECISION_SAISIE_REFUSEE = 'une autre partie de cette saisie est refusée, rien n’a été enregistré';
@@ -397,7 +408,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
     // renvoi identique d'un traitement déjà en base reste accepté sans rien écrire (règle 4).
     const refusFutur = refusTraitementFutur(l, ctx.jourServeur());
     if (refusFutur !== null) return (await identique(tx, l)) ? null : refusFutur;
-    const refusReference = (await verifierReferences(tx, l)) ?? (await verifierCorrection(tx, l)) ?? (await verifierRemplacementRecolte(tx, l));
+    const refusReference =
+      (await verifierReferences(tx, l)) ?? (await verifierCorrection(tx, l)) ?? (await verifierRemplacementRecolte(tx, l)) ?? (await verifierEtatAbri(tx, l));
     if (refusReference !== null) return { ...refusReference, fermeId: l.fermeId };
     const [ecrit] = await tx
       .insert(evenement)
@@ -722,8 +734,8 @@ export function routesSynchro(ctx: Contexte): Hono<Env> {
       return c.json({ refus });
     }
 
-    if (ecritures.some((e) => TABLES_TOUT_OU_RIEN.has(e.table))) {
-      // T10c, T10e : une saisie de stock ou une série, tout ou rien. Chaque écriture d'un lot refusé a son refus.
+    if (ecritures.some((e) => TABLES_TOUT_OU_RIEN.has(e.table) || changeEtatAbri(e))) {
+      // T10c, T10e, T58 : une saisie de stock, une série ou un changement d'état de serre, tout ou rien. Chaque écriture d'un lot refusé a son refus.
       const echec = await ecrireEnsemble(ecritures, utilisateurId, fermes);
       if (echec !== null) {
         await refuser(

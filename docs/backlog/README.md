@@ -191,7 +191,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T55](T55-3d-traitements.md) | Jumeau 3D : traitements et délai avant récolte visibles | T52, T37 | fait |
 | [T56](T56-fertirrigation.md) | Fertirrigation : recettes et apports par vanne, hors-sol et pleine terre | T57, T54 | fait |
 | [T57](T57-vannes-irrigation.md) | Vannes d'irrigation : secteurs, planches arrosées, vannes dans la 3D | T49, T28, T37 | fait |
-| [T58](T58-etat-serres.md) | État des serres : ouvrants, chauffage, bâches, dans la 3D | T28c, T49 | à faire |
+| [T58](T58-etat-serres.md) | État des serres : ouvrants, chauffage, bâches, dans la 3D | T28c, T49 | fait |
 | [T59](T59-deroule-saison-3d.md) | Jumeau 3D : dérouler la saison | T32, T27 | fait |
 | [T60](T60-consignes-par-ouvrier.md) | Consignes par ouvrier : chacun ses travaux du jour | T09, T37 | fait |
 | [T61](T61-chemins-outils.md) | Jumeau 3D : chemins, bâtiments et rangement des outils | T28, T60, T22 | fait |
