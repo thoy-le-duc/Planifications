@@ -196,6 +196,7 @@ function Formulaire({ culture: initiale, cultures, produits, etatCatalogue, surR
   /** Produit avec N° AMM, catalogue lu, AMM absent du catalogue : DAR de la fiche, avec un avis (T79). */
   const ammInconnu = produit !== null && produit.numeroAmm !== '' && catalogue !== null && ephy === null;
   const pourCulture = lot ? 'chaque culture' : 'cette culture';
+  const avisEphy = useRef<HTMLDivElement>(null);
   const valeurDose = lireNombre(dose);
   const avertissement = produit === null || valeurDose === null ? null : avertissementDose({ valeur: valeurDose, unite }, produit.doseMaximale);
 
@@ -430,23 +431,30 @@ function Formulaire({ culture: initiale, cultures, produits, etatCatalogue, surR
           ))}
         </select>
       </div>
-      {ephyInconnu &&
-        (etatCatalogue.sorte === 'echec' ? (
-          <div data-testid="avertissement-ephy" role="status" className="parc-erreur">
-            <p style={{ margin: 0 }}>e-phy indisponible sur ce téléphone : vérifiez le DAR pour {pourCulture}, puis saisissez-le.</p>
-            <button type="button" className="parc-bouton-secondaire" onClick={surReessayer}>
-              Réessayer
-            </button>
-          </div>
-        ) : (
-          <p data-testid="avertissement-ephy" role="status" className="parc-aide">
-            Chargement d’e-phy… le DAR de {pourCulture} sera proposé dès qu’il est lu.
-          </p>
-        ))}
-      {ammInconnu && (
-        <p data-testid="avertissement-ephy" role="status" className="parc-erreur">
-          AMM inconnu d’e-phy : vérifiez le DAR pour {pourCulture} (repris de la fiche du produit).
-        </p>
+      {(ephyInconnu || ammInconnu) && (
+        // Un seul conteneur role="status", du chargement à l'échec et au nouvel essai : les lecteurs
+        // d'écran suivent le même nœud ; il reçoit le focus quand « Réessayer » disparaît (T79).
+        <div ref={avisEphy} tabIndex={-1} data-testid="avertissement-ephy" role="status" className={ephyInconnu && etatCatalogue.sorte !== 'echec' ? 'parc-aide' : 'parc-erreur'}>
+          {ammInconnu ? (
+            <p style={{ margin: 0 }}>AMM inconnu d’e-phy : vérifiez le DAR pour {pourCulture} (repris de la fiche du produit).</p>
+          ) : etatCatalogue.sorte === 'echec' ? (
+            <>
+              <p style={{ margin: 0 }}>e-phy indisponible sur ce téléphone : vérifiez le DAR pour {pourCulture}, puis saisissez-le.</p>
+              <button
+                type="button"
+                className="parc-bouton-secondaire"
+                onClick={() => {
+                  avisEphy.current?.focus();
+                  surReessayer();
+                }}
+              >
+                Réessayer
+              </button>
+            </>
+          ) : (
+            <p style={{ margin: 0 }}>Chargement d’e-phy… le DAR de {pourCulture} sera proposé dès qu’il est lu.</p>
+          )}
+        </div>
       )}
       {lot ? (
         traitees.map((c, k) => (
