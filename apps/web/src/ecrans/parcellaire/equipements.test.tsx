@@ -186,6 +186,20 @@ describe('T82 : équipements d’une serre', () => {
     expect(equipementsDe(tunnel)).toEqual(['ouvrants_lateraux', 'portes']);
   });
 
+  it('deux taps rapides (sans attendre la base ni l’écran) : les deux changements sont dans la colonne', async () => {
+    await ouvrir();
+    const tunnel = await creerZone('Tunnel 1', 'tunnel');
+    const d = await ouvrirZone('Tunnel 1');
+    await act(async () => {
+      caseDe(d, 'voile ou filet').click();
+      caseDe(d, 'chauffage').click();
+      await Promise.resolve();
+    });
+    await attendre(() => (equipementsDe(tunnel) as unknown[] | null)?.length === 3, 'les deux changements écrits');
+    expect(equipementsDe(tunnel)).toEqual(['ouvrants_lateraux', 'portes', 'chauffage']);
+    expect(cochees(d)).toEqual(['ouvrants latéraux', 'portes', 'chauffage']);
+  });
+
   it('zone de plein champ : pas de section Équipements ; elle apparaît quand on passe la zone en tunnel', async () => {
     await ouvrir();
     await creerZone('Îlot', 'plein_champ');
