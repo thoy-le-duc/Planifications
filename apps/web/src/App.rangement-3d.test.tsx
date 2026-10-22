@@ -39,6 +39,7 @@ interface ProprietesDouble {
   readonly surMontrerRangement?: (cible: { outilId: string; cle: string; plancheId: string | null }) => void;
   readonly rangement?: { outilId: string; plancheId: string | null } | null;
   readonly surFermerRangement?: () => void;
+  readonly surOnglet?: (o: 'ferme' | 'planches') => void;
 }
 
 vi.mock('./ecrans/plan/index.ts', () => {
@@ -47,6 +48,9 @@ vi.mock('./ecrans/plan/index.ts', () => {
       <section data-testid="planches-double" data-rangement={JSON.stringify(p.rangement ?? null)}>
         <button type="button" data-testid="fermer-rangement-double" onClick={() => p.surFermerRangement?.()}>
           Fermer le rangement
+        </button>
+        <button type="button" data-testid="bandeau-vers-ferme-double" onClick={() => p.surOnglet?.('ferme')}>
+          Bandeau Démarrer : aller à la Ferme
         </button>
       </section>
     );
@@ -69,6 +73,13 @@ vi.mock('./ecrans/aujourdhui/index.ts', () => {
     );
   }
   return { default: EcranAujourdhuiDouble };
+});
+
+vi.mock('./ecrans/ferme/EcranFerme.tsx', () => {
+  function EcranFermeDouble() {
+    return <h2 data-testid="ferme-double">Ferme (double)</h2>;
+  }
+  return { default: EcranFermeDouble, EcranFerme: EcranFermeDouble };
 });
 
 vi.mock('./donnees/precharger.ts', () => ({ prechargerFerme: () => Promise.resolve() }));
@@ -180,5 +191,22 @@ describe('T61 : de la fiche du jour à la 3D, dans l’appli', () => {
     });
     await attendre(() => un('planches-double') !== null, 'Planches de nouveau');
     expect(rangement()).toBeNull();
+  });
+
+  it('le bandeau « Démarrer » change d’onglet pendant qu’un rangement est affiché : cible effacée, pas de réouverture au retour', async () => {
+    await demarrer();
+    act(() => {
+      un('tap-outil-double')?.click();
+    });
+    await attendre(() => rangement() !== null, 'cible donnée');
+    act(() => {
+      un('bandeau-vers-ferme-double')?.click();
+    });
+    await attendre(() => un('ferme-double') !== null, 'onglet Ferme affiché');
+    act(() => {
+      onglet('Planches').click();
+    });
+    await attendre(() => un('planches-double') !== null, 'Planches de nouveau');
+    expect(rangement(), 'la 3D ne se rouvre pas seule').toBeNull();
   });
 });
