@@ -500,23 +500,43 @@ function equipementsLus(brut: unknown): readonly EquipementAbri[] | null {
 
 /** Cinq cases, pré-cochées selon la liste en vigueur ; un tap = une écriture, annulable. Pas pour le plein champ. */
 function SectionEquipements({ ctx, zone, surEnregistre }: { readonly ctx: ContexteParcellaire; readonly zone: ZoneLue; readonly surEnregistre: (e: Enregistrement | null) => void }) {
-  const [occupe, setOccupe] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const typeAbri = TYPES_ABRI.find((t) => t === zone.typeAbri) ?? 'plein_champ';
-  if (typeAbri === 'plein_champ') return null;
-  const enVigueur = equipementsDeZone({ typeAbri, equipementsAbri: zone.equipementsAbri });
-
-  async function ecrire(liste: readonly EquipementAbri[] | null): Promise<void> {
-    setOccupe(true);
-    try {
-      surEnregistre(await modifierEquipements(ctx, zone.id, liste));
-      setMessage(null);
-    } catch (e) {
-      console.error('Équipements non enregistrés', e);
-      setMessage(messageEchec(e));
-    } finally {
-      setOccupe(false);
+  const depuisBase = { liste: equipementsDeZone({ typeAbri, equipementsAbri: zone.equipementsAbri }), nulle: zone.equipementsAbri === null };
+  // Liste en vigueur tenue ici : deux taps rapides repartent de la liste du premier, pas de celle de la base (pas encore relue).
+  const [local, setLocal] = useState(depuisBase);
+  const courante = useRef(local);
+  const chaine = useRef<Promise<void>>(Promise.resolve());
+  const enVol = useRef(0);
+  const [message, setMessage] = useState<string | null>(null);
+  const cle = `${depuisBase.nulle ? 'defaut' : 'liste'}:${depuisBase.liste.join(',')}`;
+  useEffect(() => {
+    // La base fait foi dès qu'aucune écriture n'est en cours.
+    if (enVol.current === 0) {
+      courante.current = depuisBase;
+      setLocal(depuisBase);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `cle` résume depuisBase
+  }, [cle]);
+  if (typeAbri === 'plein_champ') return null;
+
+  function ecrire(suivant: { readonly liste: EquipementAbri[]; readonly nulle: boolean }): void {
+    courante.current = suivant;
+    setLocal(suivant);
+    enVol.current++;
+    chaine.current = chaine.current
+      .then(async () => {
+        surEnregistre(await modifierEquipements(ctx, zone.id, suivant.nulle ? null : suivant.liste));
+        setMessage(null);
+      })
+      .catch((e: unknown) => {
+        console.error('Équipements non enregistrés', e);
+        setMessage(messageEchec(e));
+        courante.current = depuisBase;
+        setLocal(depuisBase);
+      })
+      .finally(() => {
+        enVol.current--;
+      });
   }
 
   return (
@@ -527,10 +547,10 @@ function SectionEquipements({ ctx, zone, surEnregistre }: { readonly ctx: Contex
           <label key={eq} className="parc-equipement">
             <input
               type="checkbox"
-              checked={enVigueur.includes(eq)}
-              disabled={occupe}
+              checked={local.liste.includes(eq)}
               onChange={(ev) => {
-                void ecrire(ev.target.checked ? [...enVigueur, eq] : enVigueur.filter((x) => x !== eq));
+                const base = courante.current.liste;
+                ecrire({ liste: EQUIPEMENTS_ABRI.filter((x) => (x === eq ? ev.target.checked : base.includes(x))), nulle: false });
               }}
             />
             <span>{LIBELLES_EQUIPEMENT[eq]}</span>
@@ -545,9 +565,9 @@ function SectionEquipements({ ctx, zone, surEnregistre }: { readonly ctx: Contex
       <button
         type="button"
         className="parc-bouton-secondaire"
-        disabled={occupe || zone.equipementsAbri === null}
+        disabled={local.nulle}
         onClick={() => {
-          void ecrire(null);
+          ecrire({ liste: equipementsDeZone({ typeAbri, equipementsAbri: null }), nulle: true });
         }}
       >
         Revenir aux équipements par défaut
