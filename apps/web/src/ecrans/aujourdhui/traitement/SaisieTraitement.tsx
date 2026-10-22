@@ -350,25 +350,24 @@ function Formulaire({ culture: initiale, cultures, produits, etatCatalogue, surR
 
   const avertissementCulture = (c: CultureEnPlace) => {
     const e = ephyDe(c);
-    const saisi = darsSaisis[c.cibleId]?.trim() ?? '';
-    const propose = e?.dar ?? null;
-    // DAR tapé (par exemple pendant qu'e-phy manquait) gardé, mais e-phy propose autre chose : on le dit, sans bloquer (T79).
-    // Nombres comparés, pas du texte : « 01 » vaut 1 j ; un texte qui n'est pas un nombre de jours diffère.
-    const autreDar = propose !== null && saisi !== '' && (!/^\d+$/.test(saisi) || Number(saisi) !== propose) ? propose : null;
     return (
-      <>
-        {e !== null && !e.homologue && (
-          <p data-testid="avertissement-culture" data-cible={c.cibleId} role="status" className="parc-erreur">
-            Produit non homologué sur cette culture dans e-phy ({c.espece}). Vérifiez avant de traiter ; le délai avant récolte est à saisir.
-          </p>
-        )}
-        {autreDar !== null && (
-          <p data-testid="avertissement-dar-saisi" data-cible={c.cibleId} role="status" className="parc-aide">
-            Délai avant récolte saisi gardé ({saisi} j) : e-phy propose {String(autreDar)} j pour {lot ? c.nom : 'cette culture'}.
-          </p>
-        )}
-      </>
+      e !== null &&
+      !e.homologue && (
+        <p data-testid="avertissement-culture" data-cible={c.cibleId} role="status" className="parc-erreur">
+          Produit non homologué sur cette culture dans e-phy ({c.espece}). Vérifiez avant de traiter ; le délai avant récolte est à saisir.
+        </p>
+      )
     );
+  };
+
+  /**
+   * DAR tapé (par exemple pendant qu'e-phy manquait) gardé, mais e-phy propose autre chose : le DAR
+   * proposé, sinon null (T79). Nombres comparés : « 01 » vaut 1 j ; un texte qui n'est pas un nombre diffère.
+   */
+  const autreDarDe = (c: CultureEnPlace): number | null => {
+    const saisi = darsSaisis[c.cibleId]?.trim() ?? '';
+    const propose = ephyDe(c)?.dar ?? null;
+    return propose !== null && saisi !== '' && (!/^\d+$/.test(saisi) || Number(saisi) !== propose) ? propose : null;
   };
 
   const choixUsage = (c: CultureEnPlace, k: number) => {
@@ -398,14 +397,32 @@ function Formulaire({ culture: initiale, cultures, produits, etatCatalogue, surR
     );
   };
 
-  const champDar = (c: CultureEnPlace, cle: string, suffixe: string) => (
-    <div className="parc-champ-bloc">
-      <label className="parc-etiquette" htmlFor={`${id}-dar${cle}`}>
-        Délai avant récolte (jours){suffixe}
-      </label>
-      <input id={`${id}-dar${cle}`} className="parc-champ" inputMode="numeric" autoComplete="off" value={darDe(c)} onChange={(e) => { const v = e.target.value; setDarsSaisis((avant) => ({ ...avant, [c.cibleId]: v })); }} />
-    </div>
-  );
+  /** L'avis « e-phy propose N j » n'est pas une région live (relu à chaque frappe) : le champ le cite par aria-describedby. */
+  const champDar = (c: CultureEnPlace, cle: string, suffixe: string) => {
+    const autreDar = autreDarDe(c);
+    const idAvis = `${id}-dar-propose${cle}`;
+    return (
+      <div className="parc-champ-bloc">
+        <label className="parc-etiquette" htmlFor={`${id}-dar${cle}`}>
+          Délai avant récolte (jours){suffixe}
+        </label>
+        <input
+          id={`${id}-dar${cle}`}
+          className="parc-champ"
+          inputMode="numeric"
+          autoComplete="off"
+          aria-describedby={autreDar === null ? undefined : idAvis}
+          value={darDe(c)}
+          onChange={(e) => { const v = e.target.value; setDarsSaisis((avant) => ({ ...avant, [c.cibleId]: v })); }}
+        />
+        {autreDar !== null && (
+          <p id={idAvis} data-testid="avertissement-dar-saisi" data-cible={c.cibleId} className="parc-aide">
+            Délai saisi gardé : e-phy propose {String(autreDar)} j pour {lot ? c.nom : 'cette culture'}.
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const champSurface = (c: CultureEnPlace, cle: string, suffixe: string) => (
     <div className="parc-champ-bloc">
