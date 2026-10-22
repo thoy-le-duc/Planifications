@@ -25,7 +25,7 @@ import type { CatalogueEphy, ProduitEphy } from '@planif/core/ephy';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
 import type { ProprietesSaisieTraitement } from './traitement/index.ts';
 import { CAMPAGNE, EMPLACEMENT, ecrireFermeDuJour, FERME, SERIE, UTILISATEUR } from './test/ferme-du-jour.ts';
-import { attendre, bouton, champ, dialogue, dialogueOuEchec, liste, remplir, texte, toucher } from '../itineraires/test/outils.ts';
+import { aChamp, attendre, bouton, champ, dialogue, dialogueOuEchec, liste, remplir, texte, toucher } from '../itineraires/test/outils.ts';
 
 const CHEMIN = './traitement/index.ts';
 const AUJOURDHUI = '2026-09-30';
@@ -261,7 +261,7 @@ describe('T79 refus d’une date future dans ecrireLotTraitement', () => {
     expect(actives.size).toBe(0);
   });
 
-  it('année suivante et ordre des jours : « 2027-01-01 » est futur, « 2026-09-31 » n’est pas comparé comme du texte (10 > 9)', async () => {
+  it('année suivante refusée ; veille d’un changement de mois (30/09 pour un « aujourd’hui » du 01/10) acceptée', async () => {
     await expect(ecrire([saisie(tomate, EMPLACEMENT.t2p07, '2027-01-01')])).rejects.toBeInstanceOf(m.TraitementRefuse);
     await expect(m.ecrireLotTraitement(porte, [saisie(tomate, EMPLACEMENT.t2p07, '2026-09-30')], undefined, '2026-10-01')).resolves.toHaveLength(1);
   });
@@ -274,5 +274,133 @@ describe('T79 refus d’une date future dans ecrireLotTraitement', () => {
   it('hier et lot de deux datés d’aujourd’hui et d’hier : acceptés', async () => {
     await expect(ecrire([saisie(tomate, EMPLACEMENT.t2p07, '2026-09-29'), saisie(fraise, EMPLACEMENT.s1g01, AUJOURDHUI)])).resolves.toHaveLength(2);
     expect(nouveaux()).toHaveLength(2);
+  });
+});
+
+describe('T79 suites : dates illisibles ou impossibles dans ecrireLotTraitement', () => {
+  const tomate = { sorte: 'serie' as const, serieId: SERIE.tomate as Id<'Serie'> };
+  const saisieDatee = (date: string): SaisieLot => ({
+    culture: tomate,
+    emplacementIds: [EMPLACEMENT.t2p07],
+    produit: { id: FRAISIOR, nomCommercial: 'Fraisior', delaiAvantRecolteJours: 3, doseMaximale: null },
+    date,
+    dose: { valeur: 0.5, unite: 'L/ha' },
+    surfaceTraiteeM2: 24,
+    cible: 'thrips',
+    operateur: 'Lucas',
+  });
+  const ecrire = (date: string) => m.ecrireLotTraitement(porte, [saisieDatee(date)], undefined, AUJOURDHUI);
+
+  for (const date of ['2026-9-30', '30/09/2026', '', '2026-09-30T08:00']) {
+    it(`date illisible « ${date} » : TraitementRefuse, rien d’écrit`, async () => {
+      await expect(ecrire(date)).rejects.toBeInstanceOf(m.TraitementRefuse);
+      expect(nouveaux()).toHaveLength(0);
+    });
+  }
+
+  for (const date of ['2026-02-30', '2026-00-10', '2026-13-01', '2026-09-31']) {
+    it(`date impossible « ${date} » : TraitementRefuse, rien d’écrit`, async () => {
+      await expect(ecrire(date)).rejects.toBeInstanceOf(m.TraitementRefuse);
+      expect(nouveaux()).toHaveLength(0);
+    });
+  }
+
+  it('une date impossible dans un lot de deux refuse tout le lot', async () => {
+    await expect(m.ecrireLotTraitement(porte, [saisieDatee('2026-09-29'), saisieDatee('2026-02-30')], undefined, AUJOURDHUI)).rejects.toBeInstanceOf(m.TraitementRefuse);
+    expect(nouveaux()).toHaveLength(0);
+  });
+});
+
+describe('T79 suites : saisie de plusieurs cultures, avis « chaque culture »', () => {
+  async function ouvrirLot(charger: () => Promise<CatalogueEphy>): Promise<HTMLElement> {
+    const d = await ouvrir(SERIE.tomate, charger);
+    await toucher(champ('Fraise Mara des bois', d));
+    await attendre(() => aChamp(`${DAR} · Fraise Mara des bois`, d), 'DAR de la fraise');
+    return d;
+  }
+
+  it('pendant le chargement : « chargement d’e-phy » et « chaque culture »', async () => {
+    const d = await ouvrirLot(() => new Promise<CatalogueEphy>(() => undefined));
+    await remplir(liste('Produit', d), FRAISIOR);
+    expect(avis()).toMatch(/chargement d.e-phy/i);
+    expect(avis()).toMatch(/chaque culture/i);
+    expect(avis()).not.toMatch(/cette culture/i);
+  });
+
+  it('après un échec : « indisponible », « chaque culture » et Réessayer', async () => {
+    const d = await ouvrirLot(() => Promise.reject(new Error('catalogue illisible')));
+    await remplir(liste('Produit', d), FRAISIOR);
+    await attendre(() => /indisponible/i.test(avis()), 'avis indisponible');
+    expect(avis()).toMatch(/vérifiez le DAR pour chaque culture/i);
+    expect(avis()).not.toMatch(/cette culture/i);
+    expect(boutonReessayer()).not.toBeNull();
+  });
+
+  it('AMM inconnu : « AMM inconnu d’e-phy » et « chaque culture »', async () => {
+    const d = await ouvrirLot(() => Promise.resolve(CATALOGUE));
+    await remplir(liste('Produit', d), RETIRE);
+    await attendre(() => /AMM inconnu/i.test(avis()), 'avis AMM inconnu');
+    expect(avis()).toMatch(/vérifiez le DAR pour chaque culture/i);
+    expect(avis()).not.toMatch(/cette culture/i);
+  });
+});
+
+describe('T79 suites : Réessayer, accessibilité et saisie du maraîcher', () => {
+  const noeudAvis = (): Element | null => document.querySelector('[data-testid="avertissement-ephy"]');
+
+  it('après un clic sur Réessayer : le focus reste dans le dialogue, sur l’avis (pas sur body)', async () => {
+    let appels = 0;
+    const charger = () => (++appels === 1 ? Promise.reject<CatalogueEphy>(new Error('hors ligne')) : new Promise<CatalogueEphy>(() => undefined));
+    const d = await ouvrir(SERIE.tomate, charger);
+    await remplir(liste('Produit', d), FRAISIOR);
+    await attendre(() => boutonReessayer() !== null, 'bouton Réessayer');
+    await toucher(reessayer());
+    await attendre(() => appels === 2, 'second chargement lancé');
+    const actif = document.activeElement;
+    expect(actif).not.toBe(document.body);
+    expect(d.contains(actif)).toBe(true);
+    const a = noeudAvis();
+    expect(a !== null && (a === actif || a.contains(actif))).toBe(true);
+  });
+
+  it('même conteneur role="status" du chargement à l’échec, puis au nouvel essai (même nœud DOM)', async () => {
+    let appels = 0;
+    let echouer: (e: Error) => void = () => undefined;
+    const charger = () => {
+      appels++;
+      return appels === 1 ? new Promise<CatalogueEphy>((_, r) => { echouer = r; }) : new Promise<CatalogueEphy>(() => undefined);
+    };
+    const d = await ouvrir(SERIE.tomate, charger);
+    await remplir(liste('Produit', d), FRAISIOR);
+    const enChargement = noeudAvis();
+    expect(enChargement?.getAttribute('role')).toBe('status');
+    await act(async () => { echouer(new Error('hors ligne')); await Promise.resolve(); });
+    await attendre(() => /indisponible/i.test(avis()), 'avis indisponible');
+    expect(noeudAvis()).toBe(enChargement);
+    expect(noeudAvis()?.getAttribute('role')).toBe('status');
+    await toucher(reessayer());
+    await attendre(() => appels === 2, 'second chargement');
+    expect(noeudAvis()).toBe(enChargement);
+    expect(noeudAvis()?.getAttribute('role')).toBe('status');
+  });
+
+  it('DAR tapé après l’échec, puis Réessayer réussit avec un autre DAR e-phy : valeur gardée et avis non bloquant « e-phy propose 1 j »', async () => {
+    let appels = 0;
+    const charger = () => (++appels === 1 ? Promise.reject<CatalogueEphy>(new Error('hors ligne')) : Promise.resolve(CATALOGUE));
+    const d = await ouvrir(CAMPAGNE.fraise, charger);
+    await remplir(liste('Produit', d), FRAISIOR);
+    await attendre(() => boutonReessayer() !== null, 'bouton Réessayer');
+    await remplir(champ(DAR, d), '9');
+    await toucher(reessayer());
+    await attendre(() => appels === 2 && !/indisponible|chargement/i.test(avis()), 'second chargement réussi');
+    expect(champ(DAR, d).value).toBe('9');
+    expect(texte(document.body)).toMatch(/e-phy propose 1 j/i);
+    const propose = [...document.querySelectorAll('[role="status"]')].find((e) => /e-phy propose 1 j/i.test(texte(e)));
+    expect(propose).toBeDefined();
+    await remplir(champ('Dose', d), '2');
+    await remplir(champ('Cible', d), 'thrips');
+    await toucher(bouton('Enregistrer', d));
+    await attendre(() => nouveaux().length === 1, 'enregistrement non bloqué');
+    expect((JSON.parse(nouveaux()[0]?.detail ?? '{}') as { recolteAutoriseeLe: string }).recolteAutoriseeLe).toBe('2026-10-09');
   });
 });
