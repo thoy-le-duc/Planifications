@@ -81,6 +81,17 @@ export interface BatimentScene {
   /** Opacité de la bâche (1 pour un volume). */
   readonly opacite: number;
   readonly couleur: string;
+  /** T58 : ouvrants, porte, chauffage et voile d'un abri, posés par ./abris.ts ; absent : rien d'ouvert. */
+  readonly ouvertures?: OuverturesBatiment;
+}
+
+/** T58 : ce qui se dessine d'un abri — vrai si l'équipement est déclaré et actif. */
+export interface OuverturesBatiment {
+  readonly lateraux: boolean;
+  readonly faitage: boolean;
+  readonly portes: boolean;
+  readonly chauffage: boolean;
+  readonly voile: boolean;
 }
 
 export interface Scene {
