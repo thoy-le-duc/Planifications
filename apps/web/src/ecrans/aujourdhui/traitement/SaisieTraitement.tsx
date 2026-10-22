@@ -550,7 +550,6 @@ export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcr
   useEffect(() => {
     if (!avecAmm) return;
     let actif = true;
-    setEtatCatalogue({ sorte: 'chargement' });
     charge.current().then(
       (c) => {
         if (actif) setEtatCatalogue({ sorte: 'lu', catalogue: c });
@@ -705,6 +704,7 @@ export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcr
               produits={lu.produits}
               etatCatalogue={etatCatalogue}
               surReessayer={() => {
+                setEtatCatalogue({ sorte: 'chargement' });
                 setEssai((n) => n + 1);
               }}
               aujourdhui={aujourdhui}
