@@ -3,8 +3,9 @@
  * « 2 serres encore ouvertes » s'il y en a (`rappelDuSoir` du cœur). Chargé après l'affichage de
  * l'écran, à part de son morceau. Avant 18 h, seul le fuseau de la ferme est lu (une ligne) : le
  * journal des serres n'est lu et suivi qu'à partir de 18 h. L'heure est relue chaque minute ;
- * le rappel suit la base (refermer une serre le met à jour). Le calcul est mémorisé sur le
- * journal et les zones : la relecture de chaque minute ne refait rien tant qu'ils n'ont pas changé.
+ * le rappel suit la base (refermer une serre le met à jour) et le temps : un événement daté dans le
+ * futur compte à son heure. Le calcul est mémorisé sur le journal, les zones et l'heure du prochain
+ * événement à venir : la relecture de chaque minute ne refait rien d'autre.
  */
 import { HEURE_RAPPEL_SERRES, rappelDuSoir, type EvenementEtatAbri, type RappelDuSoir, type ZoneAbri } from '@planif/core/abris';
 import type { PorteDonnees } from '@planif/sync';
@@ -24,6 +25,16 @@ function heureDeLaFerme(instant: Date, fuseau: string): number | null {
   }
 }
 
+/** Instant (ms) du prochain événement daté après `t` ; l'infini s'il n'y en a pas. */
+function prochainApres(evenements: readonly EvenementEtatAbri[], t: number): number {
+  let prochain = Number.POSITIVE_INFINITY;
+  for (const e of evenements) {
+    const h = Date.parse(e.horodatage);
+    if (h > t && h < prochain) prochain = h;
+  }
+  return prochain;
+}
+
 /**
  * Suit le rappel du soir de la ferme : `rappel` reçoit le rappel, ou null (avant 18 h, rien
  * d'ouvert). Rend la fonction d'arrêt.
@@ -35,8 +46,11 @@ export function suivreRappelSerres(porte: PorteDonnees, fermeId: string, mainten
   let arretsJournal: (() => void)[] = [];
   let suivi = false;
   let dernier: string | null = null;
-  /** Dernier rappel calculé, et le journal et les zones dont il vient : la minute ne recalcule rien d'autre. */
-  let memo: { readonly zones: readonly ZoneAbri[]; readonly evenements: readonly EvenementEtatAbri[]; readonly rappel: RappelDuSoir | null } | null = null;
+  /**
+   * Dernier rappel calculé, le journal et les zones dont il vient, et l'instant jusqu'auquel il
+   * vaut : le prochain événement daté dans le futur (saisi d'avance, ou d'un téléphone en avance).
+   */
+  let memo: { readonly zones: readonly ZoneAbri[]; readonly evenements: readonly EvenementEtatAbri[]; readonly rappel: RappelDuSoir | null; readonly jusqua: number } | null = null;
 
   const rendre = (r: RappelDuSoir | null): void => {
     const cle = r === null ? '' : `${r.phrase}|${r.zones.map((z) => z.zoneId).join(',')}`;
@@ -75,8 +89,12 @@ export function suivreRappelSerres(porte: PorteDonnees, fermeId: string, mainten
       ];
     }
     if (zones === null || evenements === null) return;
-    // Le journal et les zones n'ont pas changé depuis le dernier calcul (après 18 h) : même rappel.
-    if (memo?.zones !== zones || memo.evenements !== evenements) memo = { zones, evenements, rappel: rappelDuSoir({ zones, evenements, maintenant: instant.toISOString(), fuseau }) };
+    // Ni le journal ni les zones n'ont changé, et aucun événement daté dans le futur n'a pris effet
+    // depuis le dernier calcul : même rappel.
+    const t = instant.getTime();
+    if (memo?.zones !== zones || memo.evenements !== evenements || t >= memo.jusqua) {
+      memo = { zones, evenements, rappel: rappelDuSoir({ zones, evenements, maintenant: instant.toISOString(), fuseau }), jusqua: prochainApres(evenements, t) };
+    }
     rendre(memo.rappel);
   };
 
