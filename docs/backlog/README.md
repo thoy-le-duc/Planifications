@@ -164,7 +164,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 
 ## Phase 1 — Mise en ligne, usage réel, jumeau, phyto et fertilisation (octobre 2026)
 
-Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : T58 (en cours le 22 octobre au matin), puis T81 (demande de Théophane, bloque le placement réel), puis T80, puis T82.
+Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : aucun ticket « à faire » le 22 octobre au soir ; la prochaine session écrit ses questions dans `docs/questions.md` (voir Q50) et s'arrête.
 
 | Ticket | Sujet | Dépend de | Statut |
 | --- | --- | --- | --- |
@@ -191,7 +191,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T55](T55-3d-traitements.md) | Jumeau 3D : traitements et délai avant récolte visibles | T52, T37 | fait |
 | [T56](T56-fertirrigation.md) | Fertirrigation : recettes et apports par vanne, hors-sol et pleine terre | T57, T54 | fait |
 | [T57](T57-vannes-irrigation.md) | Vannes d'irrigation : secteurs, planches arrosées, vannes dans la 3D | T49, T28, T37 | fait |
-| [T58](T58-etat-serres.md) | État des serres : ouvrants, chauffage, bâches, dans la 3D | T28c, T49 | à faire |
+| [T58](T58-etat-serres.md) | État des serres : ouvrants, chauffage, bâches, dans la 3D | T28c, T49 | fait |
 | [T59](T59-deroule-saison-3d.md) | Jumeau 3D : dérouler la saison | T32, T27 | fait |
 | [T60](T60-consignes-par-ouvrier.md) | Consignes par ouvrier : chacun ses travaux du jour | T09, T37 | fait |
 | [T61](T61-chemins-outils.md) | Jumeau 3D : chemins, bâtiments et rangement des outils | T28, T60, T22 | fait |
@@ -213,9 +213,9 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T77](T77-3d-prete-avec-plants.md) | Jumeau 3D : ne se dire « prête » qu'une fois les plants posés | T71 | fait |
 | [T78](T78-traitement-plusieurs-cultures.md) | Traitement : un même produit sur plusieurs cultures en une saisie | T52, T76 | fait |
 | [T79](T79-ephy-saisie-suites.md) | Saisie d'un traitement : suites de la relecture de T76 | T76 | fait |
-| [T80](T80-traitement-date-future-serveur.md) | Serveur : refuser un traitement daté dans le futur (relecture T79) | T79 | à faire |
-| [T81](T81-placer-serre-depuis-zone.md) | Placer une serre depuis sa zone, en un geste | T28b, T28d, T28h, T61 | à faire |
-| [T82](T82-equipements-abri-ecran.md) | Modifier les équipements d'une serre (écran, relecture T58) | T58 | à faire |
+| [T80](T80-traitement-date-future-serveur.md) | Serveur : refuser un traitement daté dans le futur (relecture T79) | T79 | fait |
+| [T81](T81-placer-serre-depuis-zone.md) | Placer une serre depuis sa zone, en un geste | T28b, T28d, T28h, T61 | fait |
+| [T82](T82-equipements-abri-ecran.md) | Modifier les équipements d'une serre (écran, relecture T58) | T58 | fait |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 

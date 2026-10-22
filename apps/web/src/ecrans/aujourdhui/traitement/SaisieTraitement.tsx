@@ -11,9 +11,12 @@
  * Produit venu d'e-phy (son AMM est dans le catalogue) : prérempli du DAR de l'usage de LA culture
  * traitée s'il est unique ; usages de DAR différents : l'utilisateur choisit ; aucun usage :
  * avertissement « non homologué » (non bloquant), DAR à saisir ; DAR absent d'e-phy (Q47) : vide,
- * jamais deviné. Produit sans N° AMM, ou dont l'AMM n'est pas dans le catalogue : DAR de la fiche.
- * Produit avec N° AMM et catalogue en chargement ou indisponible : champ vide et avis « e-phy
- * indisponible » (non bloquant) ; jamais le DAR de la fiche, qui peut être celui d'une autre culture.
+ * jamais deviné. Produit sans N° AMM : DAR de la fiche. Produit dont l'AMM n'est pas dans le
+ * catalogue chargé (retiré d'un catalogue plus récent, ou tapé à la main) : DAR de la fiche et avis
+ * « AMM inconnu d'e-phy » (non bloquant, T79) : il a pu être fixé pour une autre culture.
+ * Produit avec N° AMM et catalogue en chargement : champ vide et avis « chargement d'e-phy… » ;
+ * après un échec : champ vide, avis « e-phy indisponible » (non bloquant) et bouton « Réessayer »
+ * (le dialogue ne retente pas seul, T79) ; jamais le DAR de la fiche, qui peut être celui d'une autre culture.
  *
  * Plusieurs cultures (T78) : cases « Cultures traitées » ; produit, date, dose, cible et opérateur
  * communs ; pour chaque culture cochée, ses emplacements, son DAR (règle ci-dessus appliquée à
@@ -50,7 +53,7 @@ export interface ProprietesSaisieTraitement {
   readonly surEcrit?: () => void;
   /**
    * Catalogue e-phy (T76) ; défaut : celui de l'appli, chargé à la demande (cache du navigateur,
-   * hors ligne après un premier chargement). Un échec n'empêche rien : DAR de la fiche du produit.
+   * hors ligne après un premier chargement). Un échec n'empêche rien : DAR à saisir, « Réessayer » relance (T79).
    */
   readonly chargerCatalogue?: () => Promise<CatalogueEphy>;
 }
@@ -67,6 +70,9 @@ function chargerCatalogueParDefaut(): Promise<CatalogueEphy> {
     });
   return catalogueEnMemoire;
 }
+
+/** Le catalogue e-phy du dialogue : en chargement, lu, ou en échec (on peut réessayer). */
+type EtatCatalogue = { readonly sorte: 'chargement' } | { readonly sorte: 'lu'; readonly catalogue: CatalogueEphy } | { readonly sorte: 'echec' };
 
 /** Ce que l'e-phy dit du produit pour une culture traitée. */
 interface UsagesCulture {
@@ -145,8 +151,9 @@ interface ProprietesFormulaire {
   /** Toutes les cultures en place ce jour : on peut en cocher plusieurs (T78). */
   readonly cultures: readonly CultureEnPlace[];
   readonly produits: readonly ProduitUtilisable[];
-  /** null : en chargement, ou indisponible. */
-  readonly catalogue: CatalogueEphy | null;
+  readonly etatCatalogue: EtatCatalogue;
+  /** Relance le chargement du catalogue après un échec (bouton « Réessayer »). */
+  readonly surReessayer: () => void;
   readonly aujourdhui: string;
   readonly occupe: boolean;
   readonly message: string | null;
@@ -159,7 +166,7 @@ type ParCulture<T> = Readonly<Record<string, T>>;
 
 const sans = <T,>(r: ParCulture<T>, cle: string): ParCulture<T> => Object.fromEntries(Object.entries(r).filter(([k]) => k !== cle));
 
-function Formulaire({ culture: initiale, cultures, produits, catalogue, aujourdhui, occupe, message, surEnregistrer, surMessage }: ProprietesFormulaire): ReactElement {
+function Formulaire({ culture: initiale, cultures, produits, etatCatalogue, surReessayer, aujourdhui, occupe, message, surEnregistrer, surMessage }: ProprietesFormulaire): ReactElement {
   const id = useId();
   const [cochees, setCochees] = useState<ReadonlySet<string>>(() => new Set([initiale.cibleId]));
   /** Emplacements cochés, par culture. */
@@ -182,9 +189,21 @@ function Formulaire({ culture: initiale, cultures, produits, catalogue, aujourdh
   }, [cultures, cochees, initiale]);
   const lot = traitees.length > 1;
   const produit = produits.find((p) => p.id === produitId) ?? null;
+  const catalogue = etatCatalogue.sorte === 'lu' ? etatCatalogue.catalogue : null;
   const ephy = useMemo(() => usagesCultures(catalogue, produit, traitees), [catalogue, produit, traitees]);
   /** Produit avec N° AMM, catalogue absent : l'usage de chaque culture est inconnu, rien n'est proposé. */
   const ephyInconnu = produit !== null && produit.numeroAmm !== '' && catalogue === null;
+  /** Produit avec N° AMM, catalogue lu, AMM absent du catalogue : DAR de la fiche, avec un avis (T79). */
+  const ammInconnu = produit !== null && produit.numeroAmm !== '' && catalogue !== null && ephy === null;
+  const pourCulture = lot ? 'chaque culture' : 'cette culture';
+  const avisEphy = useRef<HTMLDivElement>(null);
+  /** « Réessayer » touché : si le catalogue est lu, le focus passe au DAR de la première culture (l'avis disparaît). */
+  const reessaiEnCours = useRef(false);
+  useEffect(() => {
+    if (etatCatalogue.sorte === 'chargement' || !reessaiEnCours.current) return;
+    reessaiEnCours.current = false;
+    if (etatCatalogue.sorte === 'lu') document.getElementById(lot ? `${id}-dar-0` : `${id}-dar`)?.focus();
+  }, [etatCatalogue.sorte, id, lot]);
   const valeurDose = lireNombre(dose);
   const avertissement = produit === null || valeurDose === null ? null : avertissementDose({ valeur: valeurDose, unite }, produit.doseMaximale);
 
@@ -341,6 +360,16 @@ function Formulaire({ culture: initiale, cultures, produits, catalogue, aujourdh
     );
   };
 
+  /**
+   * DAR tapé (par exemple pendant qu'e-phy manquait) gardé, mais e-phy propose autre chose : le DAR
+   * proposé, sinon null (T79). Nombres comparés : « 01 » vaut 1 j ; un texte qui n'est pas un nombre diffère.
+   */
+  const autreDarDe = (c: CultureEnPlace): number | null => {
+    const saisi = darsSaisis[c.cibleId]?.trim() ?? '';
+    const propose = ephyDe(c)?.dar ?? null;
+    return propose !== null && saisi !== '' && (!/^\d+$/.test(saisi) || Number(saisi) !== propose) ? propose : null;
+  };
+
   const choixUsage = (c: CultureEnPlace, k: number) => {
     const e = ephyDe(c);
     if (e === null || !choixUsageDe(c)) return null;
@@ -368,14 +397,32 @@ function Formulaire({ culture: initiale, cultures, produits, catalogue, aujourdh
     );
   };
 
-  const champDar = (c: CultureEnPlace, cle: string, suffixe: string) => (
-    <div className="parc-champ-bloc">
-      <label className="parc-etiquette" htmlFor={`${id}-dar${cle}`}>
-        Délai avant récolte (jours){suffixe}
-      </label>
-      <input id={`${id}-dar${cle}`} className="parc-champ" inputMode="numeric" autoComplete="off" value={darDe(c)} onChange={(e) => { const v = e.target.value; setDarsSaisis((avant) => ({ ...avant, [c.cibleId]: v })); }} />
-    </div>
-  );
+  /** L'avis « e-phy propose N j » n'est pas une région live (relu à chaque frappe) : le champ le cite par aria-describedby. */
+  const champDar = (c: CultureEnPlace, cle: string, suffixe: string) => {
+    const autreDar = autreDarDe(c);
+    const idAvis = `${id}-dar-propose${cle}`;
+    return (
+      <div className="parc-champ-bloc">
+        <label className="parc-etiquette" htmlFor={`${id}-dar${cle}`}>
+          Délai avant récolte (jours){suffixe}
+        </label>
+        <input
+          id={`${id}-dar${cle}`}
+          className="parc-champ"
+          inputMode="numeric"
+          autoComplete="off"
+          aria-describedby={autreDar === null ? undefined : idAvis}
+          value={darDe(c)}
+          onChange={(e) => { const v = e.target.value; setDarsSaisis((avant) => ({ ...avant, [c.cibleId]: v })); }}
+        />
+        {autreDar !== null && (
+          <p id={idAvis} data-testid="avertissement-dar-saisi" data-cible={c.cibleId} className="parc-aide">
+            Délai saisi gardé : e-phy propose {String(autreDar)} j pour {lot ? c.nom : 'cette culture'}.
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const champSurface = (c: CultureEnPlace, cle: string, suffixe: string) => (
     <div className="parc-champ-bloc">
@@ -419,10 +466,31 @@ function Formulaire({ culture: initiale, cultures, produits, catalogue, aujourdh
           ))}
         </select>
       </div>
-      {ephyInconnu && (
-        <p data-testid="avertissement-ephy" role="status" className="parc-erreur">
-          e-phy indisponible sur ce téléphone : vérifiez le DAR pour {lot ? 'chaque culture' : 'cette culture'}, puis saisissez-le.
-        </p>
+      {(ephyInconnu || ammInconnu) && (
+        // Un seul conteneur role="status", du chargement à l'échec et au nouvel essai : les lecteurs
+        // d'écran suivent le même nœud ; il reçoit le focus quand « Réessayer » disparaît (T79).
+        <div ref={avisEphy} tabIndex={-1} data-testid="avertissement-ephy" role="status" className={ephyInconnu && etatCatalogue.sorte !== 'echec' ? 'parc-aide' : 'parc-erreur'}>
+          {ammInconnu ? (
+            <p style={{ margin: 0 }}>AMM inconnu d’e-phy : vérifiez le DAR pour {pourCulture} (repris de la fiche du produit).</p>
+          ) : etatCatalogue.sorte === 'echec' ? (
+            <>
+              <p style={{ margin: 0 }}>e-phy indisponible sur ce téléphone : vérifiez le DAR pour {pourCulture}, puis saisissez-le.</p>
+              <button
+                type="button"
+                className="parc-bouton-secondaire"
+                onClick={() => {
+                  avisEphy.current?.focus();
+                  reessaiEnCours.current = true;
+                  surReessayer();
+                }}
+              >
+                Réessayer
+              </button>
+            </>
+          ) : (
+            <p style={{ margin: 0 }}>Chargement d’e-phy… le DAR de {pourCulture} sera proposé dès qu’il est lu.</p>
+          )}
+        </div>
       )}
       {lot ? (
         traitees.map((c, k) => (
@@ -516,7 +584,9 @@ export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcr
   const [etape, setEtape] = useState<Etape>({ sorte: 'culture' });
   const [occupe, setOccupe] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [catalogue, setCatalogue] = useState<CatalogueEphy | null>(null);
+  const [etatCatalogue, setEtatCatalogue] = useState<EtatCatalogue>({ sorte: 'chargement' });
+  /** Numéro de l'essai de chargement : « Réessayer » l'incrémente, rien d'autre ne relance (T79). */
+  const [essai, setEssai] = useState(0);
   const charge = useRef(chargerCatalogue);
   const avecAmm = lu?.produits.some((p) => p.numeroAmm !== '') === true;
 
@@ -526,16 +596,17 @@ export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcr
     let actif = true;
     charge.current().then(
       (c) => {
-        if (actif) setCatalogue(c);
+        if (actif) setEtatCatalogue({ sorte: 'lu', catalogue: c });
       },
       (e: unknown) => {
-        console.warn('Catalogue e-phy indisponible : DAR des fiches produit', e);
+        console.warn('Catalogue e-phy indisponible : DAR à saisir pour les produits à N° AMM', e);
+        if (actif) setEtatCatalogue({ sorte: 'echec' });
       },
     );
     return () => {
       actif = false;
     };
-  }, [avecAmm]);
+  }, [avecAmm, essai]);
 
   useEffect(() => {
     titre.current?.focus();
@@ -675,7 +746,11 @@ export function SaisieTraitement({ porte, fermeId, aujourdhui, surFermer, surEcr
               culture={etape.culture}
               cultures={lu.cultures}
               produits={lu.produits}
-              catalogue={catalogue}
+              etatCatalogue={etatCatalogue}
+              surReessayer={() => {
+                setEtatCatalogue({ sorte: 'chargement' });
+                setEssai((n) => n + 1);
+              }}
               aujourdhui={aujourdhui}
               occupe={occupe}
               message={message}

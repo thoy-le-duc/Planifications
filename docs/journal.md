@@ -2,6 +2,42 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-22 (soir) — T81 : placer une serre depuis sa zone, en un geste
+
+- **Fait** : dans l'éditeur de placement, une zone tunnel ou serre propose « Placer la serre » au lieu de « Tracer le contour ». Le rectangle se pose au centre de la vue, aux mesures du dernier bâtiment du même type (sinon 30 × 8 m), puis se déplace et se tourne aux poignées, souris ou doigt. Un seul Enregistrer crée le bâtiment et le rattache à la zone, et reste annulable. Une zone déjà tracée à la main, comme Manon 1, propose « Remplacer par une serre », à partir du rectangle de surface minimale de son contour. Les planches déjà placées restent au même endroit sur le terrain ; celles qui tomberaient hors de la serre sont signalées avant de confirmer. PR #252.
+- **Décidé** : le calcul du rectangle se charge à la demande, et le budget de l'éditeur (21,1 Kio) est tenu sans être relevé. La marge est à zéro : la prochaine addition à l'éditeur devra alléger ailleurs. Dans les tests de placement, « Tunnel 1 » est maintenant en plein champ par défaut, car les tests T28d y tracent un contour libre (aucune assertion touchée).
+- **Bloquant** : rien. La largeur type des tunnels attend la réponse de Théophane (Q50).
+
+## 2026-10-22 (soir) — Main verte : la requête « déjà fait » sous la nouvelle Node 22
+
+- **Fait** : la CI suit la dernière Node 22 (`.node-version` = « 22 »). Node 22.23.4 embarque SQLite 3.53.4, avec lequel la CTE récursive du « déjà fait » (`packages/sync/src/fait-unique.ts`) parcourait tout le journal : test d'index T13l rouge, refus à environ 100 ms au lieu de moins de 50. La faute a été reproduite sur `main` seule. Le correctif écrit le départ de la CTE en UNION ALL ; l'ensemble des membres ne change pas (relecture critique). PR #249 fusionnée. Le matin, `main` avait été rouge une fois sur l'e2e du déroulé 3D (une semaine sautée sous charge) : vert après une relance du même commit.
+- **Décidé** : PR à part, parce que T58 avait été fusionnée par la session du soir après une relance verte, juste avant que ce correctif arrive sur sa branche.
+- **Bloquant** : à décider, épingler une version précise de Node dans `.node-version` pour que la CI ne change plus sans prévenir.
+
+## 2026-10-22 (soir) — T82 : modifier les équipements d'une serre
+
+- **Fait** : la fiche d'une zone abritée (Parcellaire) a une section « Équipements » avec cinq cases (ouvrants latéraux, ouvrants de faîtage, portes, chauffage, voile ou filet), pré-cochées selon la liste en vigueur. Un tap écrit tout de suite, avec « Annuler ». « Revenir aux équipements par défaut » remet la colonne à nulle. Une zone de plein champ n'a pas cette section. Un équipement décoché disparaît du panneau Serres, de la 3D et du rappel. Les événements passés restent.
+- **Décidé** : plusieurs taps rapides s'enchaînent dans une file. Aucun ne se perd, et chaque « Annuler » garde la bonne valeur d'avant. L'affichage ne clignote pas en attendant la relecture de la base. Après un échec, il revient à la base la plus récente. Ces trois défauts ont été trouvés en relecture et corrigés dans la PR, avec leurs tests.
+- **Bloquant** : rien. Limites connues : un « Annuler » tapé pendant une écriture de la file n'est pas mis en file (cas rare). Une zone repassée en plein champ garde sa liste personnalisée en base, sans effet visible.
+
+## 2026-10-22 (soir) — T80 : le serveur refuse un traitement daté dans le futur
+
+- **Fait** : le serveur refuse un traitement phyto daté après son jour à Paris + 1 jour (le 22/10, le 23 passe, le 24 est refusé), avec « traitement daté dans le futur (24/10/2026) : corrigez la date », par le chemin des refus existant, sans bloquer les autres saisies de l'envoi. Correction et annulation suivent la même règle sur la date qu'elles portent. Les traitements déjà en base ne sont pas réécrits. Ticket critique : testeur séparé, relecture critique sans faille au premier passage. Avant T80, T58 (état des serres) a été fusionnée : sa CI rouge (budgets de temps et plan SQL de `annulation-chaine`) passait en local et est passée au vert à la relance, sans changement de code.
+- **Décidé** : le jour du serveur est injectable (`jourServeur`), en fuseau Europe/Paris. Un traitement futur déjà en base, renvoyé à l'identique par un téléphone, reste accepté sans rien écrire ; le même identifiant avec une autre date est refusé.
+- **Bloquant** : rien. À trancher avec Théophane : la même règle pour la récolte et le réalisé. Vercel sature (plus de 100 déploiements par jour, deux projets à chaque push de branche) : proposition faite à Théophane de ne déployer que `main`.
+
+## 2026-10-22 (jour) — T58 : état des serres, dans Aujourd'hui et la 3D
+
+- **Fait** : chaque tunnel ou serre a ses équipements (ouvrants latéraux, de faîtage, portes, chauffage, voile), avec une liste par défaut selon le type d'abri. Un tap, hors ligne, depuis Aujourd'hui (panneau « Serres ») ou depuis la 3D, note « ouvert » ou « fermé » ; c'est un événement `etat_abri` du journal, annulable. L'état courant se calcule dans le cœur, corrections et annulations comprises, en une passe : 10 ms pour 20 000 événements. Le rappel « 2 serres encore ouvertes » s'affiche à partir de 18 h, heure de la ferme. Dans la 3D, les ouvrants ouverts sont relevés et le filtre « Serres » montre ce qui est ouvert. Côté base : migration 0047 (colonne `zone.equipements_abri`, nulle = liste par défaut) ; flux PowerSync inchangés ; export à jour. PR #247, ticket critique, trois passages de relecture jusqu'à zéro faille (test aléatoire de 120 000 journaux).
+- **Décidé** : pas de nouvelle table, un type d'événement. Une correction garde la zone et l'équipement de l'original (refus du serveur sinon). À heures égales, l'identifiant de l'original départage deux chaînes. Le hors-sol a la même liste par défaut qu'un tunnel. Le rappel s'arrête à minuit (une serre restée ouverte n'est plus signalée le matin : question Q50).
+- **Bloquant** : rien. L'écran qui modifie la liste des équipements d'une zone n'existe pas encore : ticket T82. Les tests de synchro de bout en bout n'ont pas tourné dans le conteneur (pas de Docker) : la CI les passe.
+
+## 2026-10-22 (matin) — T79 : saisie d'un traitement, suites de la relecture de T76
+
+- **Fait** : la saisie d'un traitement dit « Chargement d'e-phy… » tant que le catalogue charge. « e-phy indisponible sur ce téléphone » n'apparaît qu'après un échec, avec un bouton « Réessayer » (jamais de nouvel essai automatique). Un AMM absent du catalogue reprend le DAR de la fiche, avec l'avis « AMM inconnu d'e-phy : vérifiez le DAR pour cette culture ». Un DAR tapé à la main est toujours gardé ; s'il diffère d'e-phy, un avis le dit sous le champ. `ecrireLotTraitement` refuse tout le lot si une date est dans le futur, illisible ou impossible : rien n'est écrit. PR #246, ticket critique (testeur séparé, trois passages de relecture jusqu'à zéro faille).
+- **Décidé** : l'avis « e-phy propose N j » n'est pas une région live : il est relié au champ par aria-describedby, pour qu'un lecteur d'écran ne parle pas à chaque frappe. Ce choix contredisait un test du premier passage, que le testeur a ajusté sur ordre du chef (justifié dans la PR). Pour une saisie sur plusieurs cultures, les avis disent « chaque culture ». Avant T79, `main` avait été rouge une fois sur l'e2e du déroulé 3D (une semaine sautée sous charge, le rattrapage saute au-delà d'1 s de retard) : vert relancé sur le même commit, à surveiller.
+- **Bloquant** : rien. Ticket de suite T80 : le serveur refuse lui aussi un traitement daté dans le futur (aujourd'hui, seul le téléphone le refuse). Dans le conteneur de la boucle, 7 tests Windows-1252 échouent toujours (Node du conteneur), sans effet sur la CI.
+
 ## 2026-10-22 (nuit) — Main verte : le test C6 du plan ne dépend plus de la date
 
 - **Fait** : après la fusion de T61, la CI de `main` est passée au rouge sur `plan-relecture.e2e.ts` C6 (4 barres visibles pour plus de 5 attendues), alors que le même code était vert quelques heures avant. L'écran Planches se centre sur la semaine du jour, comme voulu, donc le nombre de barres vues dépend de la date (8 le 21/10, 7 le 22/10, 4 en CI). C6 fige maintenant l'horloge au 15/06/2026 et parcourt toute la saison : 11 barres, seuil inchangé. PR #244 fusionnée, `main` verte. Les migrations 0044 à 0046 sont appliquées en production, et les règles de synchro déployées (journaux lus : « Migrations appliquées », « Deployment operation completed successfully »).

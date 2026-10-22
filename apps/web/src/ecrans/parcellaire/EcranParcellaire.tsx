@@ -7,7 +7,8 @@
  * Règles : ./regles.ts ; écritures (une transaction par geste, annulable 10 s) : ./ecritures.ts.
  */
 import { useEffect, useId, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactElement, type ReactNode } from 'react';
-import { painsParDefaut } from '@planif/core';
+import { painsParDefaut, type EquipementAbri } from '@planif/core';
+import { equipementsDeZone, EQUIPEMENTS_ABRI, validerEquipementsAbri } from '@planif/core/abris';
 import type { PorteDonnees } from '@planif/sync';
 import './parcellaire.css';
 import {
@@ -20,6 +21,7 @@ import {
   EcritureRefusee,
   modifierEmplacement,
   modifierSaison,
+  modifierEquipements,
   modifierZone,
   supprimerEmplacement,
   supprimerSaison,
@@ -68,6 +70,8 @@ interface ZoneLue {
   readonly nom: string;
   readonly typeAbri: string;
   readonly parenteId: string | null;
+  /** T82 : liste de la zone ; nulle : celle de son type d'abri. */
+  readonly equipementsAbri: readonly EquipementAbri[] | null;
 }
 interface PlancheLue {
   readonly id: string;
@@ -477,6 +481,120 @@ function FormulairePlanche({ ctx, planche, codesPris, surFermer, surEnregistre }
   );
 }
 
+// ── Équipements d'une zone abritée (T82) ─────────────────────────────────────────────────────
+
+const LIBELLES_EQUIPEMENT: Readonly<Record<EquipementAbri, string>> = {
+  ouvrants_lateraux: 'ouvrants latéraux',
+  ouvrants_faitage: 'ouvrants de faîtage',
+  portes: 'portes',
+  chauffage: 'chauffage',
+  voile: 'voile ou filet',
+};
+
+/** Liste lue de la base locale (texte JSON) ; nulle ou illisible : la liste par défaut du type. */
+function equipementsLus(brut: unknown): readonly EquipementAbri[] | null {
+  if (brut === null || brut === undefined) return null;
+  const v = validerEquipementsAbri(brut);
+  return v.ok ? v.valeur : null;
+}
+
+/** Cinq cases, pré-cochées selon la liste en vigueur ; un tap = une écriture, annulable. Pas pour le plein champ. */
+const cleDe = (l: { readonly liste: readonly EquipementAbri[]; readonly nulle: boolean }): string => `${l.nulle ? 'defaut' : 'liste'}:${l.liste.join(',')}`;
+
+function SectionEquipements({ ctx, zone, surEnregistre }: { readonly ctx: ContexteParcellaire; readonly zone: ZoneLue; readonly surEnregistre: (e: Enregistrement | null) => void }) {
+  const typeAbri = TYPES_ABRI.find((t) => t === zone.typeAbri) ?? 'plein_champ';
+  const depuisBase = { liste: equipementsDeZone({ typeAbri, equipementsAbri: zone.equipementsAbri }), nulle: zone.equipementsAbri === null };
+  // Liste en vigueur tenue ici : deux taps rapides repartent de la liste du premier, pas de celle de la base (pas encore relue).
+  const [local, setLocal] = useState(depuisBase);
+  const courante = useRef(local);
+  // La base la plus récente (relue à chaque rendu) : c'est elle qu'on affiche quand la file se vide.
+  const baseRecente = useRef(depuisBase);
+  useEffect(() => {
+    baseRecente.current = depuisBase;
+  });
+  const chaine = useRef<Promise<void>>(Promise.resolve());
+  const enVol = useRef(0);
+  // Base d'avant la première écriture de la file, et échec dans la file : décident de ce qu'on affiche à la fin.
+  const avantFile = useRef('');
+  const echecFile = useRef(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const cle = cleDe(depuisBase);
+  useEffect(() => {
+    // La base fait foi dès qu'aucune écriture n'est en cours.
+    if (enVol.current === 0) {
+      courante.current = depuisBase;
+      setLocal(depuisBase);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `cle` résume depuisBase
+  }, [cle]);
+  if (typeAbri === 'plein_champ') return null;
+
+  function ecrire(suivant: { readonly liste: EquipementAbri[]; readonly nulle: boolean }): void {
+    courante.current = suivant;
+    setLocal(suivant);
+    setMessage(null);
+    if (enVol.current === 0) {
+      avantFile.current = cleDe(baseRecente.current);
+      echecFile.current = false;
+    }
+    enVol.current++;
+    chaine.current = chaine.current
+      .then(async () => {
+        surEnregistre(await modifierEquipements(ctx, zone.id, suivant.nulle ? null : suivant.liste));
+      })
+      .catch((e: unknown) => {
+        console.error('Équipements non enregistrés', e);
+        setMessage(messageEchec(e));
+        echecFile.current = true;
+      })
+      .finally(() => {
+        enVol.current--;
+        // File vide. Sans échec et base pas encore relue (inchangée) : on garde l'état local, sans clignotement.
+        // Sinon la base fait foi (écritures réussies relues, changement venu d'un autre appareil, ou échec).
+        if (enVol.current === 0 && (echecFile.current || cleDe(baseRecente.current) !== avantFile.current)) {
+          courante.current = baseRecente.current;
+          setLocal(baseRecente.current);
+        }
+      });
+  }
+
+  return (
+    <section className="parc-carte" aria-label="Équipements">
+      <h3 className="parc-etiquette">Équipements</h3>
+      <div className="parc-equipements">
+        {EQUIPEMENTS_ABRI.map((eq) => (
+          <label key={eq} className="parc-equipement">
+            <input
+              type="checkbox"
+              checked={local.liste.includes(eq)}
+              onChange={(ev) => {
+                const base = courante.current.liste;
+                ecrire({ liste: EQUIPEMENTS_ABRI.filter((x) => (x === eq ? ev.target.checked : base.includes(x))), nulle: false });
+              }}
+            />
+            <span>{LIBELLES_EQUIPEMENT[eq]}</span>
+          </label>
+        ))}
+      </div>
+      {message !== null && (
+        <p role="alert" className="parc-erreur">
+          {message}
+        </p>
+      )}
+      <button
+        type="button"
+        className="parc-bouton-secondaire"
+        disabled={local.nulle}
+        onClick={() => {
+          ecrire({ liste: equipementsDeZone({ typeAbri, equipementsAbri: null }), nulle: true });
+        }}
+      >
+        Revenir aux équipements par défaut
+      </button>
+    </section>
+  );
+}
+
 // ── Dialogue d'une zone : ses planches, en ajouter en lot ────────────────────────────────────
 
 function DialogueZone({
@@ -567,6 +685,7 @@ function DialogueZone({
           <button type="button" className="parc-bouton-secondaire" onClick={surModifierZone}>
             Modifier la zone
           </button>
+          <SectionEquipements ctx={ctx} zone={zone} surEnregistre={surEnregistre} />
           <section className="parc-carte" aria-label="Ajouter des planches">
             <h3 className="parc-etiquette">Ajouter des planches</h3>
             <div className="parc-grille">
@@ -664,10 +783,10 @@ export function EcranParcellaire({ porte, fermeId, section, surFermer, surImport
     () =>
       porte.surveiller<ZoneLue>(
         {
-          sql: 'SELECT id, nom, type_abri, zone_parente_id FROM zone WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY nom, id',
+          sql: 'SELECT id, nom, type_abri, zone_parente_id, equipements_abri FROM zone WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY nom, id',
           parametres: [fermeId],
           tables: ['zone'],
-          convertir: (l: L) => ({ id: txt(l.id), nom: txt(l.nom), typeAbri: txt(l.type_abri), parenteId: txtOuNul(l.zone_parente_id) }),
+          convertir: (l: L) => ({ id: txt(l.id), nom: txt(l.nom), typeAbri: txt(l.type_abri), parenteId: txtOuNul(l.zone_parente_id), equipementsAbri: equipementsLus(l.equipements_abri) }),
         },
         setZones,
       ),

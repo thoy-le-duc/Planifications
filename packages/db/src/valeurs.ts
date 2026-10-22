@@ -7,6 +7,7 @@
 import type {
   CategorieEspece,
   CategorieIntervention,
+  EquipementAbri,
   EtapeRealisee,
   FormeFertilisant,
   ModeItineraire,
@@ -64,7 +65,10 @@ export const TYPES_EVENEMENT = toutes<TypeEvenement>()([
   'irrigation',
   'traitement',
   'observation',
+  'etat_abri',
 ]);
+/** T58 : équipements d'un abri (détail des événements `etat_abri`, `zone.equipements_abri`). */
+export const EQUIPEMENTS_ABRI = toutes<EquipementAbri>()(['ouvrants_lateraux', 'ouvrants_faitage', 'portes', 'chauffage', 'voile']);
 export const SOURCES_SAISIE = toutes<SourceSaisie>()(['tap', 'voix', 'agent', 'photo', 'import']);
 export const SORTES_REMPLACEMENT = toutes<RemplacementEvenement['sorte']>()(['correction', 'annulation']);
 export const ETAPES_REALISEES = toutes<EtapeRealisee>()(['semis_pepiniere', 'semis_direct', 'plantation', 'arrachage']);
