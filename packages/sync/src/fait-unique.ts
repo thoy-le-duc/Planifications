@@ -58,6 +58,10 @@ export class DejaFait extends Error {}
  * `depart` filtre les remplacements dont on part ; `avant` : CTE placées avant
  * (`nom(…) AS (…),`), que `depart` peut lire.
  *
+ * Départ des CTE récursives `membre` en UNION ALL (le seul UNION est celui qui relie le départ à
+ * la récursion, et il écarte les doublons) : en UNION, SQLite 3.53 (Node 22.23) fusionne les
+ * branches dans l'ordre des id et parcourt alors tout le journal par la clé primaire.
+ *
  * T13b : les remplacements se lisent par l'index `remplacement` (`>= ''` : toute valeur non
  * nulle, comme `IS NOT NULL`, que SQLite ne cherche pas dans un index d'expression), qui porte
  * aussi la ferme, l'origine, la sorte et l'horodatage. La ferme est écartée de l'index
@@ -125,9 +129,9 @@ const sqlDejaFait = (colonne: ColonneCulture, nombreCles: number) => {
   ),
   membre(id) AS (
     SELECT id FROM haut
-    UNION SELECT origine FROM haut WHERE origine IS NOT NULL
-    UNION SELECT e.id FROM evenement e WHERE e.${colonne} = ? AND +e.ferme_id = ? AND e.remplace_sorte IS NOT NULL
-    UNION SELECT e.id FROM evenement e
+    UNION ALL SELECT origine FROM haut WHERE origine IS NOT NULL
+    UNION ALL SELECT e.id FROM evenement e WHERE e.${colonne} = ? AND +e.ferme_id = ? AND e.remplace_sorte IS NOT NULL
+    UNION ALL SELECT e.id FROM evenement e
       WHERE e.remplace_evenement_id >= '' AND +e.ferme_id = ? AND e.origine_id IN (SELECT id FROM haut UNION SELECT origine FROM haut)
     UNION SELECT e.id FROM evenement e JOIN membre m ON e.remplace_evenement_id = m.id
   ),
@@ -257,7 +261,7 @@ const SQL_CHAINE_DE_L_ORIGINE = `${chaines(
   `id IN (SELECT id FROM membre) AND remplace_evenement_id >= '' AND +ferme_id = ?`,
   `membre(id) AS (
     SELECT ?
-    UNION SELECT e.id FROM evenement e WHERE e.remplace_evenement_id >= '' AND +e.ferme_id = ? AND e.origine_id = ?
+    UNION ALL SELECT e.id FROM evenement e WHERE e.remplace_evenement_id >= '' AND +e.ferme_id = ? AND e.origine_id = ?
     UNION SELECT e.id FROM evenement e JOIN membre m ON e.remplace_evenement_id = m.id WHERE +e.ferme_id = ?
   ),
   `,
