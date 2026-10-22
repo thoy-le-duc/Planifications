@@ -164,7 +164,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 
 ## Phase 1 — Mise en ligne, usage réel, jumeau, phyto et fertilisation (octobre 2026)
 
-Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : T79 (suites de T76, phyto ; y ajouter le refus d'une date future dans `ecrireLotTraitement`), puis T58.
+Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : T58 (en cours le 22 octobre au matin), puis T81 (demande de Théophane, bloque le placement réel), puis T80.
 
 | Ticket | Sujet | Dépend de | Statut |
 | --- | --- | --- | --- |
@@ -213,6 +213,8 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T77](T77-3d-prete-avec-plants.md) | Jumeau 3D : ne se dire « prête » qu'une fois les plants posés | T71 | fait |
 | [T78](T78-traitement-plusieurs-cultures.md) | Traitement : un même produit sur plusieurs cultures en une saisie | T52, T76 | fait |
 | [T79](T79-ephy-saisie-suites.md) | Saisie d'un traitement : suites de la relecture de T76 | T76 | fait |
+| [T80](T80-traitement-date-future-serveur.md) | Serveur : refuser un traitement daté dans le futur (relecture T79) | T79 | en revue |
+| [T81](T81-placer-serre-depuis-zone.md) | Placer une serre depuis sa zone, en un geste | T28b, T28d, T28h, T61 | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 
