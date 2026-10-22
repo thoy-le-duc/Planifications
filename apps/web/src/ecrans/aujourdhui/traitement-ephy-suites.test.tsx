@@ -395,8 +395,10 @@ describe('T79 suites : Réessayer, accessibilité et saisie du maraîcher', () =
     await attendre(() => appels === 2 && !/indisponible|chargement/i.test(avis()), 'second chargement réussi');
     expect(champ(DAR, d).value).toBe('9');
     expect(texte(document.body)).toMatch(/e-phy propose 1 j/i);
-    const propose = [...document.querySelectorAll('[role="status"]')].find((e) => /e-phy propose 1 j/i.test(texte(e)));
-    expect(propose).toBeDefined();
+    const avisPropose = [...document.querySelectorAll('p, div, span')].reverse().find((e) => /e-phy propose 1 j/i.test(e.textContent) && e.children.length === 0);
+    expect(avisPropose).toBeDefined();
+    expect(avisPropose?.id).not.toBe('');
+    expect((champ(DAR, d).getAttribute('aria-describedby') ?? '').split(/\s+/)).toContain(avisPropose?.id);
     await remplir(champ('Dose', d), '2');
     await remplir(champ('Cible', d), 'thrips');
     await toucher(bouton('Enregistrer', d));
