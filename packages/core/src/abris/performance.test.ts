@@ -6,7 +6,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { mesurer } from '../test/mesurer.ts';
-import { EQUIPEMENTS_ABRI, etatsDesZones, type EquipementAbri, type EvenementEtatAbri, type ZoneAbri } from './index.ts';
+import type { EquipementAbri } from '../domaine/entites.ts';
+import { EQUIPEMENTS_ABRI, etatsDesZones, type EvenementEtatAbri, type ZoneAbri } from './index.ts';
 
 const uuid = (n: number): string => `0192f0c1-5858-7000-8000-${n.toString(16).padStart(12, '0')}`;
 const DEBUT = Date.parse('2026-09-01T00:00:00.000Z');
@@ -79,7 +80,8 @@ describe('T58 : 40 zones × 5 équipements, 20 000 événements', () => {
   // Mélangés : l'ordre du journal ne doit pas compter.
   for (let i = evenements.length - 1; i > 0; i--) {
     const j = alea(i + 1);
-    [evenements[i], evenements[j]] = [evenements[j] as EvenementEtatAbri, evenements[i] as EvenementEtatAbri];
+    const echange = evenements.splice(j, 1, ...evenements.slice(i, i + 1));
+    evenements.splice(i, 1, ...echange);
   }
   const INSTANT = iso(DEBUT + (rang + 10) * 60_000);
 
