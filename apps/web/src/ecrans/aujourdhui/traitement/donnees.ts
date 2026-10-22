@@ -26,6 +26,8 @@ import { jourDuTelephone } from '../jour.ts';
  */
 export type Annoncer = (culture: CultureConcernee) => () => void;
 
+const JOUR = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Écriture refusée avant l'envoi (règle du serveur), avec un message clair. */
 export class TraitementRefuse extends Error {}
 
@@ -207,9 +209,15 @@ export async function ecrireTraitement(porte: PorteDonnees, s: SaisieDuTraitemen
 /**
  * Un même produit sur plusieurs cultures (T78) : UN événement `traitement` par saisie (une par
  * culture, avec ses emplacements et SON DAR figé), dans l'ordre, en UNE transaction. Tout ou rien :
- * une saisie refusée par les règles du serveur, ou un lot vide → TraitementRefuse, rien d'écrit.
+ * une saisie refusée par les règles du serveur, une saisie datée après `aujourdhui` (T79 : le
+ * registre note ce qui est fait), ou un lot vide → TraitementRefuse, rien d'écrit ni annoncé.
  */
 export async function ecrireLotTraitement(porte: PorteDonnees, saisies: readonly SaisieDuTraitement[], annoncer?: Annoncer, aujourdhui: string = jourDuTelephone()): Promise<TraitementEcrit[]> {
+  for (const s of saisies) {
+    // Dates 'AAAA-MM-JJ' : l'ordre du texte est celui des jours ; une autre forme est refusée.
+    if (!JOUR.test(s.date)) throw new TraitementRefuse('date du traitement illisible ; rien n’a été enregistré');
+    if (s.date > aujourdhui) throw new TraitementRefuse('la date du traitement ne peut pas être après aujourd’hui ; rien n’a été enregistré');
+  }
   const lot = saisies.map(saisieDe);
   const ids = await ecrire(
     porte,

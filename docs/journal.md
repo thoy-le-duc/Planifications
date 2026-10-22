@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-22 (matin) — T79 : saisie d'un traitement, suites de la relecture de T76
+
+- **Fait** : la saisie d'un traitement dit « Chargement d'e-phy… » tant que le catalogue charge. « e-phy indisponible sur ce téléphone » n'apparaît qu'après un échec, avec un bouton « Réessayer » (jamais de nouvel essai automatique). Un AMM absent du catalogue reprend le DAR de la fiche, avec l'avis « AMM inconnu d'e-phy : vérifiez le DAR pour cette culture ». Un DAR tapé à la main est toujours gardé ; s'il diffère d'e-phy, un avis le dit sous le champ. `ecrireLotTraitement` refuse tout le lot si une date est dans le futur, illisible ou impossible : rien n'est écrit. PR #246, ticket critique (testeur séparé, trois passages de relecture jusqu'à zéro faille).
+- **Décidé** : l'avis « e-phy propose N j » n'est pas une région live : il est relié au champ par aria-describedby, pour qu'un lecteur d'écran ne parle pas à chaque frappe. Ce choix contredisait un test du premier passage, que le testeur a ajusté sur ordre du chef (justifié dans la PR). Pour une saisie sur plusieurs cultures, les avis disent « chaque culture ». Avant T79, `main` avait été rouge une fois sur l'e2e du déroulé 3D (une semaine sautée sous charge, le rattrapage saute au-delà d'1 s de retard) : vert relancé sur le même commit, à surveiller.
+- **Bloquant** : rien. Ticket de suite T80 : le serveur refuse lui aussi un traitement daté dans le futur (aujourd'hui, seul le téléphone le refuse). Dans le conteneur de la boucle, 7 tests Windows-1252 échouent toujours (Node du conteneur), sans effet sur la CI.
+
 ## 2026-10-22 (nuit) — Main verte : le test C6 du plan ne dépend plus de la date
 
 - **Fait** : après la fusion de T61, la CI de `main` est passée au rouge sur `plan-relecture.e2e.ts` C6 (4 barres visibles pour plus de 5 attendues), alors que le même code était vert quelques heures avant. L'écran Planches se centre sur la semaine du jour, comme voulu, donc le nombre de barres vues dépend de la date (8 le 21/10, 7 le 22/10, 4 en CI). C6 fige maintenant l'horloge au 15/06/2026 et parcourt toute la saison : 11 barres, seuil inchangé. PR #244 fusionnée, `main` verte. Les migrations 0044 à 0046 sont appliquées en production, et les règles de synchro déployées (journaux lus : « Migrations appliquées », « Deployment operation completed successfully »).
