@@ -6,7 +6,6 @@
 import { coinsEmprise, depuisRepereZone, rectangleEnglobantMinimal, versRepereZone, type RectangleEnglobant, type RepereZone } from '@planif/core/placement';
 import type { Point } from './tuiles.ts';
 import type { Planche } from './donnees.ts';
-import { depuisPlacementPlanche, normaliserCap } from './gestes.ts';
 
 /** Marge sous laquelle un coin de planche au bord de la serre est dedans (m). */
 const MARGE_M = 0.01;
@@ -30,8 +29,7 @@ export function preparerRemplacement(
   if (serre === null) return { englobant: null, avis: 'Contour inutilisable, la serre est posée au centre de la vue.', converties: [] };
   if (repere == null) return { englobant: serre, avis: null, converties: [] };
   const hors = planches.filter((p) => {
-    const { centre, orientationDeg } = depuisPlacementPlanche(repere, p.placement);
-    return coinsEmprise(centre, p.longueurM, p.largeurM, orientationDeg).some((c) => {
+    return coinsEmprise(depuisRepereZone(repere, p.placement), p.longueurM, p.largeurM, p.placement.orientation_deg + repere.orientationDeg).some((c) => {
       const l = versRepereZone(serre, c);
       return Math.abs(l.x) > serre.largeurM / 2 + MARGE_M || Math.abs(l.y) > serre.longueurM / 2 + MARGE_M;
     });
@@ -41,7 +39,7 @@ export function preparerRemplacement(
     avis: hors === 0 ? null : `${String(hors)} planche${hors > 1 ? 's' : ''} hors de la serre.`,
     converties: planches.map((p) => {
       const { x, y } = versRepereZone(serre, depuisRepereZone(repere, p.placement));
-      return [p.id, { ...p, placement: { x: mm(x), y: mm(y), orientation_deg: normaliserCap(mm(p.placement.orientation_deg + repere.orientationDeg - serre.orientationDeg)) } }] as [string, Planche];
+      return [p.id, { ...p, placement: { x: mm(x), y: mm(y), orientation_deg: (((mm(p.placement.orientation_deg + repere.orientationDeg - serre.orientationDeg) % 360) + 360) % 360) } }] as [string, Planche];
     }),
   };
 }
