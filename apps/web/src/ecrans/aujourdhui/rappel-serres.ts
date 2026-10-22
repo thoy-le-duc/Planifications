@@ -3,7 +3,8 @@
  * « 2 serres encore ouvertes » s'il y en a (`rappelDuSoir` du cœur). Chargé après l'affichage de
  * l'écran, à part de son morceau. Avant 18 h, seul le fuseau de la ferme est lu (une ligne) : le
  * journal des serres n'est lu et suivi qu'à partir de 18 h. L'heure est relue chaque minute ;
- * le rappel suit la base (refermer une serre le met à jour).
+ * le rappel suit la base (refermer une serre le met à jour). Le calcul est mémorisé sur le
+ * journal et les zones : la relecture de chaque minute ne refait rien tant qu'ils n'ont pas changé.
  */
 import { HEURE_RAPPEL_SERRES, rappelDuSoir, type EvenementEtatAbri, type RappelDuSoir, type ZoneAbri } from '@planif/core/abris';
 import type { PorteDonnees } from '@planif/sync';
@@ -34,6 +35,8 @@ export function suivreRappelSerres(porte: PorteDonnees, fermeId: string, mainten
   let arretsJournal: (() => void)[] = [];
   let suivi = false;
   let dernier: string | null = null;
+  /** Dernier rappel calculé, et le journal et les zones dont il vient : la minute ne recalcule rien d'autre. */
+  let memo: { readonly zones: readonly ZoneAbri[]; readonly evenements: readonly EvenementEtatAbri[]; readonly rappel: RappelDuSoir | null } | null = null;
 
   const rendre = (r: RappelDuSoir | null): void => {
     const cle = r === null ? '' : `${r.phrase}|${r.zones.map((z) => z.zoneId).join(',')}`;
@@ -51,6 +54,7 @@ export function suivreRappelSerres(porte: PorteDonnees, fermeId: string, mainten
       for (const a of arretsJournal) a();
       arretsJournal = [];
       suivi = false;
+      memo = null;
       zones = null;
       evenements = null;
       rendre(null);
@@ -71,7 +75,9 @@ export function suivreRappelSerres(porte: PorteDonnees, fermeId: string, mainten
       ];
     }
     if (zones === null || evenements === null) return;
-    rendre(rappelDuSoir({ zones, evenements, maintenant: instant.toISOString(), fuseau }));
+    // Le journal et les zones n'ont pas changé depuis le dernier calcul (après 18 h) : même rappel.
+    if (memo?.zones !== zones || memo.evenements !== evenements) memo = { zones, evenements, rappel: rappelDuSoir({ zones, evenements, maintenant: instant.toISOString(), fuseau }) };
+    rendre(memo.rappel);
   };
 
   const arretFerme = porte.surveiller<string>(
