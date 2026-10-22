@@ -2,6 +2,24 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-22 (nuit) — Main verte : le test C6 du plan ne dépend plus de la date
+
+- **Fait** : après la fusion de T61, la CI de `main` est passée au rouge sur `plan-relecture.e2e.ts` C6 (4 barres visibles pour plus de 5 attendues), alors que le même code était vert quelques heures avant. L'écran Planches se centre sur la semaine du jour, comme voulu, donc le nombre de barres vues dépend de la date (8 le 21/10, 7 le 22/10, 4 en CI). C6 fige maintenant l'horloge au 15/06/2026 et parcourt toute la saison : 11 barres, seuil inchangé. PR #244 fusionnée, `main` verte. Les migrations 0044 à 0046 sont appliquées en production, et les règles de synchro déployées (journaux lus : « Migrations appliquées », « Deployment operation completed successfully »).
+- **Décidé** : on corrige le test, pas l'appli ni le seuil. Tant que `main` était rouge, migrations et règles ont attendu : la production n'a jamais eu de base ou de règles à moitié.
+- **Bloquant** : rien. À surveiller au 1er janvier 2027 : `plan.e2e.ts` et C1 de `plan-relecture` calculent un plan à la date du jour sur des saisons 2022 à 2026.
+
+## 2026-10-22 (nuit) — T61 : chemins, bâtiments et rangement des outils
+
+- **Fait** : dans l'éditeur de placement, on trace les chemins point par point avec leur largeur, et les bâtiments ont deux types de plus (local, chambre froide). Les lieux de rangement ont leurs places nommées, et chaque outil a son lieu. La fiche du jour affiche « Grelinette — hangar, mur nord » ; un tap ouvre la 3D avec le lieu et la planche surlignés. La 3D montre les chemins au sol, les bâtiments en volumes simples et des étiquettes à la demande. Côté données : migrations 0044 à 0046, cinq flux PowerSync, serveur et porte réservés au gérant dans la même ferme, export complet. PR #243 fusionnée, CI verte, synchro de bout en bout comprise.
+- **Décidé** : un lieu, un bâtiment ou un point qui range encore des outils ne se retire pas. La limite des 5 km du cœur est sûre face au numeric exact de la base. La cible de la 3D s'efface en changeant d'onglet et à la déconnexion. Budget de l'éditeur **inchangé** (21,1 Kio) : relevé un temps à 21,7, puis rétabli quand le morceau est tombé à 20,7 Kio. **Défaut de synchro trouvé et corrigé** : la règle `fermes_actives` (déjà sur `main`) faisait évaluer à PowerSync toutes les fermes et tous les comptes de l'instance, pour chaque flux. La synchro aurait cassé pour tout le monde vers 33 fermes et comptes au total. Réécrite en sous-requêtes, avec une équivalence vérifiée par le vrai évaluateur PowerSync (17 tests versionnés, `@powersync/service-sync-rules` 0.42.0 épinglé) ; noms de buckets inchangés, aucun téléphone ne retélécharge tout.
+- **Bloquant** : rien. Plafond désormais de 14 fermes par compte (Q49). Un téléphone pas encore mis à jour montre « local » et « chambre froide » comme « autre ».
+
+## 2026-10-22 (nuit) — T78 : un même produit phyto sur plusieurs cultures en une saisie
+
+- **Fait** : cases « Cultures traitées » dans la saisie d'un traitement. Produit, date et dose sont communs ; le DAR est propre à chaque culture (usage E-Phy de cette culture) ; une culture non homologuée a un avertissement pour elle seule et un DAR à saisir. La confirmation liste chaque culture et son DAR, et « Annuler » annule tout le lot. Il y a un événement `traitement` par culture, avec son DAR figé : le registre et le blocage de récolte restent par emplacement. PR #242 fusionnée, CI verte.
+- **Décidé** : écriture et annulation en une transaction, tout ou rien, isolement par ferme. Trois corrections de relecture (tests rouges d'abord) : DAR en chiffres seuls (« 1e1 » acceptait 10 jours) ; avis quand l'unité est une quantité totale ; emplacement revérifié au moment d'écrire, accepté s'il est actif à la date du traitement ou aujourd'hui (sinon un traitement daté d'avant un redécoupage ne pouvait plus être noté).
+- **Bloquant** : rien. À faire avec T79 : `ecrireLotTraitement` ne refuse pas lui-même une date future (seul l'écran l'empêche, comme avant).
+
 ## 2026-10-21 (soir) — T59 : dérouler la saison dans la vue 3D
 
 - **Fait** : bouton Lecture / Pause à côté du curseur, 1 ou 4 semaines par seconde, arrêt seul en fin de saison, pause dès qu'on touche le curseur, caméra libre. « Prévu seul » montre le plan sans les écarts : plants, couleurs des planches et liste texte suivent la même source. Successions visibles (arrachage, planche nue, jeunes plants). Changement de semaine : 25 à 30 ms par image (CPU ×4, seuil 50 ms), contre 65 à 70 ms avant optimisation ; vue 3D 199,5 Kio sur 207,9, budget non relevé. PR #240 fusionnée, CI verte.

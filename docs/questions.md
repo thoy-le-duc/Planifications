@@ -480,6 +480,10 @@ Question : dans e-phy, beaucoup d'usages n'ont pas de délai avant récolte en j
 
 Deux réglages GitHub pour le workflow « Catalogue e-phy » : Settings → Actions → General → « Allow GitHub Actions to create and approve pull requests » doit être coché, sinon la PR hebdomadaire ne peut pas s'ouvrir ; puis un premier lancement à la main (Actions → Catalogue e-phy → Run workflow) remplit le catalogue, vide dans le dépôt.
 
+### Q49 — Combien de fermes au plus pour un même compte ? (posée le 2026-10-22, T61)
+
+Question : PowerSync, le service de synchro, limite à 1 000 le nombre de « paramètres » calculés par connexion. Avec les règles actuelles (41 flux, un par table), un compte membre de **14 fermes au plus** se synchronise ; à 15, sa synchro est refusée, pour ce compte seulement. Une ferme comme la tienne en utilise une. La marge à 14 fermes est presque nulle : le prochain flux ajouté baissera le plafond à 13. Proposition : garder ce plafond pour l'instant (un maraîcher, ses associés et ses salariés ont une ou deux fermes) et, le jour où un conseiller ou une coopérative suit plus de fermes, regrouper les flux pour remonter la limite (environ 29 fermes). Préfères-tu qu'on traite ce regroupement dès maintenant ?
+
 ### À suivre
 
 ## Questions ouvertes du brief
