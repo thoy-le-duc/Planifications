@@ -184,6 +184,11 @@ export function App() {
   const [onglet, setOnglet] = useState<Onglet>('aujourdhui');
   /** T61 : outil et planche d'une consigne à montrer dans la 3D (tap dans la fiche du jour) ; nul en quittant Planches. */
   const [rangement, setRangement] = useState<{ readonly outilId: string; readonly plancheId: string | null } | null>(null);
+  /** Changement d'onglet demandé par un écran (bandeau « Démarrer »…) : la cible du rangement s'efface aussi. */
+  const allerA = (o: Onglet): void => {
+    setRangement(null);
+    setOnglet(o);
+  };
   /** Morceau de l'export (T15e), donné par l'écran Ferme une fois chargé : il porte le bandeau. */
   const [exportCharge, setExportCharge] = useState<ModuleExport | null>(null);
 
@@ -318,7 +323,7 @@ export function App() {
                   porte={donnees.ferme?.porte ?? null}
                   fermeId={donnees.ferme?.fermeId ?? null}
                   utilisateurId={session.utilisateurId}
-                  surOnglet={setOnglet}
+                  surOnglet={allerA}
                   rangement={rangement}
                   surFermerRangement={() => {
                     setRangement(null);
@@ -329,7 +334,7 @@ export function App() {
                   porte={donnees.ferme?.porte ?? null}
                   fermeId={donnees.ferme?.fermeId ?? null}
                   utilisateurId={session.utilisateurId}
-                  surOnglet={setOnglet}
+                  surOnglet={allerA}
                   surMontrerRangement={(c) => {
                     setRangement({ outilId: c.outilId, plancheId: c.plancheId });
                     setOnglet('planches');
