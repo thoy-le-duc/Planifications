@@ -754,3 +754,11 @@
   border-radius: var(--rayon-etiquette);
   background: var(--couleur-surface);
 }
+
+/* T61 : chemin posé, une bande de sa largeur au sol (repère de la ferme). */
+.pl-chemin {
+  fill: none;
+  stroke: color-mix(in srgb, var(--couleur-orange) 70%, transparent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}

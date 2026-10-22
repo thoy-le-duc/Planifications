@@ -24,7 +24,6 @@ export {
   PLAFONDS_BATIMENT,
   TYPES_BATIMENT,
   validerContour,
-  validerPlacement,
   type CodeErreurPlacement,
   type EntreePlacementBatiment,
   type EntreePlacementEmplacement,
@@ -35,3 +34,28 @@ export {
   type PlacementZone,
   type ResultatPlacement,
 } from './validation.ts';
+export { validerPlacement } from './ligne.ts';
+// T61 : chemins, points du plan (point d'eau, repère) et rangement des outils.
+export {
+  CHEMIN_POINTS_MAX,
+  CHEMIN_POINTS_MIN,
+  NOM_CHEMIN_MAX,
+  NOM_OUTIL_MAX,
+  NOM_PLACE_RANGEMENT_MAX,
+  NOM_POINT_PLAN_MAX,
+  PLAFOND_LARGEUR_CHEMIN_M,
+  SORTES_POINT_PLAN,
+  libelleRangement,
+  nomComparable,
+  nomDeChemin,
+  trouverOutil,
+  validerChemin,
+  validerOutil,
+  validerPlaceRangement,
+  validerPointPlan,
+  type CheminValide,
+  type OutilValide,
+  type PlaceRangementValide,
+  type PointPlanValide,
+  type SortePointPlan,
+} from './chemins.ts';

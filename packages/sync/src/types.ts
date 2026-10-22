@@ -8,7 +8,7 @@
  * (`toISOString()`), jsonb et tableaux en texte JSON. C'est aussi le format des `donnees`
  * envoyées à POST /sync/upload.
  */
-import type { Evenement, GenerateurId, Id } from '@planif/core';
+import type { Evenement, GenerateurId, Id, TypeBatiment } from '@planif/core';
 
 export interface TransactionLocale {
   getAll<T>(sql: string, parametres?: readonly unknown[]): Promise<T[]>;
@@ -141,7 +141,7 @@ export interface PointPlacement {
  */
 export interface ValeursBatiment {
   readonly nom?: string;
-  readonly type?: 'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'magasin' | 'autre';
+  readonly type?: TypeBatiment;
   readonly longueur_m?: number;
   readonly largeur_m?: number;
   readonly hauteur_m?: number;
@@ -168,7 +168,53 @@ export type ChangementPlacement =
     }
   | { readonly sorte: 'origine'; readonly origine: { readonly latitude: number; readonly longitude: number } | null }
   /** T57 : une vanne posée sur le plan (repère de la ferme, mètres) ; nulle : en tête de sa première planche. */
-  | { readonly sorte: 'vanne'; readonly id: string; readonly position: { readonly x: number; readonly y: number } | null };
+  | { readonly sorte: 'vanne'; readonly id: string; readonly position: { readonly x: number; readonly y: number } | null }
+  /** T61 : un chemin du plan (ligne ouverte), créé ou modifié. */
+  | { readonly sorte: 'chemin'; readonly id: string; readonly valeurs: ValeursChemin }
+  /** T61 : un point du plan (point d'eau, repère), créé ou modifié. */
+  | { readonly sorte: 'point_plan'; readonly id: string; readonly valeurs: ValeursPointPlan }
+  /** T61 : un lieu de rangement (un bâtiment ou un point du plan), créé ou retiré. */
+  | { readonly sorte: 'lieu_rangement'; readonly id: string; readonly valeurs: ValeursLieuRangement }
+  /** T61 : une place nommée dans un lieu de rangement, créée, renommée ou retirée. */
+  | { readonly sorte: 'place_rangement'; readonly id: string; readonly valeurs: ValeursPlaceRangement }
+  /** T61 : un outil et son lieu de rangement, créé, déplacé ou retiré. */
+  | { readonly sorte: 'outil'; readonly id: string; readonly valeurs: ValeursOutil };
+
+/**
+ * T61 : colonnes des éléments du plan et du rangement données à `placer` (format local,
+ * snake_case). Création : les colonnes requises ; modification : celles qui changent.
+ * `supprime_le` : instant ISO UTC de la suppression douce, ou null pour rétablir.
+ */
+export interface ValeursChemin {
+  readonly nom?: string | null;
+  /** Tracé en mètres du repère de la ferme ; rangé en texte JSON `[{x, y}]`. */
+  readonly points?: readonly PointPlacement[];
+  readonly largeur_m?: number;
+  readonly supprime_le?: string | null;
+}
+export interface ValeursPointPlan {
+  readonly nom?: string;
+  readonly sorte?: 'point_eau' | 'repere';
+  readonly x_m?: number;
+  readonly y_m?: number;
+  readonly supprime_le?: string | null;
+}
+export interface ValeursLieuRangement {
+  readonly batiment_id?: string | null;
+  readonly point_plan_id?: string | null;
+  readonly supprime_le?: string | null;
+}
+export interface ValeursPlaceRangement {
+  readonly lieu_rangement_id?: string;
+  readonly nom?: string;
+  readonly supprime_le?: string | null;
+}
+export interface ValeursOutil {
+  readonly nom?: string;
+  readonly lieu_rangement_id?: string;
+  readonly place_rangement_id?: string | null;
+  readonly supprime_le?: string | null;
+}
 
 export interface PorteDonnees {
   /** Lecture SQL libre (jointures comprises) sur la base locale. */

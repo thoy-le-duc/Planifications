@@ -162,6 +162,8 @@ export interface TravailVu {
   readonly zone: string;
   /** Outil du travail prévu, sinon ''. */
   readonly outil: string;
+  /** T61 : premier emplacement de la tâche (la planche que la 3D surligne), ou null. */
+  readonly plancheId: string | null;
 }
 
 /** T60 : les travaux de l'écran (en retard d'abord, comme ses cartes), pour les consignes de l'équipe. */
@@ -175,6 +177,7 @@ export function travauxVus(taches: readonly TacheJour[]): TravailVu[] {
       planche: tous === '' ? 'sans planche' : tous,
       zone: t.tache.emplacements[0]?.zone ?? '',
       outil: t.tache.etape === 'travail' ? (t.tache.travail.outil ?? '') : '',
+      plancheId: t.tache.emplacements[0]?.id ?? null,
     };
   });
 }

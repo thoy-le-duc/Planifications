@@ -84,6 +84,7 @@ import {
   refusDuProfil,
 } from './messages.ts';
 import type { Refus } from './motifs.ts';
+import { verifierRangementVide } from './plan-chemins.ts';
 import { visibleParLaFerme, type TransactionDb } from './references.ts';
 import {
   COLONNES_PLACEMENT_EMPLACEMENT,
@@ -488,10 +489,12 @@ async function verifierLibre(tx: TransactionDb, table: TableEcrite, id: string, 
       );
       return n > 0 ? invalide(`cette vanne arrose encore ${quantite(n, 'emplacement', 'emplacements')} : retirez-les d’abord`, fermeId) : null;
     }
-    case 'assolement':
     case 'batiment':
-    case 'secteur_emplacement':
       // Supprimer le bâtiment d'une zone : la zone et ses planches restent, la zone redevient « pas placée ».
+      // Relecture T61 : un bâtiment qui range encore des outils ou des places ne se retire pas.
+      return verifierRangementVide(tx, 'batiment_id', id, fermeId);
+    case 'assolement':
+    case 'secteur_emplacement':
       return null;
   }
 }

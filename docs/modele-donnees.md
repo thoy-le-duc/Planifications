@@ -81,7 +81,7 @@ Validée par Théophane le 2026-10-07 (réponses à Q30 et Q31), posée par T28a
 | Ferme | origine du plan (latitude, longitude), facultative | Point (0, 0) de toutes les positions en mètres. |
 | Zone | contour : liste de sommets `{x, y}` en mètres, facultatif | Polygone libre (Q31), 3 à 200 sommets, rangé en sens antihoraire. Nul : zone pas placée, ou abritée par un bâtiment. |
 | Emplacement | position x, position y (m), orientation (°), facultatives | **Dans le repère de sa zone** : bouger la serre bouge ses planches. Les trois nulles ensemble : rangement automatique dans la zone. |
-| Bâtiment (nouvelle) | nom, type (serre tunnel, serre chapelle, hangar, magasin, autre), longueur, largeur, hauteur (m), centre x, y (m), orientation (°), zone abritée (facultative) | Toujours un rectangle, toujours placé. Une serre abrite au plus une zone de sa ferme, et une zone au plus un bâtiment non supprimé. Suppression douce, historique, UUID v7, comme le reste du parcellaire. |
+| Bâtiment (nouvelle) | nom, type (serre tunnel, serre chapelle, hangar, local, chambre froide, magasin, autre ; local et chambre froide depuis T61), longueur, largeur, hauteur (m), centre x, y (m), orientation (°), zone abritée (facultative) | Toujours un rectangle, toujours placé. Une serre abrite au plus une zone de sa ferme, et une zone au plus un bâtiment non supprimé. Suppression douce, historique, UUID v7, comme le reste du parcellaire. |
 
 **Serre et zone** : une zone abritée par un bâtiment n'a pas de contour à elle. Sa forme est le rectangle du bâtiment, son repère celui du bâtiment (centre, orientation). Une zone sans bâtiment a son polygone ; son repère est le centroïde de surface du polygone et le cap de son plus long côté, ramené dans [0, 180[ (le premier dans l'ordre des sommets à égalité). Rattacher un bâtiment à une zone qui a un contour : l'écran efface le contour, avec confirmation (T28b) ; la base refuse les deux à la fois.
 
@@ -106,6 +106,28 @@ Validée par Théophane le 2026-10-07 (réponses à Q30 et Q31), posée par T28a
 **Droits** : **gérant seulement** pour tout placement (zones, planches, bâtiments, origine du plan), contrôlé par le serveur (T28s, voir « Placement réel écrit par le téléphone » plus bas).
 
 **Synchro et export** : `batiment` descend sur les téléphones avec le même découpage par ferme que `zone` ; l'export ajoute `batiment.csv` et les nouvelles colonnes, décrites dans LISEZMOI.txt.
+
+## 1 ter. Chemins, repères et rangement des outils — v1.x (T61, Q44)
+
+Un nouvel ouvrier trouve son chemin et l'outil de sa consigne sans demander. Cinq tables de ferme (`ferme_id`, horodatages, `supprime_le`, UUID v7) ; une ferme qui n'en a pas ne change pas.
+
+| Table | Colonnes | Rôle |
+| --- | --- | --- |
+| `chemin` | `nom` (facultatif, 1 à 80 caractères), `points` (jsonb `[{x, y}]` en mètres du repère de la ferme), `largeur_m` (> 0, 20 m au plus) | Chemin tracé point par point : une **ligne ouverte** (elle peut se croiser ou revenir sur elle-même). |
+| `point_plan` | `nom` (1 à 80), `sorte` (`point_eau` ou `repere`), `x_m`, `y_m` | Point d'eau ou autre repère nommé (portail, abri). |
+| `lieu_rangement` | `batiment_id` **ou** `point_plan_id` (exactement un, même ferme) | Où se rangent les outils. Son nom est celui de son bâtiment ou de son point. Un seul lieu non supprimé par élément. Il ne change pas d'élément : on le retire et on en crée un autre. |
+| `place_rangement` | `lieu_rangement_id` (même ferme), `nom` (1 à 60) | Place nommée dans un lieu (« mur nord »), unique dans son lieu sans tenir compte de la casse ni des espaces autour. Elle ne change pas de lieu. |
+| `outil` | `nom` (1 à 80), `lieu_rangement_id` (**obligatoire**, même ferme), `place_rangement_id` (facultatif, une place **du même lieu**) | Outil de la ferme. Son nom est unique dans la ferme (sans casse ni espaces autour) : le travail prévu le désigne par ce nom. |
+
+Règles :
+
+- **Cœur** (`packages/core/src/placement/chemins.ts`) : `validerChemin` (2 à 200 points finis, à 5 km au plus de l'origine, pas deux points consécutifs à moins de 1 mm, largeur > 0 et ≤ 20 m), `validerPointPlan`, `validerPlaceRangement`, `validerOutil`. `trouverOutil` retrouve l'outil d'un travail prévu par son nom (sans majuscules, accents ni espaces autour, jamais « le plus proche »). `libelleRangement` donne « Grelinette — hangar, mur nord ».
+- **Origine du plan** : aucun chemin ni point actif sans origine. Un chemin ou un point non supprimé **fige** l'origine, comme un bâtiment. Le rangement n'a pas de position : il ne demande pas d'origine.
+- **Droits** : le **gérant** actif seul écrit les cinq tables, comme tout le placement. Le serveur (`apps/api/src/sync/plan-chemins.ts`) et la porte du téléphone (`packages/sync/src/plan-chemins.ts`) le vérifient. Tout membre actif reçoit les cinq tables par la synchro. Il n'y a pas de DELETE, seulement la suppression douce.
+- **Ce que la base rejoue** (migrations `0044` à `0046`) : la fonction `chemin_points_valides` (tableau de 2 à 200 objets `{x, y}` numériques à 5 km au plus, texte de 16 384 caractères au plus), les bornes des noms, de la largeur, de la sorte et de la distance. La même ferme est garantie par des clés étrangères composées (`batiment` et `point_plan` gagnent `UNIQUE (ferme_id, id)`). Une clé étrangère `(place_rangement_id, lieu_rangement_id)` garantit que la place est dans le lieu de l'outil. Des index uniques partiels portent un lieu par élément et les noms uniques. Les points confondus restent au cœur. Aucune ligne existante n'est réécrite.
+- **Pas d'historique** dans `modification` (comme l'équipe). Les cinq tables sont dans l'export (`chemin.csv`, `point_plan.csv`, `lieu_rangement.csv`, `place_rangement.csv`, `outil.csv` ; `points` décodé dans `ferme.json`). Elles ont un stream chacune dans `powersync/sync-config.yaml`, filtré par `fermes_actives`.
+- **Écrans** : l'éditeur de placement montre les chemins et en trace de nouveaux (« Tracer un chemin », gérant, ordinateur). La fiche du jour affiche « Grelinette — hangar, mur nord ». Un tap ouvre l'onglet Planches et la 3D (`Rangement3d`) surligne le lieu et la planche, sans calculer de chemin. La 3D pose les chemins au sol, en bandes plates ; un bouton « Étiquettes » affiche à la demande les noms des chemins et des bâtiments.
+- **Téléphones pas encore mis à jour** : ils ignorent les nouvelles tables. Ils dessinent un bâtiment `local` ou `chambre_froide` comme « autre » dans le plan ; leur éditeur de placement ne l'affiche pas.
 
 ## 2. Bibliothèque de cultures
 

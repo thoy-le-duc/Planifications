@@ -48,6 +48,8 @@ export const TYPES: readonly { readonly valeur: TypeBatiment; readonly libelle: 
   { valeur: 'serre_tunnel', libelle: 'Serre tunnel' },
   { valeur: 'serre_chapelle', libelle: 'Serre chapelle' },
   { valeur: 'hangar', libelle: 'Hangar' },
+  { valeur: 'local', libelle: 'Local' },
+  { valeur: 'chambre_froide', libelle: 'Chambre froide' },
   { valeur: 'magasin', libelle: 'Magasin' },
   { valeur: 'autre', libelle: 'Autre' },
 ];
@@ -73,7 +75,8 @@ function position(v: unknown): Position | null {
   return la === null || lo === null ? null : { latitude: la, longitude: lo };
 }
 
-function contour(v: unknown): Point[] | null {
+/** Liste JSON de points {x, y} lue, avec `min` points au moins (contour : 3 ; chemin, T61 : 2) ; null sinon. */
+function pointsDe(v: unknown, min = 3): Point[] | null {
   const j = json(v);
   if (!Array.isArray(j)) return null;
   const points: Point[] = [];
@@ -83,7 +86,7 @@ function contour(v: unknown): Point[] | null {
     if (x === null || y === null) return null;
     points.push({ x, y });
   }
-  return points.length >= 3 ? points : null;
+  return points.length >= min ? points : null;
 }
 
 const estType = (v: unknown): v is TypeBatiment => (TYPES_BATIMENT as readonly unknown[]).includes(v);
@@ -122,7 +125,7 @@ export const requeteZones = (fermeId: string): RequeteSurveillee<Zone | null> =>
   tables: ['zone'],
   convertir: (l: Ligne) => {
     const id = texte(l.id);
-    return id === null ? null : { id, nom: texte(l.nom) ?? '', contour: contour(l.contour), parenteId: texte(l.zone_parente_id) };
+    return id === null ? null : { id, nom: texte(l.nom) ?? '', contour: pointsDe(l.contour), parenteId: texte(l.zone_parente_id) };
   },
 });
 
@@ -185,6 +188,26 @@ export const requeteVannes = (fermeId: string, jour: string): RequeteSurveillee<
   },
 });
 
+/** T61 : un chemin de la ferme (ligne ouverte, repère de la ferme). */
+export interface Chemin {
+  readonly id: string;
+  readonly nom: string | null;
+  readonly points: readonly Point[];
+  readonly largeurM: number;
+}
+
+export const requeteChemins = (fermeId: string): RequeteSurveillee<Chemin | null> => ({
+  sql: 'SELECT id, nom, points, largeur_m FROM chemin WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY id',
+  parametres: [fermeId],
+  tables: ['chemin'],
+  convertir: (l: Ligne) => {
+    const id = texte(l.id);
+    const largeurM = nombre(l.largeur_m);
+    const points = pointsDe(l.points, 2);
+    return id === null || largeurM === null || points === null ? null : { id, nom: texte(l.nom), points, largeurM };
+  },
+});
+
 export interface Lectures {
   readonly ferme: FermeLue | null;
   readonly roles: readonly string[];
@@ -193,13 +216,14 @@ export interface Lectures {
   readonly planches: readonly Planche[];
   readonly emplacements: readonly EmplacementPlace[];
   readonly vannes: readonly Vanne[];
+  readonly chemins: readonly Chemin[];
 }
 
 export const sansNull = <T,>(l: readonly (T | null)[]): T[] => l.filter((x): x is T => x !== null);
 
 /** Relit tout d'un coup (après une écriture : l'affichage ne passe pas par un état intermédiaire). */
 export async function lireTout(porte: PorteDonnees, fermeId: string, utilisateurId: string, jour: string): Promise<Lectures> {
-  const [rf, rr, rb, rz, rp, re, rv] = await Promise.all([
+  const [rf, rr, rb, rz, rp, re, rv, rc] = await Promise.all([
     lireRequete(porte, requeteFerme(fermeId)),
     lireRequete(porte, requeteRoles(fermeId, utilisateurId)),
     lireRequete(porte, requeteBatiments(fermeId)),
@@ -207,8 +231,9 @@ export async function lireTout(porte: PorteDonnees, fermeId: string, utilisateur
     lireRequete(porte, requetePlanches(fermeId)),
     lireRequete(porte, requeteEmplacementsPlaces(fermeId)),
     lireRequete(porte, requeteVannes(fermeId, jour)),
+    lireRequete(porte, requeteChemins(fermeId)),
   ]);
-  return { ferme: rf[0] ?? null, roles: rr, batiments: sansNull(rb), zones: sansNull(rz), planches: sansNull(rp), emplacements: sansNull(re), vannes: sansNull(rv) };
+  return { ferme: rf[0] ?? null, roles: rr, batiments: sansNull(rb), zones: sansNull(rz), planches: sansNull(rp), emplacements: sansNull(re), vannes: sansNull(rv), chemins: sansNull(rc) };
 }
 
 async function lireRequete<T>(porte: PorteDonnees, r: RequeteSurveillee<T>): Promise<T[]> {

@@ -18,16 +18,27 @@ config:
   # Instants en ISO 8601 à la milliseconde, comme new Date(ms).toISOString() côté téléphone.
   timestamp_max_precision: milliseconds
 
+# Écrite en sous-requêtes imbriquées, pas en jointures : PowerSync compte, par connexion et par
+# flux, chaque ligne que renvoient ses recherches de paramètres (limite de 1000, erreur
+# PSYNC_S2305). Avec des jointures (membre ⋈ ferme ⋈ utilisateur), il cherchait TOUTES les
+# fermes et TOUS les utilisateurs non supprimés de l'instance, à chaque flux : la synchro
+# cassait dès une trentaine de fermes et de comptes au total. Ainsi, il cherche le compte
+# (par id), puis ses adhésions (par utilisateur), puis ces fermes seules (par id) : par flux,
+# 1 + 2 × (fermes de l'utilisateur) résultats, quel que soit le nombre de fermes hébergées.
+# Avec les 34 flux qui lisent fermes_actives : 14 fermes par compte au plus (34 × 29 = 986) ;
+# un flux de plus ou une ferme de plus se paie là.
+# Même règle qu'avant ; vérifié hors ligne sur le plan compilé de @powersync/service-sync-rules.
 with:
   fermes_actives: >-
-    SELECT m.ferme_id AS ferme_id FROM membre m
-    INNER JOIN ferme f ON f.id = m.ferme_id
-    INNER JOIN utilisateur u ON u.id = m.utilisateur_id
+    SELECT f.id AS ferme_id FROM ferme f
+    WHERE f.supprime_le IS NULL
+    AND f.id IN (
+    SELECT m.ferme_id FROM membre m
     WHERE m.utilisateur_id = auth.user_id()
     AND m.etat = 'accepte'
     AND m.supprime_le IS NULL
-    AND f.supprime_le IS NULL
-    AND u.supprime_le IS NULL
+    AND m.utilisateur_id IN (
+    SELECT u.id FROM utilisateur u WHERE u.id = auth.user_id() AND u.supprime_le IS NULL))
 
 streams:
   ferme:
@@ -42,6 +53,23 @@ streams:
   emplacement:
     auto_subscribe: true
     query: SELECT * FROM emplacement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  # T61 : chemins, points du plan, lieux de rangement, places et outils, à tous les membres
+  # (l'ouvrier trouve son chemin et l'outil de sa consigne) ; écrits par le gérant seul (serveur).
+  chemin:
+    auto_subscribe: true
+    query: SELECT * FROM chemin WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  point_plan:
+    auto_subscribe: true
+    query: SELECT * FROM point_plan WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  lieu_rangement:
+    auto_subscribe: true
+    query: SELECT * FROM lieu_rangement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  place_rangement:
+    auto_subscribe: true
+    query: SELECT * FROM place_rangement WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
+  outil:
+    auto_subscribe: true
+    query: SELECT * FROM outil WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)
   secteur_irrigation:
     auto_subscribe: true
     query: SELECT * FROM secteur_irrigation WHERE ferme_id IN (SELECT ferme_id FROM fermes_actives)

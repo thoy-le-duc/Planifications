@@ -237,8 +237,9 @@ describe('T15b : creerZip avec compresseur (deflate) et contenus en morceaux', (
 
 /** Type d'export attendu d'une colonne du schéma local (règle du contrat de @planif/core). */
 function typeAttendu(colonne: string, typeLocal: 'texte' | 'entier' | 'reel'): TypeExport {
-  const JSON_ = new Set(['position', 'unites', 'parametres', 'rendement_prevu', 'dose_maximale', 'changements', 'avant', 'apres', 'detail', 'emplacement_ids', 'photos', 'remplace', 'origine_plan', 'contour', 'profil_croissance', 'engrais']);
+  const JSON_ = new Set(['position', 'unites', 'parametres', 'rendement_prevu', 'dose_maximale', 'changements', 'avant', 'apres', 'detail', 'emplacement_ids', 'photos', 'remplace', 'origine_plan', 'contour', 'profil_croissance', 'engrais', 'points']);
   // T56 : `engrais` (recette_fertirrigation) est un tableau JSON, comme `parametres`.
+  // T61 : `points` (chemin) est le tracé, liste JSON de points {x, y}, comme `contour`.
   const DATES = new Set(['actif_du', 'actif_au', 'ancre_date', 'du', 'au', 'date', 'date_arrachage', 'date_plantation', 'debut', 'fin', 'debut_recolte_prevu', 'fin_recolte_prevue', 'prevu_du', 'prevu_au', 'reel_du', 'reel_au', 'prevu_debut_recolte', 'prevu_fin_recolte', 'prevu_mise_en_place', 'prevu_semis_pepiniere']);
   const INSTANTS = new Set(['cree_le', 'modifie_le', 'supprime_le', 'decide_le', 'horodatage', 'invite_le']);
   // T54 : azote d'origine organique (produit_fertilisant) et option « zone vulnérable nitrates » (ferme).

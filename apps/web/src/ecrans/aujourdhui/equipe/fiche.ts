@@ -16,6 +16,8 @@ export interface LigneFiche {
   readonly travail: string;
   /** Outil du travail prévu, sinon ''. */
   readonly outil: string;
+  /** T61 : premier emplacement du travail, ou null. */
+  readonly plancheId: string | null;
   /** Travail attribué à personne : pour toute l'équipe. */
   readonly pourTous: boolean;
 }
@@ -28,6 +30,7 @@ export function lignesFiche(travaux: readonly TravailVu[], parTache: ReadonlyMap
     planche: t.planche,
     travail: t.phrase,
     outil: t.outil,
+    plancheId: t.plancheId,
     pourTous: (parTache.get(t.cle) ?? []).length === 0,
   }));
 }

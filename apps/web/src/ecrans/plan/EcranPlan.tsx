@@ -69,6 +69,13 @@ export interface ProprietesEcranPlan {
    * comme avant.
    */
   readonly surOnglet?: (onglet: 'ferme' | 'planches') => void;
+  /**
+   * T61 : outil et planche d'une consigne (tap dans la fiche du jour) : non nul, la vue 3D s'ouvre
+   * seule et surligne le lieu de rangement et la planche. `surFermerRangement` : la vue se ferme
+   * (« Retour ») ou ferme le rangement.
+   */
+  readonly rangement?: { readonly outilId: string; readonly plancheId: string | null } | null;
+  readonly surFermerRangement?: () => void;
 }
 
 /**
@@ -610,7 +617,7 @@ interface ProprietesEcran extends Omit<ProprietesEcranPlan, 'fermeId' | 'stockag
   readonly serieAuDepart: boolean;
 }
 
-function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, stockage, surOnglet, serieAuDepart }: ProprietesEcran) {
+function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, stockage, surOnglet, serieAuDepart, rangement = null, surFermerRangement }: ProprietesEcran) {
   const [jour] = useState(aujourdhui);
   const [version, setVersion] = useState(0);
   const [saisons, setSaisons] = useState<SaisonPlan[] | null>(() => (porte === null ? null : saisonsEnCache(porte, fermeId)));
@@ -1046,9 +1053,19 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
     rendreFocus.current = false;
     (document.querySelector<HTMLElement>('[data-testid="modifier-plan"]') ?? document.querySelector<HTMLElement>('[data-testid="toile-3d"]'))?.focus();
   }, [EditeurPlacement]);
+  // T61 : un rangement à montrer ouvre la 3D sans attendre « Voir en 3D ».
+  // Ouverture différée d'un tour (comme un tap) : l'effet ne pose aucun état lui-même.
+  useEffect(() => {
+    if (rangement === null) return undefined;
+    const id = setTimeout(ouvrir3d, 0);
+    return () => {
+      clearTimeout(id);
+    };
+  }, [rangement, ouvrir3d]);
   const fermer3d = useCallback(() => {
     setVue3d({ sorte: 'fermee' });
-  }, []);
+    surFermerRangement?.();
+  }, [surFermerRangement]);
   const echec3d = useCallback((message: string) => {
     setVue3d({ sorte: 'fermee' });
     setRepli3d(message);
@@ -1189,7 +1206,7 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
           {repli3d}
         </p>
       )}
-      {en3d && porte !== null && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} invitationDemo={DEMO} surModifierPlan={modifierPlan} porte={porte} fermeId={fermeId} utilisateurId={utilisateurId} />}
+      {en3d && porte !== null && <vue3d.Vue plan={plan} surRetour={fermer3d} surEchec={echec3d} gerant={gerant} invitationDemo={DEMO} surModifierPlan={modifierPlan} porte={porte} fermeId={fermeId} utilisateurId={utilisateurId} rangement={rangement} {...(surFermerRangement === undefined ? {} : { surFermerRangement })} />}
       {EditeurPlacement !== null && utilisateurId !== undefined && porte !== null && (
         <EditeurPlacement
           key={fermeId}

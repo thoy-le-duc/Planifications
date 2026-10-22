@@ -28,6 +28,7 @@ import { deplacerSommet, insererMilieu, poserPoint, replacerPlanches, retirerSom
 import {
   lireTout,
   requeteBatiments,
+  requeteChemins,
   requeteFerme,
   requetePlanches,
   requeteEmplacementsPlaces,
@@ -37,6 +38,7 @@ import {
   sansNull,
   TYPES,
   type Batiment,
+  type Chemin,
   type EmplacementPlace,
   type FermeLue,
   type Planche,
@@ -57,6 +59,7 @@ import {
   type Repere,
   type RectanglePlace,
 } from './gestes.ts';
+import type * as ModuleChemins from './chemins.tsx';
 import { DELAI_RELANCE_TUILE_MS, depuisEcran, ESSAIS_TUILE_MAX, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_DEPART_SANS_POSITION, ZOOM_INITIAL, ZOOM_MIN_VUE, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
 
 export const MESSAGES_PLACEMENT = {
@@ -391,6 +394,10 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [lusE, setLusE] = useState<readonly EmplacementPlace[] | null>(null);
   const [jour] = useState(() => new Date().toLocaleDateString('sv'));
   const [lusV, setLusV] = useState<readonly Vanne[]>([]);
+  // T61 : chemins posés ; le tracé d'un nouveau (./chemins.tsx) se charge au premier « Tracer un chemin ».
+  const [lusC, setLusC] = useState<readonly Chemin[]>([]);
+  const [mChemin, setMChemin] = useState<typeof ModuleChemins | null>(null);
+  const [chemin, setChemin] = useState<ModuleChemins.BrouillonChemin | null>(null);
   useEffect(() => porte.surveiller(requeteFerme(fermeId), (l) => { setFerme({ valeur: l[0] ?? null }); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteRoles(fermeId, utilisateurId), setRoles), [porte, fermeId, utilisateurId]);
   useEffect(() => porte.surveiller(requeteBatiments(fermeId), (l) => { setLusB(sansNull(l)); }), [porte, fermeId]);
@@ -398,6 +405,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   useEffect(() => porte.surveiller(requetePlanches(fermeId), (l) => { setLusP(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteEmplacementsPlaces(fermeId), (l) => { setLusE(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteVannes(fermeId, jour), (l) => { setLusV(sansNull(l)); }), [porte, fermeId, jour]);
+  useEffect(() => porte.surveiller(requeteChemins(fermeId), (l) => { setLusC(sansNull(l)); }), [porte, fermeId]);
+  const cheminEnCours = chemin !== null && mChemin !== null ? { b: chemin, m: mChemin } : null;
 
   const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null;
   const gerant = roles?.includes('gerant') === true;
@@ -648,15 +657,16 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               const position = { x: arrondi(p.x), y: arrondi(p.y) };
               return avant === undefined || (avant.position?.x === position.x && avant.position.y === position.y) ? [] : [{ sorte: 'vanne', id, position }];
             }),
+            chemin !== null && mChemin !== null ? mChemin.changements(chemin) : [],
           )
         : [],
-    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, brouillonV, lusV],
+    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, brouillonV, lusV, chemin, mChemin],
   );
   const modifie = changements.length > 0;
   const contoursModifies = [...zonesInfo.values()].filter((i) => i.change);
   const contoursInvalides = contoursModifies.filter((i) => i.verdict?.ok === false);
   /** Quelque chose à perdre en fermant : changements à écrire, contour refusé, tracé commencé. */
-  const brouillonOuvert = modifie || contoursModifies.length > 0 || (trace?.sommets.length ?? 0) > 0;
+  const brouillonOuvert = modifie || contoursModifies.length > 0 || (trace?.sommets.length ?? 0) > 0 || chemin !== null;
   const tropDeChangements = changements.length > ECRITURES_MAX_PAR_LOT;
   useEffect(() => {
     surBrouillon(brouillonOuvert);
@@ -671,6 +681,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     ? MESSAGES_ETAPES.occupe
     : trace !== null
       ? MESSAGES_ETAPES.traceEnCours
+      : cheminEnCours?.m.raison(cheminEnCours.b) != null
+        ? cheminEnCours.m.raison(cheminEnCours.b)
       : contoursInvalides.length > 0
         ? MESSAGES_ETAPES.contourInvalide
         : tropDeChangements
@@ -678,6 +690,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           : modifie
             ? null
             : MESSAGES_ETAPES.rienAEnregistrer;
+  /** « Nouveau bâtiment » et « Tracer un chemin » attendent l'origine, et la fin d'une pose ou d'un tracé. */
+  const nouveauBloque = origine === null || pose !== null || trace !== null;
   const raisonNouveau = origine === null ? MESSAGES_ETAPES.sansOrigine : pose !== null ? MESSAGES_ETAPES.poseEnCours : MESSAGES_ETAPES.traceEnCours;
   const peutEnregistrer = raisonEnregistrer === null;
 
@@ -717,6 +731,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setBrouillonZ(new Map());
     setBrouillonV(new Map());
     setTrace(null);
+    setChemin(null);
     setMessageContour(null);
     setErreur(null);
   }
@@ -850,6 +865,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setLusP(l.planches);
     setLusE(l.emplacements);
     setLusV(l.vannes);
+    setLusC(l.chemins);
   }
 
   /** Relit la base après une écriture réussie ; un échec ne défait rien : il est dit à part d'un refus. */
@@ -883,7 +899,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   async function enregistrer(): Promise<void> {
     if (!peutEnregistrer) return;
-    const [ecritsB, ecritsP, ecritsZ, ecritsV] = [brouillonB, brouillonP, brouillonZ, brouillonV];
+    const [ecritsB, ecritsP, ecritsZ, ecritsV, ecritC] = [brouillonB, brouillonP, brouillonZ, brouillonV, chemin];
     const entree = await ecrire(changements);
     if (entree === null) return;
     // Seul ce qui vient d'être écrit sort du brouillon : un geste fait pendant l'écriture reste.
@@ -896,6 +912,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setBrouillonP((prev) => sans(prev, ecritsP));
     setBrouillonZ((prev) => sans(prev, ecritsZ));
     setBrouillonV((prev) => sans(prev, ecritsV));
+    setChemin((c) => (c === ecritC ? null : c));
     setDernier(entree);
   }
 
@@ -1098,6 +1115,10 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       return;
     }
     const local = depuisEcran(v, pixel);
+    if (cheminEnCours !== null) {
+      setChemin(cheminEnCours.m.poser(cheminEnCours.b, local));
+      return;
+    }
     if (trace !== null) {
       const toleranceM = TOLERANCE_FERMETURE_PX * metresParPixel(v.origine.latitude, v.zoom);
       const r = poserPoint(trace.sommets, { x: arrondi(local.x), y: arrondi(local.y) }, toleranceM);
@@ -1179,6 +1200,13 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     garderLeFocus(e);
     const cible = e.target;
     const enSaisie = cible instanceof HTMLInputElement || cible instanceof HTMLSelectElement || cible instanceof HTMLTextAreaElement;
+    // T61 : tracé d'un chemin : Entrée le termine, Échap l'abandonne.
+    const r = cheminEnCours !== null && !enSaisie && !(cible instanceof HTMLButtonElement) ? cheminEnCours.m.touche(cheminEnCours.b, e.key) : undefined;
+    if (r !== undefined) {
+      e.preventDefault();
+      setChemin(r);
+      return;
+    }
     if (edition && trace !== null && !e.ctrlKey && !e.metaKey && !e.altKey) {
       // Tracé en cours : Entrée le ferme (3 sommets au moins), Échap l'abandonne.
       if (e.key === 'Escape') {
@@ -1309,18 +1337,39 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       <button
         type="button"
         className="pl-bouton"
-        disabled={origine === null || pose !== null || trace !== null}
-        aria-describedby={origine === null || pose !== null || trace !== null ? idRaisonNouveau : undefined}
+        disabled={nouveauBloque}
+        aria-describedby={nouveauBloque ? idRaisonNouveau : undefined}
         onClick={() => {
           setFormulaire(true);
         }}
       >
         Nouveau bâtiment
       </button>
-      {(origine === null || pose !== null || trace !== null) && (
+      {nouveauBloque && (
         <p id={idRaisonNouveau} className="pl-aide">
           {raisonNouveau}
         </p>
+      )}
+      {surOrdinateur && (
+        <button
+          type="button"
+          className="pl-bouton"
+          disabled={nouveauBloque || chemin !== null}
+          aria-describedby={nouveauBloque ? idRaisonNouveau : undefined}
+          onClick={() => {
+            const id = nouvelId?.() ?? identifiantNeuf();
+            void import('./chemins.tsx').then((m) => {
+              selectionner(null);
+              setTrace(null);
+              setMChemin(m);
+              setChemin(m.nouveau(id));
+            }, (e: unknown) => {
+              setErreur(messageDe(e));
+            });
+          }}
+        >
+          Tracer un chemin
+        </button>
       )}
       <button
         type="button"
@@ -1507,6 +1556,14 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                   {origine !== null && <circle className="pl-depart" cx={depart.x} cy={depart.y} r={5} />}
                 </svg>
               )}
+              {pret && (
+                <svg className="pl-svg" width={taille.w} height={taille.h}>
+                  {lusC.map((c) => (
+                    <polyline key={c.id} role="img" data-testid="chemin" data-id={c.id} data-points={c.points.length} data-largeur={c.largeurM} aria-label={c.nom ?? 'Chemin'} className="pl-chemin" strokeWidth={Math.max(2, c.largeurM / mpp)} points={enPoints(c.points)} />
+                  ))}
+                </svg>
+              )}
+              {cheminEnCours !== null && <cheminEnCours.m.TraceSurPlan b={cheminEnCours.b} versEcran={(p) => versEcran(vue, p)} taille={taille} />}
 
               {pret && elements.planches.map(dessiner)}
               {pret && elements.batiments.map(dessiner)}
@@ -1736,7 +1793,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             )}
 
             <section data-testid="panneau-placement" aria-label="Réglages de l’élément" className="pl-panneau">
-              {choisi === undefined && zoneChoisie !== undefined ? (
+              {cheminEnCours !== null ? (
+                <cheminEnCours.m.PanneauChemin b={cheminEnCours.b} surChange={setChemin} />
+              ) : choisi === undefined && zoneChoisie !== undefined ? (
                 <PanneauZone
                   info={zoneChoisie}
                   edition={edition}

@@ -40,7 +40,7 @@ export const PRECISION_SEUL_LE_GERANT = 'seul le gérant peut placer les éléme
 export const PRECISION_SEUL_LE_GERANT_PROFIL = 'seul le gérant peut régler le profil de croissance';
 /** T28s : l'origine du plan ne bouge plus dès qu'un élément est placé (Q31). */
 export const PRECISION_ORIGINE_FIGEE =
-  'le point de départ du plan ne se déplace ni ne s’efface tant que des éléments sont placés : retirez-les d’abord du plan';
+  'le point de départ du plan (son origine) ne se déplace ni ne s’efface tant que des éléments sont placés : retirez-les d’abord du plan';
 /** T28s (décision du chef) : aucun placement tant que l'origine du plan n'est pas posée. */
 export const PRECISION_SANS_ORIGINE = 'posez d’abord le point de départ du plan de la ferme, avant d’y placer des éléments';
 export const PRECISION_ORIGINE_INVALIDE = 'le point de départ du plan doit avoir une latitude et une longitude valables';
@@ -249,7 +249,8 @@ const DIMENSIONS: Readonly<Record<string, string>> = { longueur_m: 'la longueur'
 export function precisionDuPlacement(erreur: ErreurPlacement): string {
   const champ = erreur.champ ?? '';
   const precisions: Readonly<Record<CodeErreurPlacement, string>> = {
-    entree_invalide: 'les contours de la zone sont illisibles : une liste de sommets est attendue',
+    entree_invalide:
+      champ === 'type' ? 'le type de bâtiment est inconnu' : 'les contours de la zone sont illisibles : une liste de sommets est attendue',
     trop_peu_de_sommets: 'les contours d’une zone ont 3 sommets au moins',
     trop_de_sommets: 'les contours d’une zone ont 200 sommets au plus',
     coordonnee_invalide:

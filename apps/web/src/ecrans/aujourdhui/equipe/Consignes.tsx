@@ -14,7 +14,8 @@ import type { TravailVu } from '../vues.ts';
 import { useFocusDuDialogue } from '../dialogue.ts';
 import type { ModeEquipe } from '../cache.ts';
 import { attribuer, type Equipe } from './donnees.ts';
-import { ficheEnImage, lignesFiche } from './fiche.ts';
+import { ficheEnImage, lignesFiche, type LigneFiche } from './fiche.ts';
+import { rangementDe, suivreOutils, type OutilRange } from './rangement.ts';
 import './equipe.css';
 
 /** Durée du bandeau « Annuler » d'une attribution (comme celui d'un « Fait »). */
@@ -31,6 +32,15 @@ export interface ProprietesConsignes {
   readonly surMode: (mode: ModeEquipe) => void;
   /** Appui long sur une carte (gérant) : la clé du travail, et un numéro qui change à chaque appui. */
   readonly demande: { readonly cle: string; readonly n: number } | null;
+  /** T61 : un tap sur « Grelinette — hangar, mur nord » (fiche du jour) : montrer l'outil et la planche dans la 3D. */
+  readonly surMontrerRangement?: ((cible: CibleRangement) => void) | undefined;
+}
+
+/** T61 : ce que la 3D surligne : le lieu de rangement de l'outil, et la planche de la tâche. */
+export interface CibleRangement {
+  readonly outilId: string;
+  readonly cle: string;
+  readonly plancheId: string | null;
 }
 
 /** Prénoms des personnes d'un travail, triés, séparés par « , » ; null s'il n'est attribué à personne. */
@@ -49,7 +59,7 @@ interface Annulable {
   readonly avant: ReadonlyMap<string, readonly string[]>;
 }
 
-export function Consignes({ porte, fermeId, utilisateurId, equipe, travaux, mode, surMode, demande }: ProprietesConsignes) {
+export function Consignes({ porte, fermeId, utilisateurId, equipe, travaux, mode, surMode, demande, surMontrerRangement }: ProprietesConsignes) {
   const [ouvert, setOuvert] = useState<Ouvert>(null);
   const [annulable, setAnnulable] = useState<Annulable | null>(null);
   const [occupe, setOccupe] = useState(false);
@@ -164,8 +174,11 @@ export function Consignes({ porte, fermeId, utilisateurId, equipe, travaux, mode
       )}
       {ouvert?.sorte === 'fiche' && (
         <FicheDuJour
+          porte={porte}
+          fermeId={fermeId}
           travaux={travaux}
           equipe={equipe}
+          surMontrerRangement={surMontrerRangement}
           surFermer={() => {
             setOuvert(null);
           }}
@@ -331,12 +344,39 @@ function DialogueAttribution({ travaux, equipe, cleDepart, occupe, erreur, surVa
 // ── Fiche du jour ────────────────────────────────────────────────────────────────────────────
 
 interface ProprietesFiche {
+  readonly porte: PorteDonnees;
+  readonly fermeId: string;
   readonly travaux: readonly TravailVu[];
   readonly equipe: Equipe;
+  readonly surMontrerRangement: ((cible: CibleRangement) => void) | undefined;
   readonly surFermer: () => void;
 }
 
-function FicheDuJour({ travaux, equipe, surFermer }: ProprietesFiche) {
+/** T61 : la colonne outil : « Grelinette — hangar, mur nord » à toucher si l'outil est rangé, sinon le nom du travail prévu. */
+function CelluleOutil({ ligne, outils, surMontrer }: { readonly ligne: LigneFiche; readonly outils: readonly OutilRange[]; readonly surMontrer: ((cible: CibleRangement) => void) | undefined }) {
+  const r = ligne.outil === '' ? null : rangementDe(ligne.outil, outils);
+  if (r === null) return <td data-colonne="outil">{ligne.outil}</td>;
+  return (
+    <td data-colonne="outil">
+      <button
+        type="button"
+        data-testid="montrer-rangement"
+        aria-label={r.libelle}
+        className="auj-rangement"
+        onClick={() => {
+          surMontrer?.({ outilId: r.outil.id, cle: ligne.cle, plancheId: ligne.plancheId });
+        }}
+      >
+        {r.libelle}
+      </button>
+    </td>
+  );
+}
+
+function FicheDuJour({ porte, fermeId, travaux, equipe, surMontrerRangement, surFermer }: ProprietesFiche) {
+  // T61 : le rangement des outils, lu à la demande (fiche ouverte), ferme de la porte seulement.
+  const [outils, setOutils] = useState<readonly OutilRange[]>([]);
+  useEffect(() => suivreOutils(porte, fermeId, setOutils), [porte, fermeId]);
   const [personne, setPersonne] = useState(() => equipe.moi ?? equipe.personnes[0]?.id ?? '');
   const [avis, setAvis] = useState<string | null>(null);
   const garderFocus = useFocusDuDialogue();
@@ -413,7 +453,7 @@ function FicheDuJour({ travaux, equipe, surFermer }: ProprietesFiche) {
                     {l.travail}
                     {l.pourTous && <span className="auj-fiche-tous"> (pour tous)</span>}
                   </td>
-                  <td data-colonne="outil">{l.outil}</td>
+                  <CelluleOutil ligne={l} outils={outils} surMontrer={surMontrerRangement} />
                 </tr>
               ))}
             </tbody>

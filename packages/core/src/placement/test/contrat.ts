@@ -179,7 +179,7 @@ export interface PlacementZone {
   readonly contour: readonly PointLocal[] | null;
 }
 
-export type TypeBatiment = 'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'magasin' | 'autre';
+export type TypeBatiment = 'serre_tunnel' | 'serre_chapelle' | 'hangar' | 'local' | 'chambre_froide' | 'magasin' | 'autre'; // T61 : local et chambre froide
 
 export interface ModulePlacement {
   readonly RAYON_TERRESTRE_M: number;
