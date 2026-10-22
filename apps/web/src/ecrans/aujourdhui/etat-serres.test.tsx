@@ -98,6 +98,7 @@ async function ouvrirPanneau(role: 'gerant' | 'equipier' = 'gerant', maintenant:
   await ecrireFermeNeuve(base, { role });
   ecrireSerres(base, FERME);
   amorcerEtats(FERME, UTILISATEUR);
+  departs = new Set(etats().map((e) => String(e.id)));
   porte = porteSur(base, UTILISATEUR, FERME, maintenant);
   await act(async () => {
     racine.render(
@@ -128,7 +129,9 @@ function equipement(zone: string, nom: string): HTMLElement {
 
 type Ligne = Record<string, string | null>;
 const etats = (): Ligne[] => base.lireDirect<Ligne>(`SELECT * FROM evenement WHERE type = 'etat_abri' AND ferme_id = ? ORDER BY horodatage, id`, [FERME]);
-const nouveaux = (): Ligne[] => etats().filter((e) => !(e.horodatage ?? '').startsWith('2026-09-30T0'));
+/** Identifiants des événements de départ (amorcerEtats) : les nouveaux sont tous les autres, quelle que soit l'heure de la porte. */
+let departs = new Set<string>();
+const nouveaux = (): Ligne[] => etats().filter((e) => !departs.has(String(e.id)));
 
 describe('T58 : panneau « État des serres »', () => {
   it('une section par abri de la ferme, par nom : Serre 1, Serre 2, Tunnel 3 ; ni plein champ, ni serre supprimée, ni serre du voisin', async () => {
