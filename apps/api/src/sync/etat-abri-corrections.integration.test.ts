@@ -154,4 +154,43 @@ decrireAvecBase('T58')('T58 : corrections et annulations des changements d’ét
     expect(await lot([a])).toEqual({ refus: [] });
     expect(await ecrit(a.id)).toBe(1);
   });
+
+  // ── Correction d'une correction : la zone et l'équipement restent ceux de la chaîne ─────────
+
+  async function chaine(): Promise<{ origine: EcritureEnvoyee; premiere: EcritureEnvoyee }> {
+    const o = await origine();
+    const c1 = putEtat(serre, 'portes', false, remplace('correction', o));
+    expect(await lot([c1]), 'la 1re correction est acceptée').toEqual({ refus: [] });
+    return { origine: o, premiere: c1 };
+  }
+
+  it('2e correction qui ne change que `actif` : acceptée (témoin)', async () => {
+    const { premiere } = await chaine();
+    const c2 = putEtat(serre, 'portes', true, remplace('correction', premiere));
+    expect(await lot([c2])).toEqual({ refus: [] });
+    expect(await ecrit(c2.id)).toBe(1);
+  });
+
+  it('2e correction qui change de zone par rapport à la 1re : refusée, rien d’écrit', async () => {
+    const { premiere } = await chaine();
+    const c2 = putEtat(tunnel, 'portes', true, remplace('correction', premiere));
+    expect((await lot([c2])).refus).toEqual([{ table: 'evenement', id: c2.id, motif: 'ecriture_invalide' }]);
+    expect(await ecrit(c2.id)).toBe(0);
+  });
+
+  it('2e correction qui change d’équipement par rapport à la 1re : refusée, rien d’écrit', async () => {
+    const { premiere } = await chaine();
+    const c2 = putEtat(serre, 'ouvrants_lateraux', true, remplace('correction', premiere));
+    expect((await lot([c2])).refus).toEqual([{ table: 'evenement', id: c2.id, motif: 'ecriture_invalide' }]);
+    expect(await ecrit(c2.id)).toBe(0);
+  });
+
+  it('une 2e correction envoyée dans le même lot que la 1re est jugée sur la 1re : changer de zone est refusé', async () => {
+    const o = await origine();
+    const c1 = putEtat(serre, 'portes', false, remplace('correction', o));
+    const c2 = putEtat(tunnel, 'portes', true, remplace('correction', c1));
+    const r = await lot([c1, c2]);
+    expect(r.refus.map((x) => x.id)).toContain(c2.id);
+    expect(await ecrit(c2.id)).toBe(0);
+  });
 });
