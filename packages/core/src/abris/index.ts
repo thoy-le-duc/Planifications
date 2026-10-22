@@ -208,6 +208,16 @@ export function etatsDeLaZone(evenements: readonly EvenementEtatAbri[], zone: Zo
   return etatsAvec(enVigueur(evenements), zone, instantDe(instant));
 }
 
+/**
+ * État de chaque équipement déclaré de chaque zone, en une passe sur le journal (les écrans
+ * Aujourd'hui et 3D) : comme `etatsDeLaZone` zone par zone, sans recalculer les chaînes.
+ */
+export function etatsDesZones(evenements: readonly EvenementEtatAbri[], zones: readonly ZoneAbri[], instant: string): Map<string, EtatEquipementDeZone[]> {
+  const vigueur = enVigueur(evenements);
+  const t = instantDe(instant);
+  return new Map(zones.map((z) => [z.id, etatsAvec(vigueur, z, t)]));
+}
+
 const COLLATOR = new Intl.Collator('fr', { numeric: true, sensitivity: 'base' });
 
 /** Ordre des abris : nom (naturel, sans la casse), puis id. */
