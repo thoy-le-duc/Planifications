@@ -36,6 +36,8 @@ const CHEMIN_CALCULS = '../src/ecrans/plan/calculs.ts';
 const CLE_EFFACEMENT_EN_ATTENTE = 'planif.effacement-en-attente';
 const POLICE_MIN_PX = 12;
 const CIBLE_ETIQUETTE_PX = 48;
+/** Jour de référence de C6 : milieu de la saison 2026 du jeu de T07, indépendant de la date réelle. */
+const JOUR_FIGE = '2026-06-15';
 /** Demi-côté de la zone tactile minimale (44 px) moins 1 px. */
 const DEMI_CIBLE_PX = 21;
 
@@ -50,13 +52,13 @@ function jourLocal(d: Date): string {
   return `${String(d.getFullYear())}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`;
 }
 
-async function planAttendu(): Promise<{ plan: Plan; calculs: ModuleCalculsPlan; utilisateurId: string }> {
+async function planAttendu(jour: string = jourLocal(new Date())): Promise<{ plan: Plan; calculs: ModuleCalculsPlan; utilisateurId: string }> {
   const calculs = (await import(/* @vite-ignore */ CHEMIN_CALCULS)) as ModuleCalculsPlan;
   const base = creerBaseMemoire(SCHEMA_LOCAL);
   try {
     const jeu = await remplirJeuT07(base);
     const porte = creerPorte(base, { utilisateurId: jeu.utilisateurId as Id<'Utilisateur'>, fermeId: jeu.principale.fermeId as Id<'Ferme'> });
-    const aujourdhui = jourLocal(new Date());
+    const aujourdhui = jour;
     const saison = calculs.saisonParDefaut(await calculs.chargerSaisons(porte, jeu.principale.fermeId), aujourdhui);
     if (saison === null) throw new Error('jeu de T07 sans saison');
     const plan = await calculs.chargerPlan(porte, jeu.principale.fermeId, { saison, aujourdhui });
@@ -187,8 +189,11 @@ interface Sonde {
 
 test('C6 — barres : zone de toucher d’au moins 44 × 44 px autour du centre de chaque barre visible', async ({ page }) => {
   test.setTimeout(DELAI_AMORCAGE_MS + 90_000);
-  const { plan, calculs, utilisateurId } = await planAttendu();
+  const { plan, calculs, utilisateurId } = await planAttendu(JOUR_FIGE);
   await page.setViewportSize({ width: 360, height: 780 });
+  // Jour figé : sans cela, le défilement initial (centré sur la semaine du jour) change avec la
+  // date et le nombre de barres visibles passait sous le seuil en fin de saison.
+  await page.clock.setFixedTime(new Date(`${JOUR_FIGE}T10:00:00`));
   await ouvrirAvecBase(page, utilisateurId);
   await allerAuPlan(page);
 
@@ -198,6 +203,8 @@ test('C6 — barres : zone de toucher d’au moins 44 × 44 px autour du centre 
     { haut: 0, gauche: null },
     { haut: 'milieu', gauche: null },
     { haut: 'milieu', gauche: 0 },
+    { haut: 0, gauche: 900 },
+    { haut: 'milieu', gauche: 900 },
   ];
   const etroite = plan.lignes
     .map((l, i) => ({ l, i }))
