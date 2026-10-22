@@ -197,6 +197,13 @@ function Formulaire({ culture: initiale, cultures, produits, etatCatalogue, surR
   const ammInconnu = produit !== null && produit.numeroAmm !== '' && catalogue !== null && ephy === null;
   const pourCulture = lot ? 'chaque culture' : 'cette culture';
   const avisEphy = useRef<HTMLDivElement>(null);
+  /** « Réessayer » touché : si le catalogue est lu, le focus passe au DAR de la première culture (l'avis disparaît). */
+  const reessaiEnCours = useRef(false);
+  useEffect(() => {
+    if (etatCatalogue.sorte === 'chargement' || !reessaiEnCours.current) return;
+    reessaiEnCours.current = false;
+    if (etatCatalogue.sorte === 'lu') document.getElementById(lot ? `${id}-dar-0` : `${id}-dar`)?.focus();
+  }, [etatCatalogue.sorte, id, lot]);
   const valeurDose = lireNombre(dose);
   const avertissement = produit === null || valeurDose === null ? null : avertissementDose({ valeur: valeurDose, unite }, produit.doseMaximale);
 
@@ -456,6 +463,7 @@ function Formulaire({ culture: initiale, cultures, produits, etatCatalogue, surR
                 className="parc-bouton-secondaire"
                 onClick={() => {
                   avisEphy.current?.focus();
+                  reessaiEnCours.current = true;
                   surReessayer();
                 }}
               >
