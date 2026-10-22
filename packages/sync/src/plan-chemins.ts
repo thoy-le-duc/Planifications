@@ -70,6 +70,21 @@ async function exigerOrigine(tx: TransactionLocale, ctx: ContextePlan): Promise<
   if (ferme === undefined || ferme.o === null) throw new Error('Posez d’abord le point de départ du plan (son origine), avant d’y tracer un chemin ou d’y poser un point.');
 }
 
+/**
+ * Relecture T61 : un lieu actif qui porte sur cet élément (`colonne` = 'id' pour le lieu lui-même,
+ * 'batiment_id', 'point_plan_id') range-t-il encore un outil ou une place actifs ? Alors rejet.
+ */
+export async function exigerRangementVide(tx: TransactionLocale, fermeId: string, colonne: 'id' | 'batiment_id' | 'point_plan_id', id: string): Promise<void> {
+  const occupe = await lire(
+    tx,
+    `SELECT 1 AS n FROM lieu_rangement l WHERE l.ferme_id = ? AND l.supprime_le IS NULL AND l.${colonne} = ?
+       AND (EXISTS (SELECT 1 FROM outil o WHERE o.lieu_rangement_id = l.id AND o.ferme_id = l.ferme_id AND o.supprime_le IS NULL)
+         OR EXISTS (SELECT 1 FROM place_rangement p WHERE p.lieu_rangement_id = l.id AND p.ferme_id = l.ferme_id AND p.supprime_le IS NULL))`,
+    [fermeId, id],
+  );
+  if (occupe.length > 0) throw new Error('Déplacez d’abord les outils rangés ici et retirez ses places de rangement, puis retirez-le.');
+}
+
 /** Ligne `id` de la ferme de la porte, ou undefined si elle n'existe pas ; d'une autre ferme : rejet. */
 async function ligneDeLaFerme(tx: TransactionLocale, ctx: ContextePlan, table: SortePlan, id: string): Promise<Ligne | undefined> {
   const [l] = await lire<Ligne>(tx, `SELECT ferme_id, ${COLONNES[table].join(', ')} FROM ${table} WHERE id = ?`, [id]);
@@ -110,6 +125,13 @@ function recues(table: SortePlan, valeurs: Ligne, existante: Ligne | undefined):
 /** La ligne complète (existante + reçue) validée, au format rangé dans la base locale. */
 async function ligneValidee(tx: TransactionLocale, ctx: ContextePlan, table: SortePlan, id: string, ligne: Ligne, existante: Ligne | undefined): Promise<Ligne> {
   const active = ligne.supprime_le === null;
+  // Relecture T61 : retirer un lieu ou un point qui range encore des outils ou des places : rejet.
+  if (!active && existante !== undefined && existante.supprime_le === null) {
+    if (table === 'lieu_rangement') await exigerRangementVide(tx, ctx.fermeId, 'id', id);
+    if (table === 'point_plan') await exigerRangementVide(tx, ctx.fermeId, 'point_plan_id', id);
+  }
+  /** La référence est à relire : création, rétablissement, ou valeur changée (un outil orphelin reste renommable). */
+  const relire = (c: string): boolean => existante === undefined || existante.supprime_le !== null || (existante[c] ?? null) !== (ligne[c] ?? null);
   switch (table) {
     case 'chemin': {
       const nom = nomDeChemin(ligne.nom);
@@ -132,7 +154,7 @@ async function ligneValidee(tx: TransactionLocale, ctx: ContextePlan, table: Sor
       if (existante !== undefined && (existante.batiment_id !== batiment || existante.point_plan_id !== point)) {
         throw new Error('Un lieu de rangement ne change pas de bâtiment ni de point : retirez-le, puis créez-en un autre.');
       }
-      if (active) {
+      if (active && (relire('batiment_id') || relire('point_plan_id'))) {
         const [colonne, table_, element] = batiment !== null ? (['batiment_id', 'batiment', batiment] as const) : (['point_plan_id', 'point_plan', point] as const);
         await exigerActive(tx, ctx, table_, element, batiment !== null ? 'Bâtiment introuvable dans cette ferme.' : 'Point du plan introuvable dans cette ferme.');
         const autre = await lire(tx, `SELECT 1 AS n FROM lieu_rangement WHERE ${colonne} = ? AND ferme_id = ? AND supprime_le IS NULL AND id <> ?`, [element, ctx.fermeId, id]);
@@ -147,7 +169,7 @@ async function ligneValidee(tx: TransactionLocale, ctx: ContextePlan, table: Sor
       if (typeof lieu !== 'string') throw new Error('Une place est toujours dans un lieu de rangement.');
       if (existante !== undefined && existante.lieu_rangement_id !== lieu) throw new Error('Une place ne change pas de lieu de rangement.');
       if (active) {
-        await exigerActive(tx, ctx, 'lieu_rangement', lieu, 'Lieu de rangement introuvable dans cette ferme.');
+        if (relire('lieu_rangement_id')) await exigerActive(tx, ctx, 'lieu_rangement', lieu, 'Lieu de rangement introuvable dans cette ferme.');
         const places = await lire<{ nom: unknown }>(tx, 'SELECT nom FROM place_rangement WHERE lieu_rangement_id = ? AND ferme_id = ? AND supprime_le IS NULL AND id <> ?', [lieu, ctx.fermeId, id]);
         if (places.some((p) => typeof p.nom === 'string' && nomEnBase(p.nom) === nomEnBase(r.valeur.nom))) throw new Error('Ce nom de place est déjà pris dans ce lieu de rangement.');
       }
@@ -158,8 +180,8 @@ async function ligneValidee(tx: TransactionLocale, ctx: ContextePlan, table: Sor
       if (!r.ok) throw new Error(r.erreur.message);
       const { lieu_rangement_id: lieu, place_rangement_id: place } = r.valeur;
       if (active) {
-        await exigerActive(tx, ctx, 'lieu_rangement', lieu, 'Lieu de rangement introuvable dans cette ferme.');
-        if (place !== null) {
+        if (relire('lieu_rangement_id')) await exigerActive(tx, ctx, 'lieu_rangement', lieu, 'Lieu de rangement introuvable dans cette ferme.');
+        if (place !== null && (relire('place_rangement_id') || relire('lieu_rangement_id'))) {
           const p = await exigerActive(tx, ctx, 'place_rangement', place, 'Place de rangement introuvable dans cette ferme.');
           if (p.lieu_rangement_id !== lieu) throw new Error('Cette place n’est pas dans le lieu de rangement de l’outil.');
         }

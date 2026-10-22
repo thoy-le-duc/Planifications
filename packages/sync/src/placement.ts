@@ -15,7 +15,7 @@
  * DELETE). Les messages de rejet sont en français (ceux du cœur pour ses règles).
  */
 import { identifiantNormalise, instantNormalise, TAILLE_MAX_PAR_LOT, TYPES_BATIMENT, validerPlacement, validerPositionVanne } from '@planif/core';
-import { placerElementPlan } from './plan-chemins.ts';
+import { exigerRangementVide, placerElementPlan } from './plan-chemins.ts';
 import type { BaseLocale, ChangementPlacement, PointPlacement, TransactionLocale, ValeursBatiment } from './types.ts';
 
 export const SEUL_LE_GERANT = 'Seul le gérant peut placer les éléments de la ferme.';
@@ -125,6 +125,8 @@ async function placerBatiment(tx: TransactionLocale, ctx: ContextePlacement, id:
   const zoneChange = existant?.zone_id !== zone || existant.supprime_le !== null;
   if (zone !== null && supprime === null && zoneChange) await verifierZoneAbritee(tx, ctx, zone, id);
   if (supprime === null) await exigerOrigine(tx, ctx);
+  // Relecture T61 : un bâtiment qui range encore des outils ou des places ne se retire pas.
+  if (supprime !== null && existant !== undefined && existant.supprime_le === null) await exigerRangementVide(tx, ctx.fermeId, 'batiment_id', id);
 
   const instant = ctx.maintenant().toISOString();
   if (existant === undefined) {

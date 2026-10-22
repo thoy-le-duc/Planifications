@@ -88,6 +88,8 @@ export const PRECISION_PLACE_HORS_LIEU = 'cette place n’est pas dans le lieu d
 export const PRECISION_PLACE_FIGEE = 'une place ne change pas de lieu de rangement : retirez-la, puis créez-en une autre';
 export const PRECISION_PLACE_DEJA = 'ce nom de place est déjà pris dans ce lieu de rangement';
 export const PRECISION_OUTIL_DEJA = 'un outil de ce nom existe déjà dans la ferme';
+/** Relecture T61 : un lieu (ou son bâtiment, son point) qui range encore des outils ou des places actifs ne se retire pas. */
+export const PRECISION_RANGEMENT_OCCUPE = 'déplacez d’abord les outils rangés ici et retirez ses places de rangement, puis retirez-le';
 export const PRECISION_INFORMATION_INCONNUE = "la saisie contient une information que l'appli ne connaît pas";
 export const PRECISION_SUPPRESSION_ILLISIBLE = 'la date de suppression est illisible';
 export const PRECISION_REFERENCE_ILLISIBLE = 'un élément choisi est illisible';
@@ -259,10 +261,38 @@ async function active(tx: TransactionDb, table: 'batiment' | 'point_plan' | 'lie
   return r.rows[0]?.l ?? null;
 }
 
-/** Ce que la base seule sait : origine du plan, références, unicités. Seulement pour une ligne active. */
-async function verifierEnBase(tx: TransactionDb, table: TablePlan, l: Ligne, fermeId: string): Promise<Refus | null> {
-  if (l.supprime_le !== null) return null;
+/**
+ * Relecture T61 : un lieu de rangement actif qui porte sur cet élément (`colonne` = 'id' pour le
+ * lieu lui-même, 'batiment_id', 'point_plan_id') range-t-il encore un outil ou une place actifs ?
+ * Alors l'élément ne se retire pas. Ce qui est déplacé ou retiré plus haut dans le lot ne compte plus.
+ */
+export async function verifierRangementVide(tx: TransactionDb, colonne: 'id' | 'batiment_id' | 'point_plan_id', id: string, fermeId: string): Promise<Refus | null> {
+  const occupe = await existe(
+    tx,
+    sql`SELECT 1 FROM lieu_rangement l WHERE l.ferme_id = ${fermeId}::uuid AND l.supprime_le IS NULL AND l.${sql.identifier(colonne)} = ${id}::uuid
+          AND (EXISTS (SELECT 1 FROM outil o WHERE o.lieu_rangement_id = l.id AND o.ferme_id = l.ferme_id AND o.supprime_le IS NULL)
+            OR EXISTS (SELECT 1 FROM place_rangement p WHERE p.lieu_rangement_id = l.id AND p.ferme_id = l.ferme_id AND p.supprime_le IS NULL))`,
+  );
+  return occupe ? invalide(PRECISION_RANGEMENT_OCCUPE, fermeId) : null;
+}
+
+/**
+ * Ce que la base seule sait : origine du plan, références, unicités (ligne active) ; retrait d'un
+ * lieu ou d'un point qui range encore. `avant` : la ligne existante (PATCH), ou null (PUT). Les
+ * références d'une ligne existante qui ne changent pas ne sont pas relues : un outil dont le lieu
+ * a été retiré (d'avant la règle) reste renommable.
+ */
+async function verifierEnBase(tx: TransactionDb, table: TablePlan, l: Ligne, fermeId: string, avant: Ligne | null): Promise<Refus | null> {
   const id = String(l.id);
+  if (l.supprime_le !== null) {
+    const retrait = avant !== null && avant.supprime_le == null;
+    if (!retrait) return null;
+    if (table === 'lieu_rangement') return verifierRangementVide(tx, 'id', id, fermeId);
+    if (table === 'point_plan') return verifierRangementVide(tx, 'point_plan_id', id, fermeId);
+    return null;
+  }
+  /** La référence est à relire : création, rétablissement, ou valeur changée. */
+  const relire = (c: string): boolean => avant === null || avant.supprime_le != null || (avant[c] ?? null) !== (l[c] ?? null);
   switch (table) {
     case 'chemin':
     case 'point_plan': {
@@ -270,6 +300,7 @@ async function verifierEnBase(tx: TransactionDb, table: TablePlan, l: Ligne, fer
       return sansOrigine ? invalide(PRECISION_PLAN_SANS_ORIGINE, fermeId) : null;
     }
     case 'lieu_rangement': {
+      if (!relire('batiment_id') && !relire('point_plan_id')) return null;
       const surBatiment = l.batiment_id !== null;
       const element = surBatiment ? l.batiment_id : l.point_plan_id;
       if ((await active(tx, surBatiment ? 'batiment' : 'point_plan', element, fermeId)) === null) return invalide(PRECISION_ELEMENT_INTROUVABLE, fermeId);
@@ -278,7 +309,7 @@ async function verifierEnBase(tx: TransactionDb, table: TablePlan, l: Ligne, fer
       return deja ? invalide(PRECISION_LIEU_DEJA, fermeId) : null;
     }
     case 'place_rangement': {
-      if ((await active(tx, 'lieu_rangement', l.lieu_rangement_id, fermeId)) === null) return invalide(PRECISION_LIEU_INTROUVABLE, fermeId);
+      if (relire('lieu_rangement_id') && (await active(tx, 'lieu_rangement', l.lieu_rangement_id, fermeId)) === null) return invalide(PRECISION_LIEU_INTROUVABLE, fermeId);
       const deja = await existe(
         tx,
         sql`SELECT 1 FROM place_rangement WHERE lieu_rangement_id = ${String(l.lieu_rangement_id)}::uuid AND supprime_le IS NULL
@@ -287,8 +318,8 @@ async function verifierEnBase(tx: TransactionDb, table: TablePlan, l: Ligne, fer
       return deja ? invalide(PRECISION_PLACE_DEJA, fermeId) : null;
     }
     case 'outil': {
-      if ((await active(tx, 'lieu_rangement', l.lieu_rangement_id, fermeId)) === null) return invalide(PRECISION_LIEU_INTROUVABLE, fermeId);
-      if (l.place_rangement_id !== null) {
+      if (relire('lieu_rangement_id') && (await active(tx, 'lieu_rangement', l.lieu_rangement_id, fermeId)) === null) return invalide(PRECISION_LIEU_INTROUVABLE, fermeId);
+      if (l.place_rangement_id !== null && (relire('place_rangement_id') || relire('lieu_rangement_id'))) {
         const place = await active(tx, 'place_rangement', l.place_rangement_id, fermeId);
         if (place === null) return invalide(PRECISION_PLACE_INTROUVABLE, fermeId);
         if (place.lieu_rangement_id !== l.lieu_rangement_id) return invalide(PRECISION_PLACE_HORS_LIEU, fermeId);
@@ -318,7 +349,7 @@ async function creer(tx: TransactionDb, ctx: Contexte, e: EcriturePlanRecue, fer
   if (ligne.supprime_le !== null) return invalide(PRECISION_CREEE_SUPPRIMEE, fermeDonnee);
   const existante = await identique(tx, e.table, ligne, id);
   if (existante !== null) return existante ? null : invalide(PRECISION_EXISTE_DEJA, null);
-  const refus = await verifierEnBase(tx, e.table, ligne, fermeDonnee);
+  const refus = await verifierEnBase(tx, e.table, ligne, fermeDonnee, null);
   if (refus !== null) return refus;
   const maintenant = ctx.maintenant();
   const ecrite = await tx.execute<{ id: string }>(
@@ -361,7 +392,7 @@ async function modifier(tx: TransactionDb, ctx: Contexte, e: EcriturePlanRecue, 
   if (!lecture.ok) return lecture.refus;
   const ligne = lecture.ligne;
   if ((await identique(tx, e.table, ligne, String(avant.id))) === true) return null;
-  const refus = await verifierEnBase(tx, e.table, ligne, fermeId);
+  const refus = await verifierEnBase(tx, e.table, ligne, fermeId, avant);
   if (refus !== null) return refus;
   const maintenant = ctx.maintenant();
   await tx.execute(
