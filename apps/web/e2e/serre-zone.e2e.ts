@@ -1,7 +1,7 @@
 import { devices, expect, test, type BrowserContext, type Page } from '@playwright/test';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import { ENTREE_PLACEMENT, TESTID_PLACEMENT as T } from '../src/ecrans/placement/test/contrat.ts';
-import { BOUTONS_CONTOURS as B, TESTID_CONTOURS as TC } from '../src/ecrans/placement/test/contrat-contours.ts';
+import { TESTID_CONTOURS as TC } from '../src/ecrans/placement/test/contrat-contours.ts';
 import { fermePlacement, ZONE_TUNNEL } from '../src/ecrans/placement/test/ferme-placement.ts';
 import { surveillerCsp } from './outils.ts';
 
