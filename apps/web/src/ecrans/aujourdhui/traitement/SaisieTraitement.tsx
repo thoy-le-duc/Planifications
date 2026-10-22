@@ -343,13 +343,23 @@ function Formulaire({ culture: initiale, cultures, produits, etatCatalogue, surR
 
   const avertissementCulture = (c: CultureEnPlace) => {
     const e = ephyDe(c);
+    const saisi = darsSaisis[c.cibleId]?.trim() ?? '';
+    const propose = e?.dar ?? null;
+    // DAR tapé (par exemple pendant qu'e-phy manquait) gardé, mais e-phy propose autre chose : on le dit, sans bloquer (T79).
+    const autreDar = propose !== null && saisi !== '' && saisi !== String(propose) ? propose : null;
     return (
-      e !== null &&
-      !e.homologue && (
-        <p data-testid="avertissement-culture" data-cible={c.cibleId} role="status" className="parc-erreur">
-          Produit non homologué sur cette culture dans e-phy ({c.espece}). Vérifiez avant de traiter ; le délai avant récolte est à saisir.
-        </p>
-      )
+      <>
+        {e !== null && !e.homologue && (
+          <p data-testid="avertissement-culture" data-cible={c.cibleId} role="status" className="parc-erreur">
+            Produit non homologué sur cette culture dans e-phy ({c.espece}). Vérifiez avant de traiter ; le délai avant récolte est à saisir.
+          </p>
+        )}
+        {autreDar !== null && (
+          <p data-testid="avertissement-dar-saisi" data-cible={c.cibleId} role="status" className="parc-aide">
+            Délai avant récolte saisi gardé ({saisi} j) : e-phy propose {String(autreDar)} j pour {lot ? c.nom : 'cette culture'}.
+          </p>
+        )}
+      </>
     );
   };
 
