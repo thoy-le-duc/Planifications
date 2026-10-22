@@ -8,6 +8,7 @@
  */
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import type { PorteDonnees } from '@planif/sync';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { EtatSerres } from '../aujourdhui/EtatSerres.tsx';
 import type { ModuleParcellaire, ProprietesEcranParcellaire } from './test/contrat.ts';
@@ -198,6 +199,91 @@ describe('T82 : équipements d’une serre', () => {
     await attendre(() => (equipementsDe(tunnel) as unknown[] | null)?.length === 3, 'les deux changements écrits');
     expect(equipementsDe(tunnel)).toEqual(['ouvrants_lateraux', 'portes', 'chauffage']);
     expect(cochees(d)).toEqual(['ouvrants latéraux', 'portes', 'chauffage']);
+  });
+
+  // Porte dont `ecrireEnsemble` peut échouer ou attendre une porte ouverte à la main, après l'écriture réelle.
+  function porteTruquee(regle: { echouerAu: number; apres: Promise<void> | null; compte: number }): PorteDonnees {
+    return {
+      ...b.porte,
+      ecrireEnsemble: async (...args: Parameters<PorteDonnees['ecrireEnsemble']>) => {
+        regle.compte++;
+        if (regle.compte === regle.echouerAu) throw new Error('écriture refusée');
+        await b.porte.ecrireEnsemble(...args);
+        if (regle.apres !== null && regle.compte === 1) await regle.apres;
+      },
+    };
+  }
+
+  it('A réussit puis B échoue : l’affichage montre la base (avec A), pas la liste d’avant A ; le succès suivant n’efface pas l’erreur', async () => {
+    let ouvrirPorte: () => void = () => undefined;
+    const regle = { echouerAu: 0, apres: null as Promise<void> | null, compte: 0 };
+    await ouvrir({ porte: porteTruquee(regle) });
+    const tunnel = await creerZone('Tunnel 1', 'tunnel');
+    const d = await ouvrirZone('Tunnel 1');
+    regle.compte = 0;
+    regle.echouerAu = 2;
+    // La base est relue (A écrite) alors que la file n'est pas vide ; B échoue ensuite.
+    regle.apres = new Promise<void>((r) => {
+      ouvrirPorte = r;
+    });
+    await act(async () => {
+      caseDe(d, 'voile ou filet').click();
+      caseDe(d, 'chauffage').click();
+      await Promise.resolve();
+    });
+    await attendre(() => equipementsDe(tunnel) !== null, 'A écrite, file encore ouverte');
+    await toucher(d);
+    ouvrirPorte();
+    await attendre(() => section(d).querySelector('[role="alert"]') !== null, 'erreur de B affichée');
+    expect(equipementsDe(tunnel)).toEqual(['ouvrants_lateraux', 'portes']);
+    await attendre(() => cochees(d).join() === 'ouvrants latéraux,portes', 'affichage = base avec A');
+    // Un tap réussi ensuite : le message ne s'efface qu'au tap, et reste tant qu'aucun tap n'a lieu.
+    expect(section(d).querySelector('[role="alert"]')).not.toBeNull();
+  });
+
+  it('la base change pendant une écriture (autre appareil) : elle est affichée quand la file est vide', async () => {
+    let ouvrirPorte: () => void = () => undefined;
+    const regle = { echouerAu: 0, apres: null as Promise<void> | null, compte: 0 };
+    await ouvrir({ porte: porteTruquee(regle) });
+    const tunnel = await creerZone('Tunnel 1', 'tunnel');
+    const d = await ouvrirZone('Tunnel 1');
+    regle.compte = 0;
+    regle.apres = new Promise<void>((r) => {
+      ouvrirPorte = r;
+    });
+    await act(async () => {
+      caseDe(d, 'voile ou filet').click();
+      await Promise.resolve();
+    });
+    await attendre(() => equipementsDe(tunnel) !== null, 'écriture faite, file encore ouverte');
+    await b.base.execute('UPDATE zone SET equipements_abri = ? WHERE id = ?', ['["chauffage"]', tunnel]);
+    await toucher(d);
+    ouvrirPorte();
+    await attendre(() => cochees(d).join() === 'chauffage', 'base de l’autre appareil affichée');
+  });
+
+  it('changer de zone pendant une écriture : la fiche de la nouvelle zone montre sa propre liste', async () => {
+    let ouvrirPorte: () => void = () => undefined;
+    const regle = { echouerAu: 0, apres: null as Promise<void> | null, compte: 0 };
+    await ouvrir({ porte: porteTruquee(regle) });
+    const tunnel = await creerZone('Tunnel 1', 'tunnel');
+    await creerZone('Serre A', 'serre');
+    const d = await ouvrirZone('Tunnel 1');
+    regle.compte = 0;
+    regle.apres = new Promise<void>((r) => {
+      ouvrirPorte = r;
+    });
+    await act(async () => {
+      caseDe(d, 'voile ou filet').click();
+      await Promise.resolve();
+    });
+    await attendre(() => equipementsDe(tunnel) !== null, 'écriture faite, file encore ouverte');
+    await toucher(bouton('Fermer', d));
+    const s = await ouvrirZone('Serre A');
+    expect(cochees(s)).toEqual([...NOMS]);
+    ouvrirPorte();
+    await toucher(s);
+    expect(cochees(dialogueOuEchec('Serre A'))).toEqual([...NOMS]);
   });
 
   it('zone de plein champ : pas de section Équipements ; elle apparaît quand on passe la zone en tunnel', async () => {
