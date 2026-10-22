@@ -72,6 +72,7 @@ import { useFocusDuDialogue } from './dialogue.ts';
 import { jourDuTelephone } from './jour.ts';
 import { BoutonIrrigation } from './BoutonIrrigation.tsx';
 import { BoutonFertilisation } from './BoutonFertilisation.tsx';
+import { BoutonSerres } from './BoutonSerres.tsx';
 import type { ProprietesBandeauInstallation } from '../../installation/BandeauInstallation.tsx';
 import { annulerSaisie, changerDate, DejaFait, marquerFait, marquerTravailFait, noterRecolte, SaisiePlusEnVigueur, type ContexteEcriture } from './ecritures.ts';
 import { garderInstantane, lireFaitsEnAttente, lireInstantane, noterFaitsEnAttente, remettreDansInstantane, retirerDeInstantane, stockageParDefaut, type CarteRetiree, type StockageInstantane, type VueJournee } from './instantane.ts';
@@ -102,6 +103,8 @@ export interface ProprietesEcranAujourdhui {
   readonly fermeId: string | null;
   /** Jour du téléphone, 'AAAA-MM-JJ' ; par défaut celui de l'horloge du téléphone. */
   readonly aujourdhui?: () => string;
+  /** T58 : instant présent (rappel du soir des serres, état des serres) ; par défaut l'horloge du téléphone. */
+  readonly maintenant?: () => Date;
   /** T13d : utilisateur connecté (session) ; sans lui, aucun instantané n'est lu ni gardé. */
   readonly utilisateurId?: string;
   /** T13d : où garder l'instantané de la journée (défaut : localStorage). */
@@ -689,7 +692,10 @@ function nouvelleAttente(): AttentePorte {
   return { promesse, rendre };
 }
 
-function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage, abandonnes, surAbandon, oublierAbandon, surOnglet, surMontrerRangement }: ProprietesEcran) {
+/** T58 : l'horloge du téléphone, une seule fonction (le rappel des serres ne se réabonne pas à chaque rendu). */
+const horlogeDuTelephone = (): Date => new Date();
+
+function Ecran({ porte, fermeId, aujourdhui: jourDonne, maintenant = horlogeDuTelephone, utilisateurId, stockage, abandonnes, surAbandon, oublierAbandon, surOnglet, surMontrerRangement }: ProprietesEcran) {
   // T49 : parcours guidé d'une ferme qui démarre (lu après l'affichage, seulement si l'appli sait changer d'onglet).
   const demarrage = useDemarrage(porte, fermeId, surOnglet !== undefined);
   /** Jour du téléphone maintenant (relu à chaque écriture : l'écran peut rester ouvert à minuit). */
@@ -1396,6 +1402,8 @@ function Ecran({ porte, fermeId, aujourdhui: jourDonne, utilisateurId, stockage,
         <BoutonIrrigation porte={porte} fermeId={fermeId} aujourdhui={jour} />
         {/* T54 : saisir un apport (fertilisation, amendement), fichier à part chargé au premier tap. */}
         <BoutonFertilisation porte={porte} fermeId={fermeId} aujourdhui={jour} />
+        {/* T58 : état des serres (panneau chargé au tap) et rappel du soir, à partir de 18 h. */}
+        <BoutonSerres porte={porte} fermeId={fermeId} aujourdhui={jour} maintenant={maintenant} />
         {/* L'historique est en bas de l'écran : ce bouton y mène d'un geste. */}
         <button
           type="button"

@@ -10,6 +10,7 @@
     "./placement": "./src/placement/index.ts",
     "./croissance": "./src/croissance/index.ts",
     "./irrigation": "./src/irrigation/index.ts",
+    "./abris": "./src/abris/index.ts",
     "./identifiants": "./src/domaine/identifiants.ts",
     "./ephy": "./src/phyto/ephy.ts"
   },

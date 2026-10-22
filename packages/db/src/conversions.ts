@@ -286,6 +286,8 @@ export function evenementDepuisLigne(l: LigneEvenement): Evenement {
       return { ...commun, type: l.type, detail: l.detail as Detail<'traitement'> };
     case 'observation':
       return { ...commun, type: l.type, detail: l.detail as Detail<'observation'> };
+    case 'etat_abri':
+      return { ...commun, type: l.type, detail: l.detail as Detail<'etat_abri'> };
     default:
       return verifierExhaustif(l.type);
   }

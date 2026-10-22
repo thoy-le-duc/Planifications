@@ -189,7 +189,7 @@ describe('unions discriminées', () => {
     expectTypeOf<SorteEmplacement>().toEqualTypeOf<'planche' | 'rang' | 'gouttiere'>();
     expectTypeOf<Emplacement['sorte']>().toEqualTypeOf<SorteEmplacement>();
     expectTypeOf<TypeEvenement>().toEqualTypeOf<
-      'realise' | 'recolte' | 'intervention' | 'irrigation' | 'traitement' | 'observation'
+      'realise' | 'recolte' | 'intervention' | 'irrigation' | 'traitement' | 'observation' | 'etat_abri'
     >();
     expectTypeOf<Evenement['type']>().toEqualTypeOf<TypeEvenement>();
     expectTypeOf<ModeItineraire>().toEqualTypeOf<'semis_direct' | 'plant_maison' | 'plant_achete'>();
@@ -242,6 +242,8 @@ describe('unions discriminées', () => {
           return 'Traitement';
         case 'observation':
           return 'Observation';
+        case 'etat_abri':
+          return 'État des serres';
         default: {
           const reste: never = type;
           return reste;
@@ -358,6 +360,8 @@ describe('lien entre discriminant et contenu', () => {
         return `traitement, récolte autorisée le ${evenement.detail.recolteAutoriseeLe}`;
       case 'observation':
         return `observation ${evenement.detail.nature}`;
+      case 'etat_abri':
+        return `état ${evenement.detail.equipement}`;
       default:
         return verifierExhaustif(evenement);
     }

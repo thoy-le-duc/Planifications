@@ -1,0 +1,110 @@
+/* T58 — état des serres : panneau d'Aujourd'hui (EtatSerres.tsx) et fiche d'un abri dans la 3D
+   (../plan3d/Abris3d.tsx). Chargée avec eux, jamais au démarrage. */
+
+.serres-voile {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: color-mix(in srgb, var(--couleur-ombre) 45%, transparent);
+}
+
+.serres-feuille {
+  width: 100%;
+  max-width: 560px;
+  max-height: 100%;
+  overflow: auto;
+  background: var(--couleur-fond);
+  color: var(--couleur-encre);
+  border-radius: var(--rayon-feuille) var(--rayon-feuille) 0 0;
+  padding: 22px 16px max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--espace-m);
+}
+
+.serres-titre {
+  font-family: var(--police-titre);
+  font-weight: 800;
+  font-size: 24px;
+  margin: 0;
+}
+
+.serres-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.serres-nom {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.serres-equipements {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.serres-equipement {
+  min-height: 56px;
+  padding: 6px 10px;
+  border: 2px solid var(--couleur-tertiaire);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-encre);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.serres-equipement-actif {
+  border-color: var(--couleur-orange);
+  background: var(--couleur-orange);
+  color: var(--couleur-sur-orange);
+}
+
+.serres-equipement:disabled {
+  opacity: 0.6;
+}
+
+.serres-statut {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--rayon-case);
+  background: var(--couleur-foret);
+  color: var(--couleur-sur-foret);
+  font-weight: 700;
+}
+
+.serres-annuler {
+  padding: 0 14px;
+  border: 2px solid currentColor;
+  border-radius: var(--rayon-bouton);
+  background: transparent;
+  color: inherit;
+  font-weight: 800;
+}
+
+.serres-erreur {
+  margin: 0;
+  color: var(--couleur-conflit);
+  font-weight: 700;
+}
+
+.serres-fermer {
+  min-height: 56px;
+  border: 2px solid var(--couleur-foret);
+  border-radius: var(--rayon-bouton);
+  background: var(--couleur-surface);
+  color: var(--couleur-foret);
+  font-size: 18px;
+  font-weight: 800;
+}

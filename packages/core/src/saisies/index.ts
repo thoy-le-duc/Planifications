@@ -9,6 +9,7 @@
 import { estDateValide } from '../dates/index.ts';
 import type {
   CategorieIntervention,
+  EquipementAbri,
   EtapeRealisee,
   Evenement,
   Id,
@@ -93,7 +94,7 @@ export const PLAFONDS_SAISIES = {
 
 // ── Listes de valeurs (T01) ──────────────────────────────────────────────────────────────────
 
-const TYPES = ['realise', 'recolte', 'intervention', 'irrigation', 'traitement', 'observation'] as const satisfies readonly TypeEvenement[];
+const TYPES = ['realise', 'recolte', 'intervention', 'irrigation', 'traitement', 'observation', 'etat_abri'] as const satisfies readonly TypeEvenement[];
 const SOURCES = ['tap', 'voix', 'agent', 'photo', 'import'] as const satisfies readonly SourceSaisie[];
 const SORTES_REMPLACEMENT = ['correction', 'annulation'] as const satisfies readonly RemplacementEvenement['sorte'][];
 const UNITES_RECOLTE = ['kg', 'botte', 'piece', 'barquette'] as const satisfies readonly UniteRecolte[];
@@ -107,6 +108,8 @@ const CATEGORIES_INTERVENTION = [
 ] as const satisfies readonly CategorieIntervention[];
 const NATURES = ['ravageur', 'maladie', 'stade', 'autre'] as const satisfies readonly NatureObservation[];
 const GRAVITES = ['faible', 'moyenne', 'forte'] as const;
+/** T58 : même liste que EQUIPEMENTS_ABRI (abris/index.ts), sans dépendre de ce module. */
+const EQUIPEMENTS = ['ouvrants_lateraux', 'ouvrants_faitage', 'portes', 'chauffage', 'voile'] as const satisfies readonly EquipementAbri[];
 
 /**
  * Colonnes d'une ligne `evenement` ; `cree_le` et `origine_id` (remplies par le serveur, T10h pour
@@ -140,6 +143,7 @@ const CLES_DETAIL: Readonly<Record<TypeEvenement, readonly string[]>> = {
   irrigation: ['secteurIrrigationId', 'dureeMinutes', 'recetteFertirrigationId', 'volumeM3', 'ecMesuree', 'phMesure', 'engrais'],
   traitement: ['produitPhytoId', 'dose', 'surfaceTraiteeM2', 'cible', 'operateur', 'recolteAutoriseeLe'],
   observation: ['nature', 'gravite'],
+  etat_abri: ['zoneId', 'equipement', 'actif'],
 };
 const CLES_CATEGORIE: Readonly<Record<CategorieIntervention, readonly string[]>> = {
   travail_sol: [],
@@ -357,6 +361,20 @@ function verifDetail(type: TypeEvenement, d: Objet): Verif {
         verifParmi(d.nature, NATURES, 'detail.nature', "nature d'observation", true) ??
         verifParmi(d.gravite, GRAVITES, 'detail.gravite', 'gravité', false)
       );
+    case 'etat_abri':
+      return (
+        verifUuid(d.zoneId, 'detail.zoneId', 'serre ou tunnel') ??
+        (absent(d.equipement)
+          ? erreur('champ_manquant', 'detail.equipement', 'équipement manquant')
+          : parmi(EQUIPEMENTS, d.equipement)
+            ? null
+            : erreur('champ_invalide', 'detail.equipement', 'équipement inconnu')) ??
+        (absent(d.actif)
+          ? erreur('champ_manquant', 'detail.actif', 'état (ouvert ou fermé) manquant')
+          : typeof d.actif === 'boolean'
+            ? null
+            : erreur('champ_invalide', 'detail.actif', 'état : vrai ou faux attendu'))
+      );
   }
 }
 
@@ -567,6 +585,14 @@ function lire(l: Objet): Lu<Evenement> {
   // T52 : la récolte est autorisée au plus tôt le jour du traitement (DAR ≥ 0).
   if (type.valeur === 'traitement' && typeof detail.valeur.recolteAutoriseeLe === 'string' && detail.valeur.recolteAutoriseeLe < date.valeur) {
     return echec(erreur('incoherent', 'detail.recolteAutoriseeLe', 'date de récolte autorisée avant le jour du traitement'));
+  }
+
+  // T58 : un changement d'état vise la zone de son détail, ni une culture ni des emplacements.
+  if (type.valeur === 'etat_abri' && (serieId.valeur !== null || campagneId.valeur !== null)) {
+    return echec(erreur('incoherent', serieId.valeur !== null ? 'serie_id' : 'campagne_id', "l'état d'une serre ne vise pas une culture"));
+  }
+  if (type.valeur === 'etat_abri' && emplacements.valeur.length > 0) {
+    return echec(erreur('incoherent', 'emplacement_ids', "l'état d'une serre ne vise pas des emplacements"));
   }
 
   let culture: Evenement['culture'] = null;

@@ -330,6 +330,13 @@
       "when": 1792619933860,
       "tag": "0046_plan_chemins_rangement",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1792663784572,
+      "tag": "0047_etat_abri",
+      "breakpoints": true
     }
   ]
 }

@@ -138,9 +138,9 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       },
       true,
     ),
-    evenement: table('Journal de terrain : tout ce qui a été fait ou observé (réalisés, récoltes, interventions, irrigations, traitements, observations).', {
+    evenement: table('Journal de terrain : tout ce qui a été fait ou observé (réalisés, récoltes, interventions, irrigations, traitements, observations, état des serres).', {
       ferme_id: FERME_ID,
-      type: texte('type d’événement : réalisé, récolte, intervention, irrigation, traitement, observation'),
+      type: texte('type d’événement : réalisé, récolte, intervention, irrigation, traitement, observation, état des serres (etat_abri : ouvrants, portes, chauffage ou voile)'),
       date: date('jour de l’événement (AAAA-MM-JJ)'),
       horodatage: instant('date et heure de la saisie (UTC)'),
       auteur_id: texte('personne qui a saisi l’événement (voir utilisateur.csv)'),
@@ -152,7 +152,7 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       photos: json('photos jointes (liste JSON)'),
       remplace_sorte: texte('si l’événement en corrige ou en annule un autre : correction ou annulation'),
       remplace_evenement_id: texte('événement corrigé ou annulé par celui-ci'),
-      detail: json('détails propres au type (quantité récoltée, produit, dose, durée…), en JSON'),
+      detail: json('détails propres au type (quantité récoltée, produit, dose, durée ; pour l’état des serres : zone, équipement et état, ouvert ou fermé…), en JSON'),
       cree_le: CREE_LE,
       origine_id: texte('premier événement de la chaîne de corrections (lui-même s’il ne corrige ni n’annule rien)'),
     }),
@@ -400,6 +400,9 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       type_abri: texte('type d’abri : plein champ, tunnel, serre, hors-sol'),
       surface_m2: reel('surface en mètres carrés'),
       contour: json('contour de la zone, en JSON : liste de sommets {x, y} en mètres depuis l’origine du plan (x vers l’est, y vers le nord) ; vide si la zone n’est pas placée ou si un bâtiment l’abrite'),
+      equipements_abri: json(
+        'équipements de l’abri dont l’état se note au journal, en JSON : liste parmi ouvrants_lateraux, ouvrants_faitage, portes, chauffage, voile ; vide : la liste par défaut du type d’abri (serre : les cinq ; tunnel et hors-sol : ouvrants latéraux, portes, voile ; plein champ : aucun)',
+      ),
       ...HORODATAGE,
     }),
   };

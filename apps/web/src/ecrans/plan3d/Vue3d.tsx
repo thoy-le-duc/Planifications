@@ -25,7 +25,7 @@ import { Component, lazy, memo, Suspense, useCallback, useEffect, useId, useLayo
 import { AmbientLight, Color, DirectionalLight, DoubleSide, InstancedMesh, Mesh, MeshLambertMaterial, Object3D, Vector2 } from 'three';
 import type { DateCalendaire } from '@planif/core';
 import type { Plan } from '../plan/calculs.ts';
-import { COULEURS, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
+import { COULEURS, COULEURS_SERRES_3D, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
 import { boiteDe, cadrage, demarrerVol, empriseDe, meilleureVueDeFerme, poseAu, pointsDeFerme, type CibleVol, type Point3, type Pose, type Vol } from './cadrage.ts';
 import { empreinteDe, geometrieArceau, geometrieBache, geometrieBout, geometrieMurs, geometriePlanche, geometrieSol, geometrieToit } from './formes.ts';
 import { boiteSousRayon, type BoiteZone } from './pointage.ts';
@@ -58,6 +58,8 @@ import type { Plants } from './Plants.tsx';
 import { PanneauTravaux3d } from './PanneauTravaux.tsx';
 import { CouchePastilles, placerPastilles, type PastilleDessinee, type PointPose } from './Pastilles.tsx';
 import type { EtatVannes3d, ProprietesVannes3d } from './Vannes3d.tsx';
+// T58 : les serres (repères, fiche, filtre « Serres »), chargées à part par ./abris-differees.ts ; ici, leurs types seulement.
+import type { EtatAbris3d, ProprietesAbris3d } from './Abris3d.tsx';
 import type { EtatRangement3d, ProprietesRangement3d } from './Rangement3d.tsx';
 import { Etiquettes3d } from './Etiquettes3d.tsx';
 import type { Camera as CameraThree } from 'three';
@@ -270,7 +272,9 @@ export function appelsHorsPlants(scene: Scene): number {
   const volumes = scene.batiments.length - serres.length;
   // T61 : les bandes des chemins, un InstancedMesh.
   const chemins = (scene.chemins ?? []).some((c) => c.segments.length > 0) ? 1 : 0;
-  return (scene.socles.length > 0 ? 1 : 0) + (scene.volumes.length > 0 ? 1 : 0) + (arceaux > 0 ? 1 : 0) + (nefs > 0 ? 2 : 0) + (volumes > 0 ? 2 : 0) + chemins;
+  // T58 : ouvrants relevés et portes ouvertes des serres, un InstancedMesh.
+  const ouvrants = panneauxOuverts(serres).length > 0 ? 1 : 0;
+  return (scene.socles.length > 0 ? 1 : 0) + (scene.volumes.length > 0 ? 1 : 0) + (arceaux > 0 ? 1 : 0) + (nefs > 0 ? 2 : 0) + (volumes > 0 ? 2 : 0) + chemins + ouvrants;
 }
 
 /** T61 : les chemins au sol, une bande plate par segment, en UN InstancedMesh (géométrie unique, échelle par bande). */
@@ -305,6 +309,83 @@ function Chemins({ scene }: { readonly scene: Scene }) {
   );
 }
 
+/** T58 : un panneau d'abri ouvert (ouvrant relevé, porte ouverte), boîte posée dans le repère de la scène. */
+interface PanneauOuvert {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly angle: number;
+  readonly ex: number;
+  readonly ey: number;
+  readonly ez: number;
+}
+
+/**
+ * T58 (règle 3) : ce qui se dessine des abris ouverts — ouvrants latéraux relevés (un auvent de
+ * chaque côté), ouvrants de faîtage relevés (une lame au-dessus de chaque chapelle), porte ouverte
+ * (un battant ouvert à angle droit au bout de la serre). Le chauffage et le voile sont des
+ * pastilles sur le repère (./Abris3d.tsx). Repère de la serre : x = largeur, z = longueur.
+ */
+function panneauxOuverts(serres: readonly BatimentScene[]): PanneauOuvert[] {
+  const panneaux: PanneauOuvert[] = [];
+  for (const b of serres) {
+    const o = b.ouvertures;
+    if (o === undefined || !(o.lateraux || o.faitage || o.portes)) continue;
+    const cos = Math.cos(b.angle);
+    const sin = Math.sin(b.angle);
+    const versScene = (lx: number, lz: number): { readonly x: number; readonly z: number } => ({ x: b.x + lx * cos + lz * sin, z: b.z - lx * sin + lz * cos });
+    const ajouter = (lx: number, y: number, lz: number, ex: number, ey: number, ez: number): void => {
+      const p = versScene(lx, lz);
+      panneaux.push({ x: p.x, y, z: p.z, angle: b.angle, ex, ey, ez });
+    };
+    const longueur = b.profondeur * 0.85;
+    if (o.lateraux) {
+      const y = Math.min(1.4, b.hauteur * 0.45);
+      for (const sens of [1, -1]) ajouter(sens * (b.largeur / 2 + 0.35), y, 0, 0.7, 0.06, longueur);
+    }
+    if (o.faitage) {
+      const largeurNef = b.largeur / b.nefs;
+      for (let j = 0; j < b.nefs; j += 1) ajouter(-b.largeur / 2 + (j + 0.5) * largeurNef, b.hauteur + 0.35, 0, Math.min(1.2, largeurNef * 0.3), 0.06, longueur);
+    }
+    if (o.portes) {
+      const haut = Math.min(2.2, b.hauteur * 0.8);
+      ajouter(-0.6, haut / 2, b.profondeur / 2 + 0.6, 0.08, haut, 1.2);
+    }
+  }
+  return panneaux;
+}
+
+/** T58 : les panneaux ouverts des abris, en UN InstancedMesh (géométrie de la boîte unité des murs). */
+function Ouvrants({ serres }: { readonly serres: readonly BatimentScene[] }) {
+  const invalider = useThree((s) => s.invalidate);
+  const panneaux = useMemo(() => panneauxOuverts(serres), [serres]);
+  const forme = useMemo(() => geometrieMurs(), []);
+  useEffect(() => () => {
+    forme.dispose();
+  }, [forme]);
+  const m = useRef<InstancedMesh>(null);
+  useLayoutEffect(() => {
+    const mesh = m.current;
+    if (mesh === null) return;
+    panneaux.forEach((p, i) => {
+      temporaire.position.set(p.x, p.y, p.z);
+      temporaire.rotation.set(0, p.angle, 0);
+      temporaire.scale.set(p.ex, p.ey, p.ez);
+      temporaire.updateMatrix();
+      mesh.setMatrixAt(i, temporaire.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    invalider();
+  }, [panneaux, invalider]);
+  if (panneaux.length === 0) return null;
+  return (
+    <instancedMesh key={`o${String(panneaux.length)}`} ref={m} args={[forme, undefined, panneaux.length]} frustumCulled={false}>
+      <meshLambertMaterial color={COULEURS_SERRES_3D.ouverte} />
+    </instancedMesh>
+  );
+}
+
 /** Part de la hauteur d'un volume simple occupée par les murs ; le reste est le toit. */
 const PART_MURS = 0.72;
 /** Pointe de l'arceau : le tube ne s'épaissit pas avec la serre (échelle z de l'instance). */
@@ -316,7 +397,7 @@ const arceauEpais = (largeurNef: number, hauteurArc: number): number => Math.sqr
  * magasin…) : murs et toit, chacun en un InstancedMesh. Les géométries sont uniques ; seule l'échelle
  * de l'instance change d'un bâtiment à l'autre. Les matrices se posent quand le plan change.
  */
-function Batiments({ scene }: { readonly scene: Scene }) {
+function Batiments({ scene, couleurs = null }: { readonly scene: Scene; readonly couleurs?: ReadonlyMap<string, string> | null }) {
   const invalider = useThree((s) => s.invalidate);
   const serres = useMemo(() => scene.batiments.filter((b) => b.forme !== 'volume'), [scene.batiments]);
   const volumes = useMemo(() => scene.batiments.filter((b) => b.forme === 'volume'), [scene.batiments]);
@@ -371,10 +452,25 @@ function Batiments({ scene }: { readonly scene: Scene }) {
       }
     }
     const couleur = new Color();
+    // T58 : filtre « Serres » : chaque bâche prend la couleur de son abri (ouvert, fermé, estompé).
+    if (couleurs !== null) {
+      let iB = 0;
+      let iE = 0;
+      for (const b of serres) {
+        couleur.set(couleurs.get(b.id) ?? b.couleur);
+        for (let j = 0; j < b.nefs; j += 1) {
+          mBaches.current?.setColorAt(iB, couleur);
+          iB += 1;
+          mBouts.current?.setColorAt(iE, couleur);
+          mBouts.current?.setColorAt(iE + 1, couleur);
+          iE += 2;
+        }
+      }
+    }
     volumes.forEach((b, i) => {
       const murs = b.hauteur * PART_MURS;
       poser(mMurs.current, i, b.x, murs / 2, b.z, b.angle, b.largeur, murs, b.profondeur);
-      mMurs.current?.setColorAt(i, couleur.set(b.couleur));
+      mMurs.current?.setColorAt(i, couleur.set(couleurs?.get(b.id) ?? b.couleur));
       poser(mToits.current, i, b.x, murs, b.z, b.angle, b.largeur * 1.04, b.hauteur - murs, b.profondeur * 1.02);
     });
     for (const m of [mArceaux.current, mBaches.current, mBouts.current, mMurs.current, mToits.current]) {
@@ -384,7 +480,13 @@ function Batiments({ scene }: { readonly scene: Scene }) {
       m.computeBoundingSphere();
     }
     invalider();
-  }, [serres, volumes, invalider]);
+  }, [serres, volumes, couleurs, invalider]);
+
+  // T58 : filtre « Serres » allumé : bâches teintées par instance (matériau blanc), plus opaques ;
+  // la clé change avec lui, pour que l'éteindre rende des maillages sans teinte.
+  const teinte = couleurs === null ? '' : 's';
+  const couleurBacheRendue = couleurs === null ? couleurBache : COULEURS_SERRES_3D.texte;
+  const opaciteRendue = couleurs === null ? opacite : Math.max(opacite, 0.55);
 
   return (
     <>
@@ -395,11 +497,11 @@ function Batiments({ scene }: { readonly scene: Scene }) {
       )}
       {nefs > 0 && (
         <>
-          <instancedMesh key={`b${String(nefs)}`} ref={mBaches} args={[formes.bache, undefined, nefs]} frustumCulled={false} renderOrder={1}>
-            <meshLambertMaterial color={couleurBache} transparent opacity={opacite} depthWrite={false} />
+          <instancedMesh key={`b${String(nefs)}${teinte}`} ref={mBaches} args={[formes.bache, undefined, nefs]} frustumCulled={false} renderOrder={1}>
+            <meshLambertMaterial color={couleurBacheRendue} transparent opacity={opaciteRendue} depthWrite={false} />
           </instancedMesh>
-          <instancedMesh key={`e${String(nefs)}`} ref={mBouts} args={[formes.bout, undefined, 2 * nefs]} frustumCulled={false} renderOrder={1}>
-            <meshLambertMaterial color={couleurBache} transparent opacity={opacite} depthWrite={false} />
+          <instancedMesh key={`e${String(nefs)}${teinte}`} ref={mBouts} args={[formes.bout, undefined, 2 * nefs]} frustumCulled={false} renderOrder={1}>
+            <meshLambertMaterial color={couleurBacheRendue} transparent opacity={opaciteRendue} depthWrite={false} />
           </instancedMesh>
         </>
       )}
@@ -413,6 +515,7 @@ function Batiments({ scene }: { readonly scene: Scene }) {
           </instancedMesh>
         </>
       )}
+      <Ouvrants serres={serres} />
     </>
   );
 }
@@ -953,6 +1056,19 @@ const VannesDifferees = lazy(
       .catch(() => ({ default: () => null })),
 );
 
+/**
+ * T58 : les serres (repères, fiche d'un abri, filtre « Serres »), chargées à la demande par un
+ * relais (./abris-differees.ts), comme les vannes ; seulement si un bâtiment abrite une zone. Leur
+ * état arrive par `surEtatAbris` ; la vue ne se redessine que si un abri est ouvert, chauffé ou
+ * voilé, ou si le filtre « Serres » est allumé.
+ */
+const AbrisDifferes = lazy(
+  (): Promise<{ default: (p: ProprietesAbris3d) => ReactNode }> =>
+    import('./abris-differees.ts')
+      .then((m) => m.chargerAbris3d())
+      .catch(() => ({ default: () => null })),
+);
+
 /** T61 : le lieu de rangement et la planche d'une consigne, chargés à la demande (seulement avec une cible). */
 const RangementDiffere = lazy(
   (): Promise<{ default: (p: ProprietesRangement3d) => ReactNode }> => import('./Rangement3d.tsx').catch(() => ({ default: () => null })),
@@ -1152,6 +1268,11 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const coucheVannes = useRef<HTMLDivElement>(null);
   const reperesRef = useRef<readonly PointPose[]>([]);
   const colorationActive = useRef(false);
+  // T58 : serres (repères posés sur la toile ; ouvertures et filtre « Serres » posés sur la scène).
+  const coucheAbris = useRef<HTMLDivElement>(null);
+  const reperesAbris = useRef<readonly PointPose[]>([]);
+  const [abris, setAbris] = useState<Pick<EtatAbris3d, 'poser' | 'colorer' | 'filtre'> | null>(null);
+  const abrisActifs = useRef(false);
 
   // Filtres (T27b) : état local à la vue, jamais écrit ni stocké ; tout est coché à chaque ouverture.
   const [filtres, setFiltres] = useState<FiltresScene>(FILTRES_TOUT);
@@ -1161,8 +1282,10 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   const filtree = useMemo(() => {
     if (filtreeBrute === null) return null;
     const f = coloration === null ? filtreeBrute : coloration.colorer(filtreeBrute);
-    return colorationRangement === null ? f : colorationRangement.colorer(f);
-  }, [filtreeBrute, coloration, colorationRangement]);
+    const g = colorationRangement === null ? f : colorationRangement.colorer(f);
+    // T58 : filtre « Serres » (filtre éteint : la scène reçue elle-même).
+    return abris === null ? g : abris.colorer(g);
+  }, [filtreeBrute, coloration, colorationRangement, abris]);
   const univers = useCallback(
     (dimension: DimensionFiltre): readonly string[] => (dimension === 'zones' ? options.zones.map((z) => z.id) : options[dimension]),
     [options],
@@ -1199,6 +1322,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     // Taille de la toile lue par fiber (T37b) : aucune lecture de mise en page à chaque image.
     if (couchePastilles.current !== null) placerPastilles(couchePastilles.current, camera, size.width, size.height, pastillesRef.current);
     if (coucheVannes.current !== null) placerPastilles(coucheVannes.current, camera, size.width, size.height, reperesRef.current);
+    if (coucheAbris.current !== null) placerPastilles(coucheAbris.current, camera, size.width, size.height, reperesAbris.current);
     if (coucheRangement.current !== null) placerPastilles(coucheRangement.current, camera, size.width, size.height, reperesRangement.current);
     if (coucheEtiquettes.current !== null) placerPastilles(coucheEtiquettes.current, camera, size.width, size.height, pointsEtiquettes.current);
     s.rendus += 1;
@@ -1264,6 +1388,20 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
     colorationActive.current = active;
     setColoration(active ? { colorer: e.colorer } : null);
   }, []);
+  const surEtatAbris = useCallback((e: EtatAbris3d) => {
+    reperesAbris.current = e.reperes;
+    const taille = derniereTaille.current;
+    if (coucheAbris.current !== null && derniereCamera.current !== null && taille !== null) placerPastilles(coucheAbris.current, derniereCamera.current, taille.width, taille.height, e.reperes);
+    // Aucun rendu tant que rien n'est ni n'était à dessiner : ni ouvrant, ni porte ouverte, ni filtre.
+    const actifs = e.filtre || [...e.etats.values()].some((x) => x.ouvertures.lateraux || x.ouvertures.faitage || x.ouvertures.portes);
+    if (!actifs && !abrisActifs.current) return;
+    abrisActifs.current = actifs;
+    setAbris(actifs ? { poser: e.poser, colorer: e.colorer, filtre: e.filtre } : null);
+  }, []);
+  // T58 : bâtiments dessinés avec leurs ouvertures, et la teinte du filtre « Serres » de chaque bâtiment.
+  const batimentsDessines = useMemo(() => (geometrie === null || abris === null ? geometrie : abris.poser(geometrie)), [geometrie, abris]);
+  const couleursSerres = useMemo(() => (abris === null || !abris.filtre || filtree === null ? null : new Map(filtree.batiments.map((b) => [b.id, b.couleur]))), [abris, filtree]);
+  const abritees = useMemo(() => geometrie?.batiments.some((b) => b.zoneId !== null) ?? false, [geometrie]);
   const etiquettes = useMemo(() => (geometrie === null ? [] : etiquettesScene(geometrie)), [geometrie]);
   // Étiquettes ouvertes ou fermées : replacées tout de suite (nouvelle liste, pour que la pose ne soit pas sautée).
   useLayoutEffect(() => {
@@ -1414,7 +1552,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
   }, [filtree]);
 
   const nbVolumes = geometrie?.volumes.length ?? 0;
-  const appelsFerme = useMemo(() => (geometrie === null ? 0 : appelsHorsPlants(geometrie)), [geometrie]);
+  const appelsFerme = useMemo(() => (batimentsDessines === null ? 0 : appelsHorsPlants(batimentsDessines)), [batimentsDessines]);
   // Ce que le jumeau dessine, lu par les tests : bâtiments, arceaux (tous bâtiments), planches placées. La géométrie ne dépend pas de la semaine.
   const nbBatiments = geometrie?.batiments.length ?? 0;
   const nbArceaux = geometrie?.batiments.reduce((n, b) => n + b.arceaux.length, 0) ?? 0;
@@ -1439,7 +1577,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         <ambientLight intensity={1.6} />
         <directionalLight position={[rayon * 0.3, rayon, rayon * 0.5]} intensity={1.8} />
         <Sol scene={geometrie} />
-        <Batiments scene={geometrie} />
+        <Batiments scene={batimentsDessines ?? geometrie} couleurs={couleursSerres} />
         <Chemins scene={geometrie} />
         <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} plants={plants} rendu={rendu} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
         {plants !== null && couche !== null && <couche.Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={couche.rendu} surBilan={surBilan} appelsHorsPlants={appelsFerme} plancheActive={plancheActive} />}
@@ -1577,6 +1715,11 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           <CouchePastilles pastilles={pastillesDessinees} actif={plancheActive} couche={couchePastilles} />
           <PanneauTravaux3d travaux={jour.travaux} actif={travailActif} surChoisir={choisirTravail} erreur={erreurTravaux} />
           {porte !== undefined && fermeId !== undefined && geometrie !== null && <Suspense><VannesDifferees porte={porte} fermeId={fermeId} volumes={geometrie.volumes} couche={coucheVannes} surEtat={surEtatVannes} jour={lundi} /></Suspense>}
+          {porte !== undefined && fermeId !== undefined && geometrie !== null && abritees && (
+            <Suspense>
+              <AbrisDifferes porte={porte} fermeId={fermeId} batiments={geometrie.batiments} couche={coucheAbris} surEtat={surEtatAbris} />
+            </Suspense>
+          )}
           {etiquettes.length > 0 && <Etiquettes3d etiquettes={etiquettes} couche={coucheEtiquettes} surBascule={setEtiquettesOuvertes} />}
           {porte !== undefined && fermeId !== undefined && geometrie !== null && rangement !== null && (
             <Suspense>

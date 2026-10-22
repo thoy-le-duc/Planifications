@@ -22,6 +22,7 @@ import type {
   ModeItineraire,
   NomEntite,
   ParametresItineraire,
+  EquipementAbri,
   PointLocal,
   PositionGeographique,
   ProfilCroissance,
@@ -74,6 +75,7 @@ import {
   SORTES_POINT_PLAN,
   TYPES_BATIMENT,
   TYPES_EVENEMENT,
+  EQUIPEMENTS_ABRI,
   UNITES_FERTILISANT,
   UNITES_RECOLTE,
 } from './valeurs.ts';
@@ -140,6 +142,23 @@ function typeOuNul(valeur: SQL, type: 'string' | 'number'): SQL {
   return sql`coalesce(jsonb_typeof(${valeur}), 'null') IN ('null', ${sql.raw(`'${type}'`)})`;
 }
 
+/**
+ * Tableau jsonb nul, ou de noms pris dans `valeurs` sans doublon (T58). Sans sous-requête (interdite
+ * dans un CHECK) : chaque nom connu compté une fois doit redonner la longueur du tableau. Le CASE
+ * garantit qu'aucune fonction de tableau ne s'applique à autre chose qu'un tableau.
+ */
+function listeSansDoublon(colonne: AnyPgColumn, valeurs: readonly string[]): SQL {
+  for (const v of valeurs) {
+    if (!/^[A-Za-z0-9_]+$/.test(v)) throw new Error(`valeur d’union inattendue : ${v}`);
+  }
+  const liste = sql.raw(`'${JSON.stringify(valeurs)}'::jsonb`);
+  const comptes = sql.join(
+    valeurs.map((v) => sql`(${colonne} @> ${sql.raw(`'["${v}"]'::jsonb`)})::int`),
+    sql` + `,
+  );
+  return sql`${colonne} IS NULL OR (CASE WHEN jsonb_typeof(${colonne}) = 'array' THEN ${colonne} <@ ${liste} AND jsonb_array_length(${colonne}) = ${comptes} ELSE false END)`;
+}
+
 /** Nom de contrainte CHECK préfixé par la table. */
 const verif = (table: string, nom: string, condition: SQL) => check(`${table}_${nom}`, condition);
 
@@ -184,10 +203,16 @@ export const zone = pgTable(
      * placée, ou abritée par un bâtiment (déclencheurs de la migration 0028).
      */
     contour: jsonb('contour').$type<readonly PointLocal[]>(),
+    /**
+     * T58 : équipements de l'abri dont l'état se note au journal (`etat_abri`), tableau de noms
+     * de EQUIPEMENTS_ABRI sans doublon ; nul = liste par défaut du type d'abri (`equipementsParDefaut`).
+     */
+    equipementsAbri: jsonb('equipements_abri').$type<readonly EquipementAbri[]>(),
     ...horodatages(),
   },
   (t) => [
     verif('zone', 'type_abri', parmi(t.typeAbri, TYPES_ABRI)),
+    verif('zone', 'equipements_abri', listeSansDoublon(t.equipementsAbri, EQUIPEMENTS_ABRI)),
     verif('zone', 'surface_positive', sql`${t.surfaceM2} IS NULL OR ${t.surfaceM2} > 0`),
     verif('zone', 'pas_sa_propre_parente', sql`${t.zoneParenteId} IS DISTINCT FROM ${t.id}`),
     /** Bornes simples du contour (fonction de la migration 0025) ; la géométrie reste au serveur. */
@@ -950,6 +975,15 @@ export const evenement = pgTable(
       'evenement',
       'detail_observation',
       sql`${t.type} <> 'observation' OR (${parmi(sql`${t.detail} ->> 'nature'`, NATURES_OBSERVATION)}) IS TRUE`,
+    ),
+    // T58 : la zone désignée est de la ferme et déclare l'équipement : vérifié au serveur.
+    verif(
+      'evenement',
+      'detail_etat_abri',
+      sql`${t.type} <> 'etat_abri' OR (jsonb_typeof(${t.detail} -> 'zoneId') = 'string'
+        AND (${t.detail} ->> 'zoneId') ~ ${sql.raw(`'${MOTIF_UUID}'`)}
+        AND ${parmi(sql`${t.detail} ->> 'equipement'`, EQUIPEMENTS_ABRI)}
+        AND jsonb_typeof(${t.detail} -> 'actif') = 'boolean') IS TRUE`,
     ),
     /** Cible de la clé étrangère composée : un remplacement vise un événement de la même ferme. */
     unique('evenement_ferme_id_id_unique').on(t.fermeId, t.id),
