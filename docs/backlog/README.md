@@ -216,7 +216,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T80](T80-traitement-date-future-serveur.md) | Serveur : refuser un traitement daté dans le futur (relecture T79) | T79 | fait |
 | [T81](T81-placer-serre-depuis-zone.md) | Placer une serre depuis sa zone, en un geste | T28b, T28d, T28h, T61 | fait |
 | [T82](T82-equipements-abri-ecran.md) | Modifier les équipements d'une serre (écran, relecture T58) | T58 | fait |
-| [T83](T83-tunnel-par-defaut.md) | Tunnel posé aux mesures de Théophane : 40 m × 9,60 m (Q50) | T81 | à faire |
+| [T83](T83-tunnel-par-defaut.md) | Tunnel posé aux mesures de Théophane : 40 m × 9,60 m (Q50) | T81 | fait |
 | [T84](T84-ephy-recherche-culture-cible.md) | E-Phy : chercher un produit par culture, ravageur ou maladie (Q48) | T53, T75, T76 | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.

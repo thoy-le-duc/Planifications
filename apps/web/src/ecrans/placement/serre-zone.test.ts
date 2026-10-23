@@ -29,8 +29,16 @@ describe('T81 : mesures de départ', () => {
     expect(dimensionsParDefaut(lot, 'serre_tunnel')).toEqual({ longueurM: 35, largeurM: 7 });
     expect(dimensionsParDefaut(lot, 'serre_chapelle')).toEqual({ longueurM: 50, largeurM: 9.6 });
   });
-  it('sinon 30 m × 8 m', () => {
-    expect(dimensionsParDefaut([], 'serre_tunnel')).toEqual({ longueurM: 30, largeurM: 8 });
-    expect(dimensionsParDefaut(lot.slice(1, 2), 'serre_tunnel')).toEqual({ longueurM: 30, largeurM: 8 });
+  it('sinon, serre chapelle : 30 m × 8 m (inchangé)', () => {
+    expect(dimensionsParDefaut([], 'serre_chapelle')).toEqual({ longueurM: 30, largeurM: 8 });
+    expect(dimensionsParDefaut(lot.slice(0, 2), 'serre_chapelle')).toEqual({ longueurM: 30, largeurM: 8 });
+  });
+  // T83 (Q50) : la taille type d'un tunnel chez Théophane.
+  it('sinon, tunnel : 40 m × 9,6 m', () => {
+    expect(dimensionsParDefaut([], 'serre_tunnel')).toEqual({ longueurM: 40, largeurM: 9.6 });
+    expect(dimensionsParDefaut(lot.slice(1, 3), 'serre_tunnel')).toEqual({ longueurM: 40, largeurM: 9.6 });
+  });
+  it('un tunnel de 50 × 8 déjà posé : 50 × 8 pour le suivant', () => {
+    expect(dimensionsParDefaut([{ type: 'serre_tunnel', longueurM: 50, largeurM: 8 }], 'serre_tunnel')).toEqual({ longueurM: 50, largeurM: 8 });
   });
 });

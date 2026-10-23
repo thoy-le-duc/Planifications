@@ -103,13 +103,13 @@ test('ordinateur : placer une serre depuis sa zone, enregistrer, recharger : la 
     await expect(editeur(page)).toHaveAttribute('data-origine', '44,1.5');
   });
 
-  await test.step('« Tunnel 1 » : « Placer la serre » pose un rectangle de 30 × 8 m', async () => {
+  await test.step('« Tunnel 1 » : « Placer la serre » pose un rectangle de 40 × 9,6 m (taille type, Q50)', async () => {
     await zoneTunnel(page).click();
     await expect(page.getByRole('button', { name: 'Tracer le contour', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Placer la serre', exact: true }).click();
     await expect(serre(page)).toHaveCount(1);
-    await expect(serre(page)).toHaveAttribute('data-longueur', '30');
-    await expect(serre(page)).toHaveAttribute('data-largeur', '8');
+    await expect(serre(page)).toHaveAttribute('data-longueur', '40');
+    await expect(serre(page)).toHaveAttribute('data-largeur', '9.6');
     await enregistrer(page);
   });
 

@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-23 — T83 : un premier tunnel se pose en 40 m × 9,60 m
+
+- **Fait** : « Placer la serre » propose 40 m × 9,6 m pour le premier tunnel d'une ferme (réponse de Théophane à Q50), 30 m × 8 m pour une serre chapelle ; ensuite, les mesures du dernier bâtiment du même type, supprimés exclus. Le test unitaire de T81 « sinon 30 × 8 » et l'e2e `serre-zone` passent à 40 × 9,6 pour un tunnel : changement voulu.
+- **Décidé** : le budget du morceau de l'éditeur (21,1 Kio) est tenu sans être relevé, en écrivant les mesures de départ plus court. La marge reste à zéro.
+- **Bloquant** : le placement des grandes serres découpées en zones d'irrigation et le rangement des planches attendent Q54 ; c'est ce qui empêche Théophane de commencer l'usage quotidien.
+
 ## 2026-10-22 (soir) — T81 : placer une serre depuis sa zone, en un geste
 
 - **Fait** : dans l'éditeur de placement, une zone tunnel ou serre propose « Placer la serre » au lieu de « Tracer le contour ». Le rectangle se pose au centre de la vue, aux mesures du dernier bâtiment du même type (sinon 30 × 8 m), puis se déplace et se tourne aux poignées, souris ou doigt. Un seul Enregistrer crée le bâtiment et le rattache à la zone, et reste annulable. Une zone déjà tracée à la main, comme Manon 1, propose « Remplacer par une serre », à partir du rectangle de surface minimale de son contour. Les planches déjà placées restent au même endroit sur le terrain ; celles qui tomberaient hors de la serre sont signalées avant de confirmer. PR #252.
