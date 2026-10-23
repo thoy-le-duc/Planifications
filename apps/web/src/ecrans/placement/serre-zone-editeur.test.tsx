@@ -146,7 +146,7 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     expect(boutonsNommes(/^Remplacer par une serre$/)).toHaveLength(0);
   });
 
-  it('« Placer la serre » pose un rectangle nommé comme la zone, 30 × 8 m, au centre de la vue, rien d’écrit', async () => {
+  it('« Placer la serre » pose un rectangle nommé comme la zone, 40 × 9,6 m (tunnel sans autre tunnel), au centre de la vue, rien d’écrit', async () => {
     const b = await ouvrir();
     await choisirZone(ZONE_TUNNEL);
     await toucher(bouton('Placer la serre'));
@@ -156,8 +156,8 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     expect(serre.getAttribute('data-id')).toMatch(MOTIF_UUID_V7);
     expect(serre.getAttribute('aria-pressed')).toBe('true');
     expect(serre.getAttribute('aria-label') ?? '').toMatch(/^Tunnel 1/);
-    expect(nombre(serre, 'data-longueur')).toBeCloseTo(30, 3);
-    expect(nombre(serre, 'data-largeur')).toBeCloseTo(8, 3);
+    expect(nombre(serre, 'data-longueur')).toBeCloseTo(40, 3);
+    expect(nombre(serre, 'data-largeur')).toBeCloseTo(9.6, 3);
     expect(nombre(serre, 'data-orientation')).toBeCloseTo(0, 3);
     const [lat, lon] = (un(T.editeur)?.getAttribute('data-centre') ?? '0,0').split(',').map(Number);
     const centre = versLocal(POSITION, { latitude: lat ?? 0, longitude: lon ?? 0 });
@@ -478,8 +478,8 @@ describe('T81 : contour inutilisable', () => {
     await confirmerRemplacement();
     await attendre(() => nouveaux().length === 1, 'serre au plan');
     const serre = nouveaux()[0] ?? document.body;
-    expect(nombre(serre, 'data-longueur')).toBeCloseTo(30, 3);
-    expect(nombre(serre, 'data-largeur')).toBeCloseTo(8, 3);
+    expect(nombre(serre, 'data-longueur')).toBeCloseTo(40, 3);
+    expect(nombre(serre, 'data-largeur')).toBeCloseTo(9.6, 3);
     expect(nombre(serre, 'data-orientation')).toBeCloseTo(0, 3);
     const [lat, lon] = (un(T.editeur)?.getAttribute('data-centre') ?? '0,0').split(',').map(Number);
     const centre = versLocal(POSITION, { latitude: lat ?? 0, longitude: lon ?? 0 });
