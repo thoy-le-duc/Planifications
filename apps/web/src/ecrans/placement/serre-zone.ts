@@ -11,11 +11,12 @@ export function typeDeSerrePourZone(typeAbri: string | null | undefined): 'serre
   return null;
 }
 
-/** Longueur et largeur du dernier bâtiment de ce type dans la liste, sinon 30 m × 8 m (hauteur posée : 3,5 m, comme « Nouveau bâtiment »). */
+/** Longueur et largeur du dernier bâtiment de ce type dans la liste, sinon 40 m × 9,6 m pour un tunnel (taille type de la ferme, T83) et 30 m × 8 m pour le reste (hauteur posée : 3,5 m, comme « Nouveau bâtiment »). */
 export function dimensionsParDefaut(
   batiments: readonly { readonly type: TypeBatiment; readonly longueurM: number; readonly largeurM: number }[],
   type: TypeBatiment,
 ): { readonly longueurM: number; readonly largeurM: number } {
   const dernier = batiments.findLast((b) => b.type === type);
-  return { longueurM: dernier?.longueurM ?? 30, largeurM: dernier?.largeurM ?? 8 };
+  const tunnel = type === 'serre_tunnel';
+  return { longueurM: dernier?.longueurM ?? (tunnel ? 40 : 30), largeurM: dernier?.largeurM ?? (tunnel ? 9.6 : 8) };
 }
