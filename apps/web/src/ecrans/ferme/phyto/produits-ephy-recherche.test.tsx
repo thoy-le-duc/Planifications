@@ -104,10 +104,10 @@ describe('T84 : l’usage trouvé sous le nom du produit', () => {
     const d = await ouvrirFormulaire(CATALOGUE);
     await chercher(d, 'tomate');
     const s = suggestions().find((x) => x.dataset.amm === '2000001');
-    expect(s?.querySelector('[data-testid="usage-trouve"]')?.textContent).toBe('Tomate - Aubergine · Oïdium(s) · DAR 3 j + 1 usage');
+    expect(s?.querySelector('[data-testid="usage-trouve"]')?.textContent).toBe('Tomate - Aubergine · Oïdium(s) · DAR 3 j + 1 autre usage trouvé');
     await chercher(d, 'oidium');
     const t = suggestions().find((x) => x.dataset.amm === '2000001');
-    expect(t?.querySelector('[data-testid="usage-trouve"]')?.textContent).toBe('Tomate - Aubergine · Oïdium(s) · DAR 3 j + 1 usage');
+    expect(t?.querySelector('[data-testid="usage-trouve"]')?.textContent).toBe('Tomate - Aubergine · Oïdium(s) · DAR 3 j + 1 autre usage trouvé');
   });
 
   it('trouvé par le nom : pas de ligne d’usage', async () => {
@@ -123,6 +123,11 @@ describe('T84 : plus de 8 résultats', () => {
     await chercher(d, 'tomate');
     expect(suggestions()).toHaveLength(8);
     expect(document.querySelector('[data-testid="autres-ephy"]')?.textContent).toBe('2 autres produits : précisez la recherche');
+  });
+  it('le message est dans une zone annoncée (aria-live polie)', async () => {
+    const d = await ouvrirFormulaire(BEAUCOUP);
+    await chercher(d, 'tomate');
+    expect(document.querySelector('[data-testid="autres-ephy"]')?.closest('[aria-live="polite"]')).not.toBeNull();
   });
   it('pas de message quand tout tient', async () => {
     const d = await ouvrirFormulaire(CATALOGUE);
