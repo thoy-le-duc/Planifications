@@ -294,6 +294,8 @@ Réponses (2026-09-30) : une récolte annulée ne se corrige plus, on en saisit 
 
 Question : « Salade » est rattachée à Laitue (une scarole ou une mâche saisies « Salade » recevraient le DAR de la laitue : les créer comme espèces à part) ; chou de Bruxelles avec les choux pommés, chou chinois avec les choux feuillus ; pivoine sur « Cultures florales et plantes vertes » seulement (pas « Cultures ornementales ») ; potimarron en « peau non comestible » (classement e-phy par espèce de courge). D'accord ? **En attente de Théophane** (sans urgence).
 
+Réponse (2026-10-23) : « oui, il peut y avoir des correspondances ». Correspondances validées. Demande en plus : « il faut pouvoir aussi faire une recherche par nom ; parfois on cherche un produit, on regarde par exemple tomate ; et par ravageur aussi, ou par maladie ». Ticket T84.
+
 ### Q46 — Délai avant récolte dans la 3D : toute la culture, ou les planches traitées ? (posée le 2026-10-20, relecture de T55)
 
 Question : quand une culture est traitée sur une partie de ses planches seulement (tomates sur P1, pas sur P2), l'écran Aujourd'hui (T52) bloque la récolte de **toute la culture** jusqu'à la fin du délai, par prudence. La 3D (T55) ne pose le repère « Ne pas récolter » que sur **les planches traitées** (P1) : P2 garde sa balise « à récolter ». Les deux se contredisent. Et une culture sans planche (kiwis ou asperges saisis sans rang) n'a pas de volume dans la 3D, donc pas de repère du tout. Proposition : aligner la 3D sur Aujourd'hui, repère sur toutes les planches de la culture traitée (ticket de suite, il faut faire de la place dans le poids de la vue 3D). L'autre choix : desserrer Aujourd'hui pour ne bloquer que les planches traitées. Lequel colle à ta pratique ?
@@ -490,6 +492,40 @@ Question : PowerSync, le service de synchro, limite à 1 000 le nombre de « par
 
 1. **Rappel des serres ouvertes** (T58) : il s'affiche dans Aujourd'hui de 18 h à minuit. Après minuit, une serre restée ouverte n'est plus signalée. Faut-il le garder le matin, par exemple jusqu'à 10 h, sous la forme « Serre Manon 1 ouverte depuis hier 9 h » ?
 2. **Largeur des tunnels** (T81, « Placer la serre ») : tes tunnels font-ils tous la même largeur et la même longueur ? Si oui, lesquelles ? Elles seront proposées par défaut (aujourd'hui, 30 m × 8 m).
+
+Réponse au point 2 (2026-10-23) : « la taille type des tunnels, 40 mètres de long sur 9 m 60. Et j'ai des serres de plusieurs hectares divisées en zones associées chacune à une vanne d'irrigation, et chaque zone est divisée en planches. » Ticket T83 pour les tunnels ; les grandes serres, en Q54. Point 1 (rappel après minuit) : sans réponse.
+
+### Q51 — L'usage réel a-t-il commencé, et qu'est-ce qui coince ? (posée le 2026-10-23, backlog vide)
+
+Le backlog est vide depuis le 22 octobre au soir. Pour sortir de la phase 1, il faut que tu utilises l'appli chaque jour sur ta ferme pendant un mois (`docs/brief.md`), et depuis Q42 chacun de tes retours devient un ticket. Aucun retour n'est arrivé depuis T82.
+
+1. Depuis quand utilises-tu l'appli chaque jour sur la ferme (appli-ferme.vercel.app) ? Ta ferme y est-elle construite (zones, planches, séries de la saison) ?
+2. Quelles sont les **trois choses qui t'ont agacé ou ralenti** au champ ou au bureau ? Une phrase par chose suffit, à la voix si tu veux, même si c'est vague : la boucle en fera des tickets précis.
+3. Y a-t-il un geste de tous les jours que tu fais encore ailleurs (carnet, tableur, Elzéard, tête) ? Lequel ?
+
+Réponse (2026-10-23) : pas encore commencé. Théophane attend de pouvoir placer ses parcelles déjà dimensionnées. Voir Q54.
+
+### Q52 — En attendant tes retours, que préparer ? (posée le 2026-10-23, backlog vide)
+
+D'après la règle d'arrêt du brief, on ne passe pas à la phase 2 (voix et agent) tant que le critère de la phase 1 n'est pas atteint. Deux « évidences » de la phase 1 du brief ne sont pas encore faites :
+
+- **Journal des modifications consultable** : qui a changé quoi et quand (série déplacée, récolte corrigée, planche supprimée), lisible par le gérant et annulable quand c'est possible. La base garde déjà ces changements, mais aucun écran ne les montre.
+- **Sauvegardes** : la base de production est sur l'offre gratuite de Neon, dont la fenêtre de restauration est courte. Proposition : une sauvegarde automatique chaque nuit, chiffrée et gardée 30 jours hors de Neon, avec un essai de restauration vérifié en CI.
+
+Proposition : ces deux tickets, dans cet ordre, pendant que tu fais tes premiers retours. Autres choix possibles : préparer le journal vocal (phase 2) maintenant, ou ne rien faire tant que tu n'as pas fait de retour. Qu'est-ce que tu préfères ?
+
+### Q54 — Placer les planches déjà dimensionnées, et les grandes serres (posée le 2026-10-23, réponse à Q51)
+
+Réponse de Théophane à Q51 : il n'a pas encore commencé l'usage quotidien : « j'attendais de pouvoir placer les parcelles déjà dimensionnées avant de vraiment commencer ». C'est donc le placement qui bloque la sortie de la phase 1.
+
+Ce que fait l'appli aujourd'hui : une serre abrite **une seule zone**. Une zone peut avoir des sous-zones (`zone_parente_id`), mais elles ne se dessinent pas dans la serre. Les planches d'une zone qui n'ont pas de place se rangent toutes seules dans la serre, côte à côte, avec 30 cm d'écart, puis se déplacent une par une.
+
+1. Qu'est-ce qui manque pour placer les planches déjà dimensionnées ? (a) Les vraies serres n'entrent pas dans le modèle (point 2). (b) Le rangement automatique ne suffit pas : il faut choisir la largeur du passe-pied, le sens des planches et l'ordre (P1 contre une paroi…), puis tout placer en un tap. (c) Autre chose.
+2. Grandes serres de plusieurs hectares, découpées en zones (une vanne chacune), elles-mêmes découpées en planches. Proposition : la serre est un grand rectangle, chaque zone en est une **bande** et ses planches se rangent dans sa bande. Les zones traversent-elles la serre d'un bout à l'autre ? Sont-elles toutes de même taille ? Une zone correspond-elle à une ou plusieurs chapelles ? Exemple chiffré souhaité, du type « serre de 200 × 100 m, 8 zones de 25 m, 10 planches de 100 × 1,20 m par zone, 1,30 m d'entraxe ».
+
+### Q53 — Épingler la version de Node (posée le 2026-10-23, journal du 22 octobre)
+
+Le 22 octobre, la CI a pris toute seule une nouvelle version de Node 22, et un test de la règle « déjà fait » est devenu rouge sur `main` sans qu'aucun code ait changé. Proposition : fixer la version exacte (22.23.4) dans `.node-version`, et la monter à la main dans un ticket à part, testé avant de fusionner. D'accord ?
 
 ## Questions ouvertes du brief
 

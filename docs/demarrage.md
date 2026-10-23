@@ -56,4 +56,3 @@ CI rouge : le chef **n'appelle jamais `mcp__github__get_job_logs`** lui-même ; 
 ## Échéances
 
 - **1er novembre 2026 : le dépôt devient public.** Aucune valeur de jeton, de clé, de mot de passe ni de variable sensible dans un fichier, un commit, une PR ou un ticket : seulement leur nom et ce qu'il faut faire. Théophane saisit lui-même les secrets.
-- **Page de suivi en retard** : `etat.json` est à jour (21 octobre), la page publiée ne l'est pas ; la republier à la prochaine fin de session.
