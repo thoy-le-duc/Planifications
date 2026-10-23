@@ -402,12 +402,12 @@ function especeConnue(nom: string): boolean {
 
 /** Cultures e-phy qui couvrent l'espèce de la ferme ; espèce inconnue : son propre nom seulement. */
 export function culturesEphyPourEspece(nomEspece: string): string[] {
-  const parCle = correspondances();
+  const table = correspondances();
   tetes ??= new Set(TETES_SURES.map(cle));
   exceptions ??= new Set(EXCEPTIONS_TETES.map(cle));
   const k = cle(nomEspece);
   const tete = k.split(' ')[0] ?? '';
-  const connue = parCle.get(k) ?? (tetes.has(tete) && !estException(k) ? parCle.get(tete) : undefined);
+  const connue = table.get(k) ?? (tetes.has(tete) && !estException(k) ? table.get(tete) : undefined);
   return connue === undefined ? [nomEspece.trim()] : [...connue];
 }
 

@@ -4,7 +4,7 @@
  * Puis le choix de l'usage, dont dépend le délai avant récolte. Contrat : ./test/contrat.ts.
  */
 import { rendreLaMain } from '../../export/rendre-la-main.ts';
-import { useId, useRef, useState, type ReactElement } from 'react';
+import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import { indexerTrancheEphy, rechercherEphy, type CatalogueEphy, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
 
 export type ChargerCatalogue = () => Promise<CatalogueEphy>;
@@ -31,24 +31,35 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
   const [texte, setTexte] = useState('');
   const [etat, setEtat] = useState<Etat>({ sorte: 'repos' });
   const demande = useRef(false);
+  const vivant = useRef(true);
+
+  // Démonté : plus de setState, et la boucle de tranches s'arrête.
+  useEffect(() => {
+    vivant.current = true;
+    return () => {
+      vivant.current = false;
+    };
+  }, []);
 
   function charger(): void {
     if (demande.current) return;
     demande.current = true;
     setEtat({ sorte: 'chargement' });
-    chargerCatalogue().then(
-      async (catalogue) => {
+    const echec = (e: unknown): void => {
+      console.error('Catalogue e-phy non chargé', e);
+      demande.current = false;
+      if (vivant.current) setEtat({ sorte: 'erreur', message: e instanceof Error ? e.message : 'Base e-phy indisponible.' });
+    };
+    chargerCatalogue().then(async (catalogue) => {
+      try {
         // L'index se construit par tranches de 50 produits, en rendant la main entre deux :
         // jamais de tâche longue sur le fil principal. La recherche attend la fin (« Chargement »).
-        while (!indexerTrancheEphy(catalogue)) await rendreLaMain();
-        setEtat({ sorte: 'pret', catalogue });
-      },
-      (e: unknown) => {
-        console.error('Catalogue e-phy non chargé', e);
-        demande.current = false;
-        setEtat({ sorte: 'erreur', message: e instanceof Error ? e.message : 'Base e-phy indisponible.' });
-      },
-    );
+        while (vivant.current && !indexerTrancheEphy(catalogue)) await rendreLaMain();
+        if (vivant.current) setEtat({ sorte: 'pret', catalogue });
+      } catch (e: unknown) {
+        echec(e);
+      }
+    }, echec);
   }
 
   const catalogue = etat.sorte === 'pret' ? etat.catalogue : null;
