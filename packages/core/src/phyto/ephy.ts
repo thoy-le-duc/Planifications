@@ -111,19 +111,87 @@ export function normaliserEphy(t: string): string {
     .trim();
 }
 
-/** Produits qui contiennent chaque mot tapé (nom, seconds noms, AMM, substances) ; 2 lettres au moins. */
-export function chercherProduitsEphy(catalogue: CatalogueEphy, texte: string, max = 8): ProduitEphy[] {
+/** Un produit trouvé, avec l'usage qui l'a fait trouver quand c'est par une culture ou une cible (T84). */
+export interface ResultatEphy {
+  readonly produit: ProduitEphy;
+  /** Premier usage (ordre du catalogue) qui répond à la recherche ; null si trouvé par nom, AMM ou substance seulement. */
+  readonly usage: UsageEphy | null;
+  /** Nombre d'autres usages qui répondent aussi à la recherche. */
+  readonly usagesEnPlus: number;
+}
+
+interface UsageIndexe {
+  readonly usage: UsageEphy;
+  /** Culture e-phy normalisée (sans accents ni majuscules). */
+  readonly culture: string;
+  /** Clé de comparaison de la culture, celle des correspondances espèce → culture. */
+  readonly cleCulture: string;
+  readonly cible: string;
+}
+
+interface ProduitIndexe {
+  readonly produit: ProduitEphy;
+  /** Noms normalisés (nom et seconds noms). */
+  readonly noms: readonly string[];
+  /** Nom, seconds noms, AMM et substances normalisés, mis bout à bout. */
+  readonly tout: string;
+  readonly usages: readonly UsageIndexe[];
+}
+
+/** Catalogue normalisé une fois (au premier appel), pour que la frappe suivante ne recalcule rien. */
+const indexes = new WeakMap<CatalogueEphy, readonly ProduitIndexe[]>();
+
+function indexer(catalogue: CatalogueEphy): readonly ProduitIndexe[] {
+  const connu = indexes.get(catalogue);
+  if (connu !== undefined) return connu;
+  const index = catalogue.produits.map((produit): ProduitIndexe => {
+    const noms = [produit.nom, ...produit.autresNoms].map(normaliserEphy);
+    return {
+      produit,
+      noms,
+      tout: [...noms, produit.amm, ...produit.substances.map(normaliserEphy)].join(' | '),
+      usages: produit.usages.map((usage) => ({ usage, culture: normaliserEphy(usage.culture), cleCulture: cle(usage.culture), cible: normaliserEphy(usage.cible) })),
+    };
+  });
+  indexes.set(catalogue, index);
+  return index;
+}
+
+/** Normalise le catalogue d'avance (à son chargement), pour que la première frappe ne paie pas l'indexation. */
+export function preparerRechercheEphy(catalogue: CatalogueEphy): void {
+  indexer(catalogue);
+}
+
+/**
+ * Recherche e-phy (T53, T84). Chaque mot tapé (2 lettres au moins pour l'ensemble) correspond au
+ * nom, à l'AMM ou à la substance du produit, qui vaut alors pour tous ses usages, ou à la culture
+ * ou à la cible d'un usage ; les mots restants doivent tomber sur un MÊME usage. Une espèce est
+ * traduite en cultures e-phy (`culturesEphyPourEspece`). Ordre : autorisés d'abord, puis nom qui
+ * commence par la recherche, puis alphabétique. `autres` : produits trouvés au-delà de `max`.
+ */
+export function rechercherEphy(catalogue: CatalogueEphy, texte: string, max = 8): { readonly resultats: ResultatEphy[]; readonly autres: number } {
   const t = normaliserEphy(texte);
-  if (t.length < 2) return [];
-  const mots = t.split(' ');
-  const trouves: { readonly p: ProduitEphy; readonly debut: boolean }[] = [];
-  for (const p of catalogue.produits) {
-    const noms = [p.nom, ...p.autresNoms].map(normaliserEphy);
-    const tout = [...noms, p.amm, ...p.substances.map(normaliserEphy)].join(' | ');
-    if (mots.every((m) => tout.includes(m))) trouves.push({ p, debut: noms.some((n) => n.startsWith(t)) });
+  if (t.length < 2) return { resultats: [], autres: 0 };
+  const mots = t.split(' ').map((mot) => ({ mot, cultures: new Set(culturesEphyPourEspece(mot).map(cle)) }));
+  const trouves: { readonly r: ResultatEphy; readonly debut: boolean }[] = [];
+  for (const p of indexer(catalogue)) {
+    const restants = mots.filter((m) => !p.tout.includes(m.mot));
+    let r: ResultatEphy | null = null;
+    if (restants.length === 0) r = { produit: p.produit, usage: null, usagesEnPlus: 0 };
+    else {
+      const bons = p.usages.filter((u) => restants.every((m) => m.cultures.has(u.cleCulture) || u.culture.includes(m.mot) || u.cible.includes(m.mot)));
+      const [premier] = bons;
+      if (premier !== undefined) r = { produit: p.produit, usage: premier.usage, usagesEnPlus: bons.length - 1 };
+    }
+    if (r !== null) trouves.push({ r, debut: p.noms.some((n) => n.startsWith(t)) });
   }
-  trouves.sort((a, b) => Number(a.p.retire) - Number(b.p.retire) || Number(b.debut) - Number(a.debut) || a.p.nom.localeCompare(b.p.nom, 'fr'));
-  return trouves.slice(0, max).map((x) => x.p);
+  trouves.sort((a, b) => Number(a.r.produit.retire) - Number(b.r.produit.retire) || Number(b.debut) - Number(a.debut) || a.r.produit.nom.localeCompare(b.r.produit.nom, 'fr'));
+  return { resultats: trouves.slice(0, max).map((x) => x.r), autres: Math.max(0, trouves.length - max) };
+}
+
+/** Les produits de `rechercherEphy` (au plus `max`), sans l'usage trouvé. */
+export function chercherProduitsEphy(catalogue: CatalogueEphy, texte: string, max = 8): ProduitEphy[] {
+  return rechercherEphy(catalogue, texte, max).resultats.map((r) => r.produit);
 }
 
 // ── Espèce → usage ───────────────────────────────────────────────────────────────────────────
