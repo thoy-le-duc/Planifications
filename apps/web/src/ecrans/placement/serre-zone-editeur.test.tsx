@@ -184,7 +184,6 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     expect(nombre(serre ?? document.body, 'data-largeur')).toBeCloseTo(6, 3);
   });
 
-
   // T83 (Q50) : la ferme de ce banc a déjà « Serre M1 » (tunnel 30 × 8) ; sans elle, c'est la taille type.
   it('ferme sans aucun tunnel : le premier se pose en 40 × 9,6 m (taille type, Q50)', async () => {
     await ouvrir({
@@ -199,6 +198,21 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     expect(nombre(serre ?? document.body, 'data-longueur')).toBeCloseTo(40, 3);
     expect(nombre(serre ?? document.body, 'data-largeur')).toBeCloseTo(9.6, 3);
   });
+
+  it('le seul tunnel supprimé en douceur (supprime_le renseigné) ne compte pas : 40 × 9,6 m', async () => {
+    await ouvrir({
+      avant: (base) => {
+        base.recevoir("UPDATE batiment SET supprime_le = '2026-10-01T08:00:00.000Z' WHERE id = ?", [SERRE]);
+      },
+    });
+    await choisirZone(ZONE_TUNNEL);
+    await toucher(bouton('Placer la serre'));
+    const serre = nouveaux()[0];
+    expect(serre, 'nouvelle serre au plan').toBeDefined();
+    expect(nombre(serre ?? document.body, 'data-longueur')).toBeCloseTo(40, 3);
+    expect(nombre(serre ?? document.body, 'data-largeur')).toBeCloseTo(9.6, 3);
+  });
+
   it('zone de type serre : la serre posée est une serre chapelle', async () => {
     const b = await ouvrir({ avant: typeSerre });
     await choisirZone(ZONE_TUNNEL);
