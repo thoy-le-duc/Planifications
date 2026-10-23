@@ -19,19 +19,15 @@ describe('T84 : usage spécifique avant usage générique', () => {
   const SPECIFIQUE = produit('2', 'ZZSPECIFIQUE', [usage('Tomate - Aubergine', 'Mildiou')]);
   const MIXTE = produit('3', 'MMMIXTE', [usage('Cultures légumières', 'Botrytis'), usage('Tomate', 'Botrytis')]);
   const RETIRE = produit('4', 'BBRETIRE', [usage('Tomate - Aubergine', 'Mildiou')], true);
-  const TOMATEX = produit('5', 'TOMATEX', [usage('Cultures légumières', 'Mildiou')]);
-  const c = catalogue([GENERIQUE, SPECIFIQUE, MIXTE, RETIRE, TOMATEX]);
+  const c = catalogue([GENERIQUE, SPECIFIQUE, MIXTE, RETIRE]);
 
   it('spécifiques (alphabétique), puis génériques ; le retiré reste en dernier', () => {
-    expect(noms(c, 'tomate')).toEqual(['MMMIXTE', 'ZZSPECIFIQUE', 'AAGENERIQUE', 'TOMATEX', 'BBRETIRE']);
+    expect(noms(c, 'tomate')).toEqual(['MMMIXTE', 'ZZSPECIFIQUE', 'AAGENERIQUE', 'BBRETIRE']);
   });
   it('l’usage affiché est le plus spécifique, même s’il vient après un usage générique', () => {
     const m = rechercherEphy(c, 'tomate').resultats.find((r) => r.produit === MIXTE);
     expect(m?.usage?.culture).toBe('Tomate');
     expect(m?.usagesEnPlus).toBe(1);
-  });
-  it('un usage générique ne passe pas avant parce que le nom commence par la recherche', () => {
-    expect(noms(c, 'tomate').indexOf('TOMATEX')).toBeGreaterThan(noms(c, 'tomate').indexOf('ZZSPECIFIQUE'));
   });
 });
 

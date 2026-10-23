@@ -15,7 +15,7 @@ describe('T84 : recherche sur le catalogue réel', () => {
   it('le catalogue réel est lisible et rempli', () => {
     expect(catalogue?.produits.length).toBeGreaterThan(1000);
   });
-  it.each(['tomate', 'tomate pucerons', 'fraise thrips', 'oidium', 'soufre oidium', 'chou chenilles'])('« %s » en moins de 50 ms (médiane)', (texte) => {
+  it.each(['tomate', 'tomate pucerons', 'fraise thrips', 'oidium', 'soufre oidium', 'chou rouge chenilles'])('« %s » en moins de 50 ms (médiane)', (texte) => {
     if (catalogue === null) throw new Error('catalogue illisible');
     const { mediane, detail, resultat } = mesurer(() => rechercherEphy(catalogue, texte), { echauffement: 2, mesures: 7, borneMs: BORNE_MS });
     expect(resultat.resultats.length, texte).toBeGreaterThan(0);

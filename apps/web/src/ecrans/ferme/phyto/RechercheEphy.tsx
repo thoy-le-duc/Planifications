@@ -3,8 +3,9 @@
  * produit (./EcranProduitsPhyto.tsx). Le catalogue n'est chargé qu'au premier usage du champ.
  * Puis le choix de l'usage, dont dépend le délai avant récolte. Contrat : ./test/contrat.ts.
  */
+import { rendreLaMain } from '../../export/rendre-la-main.ts';
 import { useId, useRef, useState, type ReactElement } from 'react';
-import { preparerRechercheEphy, rechercherEphy, type CatalogueEphy, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
+import { indexerTrancheEphy, rechercherEphy, type CatalogueEphy, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
 
 export type ChargerCatalogue = () => Promise<CatalogueEphy>;
 
@@ -36,8 +37,10 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
     demande.current = true;
     setEtat({ sorte: 'chargement' });
     chargerCatalogue().then(
-      (catalogue) => {
-        preparerRechercheEphy(catalogue);
+      async (catalogue) => {
+        // L'index se construit par tranches de 50 produits, en rendant la main entre deux :
+        // jamais de tâche longue sur le fil principal. La recherche attend la fin (« Chargement »).
+        while (!indexerTrancheEphy(catalogue)) await rendreLaMain();
         setEtat({ sorte: 'pret', catalogue });
       },
       (e: unknown) => {
@@ -89,7 +92,7 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
                   <strong>{p.nom}</strong>
                   <span>{detail(p)}</span>
                   {usage !== null && (
-                    <span data-testid="usage-trouve">{`${libelleUsageCourt(usage)}${usagesEnPlus > 0 ? ` + ${String(usagesEnPlus)} usage${usagesEnPlus > 1 ? 's' : ''}` : ''}`}</span>
+                    <span data-testid="usage-trouve">{`${libelleUsageCourt(usage)}${usagesEnPlus > 0 ? ` + ${String(usagesEnPlus)} ${usagesEnPlus > 1 ? 'autres usages trouvés' : 'autre usage trouvé'}` : ''}`}</span>
                   )}
                 </span>
               </button>
@@ -97,11 +100,13 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
           ))}
         </ul>
       )}
-      {autres > 0 && (
-        <p className="parc-aide" data-testid="autres-ephy">
-          {`${String(autres)} ${autres > 1 ? 'autres produits' : 'autre produit'} : précisez la recherche`}
-        </p>
-      )}
+      <div aria-live="polite">
+        {autres > 0 && (
+          <p className="parc-aide" data-testid="autres-ephy">
+            {`${String(autres)} ${autres > 1 ? 'autres produits' : 'autre produit'} : précisez la recherche`}
+          </p>
+        )}
+      </div>
       <p className="parc-aide" aria-live="polite">
         {etat.sorte === 'chargement'
           ? 'Chargement de la base e-phy…'
