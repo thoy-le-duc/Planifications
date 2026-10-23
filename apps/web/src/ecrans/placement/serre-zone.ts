@@ -17,6 +17,6 @@ export function dimensionsParDefaut(
   type: TypeBatiment,
 ): { readonly longueurM: number; readonly largeurM: number } {
   const dernier = batiments.findLast((b) => b.type === type);
-  const depart = type === 'serre_tunnel' ? { longueurM: 40, largeurM: 9.6 } : { longueurM: 30, largeurM: 8 };
-  return { longueurM: dernier?.longueurM ?? depart.longueurM, largeurM: dernier?.largeurM ?? depart.largeurM };
+  const tunnel = type === 'serre_tunnel';
+  return { longueurM: dernier?.longueurM ?? (tunnel ? 40 : 30), largeurM: dernier?.largeurM ?? (tunnel ? 9.6 : 8) };
 }
