@@ -491,6 +491,27 @@ Question : PowerSync, le service de synchro, limite à 1 000 le nombre de « par
 1. **Rappel des serres ouvertes** (T58) : il s'affiche dans Aujourd'hui de 18 h à minuit. Après minuit, une serre restée ouverte n'est plus signalée. Faut-il le garder le matin, par exemple jusqu'à 10 h, sous la forme « Serre Manon 1 ouverte depuis hier 9 h » ?
 2. **Largeur des tunnels** (T81, « Placer la serre ») : tes tunnels font-ils tous la même largeur et la même longueur ? Si oui, lesquelles ? Elles seront proposées par défaut (aujourd'hui, 30 m × 8 m).
 
+### Q51 — L'usage réel a-t-il commencé, et qu'est-ce qui coince ? (posée le 2026-10-23, backlog vide)
+
+Le backlog est vide depuis le 22 octobre au soir. Pour sortir de la phase 1, il faut que tu utilises l'appli chaque jour sur ta ferme pendant un mois (`docs/brief.md`), et depuis Q42 chacun de tes retours devient un ticket. Aucun retour n'est arrivé depuis T82.
+
+1. Depuis quand utilises-tu l'appli chaque jour sur la ferme (appli-ferme.vercel.app) ? Ta ferme y est-elle construite (zones, planches, séries de la saison) ?
+2. Quelles sont les **trois choses qui t'ont agacé ou ralenti** au champ ou au bureau ? Une phrase par chose suffit, à la voix si tu veux, même si c'est vague : la boucle en fera des tickets précis.
+3. Y a-t-il un geste de tous les jours que tu fais encore ailleurs (carnet, tableur, Elzéard, tête) ? Lequel ?
+
+### Q52 — En attendant tes retours, que préparer ? (posée le 2026-10-23, backlog vide)
+
+D'après la règle d'arrêt du brief, on ne passe pas à la phase 2 (voix et agent) tant que le critère de la phase 1 n'est pas atteint. Deux « évidences » de la phase 1 du brief ne sont pas encore faites :
+
+- **Journal des modifications consultable** : qui a changé quoi et quand (série déplacée, récolte corrigée, planche supprimée), lisible par le gérant et annulable quand c'est possible. La base garde déjà ces changements, mais aucun écran ne les montre.
+- **Sauvegardes** : la base de production est sur l'offre gratuite de Neon, dont la fenêtre de restauration est courte. Proposition : une sauvegarde automatique chaque nuit, chiffrée et gardée 30 jours hors de Neon, avec un essai de restauration vérifié en CI.
+
+Proposition : ces deux tickets, dans cet ordre, pendant que tu fais tes premiers retours. Autres choix possibles : préparer le journal vocal (phase 2) maintenant, ou ne rien faire tant que tu n'as pas fait de retour. Qu'est-ce que tu préfères ?
+
+### Q53 — Épingler la version de Node (posée le 2026-10-23, journal du 22 octobre)
+
+Le 22 octobre, la CI a pris toute seule une nouvelle version de Node 22, et un test de la règle « déjà fait » est devenu rouge sur `main` sans qu'aucun code ait changé. Proposition : fixer la version exacte (22.23.4) dans `.node-version`, et la monter à la main dans un ticket à part, testé avant de fusionner. D'accord ?
+
 ## Questions ouvertes du brief
 
 - Nom du produit.

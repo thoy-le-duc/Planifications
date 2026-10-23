@@ -164,7 +164,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 
 ## Phase 1 — Mise en ligne, usage réel, jumeau, phyto et fertilisation (octobre 2026)
 
-Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : aucun ticket « à faire » le 22 octobre au soir ; la prochaine session écrit ses questions dans `docs/questions.md` (voir Q50) et s'arrête.
+Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : aucun ticket « à faire » le 23 octobre ; questions posées à Théophane (Q50 à Q53, dont Q51 sur les retours d'usage et Q52 sur la suite) : tant qu'il n'a pas répondu, les sessions surveillent les PR et s'arrêtent.
 
 | Ticket | Sujet | Dépend de | Statut |
 | --- | --- | --- | --- |
