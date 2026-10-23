@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-23 — T84 : chercher un produit phyto par culture, ravageur ou maladie
+
+- **Fait** : la recherche E-Phy trouve un produit par son nom, son AMM, sa substance, et maintenant par la culture (« tomate », « chou rouge ») ou la cible (« pucerons », « mildiou »). Les mots se combinent sur un même usage (« tomate pucerons »). Chaque résultat montre l'usage trouvé, culture, cible et DAR, avec « + N autres usages trouvés ». Au-delà de 8 résultats s'affiche « N autres produits : précisez la recherche ». Une frappe prend 2 à 16 ms sur le catalogue réel (1 912 produits, 18 221 usages). Demande de Théophane en réponse à Q48.
+- **Décidé** : un usage propre à la culture (« Tomate - Aubergine ») passe avant un usage générique (« Cultures légumières »). L'index se construit par tranches de 50 produits qui rendent la main au fil, pour que l'écran ne se fige jamais à l'ouverture. Le libellé « + N usages » de la première version devient « + N autres usages trouvés » (deux attentes de test suivent ce libellé).
+- **Bloquant** : rien. Le test e2e de l'import (tâche longue de 333 ms, `import.e2e.ts:244`) a échoué une fois sur la PR de T83 puis est passé à la relance : à surveiller.
+
 ## 2026-10-23 — T83 : un premier tunnel se pose en 40 m × 9,60 m
 
 - **Fait** : « Placer la serre » propose 40 m × 9,6 m pour le premier tunnel d'une ferme (réponse de Théophane à Q50), 30 m × 8 m pour une serre chapelle ; ensuite, les mesures du dernier bâtiment du même type, supprimés exclus. Le test unitaire de T81 « sinon 30 × 8 » et l'e2e `serre-zone` passent à 40 × 9,6 pour un tunnel : changement voulu.
