@@ -111,19 +111,172 @@ export function normaliserEphy(t: string): string {
     .trim();
 }
 
-/** Produits qui contiennent chaque mot tapé (nom, seconds noms, AMM, substances) ; 2 lettres au moins. */
-export function chercherProduitsEphy(catalogue: CatalogueEphy, texte: string, max = 8): ProduitEphy[] {
-  const t = normaliserEphy(texte);
-  if (t.length < 2) return [];
-  const mots = t.split(' ');
-  const trouves: { readonly p: ProduitEphy; readonly debut: boolean }[] = [];
-  for (const p of catalogue.produits) {
-    const noms = [p.nom, ...p.autresNoms].map(normaliserEphy);
-    const tout = [...noms, p.amm, ...p.substances.map(normaliserEphy)].join(' | ');
-    if (mots.every((m) => tout.includes(m))) trouves.push({ p, debut: noms.some((n) => n.startsWith(t)) });
+/** Un produit trouvé, avec l'usage qui l'a fait trouver quand c'est par une culture ou une cible (T84). */
+export interface ResultatEphy {
+  readonly produit: ProduitEphy;
+  /** Premier usage (ordre du catalogue) qui répond à la recherche ; null si trouvé par nom, AMM ou substance seulement. */
+  readonly usage: UsageEphy | null;
+  /** Nombre d'autres usages qui répondent aussi à la recherche. */
+  readonly usagesEnPlus: number;
+}
+
+interface UsageIndexe {
+  readonly usage: UsageEphy;
+  /** Culture e-phy normalisée (sans accents ni majuscules). */
+  readonly culture: string;
+  /** Clé de comparaison de la culture, celle des correspondances espèce → culture. */
+  readonly cleCulture: string;
+  readonly cible: string;
+}
+
+interface ProduitIndexe {
+  readonly produit: ProduitEphy;
+  /** Noms normalisés (nom et seconds noms). */
+  readonly noms: readonly string[];
+  /** Nom, seconds noms, AMM et substances normalisés, mis bout à bout. */
+  readonly tout: string;
+  readonly usages: readonly UsageIndexe[];
+}
+
+/** Produits indexés par tranches : l'index d'un catalogue est complet quand il a autant de produits que lui. */
+const indexes = new WeakMap<CatalogueEphy, ProduitIndexe[]>();
+
+/** Produits indexés par tranche : assez petite pour qu'une tranche tienne bien sous 50 ms à froid. */
+export const TRANCHE_INDEX_EPHY = 50;
+
+function indexerProduit(produit: ProduitEphy): ProduitIndexe {
+  const noms = [produit.nom, ...produit.autresNoms].map(normaliserEphy);
+  return {
+    produit,
+    noms,
+    tout: [...noms, produit.amm, ...produit.substances.map(normaliserEphy)].join(' | '),
+    usages: produit.usages.map((usage) => ({ usage, culture: normaliserEphy(usage.culture), cleCulture: cle(usage.culture), cible: normaliserEphy(usage.cible) })),
+  };
+}
+
+/**
+ * Indexe (normalise) au plus `taille` produits de plus du catalogue, et rend true quand l'index
+ * est complet. L'appelant rend la main entre deux tranches : aucune tâche longue sur le fil
+ * principal (T84). Le cœur n'a ni minuterie ni horloge : la tranche se compte en produits.
+ */
+export function indexerTrancheEphy(catalogue: CatalogueEphy, taille = TRANCHE_INDEX_EPHY): boolean {
+  let index = indexes.get(catalogue);
+  if (index === undefined) {
+    index = [];
+    indexes.set(catalogue, index);
   }
-  trouves.sort((a, b) => Number(a.p.retire) - Number(b.p.retire) || Number(b.debut) - Number(a.debut) || a.p.nom.localeCompare(b.p.nom, 'fr'));
-  return trouves.slice(0, max).map((x) => x.p);
+  const fin = Math.min(catalogue.produits.length, index.length + taille);
+  for (let i = index.length; i < fin; i++) {
+    const p = catalogue.produits[i];
+    if (p !== undefined) index.push(indexerProduit(p));
+  }
+  return index.length >= catalogue.produits.length;
+}
+
+/** L'index complet ; termine d'un coup ce que les tranches n'ont pas fait (appel direct, sans écran). */
+function indexer(catalogue: CatalogueEphy): readonly ProduitIndexe[] {
+  while (!indexerTrancheEphy(catalogue, Number.MAX_SAFE_INTEGER));
+  return indexes.get(catalogue) ?? [];
+}
+
+/** Un mot de la recherche, ou une suite de mots qui forme un nom d'espèce (« chou rouge »). */
+interface Unite {
+  readonly mot: string;
+  /** Cultures e-phy précises pour cette espèce (clés de comparaison). */
+  readonly precises: ReadonlySet<string>;
+  /** Cultures génériques (« Cultures légumières ») : valables, mais après les précises. */
+  readonly generiques: ReadonlySet<string>;
+}
+
+function unite(mot: string): Unite {
+  const cultures = culturesEphyPourEspece(mot);
+  const generique = cle(LEGUMIERES);
+  const cles = cultures.map(cle);
+  return { mot, precises: new Set(cles.filter((c) => c !== generique)), generiques: new Set(cles.filter((c) => c === generique)) };
+}
+
+/** Découpe la recherche : les suites de 3 puis 2 mots qui sont une espèce connue comptent pour un seul mot. */
+function unites(mots: readonly string[]): Unite[] {
+  const r: Unite[] = [];
+  for (let i = 0; i < mots.length; ) {
+    let pris = 1;
+    for (const n of [3, 2]) {
+      if (i + n <= mots.length && especeConnue(mots.slice(i, i + n).join(' '))) {
+        pris = n;
+        break;
+      }
+    }
+    r.push(unite(mots.slice(i, i + pris).join(' ')));
+    i += pris;
+  }
+  return r;
+}
+
+/** 0 : l'usage répond précisément à l'unité ; 1 : seulement par une culture générique ; null : ne répond pas. */
+function rang(u: UsageIndexe, m: Unite): 0 | 1 | null {
+  if (m.precises.has(u.cleCulture) || u.culture.includes(m.mot) || u.cible.includes(m.mot)) return 0;
+  return m.generiques.has(u.cleCulture) ? 1 : null;
+}
+
+/** Note d'un usage pour les unités restantes (somme des rangs), null s'il ne répond pas à toutes. */
+function note(u: UsageIndexe, restants: readonly Unite[]): number | null {
+  let total = 0;
+  for (const m of restants) {
+    const r = rang(u, m);
+    if (r === null) return null;
+    total += r;
+  }
+  return total;
+}
+
+/**
+ * Recherche e-phy (T53, T84). Chaque mot tapé (2 lettres au moins pour l'ensemble) correspond au
+ * nom, à l'AMM ou à la substance du produit, qui vaut alors pour tous ses usages, ou à la culture
+ * ou à la cible d'un usage ; les mots restants doivent tomber sur un MÊME usage. Une espèce, en
+ * un ou plusieurs mots (« chou rouge »), est traduite en cultures e-phy (`culturesEphyPourEspece`).
+ * Ordre : autorisés d'abord, puis usage précis avant usage générique (« Tomate - Aubergine » avant
+ * « Cultures légumières »), puis nom qui commence par la recherche, puis alphabétique. L'usage
+ * rendu est le plus précis de ceux qui répondent. `autres` : produits trouvés au-delà de `max`.
+ */
+export function rechercherEphy(catalogue: CatalogueEphy, texte: string, max = 8): { readonly resultats: ResultatEphy[]; readonly autres: number } {
+  const t = normaliserEphy(texte);
+  if (t.length < 2) return { resultats: [], autres: 0 };
+  const mots = unites(t.split(' '));
+  const trouves: { readonly r: ResultatEphy; readonly note: number; readonly debut: boolean }[] = [];
+  for (const p of indexer(catalogue)) {
+    const restants = mots.filter((m) => !p.tout.includes(m.mot));
+    let r: ResultatEphy | null = null;
+    let meilleure = 0;
+    if (restants.length === 0) r = { produit: p.produit, usage: null, usagesEnPlus: 0 };
+    else {
+      let premier: UsageIndexe | null = null;
+      let nb = 0;
+      for (const u of p.usages) {
+        const n = note(u, restants);
+        if (n === null) continue;
+        nb++;
+        if (premier === null || n < meilleure) {
+          premier = u;
+          meilleure = n;
+        }
+      }
+      if (premier !== null) r = { produit: p.produit, usage: premier.usage, usagesEnPlus: nb - 1 };
+    }
+    if (r !== null) trouves.push({ r, note: meilleure, debut: p.noms.some((n) => n.startsWith(t)) });
+  }
+  trouves.sort(
+    (a, b) =>
+      Number(a.r.produit.retire) - Number(b.r.produit.retire) ||
+      a.note - b.note ||
+      Number(b.debut) - Number(a.debut) ||
+      a.r.produit.nom.localeCompare(b.r.produit.nom, 'fr'),
+  );
+  return { resultats: trouves.slice(0, max).map((x) => x.r), autres: Math.max(0, trouves.length - max) };
+}
+
+/** Les produits de `rechercherEphy` (au plus `max`), sans l'usage trouvé. */
+export function chercherProduitsEphy(catalogue: CatalogueEphy, texte: string, max = 8): ProduitEphy[] {
+  return rechercherEphy(catalogue, texte, max).resultats.map((r) => r.produit);
 }
 
 // ── Espèce → usage ───────────────────────────────────────────────────────────────────────────
@@ -237,14 +390,24 @@ let exceptions: ReadonlySet<string> | undefined;
 
 const estException = (k: string): boolean => [...(exceptions ?? [])].some((e) => k === e || k.startsWith(`${e} `));
 
+function correspondances(): ReadonlyMap<string, readonly string[]> {
+  parCle ??= new Map(Object.entries(CORRESPONDANCES).map(([k, v]) => [cle(k), v] as const));
+  return parCle;
+}
+
+/** Le nom est exactement une espèce de la table (« chou rouge »), sans le repli « premier mot ». */
+function especeConnue(nom: string): boolean {
+  return correspondances().has(cle(nom));
+}
+
 /** Cultures e-phy qui couvrent l'espèce de la ferme ; espèce inconnue : son propre nom seulement. */
 export function culturesEphyPourEspece(nomEspece: string): string[] {
-  parCle ??= new Map(Object.entries(CORRESPONDANCES).map(([k, v]) => [cle(k), v] as const));
+  const table = correspondances();
   tetes ??= new Set(TETES_SURES.map(cle));
   exceptions ??= new Set(EXCEPTIONS_TETES.map(cle));
   const k = cle(nomEspece);
   const tete = k.split(' ')[0] ?? '';
-  const connue = parCle.get(k) ?? (tetes.has(tete) && !estException(k) ? parCle.get(tete) : undefined);
+  const connue = table.get(k) ?? (tetes.has(tete) && !estException(k) ? table.get(tete) : undefined);
   return connue === undefined ? [nomEspece.trim()] : [...connue];
 }
 

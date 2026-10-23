@@ -3,8 +3,9 @@
  * produit (./EcranProduitsPhyto.tsx). Le catalogue n'est chargé qu'au premier usage du champ.
  * Puis le choix de l'usage, dont dépend le délai avant récolte. Contrat : ./test/contrat.ts.
  */
-import { useId, useRef, useState, type ReactElement } from 'react';
-import { chercherProduitsEphy, type CatalogueEphy, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
+import { rendreLaMain } from '../../export/rendre-la-main.ts';
+import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
+import { indexerTrancheEphy, rechercherEphy, type CatalogueEphy, type ProduitEphy, type UsageEphy } from '@planif/core/ephy';
 
 export type ChargerCatalogue = () => Promise<CatalogueEphy>;
 
@@ -30,26 +31,40 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
   const [texte, setTexte] = useState('');
   const [etat, setEtat] = useState<Etat>({ sorte: 'repos' });
   const demande = useRef(false);
+  const vivant = useRef(true);
+
+  // Démonté : plus de setState, et la boucle de tranches s'arrête.
+  useEffect(() => {
+    vivant.current = true;
+    return () => {
+      vivant.current = false;
+    };
+  }, []);
 
   function charger(): void {
     if (demande.current) return;
     demande.current = true;
     setEtat({ sorte: 'chargement' });
-    chargerCatalogue().then(
-      (catalogue) => {
-        setEtat({ sorte: 'pret', catalogue });
-      },
-      (e: unknown) => {
-        console.error('Catalogue e-phy non chargé', e);
-        demande.current = false;
-        setEtat({ sorte: 'erreur', message: e instanceof Error ? e.message : 'Base e-phy indisponible.' });
-      },
-    );
+    const echec = (e: unknown): void => {
+      console.error('Catalogue e-phy non chargé', e);
+      demande.current = false;
+      if (vivant.current) setEtat({ sorte: 'erreur', message: e instanceof Error ? e.message : 'Base e-phy indisponible.' });
+    };
+    chargerCatalogue().then(async (catalogue) => {
+      try {
+        // L'index se construit par tranches de 50 produits, en rendant la main entre deux :
+        // jamais de tâche longue sur le fil principal. La recherche attend la fin (« Chargement »).
+        while (vivant.current && !indexerTrancheEphy(catalogue)) await rendreLaMain();
+        if (vivant.current) setEtat({ sorte: 'pret', catalogue });
+      } catch (e: unknown) {
+        echec(e);
+      }
+    }, echec);
   }
 
   const catalogue = etat.sorte === 'pret' ? etat.catalogue : null;
   const vide = catalogue !== null && (catalogue.dateBase === null || catalogue.produits.length === 0);
-  const trouves = catalogue === null || vide ? [] : chercherProduitsEphy(catalogue, texte);
+  const { resultats: trouves, autres } = catalogue === null || vide ? { resultats: [], autres: 0 } : rechercherEphy(catalogue, texte);
 
   return (
     <section className="parc-section" aria-label="Base e-phy">
@@ -62,7 +77,7 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
         type="search"
         autoComplete="off"
         enterKeyHint="search"
-        placeholder="Nom, substance ou AMM"
+        placeholder="Nom, substance, AMM, culture ou cible"
         value={texte}
         onFocus={charger}
         onChange={(e) => {
@@ -72,7 +87,7 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
       />
       {trouves.length > 0 && (
         <ul className="parc-liste" aria-label="Produits e-phy">
-          {trouves.map((p) => (
+          {trouves.map(({ produit: p, usage, usagesEnPlus }) => (
             <li key={p.amm}>
               <button
                 type="button"
@@ -87,12 +102,22 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
                 <span className="parc-ligne-textes">
                   <strong>{p.nom}</strong>
                   <span>{detail(p)}</span>
+                  {usage !== null && (
+                    <span data-testid="usage-trouve">{`${libelleUsageCourt(usage)}${usagesEnPlus > 0 ? ` + ${String(usagesEnPlus)} ${usagesEnPlus > 1 ? 'autres usages trouvés' : 'autre usage trouvé'}` : ''}`}</span>
+                  )}
                 </span>
               </button>
             </li>
           ))}
         </ul>
       )}
+      <div aria-live="polite">
+        {autres > 0 && (
+          <p className="parc-aide" data-testid="autres-ephy">
+            {`${String(autres)} ${autres > 1 ? 'autres produits' : 'autre produit'} : précisez la recherche`}
+          </p>
+        )}
+      </div>
       <p className="parc-aide" aria-live="polite">
         {etat.sorte === 'chargement'
           ? 'Chargement de la base e-phy…'
@@ -106,6 +131,11 @@ export function RechercheEphy({ chargerCatalogue, surChoisir }: { readonly charg
       </p>
     </section>
   );
+}
+
+/** Ligne d'un résultat de recherche : culture, cible, DAR. */
+function libelleUsageCourt(u: UsageEphy): string {
+  return `${u.culture} · ${u.cible} · ${u.dar === null ? 'DAR non précisé' : `DAR ${String(u.dar)} j`}`;
 }
 
 export function libelleUsage(u: UsageEphy): string {

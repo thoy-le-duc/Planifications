@@ -164,7 +164,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 
 ## Phase 1 — Mise en ligne, usage réel, jumeau, phyto et fertilisation (octobre 2026)
 
-Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : T83 et T84 (indépendants, en parallèle), le 23 octobre. Le placement des grandes serres et des planches attend la réponse de Théophane à Q54 ; Q49, Q50.1, Q52 et Q53 restent ouvertes.
+Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : aucun ticket « à faire » (T83 et T84 faits le 23 octobre). Le placement des grandes serres et des planches attend la réponse de Théophane à Q54 ; Q49, Q50.1, Q52 et Q53 restent ouvertes.
 
 | Ticket | Sujet | Dépend de | Statut |
 | --- | --- | --- | --- |
@@ -217,7 +217,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T81](T81-placer-serre-depuis-zone.md) | Placer une serre depuis sa zone, en un geste | T28b, T28d, T28h, T61 | fait |
 | [T82](T82-equipements-abri-ecran.md) | Modifier les équipements d'une serre (écran, relecture T58) | T58 | fait |
 | [T83](T83-tunnel-par-defaut.md) | Tunnel posé aux mesures de Théophane : 40 m × 9,60 m (Q50) | T81 | fait |
-| [T84](T84-ephy-recherche-culture-cible.md) | E-Phy : chercher un produit par culture, ravageur ou maladie (Q48) | T53, T75, T76 | à faire |
+| [T84](T84-ephy-recherche-culture-cible.md) | E-Phy : chercher un produit par culture, ravageur ou maladie (Q48) | T53, T75, T76 | fait |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 
