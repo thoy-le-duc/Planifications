@@ -88,11 +88,12 @@ describe('T84 : l’usage trouvé sous le nom du produit', () => {
     await chercher(d, 'tomate pucerons');
     expect(suggestions().map((s) => s.dataset.amm)).toEqual(['2000002']);
     const s = suggestions()[0];
-    const ligne = s?.querySelector('[data-testid="usage-trouve"]');
+    if (s === undefined) throw new Error('suggestion absente');
+    const ligne = s.querySelector('[data-testid="usage-trouve"]');
     expect(ligne?.textContent).toBe('Tomate - Aubergine · Pucerons · DAR 3 j');
-    expect(texte(s as HTMLElement)).not.toContain('+');
+    expect(texte(s)).not.toContain('+');
     b.remiseAZero();
-    await toucher(s as HTMLElement);
+    await toucher(s);
     expect(b.transactions()).toBe(0);
     expect(champ('Nom commercial', d).value).toBe('DELTAGARD');
     expect(champ('N° AMM', d).value).toBe('2000002');
