@@ -11,7 +11,7 @@ import { surveillerCsp } from './outils.ts';
  * (Chromium 1280 × 800), avec la ferme du placement (?jeu=placement&planches=1 : gérant, « Tunnel 1 »,
  * plein champ sans contour, avec trois planches non placées de 30 × 0,75 m).
  * Poser le point de départ, choisir « Tunnel 1 », « Dessiner depuis les planches », Enregistrer,
- * recharger : la parcelle (contour de 4 sommets) et ses trois planches sont là, et glisser l'intérieur
+ * recharger : la parcelle (contour de 4 sommets) et ses trois planches sont là, et glisser la poignée du centre
  * de la zone déplace les planches avec elle.
  * AUCUN appel réseau réel : tuiles servies par une fausse route, comme e2e/serre-zone.e2e.ts.
  */
@@ -130,10 +130,11 @@ test('ordinateur : dessiner la parcelle depuis les planches, enregistrer, rechar
     await expect(page.getByTestId(TP.poigneeRotation)).toBeVisible();
   });
 
-  await test.step('glisser l’intérieur de la zone déplace les planches avec elle', async () => {
+  await test.step('glisser la poignée du centre déplace les planches avec elle', async () => {
     const avant = await planches(page).first().getAttribute('data-x');
-    const interieur = page.getByTestId(TP.interieur);
-    const boite = await interieur.boundingBox();
+    // Une parcelle de 3 m de large est étroite à l'écran : on la prend par la poignée de son centre.
+    const poignee = page.getByTestId(TP.poigneeDeplacement);
+    const boite = await poignee.boundingBox();
     expect(boite).not.toBeNull();
     if (boite === null) return;
     const x = boite.x + boite.width / 2;

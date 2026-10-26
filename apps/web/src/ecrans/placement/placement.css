@@ -779,6 +779,11 @@
   z-index: 3;
 }
 
+.pl-poignee-deplacer {
+  background: var(--couleur-foret);
+  cursor: move;
+}
+
 .pl-parcelle {
   display: flex;
   flex-direction: column;

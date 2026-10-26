@@ -632,3 +632,31 @@ describe('T85 : un seul enregistrement pour tout', () => {
     }
   });
 });
+
+describe('T85 : la poignée du centre déplace le bloc comme son intérieur', () => {
+  it('une parcelle étroite est couverte par ses côtés : la poignée du centre entraîne contour et planches du même vecteur', async () => {
+    const b = await ouvrir({ avant: PC01_EN });
+    await choisirZone(ZONE_CHAMP);
+    expect(tous(TP.poigneeDeplacement)).toHaveLength(1);
+    const avantS = sommets();
+    const avantP = { x: nombre(planche(PLANCHE), 'data-x'), y: nombre(planche(PLANCHE), 'data-y') };
+    const poignee = un(TP.poigneeDeplacement);
+    if (poignee === null) throw new Error('poignée absente');
+    await glisser(poignee, { x: 400, y: 300 }, { x: 440, y: 330 });
+    const dx = nombre(planche(PLANCHE), 'data-x') - avantP.x;
+    const dy = nombre(planche(PLANCHE), 'data-y') - avantP.y;
+    expect(dx).toBeGreaterThan(0.5);
+    expect(dy, 'vers le sud').toBeLessThan(-0.5);
+    sommets().forEach((s, i) => {
+      expect(s.x - (avantS[i]?.x ?? 0)).toBeCloseTo(dx, 2);
+      expect(s.y - (avantS[i]?.y ?? 0)).toBeCloseTo(dy, 2);
+    });
+    expect(b.placements).toEqual([]);
+  });
+
+  it('équipier : pas de poignée', async () => {
+    await ouvrir({ role: 'equipier' });
+    await choisirZone(ZONE_CHAMP);
+    expect(tous(TP.poigneeDeplacement)).toHaveLength(0);
+  });
+});

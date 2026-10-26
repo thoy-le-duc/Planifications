@@ -179,14 +179,16 @@ export interface ProprietesCoucheBloc {
   readonly hauteurPx: number;
   /** Sommets du contour à l'écran, au format d'un attribut `points` de SVG. */
   readonly points: string;
+  /** Centre de la zone, à l'écran : sa poignée de déplacement (l'intérieur d'une parcelle étroite est couvert par ses côtés). */
+  readonly centre: Point;
   /** Poignée de rotation, à l'écran. */
   readonly poignee: Point;
   readonly surGlisser: (e: PointerEvent, zoneId: string) => void;
   readonly surTourner: (e: PointerEvent, zoneId: string) => void;
 }
 
-/** L'intérieur de la zone (on le glisse) et sa poignée de rotation. */
-export function CoucheBloc({ zoneId, largeurPx, hauteurPx, points, poignee, surGlisser, surTourner }: ProprietesCoucheBloc): ReactElement {
+/** L'intérieur de la zone (on le glisse, ou par sa poignée du centre) et sa poignée de rotation. */
+export function CoucheBloc({ zoneId, largeurPx, hauteurPx, points, centre, poignee, surGlisser, surTourner }: ProprietesCoucheBloc): ReactElement {
   return (
     <>
       <svg className="pl-svg pl-svg-interieur" width={largeurPx} height={hauteurPx}>
@@ -200,6 +202,15 @@ export function CoucheBloc({ zoneId, largeurPx, hauteurPx, points, poignee, surG
           }}
         />
       </svg>
+      <div
+        data-testid="poignee-deplacement-zone"
+        className="pl-poignee pl-poignee-rotation pl-poignee-zone pl-poignee-deplacer"
+        aria-hidden="true"
+        style={{ left: centre.x - 14, top: centre.y - 14 }}
+        onPointerDown={(ev) => {
+          surGlisser(ev, zoneId);
+        }}
+      />
       <div
         data-testid="poignee-rotation-zone"
         className="pl-poignee pl-poignee-rotation pl-poignee-zone"

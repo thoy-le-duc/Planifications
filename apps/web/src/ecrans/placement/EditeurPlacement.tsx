@@ -1743,6 +1743,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                   largeurPx={taille.w}
                   hauteurPx={taille.h}
                   points={enPoints(blocZone.contour)}
+                  centre={versEcran(vue, blocZone.repere.centre)}
                   poignee={poigneeBloc}
                   surGlisser={(ev, id) => {
                     commencerBloc(ev, id, 'deplacer');

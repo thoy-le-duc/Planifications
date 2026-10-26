@@ -36,6 +36,8 @@
 export const TESTID_PARCELLE = {
   interieur: 'zone-interieur',
   poigneeRotation: 'poignee-rotation-zone',
+  /** Poignée du centre (même geste que l'intérieur : une parcelle étroite est couverte par ses côtés). */
+  poigneeDeplacement: 'poignee-deplacement-zone',
   annonce: 'parcelle-annonce',
 } as const;
 
