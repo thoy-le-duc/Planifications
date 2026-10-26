@@ -260,7 +260,7 @@ function Sol({ scene }: { readonly scene: Scene }) {
   }, [geometrie, invalider]);
   return (
     <mesh key={traits ? 'traits' : 'uni'} geometry={geometrie} frustumCulled={false}>
-      <meshLambertMaterial color={traits ? '#ffffff' : COULEURS.secondaire} vertexColors={traits} side={DoubleSide} />
+      <meshLambertMaterial color={traits ? COULEURS.surface : COULEURS.secondaire} vertexColors={traits} side={DoubleSide} />
     </mesh>
   );
 }
