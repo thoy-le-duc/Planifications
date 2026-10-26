@@ -4,8 +4,9 @@
  * échelle par serre), un seul toit ; le sol de toutes les zones est UNE géométrie fusionnée.
  * Pas de React ici : ce fichier ne dépend que de three et de la scène (pure), et se teste sous Node.
  */
-import { BoxGeometry, BufferGeometry, Float32BufferAttribute, ShapeUtils, Vector2 } from 'three';
-import { coinsRectScene, type PointScene, type SocleScene } from './scene.ts';
+import { BoxGeometry, BufferGeometry, Color, Float32BufferAttribute, ShapeUtils, Vector2 } from 'three';
+import { COULEURS } from '../../ui/jetons.ts';
+import { coinsRectScene, type BandeScene, type PointScene, type SocleScene } from './scene.ts';
 
 /** Contour au sol d'un socle : son contour s'il en a un, sinon son rectangle (tourné). */
 export function empreinteDe(s: SocleScene): readonly PointScene[] {
@@ -18,7 +19,7 @@ export function empreinteDe(s: SocleScene): readonly PointScene[] {
  * y = −epaisseur. Un seul appel de dessin quel que soit le nombre de zones. À dessiner des deux
  * côtés (l'orientation des triangles dépend du sens du contour).
  */
-export function geometrieSol(empreintes: readonly (readonly PointScene[])[], epaisseur: number): BufferGeometry {
+export function geometrieSol(empreintes: readonly (readonly PointScene[])[], epaisseur: number, limites: readonly (readonly PointScene[])[] = []): BufferGeometry {
   const positions: number[] = [];
   const sommet = (x: number, y: number, z: number): void => {
     positions.push(x, y, z);
@@ -48,9 +49,36 @@ export function geometrieSol(empreintes: readonly (readonly PointScene[])[], epa
     }
   }
   const g = new BufferGeometry();
+  // T86 : les limites entre les bandes d'une serre, des rectangles plats juste au-dessus du sol, d'une autre couleur (par sommet).
+  if (limites.length > 0) {
+    const sol = new Color(COULEURS.secondaire);
+    const trait = new Color(COULEURS.trait);
+    const couleurs: number[] = [];
+    for (let i = 0; i < positions.length / 3; i += 1) couleurs.push(sol.r, sol.g, sol.b);
+    for (const r of limites) {
+      for (const k of [0, 1, 2, 0, 2, 3]) {
+        const p = r[k];
+        if (p === undefined) continue;
+        positions.push(p.x, HAUTEUR_LIMITE_M, p.z);
+        couleurs.push(trait.r, trait.g, trait.b);
+      }
+    }
+    g.setAttribute('color', new Float32BufferAttribute(couleurs, 3));
+  }
   g.setAttribute('position', new Float32BufferAttribute(positions, 3));
   g.computeVertexNormals();
   return g;
+}
+
+/** T86 : hauteur (m) des limites de bandes au-dessus du sol, et largeur de leur trait. */
+const HAUTEUR_LIMITE_M = 0.02;
+const LARGEUR_LIMITE_M = 0.12;
+
+/** T86 : le rectangle de la limite de chaque bande sauf la première de sa serre (son bord de x local négatif), en repère de scène. */
+export function limitesDeBandes(bandes: readonly BandeScene[]): PointScene[][] {
+  return bandes
+    .filter((b) => b.rang > 1)
+    .map((b) => coinsRectScene(b.x - (b.largeur / 2) * Math.cos(b.angle), b.z + (b.largeur / 2) * Math.sin(b.angle), LARGEUR_LIMITE_M, b.profondeur, b.angle));
 }
 
 /**

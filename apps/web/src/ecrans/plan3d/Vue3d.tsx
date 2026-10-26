@@ -27,7 +27,7 @@ import type { DateCalendaire } from '@planif/core';
 import type { Plan } from '../plan/calculs.ts';
 import { COULEURS, COULEURS_SERRES_3D, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
 import { boiteDe, cadrage, demarrerVol, empriseDe, meilleureVueDeFerme, poseAu, pointsDeFerme, type CibleVol, type Point3, type Pose, type Vol } from './cadrage.ts';
-import { empreinteDe, geometrieArceau, geometrieBache, geometrieBout, geometrieMurs, geometriePlanche, geometrieSol, geometrieToit } from './formes.ts';
+import { empreinteDe, geometrieArceau, geometrieBache, geometrieBout, geometrieMurs, geometriePlanche, geometrieSol, geometrieToit, limitesDeBandes } from './formes.ts';
 import { boiteSousRayon, type BoiteZone } from './pointage.ts';
 import {
   appliquerFiltres,
@@ -244,10 +244,14 @@ function Rendu({ surImage }: { readonly surImage: (etat: RootState) => void }) {
 
 const temporaire = new Object3D();
 
-/** Le sol de toutes les zones : une seule géométrie, posée une fois (un contour reste un contour, une serre son rectangle tourné). */
+/**
+ * Le sol de toutes les zones : une seule géométrie, posée une fois (un contour reste un contour, une serre son rectangle tourné).
+ * T86 : les limites entre les bandes d'une serre y sont des traits clairs posés au sol (couleurs par sommet), dans le même appel de dessin.
+ */
 function Sol({ scene }: { readonly scene: Scene }) {
   const invalider = useThree((s) => s.invalidate);
-  const geometrie = useMemo(() => geometrieSol(scene.socles.map(empreinteDe), EPAISSEUR_SOCLE), [scene.socles]);
+  const geometrie = useMemo(() => geometrieSol(scene.socles.map(empreinteDe), EPAISSEUR_SOCLE, limitesDeBandes(scene.bandes ?? [])), [scene.socles, scene.bandes]);
+  const traits = geometrie.hasAttribute('color');
   useLayoutEffect(() => {
     invalider();
     return () => {
@@ -255,8 +259,8 @@ function Sol({ scene }: { readonly scene: Scene }) {
     };
   }, [geometrie, invalider]);
   return (
-    <mesh geometry={geometrie} frustumCulled={false}>
-      <meshLambertMaterial color={COULEURS.secondaire} side={DoubleSide} />
+    <mesh key={traits ? 'traits' : 'uni'} geometry={geometrie} frustumCulled={false}>
+      <meshLambertMaterial color={traits ? '#ffffff' : COULEURS.secondaire} vertexColors={traits} side={DoubleSide} />
     </mesh>
   );
 }
@@ -272,11 +276,9 @@ export function appelsHorsPlants(scene: Scene): number {
   const volumes = scene.batiments.length - serres.length;
   // T61 : les bandes des chemins, un InstancedMesh.
   const chemins = (scene.chemins ?? []).some((c) => c.segments.length > 0) ? 1 : 0;
-  // T86 : les limites entre les bandes d'une serre, un InstancedMesh.
-  const limites = (scene.bandes ?? []).some((b) => b.rang > 1) ? 1 : 0;
   // T58 : ouvrants relevés et portes ouvertes des serres, un InstancedMesh.
   const ouvrants = panneauxOuverts(serres).length > 0 ? 1 : 0;
-  return (scene.socles.length > 0 ? 1 : 0) + (scene.volumes.length > 0 ? 1 : 0) + (arceaux > 0 ? 1 : 0) + (nefs > 0 ? 2 : 0) + (volumes > 0 ? 2 : 0) + chemins + limites + ouvrants;
+  return (scene.socles.length > 0 ? 1 : 0) + (scene.volumes.length > 0 ? 1 : 0) + (arceaux > 0 ? 1 : 0) + (nefs > 0 ? 2 : 0) + (volumes > 0 ? 2 : 0) + chemins + ouvrants;
 }
 
 /** T61 : les chemins au sol, une bande plate par segment, en UN InstancedMesh (géométrie unique, échelle par bande). */
@@ -307,42 +309,6 @@ function Chemins({ scene }: { readonly scene: Scene }) {
   return (
     <instancedMesh key={`c${String(bandes.length)}`} ref={m} args={[forme, undefined, bandes.length]} frustumCulled={false}>
       <meshLambertMaterial color={COULEURS.texteOrange} />
-    </instancedMesh>
-  );
-}
-
-/** T86 : largeur et épaisseur (m) du trait qui sépare deux bandes d'une serre, posé au sol. */
-const LARGEUR_LIMITE_M = 0.12;
-const EPAISSEUR_LIMITE_M = 0.03;
-
-/** T86 : la limite au sol entre deux bandes d'une serre, un trait par limite (côté ouest de chaque bande sauf la première), en UN InstancedMesh. */
-function LimitesBandes({ scene }: { readonly scene: Scene }) {
-  const invalider = useThree((s) => s.invalidate);
-  const limites = useMemo(() => (scene.bandes ?? []).filter((b) => b.rang > 1), [scene.bandes]);
-  const forme = useMemo(() => geometrieMurs(), []);
-  useEffect(() => () => {
-    forme.dispose();
-  }, [forme]);
-  const m = useRef<InstancedMesh>(null);
-  useLayoutEffect(() => {
-    const mesh = m.current;
-    if (mesh === null) return;
-    limites.forEach((b, i) => {
-      // Le bord de la bande côté x local négatif : son centre décalé d'une demi-largeur selon l'axe x local tourné de `angle`.
-      temporaire.position.set(b.x - (b.largeur / 2) * Math.cos(b.angle), EPAISSEUR_LIMITE_M / 2, b.z + (b.largeur / 2) * Math.sin(b.angle));
-      temporaire.rotation.set(0, b.angle, 0);
-      temporaire.scale.set(LARGEUR_LIMITE_M, EPAISSEUR_LIMITE_M, b.profondeur);
-      temporaire.updateMatrix();
-      mesh.setMatrixAt(i, temporaire.matrix);
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.computeBoundingSphere();
-    invalider();
-  }, [limites, invalider]);
-  if (limites.length === 0) return null;
-  return (
-    <instancedMesh key={`l${String(limites.length)}`} ref={m} args={[forme, undefined, limites.length]} frustumCulled={false}>
-      <meshLambertMaterial color={COULEURS.trait} />
     </instancedMesh>
   );
 }
@@ -1617,7 +1583,6 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
         <Sol scene={geometrie} />
         <Batiments scene={batimentsDessines ?? geometrie} couleurs={couleursSerres} />
         <Chemins scene={geometrie} />
-        <LimitesBandes scene={geometrie} />
         <Volumes key={nbVolumes} scene={scene} filtres={filtres} filtree={filtree} plants={plants} rendu={rendu} surGeometrie={surGeometrie} surCouleurs={surCouleurs} />
         {plants !== null && couche !== null && <couche.Plants key={nbVolumes} scene={scene} filtree={filtree} plants={plants} rendu={couche.rendu} surBilan={surBilan} appelsHorsPlants={appelsFerme} plancheActive={plancheActive} />}
         <Camera rayon={rayon} centre={centre} scene={scene} boites={boites} suiviRef={suivi} piloteRef={pilote} surGlisse={surGlisse} />
