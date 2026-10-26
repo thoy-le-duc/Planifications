@@ -789,3 +789,29 @@
   flex-direction: column;
   gap: 8px;
 }
+
+/* T86 : le nom d'une bande de serre, posé près de son bout nord ; le toucher choisit la sous-zone. */
+.pl-bande {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
+  border: 2px solid var(--couleur-sur-foret);
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-texte);
+  font: inherit;
+  font-weight: 700;
+  touch-action: manipulation;
+}
+
+.pl-bande-choisie {
+  border-color: var(--couleur-orange);
+}
+
+.pl-svg-bandes {
+  width: 100%;
+  height: 100%;
+}

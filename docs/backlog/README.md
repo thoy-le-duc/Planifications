@@ -164,7 +164,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 
 ## Phase 1 — Mise en ligne, usage réel, jumeau, phyto et fertilisation (octobre 2026)
 
-Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : T85 (parcelle dessinée depuis ses planches), puis T86 (zones d'une serre à plusieurs tunnels), demandes de Théophane du 26 octobre. Q49, Q50.1, Q52, Q53 et Q54 (bandes de largeurs différentes) restent ouvertes.
+Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : aucun ticket « à faire » (T85 et T86 faits le 26 octobre, demandes de Théophane). Q49, Q50.1, Q52, Q53 et Q54 (bandes de largeurs différentes) restent ouvertes.
 
 | Ticket | Sujet | Dépend de | Statut |
 | --- | --- | --- | --- |
@@ -219,7 +219,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T83](T83-tunnel-par-defaut.md) | Tunnel posé aux mesures de Théophane : 40 m × 9,60 m (Q50) | T81 | fait |
 | [T84](T84-ephy-recherche-culture-cible.md) | E-Phy : chercher un produit par culture, ravageur ou maladie (Q48) | T53, T75, T76 | fait |
 | [T85](T85-parcelle-depuis-planches.md) | Placement : dessiner une parcelle d’un tap à partir de ses planches | T28d, T81 | fait |
-| [T86](T86-sous-zones-dans-serre.md) | Placement : une serre à plusieurs tunnels, ses zones dessinées dedans (Q54) | T85 | à faire |
+| [T86](T86-sous-zones-dans-serre.md) | Placement : une serre à plusieurs tunnels, ses zones dessinées dedans (Q54) | T85 | fait |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 

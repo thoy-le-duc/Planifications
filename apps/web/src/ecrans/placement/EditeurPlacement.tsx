@@ -24,7 +24,6 @@ import { RechercheAdresse } from './RechercheAdresse.tsx';
 import { BandeauEtapes, etapeCourante, MESSAGES_ETAPES, type NumeroEtape } from './etapes.tsx';
 import { TEXTE_INVITATION } from '../../demo/invitation.ts';
 import { empriseDeContours, vueSurEmprise, type Emprise } from './sites.ts';
-import { dimensionsParDefaut, typeDeSerrePourZone } from './serre-zone.ts';
 import { deplacerSommet, insererMilieu, poserPoint, replacerEntreReperes, retirerSommet, toucheSommet, TOLERANCE_FERMETURE_PX, verifierContour } from './contours.ts';
 import type { MouvementBloc } from './bloc.ts';
 import {
@@ -64,6 +63,7 @@ import {
 } from './gestes.ts';
 import type * as ModuleChemins from './chemins.tsx';
 import type * as ModuleZone from './zone-ecran.tsx';
+import type { InfoBande } from './bandes-serre.ts';
 import type { RectangleEnglobant } from '@planif/core/placement';
 import { DELAI_RELANCE_TUILE_MS, depuisEcran, ESSAIS_TUILE_MAX, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_DEPART_SANS_POSITION, ZOOM_INITIAL, ZOOM_MIN_VUE, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
 
@@ -603,10 +603,13 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     return [...lus.map((b) => brouillonB.get(b.id) ?? b), ...[...brouillonB.values()].filter((b) => !connus.has(b.id))];
   }, [lusB, brouillonB]);
 
+  // T86 : les sous-zones d'une zone abritée par une serre sont des bandes de la serre (leur contour tracé est ignoré).
+  const bandes = useMemo(() => mZone?.bandesDesSerres(zones ?? [], batimentsAff) ?? new Map<string, InfoBande>(), [mZone, zones, batimentsAff]);
+
   const zonesInfo = useMemo(() => {
     const m = new Map<string, ZoneAffichee>();
     for (const z of zones ?? []) {
-      const abritee = batimentsAff.some((b) => b.zoneId === z.id);
+      const abritee = bandes.has(z.id) || batimentsAff.some((b) => b.zoneId === z.id);
       const b = brouillonZ.get(z.id);
       const verdict = b === undefined ? null : verifierContour(b.map((p) => ({ x: arrondi(p.x), y: arrondi(p.y) })));
       const change = b !== undefined && !abritee && contourChange(z.contour, b);
@@ -620,19 +623,19 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       });
     }
     return m;
-  }, [zones, batimentsAff, brouillonZ]);
+  }, [zones, batimentsAff, brouillonZ, bandes]);
 
   /** Repère d'affichage de chaque zone (contour du brouillon s'il est valide), et repère où les planches gardent leur placement au brouillon (contour de la base). */
   const reperes = useMemo(() => {
     const m = new Map<string, { readonly affichage: Repere | null; readonly base: Repere | null }>();
     for (const i of zonesInfo.values()) {
-      const abri = batimentsAff.find((b) => b.zoneId === i.zone.id);
+      const abri = batimentsAff.find((b) => b.zoneId === (bandes.get(i.zone.id)?.racineId ?? i.zone.id));
       const abritee = abri === undefined ? null : { centre: abri.centre, orientationDeg: abri.orientationDeg };
       const affichage = repereZone({ contour: abri === undefined ? i.effectif : null }, abritee);
       m.set(i.zone.id, { affichage, base: abri === undefined ? (calages.get(i.zone.id) ?? repereZone({ contour: i.zone.contour })) : affichage });
     }
     return m;
-  }, [zonesInfo, batimentsAff, calages]);
+  }, [zonesInfo, batimentsAff, calages, bandes]);
 
   // Un contour changé ne déplace pas les planches de la zone sur le terrain (décision du chef) ; un bloc déplacé ou tourné
   // (T85) les emmène : leur placement est gardé dans le repère `base`, qui a suivi le bloc. Celles que le brouillon vient de ranger
@@ -712,9 +715,10 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               return avant === undefined || (avant.position?.x === position.x && avant.position.y === position.y) ? [] : [{ sorte: 'vanne', id, position }];
             }),
             chemin !== null && mChemin !== null ? mChemin.changements(chemin) : [],
+            mZone?.changementsDesBandes(zones, lusP, brouillonP, brouillonZ, bandes) ?? [],
           )
         : [],
-    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, calages, brouillonV, lusV, chemin, mChemin],
+    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, calages, brouillonV, lusV, chemin, mChemin, mZone, bandes],
   );
   const modifie = changements.length > 0;
   const contoursModifies = [...zonesInfo.values()].filter((i) => i.change);
@@ -845,12 +849,11 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     majContour(zoneId, r.contour);
   }
 
-  /** Le champ « Orientation (°) » : le bloc tourne autour de son centre jusqu'à ce cap. */
-  function orienterBloc(zoneId: string, cap: number): void {
+  /** Le champ « Orientation (°) » : le bloc tourne autour de son centre (le mouvement vient du panneau). */
+  function orienterBloc(zoneId: string, mouvement: MouvementBloc): void {
     const contour = zonesInfo.get(zoneId)?.affiche;
-    const r = reperes.get(zoneId);
-    if (contour == null || r?.base == null || r.affichage == null) return;
-    bougerBloc(zoneId, contour, r.base, { dx: 0, dy: 0, rotationDeg: ecartAngle(cap - r.affichage.orientationDeg) });
+    const base = reperes.get(zoneId)?.base;
+    if (contour != null && base != null) bougerBloc(zoneId, contour, base, mouvement);
   }
 
   function commencerBloc(e: PointerEvent, zoneId: string, mode: 'deplacer' | 'pivoter'): void {
@@ -883,14 +886,15 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       setMessageContour(r.message);
       return;
     }
-    setBrouillonZ((prev) => new Map(prev).set(zoneId, r.contour));
+    poserRangement({ planches: r.planches, zones: [[zoneId, r.contour]], message: null });
     setCalages((prev) => new Map(prev).set(zoneId, r.calage));
-    setBrouillonP((prev) => {
-      const suite = new Map(prev);
-      for (const planche of r.planches) suite.set(planche.id, planche);
-      return suite;
-    });
-    setMessageContour(null);
+  }
+
+  /** Les planches rangées vont au brouillon, avec les contours qui changent avec elles (T86 : un contour vide est un contour à effacer). */
+  function poserRangement(r: ModuleZone.RangementBandes): void {
+    setBrouillonP((prev) => new Map([...prev, ...r.planches.map((p): [string, Planche] => [p.id, p])]));
+    setBrouillonZ((prev) => new Map([...prev, ...r.zones]));
+    setMessageContour(r.message);
     setSommetSel(null);
   }
 
@@ -1294,9 +1298,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
    */
   function placerSerre(zoneId: string, englobant: RectangleEnglobant | null): void {
     const info = zonesInfo.get(zoneId);
-    const type = typeDeSerrePourZone(info?.zone.typeAbri);
-    if (info === undefined || type === null) return;
-    ajouterBatiment({ ...(englobant ?? { ...dimensionsParDefaut(batimentsAff, type), centre: { x: arrondi(vue.centre.x), y: arrondi(vue.centre.y) }, orientationDeg: 0 }), nom: info.zone.nom, type, zoneId });
+    const type = mZone?.typeDeSerrePourZone(info?.zone.typeAbri);
+    if (mZone === null || info === undefined || type == null) return;
+    ajouterBatiment({ ...(englobant ?? { ...mZone.dimensionsParDefaut(batimentsAff, type), centre: { x: arrondi(vue.centre.x), y: arrondi(vue.centre.y) }, orientationDeg: 0 }), nom: info.zone.nom, type, zoneId });
   }
 
   /** Charge le calcul du rectangle englobant (à la demande), puis demande confirmation, avec ce qu'il faut savoir. */
@@ -1424,14 +1428,6 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       ? { id: zoneChoisie.zone.id, contour: zoneChoisie.affiche, repere: reperesZoneChoisie.affichage }
       : null;
   const poigneeBloc = blocZone === null || mZone === null ? null : mZone.poigneeDuBloc((p) => versEcran(vue, p), mpp, blocZone.contour, blocZone.repere);
-  /** « Dessiner depuis les planches » : les emplacements en service de la zone choisie, dont ceux déjà placés. */
-  const dessinZone =
-    edition && lusS !== null && zoneChoisie !== undefined && !zoneChoisie.abritee && zoneChoisie.affiche === null && typeDeSerrePourZone(zoneChoisie.zone.typeAbri) === null
-      ? (() => {
-          const siens = lusS.filter((x) => x.zoneId === zoneChoisie.zone.id);
-          return siens.length === 0 ? null : { nombre: siens.length, dejaPlaces: siens.filter((x) => x.placement !== null).length };
-        })()
-      : null;
   // Pendant une écriture, l'annulation précédente disparaît : « Annuler » dit toujours le dernier enregistrement, une fois écrit.
   const annulable = occupe ? undefined : (dernier ?? undefined);
 
@@ -1735,6 +1731,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               {pret && elements.planches.map(dessiner)}
               {pret && elements.batiments.map(dessiner)}
               {pret && elements.vannes.map(dessiner)}
+              {pret && mZone !== null && (
+                <mZone.CoucheBandes bandes={bandes} versEcran={(p) => versEcran(vue, p)} choisie={zoneSel} surChoisir={choisirZoneListe} />
+              )}
 
               {pret && mZone !== null && blocZone !== null && poigneeBloc !== null && (
                 <mZone.CoucheBloc
@@ -1993,21 +1992,22 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                     demarrerTrace(zoneChoisie.zone.id);
                   }}
                   surRenoncer={abandonnerTrace}
-                  typeSerre={typeDeSerrePourZone(zoneChoisie.zone.typeAbri)}
                   surSerre={() => {
                     if (zoneChoisie.affiche === null) placerSerre(zoneChoisie.zone.id, null);
                     else remplacerParSerre(zoneChoisie.zone.id);
                   }}
-                  dessin={dessinZone}
                   passePied={passePied}
                   surPassePied={setPassePied}
                   surDessiner={() => {
                     dessinerDepuisPlanches(zoneChoisie.zone.id);
                   }}
                   orientation={blocZone === null ? null : blocZone.repere.orientationDeg}
-                  surOrientation={(cap) => {
-                    orienterBloc(zoneChoisie.zone.id, cap);
+                  surOrientation={(m) => {
+                    orienterBloc(zoneChoisie.zone.id, m);
                   }}
+                  bandes={bandes}
+                  emplacements={lusS}
+                  surRanger={poserRangement}
                   surSommet={(index, point) => {
                     const contour = zoneChoisie.affiche;
                     if (contour !== null) majContour(zoneChoisie.zone.id, deplacerSommet(contour, index, point));

@@ -15,6 +15,9 @@
 import { coinsEmprise, depuisRepereZone, repereZone, versRepereZone, type RepereZone } from '@planif/core/placement';
 import type { BatimentPlan, CheminPlan, CleFamille, LigneEmplacementPlan, LigneZonePlan, Plan, PointPlan, SemainePlan } from '../plan/calculs.ts';
 import { COULEUR_ESTOMPEE, COULEURS, FAMILLES } from '../../ui/jetons.ts';
+import { bandesDesSerres, type BandeScene } from './bandes-scene.ts';
+
+export type { BandeScene };
 import { rangerDansZone, type Conteneur, type RectZone, type Taille } from './disposition.ts';
 
 /** Point du repère de la scène (x, z), en mètres. */
@@ -103,6 +106,8 @@ export interface Scene {
   readonly batiments: readonly BatimentScene[];
   /** T61 : chemins posés au sol, en bandes plates ; versScene le rend toujours (vide sans chemin). */
   readonly chemins?: readonly CheminScene[];
+  /** T86 : les bandes des serres qui abritent une zone à sous-zones ; absent : aucune. */
+  readonly bandes?: readonly BandeScene[];
 }
 
 /** T61 : une bande d'un chemin, rectangle de la famille des bâtiments (longueur selon z local, angle = −cap). */
@@ -125,7 +130,7 @@ export interface CheminScene {
 /** T61 : une étiquette à la demande (nom d'un chemin ou d'un bâtiment), en repère de scène. */
 export interface EtiquetteScene {
   readonly id: string;
-  readonly sorte: 'chemin' | 'batiment';
+  readonly sorte: 'chemin' | 'batiment' | 'bande';
   readonly nom: string;
   readonly x: number;
   readonly z: number;
@@ -231,7 +236,7 @@ function versCheminScene(c: CheminPlan): CheminScene {
  * T61 : étiquettes à la demande : les chemins nommés (au milieu de leur plus long segment, le
  * premier à égalité), puis les bâtiments (à leur centre), dans l'ordre de la scène ; un nom blanc n'en a pas.
  */
-export function etiquettesScene(scene: Pick<Scene, 'chemins' | 'batiments'>): EtiquetteScene[] {
+export function etiquettesScene(scene: Pick<Scene, 'chemins' | 'batiments' | 'bandes'>): EtiquetteScene[] {
   const r: EtiquetteScene[] = [];
   for (const c of scene.chemins ?? []) {
     const nom = c.nom?.trim() ?? '';
@@ -239,6 +244,8 @@ export function etiquettesScene(scene: Pick<Scene, 'chemins' | 'batiments'>): Et
     if (nom !== '' && s !== undefined) r.push({ id: c.id, sorte: 'chemin', nom, x: s.cx, z: s.cz });
   }
   for (const b of scene.batiments) if (b.nom.trim() !== '') r.push({ id: b.id, sorte: 'batiment', nom: b.nom.trim(), x: b.x, z: b.z });
+  // T86 : le nom de chaque bande, à son centre.
+  for (const b of scene.bandes ?? []) if (b.nom.trim() !== '') r.push({ id: b.id, sorte: 'bande', nom: b.nom.trim(), x: b.x, z: b.z });
   return r;
 }
 
@@ -578,7 +585,9 @@ export function versScene(plan: Plan, semaine: number): Scene {
     const v = volumesPar.get(l.id);
     if (v !== undefined) volumes.push(v);
   }
-  return { semaine, libelleSemaine, socles: sortieSocles, volumes, batiments, chemins };
+  // T86 : une bande par sous-zone directe d'une zone abritée par une serre (même sans planche).
+  const bandes = bandesDesSerres(batimentDeZone, plan.sousZones ?? []);
+  return { semaine, libelleSemaine, socles: sortieSocles, volumes, batiments, chemins, ...(bandes.length === 0 ? {} : { bandes }) };
 }
 
 // ── Filtres (T27b) ───────────────────────────────────────────────────────────────────────────

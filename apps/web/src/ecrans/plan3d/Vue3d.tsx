@@ -27,7 +27,7 @@ import type { DateCalendaire } from '@planif/core';
 import type { Plan } from '../plan/calculs.ts';
 import { COULEURS, COULEURS_SERRES_3D, FAMILLES, type CleFamille } from '../../ui/jetons.ts';
 import { boiteDe, cadrage, demarrerVol, empriseDe, meilleureVueDeFerme, poseAu, pointsDeFerme, type CibleVol, type Point3, type Pose, type Vol } from './cadrage.ts';
-import { empreinteDe, geometrieArceau, geometrieBache, geometrieBout, geometrieMurs, geometriePlanche, geometrieSol, geometrieToit } from './formes.ts';
+import { empreinteDe, geometrieArceau, geometrieBache, geometrieBout, geometrieMurs, geometriePlanche, geometrieSol, geometrieToit, limitesDeBandes } from './formes.ts';
 import { boiteSousRayon, type BoiteZone } from './pointage.ts';
 import {
   appliquerFiltres,
@@ -244,10 +244,14 @@ function Rendu({ surImage }: { readonly surImage: (etat: RootState) => void }) {
 
 const temporaire = new Object3D();
 
-/** Le sol de toutes les zones : une seule géométrie, posée une fois (un contour reste un contour, une serre son rectangle tourné). */
+/**
+ * Le sol de toutes les zones : une seule géométrie, posée une fois (un contour reste un contour, une serre son rectangle tourné).
+ * T86 : les limites entre les bandes d'une serre y sont des traits clairs posés au sol (couleurs par sommet), dans le même appel de dessin.
+ */
 function Sol({ scene }: { readonly scene: Scene }) {
   const invalider = useThree((s) => s.invalidate);
-  const geometrie = useMemo(() => geometrieSol(scene.socles.map(empreinteDe), EPAISSEUR_SOCLE), [scene.socles]);
+  const geometrie = useMemo(() => geometrieSol(scene.socles.map(empreinteDe), EPAISSEUR_SOCLE, limitesDeBandes(scene.bandes ?? [])), [scene.socles, scene.bandes]);
+  const traits = geometrie.hasAttribute('color');
   useLayoutEffect(() => {
     invalider();
     return () => {
@@ -255,8 +259,8 @@ function Sol({ scene }: { readonly scene: Scene }) {
     };
   }, [geometrie, invalider]);
   return (
-    <mesh geometry={geometrie} frustumCulled={false}>
-      <meshLambertMaterial color={COULEURS.secondaire} side={DoubleSide} />
+    <mesh key={traits ? 'traits' : 'uni'} geometry={geometrie} frustumCulled={false}>
+      <meshLambertMaterial color={traits ? COULEURS.surface : COULEURS.secondaire} vertexColors={traits} side={DoubleSide} />
     </mesh>
   );
 }

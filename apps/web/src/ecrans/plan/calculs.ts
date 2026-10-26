@@ -111,6 +111,13 @@ export interface LigneZonePlan {
   readonly contour?: readonly PointPlan[] | null;
 }
 
+/** T86 : une zone qui a une zone parente, avec celle-ci : la 3D en fait les bandes d'une serre, même sans planche. */
+export interface SousZonePlan {
+  readonly id: string;
+  readonly nom: string;
+  readonly parenteId: string;
+}
+
 /** Bâtiment non supprimé de la ferme (T28a), recopié de la base sans calcul (T28c). */
 export interface BatimentPlan {
   readonly id: string;
@@ -155,6 +162,8 @@ export interface Plan {
   readonly batiments?: readonly BatimentPlan[];
   /** T61 : chemins non supprimés (nom, sans nom en dernier, puis id) ; absent = aucun. */
   readonly chemins?: readonly CheminPlan[];
+  /** T86 : zones non supprimées qui ont une zone parente (nom, puis id) ; absent = aucune. */
+  readonly sousZones?: readonly SousZonePlan[];
 }
 
 /** T61 : un chemin, ligne ouverte dans le repère de la ferme. */
@@ -622,7 +631,22 @@ export function construirePlan(donnees: DonneesPlan, options: OptionsPlan): Plan
     return points === null || typeof largeurM !== 'number' ? [] : [{ id: texte(c.id), nom: texteOuNul(c.nom), points, largeurM }];
   });
   chemins.sort((a, b) => (a.nom === null) !== (b.nom === null) ? (a.nom === null ? 1 : -1) : comparerTexte(a.nom ?? '', a.id, b.nom ?? '', b.id));
-  return { saison, semaines, semaineCourante, lignes, ...(batiments.length === 0 ? {} : { batiments }), ...(chemins.length === 0 ? {} : { chemins }) };
+  // T86 : les sous-zones, recopiées de même (la 3D dessine une bande par sous-zone d'une serre, qu'elle ait des planches ou non).
+  const sousZones = donnees.zone
+    .flatMap((z): SousZonePlan[] => {
+      const parenteId = texteOuNul(z.zone_parente_id);
+      return z.supprime_le == null && parenteId !== null ? [{ id: texte(z.id), nom: texte(z.nom), parenteId }] : [];
+    })
+    .sort((a, b) => comparerTexte(a.nom, a.id, b.nom, b.id));
+  return {
+    saison,
+    semaines,
+    semaineCourante,
+    lignes,
+    ...(batiments.length === 0 ? {} : { batiments }),
+    ...(chemins.length === 0 ? {} : { chemins }),
+    ...(sousZones.length === 0 ? {} : { sousZones }),
+  };
 }
 
 // ── Lecture par la porte ─────────────────────────────────────────────────────────────────────

@@ -181,6 +181,8 @@ async function amorcerPlacement(parametres: URLSearchParams): Promise<Amorcage> 
     ...(parametres.get('tunnel') === '1' ? { zoneTunnel: true } : {}),
     // T85 : `planches=1` : « Tunnel 1 » a trois planches non placées (« Dessiner depuis les planches »).
     ...(parametres.get('planches') === '1' ? { planchesTunnel: true } : {}),
+    // T86 : `tri=1` : « Tri-tunnel » (zone tunnel) avec ses sous-zones « Manon 1 » à « Manon 3 » et leurs planches non placées.
+    ...(parametres.get('tri') === '1' ? { triTunnel: true } : {}),
   };
   const ferme = fermePlacement(options);
   await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermePlacement(base, options));

@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-26 — T86 : une serre à plusieurs tunnels, ses zones dessinées dedans
+
+- **Fait** : une serre qui abrite une zone à sous-zones (Tri-tunnel avec Manon 1, 2, 3) se découpe en bandes de même largeur, de bout en bout, dans l'ordre des noms ; chaque bande porte son nom dans l'éditeur, le plan et la 3D. « Ranger les planches dans les bandes » range chaque sous-zone dans la sienne (règle de T85), en un seul enregistrement annulable ; un dépassement est signalé sans bloquer.
+- **Décidé** : les bandes sont calculées, rien de neuf en base (ticket non critique). Une planche d'une sous-zone qui avait un contour tracé à la main se montre dans le repère de la serre dès que les bandes apparaissent, avant même le rangement. Un seul niveau de sous-zones. Budget de l'éditeur tenu sans relèvement (12 octets de marge).
+- **Bloquant** : bandes de largeurs différentes et zones qui ne traversent pas toute la serre : il faut un exemple chiffré d'une grande serre de Théophane (Q54).
+
 ## 2026-10-26 — T85 : dessiner une parcelle d'un tap à partir de ses planches
 
 - **Fait** : « Dessiner depuis les planches » dessine le rectangle d'une zone non abritée à partir de ses planches (ordre naturel des codes, passe-pied de 45 cm modifiable, 0,80 m pour une planche sans largeur), puis on glisse et tourne le bloc entier, planches comprises. Un seul « Enregistrer », « Annuler » remet tout. Demande de Théophane du 26 octobre.

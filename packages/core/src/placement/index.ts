@@ -70,3 +70,5 @@ export {
   type PlancheDeParcelle,
   type PlancheRangee,
 } from './parcelle.ts';
+// T86 : les sous-zones d'une serre en bandes, et le rangement de leurs planches.
+export { bandesDeSerre, rangerDansBande, type BandeSerre, type RangementDeBande, type SousZoneDeSerre } from './bandes.ts';

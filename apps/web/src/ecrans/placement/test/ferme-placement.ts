@@ -36,6 +36,16 @@ export const ZONE_CHAMP = id(0x11);
 export const PLANCHE = id(0x20);
 /** T85 : les trois planches de « Tunnel 1 » (option `planchesTunnel`). */
 export const PLANCHES_TUNNEL = [id(0x21), id(0x22), id(0x23)] as const;
+/**
+ * T86 : « Tri-tunnel » (option `triTunnel`) : zone de type tunnel abritée par la serre TRI_TUNNEL (40 × 28,8 × 4 m, centre (200 ; 60), 0°),
+ * avec trois sous-zones « Manon 1 » à « Manon 3 » (MANON). Planches de 38 × 0,75 m, non placées : MANON_PLANCHES[0] = 2 planches
+ * (M1-1, M1-2), [1] = 4 planches (M2-1 à M2-4), [2] = 1 planche (M3-1) ; DIRECTE = « T-1 », rattachée à la zone Tri-tunnel elle-même.
+ */
+export const ZONE_TRI = id(0x50);
+export const TRI_TUNNEL = id(0x54);
+export const MANON = [id(0x51), id(0x52), id(0x53)] as const;
+export const MANON_PLANCHES = [[id(0x60), id(0x61)], [id(0x62), id(0x63), id(0x64), id(0x65)], [id(0x66)]] as const;
+export const DIRECTE = id(0x67);
 export const SAISON = id(0x40);
 export const HANGAR = id(0x30);
 export const SERRE = id(0x31);
@@ -82,6 +92,11 @@ export interface OptionsFermePlacement {
    * propose « Dessiner depuis les planches ». Défaut : faux (la zone n'a aucun emplacement : les tests de T28d et de T81 ne changent pas).
    */
   readonly planchesTunnel?: boolean;
+  /**
+   * T86 : « Tri-tunnel » et ses trois sous-zones « Manon 1 » à « Manon 3 », ses planches et sa serre (avec `origine`, qui seule place
+   * un bâtiment ; sans, la zone et les planches existent mais rien n'est posé). Défaut : faux (les tests précédents ne changent pas).
+   */
+  readonly triTunnel?: boolean;
 }
 
 export interface FermePlacement {
@@ -167,8 +182,39 @@ export function fermePlacement(options: OptionsFermePlacement = {}): FermePlacem
       });
     });
   }
+  if (options.triTunnel === true) {
+    ajouter('zone', { id: ZONE_TRI, ferme_id: FERME, nom: 'Tri-tunnel', zone_parente_id: null, type_abri: 'tunnel', surface_m2: 1152, contour: null, ...horo });
+    MANON.forEach((zid, i) => {
+      ajouter('zone', { id: zid, ferme_id: FERME, nom: `Manon ${String(i + 1)}`, zone_parente_id: ZONE_TRI, type_abri: 'tunnel', surface_m2: 384, contour: null, ...horo });
+    });
+    const planche = (pid: string, zoneId: string, code: string) => {
+      ajouter('emplacement', {
+        id: pid,
+        ferme_id: FERME,
+        zone_id: zoneId,
+        code,
+        sorte: 'planche',
+        longueur_m: 38,
+        largeur_m: 0.75,
+        nombre_places: null,
+        actif_du: '2020-01-01',
+        actif_au: null,
+        remplace: '[]',
+        placement_x_m: null,
+        placement_y_m: null,
+        orientation_deg: null,
+        ...horo,
+      });
+    };
+    MANON_PLANCHES.forEach((ids, i) => {
+      ids.forEach((pid, k) => {
+        planche(pid, MANON[i] ?? '', `M${String(i + 1)}-${String(k + 1)}`);
+      });
+    });
+    planche(DIRECTE, ZONE_TRI, 'T-1');
+  }
   if (origine) {
-    const batiment = (bid: string, nom: string, type: string, l: [number, number, number], centre: [number, number]) => {
+    const batiment = (bid: string, nom: string, type: string, l: [number, number, number], centre: [number, number], zoneId: string | null = null) => {
       ajouter('batiment', {
         id: bid,
         ferme_id: FERME,
@@ -180,12 +226,15 @@ export function fermePlacement(options: OptionsFermePlacement = {}): FermePlacem
         centre_x_m: centre[0],
         centre_y_m: centre[1],
         orientation_deg: 0,
-        zone_id: null,
+        zone_id: zoneId,
         ...horo,
       });
     };
     batiment(HANGAR, 'Hangar', 'hangar', [20, 12, 6], [-10, 15]);
     batiment(SERRE, 'Serre M1', 'serre_tunnel', [30, 8, 3.5], [40, 40]);
+    if (options.triTunnel === true) {
+      batiment(TRI_TUNNEL, 'Tri-tunnel', 'serre_tunnel', [40, 28.8, 4], [200, 60], ZONE_TRI);
+    }
   }
   const total = Object.values(lignes).reduce((n, l) => n + l.length, 0);
   return { utilisateurId: UTILISATEUR, fermeId: FERME, lignes, total };
