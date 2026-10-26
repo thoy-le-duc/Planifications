@@ -165,6 +165,17 @@ export const requeteEmplacementsPlaces = (fermeId: string): RequeteSurveillee<Em
   },
 });
 
+/** T85 : un emplacement en service (non supprimé, `actif_au` nul) dont la longueur est connue, placé ou non. */
+export interface EmplacementEnService {
+  readonly id: string;
+  readonly zoneId: string;
+  readonly code: string;
+  readonly longueurM: number;
+  /** Inconnue ou nulle : 0,80 m pour le rangement. */
+  readonly largeurM: number | null;
+  readonly placement: { readonly x: number; readonly y: number; readonly orientation_deg: number } | null;
+}
+
 /** T57 : une vanne, sa position sur le plan (repère de la ferme) ou nulle, et les planches qu'elle arrose ce jour-là. */
 export interface Vanne {
   readonly id: string;

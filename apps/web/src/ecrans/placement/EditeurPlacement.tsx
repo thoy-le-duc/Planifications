@@ -12,11 +12,11 @@
  * carte ; deux doigts zooment, et tournent l'élément choisi ; barre du bas « Tourner ±5° ». Sans
  * réseau, le fond est un quadrillage de 10 m et tout le reste marche.
  */
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactElement, type ReactNode, type RefObject } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactElement, type ReactNode } from 'react';
 import { creerGenerateurId, type GenerateurId } from '@planif/core/identifiants';
 import type { ChangementPlacement, PorteDonnees } from '@planif/sync';
 import './placement.css';
-import { repereZone, TYPES_BATIMENT, versGeographique, versLocal, type TypeBatiment } from './coeur.ts';
+import { repereZone, versGeographique, versLocal, type RepereZone, type TypeBatiment } from './coeur.ts';
 import { changementsDuBrouillon, contourChange, ECRITURES_MAX_PAR_LOT } from './brouillon.ts';
 import type { PropositionAdresse } from './adresse.ts';
 import { Champ, garderLeFocus, Modale } from './composants.tsx';
@@ -25,7 +25,8 @@ import { BandeauEtapes, etapeCourante, MESSAGES_ETAPES, type NumeroEtape } from 
 import { TEXTE_INVITATION } from '../../demo/invitation.ts';
 import { empriseDeContours, vueSurEmprise, type Emprise } from './sites.ts';
 import { dimensionsParDefaut, typeDeSerrePourZone } from './serre-zone.ts';
-import { deplacerSommet, insererMilieu, poserPoint, replacerPlanches, retirerSommet, toucheSommet, TOLERANCE_FERMETURE_PX, verifierContour } from './contours.ts';
+import { deplacerSommet, insererMilieu, poserPoint, replacerEntreReperes, retirerSommet, toucheSommet, TOLERANCE_FERMETURE_PX, verifierContour } from './contours.ts';
+import type { MouvementBloc } from './bloc.ts';
 import {
   lireTout,
   requeteBatiments,
@@ -40,6 +41,7 @@ import {
   TYPES,
   type Batiment,
   type Chemin,
+  type EmplacementEnService,
   type EmplacementPlace,
   type FermeLue,
   type Planche,
@@ -61,6 +63,7 @@ import {
   type RectanglePlace,
 } from './gestes.ts';
 import type * as ModuleChemins from './chemins.tsx';
+import type * as ModuleZone from './zone-ecran.tsx';
 import type { RectangleEnglobant } from '@planif/core/placement';
 import { DELAI_RELANCE_TUILE_MS, depuisEcran, ESSAIS_TUILE_MAX, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_DEPART_SANS_POSITION, ZOOM_INITIAL, ZOOM_MIN_VUE, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
 
@@ -80,6 +83,9 @@ export const MESSAGES_CONTOURS = {
   planchesSuivent: 'Les planches de la zone suivront la serre.',
   brouillonAbandonne: 'Le brouillon en cours a été abandonné : la ferme active a changé.',
 } as const;
+
+/** Ce que le morceau « zone » (./zone-ecran.tsx) emprunte à l'éditeur. */
+const OUTILS: ModuleZone.Outils = { Champ, Modale, verifierContour, types: TYPES, zoneAbritee: MESSAGES_CONTOURS.zoneAbritee, fiche: MESSAGES_ETAPES.fiche };
 
 const MESSAGE_SOMMETS_MIN = `Un contour garde ${MESSAGES_CONTOURS.sommetsMin}.`;
 
@@ -129,12 +135,16 @@ const TAILLE_SOMMET_SOURIS_PX = 24;
 const TAILLE_SOMMET_DOIGT_PX = 44;
 /** Appui long du doigt sur un côté de contour : ajoute un sommet. */
 const DELAI_APPUI_LONG_MS = 500;
+/** Rayon d'une vanne à toucher, en pixels (marqueur de 44 px). */
+const TAILLE_VANNE_PX = 22;
 /** Pas des boutons « Tourner −5° / +5° » (degrés). */
 const PAS_ROTATION_DEG = 5;
 const CARREAU_M = 10;
 /** Position de repli d'une ferme sans position : le centre de la France. */
 const POSITION_DE_REPLI: Position = { latitude: 46.6, longitude: 2.4 };
 const TAILLE_PAR_DEFAUT = { w: 1280, h: 800 } as const;
+/** T85 : passe-pied de départ de « Dessiner depuis les planches » (cm). */
+const PASSE_PIED_DEPART_CM = '45';
 
 const LIBELLE_TYPE: Readonly<Record<TypeBatiment, string>> = Object.fromEntries(TYPES.map((t) => [t.valeur, t.libelle])) as Record<TypeBatiment, string>;
 
@@ -149,7 +159,7 @@ interface Objet {
 }
 
 /** Une zone, avec son contour tel qu'affiché et ce qu'en dit le cœur. */
-interface ZoneAffichee {
+export interface ZoneAffichee {
   readonly zone: Zone;
   readonly abritee: boolean;
   /** Contour affiché : celui du brouillon, sinon celui de la base. */
@@ -193,7 +203,21 @@ type Geste =
       readonly fige: boolean;
       demarre: boolean;
     }
-  | { readonly type: 'milieu'; readonly zoneId: string; readonly index: number; readonly pixel0: Point; readonly tactile: boolean; demarre: boolean };
+  | { readonly type: 'milieu'; readonly zoneId: string; readonly index: number; readonly pixel0: Point; readonly tactile: boolean; demarre: boolean }
+  | {
+      /** T85, bloc d'une zone : glisser son intérieur la déplace avec ses planches, sa poignée la tourne autour de son centre. */
+      readonly type: 'bloc';
+      readonly mode: 'deplacer' | 'pivoter';
+      readonly zoneId: string;
+      readonly contour0: readonly Point[];
+      readonly calage0: RepereZone;
+      readonly centre0: Point;
+      readonly orientation0: number;
+      readonly pixel0: Point;
+      readonly depart: Point;
+      readonly vue: VueCarte;
+      demarre: boolean;
+    };
 
 /** Le geste au doigt en cours (attribut data-geste). */
 type GesteDoigt = 'aucun' | 'carte' | 'element' | 'sommet' | 'deux-doigts';
@@ -214,7 +238,7 @@ interface DeuxDoigts {
 /** Angle cumulé à deux doigts au-delà duquel l'élément choisi se met à tourner (relecture T28k). */
 const SEUIL_ROTATION_DOIGTS_DEG = 8;
 
-interface Trace {
+export interface Trace {
   readonly zoneId: string;
   readonly sommets: readonly Point[];
 }
@@ -225,7 +249,7 @@ type Confirmation =
   | { readonly type: 'remplacer'; readonly zoneId: string; readonly englobant: RectangleEnglobant | null; readonly avis: string | null; readonly converties: readonly (readonly [string, Planche])[] }
   | { readonly type: 'fermer' };
 
-interface NouveauBatiment {
+export interface NouveauBatiment {
   readonly nom: string;
   readonly type: TypeBatiment;
   readonly longueurM: number;
@@ -318,7 +342,7 @@ function ecartAngle(degres: number): number {
   return e === -180 ? 180 : e;
 }
 
-function capturer(e: PointerEvent<HTMLElement>): void {
+function capturer(e: PointerEvent): void {
   try {
     e.currentTarget.setPointerCapture(e.pointerId);
   } catch {
@@ -395,6 +419,11 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [zones, setZones] = useState<readonly Zone[] | null>(null);
   const [lusP, setLusP] = useState<readonly Planche[] | null>(null);
   const [lusE, setLusE] = useState<readonly EmplacementPlace[] | null>(null);
+  // T85 : les emplacements en service (placés ou non), pour « Dessiner depuis les planches ».
+  const [lusS, setLusS] = useState<readonly EmplacementEnService[] | null>(null);
+  // Le morceau de T85 (chargé à part, en parallèle des lectures) : l'éditeur n'est prêt, en édition, qu'une fois lui et ses lectures arrivés.
+  const [mZone, setMZone] = useState<typeof ModuleZone | null>(null);
+  const [echecZone, setEchecZone] = useState(false);
   const [jour] = useState(() => new Date().toLocaleDateString('sv'));
   const [lusV, setLusV] = useState<readonly Vanne[]>([]);
   // T61 : chemins posés ; le tracé d'un nouveau (./chemins.tsx) se charge au premier « Tracer un chemin ».
@@ -407,12 +436,27 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   useEffect(() => porte.surveiller(requeteZones(fermeId), (l) => { setZones(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requetePlanches(fermeId), (l) => { setLusP(sansNull(l)); }), [porte, fermeId]);
   useEffect(() => porte.surveiller(requeteEmplacementsPlaces(fermeId), (l) => { setLusE(sansNull(l)); }), [porte, fermeId]);
+  useEffect(() => {
+    let vivant = true;
+    import('./zone-ecran.tsx').then(
+      (m) => {
+        if (vivant) setMZone(m);
+      },
+      () => {
+        if (vivant) setEchecZone(true);
+      },
+    );
+    return () => {
+      vivant = false;
+    };
+  }, []);
+  useEffect(() => (mZone === null ? undefined : porte.surveiller(mZone.requeteEmplacementsEnService(fermeId), (l) => { setLusS(sansNull(l)); })), [mZone, porte, fermeId]);
   useEffect(() => porte.surveiller(requeteVannes(fermeId, jour), (l) => { setLusV(sansNull(l)); }), [porte, fermeId, jour]);
   useEffect(() => porte.surveiller(requeteChemins(fermeId), (l) => { setLusC(sansNull(l)); }), [porte, fermeId]);
   const cheminEnCours = chemin !== null && mChemin !== null ? { b: chemin, m: mChemin } : null;
 
-  const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null;
   const gerant = roles?.includes('gerant') === true;
+  const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null && (echecZone || (mZone !== null && lusS !== null));
   const mode = !pret ? undefined : gerant ? 'edition' : 'lecture';
   const edition = mode === 'edition';
 
@@ -421,6 +465,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [brouillonP, setBrouillonP] = useState<ReadonlyMap<string, Planche>>(() => new Map());
   const [brouillonZ, setBrouillonZ] = useState<ReadonlyMap<string, readonly Point[]>>(() => new Map());
   const [brouillonV, setBrouillonV] = useState<ReadonlyMap<string, Point>>(() => new Map());
+  // T85 : le repère où les planches d'une zone gardent leur placement au brouillon, quand ce n'est plus celui de son contour lu.
+  const [calages, setCalages] = useState<ReadonlyMap<string, RepereZone>>(() => new Map());
+  const [passePied, setPassePied] = useState(PASSE_PIED_DEPART_CM);
   const [selection, setSelection] = useState<string | null>(null);
   const [zoneSel, setZoneSel] = useState<string | null>(null);
   const [trace, setTrace] = useState<Trace | null>(null);
@@ -582,23 +629,26 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       const abri = batimentsAff.find((b) => b.zoneId === i.zone.id);
       const abritee = abri === undefined ? null : { centre: abri.centre, orientationDeg: abri.orientationDeg };
       const affichage = repereZone({ contour: abri === undefined ? i.effectif : null }, abritee);
-      m.set(i.zone.id, { affichage, base: abri === undefined ? repereZone({ contour: i.zone.contour }) : affichage });
+      m.set(i.zone.id, { affichage, base: abri === undefined ? (calages.get(i.zone.id) ?? repereZone({ contour: i.zone.contour })) : affichage });
     }
     return m;
-  }, [zonesInfo, batimentsAff]);
+  }, [zonesInfo, batimentsAff, calages]);
 
-  // Un contour changé ne déplace pas les planches de la zone sur le terrain (décision du chef).
-  const planchesAff = useMemo(
-    () =>
-      (lusP ?? []).map((p) => {
-        const info = zonesInfo.get(p.zoneId);
-        const base = brouillonP.get(p.id) ?? p;
-        if (info === undefined || info.abritee || !info.change || info.zone.contour === null || info.effectif === null) return base;
-        const [replacee] = replacerPlanches(info.zone.contour, info.effectif, [{ id: p.id, placement: base.placement }]);
-        return replacee === undefined ? base : { ...base, placement: replacee.placement };
-      }),
-    [lusP, brouillonP, zonesInfo],
-  );
+  // Un contour changé ne déplace pas les planches de la zone sur le terrain (décision du chef) ; un bloc déplacé ou tourné
+  // (T85) les emmène : leur placement est gardé dans le repère `base`, qui a suivi le bloc. Celles que le brouillon vient de ranger
+  // (parcelle dessinée depuis les planches) ne sont pas encore dans la base.
+  const planchesAff = useMemo(() => {
+    const lues = lusP ?? [];
+    const connues = new Set(lues.map((p) => p.id));
+    return [...lues, ...[...brouillonP.values()].filter((p) => !connues.has(p.id))].map((p) => {
+      const info = zonesInfo.get(p.zoneId);
+      const base = brouillonP.get(p.id) ?? p;
+      const r = reperes.get(p.zoneId);
+      if (info === undefined || info.abritee || r?.base == null || r.affichage == null || !(info.change || calages.has(p.zoneId))) return base;
+      const [replacee] = replacerEntreReperes(r.base, r.affichage, [{ id: p.id, placement: base.placement }]);
+      return replacee === undefined ? base : { ...base, placement: replacee.placement };
+    });
+  }, [lusP, brouillonP, zonesInfo, reperes, calages]);
 
   const elements = useMemo(() => {
     const liste: Objet[] = batimentsAff.map((b) => ({
@@ -653,6 +703,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             brouillonPlanches: brouillonP,
             brouillonZones: brouillonZ,
             zonesAbritees: new Set([...zonesInfo.values()].filter((i) => i.abritee).map((i) => i.zone.id)),
+            calages,
           }).concat(
             // T57 : les vannes déplacées (repère de la ferme, au millimètre).
             [...brouillonV].flatMap(([id, p]): ChangementPlacement[] => {
@@ -663,7 +714,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             chemin !== null && mChemin !== null ? mChemin.changements(chemin) : [],
           )
         : [],
-    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, brouillonV, lusV, chemin, mChemin],
+    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, calages, brouillonV, lusV, chemin, mChemin],
   );
   const modifie = changements.length > 0;
   const contoursModifies = [...zonesInfo.values()].filter((i) => i.change);
@@ -722,7 +773,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       majBatiment(e.id, { centre: r.centre, orientationDeg: r.orientationDeg, longueurM: r.longueurM, largeurM: r.largeurM });
       return;
     }
-    const lue = lusP?.find((p) => p.id === e.id);
+    const lue = lusP?.find((p) => p.id === e.id) ?? brouillonP.get(e.id);
     if (lue === undefined || e.repere === null) return;
     const placement = versPlacementPlanche(e.repere, r);
     setBrouillonP((prev) => new Map(prev).set(e.id, { ...(prev.get(e.id) ?? lue), placement }));
@@ -733,6 +784,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setBrouillonP(new Map());
     setBrouillonZ(new Map());
     setBrouillonV(new Map());
+    setCalages(new Map());
     setTrace(null);
     setChemin(null);
     setMessageContour(null);
@@ -782,6 +834,64 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setTrace(null);
     setSommetSel(0);
     focusSommet.current = 0;
+  }
+
+  // ── Bloc d'une zone (T85) ─────────────────────────────────────────────────────────────────────
+  /** Le contour et le repère de ses planches bougent ensemble, à partir de l'état `contour0` / `calage0` donné. */
+  function bougerBloc(zoneId: string, contour0: readonly Point[], calage0: RepereZone, mouvement: MouvementBloc): void {
+    const r = mZone?.mouvoirBloc(contour0, calage0, mouvement);
+    if (r == null) return;
+    setCalages((prev) => new Map(prev).set(zoneId, r.calage));
+    majContour(zoneId, r.contour);
+  }
+
+  /** Le champ « Orientation (°) » : le bloc tourne autour de son centre jusqu'à ce cap. */
+  function orienterBloc(zoneId: string, cap: number): void {
+    const contour = zonesInfo.get(zoneId)?.affiche;
+    const r = reperes.get(zoneId);
+    if (contour == null || r?.base == null || r.affichage == null) return;
+    bougerBloc(zoneId, contour, r.base, { dx: 0, dy: 0, rotationDeg: ecartAngle(cap - r.affichage.orientationDeg) });
+  }
+
+  function commencerBloc(e: PointerEvent, zoneId: string, mode: 'deplacer' | 'pivoter'): void {
+    e.stopPropagation();
+    const contour = zonesInfo.get(zoneId)?.affiche;
+    const r = reperes.get(zoneId);
+    if (!edition || (e.pointerType === 'mouse' && e.button !== 0) || contour == null || r?.base == null || r.affichage == null) return;
+    const pixel0 = pixelDe(e);
+    geste.current = {
+      type: 'bloc',
+      mode,
+      zoneId,
+      contour0: contour,
+      calage0: r.base,
+      centre0: r.affichage.centre,
+      orientation0: r.affichage.orientationDeg,
+      pixel0,
+      depart: depuisEcran(vue, pixel0),
+      vue,
+      demarre: mode === 'pivoter',
+    };
+    capturer(e);
+  }
+
+  /** « Dessiner depuis les planches » : le contour et le placement de chaque emplacement de la zone vont au brouillon. */
+  function dessinerDepuisPlanches(zoneId: string): void {
+    if (mZone === null || lusS === null) return;
+    const r = mZone.preparerParcelle(zoneId, lusS.filter((x) => x.zoneId === zoneId), Number(passePied), { x: vue.centre.x, y: vue.centre.y });
+    if (!r.ok) {
+      setMessageContour(r.message);
+      return;
+    }
+    setBrouillonZ((prev) => new Map(prev).set(zoneId, r.contour));
+    setCalages((prev) => new Map(prev).set(zoneId, r.calage));
+    setBrouillonP((prev) => {
+      const suite = new Map(prev);
+      for (const planche of r.planches) suite.set(planche.id, planche);
+      return suite;
+    });
+    setMessageContour(null);
+    setSommetSel(null);
   }
 
   function retirer(zoneId: string, index: number): void {
@@ -902,7 +1012,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   async function enregistrer(): Promise<void> {
     if (!peutEnregistrer) return;
-    const [ecritsB, ecritsP, ecritsZ, ecritsV, ecritC] = [brouillonB, brouillonP, brouillonZ, brouillonV, chemin];
+    const [ecritsB, ecritsP, ecritsZ, ecritsV, ecritC, ecritsCal] = [brouillonB, brouillonP, brouillonZ, brouillonV, chemin, calages];
     const entree = await ecrire(changements);
     if (entree === null) return;
     // Seul ce qui vient d'être écrit sort du brouillon : un geste fait pendant l'écriture reste.
@@ -915,6 +1025,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setBrouillonP((prev) => sans(prev, ecritsP));
     setBrouillonZ((prev) => sans(prev, ecritsZ));
     setBrouillonV((prev) => sans(prev, ecritsV));
+    setCalages((prev) => sans(prev, ecritsCal));
     setChemin((c) => (c === ecritC ? null : c));
     setDernier(entree);
   }
@@ -1083,6 +1194,15 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       if (sommet !== undefined) majContour(g.zoneId, deplacerSommet(g.contour0, g.index, { x: arrondi(sommet.x + p.x - g.depart.x), y: arrondi(sommet.y + p.y - g.depart.y) }));
       return;
     }
+    if (g.type === 'bloc') {
+      if (!g.demarre) {
+        if (Math.hypot(pixel.x - g.pixel0.x, pixel.y - g.pixel0.y) < SEUIL_GLISSEMENT_PX) return;
+        g.demarre = true;
+      }
+      if (tactile) setGesteDoigt('element');
+      if (mZone !== null) bougerBloc(g.zoneId, g.contour0, g.calage0, mZone.mouvementDuGeste(g, depuisEcran(g.vue, pixel), e.shiftKey));
+      return;
+    }
     if (!g.demarre) {
       if (Math.hypot(pixel.x - g.pixel0.x, pixel.y - g.pixel0.y) < SEUIL_GLISSEMENT_PX) return;
       g.demarre = true;
@@ -1106,6 +1226,12 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     } else if (g.type === 'sommet') {
       // Un simple clic sur le premier sommet d'un tracé le ferme.
       if (!g.demarre && g.fige && g.index === 0) fermerTrace();
+    } else if (g.type === 'bloc') {
+      // Un simple toucher dans la zone choisit ce qui est dessous (planche, bâtiment, vanne), s'il y a quelque chose.
+      if (!g.demarre) {
+        const dessous = mZone?.elementSous(g.depart, elements, TAILLE_VANNE_PX * metresParPixel(g.vue.origine.latitude, g.vue.zoom));
+        if (dessous !== undefined) selectionner(dessous);
+      }
     } else if (g.type === 'milieu' && !g.demarre && !g.tactile) {
       clicDejaTraite.current = g.index;
       insererSurCote(g.zoneId, g.index);
@@ -1291,6 +1417,21 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const enTrace = traceZone !== null;
   /** Sommets dessinés et éditables : le tracé en cours, sinon le contour affiché de la zone choisie (gérant, zone non abritée). */
   const sommetsAff: readonly Point[] = !edition || zoneChoisie === undefined || zoneChoisie.abritee ? [] : traceZone !== null ? traceZone.sommets : (zoneChoisie.affiche ?? []);
+  // T85 : le bloc de la zone choisie (contour valide, hors tracé, pose ou chemin) se déplace par son intérieur et tourne par sa poignée.
+  const reperesZoneChoisie = zoneChoisie === undefined ? undefined : reperes.get(zoneChoisie.zone.id);
+  const blocZone =
+    edition && zoneChoisie !== undefined && !zoneChoisie.abritee && !enTrace && pose === null && cheminEnCours === null && zoneChoisie.affiche !== null && zoneChoisie.verdict?.ok !== false && reperesZoneChoisie?.base != null && reperesZoneChoisie.affichage != null
+      ? { id: zoneChoisie.zone.id, contour: zoneChoisie.affiche, repere: reperesZoneChoisie.affichage }
+      : null;
+  const poigneeBloc = blocZone === null || mZone === null ? null : mZone.poigneeDuBloc((p) => versEcran(vue, p), mpp, blocZone.contour, blocZone.repere);
+  /** « Dessiner depuis les planches » : les emplacements en service de la zone choisie, dont ceux déjà placés. */
+  const dessinZone =
+    edition && lusS !== null && zoneChoisie !== undefined && !zoneChoisie.abritee && zoneChoisie.affiche === null && typeDeSerrePourZone(zoneChoisie.zone.typeAbri) === null
+      ? (() => {
+          const siens = lusS.filter((x) => x.zoneId === zoneChoisie.zone.id);
+          return siens.length === 0 ? null : { nombre: siens.length, dejaPlaces: siens.filter((x) => x.placement !== null).length };
+        })()
+      : null;
   // Pendant une écriture, l'annulation précédente disparaît : « Annuler » dit toujours le dernier enregistrement, une fois écrit.
   const annulable = occupe ? undefined : (dernier ?? undefined);
 
@@ -1595,6 +1736,23 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               {pret && elements.batiments.map(dessiner)}
               {pret && elements.vannes.map(dessiner)}
 
+              {pret && mZone !== null && blocZone !== null && poigneeBloc !== null && (
+                <mZone.CoucheBloc
+                  zoneId={blocZone.id}
+                  largeurPx={taille.w}
+                  hauteurPx={taille.h}
+                  points={enPoints(blocZone.contour)}
+                  centre={versEcran(vue, blocZone.repere.centre)}
+                  poignee={poigneeBloc}
+                  surGlisser={(ev, id) => {
+                    commencerBloc(ev, id, 'deplacer');
+                  }}
+                  surTourner={(ev, id) => {
+                    commencerBloc(ev, id, 'pivoter');
+                  }}
+                />
+              )}
+
               {pret && zoneChoisie !== undefined && sommetsAff.length > 0 && (
                 <>
                   <svg className="pl-svg pl-svg-edition" width={taille.w} height={taille.h} aria-hidden="true">
@@ -1786,9 +1944,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 {MESSAGES_CONTOURS.tropDeChangements} ({String(changements.length)} sur {String(ECRITURES_MAX_PAR_LOT)} au plus). Abandonnez une partie des changements, puis enregistrez en plusieurs fois.
               </p>
             )}
-            {erreur !== null && (
+            {(erreur ?? (echecZone ? 'Une partie de l’éditeur n’a pas pu se charger : rechargez la page.' : null)) !== null && (
               <p role="alert" className="pl-message pl-erreur">
-                {erreur}
+                {erreur ?? 'Une partie de l’éditeur n’a pas pu se charger : rechargez la page.'}
               </p>
             )}
 
@@ -1822,7 +1980,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               {cheminEnCours !== null ? (
                 <cheminEnCours.m.PanneauChemin b={cheminEnCours.b} surChange={setChemin} />
               ) : choisi === undefined && zoneChoisie !== undefined ? (
-                <PanneauZone
+                mZone !== null && (
+                <mZone.PanneauZone
+                  outils={OUTILS}
                   info={zoneChoisie}
                   edition={edition}
                   origineSouhaitee={origine !== null && pose === null}
@@ -1838,11 +1998,22 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                     if (zoneChoisie.affiche === null) placerSerre(zoneChoisie.zone.id, null);
                     else remplacerParSerre(zoneChoisie.zone.id);
                   }}
+                  dessin={dessinZone}
+                  passePied={passePied}
+                  surPassePied={setPassePied}
+                  surDessiner={() => {
+                    dessinerDepuisPlanches(zoneChoisie.zone.id);
+                  }}
+                  orientation={blocZone === null ? null : blocZone.repere.orientationDeg}
+                  surOrientation={(cap) => {
+                    orienterBloc(zoneChoisie.zone.id, cap);
+                  }}
                   surSommet={(index, point) => {
                     const contour = zoneChoisie.affiche;
                     if (contour !== null) majContour(zoneChoisie.zone.id, deplacerSommet(contour, index, point));
                   }}
                 />
+                )
               ) : choisi === undefined ? (
                 <p className="pl-aide">
                   Touchez un bâtiment, une planche ou une zone pour la régler. Flèches : 0,1 m (Maj : 1 m) ; [ et ] : 1°.
@@ -1871,8 +2042,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
         {!surOrdinateur && barre}
 
-        {formulaire && (
-          <FormulaireBatiment
+        {formulaire && mZone !== null && (
+          <mZone.FormulaireBatiment
+            outils={OUTILS}
             surPoser={(n) => {
               setFormulaire(false);
               setPose(n);
@@ -2032,213 +2204,5 @@ function ChampsElement({ element, batiment, lecture, zones, surRectangle, surBat
         </>
       )}
     </>
-  );
-}
-
-// ── Panneau d'une zone : contour ────────────────────────────────────────────────────────────────
-
-interface ProprietesPanneauZone {
-  readonly info: ZoneAffichee;
-  readonly edition: boolean;
-  /** Le point de départ du plan est posé et aucun bâtiment n'est en cours de pose. */
-  readonly origineSouhaitee: boolean;
-  readonly trace: Trace | null;
-  readonly message: string | null;
-  readonly conteneur: RefObject<HTMLDivElement | null>;
-  readonly surTracer: () => void;
-  readonly surRenoncer: () => void;
-  /** T81 : type de serre que la zone peut recevoir (tunnel, serre) ; null : la zone se trace. */
-  readonly typeSerre: TypeBatiment | null;
-  /** « Placer la serre » (zone sans contour) ou « Remplacer par une serre » (zone avec contour). */
-  readonly surSerre: () => void;
-  readonly surSommet: (index: number, point: Point) => void;
-}
-
-function PanneauZone({ info, edition, origineSouhaitee, trace, message, conteneur, surTracer, surRenoncer, typeSerre, surSerre, surSommet }: ProprietesPanneauZone): ReactElement {
-  const idRaison = useId();
-  const contour = info.affiche;
-  const verdict = info.verdict ?? (contour === null ? null : verifierContour(contour));
-  return (
-    <>
-      <h3>{info.zone.nom}</h3>
-      {info.abritee && (
-        <p role="status" data-testid="zone-abritee" className="pl-aide">
-          Cette zone est abritée par un bâtiment : {MESSAGES_CONTOURS.zoneAbritee}, il n’y a pas de contour à tracer.
-        </p>
-      )}
-      {!info.abritee && !edition && (
-        <p className="pl-aide">{contour === null ? 'Aucun contour tracé pour cette zone.' : `Contour de ${String(contour.length)} sommets.`}</p>
-      )}
-      {!info.abritee && edition && trace === null && (contour === null || typeSerre !== null) && (
-        <>
-          <button
-            type="button"
-            className="pl-bouton"
-            data-action="tracer"
-            disabled={!origineSouhaitee}
-            aria-describedby={origineSouhaitee ? undefined : idRaison}
-            onClick={typeSerre === null ? surTracer : surSerre}
-          >
-            {typeSerre === null ? 'Tracer le contour' : contour === null ? 'Placer la serre' : 'Remplacer par une serre'}
-          </button>
-          <p id={idRaison} className="pl-aide">
-            {origineSouhaitee
-              ? typeSerre === null && 'Posez les sommets un à un sur la photo, puis fermez le tracé.'
-              : 'Posez d’abord le point de départ du plan.'}
-          </p>
-        </>
-      )}
-      {!info.abritee && edition && trace !== null && (
-        <div ref={conteneur} tabIndex={-1} className="pl-contour-edition" data-testid="contour-edition" data-id={info.zone.id} data-etat="trace" data-sommets={trace.sommets.length}>
-          <p className="pl-aide">
-            Touchez la photo pour poser chaque sommet ({String(trace.sommets.length)} posé{trace.sommets.length > 1 ? 's' : ''}). Pour fermer : touchez le premier sommet, ou Entrée (3 sommets au moins). Échap abandonne.
-          </p>
-          <button type="button" className="pl-bouton" onClick={surRenoncer}>
-            Renoncer au tracé
-          </button>
-        </div>
-      )}
-      {!info.abritee && edition && trace === null && contour !== null && (
-        <div
-          ref={conteneur}
-          tabIndex={-1}
-          className="pl-contour-edition"
-          data-testid="contour-edition"
-          data-id={info.zone.id}
-          data-etat={verdict?.ok === false ? 'invalide' : 'valide'}
-          data-sommets={contour.length}
-        >
-          {verdict?.ok === false && (
-            <p role="alert" data-testid="contour-erreur" className="pl-message pl-erreur">
-              {verdict.message}
-            </p>
-          )}
-          {message !== null && (
-            <p role="status" className="pl-message">
-              {message}
-            </p>
-          )}
-          <p className="pl-aide">
-            Glissez un sommet ; touchez un côté pour ajouter un sommet au milieu ; clic droit ou Suppr retire un sommet. Au clavier : Tab passe d’un sommet à l’autre, flèches 0,1 m (Maj : 1 m), Inser ajoute après.
-          </p>
-          {contour.map((p, k) => (
-            <div key={k} className="pl-sommet-champs">
-              <Champ
-                etiquette={`Sommet ${String(k + 1)} x (m)`}
-                valeur={p.x}
-                desactive={false}
-                surChange={(x) => {
-                  surSommet(k, { x, y: p.y });
-                }}
-              />
-              <Champ
-                etiquette={`Sommet ${String(k + 1)} y (m)`}
-                valeur={p.y}
-                desactive={false}
-                surChange={(y) => {
-                  surSommet(k, { x: p.x, y });
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
-// ── Nouveau bâtiment ────────────────────────────────────────────────────────────────────────────
-
-function FormulaireBatiment({ surPoser, surFermer }: { readonly surPoser: (n: NouveauBatiment) => void; readonly surFermer: () => void }): ReactElement {
-  const idType = useId();
-  const idNom = useId();
-  const idRaison = useId();
-  const [type, setType] = useState<TypeBatiment>('serre_tunnel');
-  const [nom, setNom] = useState('');
-  const [longueur, setLongueur] = useState('30');
-  const [largeur, setLargeur] = useState('8');
-  const [hauteur, setHauteur] = useState('3.5');
-  const nombre = (t: string): number => (t.trim() === '' ? Number.NaN : Number(t));
-  const valide = nom.trim() !== '' && [longueur, largeur, hauteur].every((t) => nombre(t) > 0);
-  const champ = (etiquette: string, valeur: string, maj: (v: string) => void): ReactElement => (
-    <ChampTexte etiquette={etiquette} valeur={valeur} surChange={maj} />
-  );
-  return (
-    <Modale role="dialog" titre="Nouveau bâtiment" surEchap={surFermer}>
-      <div className="pl-champ">
-        <label htmlFor={idType}>Type</label>
-        <select
-          id={idType}
-          value={type}
-          onChange={(e) => {
-            const v = e.target.value;
-            const trouve = TYPES_BATIMENT.find((t) => t === v);
-            if (trouve !== undefined) setType(trouve);
-          }}
-        >
-          {TYPES.map((t) => (
-            <option key={t.valeur} value={t.valeur}>
-              {t.libelle}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="pl-champ">
-        <label htmlFor={idNom}>Nom</label>
-        <input
-          id={idNom}
-          type="text"
-          autoComplete="off"
-          value={nom}
-          onChange={(e) => {
-            setNom(e.target.value);
-          }}
-        />
-      </div>
-      {champ('Longueur (m)', longueur, setLongueur)}
-      {champ('Largeur (m)', largeur, setLargeur)}
-      {champ('Hauteur (m)', hauteur, setHauteur)}
-      {!valide && (
-        <p id={idRaison} className="pl-aide">
-          {MESSAGES_ETAPES.fiche}
-        </p>
-      )}
-      <div className="pl-modale-actions">
-        <button
-          type="button"
-          className="pl-bouton pl-principal"
-          disabled={!valide}
-          aria-describedby={valide ? undefined : idRaison}
-          onClick={() => {
-            surPoser({ nom: nom.trim(), type, longueurM: nombre(longueur), largeurM: nombre(largeur), hauteurM: nombre(hauteur) });
-          }}
-        >
-          Poser
-        </button>
-        <button type="button" className="pl-bouton" onClick={surFermer}>
-          Annuler
-        </button>
-      </div>
-    </Modale>
-  );
-}
-
-/** Champ numérique dont le texte est gardé tel quel (le formulaire valide à « Poser »). */
-function ChampTexte({ etiquette, valeur, surChange }: { readonly etiquette: string; readonly valeur: string; readonly surChange: (v: string) => void }): ReactElement {
-  const id = useId();
-  return (
-    <div className="pl-champ">
-      <label htmlFor={id}>{etiquette}</label>
-      <input
-        id={id}
-        type="number"
-        step="any"
-        inputMode="decimal"
-        value={valeur}
-        onChange={(e) => {
-          surChange(e.target.value);
-        }}
-      />
-    </div>
   );
 }

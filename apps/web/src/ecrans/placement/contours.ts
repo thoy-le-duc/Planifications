@@ -7,7 +7,7 @@
  * Repère : celui de la ferme (mètres, x est, y nord). Aucune fonction ne modifie ses arguments.
  * La validation est celle du cœur (`validerContour`, par le sous-chemin du placement via ./coeur.ts).
  */
-import { depuisRepereZone, repereZone, validerContour, versRepereZone } from './coeur.ts';
+import { depuisRepereZone, repereZone, validerContour, versRepereZone, type RepereZone } from './coeur.ts';
 import { normaliserCap, type PlacementPlanche, type Touche } from './gestes.ts';
 import type { Point } from './tuiles.ts';
 
@@ -110,6 +110,11 @@ export function replacerPlanches(ancien: readonly Point[], nouveau: readonly Poi
   const avant = repereZone({ contour: ancien });
   const apres = repereZone({ contour: nouveau });
   if (avant === null || apres === null) return planches.map((p) => ({ id: p.id, placement: { ...p.placement } }));
+  return replacerEntreReperes(avant, apres, planches);
+}
+
+/** Comme `replacerPlanches`, entre deux repères : le terrain ne bouge pas, le placement est dit dans le repère `apres`. */
+export function replacerEntreReperes(avant: RepereZone, apres: RepereZone, planches: readonly PlancheDansZone[]): PlancheDansZone[] {
   return planches.map((p) => {
     const absolu = depuisRepereZone(avant, { x: p.placement.x, y: p.placement.y });
     const local = versRepereZone(apres, absolu);
@@ -119,3 +124,6 @@ export function replacerPlanches(ancien: readonly Point[], nouveau: readonly Poi
     };
   });
 }
+
+// T85 : le mouvement du bloc vit à part (bloc.ts), chargé à la demande avec le panneau de la zone ; les tests le lisent ici.
+export { mouvoirBloc, type MouvementBloc } from './bloc.ts';

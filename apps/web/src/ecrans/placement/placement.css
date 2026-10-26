@@ -762,3 +762,30 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+/* T85 : l'intérieur d'une zone choisie se glisse (le bloc suit), sa poignée la tourne. */
+.pl-svg-interieur {
+  z-index: 1;
+}
+
+.pl-interieur {
+  fill: transparent;
+  pointer-events: all;
+  cursor: move;
+  touch-action: none;
+}
+
+.pl-poignee-zone {
+  z-index: 3;
+}
+
+.pl-poignee-deplacer {
+  background: var(--couleur-foret);
+  cursor: move;
+}
+
+.pl-parcelle {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

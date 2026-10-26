@@ -60,3 +60,13 @@ export {
   type PointPlanValide,
   type SortePointPlan,
 } from './chemins.ts';
+// T85 : la parcelle d'une zone dessinée depuis ses planches.
+export {
+  LARGEUR_PLANCHE_PAR_DEFAUT_M,
+  PASSE_PIED_MAX_CM,
+  PASSE_PIED_PAR_DEFAUT_CM,
+  parcelleDepuisPlanches,
+  type Parcelle,
+  type PlancheDeParcelle,
+  type PlancheRangee,
+} from './parcelle.ts';
