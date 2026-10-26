@@ -442,8 +442,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       (m) => {
         if (vivant) setMZone(m);
       },
-      (e: unknown) => {
-        console.error('Morceau « parcelle » indisponible', e);
+      () => {
         if (vivant) setEchecZone(true);
       },
     );
@@ -1945,9 +1944,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 {MESSAGES_CONTOURS.tropDeChangements} ({String(changements.length)} sur {String(ECRITURES_MAX_PAR_LOT)} au plus). Abandonnez une partie des changements, puis enregistrez en plusieurs fois.
               </p>
             )}
-            {erreur !== null && (
+            {(erreur ?? (echecZone ? 'Une partie de l’éditeur n’a pas pu se charger : rechargez la page.' : null)) !== null && (
               <p role="alert" className="pl-message pl-erreur">
-                {erreur}
+                {erreur ?? 'Une partie de l’éditeur n’a pas pu se charger : rechargez la page.'}
               </p>
             )}
 
