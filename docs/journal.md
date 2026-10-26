@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-26 — T85 : dessiner une parcelle d'un tap à partir de ses planches
+
+- **Fait** : « Dessiner depuis les planches » dessine le rectangle d'une zone non abritée à partir de ses planches (ordre naturel des codes, passe-pied de 45 cm modifiable, 0,80 m pour une planche sans largeur), puis on glisse et tourne le bloc entier, planches comprises. Un seul « Enregistrer », « Annuler » remet tout. Demande de Théophane du 26 octobre.
+- **Décidé** : le passe-pied n'est pas stocké (45 cm par défaut, comme les itinéraires : planche de 75 cm + 45 cm). Pour tenir le budget de l'éditeur sans le relever, le panneau de la zone se charge à part ; s'il ne se charge pas, un message demande de recharger la page (pas de bouton « Réessayer », faute de place). Orientation affichée de 0 à 180°.
+- **Bloquant** : rien. Le morceau de l'éditeur n'a plus de marge (21,1 sur 21,1 Kio) : T86 devra charger ses ajouts à part. En local, 7 tests de décodage Windows-1252 échouent avec Node 22.22, aussi sur `main` (lié à Q53).
+
 ## 2026-10-23 — T84 : chercher un produit phyto par culture, ravageur ou maladie
 
 - **Fait** : la recherche E-Phy trouve un produit par son nom, son AMM, sa substance, et maintenant par la culture (« tomate », « chou rouge ») ou la cible (« pucerons », « mildiou »). Les mots se combinent sur un même usage (« tomate pucerons »). Chaque résultat montre l'usage trouvé, culture, cible et DAR, avec « + N autres usages trouvés ». Au-delà de 8 résultats s'affiche « N autres produits : précisez la recherche ». Une frappe prend 2 à 16 ms sur le catalogue réel (1 912 produits, 18 221 usages). Demande de Théophane en réponse à Q48.

@@ -218,7 +218,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T82](T82-equipements-abri-ecran.md) | Modifier les équipements d'une serre (écran, relecture T58) | T58 | fait |
 | [T83](T83-tunnel-par-defaut.md) | Tunnel posé aux mesures de Théophane : 40 m × 9,60 m (Q50) | T81 | fait |
 | [T84](T84-ephy-recherche-culture-cible.md) | E-Phy : chercher un produit par culture, ravageur ou maladie (Q48) | T53, T75, T76 | fait |
-| [T85](T85-parcelle-depuis-planches.md) | Placement : dessiner une parcelle d'un tap à partir de ses planches | T28d, T81 | en revue |
+| [T85](T85-parcelle-depuis-planches.md) | Placement : dessiner une parcelle d’un tap à partir de ses planches | T28d, T81 | fait |
 | [T86](T86-sous-zones-dans-serre.md) | Placement : une serre à plusieurs tunnels, ses zones dessinées dedans (Q54) | T85 | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
