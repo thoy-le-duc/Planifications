@@ -11,6 +11,7 @@
  *   UTILISATEUR : gérant actif (ou équipier, option `role`).
  *   Zones : « Tunnel 1 » (ZONE_TUNNEL, sans contour ; type d'abri tunnel avec l'option `zoneTunnel`, sinon plein champ) ; « Plein champ » (ZONE_CHAMP).
  *   Planche « PC-01 » (PLANCHE) dans Plein champ, 25 × 0,8 m.
+ * Option `planchesTunnel` (T85) : trois planches « P1 » à « P3 » (PLANCHES_TUNNEL), 30 × 0,75 m, non placées, dans « Tunnel 1 » (sans contour).
  * Option `origine` (défaut : faux) : origine du plan = la position météo, ET les placements :
  *   - contour de Plein champ : (100, 0) (140, 0) (140, 30) (100, 30), antihoraire ; repère :
  *     centre (120, 15), cap 90° (plus long côté est-ouest) ;
@@ -33,6 +34,8 @@ const MEMBRE = id(0x3);
 export const ZONE_TUNNEL = id(0x10);
 export const ZONE_CHAMP = id(0x11);
 export const PLANCHE = id(0x20);
+/** T85 : les trois planches de « Tunnel 1 » (option `planchesTunnel`). */
+export const PLANCHES_TUNNEL = [id(0x21), id(0x22), id(0x23)] as const;
 export const SAISON = id(0x40);
 export const HANGAR = id(0x30);
 export const SERRE = id(0x31);
@@ -74,6 +77,11 @@ export interface OptionsFermePlacement {
    * ce que la règle de T81 réserve au plein champ et au hors-sol.
    */
   readonly zoneTunnel?: boolean;
+  /**
+   * T85 : « Tunnel 1 » (sans contour) a trois planches « P1 » à « P3 » de 30 × 0,75 m, non placées : le panneau de la zone
+   * propose « Dessiner depuis les planches ». Défaut : faux (la zone n'a aucun emplacement : les tests de T28d et de T81 ne changent pas).
+   */
+  readonly planchesTunnel?: boolean;
 }
 
 export interface FermePlacement {
@@ -138,6 +146,27 @@ export function fermePlacement(options: OptionsFermePlacement = {}): FermePlacem
     orientation_deg: origine ? 0 : null,
     ...horo,
   });
+  if (options.planchesTunnel === true) {
+    PLANCHES_TUNNEL.forEach((pid, i) => {
+      ajouter('emplacement', {
+        id: pid,
+        ferme_id: FERME,
+        zone_id: ZONE_TUNNEL,
+        code: `P${String(i + 1)}`,
+        sorte: 'planche',
+        longueur_m: 30,
+        largeur_m: 0.75,
+        nombre_places: null,
+        actif_du: '2020-01-01',
+        actif_au: null,
+        remplace: '[]',
+        placement_x_m: null,
+        placement_y_m: null,
+        orientation_deg: null,
+        ...horo,
+      });
+    });
+  }
   if (origine) {
     const batiment = (bid: string, nom: string, type: string, l: [number, number, number], centre: [number, number]) => {
       ajouter('batiment', {
