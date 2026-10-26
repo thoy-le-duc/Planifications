@@ -6,7 +6,8 @@
  */
 import type { ChangementPlacement, ValeursBatiment } from '@planif/sync';
 import { normaliserCap } from './gestes.ts';
-import { replacerPlanches, verifierContour } from './contours.ts';
+import { repereZone, type RepereZone } from './coeur.ts';
+import { replacerEntreReperes, verifierContour } from './contours.ts';
 import type { Batiment, EmplacementPlace, Planche, Zone } from './donnees.ts';
 import type { Point } from './tuiles.ts';
 
@@ -35,6 +36,11 @@ export interface EntreeBrouillon {
   readonly brouillonZones: ReadonlyMap<string, readonly Point[]>;
   /** Zones abritées par un bâtiment, au brouillon compris : leur contour n'existe pas. */
   readonly zonesAbritees: ReadonlySet<string>;
+  /**
+   * T85 : le repère où les emplacements d'une zone gardent leur placement au brouillon, quand ce n'est plus celui de
+   * son contour lu (bloc déplacé ou tourné, parcelle dessinée depuis les planches). Absent : le repère du contour lu.
+   */
+  readonly calages?: ReadonlyMap<string, RepereZone>;
 }
 
 /**
@@ -93,29 +99,34 @@ export function changementsDuBrouillon(e: EntreeBrouillon): ChangementPlacement[
   const effaces: ChangementPlacement[] = [...zonesAEffacer].map((id) => ({ sorte: 'zone', id, contour: null }));
   const posees: ChangementPlacement[] = [];
 
-  // Contours changés (valides, zone non abritée) : le contour, et ses planches replacées au même endroit du terrain.
-  const contours = new Map<string, { readonly lu: readonly Point[] | null; readonly nouveau: readonly Point[] }>();
+  // Contours changés (valides, zone non abritée) : le contour, et ses emplacements replacés au même endroit du terrain
+  // (T85 : depuis le repère où le brouillon les garde, qui peut avoir bougé avec le bloc).
+  const contours = new Map<string, { readonly avant: RepereZone; readonly nouveau: readonly Point[] }>();
   for (const z of e.zones) {
     const b = e.brouillonZones.get(z.id);
     if (b === undefined || e.zonesAbritees.has(z.id) || !contourChange(z.contour, b)) continue;
     const nouveau = contourEcrit(b);
     if (nouveau === null) continue;
-    contours.set(z.id, { lu: z.contour, nouveau });
+    const avant = e.calages?.get(z.id) ?? repereZone({ contour: z.contour });
+    if (avant !== null) contours.set(z.id, { avant, nouveau });
     posees.push({ sorte: 'zone', id: z.id, contour: nouveau });
   }
 
   const emplacements: ChangementPlacement[] = [];
   const ecrits = new Set<string>();
-  for (const emp of e.emplacements) {
-    const contour = contours.get(emp.zoneId);
-    if (contour?.lu == null) continue;
-    const base = e.brouillonPlanches.get(emp.id)?.placement ?? emp.placement;
-    const [replacee] = replacerPlanches(contour.lu, contour.nouveau, [{ id: emp.id, placement: base }]);
-    if (replacee === undefined) continue;
+  const replacer = (id: string, zoneId: string, base: Planche['placement']): void => {
+    const contour = contours.get(zoneId);
+    const apres = contour === undefined ? null : repereZone({ contour: contour.nouveau });
+    if (contour === undefined || apres === null) return;
+    const [replacee] = replacerEntreReperes(contour.avant, apres, [{ id, placement: base }]);
+    if (replacee === undefined) return;
     const n = replacee.placement;
-    ecrits.add(emp.id);
-    emplacements.push({ sorte: 'emplacement', id: emp.id, placement: { x: arrondiM(n.x), y: arrondiM(n.y), orientation_deg: arrondiDeg(n.orientation_deg) } });
-  }
+    ecrits.add(id);
+    emplacements.push({ sorte: 'emplacement', id, placement: { x: arrondiM(n.x), y: arrondiM(n.y), orientation_deg: arrondiDeg(n.orientation_deg) } });
+  };
+  for (const emp of e.emplacements) replacer(emp.id, emp.zoneId, e.brouillonPlanches.get(emp.id)?.placement ?? emp.placement);
+  // T85 : les emplacements pas encore placés que le brouillon range (parcelle dessinée depuis les planches).
+  for (const [id, p] of e.brouillonPlanches) if (!ecrits.has(id) && !e.planches.some((x) => x.id === id) && !e.emplacements.some((x) => x.id === id)) replacer(id, p.zoneId, p.placement);
   for (const avant of e.planches) {
     const id = avant.id;
     const nouvelle = e.brouillonPlanches.get(id);
