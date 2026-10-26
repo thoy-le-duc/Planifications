@@ -1,22 +1,36 @@
 /**
- * Ce que l'éditeur n'affiche que sur demande (une zone choisie, un nouveau bâtiment), chargé à part dès son ouverture, en parallèle de
- * ses lectures, pour ne pas alourdir le morceau de l'éditeur (budget.json) : le formulaire du nouveau bâtiment, le panneau de la zone (contour
- * à tracer, sommets, serre ; T28d, T81), et pour T85 « Dessiner depuis les planches », le champ
- * « Orientation (°) », la couche de l'intérieur et de la poignée du bloc, la lecture des emplacements en
- * service et le calcul de la parcelle. L'éditeur n'est prêt qu'une fois ce morceau arrivé.
+ * Ce que l'éditeur n'affiche que sur demande (une zone choisie, un nouveau bâtiment), chargé à part dès son
+ * ouverture, en parallèle de ses lectures, pour ne pas alourdir le morceau de l'éditeur (budget.json) : le
+ * panneau de la zone (contour à tracer, sommets, serre ; T28d, T81), le formulaire du nouveau bâtiment, et pour
+ * T85 « Dessiner depuis les planches », le champ « Orientation (°) », la couche de l'intérieur et de la poignée
+ * du bloc, la lecture des emplacements en service et le calcul de la parcelle. L'éditeur n'est prêt qu'une fois
+ * ce morceau arrivé.
+ *
+ * Aucun import du morceau de l'éditeur (scripts/placement.test.ts) : ce module ne prend que des types, le cœur
+ * et React. Ce qu'il emprunte à l'éditeur (champ, fenêtre, messages…) lui est donné dans `Outils`.
  */
 import { useId, useState, type PointerEvent, type ReactElement, type RefObject } from 'react';
 import type { RequeteSurveillee } from '@planif/sync';
-import { Champ, Modale } from './composants.tsx';
-import { TYPES_BATIMENT, type TypeBatiment } from './coeur.ts';
-import { verifierContour } from './contours.ts';
-import { TYPES, type EmplacementEnService } from './donnees.ts';
-import { MESSAGES_CONTOURS, type NouveauBatiment, type Trace, type ZoneAffichee } from './EditeurPlacement.tsx';
-import { MESSAGES_ETAPES } from './etapes.tsx';
+import type { TypeBatiment } from '@planif/core';
+import { TYPES_BATIMENT, versRepereZone, type RepereZone } from '@planif/core/placement';
 import type { MouvementBloc } from './bloc.ts';
-import { pivoter, type RectanglePlace } from './gestes.ts';
-import { metresParPixel, versEcran, type Point, type VueCarte } from './tuiles.ts';
-import { versRepereZone, type RepereZone } from './coeur.ts';
+import type { ProprietesChamp, ProprietesModale } from './composants.tsx';
+import type { EmplacementEnService } from './donnees.ts';
+import type { NouveauBatiment, Trace, ZoneAffichee } from './EditeurPlacement.tsx';
+import type { RectanglePlace } from './gestes.ts';
+import type { Point } from './tuiles.ts';
+
+/** Ce que l'éditeur donne à ce module : ses composants et messages, qu'il ne peut pas importer. */
+export interface Outils {
+  readonly Champ: (p: ProprietesChamp) => ReactElement;
+  readonly Modale: (p: ProprietesModale) => ReactElement;
+  readonly verifierContour: (contour: readonly Point[]) => { readonly ok: true } | { readonly ok: false; readonly message: string };
+  readonly types: readonly { readonly valeur: TypeBatiment; readonly libelle: string }[];
+  /** Message d'une zone abritée (« sa forme est celle de la serre »). */
+  readonly zoneAbritee: string;
+  /** Message d'un formulaire de bâtiment incomplet. */
+  readonly fiche: string;
+}
 
 export { mouvoirBloc } from './bloc.ts';
 export { preparerParcelle } from './parcelle-planches.ts';
@@ -73,17 +87,21 @@ const ecartAngle = (degres: number): number => {
 /** Le mouvement du bloc au pointeur `p` (repère de la ferme), depuis le départ du geste : déplacé du même vecteur, ou tourné vers le pointeur (Maj : par 15°). */
 export function mouvementDuGeste(g: { readonly mode: 'deplacer' | 'pivoter'; readonly depart: Point; readonly centre0: Point; readonly orientation0: number }, p: Point, maj: boolean): MouvementBloc {
   if (g.mode === 'deplacer') return { dx: Math.round((p.x - g.depart.x) * 1000) / 1000, dy: Math.round((p.y - g.depart.y) * 1000) / 1000, rotationDeg: 0 };
-  const cap = pivoter({ centre: g.centre0, orientationDeg: g.orientation0, longueurM: 1, largeurM: 0 }, p, maj).orientationDeg;
+  const dx = p.x - g.centre0.x;
+  const dy = p.y - g.centre0.y;
+  if (Math.hypot(dx, dy) < 1e-9) return { dx: 0, dy: 0, rotationDeg: 0 };
+  // L'axe de la zone pointe vers le pointeur, au degré (Maj : aux 15°).
+  const cran = maj ? 15 : 1;
+  const cap = Math.round(((Math.atan2(dx, dy) * 180) / Math.PI) / cran) * cran;
   return { dx: 0, dy: 0, rotationDeg: ecartAngle(cap - g.orientation0) };
 }
 
-/** La poignée de rotation du bloc, à l'écran : au-delà du bout de la zone, sur son axe. */
-export function poigneeDuBloc(vue: VueCarte, contour: readonly Point[], repere: RepereZone): Point {
+/** La poignée de rotation du bloc, à l'écran (`versEcran` : repère de la ferme → écran ; `mParPixel` : échelle) : au-delà du bout de la zone, sur son axe. */
+export function poigneeDuBloc(versEcran: (p: Point) => Point, mParPixel: number, contour: readonly Point[], repere: RepereZone): Point {
   const demiM = Math.max(...contour.map((p) => Math.abs(versRepereZone(repere, p).y)));
-  const m = metresParPixel(vue.origine.latitude, vue.zoom);
-  const c = versEcran(vue, repere.centre);
+  const c = versEcran(repere.centre);
   const t = (repere.orientationDeg * Math.PI) / 180;
-  const d = demiM / m + 28;
+  const d = demiM / mParPixel + 28;
   return { x: c.x + Math.sin(t) * d, y: c.y - Math.cos(t) * d };
 }
 
@@ -146,10 +164,10 @@ export function PanneauDessin({ dessin, passePied, surPassePied, surDessiner, or
 }
 
 /** Le champ « Orientation (°) » d'une zone avec contour, et comment déplacer et tourner son bloc. */
-export function PanneauBloc({ orientation, surOrientation }: { readonly orientation: number; readonly surOrientation: (cap: number) => void }): ReactElement {
+export function PanneauBloc({ outils, orientation, surOrientation }: { readonly outils: Outils; readonly orientation: number; readonly surOrientation: (cap: number) => void }): ReactElement {
   return (
     <>
-      <Champ etiquette="Orientation (°)" valeur={orientation} desactive={false} surChange={surOrientation} />
+      <outils.Champ etiquette="Orientation (°)" valeur={orientation} desactive={false} surChange={surOrientation} />
       <p className="pl-aide">Glissez l’intérieur de la zone pour la déplacer avec ses planches, sa poignée orange pour la tourner. Touchez une planche pour la régler seule.</p>
     </>
   );
@@ -198,6 +216,7 @@ export function CoucheBloc({ zoneId, largeurPx, hauteurPx, points, poignee, surG
 // ── Panneau d'une zone ───────────────────────────────────────────────────────────────────────────
 
 export interface ProprietesPanneauZone {
+  readonly outils: Outils;
   readonly info: ZoneAffichee;
   readonly edition: boolean;
   /** Le point de départ du plan est posé et aucun bâtiment n'est en cours de pose. */
@@ -223,6 +242,7 @@ export interface ProprietesPanneauZone {
 }
 
 export function PanneauZone({
+  outils,
   info,
   edition,
   origineSouhaitee,
@@ -243,13 +263,13 @@ export function PanneauZone({
 }: ProprietesPanneauZone): ReactElement {
   const idRaison = useId();
   const contour = info.affiche;
-  const verdict = info.verdict ?? (contour === null ? null : verifierContour(contour));
+  const verdict = info.verdict ?? (contour === null ? null : outils.verifierContour(contour));
   return (
     <>
       <h3>{info.zone.nom}</h3>
       {info.abritee && (
         <p role="status" data-testid="zone-abritee" className="pl-aide">
-          Cette zone est abritée par un bâtiment : {MESSAGES_CONTOURS.zoneAbritee}, il n’y a pas de contour à tracer.
+          Cette zone est abritée par un bâtiment : {outils.zoneAbritee}, il n’y a pas de contour à tracer.
         </p>
       )}
       {!info.abritee && !edition && (
@@ -307,13 +327,13 @@ export function PanneauZone({
               {message}
             </p>
           )}
-          {orientation !== null && <PanneauBloc orientation={orientation} surOrientation={surOrientation} />}
+          {orientation !== null && <PanneauBloc outils={outils} orientation={orientation} surOrientation={surOrientation} />}
           <p className="pl-aide">
             Glissez un sommet ; touchez un côté pour ajouter un sommet au milieu ; clic droit ou Suppr retire un sommet. Au clavier : Tab passe d’un sommet à l’autre, flèches 0,1 m (Maj : 1 m), Inser ajoute après.
           </p>
           {contour.map((p, k) => (
             <div key={k} className="pl-sommet-champs">
-              <Champ
+              <outils.Champ
                 etiquette={`Sommet ${String(k + 1)} x (m)`}
                 valeur={p.x}
                 desactive={false}
@@ -321,7 +341,7 @@ export function PanneauZone({
                   surSommet(k, { x, y: p.y });
                 }}
               />
-              <Champ
+              <outils.Champ
                 etiquette={`Sommet ${String(k + 1)} y (m)`}
                 valeur={p.y}
                 desactive={false}
@@ -339,7 +359,7 @@ export function PanneauZone({
 
 // ── Nouveau bâtiment ────────────────────────────────────────────────────────────────────────────
 
-export function FormulaireBatiment({ surPoser, surFermer }: { readonly surPoser: (n: NouveauBatiment) => void; readonly surFermer: () => void }): ReactElement {
+export function FormulaireBatiment({ outils, surPoser, surFermer }: { readonly outils: Outils; readonly surPoser: (n: NouveauBatiment) => void; readonly surFermer: () => void }): ReactElement {
   const idType = useId();
   const idNom = useId();
   const idRaison = useId();
@@ -354,7 +374,7 @@ export function FormulaireBatiment({ surPoser, surFermer }: { readonly surPoser:
     <ChampTexte etiquette={etiquette} valeur={valeur} surChange={maj} />
   );
   return (
-    <Modale role="dialog" titre="Nouveau bâtiment" surEchap={surFermer}>
+    <outils.Modale role="dialog" titre="Nouveau bâtiment" surEchap={surFermer}>
       <div className="pl-champ">
         <label htmlFor={idType}>Type</label>
         <select
@@ -366,7 +386,7 @@ export function FormulaireBatiment({ surPoser, surFermer }: { readonly surPoser:
             if (trouve !== undefined) setType(trouve);
           }}
         >
-          {TYPES.map((t) => (
+          {outils.types.map((t) => (
             <option key={t.valeur} value={t.valeur}>
               {t.libelle}
             </option>
@@ -390,7 +410,7 @@ export function FormulaireBatiment({ surPoser, surFermer }: { readonly surPoser:
       {champ('Hauteur (m)', hauteur, setHauteur)}
       {!valide && (
         <p id={idRaison} className="pl-aide">
-          {MESSAGES_ETAPES.fiche}
+          {outils.fiche}
         </p>
       )}
       <div className="pl-modale-actions">
@@ -409,7 +429,7 @@ export function FormulaireBatiment({ surPoser, surFermer }: { readonly surPoser:
           Annuler
         </button>
       </div>
-    </Modale>
+    </outils.Modale>
   );
 }
 

@@ -84,6 +84,9 @@ export const MESSAGES_CONTOURS = {
   brouillonAbandonne: 'Le brouillon en cours a été abandonné : la ferme active a changé.',
 } as const;
 
+/** Ce que le morceau « zone » (./zone-ecran.tsx) emprunte à l'éditeur. */
+const OUTILS: ModuleZone.Outils = { Champ, Modale, verifierContour, types: TYPES, zoneAbritee: MESSAGES_CONTOURS.zoneAbritee, fiche: MESSAGES_ETAPES.fiche };
+
 const MESSAGE_SOMMETS_MIN = `Un contour garde ${MESSAGES_CONTOURS.sommetsMin}.`;
 
 /** « Annuler » reste affiché quelques secondes après un enregistrement. */
@@ -1421,7 +1424,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     edition && zoneChoisie !== undefined && !zoneChoisie.abritee && !enTrace && pose === null && cheminEnCours === null && zoneChoisie.affiche !== null && zoneChoisie.verdict?.ok !== false && reperesZoneChoisie?.base != null && reperesZoneChoisie.affichage != null
       ? { id: zoneChoisie.zone.id, contour: zoneChoisie.affiche, repere: reperesZoneChoisie.affichage }
       : null;
-  const poigneeBloc = blocZone === null || mZone === null ? null : mZone.poigneeDuBloc(vue, blocZone.contour, blocZone.repere);
+  const poigneeBloc = blocZone === null || mZone === null ? null : mZone.poigneeDuBloc((p) => versEcran(vue, p), mpp, blocZone.contour, blocZone.repere);
   /** « Dessiner depuis les planches » : les emplacements en service de la zone choisie, dont ceux déjà placés. */
   const dessinZone =
     edition && lusS !== null && zoneChoisie !== undefined && !zoneChoisie.abritee && zoneChoisie.affiche === null && typeDeSerrePourZone(zoneChoisie.zone.typeAbri) === null
@@ -1979,6 +1982,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               ) : choisi === undefined && zoneChoisie !== undefined ? (
                 mZone !== null && (
                 <mZone.PanneauZone
+                  outils={OUTILS}
                   info={zoneChoisie}
                   edition={edition}
                   origineSouhaitee={origine !== null && pose === null}
@@ -2040,6 +2044,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
         {formulaire && mZone !== null && (
           <mZone.FormulaireBatiment
+            outils={OUTILS}
             surPoser={(n) => {
               setFormulaire(false);
               setPose(n);

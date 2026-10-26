@@ -4,15 +4,14 @@
  *
  * Le rectangle se pose autour de `centre` (repère de la ferme), longueur vers le nord ; chaque
  * emplacement reçoit son placement dans le repère du contour (millimètre, millième de degré), cap
- * absolu 0° : les planches y sont au nord, côte à côte.
+ * absolu 0° : les planches y sont au nord, côte à côte. N'importe que le cœur (voir bloc.ts).
  */
-import { parcelleDepuisPlanches } from '@planif/core/placement';
-import { repereZone, versRepereZone, type RepereZone } from './coeur.ts';
-import { verifierContour } from './contours.ts';
+import { parcelleDepuisPlanches, repereZone, validerContour, versRepereZone, type RepereZone } from '@planif/core/placement';
 import type { EmplacementEnService, Planche } from './donnees.ts';
-import { normaliserCap } from './gestes.ts';
 import type { Point } from './tuiles.ts';
 
+/** Ramène un cap dans [0, 360[ (même règle que gestes.ts). */
+const normaliserCap = (degres: number): number => ((degres % 360) + 360) % 360;
 const mm = (v: number): number => Math.round(v * 1000) / 1000 + 0;
 const millieme = (v: number): number => normaliserCap(Math.round(v * 1000) / 1000) + 0;
 
@@ -39,14 +38,15 @@ export function preparerParcelle(zoneId: string, emplacements: readonly Emplacem
   const c = { x: mm(centre.x), y: mm(centre.y) };
   const l = parcelle.largeurM / 2;
   const L = parcelle.longueurM / 2;
-  const verdict = verifierContour([
+  const verdict = validerContour([
     { x: mm(c.x - l), y: mm(c.y - L) },
     { x: mm(c.x + l), y: mm(c.y - L) },
     { x: mm(c.x + l), y: mm(c.y + L) },
     { x: mm(c.x - l), y: mm(c.y + L) },
   ]);
-  if (!verdict.ok) return { ok: false, message: verdict.message };
-  const calage = repereZone({ contour: verdict.contour });
+  if (!verdict.ok) return { ok: false, message: verdict.erreur.message };
+  const contour = verdict.valeur.map((p) => ({ x: p.x, y: p.y }));
+  const calage = repereZone({ contour });
   if (calage === null) return { ok: false, message: 'La parcelle n’a pas de forme.' };
   const parId = new Map(emplacements.map((e) => [e.id, e]));
   const planches: Planche[] = [];
@@ -56,5 +56,5 @@ export function preparerParcelle(zoneId: string, emplacements: readonly Emplacem
     const local = versRepereZone(calage, { x: c.x + r.centre.x, y: c.y + r.centre.y });
     planches.push({ id: e.id, zoneId, code: e.code, longueurM: r.longueurM, largeurM: r.largeurM, placement: { x: mm(local.x), y: mm(local.y), orientation_deg: millieme(-calage.orientationDeg) } });
   }
-  return { ok: true, contour: verdict.contour, calage, planches };
+  return { ok: true, contour, calage, planches };
 }

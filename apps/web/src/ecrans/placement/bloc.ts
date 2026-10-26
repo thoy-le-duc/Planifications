@@ -1,10 +1,16 @@
 /**
  * Le bloc d'une zone (T85), en fonctions pures : ni React, ni DOM, ni réseau, ni horloge. Chargé à la demande
- * avec le panneau de la zone (./zone-ecran.tsx) ; contours.ts le ré-exporte pour ses tests.
+ * avec le panneau de la zone (./zone-ecran.tsx) ; contours.ts le ré-exporte pour ses tests. N'importe que le cœur
+ * (scripts/placement.test.ts : aucun module chargé à part n'importe le morceau de l'éditeur).
  */
-import { repereZone, type RepereZone } from './coeur.ts';
-import { normaliserCap } from './gestes.ts';
+import { repereZone, type RepereZone } from '@planif/core/placement';
 import type { Point } from './tuiles.ts';
+
+/** Ramène un cap dans [0, 360[ (même règle que gestes.ts, que ce module ne peut pas importer). */
+const normaliserCap = (degres: number): number => {
+  const c = ((degres % 360) + 360) % 360;
+  return c >= 360 ? 0 : c;
+};
 
 /** Mouvement rigide d'un bloc : rotation (sens horaire) autour du centre du repère du contour, puis translation. */
 export interface MouvementBloc {
