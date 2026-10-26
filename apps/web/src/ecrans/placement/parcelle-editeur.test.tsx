@@ -113,6 +113,8 @@ const planche = (id: string): HTMLElement => {
   if (el === null) throw new Error(`planche ${id} absente`);
   return el;
 };
+/** Les planches de « Tunnel 1 » à l'écran (« Plein champ » a aussi sa PC-01). */
+const plancheDuTunnel = (): HTMLElement[] => tous(T.planche).filter((el) => (PLANCHES_TUNNEL as readonly string[]).includes(el.getAttribute('data-id') ?? ''));
 const sommets = (): { x: number; y: number }[] => tous(TC.sommet).map((s) => ({ x: nombre(s, 'data-x'), y: nombre(s, 'data-y') }));
 
 async function ouvrir(o: Options = {}): Promise<Banc> {
@@ -145,7 +147,7 @@ async function annulerDernier(): Promise<void> {
 async function dessiner(passePied?: string): Promise<void> {
   if (passePied !== undefined) await remplir(champ(C.passePied, panneau()), passePied);
   await toucher(bouton(B.dessiner));
-  await attendre(() => tous(T.planche).length >= 1, 'planches dessinées');
+  await attendre(() => plancheDuTunnel().length >= 1, 'planches dessinées');
 }
 
 async function pointeur(el: Element, type: 'pointerdown' | 'pointermove' | 'pointerup', x: number, y: number, extra: { shiftKey?: boolean } = {}): Promise<void> {
@@ -292,7 +294,7 @@ describe('T85 : dessiner la parcelle', () => {
     const b = await ouvrir({ planches: true });
     await choisirZone(ZONE_TUNNEL);
     await dessiner();
-    expect(tous(T.planche)).toHaveLength(3);
+    expect(plancheDuTunnel()).toHaveLength(3);
     const [p1, p2, p3] = PLANCHES_TUNNEL.map(planche);
     if (p1 === undefined || p2 === undefined || p3 === undefined) throw new Error('planches absentes');
     for (const p of [p1, p2, p3]) {
@@ -346,7 +348,7 @@ describe('T85 : dessiner la parcelle', () => {
     expect(desactive(bouton(B.dessiner))).toBe(false);
     await remplir(champ(C.passePied, panneau()), '500');
     expect(desactive(bouton(B.dessiner))).toBe(false);
-    expect(tous(T.planche)).toHaveLength(0);
+    expect(plancheDuTunnel()).toHaveLength(0);
   });
 
   it('« Enregistrer » : UN appel à porte.placer, le contour puis un placement par planche, au bon endroit du terrain', async () => {
@@ -397,9 +399,9 @@ describe('T85 : dessiner la parcelle', () => {
     const b = await ouvrir({ planches: true });
     await choisirZone(ZONE_TUNNEL);
     await dessiner();
-    expect(tous(T.planche)).toHaveLength(3);
+    expect(plancheDuTunnel()).toHaveLength(3);
     await toucher(bouton('Abandonner les changements'));
-    expect(tous(T.planche)).toHaveLength(0);
+    expect(plancheDuTunnel()).toHaveLength(0);
     expect(tous(TC.sommet)).toHaveLength(0);
     expect(b.placements).toEqual([]);
     expect(boutonsNommes(new RegExp(`^${B.dessiner}$`))).toHaveLength(1);
@@ -601,7 +603,8 @@ describe('T85 : tourner le bloc', () => {
     // Cap visé : 10° à l'est du nord ; au cran de 15°, le bloc se cale sur 15°.
     const t = (10 * Math.PI) / 180;
     await glisser(poignee, { x: c.x + 200, y: c.y }, { x: c.x + 150 * Math.sin(t), y: c.y - 150 * Math.cos(t) }, { shiftKey: true });
-    expect(Number(champ(C.orientation, panneau()).value)).toBeCloseTo(15, 3);
+    // Les sommets sont au millimètre : le cap du bloc se lit à 0,001° près.
+    expect(Number(champ(C.orientation, panneau()).value)).toBeCloseTo(15, 2);
   });
 });
 
