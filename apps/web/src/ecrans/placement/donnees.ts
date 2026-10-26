@@ -176,21 +176,6 @@ export interface EmplacementEnService {
   readonly placement: { readonly x: number; readonly y: number; readonly orientation_deg: number } | null;
 }
 
-/** T85 : les emplacements en service de la ferme, pour « Dessiner depuis les planches ». */
-export const requeteEmplacementsEnService = (fermeId: string): RequeteSurveillee<EmplacementEnService | null> => ({
-  sql: 'SELECT id, zone_id, code, longueur_m, largeur_m, placement_x_m, placement_y_m, orientation_deg FROM emplacement WHERE ferme_id = ? AND supprime_le IS NULL AND actif_au IS NULL AND longueur_m > 0 ORDER BY id',
-  parametres: [fermeId],
-  tables: ['emplacement'],
-  convertir: (l: Ligne) => {
-    const id = texte(l.id);
-    const zoneId = texte(l.zone_id);
-    const longueurM = nombre(l.longueur_m);
-    const [x, y, o] = [l.placement_x_m, l.placement_y_m, l.orientation_deg].map(nombre);
-    if (id === null || zoneId === null || longueurM === null || longueurM <= 0) return null;
-    return { id, zoneId, code: texte(l.code) ?? '', longueurM, largeurM: nombre(l.largeur_m), placement: x == null || y == null || o == null ? null : { x, y, orientation_deg: o } };
-  },
-});
-
 /** T57 : une vanne, sa position sur le plan (repère de la ferme) ou nulle, et les planches qu'elle arrose ce jour-là. */
 export interface Vanne {
   readonly id: string;
@@ -243,7 +228,6 @@ export interface Lectures {
   readonly zones: readonly Zone[];
   readonly planches: readonly Planche[];
   readonly emplacements: readonly EmplacementPlace[];
-  readonly enService: readonly EmplacementEnService[];
   readonly vannes: readonly Vanne[];
   readonly chemins: readonly Chemin[];
 }
@@ -252,18 +236,17 @@ export const sansNull = <T,>(l: readonly (T | null)[]): T[] => l.filter((x): x i
 
 /** Relit tout d'un coup (après une écriture : l'affichage ne passe pas par un état intermédiaire). */
 export async function lireTout(porte: PorteDonnees, fermeId: string, utilisateurId: string, jour: string): Promise<Lectures> {
-  const [rf, rr, rb, rz, rp, re, rs, rv, rc] = await Promise.all([
+  const [rf, rr, rb, rz, rp, re, rv, rc] = await Promise.all([
     lireRequete(porte, requeteFerme(fermeId)),
     lireRequete(porte, requeteRoles(fermeId, utilisateurId)),
     lireRequete(porte, requeteBatiments(fermeId)),
     lireRequete(porte, requeteZones(fermeId)),
     lireRequete(porte, requetePlanches(fermeId)),
     lireRequete(porte, requeteEmplacementsPlaces(fermeId)),
-    lireRequete(porte, requeteEmplacementsEnService(fermeId)),
     lireRequete(porte, requeteVannes(fermeId, jour)),
     lireRequete(porte, requeteChemins(fermeId)),
   ]);
-  return { ferme: rf[0] ?? null, roles: rr, batiments: sansNull(rb), zones: sansNull(rz), planches: sansNull(rp), emplacements: sansNull(re), enService: sansNull(rs), vannes: sansNull(rv), chemins: sansNull(rc) };
+  return { ferme: rf[0] ?? null, roles: rr, batiments: sansNull(rb), zones: sansNull(rz), planches: sansNull(rp), emplacements: sansNull(re), vannes: sansNull(rv), chemins: sansNull(rc) };
 }
 
 async function lireRequete<T>(porte: PorteDonnees, r: RequeteSurveillee<T>): Promise<T[]> {
