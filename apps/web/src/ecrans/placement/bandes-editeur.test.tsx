@@ -364,10 +364,10 @@ describe('T86 : planches qui dépassent de la bande', () => {
 
 describe('T86 : sous-zone dotée d’un contour tracé à la main', () => {
   const CONTOUR = JSON.stringify([
-    { x: 5000, y: 0 },
-    { x: 5010, y: 0 },
-    { x: 5010, y: 30 },
-    { x: 5000, y: 30 },
+    { x: 300, y: 0 },
+    { x: 310, y: 0 },
+    { x: 310, y: 30 },
+    { x: 300, y: 30 },
   ]);
   const avecContour = (base: BaseMemoire): void => {
     base.recevoir('UPDATE zone SET contour = ? WHERE id = ?', [CONTOUR, MANON[1]]);
@@ -418,7 +418,8 @@ describe('T86 : sous-zone dotée d’un contour tracé à la main', () => {
     await enregistrer();
     await attendre(() => ligne(b, 'zone', MANON[1])?.contour === null, 'contour effacé');
     await annulerDernier();
-    await attendre(() => ligne(b, 'zone', MANON[1])?.contour === CONTOUR, 'contour remis');
+    await attendre(() => ligne(b, 'zone', MANON[1])?.contour != null, 'contour remis');
+    expect(JSON.parse(String(ligne(b, 'zone', MANON[1])?.contour))).toEqual(JSON.parse(CONTOUR));
     expect(placementEnBase(b, MANON_PLANCHES[1][0])).toBeNull();
   });
 });

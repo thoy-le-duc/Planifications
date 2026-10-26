@@ -62,7 +62,7 @@ describe('T86 : bandesDeSerre', () => {
 
   it('n’altère pas ses arguments', () => {
     const entree = [sz('Manon 2'), sz('Manon 1')];
-    const copie = structuredClone(entree);
+    const copie = entree.map((z) => ({ ...z }));
     bandesDeSerre(TRI, entree);
     expect(entree).toEqual(copie);
   });

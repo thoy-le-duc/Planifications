@@ -13,11 +13,13 @@ import { useId, useState, type PointerEvent, type ReactElement, type RefObject }
 import type { RequeteSurveillee } from '@planif/sync';
 import type { TypeBatiment } from '@planif/core';
 import { TYPES_BATIMENT, versRepereZone, type RepereZone } from '@planif/core/placement';
+import { bandesDeLaZone, type InfoBande, type RangementBandes, rangerDansBandes } from './bandes-serre.ts';
 import type { MouvementBloc } from './bloc.ts';
 import type { ProprietesChamp, ProprietesModale } from './composants.tsx';
 import type { EmplacementEnService } from './donnees.ts';
 import type { NouveauBatiment, Trace, ZoneAffichee } from './EditeurPlacement.tsx';
 import type { RectanglePlace } from './gestes.ts';
+import { typeDeSerrePourZone } from './serre-zone.ts';
 import type { Point } from './tuiles.ts';
 
 /** Ce que l'éditeur donne à ce module : ses composants et messages, qu'il ne peut pas importer. */
@@ -33,7 +35,9 @@ export interface Outils {
 }
 
 export { mouvoirBloc } from './bloc.ts';
+export { dimensionsParDefaut, typeDeSerrePourZone } from './serre-zone.ts';
 export { preparerParcelle } from './parcelle-planches.ts';
+export { bandesDesSerres, changementsDesBandes, type InfoBande, type RangementBandes } from './bandes-serre.ts';
 
 const PASSE_PIED_MAX_CM = 500;
 /** Un passe-pied valide : un entier de 0 à 500 cm. */
@@ -164,10 +168,13 @@ export function PanneauDessin({ dessin, passePied, surPassePied, surDessiner, or
 }
 
 /** Le champ « Orientation (°) » d'une zone avec contour, et comment déplacer et tourner son bloc. */
-export function PanneauBloc({ outils, orientation, surOrientation }: { readonly outils: Outils; readonly orientation: number; readonly surOrientation: (cap: number) => void }): ReactElement {
+export function PanneauBloc({ outils, orientation, surOrientation }: { readonly outils: Outils; readonly orientation: number; readonly surOrientation: (m: MouvementBloc) => void }): ReactElement {
   return (
     <>
-      <outils.Champ etiquette="Orientation (°)" valeur={orientation} desactive={false} surChange={surOrientation} />
+      <outils.Champ etiquette="Orientation (°)" valeur={orientation} desactive={false} surChange={(cap) => {
+          surOrientation({ dx: 0, dy: 0, rotationDeg: ecartAngle(cap - orientation) });
+        }}
+      />
       <p className="pl-aide">Glissez l’intérieur de la zone pour la déplacer avec ses planches, sa poignée orange pour la tourner. Touchez une planche pour la régler seule.</p>
     </>
   );
@@ -224,6 +231,161 @@ export function CoucheBloc({ zoneId, largeurPx, hauteurPx, points, centre, poign
   );
 }
 
+// ── Les bandes d'une serre (T86) ────────────────────────────────────────────────────────────────
+
+export interface ProprietesCoucheBandes {
+  readonly bandes: ReadonlyMap<string, InfoBande>;
+  /** Repère de la ferme → écran. */
+  readonly versEcran: (p: Point) => Point;
+  readonly choisie: string | null;
+  readonly surChoisir: (zoneId: string) => void;
+}
+
+/** Les bandes d'une serre (leur contour, comme celui d'une zone) et leur nom : le toucher choisit la sous-zone. */
+export function CoucheBandes({ bandes, versEcran, choisie, surChoisir }: ProprietesCoucheBandes): ReactElement {
+  return (
+    <>
+      <svg className="pl-svg pl-svg-bandes" aria-hidden="true">
+        {[...bandes.values()].map((b) => (
+          <polygon
+            key={b.zoneId}
+            data-testid="zone-contour"
+            data-id={b.zoneId}
+            className={`pl-contour${choisie === b.zoneId ? ' pl-contour-choisi' : ''}`}
+            points={b.contour
+              .map(versEcran)
+              .map((p) => `${String(p.x)},${String(p.y)}`)
+              .join(' ')}
+          />
+        ))}
+      </svg>
+      {[...bandes.values()].map((b) => {
+        const p = versEcran(b.etiquette);
+        return (
+          <button
+            key={b.zoneId}
+            type="button"
+            data-testid="bande-serre"
+            data-id={b.zoneId}
+            data-rang={b.bande.rang}
+            data-total={b.bande.total}
+            data-x={b.centre.x}
+            data-y={b.centre.y}
+            data-longueur={b.bande.longueurM}
+            data-largeur={b.bande.largeurM}
+            aria-pressed={choisie === b.zoneId}
+            className={`pl-bande${choisie === b.zoneId ? ' pl-bande-choisie' : ''}`}
+            style={{ left: p.x, top: p.y }}
+            onPointerDown={(ev) => {
+              ev.stopPropagation();
+            }}
+            onClick={() => {
+              surChoisir(b.zoneId);
+            }}
+          >
+            {b.zone.nom}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+export interface ProprietesPanneauRangement {
+  readonly bandes: readonly InfoBande[];
+  readonly emplacements: readonly EmplacementEnService[];
+  readonly passePied: string;
+  readonly surPassePied: (texte: string) => void;
+  readonly surRanger: (r: RangementBandes) => void;
+  /** Avertissement du dernier rangement (planches qui dépassent), ou null. */
+  readonly message: string | null;
+}
+
+/** « Ranger les planches dans les bandes », avec son passe-pied ; un contour tracé à la main se propose à l'effacement. */
+export function PanneauRangement({ bandes, emplacements, passePied, surPassePied, surRanger, message }: ProprietesPanneauRangement): ReactElement {
+  const idRaison = useId();
+  const idPassePied = useId();
+  const [confirmer, setConfirmer] = useState(false);
+  const passePiedOk = passePiedValide(passePied);
+  const nombre = bandes.reduce((n, b) => n + emplacements.filter((e) => e.zoneId === b.zoneId).length, 0);
+  const tracees = bandes.filter((b) => b.zone.contour !== null);
+  if (nombre === 0) return <p className="pl-aide">Les sous-zones de cette serre n’ont aucune planche en service à ranger.</p>;
+  const ranger = (effacer: boolean): void => {
+    setConfirmer(false);
+    const r = rangerDansBandes(bandes, emplacements, Number(passePied), effacer);
+    if (r !== null) surRanger(r);
+  };
+  return (
+    <div className="pl-parcelle">
+      <div className="pl-champ">
+        <label htmlFor={idPassePied}>Passe-pied (cm)</label>
+        <input
+          id={idPassePied}
+          type="number"
+          step={1}
+          min={0}
+          max={PASSE_PIED_MAX_CM}
+          inputMode="numeric"
+          value={passePied}
+          onChange={(e) => {
+            surPassePied(e.target.value);
+          }}
+        />
+      </div>
+      {confirmer ? (
+        <div role="group" aria-label="Contours tracés à la main" data-testid="bande-contours">
+          <p className="pl-aide">
+            {`${tracees.map((b) => b.zone.nom).join(', ')} ${tracees.length > 1 ? 'ont' : 'a'} un contour tracé à la main, que la bande remplace. L’effacer ?`}
+          </p>
+          <button
+            type="button"
+            className="pl-bouton pl-principal"
+            onClick={() => {
+              ranger(true);
+            }}
+          >
+            Effacer et ranger
+          </button>
+          <button
+            type="button"
+            className="pl-bouton"
+            onClick={() => {
+              ranger(false);
+            }}
+          >
+            Ranger sans effacer
+          </button>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="pl-bouton"
+            disabled={!passePiedOk}
+            aria-describedby={passePiedOk ? undefined : idRaison}
+            onClick={() => {
+              if (tracees.length > 0) setConfirmer(true);
+              else ranger(false);
+            }}
+          >
+            Ranger les planches dans les bandes
+          </button>
+          <p id={idRaison} className="pl-aide">
+            {passePiedOk
+              ? `Range les ${String(nombre)} planche${nombre > 1 ? 's' : ''} des sous-zones, chacune dans sa bande ; vous les déplacez ensuite.`
+              : 'Le passe-pied est un nombre entier de centimètres, de 0 à 500.'}
+          </p>
+        </>
+      )}
+      {message !== null && (
+        <p role="status" data-testid="bande-avertissement" className="pl-message">
+          {message}
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ── Panneau d'une zone ───────────────────────────────────────────────────────────────────────────
 
 export interface ProprietesPanneauZone {
@@ -237,19 +399,21 @@ export interface ProprietesPanneauZone {
   readonly conteneur: RefObject<HTMLDivElement | null>;
   readonly surTracer: () => void;
   readonly surRenoncer: () => void;
-  /** T81 : type de serre que la zone peut recevoir (tunnel, serre) ; null : la zone se trace. */
-  readonly typeSerre: TypeBatiment | null;
   /** « Placer la serre » (zone sans contour) ou « Remplacer par une serre » (zone avec contour). */
   readonly surSerre: () => void;
   readonly surSommet: (index: number, point: Point) => void;
-  /** T85 : la zone se dessine depuis ses planches (nombre en service, dont déjà placées) ; null : pas de « Dessiner depuis les planches ». */
-  readonly dessin: { readonly nombre: number; readonly dejaPlaces: number } | null;
   readonly passePied: string;
   readonly surPassePied: (texte: string) => void;
   readonly surDessiner: () => void;
   /** T85 : cap de l'axe de la zone si son bloc se tourne ; null sinon. */
   readonly orientation: number | null;
-  readonly surOrientation: (cap: number) => void;
+  /** Le champ « Orientation (°) » : le bloc tourne autour de son centre jusqu'au cap choisi. */
+  readonly surOrientation: (m: MouvementBloc) => void;
+  /** T86 : les bandes des zones abritées par une serre (par sous-zone) ; vide sans sous-zone. */
+  readonly bandes: ReadonlyMap<string, InfoBande>;
+  /** Les emplacements en service de la ferme : « Dessiner depuis les planches » (T85) et « Ranger les planches dans les bandes » (T86). */
+  readonly emplacements: readonly EmplacementEnService[];
+  readonly surRanger: (r: RangementBandes) => void;
 }
 
 export function PanneauZone({
@@ -262,26 +426,42 @@ export function PanneauZone({
   conteneur,
   surTracer,
   surRenoncer,
-  typeSerre,
   surSerre,
   surSommet,
-  dessin,
   passePied,
   surPassePied,
   surDessiner,
   orientation,
   surOrientation,
+  bandes,
+  emplacements,
+  surRanger,
 }: ProprietesPanneauZone): ReactElement {
   const idRaison = useId();
   const contour = info.affiche;
+  // T81 : type de serre que la zone peut recevoir (tunnel, serre) ; null : la zone se trace.
+  const typeSerre = typeDeSerrePourZone(info.zone.typeAbri);
+  // T85 : une zone qui se trace, sans contour, se dessine depuis ses planches en service (dont certaines déjà placées).
+  const siens = typeSerre === null && contour === null && !info.abritee ? emplacements.filter((x) => x.zoneId === info.zone.id) : [];
+  const dessin = siens.length === 0 ? null : { nombre: siens.length, dejaPlaces: siens.filter((x) => x.placement !== null).length };
+  const enBande = bandes.get(info.zone.id);
+  const sesBandes = enBande === undefined && info.abritee ? bandesDeLaZone(bandes, info.zone.id) : [];
   const verdict = info.verdict ?? (contour === null ? null : outils.verifierContour(contour));
   return (
     <>
       <h3>{info.zone.nom}</h3>
-      {info.abritee && (
+      {enBande !== undefined && (
+        <p role="status" data-testid="zone-en-bande" className="pl-aide">
+          {`Dans la serre ${enBande.serre}, bande ${String(enBande.bande.rang)} sur ${String(enBande.bande.total)}.`}
+        </p>
+      )}
+      {info.abritee && enBande === undefined && (
         <p role="status" data-testid="zone-abritee" className="pl-aide">
           Cette zone est abritée par un bâtiment : {outils.zoneAbritee}, il n’y a pas de contour à tracer.
         </p>
+      )}
+      {edition && sesBandes.length > 0 && (
+        <PanneauRangement bandes={sesBandes} emplacements={emplacements} passePied={passePied} surPassePied={surPassePied} surRanger={surRanger} message={message} />
       )}
       {!info.abritee && !edition && (
         <p className="pl-aide">{contour === null ? 'Aucun contour tracé pour cette zone.' : `Contour de ${String(contour.length)} sommets.`}</p>
