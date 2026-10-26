@@ -7,7 +7,7 @@
  * Repère : celui de la ferme (mètres, x est, y nord). Aucune fonction ne modifie ses arguments.
  * La validation est celle du cœur (`validerContour`, par le sous-chemin du placement via ./coeur.ts).
  */
-import { depuisRepereZone, repereZone, validerContour, versRepereZone } from './coeur.ts';
+import { depuisRepereZone, repereZone, validerContour, versRepereZone, type RepereZone } from './coeur.ts';
 import { normaliserCap, type PlacementPlanche, type Touche } from './gestes.ts';
 import type { Point } from './tuiles.ts';
 
@@ -110,6 +110,11 @@ export function replacerPlanches(ancien: readonly Point[], nouveau: readonly Poi
   const avant = repereZone({ contour: ancien });
   const apres = repereZone({ contour: nouveau });
   if (avant === null || apres === null) return planches.map((p) => ({ id: p.id, placement: { ...p.placement } }));
+  return replacerEntreReperes(avant, apres, planches);
+}
+
+/** Comme `replacerPlanches`, entre deux repères : le terrain ne bouge pas, le placement est dit dans le repère `apres`. */
+export function replacerEntreReperes(avant: RepereZone, apres: RepereZone, planches: readonly PlancheDansZone[]): PlancheDansZone[] {
   return planches.map((p) => {
     const absolu = depuisRepereZone(avant, { x: p.placement.x, y: p.placement.y });
     const local = versRepereZone(apres, absolu);
@@ -118,4 +123,37 @@ export function replacerPlanches(ancien: readonly Point[], nouveau: readonly Poi
       placement: { x: net(local.x), y: net(local.y), orientation_deg: normaliserCap(net(p.placement.orientation_deg + avant.orientationDeg - apres.orientationDeg)) },
     };
   });
+}
+
+/** Mouvement rigide d'un bloc : rotation (sens horaire) autour du centre du repère du contour, puis translation. */
+export interface MouvementBloc {
+  readonly dx: number;
+  readonly dy: number;
+  readonly rotationDeg: number;
+}
+
+const RAD = Math.PI / 180;
+
+/**
+ * Le bloc d'une zone (contour et planches) bouge d'un seul tenant (T85) : le contour et le repère
+ * « calage » où ses planches gardent leur placement subissent le même mouvement ; les planches
+ * suivent donc, à la même place dans la zone. Contour sans repère (invalide) : null. Sommets au
+ * millimètre ; aucun argument modifié.
+ */
+export function mouvoirBloc(contour: readonly Point[], calage: RepereZone, m: MouvementBloc): { contour: Point[]; calage: RepereZone } | null {
+  const repere = repereZone({ contour });
+  if (repere === null) return null;
+  const c = repere.centre;
+  const cos = Math.cos(m.rotationDeg * RAD);
+  const sin = Math.sin(m.rotationDeg * RAD);
+  const mouvoir = (p: Point): Point => {
+    const x = p.x - c.x;
+    const y = p.y - c.y;
+    return { x: c.x + x * cos + y * sin + m.dx, y: c.y - x * sin + y * cos + m.dy };
+  };
+  const arrondi = (p: Point): Point => ({ x: Math.round(p.x * 1000) / 1000, y: Math.round(p.y * 1000) / 1000 });
+  return {
+    contour: contour.map((p) => arrondi(mouvoir(p))),
+    calage: { centre: mouvoir(calage.centre), orientationDeg: normaliserCap(calage.orientationDeg + m.rotationDeg) },
+  };
 }
