@@ -412,7 +412,7 @@ export interface ProprietesPanneauZone {
   /** T86 : les bandes des zones abritées par une serre (par sous-zone) ; vide sans sous-zone. */
   readonly bandes: ReadonlyMap<string, InfoBande>;
   /** Les emplacements en service de la ferme : « Dessiner depuis les planches » (T85) et « Ranger les planches dans les bandes » (T86). */
-  readonly emplacements: readonly EmplacementEnService[];
+  readonly emplacements: readonly EmplacementEnService[] | null;
   readonly surRanger: (r: RangementBandes) => void;
 }
 
@@ -442,7 +442,7 @@ export function PanneauZone({
   // T81 : type de serre que la zone peut recevoir (tunnel, serre) ; null : la zone se trace.
   const typeSerre = typeDeSerrePourZone(info.zone.typeAbri);
   // T85 : une zone qui se trace, sans contour, se dessine depuis ses planches en service (dont certaines déjà placées).
-  const siens = typeSerre === null && contour === null && !info.abritee ? emplacements.filter((x) => x.zoneId === info.zone.id) : [];
+  const siens = typeSerre === null && contour === null && !info.abritee ? (emplacements ?? []).filter((x) => x.zoneId === info.zone.id) : [];
   const dessin = siens.length === 0 ? null : { nombre: siens.length, dejaPlaces: siens.filter((x) => x.placement !== null).length };
   const enBande = bandes.get(info.zone.id);
   const sesBandes = enBande === undefined && info.abritee ? bandesDeLaZone(bandes, info.zone.id) : [];
@@ -461,7 +461,7 @@ export function PanneauZone({
         </p>
       )}
       {edition && sesBandes.length > 0 && (
-        <PanneauRangement bandes={sesBandes} emplacements={emplacements} passePied={passePied} surPassePied={surPassePied} surRanger={surRanger} message={message} />
+        <PanneauRangement bandes={sesBandes} emplacements={emplacements ?? []} passePied={passePied} surPassePied={surPassePied} surRanger={surRanger} message={message} />
       )}
       {!info.abritee && !edition && (
         <p className="pl-aide">{contour === null ? 'Aucun contour tracé pour cette zone.' : `Contour de ${String(contour.length)} sommets.`}</p>

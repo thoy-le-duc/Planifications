@@ -715,7 +715,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               return avant === undefined || (avant.position?.x === position.x && avant.position.y === position.y) ? [] : [{ sorte: 'vanne', id, position }];
             }),
             chemin !== null && mChemin !== null ? mChemin.changements(chemin) : [],
-            mZone?.changementsDesBandes({ zones, planches: lusP, brouillonPlanches: brouillonP, brouillonZones: brouillonZ, bandes }) ?? [],
+            mZone?.changementsDesBandes(zones, lusP, brouillonP, brouillonZ, bandes) ?? [],
           )
         : [],
     [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, calages, brouillonV, lusV, chemin, mChemin, mZone, bandes],
@@ -2006,7 +2006,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                     orienterBloc(zoneChoisie.zone.id, m);
                   }}
                   bandes={bandes}
-                  emplacements={lusS ?? []}
+                  emplacements={lusS}
                   surRanger={poserRangement}
                   surSommet={(index, point) => {
                     const contour = zoneChoisie.affiche;

@@ -124,18 +124,18 @@ export function rangerDansBandes(bandes: readonly InfoBande[], emplacements: rea
  * effacer ; le placement d'un emplacement rangé dans une bande s'écrit tel quel (son repère est celui de la serre : aucun contour
  * ne le replace), sauf pour les planches déjà placées (lues avec leur placement), que `changementsDuBrouillon` écrit lui-même.
  */
-export function changementsDesBandes(e: {
-  readonly zones: readonly Zone[];
-  readonly planches: readonly Planche[];
-  readonly brouillonPlanches: ReadonlyMap<string, Planche>;
-  readonly brouillonZones: ReadonlyMap<string, readonly Point[]>;
-  readonly bandes: ReadonlyMap<string, InfoBande>;
-}): ChangementPlacement[] {
-  if (e.bandes.size === 0) return [];
+export function changementsDesBandes(
+  zones: readonly Zone[],
+  planches: readonly Planche[],
+  brouillonPlanches: ReadonlyMap<string, Planche>,
+  brouillonZones: ReadonlyMap<string, readonly Point[]>,
+  bandes: ReadonlyMap<string, InfoBande>,
+): ChangementPlacement[] {
+  if (bandes.size === 0) return [];
   const changements: ChangementPlacement[] = [];
-  for (const z of e.zones) if (e.brouillonZones.get(z.id)?.length === 0 && z.contour !== null && e.bandes.has(z.id)) changements.push({ sorte: 'zone', id: z.id, contour: null });
-  for (const [id, p] of e.brouillonPlanches) {
-    if (!e.bandes.has(p.zoneId) || e.planches.some((x) => x.id === id)) continue;
+  for (const z of zones) if (brouillonZones.get(z.id)?.length === 0 && z.contour !== null && bandes.has(z.id)) changements.push({ sorte: 'zone', id: z.id, contour: null });
+  for (const [id, p] of brouillonPlanches) {
+    if (!bandes.has(p.zoneId) || planches.some((x) => x.id === id)) continue;
     changements.push({ sorte: 'emplacement', id, placement: { x: mm(p.placement.x), y: mm(p.placement.y), orientation_deg: mm(p.placement.orientation_deg) } });
   }
   return changements;

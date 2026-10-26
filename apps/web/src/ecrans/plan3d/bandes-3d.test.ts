@@ -16,21 +16,9 @@ import type { ModuleCalculsPlan } from '../plan/test/contrat.ts';
 import type { Plan } from '../plan/calculs.ts';
 import type { Scene, EtiquetteScene } from './scene.ts';
 
-interface BandeAttendue {
-  readonly id: string;
-  readonly nom: string;
-  readonly x: number;
-  readonly z: number;
-  readonly largeur: number;
-  readonly profondeur: number;
-  readonly angle: number;
-}
-interface SceneAvecBandes extends Scene {
-  readonly bandes?: readonly BandeAttendue[];
-}
 interface Modules {
-  versScene(plan: Plan, semaine: number): SceneAvecBandes;
-  etiquettesScene(scene: Pick<Scene, 'chemins' | 'batiments'> & { readonly bandes?: readonly BandeAttendue[] }): EtiquetteScene[];
+  versScene(plan: Plan, semaine: number): Scene;
+  etiquettesScene(scene: Pick<Scene, 'chemins' | 'batiments' | 'bandes'>): EtiquetteScene[];
 }
 
 let calculs: ModuleCalculsPlan;
@@ -63,7 +51,7 @@ const plan = (b: Record<string, string | number | null> | null = batiment(), zon
 
 describe('T86 : le plan porte les sous-zones', () => {
   it('sousZones : les zones qui ont un parent (id, nom, parent), pour que la 3D compte aussi celles sans planche', () => {
-    const p = plan() as Plan & { sousZones?: readonly { id: string; nom: string; parenteId: string }[] };
+    const p = plan();
     expect(p.sousZones?.map((s) => [s.id, s.nom, s.parenteId]).sort()).toEqual(
       [
         [Z.chapelle2, 'Chapelle 2', Z.serre],
@@ -75,7 +63,7 @@ describe('T86 : le plan porte les sous-zones', () => {
 
   it('une zone supprimée n’est pas une sous-zone', () => {
     const zones = PETITE_FERME.zone.map((z) => (z.id === Z.chapelle2 ? { ...z, supprime_le: C } : z));
-    const p = plan(batiment(), zones) as Plan & { sousZones?: readonly { id: string }[] };
+    const p = plan(batiment(), zones);
     expect(p.sousZones?.map((s) => s.id)).not.toContain(Z.chapelle2);
   });
 });
@@ -123,12 +111,12 @@ describe('T86 : le nom des bandes (étiquettes à la demande)', () => {
   it('etiquettesScene : les bandes après les bâtiments, au centre de chaque bande', () => {
     const scene = m.versScene(plan(), 0);
     const e = m.etiquettesScene(scene);
-    const bandes = e.filter((x) => (x.sorte as string) === 'bande');
+    const bandes = e.filter((x) => x.sorte === 'bande');
     expect(bandes.map((x) => x.nom)).toEqual(['Chapelle 1', 'Chapelle 2']);
     expect(bandes.map((x) => x.id)).toEqual([Z.chapelle1, Z.chapelle2]);
     expect(bandes[0]?.x).toBeCloseTo(50, 3);
     expect(bandes[0]?.z).toBeCloseTo(-32, 3);
     const dernierBatiment = e.map((x) => x.sorte).lastIndexOf('batiment');
-    expect(e.findIndex((x) => (x.sorte as string) === 'bande')).toBeGreaterThan(dernierBatiment);
+    expect(e.findIndex((x) => x.sorte === 'bande')).toBeGreaterThan(dernierBatiment);
   });
 });
