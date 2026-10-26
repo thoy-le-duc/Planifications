@@ -101,7 +101,7 @@ describe('T85 : parcelleDepuisPlanches', () => {
 
   it('ne modifie pas ses arguments', () => {
     const entree = [planche('P2', 5, 1), planche('P1', 5, 1)];
-    const copie = structuredClone(entree);
+    const copie = entree.map((p) => ({ ...p }));
     parcelleDepuisPlanches(entree, 45);
     expect(entree).toEqual(copie);
   });

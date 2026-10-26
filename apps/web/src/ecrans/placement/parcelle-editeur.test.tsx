@@ -421,7 +421,7 @@ describe('T85 : dessiner la parcelle', () => {
     expect(b.placements).toHaveLength(1);
     expect(b.placements[0]?.map((c) => c.sorte)).toEqual(['zone', 'emplacement', 'emplacement', 'emplacement']);
     const repere = repereZone({ contour: contourEnBase(b, ZONE_TUNNEL) ?? [] });
-    const p = placementEnBase(b, PLANCHES_TUNNEL[0] ?? '');
+    const p = placementEnBase(b, PLANCHES_TUNNEL[0]);
     expect(repere).not.toBeNull();
     expect(p).not.toBeNull();
     if (repere === null || p === null) return;

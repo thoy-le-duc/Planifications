@@ -16,7 +16,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type P
 import { creerGenerateurId, type GenerateurId } from '@planif/core/identifiants';
 import type { ChangementPlacement, PorteDonnees } from '@planif/sync';
 import './placement.css';
-import { depuisRepereZone, repereZone, TYPES_BATIMENT, versGeographique, versLocal, versRepereZone, type RepereZone, type TypeBatiment } from './coeur.ts';
+import { repereZone, TYPES_BATIMENT, versGeographique, versLocal, versRepereZone, type RepereZone, type TypeBatiment } from './coeur.ts';
 import { changementsDuBrouillon, contourChange, ECRITURES_MAX_PAR_LOT } from './brouillon.ts';
 import type { PropositionAdresse } from './adresse.ts';
 import { Champ, garderLeFocus, Modale } from './composants.tsx';
@@ -341,7 +341,7 @@ function ecartAngle(degres: number): number {
   return e === -180 ? 180 : e;
 }
 
-function capturer(e: PointerEvent<Element>): void {
+function capturer(e: PointerEvent): void {
   try {
     e.currentTarget.setPointerCapture(e.pointerId);
   } catch {
@@ -835,7 +835,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     bougerBloc(zoneId, contour, r.base, { dx: 0, dy: 0, rotationDeg: ecartAngle(cap - r.affichage.orientationDeg) });
   }
 
-  function commencerBloc(e: PointerEvent<Element>, zoneId: string, mode: 'deplacer' | 'pivoter'): void {
+  function commencerBloc(e: PointerEvent, zoneId: string, mode: 'deplacer' | 'pivoter'): void {
     e.stopPropagation();
     const contour = zonesInfo.get(zoneId)?.affiche;
     const r = reperes.get(zoneId);
