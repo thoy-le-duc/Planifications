@@ -527,6 +527,18 @@ Ce que fait l'appli aujourd'hui : une serre abrite **une seule zone**. Une zone 
 
 Le 22 octobre, la CI a pris toute seule une nouvelle version de Node 22, et un test de la règle « déjà fait » est devenu rouge sur `main` sans qu'aucun code ait changé. Proposition : fixer la version exacte (22.23.4) dans `.node-version`, et la monter à la main dans un ticket à part, testé avant de fusionner. D'accord ?
 
+### Q55 — Plan de la ferme : simple et rationnel (posée le 2026-10-28, retour de Théophane)
+
+Retour de Théophane (2026-10-28) : « c'est assez bizarre comment c'est fichu comme système, pas du tout intuitif ». Points relevés : tracer un contour à la main est bizarre ; on ne peut pas dupliquer ; la 3D des zones ne montre pas ce qu'on a fait ; rien n'est verrouillé (une serre déplacée sans le vouloir en naviguant) ; il faut passer par « Nouveau bâtiment », saisir longueur et largeur et glisser la serre par-dessus ses planches.
+
+Précisions de Théophane : le tunnel Manon porte trois zones (Manon 1, 2, 3) ; la serre à légumes a 18 zones « en ligne de 6 ». Chapelles de 9,60 m de large, environ 40 m de long, « mais ça diffère de ferme en ferme ». Dans la grande serre : 6 chapelles ; dans la longueur, une zone de 40 m, une allée de 4,40 m, une deuxième zone, une allée de 4,40 m, une troisième zone. « Il faut qu'on arrive à faire quelque chose d'universel et simple. »
+
+Décision : une serre est une **grille de chapelles × tronçons, avec des allées entre les tronçons**, une zone par case (Manon : 3 × 1 ; serre à légumes : 6 × 3). Chantier T87 (plan verrouillé), T88 (modèle de la grille), T89 (« Ajouter une serre ou un tunnel » en une fiche), T90 (dupliquer), T91 (3D fidèle au plan), T92 (nettoyage). Remplace Q54.
+
+Reste à confirmer (seules les valeurs par défaut en dépendent, T89 avance sans) :
+1. Dans une chapelle de 9,60 m, combien de planches, de quelle largeur, avec quel passe-pied, et de quelle longueur ? Proposé par défaut : 8 planches de 75 cm, passe-pied de 45 cm, longueur du tronçon moins 2 m, dans la longueur de la serre.
+2. Un bouton « Modifier le plan » pour tout le plan suffit-il, ou faut-il en plus un cadenas par serre ?
+
 ## Questions ouvertes du brief
 
 - Nom du produit.
