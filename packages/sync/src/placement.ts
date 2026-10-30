@@ -7,7 +7,8 @@
  * structure-origine.ts), pour qu'un placement fait hors ligne ne soit pas refusé au retour du
  * réseau : gérant actif de la ferme de la porte (Q31), règles du cœur (validerPlacement,
  * validerContour), lignes de la ferme de la porte seulement, zone abritée sans contour, un
- * bâtiment par zone, aucun placement sans origine, origine figée dès qu'un placement existe. Tout se lit et s'écrit dans UNE
+ * bâtiment par zone, aucun placement sans origine, origine figée dès qu'un placement existe. T89 : zones, sous-zones et
+ * emplacements créés avec la serre (placement-creation.ts), dans le même appel. Tout se lit et s'écrit dans UNE
  * transaction locale : un seul envoi, que le serveur accepte ou refuse en entier.
  *
  * L'annulation rendue remet les valeurs lues dans la base locale au moment de l'écriture, dans
@@ -15,6 +16,7 @@
  * DELETE). Les messages de rejet sont en français (ceux du cœur pour ses règles).
  */
 import { identifiantNormalise, instantNormalise, TAILLE_MAX_PAR_LOT, TYPES_BATIMENT, validerPlacement, validerPositionVanne } from '@planif/core';
+import { placerEmplacementCreation, placerZoneCreation } from './placement-creation.ts';
 import { exigerRangementVide, placerElementPlan } from './plan-chemins.ts';
 import type { BaseLocale, ChangementPlacement, PointPlacement, TransactionLocale, ValeursBatiment } from './types.ts';
 
@@ -278,6 +280,11 @@ function appliquer(tx: TransactionLocale, ctx: ContextePlacement, c: ChangementP
     case 'place_rangement':
     case 'outil':
       return placerElementPlan(tx, ctx, id, c);
+    // T89 : zones, sous-zones et planches créées avec la serre, dans le même enregistrement.
+    case 'zone_creation':
+      return placerZoneCreation(tx, ctx, id, c.valeurs);
+    case 'emplacement_creation':
+      return placerEmplacementCreation(tx, ctx, id, c.valeurs);
   }
   return Promise.reject(new Error('Changement de placement inconnu.'));
 }
