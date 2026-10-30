@@ -8,7 +8,7 @@ import { CLE_SESSION } from '../src/connexion/session.ts';
 import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { MARQUES_3D, TESTID_3D, type ModuleScene, type Plan3d, type Scene } from '../src/ecrans/plan3d/test/contrat.ts';
 import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement, jugerSerie } from './outils.ts';
-import { arreterImages, BORNES_FERME_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous, type Plancher } from './fluidite-3d.ts';
+import { arreterImages, BORNES_JUMEAU_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous, type Plancher } from './fluidite-3d.ts';
 
 /**
  * T27 — vue 3D, de bout en bout, sur ordinateur (Chromium 1280 × 800, sans ralentissement du CPU :
@@ -358,7 +358,7 @@ test('vue 3D : grande ferme de T07, ordinateur, WebGL', async ({ page }) => {
   await test.step('navigation au pointeur : 5 passages, aucun intervalle au-delà du seuil relatif au plancher (4 passages saccadés ou plus de 6 intervalles : échec)', async () => {
     await demarrerImages(page);
     const passages = await glisserCinqFois(page);
-    verifierGardeFous('navigation 3D', await arreterImages(page), BORNES_FERME_T07, IMAGES_PAR_PASSAGE);
+    verifierGardeFous('navigation 3D', await arreterImages(page), BORNES_JUMEAU_T07, IMAGES_PAR_PASSAGE);
     const verdict = jugerDefilementRelatif(passages, seuilMs, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
     console.log(decrireRelatif('navigation 3D', plancher, verdict));
     for (const [i, p] of passages.entries()) {

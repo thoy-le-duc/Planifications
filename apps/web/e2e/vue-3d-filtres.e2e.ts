@@ -156,10 +156,12 @@ test('vue 3D : filtres et légende, grande ferme de T07, ordinateur', async ({ p
   test.setTimeout(DELAI_AMORCAGE_MS + 240_000);
   const attendu = await planAttendu();
   const { plan, m } = attendu;
-  const nbPlanches = plan.lignes.filter((l) => l.sorte === 'emplacement').length;
-  expect(nbPlanches, 'grande ferme').toBeGreaterThanOrEqual(400);
+  expect(plan.lignes.filter((l) => l.sorte === 'emplacement').length, 'grande ferme').toBeGreaterThanOrEqual(400);
   const semaine = plan.semaineCourante ?? 0;
   const scene = m.versScene(plan, semaine);
+  // T91 : la scène ne contient que les planches des zones placées.
+  const nbPlanches = scene.volumes.length;
+  expect(nbPlanches, 'planches placées de la grande ferme').toBeGreaterThan(200);
   const options = m.optionsFiltres(scene);
   expect(options.familles.length, 'la grande ferme a au moins 3 familles cette semaine').toBeGreaterThanOrEqual(3);
   expect(options.zones.length, 'et au moins 2 zones').toBeGreaterThanOrEqual(2);
