@@ -115,7 +115,7 @@ Validée par Théophane le 2026-10-07 (réponses à Q30 et Q31), posée par T28a
 | `nb_troncons` | entier, nul permis | 1 à 50 ; nul avec `nb_chapelles` renseigné : un seul tronçon |
 | `largeur_allee_m` | numérique, nul permis | 0 à 500 m, au millimètre (trois décimales au plus) ; nulle : allée de 0 |
 
-- Contraintes CHECK : les bornes ci-dessus, le millimètre (`largeur_allee_m = round(largeur_allee_m, 3)`), les chapelles obligatoires, et un tronçon d'au moins un millimètre une fois arrondi : `round((longueur_m − (nb_troncons − 1) × largeur_allee_m) / nb_troncons, 3) ≥ 0,001` quand `nb_chapelles` est renseigné.
+- Contraintes CHECK : les bornes ci-dessus, le millimètre (`largeur_allee_m = round(largeur_allee_m, 3)`), les chapelles obligatoires, une chapelle d'au moins un millimètre de large une fois arrondie (`round(largeur_m / nb_chapelles, 3) ≥ 0,001`), et un tronçon d'au moins un millimètre une fois arrondi : `round((longueur_m − (nb_troncons − 1) × largeur_allee_m) / nb_troncons, 3) ≥ 0,001` quand `nb_chapelles` est renseigné.
 - Les trois colonnes nulles : comportement de T86 (une bande par sous-zone sur toute la longueur). Dimensions d'une case dérivées, jamais stockées : largeur ÷ `nb_chapelles`, (longueur − (`nb_troncons` − 1) × allée) ÷ `nb_troncons`, au millimètre.
 - Les sous-zones remplissent les cases dans l'ordre naturel de leurs noms, tronçon par tronçon (tronçon 1 chapelles 1 à C, puis tronçon 2…) ; les surnuméraires n'ont pas de case (avertissement).
 - Mêmes règles dans `validerPlacement` (cœur), la porte du téléphone et `POST /sync/upload` (gérant seulement) ; l'allée est écrite arrondie au millimètre. Synchro par `SELECT *` (aucune règle PowerSync changée) ; l'export complet inclut les trois colonnes.

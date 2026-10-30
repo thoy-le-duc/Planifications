@@ -1,5 +1,5 @@
 {
-  "id": "5c17c3fd-7605-43cd-829b-dcdc5a525734",
+  "id": "deb4887c-ee26-4739-bbf5-b722550a2b30",
   "prevId": "9dc7b422-5a31-4df9-983d-cf10686adf6d",
   "version": "7",
   "dialect": "postgresql",
@@ -658,6 +658,10 @@
         "batiment_grille_chapelles": {
           "name": "batiment_grille_chapelles",
           "value": "\"batiment\".\"nb_chapelles\" IS NOT NULL OR (\"batiment\".\"nb_troncons\" IS NULL AND \"batiment\".\"largeur_allee_m\" IS NULL)"
+        },
+        "batiment_grille_chapelle": {
+          "name": "batiment_grille_chapelle",
+          "value": "CASE WHEN coalesce(\"batiment\".\"nb_chapelles\", 0) < 1 THEN true ELSE round(\"batiment\".\"largeur_m\" / \"batiment\".\"nb_chapelles\", 3) >= 0.001 END"
         },
         "batiment_grille": {
           "name": "batiment_grille",

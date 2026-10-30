@@ -62,7 +62,7 @@ interface Grille {
   readonly longueurTroncon: number;
 }
 
-/** Plus courte longueur d'un tronçon (m) : un millimètre, une fois arrondi. */
+/** Plus courte longueur d'un tronçon, et plus petite largeur d'une chapelle (m) : un millimètre, une fois arrondi. */
 export const TRONCON_MIN_M = 0.001;
 
 /**
@@ -82,7 +82,7 @@ function grille(serre: GrilleSerre, nbSousZones: number): Grille | null {
   const reste = troncons === 1 ? serre.longueurM : serre.longueurM - (troncons - 1) * allee;
   const longueurTroncon = reste / troncons;
   const largeurChapelle = serre.largeurM / chapelles;
-  if (!(mm(longueurTroncon) >= TRONCON_MIN_M) || !(mm(largeurChapelle) > 0)) return null;
+  if (!(mm(longueurTroncon) >= TRONCON_MIN_M) || !(mm(largeurChapelle) >= TRONCON_MIN_M)) return null;
   return { chapelles, troncons, allee: troncons === 1 ? 0 : allee, largeurChapelle, longueurTroncon };
 }
 

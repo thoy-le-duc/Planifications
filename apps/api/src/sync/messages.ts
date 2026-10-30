@@ -283,6 +283,8 @@ export function precisionDuPlacement(erreur: ErreurPlacement): string {
     plafond_depasse:
       champ === 'largeur_allee_m'
         ? 'les tronçons de la serre feraient moins d’un millimètre : réduisez la largeur des allées ou le nombre de tronçons'
+        : champ === 'nb_chapelles'
+          ? 'les chapelles de la serre feraient moins d’un millimètre de large : réduisez le nombre de chapelles'
         : `${DIMENSIONS[champ] ?? 'une dimension'} du bâtiment dépasse le maximum permis`,
     zone_abritee_avec_contour: 'cette zone est abritée par un bâtiment : elle prend sa forme et n’a pas de contours à elle',
   };

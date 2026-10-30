@@ -328,6 +328,8 @@ export const batiment = pgTable(
     verif('batiment', 'largeur_allee', sql`${t.largeurAlleeM} >= 0 AND ${t.largeurAlleeM} <= 500 AND ${t.largeurAlleeM} = round(${t.largeurAlleeM}, 3)`),
     // Tronçons ou allée sans nombre de chapelles : refusé (aucun nombre de chapelles n'est déduit).
     verif('batiment', 'grille_chapelles', sql`${t.nbChapelles} IS NOT NULL OR (${t.nbTroncons} IS NULL AND ${t.largeurAlleeM} IS NULL)`),
+    // Une chapelle, arrondie au millimètre, fait au moins un millimètre de large.
+    verif('batiment', 'grille_chapelle', sql`CASE WHEN coalesce(${t.nbChapelles}, 0) < 1 THEN true ELSE round(${t.largeurM} / ${t.nbChapelles}, 3) >= 0.001 END`),
     // Un tronçon, arrondi au millimètre, fait au moins un millimètre.
     verif(
       'batiment',
