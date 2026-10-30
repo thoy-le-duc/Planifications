@@ -247,7 +247,8 @@ type Confirmation =
   | { readonly type: 'origine'; readonly position: Position }
   | { readonly type: 'zone'; readonly batimentId: string; readonly zoneId: string }
   | { readonly type: 'remplacer'; readonly zoneId: string; readonly englobant: RectangleEnglobant | null; readonly avis: string | null; readonly converties: readonly (readonly [string, Planche])[] }
-  | { readonly type: 'fermer' };
+  | { readonly type: 'fermer' }
+  | { readonly type: 'terminer' };
 
 export interface NouveauBatiment {
   readonly nom: string;
@@ -457,7 +458,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   const gerant = roles?.includes('gerant') === true;
   const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null && (echecZone || (mZone !== null && lusS !== null));
-  const mode = !pret ? undefined : gerant ? 'edition' : 'lecture';
+  /** T87 : l'éditeur s'ouvre verrouillé, même pour le gérant ; « Modifier le plan » déverrouille, « Terminer » reverrouille. */
+  const [modification, setModification] = useState(false);
+  const mode = !pret ? undefined : gerant && modification ? 'edition' : 'lecture';
   const edition = mode === 'edition';
 
   // ── État de l'écran ───────────────────────────────────────────────────────────────────────────
@@ -733,6 +736,13 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [abandonAffiche, setAbandonAffiche] = useState(brouillonAbandonne);
   if (brouillonOuvert && abandonAffiche) setAbandonAffiche(false);
   const courante = etapeCourante(origine !== null, pose !== null, batimentsAff.length);
+  // Le parcours guidé déverrouille de lui-même : à l'ouverture d'une ferme qui n'a pas fini ses étapes
+  // (point de départ, premier bâtiment), puis à chaque changement d'étape.
+  const [derniereEtape, setDerniereEtape] = useState<NumeroEtape | null>(null);
+  if (pret && gerant && derniereEtape !== courante) {
+    setDerniereEtape(courante);
+    if (derniereEtape !== null || courante < 4) setModification(true);
+  }
   const etapeVue = retour !== null && retour < courante ? retour : courante;
   // Un seul calcul : « Enregistrer » est possible quand rien ne l'empêche, sinon la raison s'affiche.
   const raisonEnregistrer = occupe
@@ -1014,11 +1024,11 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     return entree;
   }
 
-  async function enregistrer(): Promise<void> {
-    if (!peutEnregistrer) return;
+  async function enregistrer(): Promise<boolean> {
+    if (!peutEnregistrer) return false;
     const [ecritsB, ecritsP, ecritsZ, ecritsV, ecritC, ecritsCal] = [brouillonB, brouillonP, brouillonZ, brouillonV, chemin, calages];
     const entree = await ecrire(changements);
-    if (entree === null) return;
+    if (entree === null) return false;
     // Seul ce qui vient d'être écrit sort du brouillon : un geste fait pendant l'écriture reste.
     const sans = <T,>(prev: ReadonlyMap<string, T>, ecrits: ReadonlyMap<string, T>): Map<string, T> => {
       const reste = new Map(prev);
@@ -1032,6 +1042,24 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setCalages((prev) => sans(prev, ecritsCal));
     setChemin((c) => (c === ecritC ? null : c));
     setDernier(entree);
+    return true;
+  }
+
+  /** T87 : reverrouille ; ce qui était en cours de pose ou de tracé n'a plus lieu d'être. */
+  function verrouiller(): void {
+    setModification(false);
+    setPose(null);
+    setFormulaire(false);
+    setTrace(null);
+    setChemin(null);
+    setSommetSel(null);
+    setMessageContour(null);
+  }
+
+  /** « Terminer » : sans rien à perdre, reverrouille aussitôt ; sinon demande d'enregistrer ou d'abandonner. */
+  function terminer(): void {
+    if (brouillonOuvert) setConfirmation({ type: 'terminer' });
+    else verrouiller();
   }
 
   async function defaire(entree: Enregistrement | undefined): Promise<void> {
@@ -1074,9 +1102,11 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   function commencer(e: PointerEvent<HTMLElement>, element: Objet, type: 'deplacer' | 'pivoter' | 'cote', cote: Cote | null): void {
     e.stopPropagation();
-    // Au doigt, seul l'élément déjà choisi se déplace ; sur un autre, le doigt déplace la carte et un tap le choisit.
-    if (e.pointerType === 'touch' && type === 'deplacer' && (!edition || selection !== element.id)) {
-      commencerFond(e, element.id);
+    // T87, souris comme doigt : seul l'élément déjà choisi se déplace (en modification) ; sur un autre, ou plan verrouillé,
+    // le glisser déplace la carte et un tap le choisit.
+    if (type === 'deplacer' && (!edition || selection !== element.id)) {
+      if (e.pointerType === 'mouse' && e.button !== 0) selectionner(element.id);
+      else commencerFond(e, element.id);
       return;
     }
     selectionner(element.id);
@@ -1471,8 +1501,24 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   }
 
   /** Barre de boutons : en bas de l'écran sur téléphone et tablette (boutons larges), dans la colonne de droite sur ordinateur. */
+  const boutonAnnuler =
+    annulable !== undefined ? (
+      <button
+        type="button"
+        data-testid="annuler-placement"
+        className="pl-bouton"
+        disabled={occupe}
+        aria-describedby={occupe ? idRaisonEnregistrer : undefined}
+        onClick={() => void defaire(annulable)}
+      >
+        Annuler l’enregistrement
+      </button>
+    ) : null;
   const barre = edition ? (
     <div data-testid="barre-doigt" className={`pl-barre${surOrdinateur ? ' pl-barre-colonne' : ''}`}>
+      <button type="button" data-testid="verrouiller-plan" className="pl-bouton" disabled={occupe} onClick={terminer}>
+        Terminer
+      </button>
       {choisi !== undefined && choisi.sorte !== 'vanne' && (
         <>
           <button
@@ -1553,18 +1599,21 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           Abandonner les changements
         </button>
       )}
-      {annulable !== undefined && (
-        <button
-          type="button"
-          data-testid="annuler-placement"
-          className="pl-bouton"
-          disabled={occupe}
-          aria-describedby={occupe ? idRaisonEnregistrer : undefined}
-          onClick={() => void defaire(annulable)}
-        >
-          Annuler l’enregistrement
-        </button>
-      )}
+      {boutonAnnuler}
+    </div>
+  ) : pret && gerant ? (
+    <div data-testid="barre-doigt" className={`pl-barre${surOrdinateur ? ' pl-barre-colonne' : ''}`}>
+      <button
+        type="button"
+        data-testid="deverrouiller-plan"
+        className="pl-bouton pl-principal"
+        onClick={() => {
+          setModification(true);
+        }}
+      >
+        Modifier le plan
+      </button>
+      {boutonAnnuler}
     </div>
   ) : null;
 
@@ -1595,6 +1644,12 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
         </header>
 
         {invitation(invitationDemo)}
+
+        {edition && (
+          <p role="status" data-testid="bandeau-modification" className="pl-message pl-message-info">
+            Modification du plan
+          </p>
+        )}
 
         {pret && (
           <BandeauEtapes
@@ -2122,6 +2177,54 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 }}
               >
                 Annuler
+              </button>
+            </div>
+          </Modale>
+        )}
+        {confirmation?.type === 'terminer' && (
+          <Modale
+            role="alertdialog"
+            titre="Terminer la modification du plan ?"
+            surEchap={() => {
+              setConfirmation(null);
+            }}
+          >
+            <p>Des changements ne sont pas enregistrés.</p>
+            {raisonEnregistrer !== null && <p className="pl-aide">{raisonEnregistrer}</p>}
+            <div className="pl-modale-actions">
+              <button
+                type="button"
+                className="pl-bouton pl-principal"
+                disabled={raisonEnregistrer !== null}
+                onClick={() => {
+                  setConfirmation(null);
+                  void enregistrer().then((ok) => {
+                    if (ok) verrouiller();
+                  });
+                }}
+              >
+                Enregistrer
+              </button>
+              <button
+                type="button"
+                className="pl-bouton"
+                disabled={occupe}
+                onClick={() => {
+                  setConfirmation(null);
+                  abandonner();
+                  verrouiller();
+                }}
+              >
+                Abandonner les changements
+              </button>
+              <button
+                type="button"
+                className="pl-bouton"
+                onClick={() => {
+                  setConfirmation(null);
+                }}
+              >
+                Continuer la modification
               </button>
             </div>
           </Modale>

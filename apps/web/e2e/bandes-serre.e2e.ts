@@ -5,6 +5,7 @@ import { TESTID_CONTOURS as TC } from '../src/ecrans/placement/test/contrat-cont
 import { BOUTONS_BANDES as B, CHAMPS_BANDES as C, TESTID_BANDES as TB } from '../src/ecrans/placement/test/contrat-bandes.ts';
 import { fermePlacement, MANON, MANON_PLANCHES, ZONE_TRI } from '../src/ecrans/placement/test/ferme-placement.ts';
 import { surveillerCsp } from './outils.ts';
+import { deverrouillerPlan } from './deverrouiller-plan.ts';
 
 /**
  * T86 — les sous-zones d'une serre se dessinent en bandes et leurs planches s'y rangent, de bout en bout, sur ordinateur
@@ -82,6 +83,7 @@ async function ouvrirEditeur(page: Page): Promise<void> {
   await onglet(page, 'Ferme').click();
   await page.getByRole('button', { name: new RegExp(ENTREE_PLACEMENT) }).click();
   await expect(editeur(page)).toBeVisible({ timeout: 15_000 });
+  await deverrouillerPlan(page);
   await expect(editeur(page)).toHaveAttribute('data-mode', 'edition');
 }
 

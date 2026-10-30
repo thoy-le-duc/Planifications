@@ -28,7 +28,6 @@ let conteneur: HTMLDivElement;
 let racine: Root;
 let base: BaseMemoire | null = null;
 let placements: (readonly ChangementPlacement[])[] = [];
-let fermetures = 0;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -36,7 +35,6 @@ beforeEach(() => {
   document.body.append(conteneur);
   racine = createRoot(conteneur);
   placements = [];
-  fermetures = 0;
   vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('fetch interdit'))));
 });
 
@@ -74,9 +72,7 @@ async function ouvrir(options: OptionsFermePlacement & { readonly ordinateur?: b
     porte,
     fermeId: FERME,
     utilisateurId: UTILISATEUR,
-    surFermer: () => {
-      fermetures++;
-    },
+    surFermer: () => undefined,
     ordinateur: options.ordinateur ?? true,
     enLigne: true,
     delaiAnnulationMs: 60_000,
@@ -243,8 +239,8 @@ describe('T87 : « Modifier le plan »', () => {
     expect(confirmation()).toBeUndefined();
     expect(Math.abs(nombre(serre(), 'data-x') - x1)).toBeLessThan(0.01);
     const annuler = un(T.annuler);
-    expect(annuler, '« Annuler l’enregistrement » reste proposé').not.toBeNull();
-    await toucher(annuler as HTMLElement);
+    if (annuler === null) throw new Error('« Annuler l’enregistrement » devrait rester proposé');
+    await toucher(annuler);
     await attendre(() => placements.length === 2, 'annulation écrite');
     await attendre(() => Math.abs(nombre(serre(), 'data-x') - 40) < 0.01, 'serre revenue');
   });
