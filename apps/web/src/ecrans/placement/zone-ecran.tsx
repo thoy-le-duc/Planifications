@@ -590,13 +590,98 @@ export function PanneauZone({
   );
 }
 
+// ── Ajouter (T89) ───────────────────────────────────────────────────────────────────────────────
+
+export interface ProprietesMenuAjouter {
+  /** « Ajouter » attend l'origine, et la fin d'une pose ou d'un tracé (comme « Nouveau bâtiment »). */
+  readonly bloque: boolean;
+  /** La raison affichée quand c'est bloqué. */
+  readonly idRaison: string;
+  /** « Ajouter » touché : l'éditeur charge la fiche de la serre d'avance. */
+  readonly surOuvrir: () => void;
+  readonly surSerre: () => void;
+  readonly surBatiment: () => void;
+}
+
+/**
+ * « Ajouter » : Serre ou tunnel (la fiche de T89), Parcelle de plein champ (le chemin de T85 : choisir la zone, puis
+ * « Dessiner depuis les planches »), Bâtiment (« Nouveau bâtiment », sans les types serre).
+ */
+export function MenuAjouter({ bloque, idRaison, surOuvrir, surSerre, surBatiment }: ProprietesMenuAjouter): ReactElement {
+  const [ouvert, setOuvert] = useState(false);
+  const [parcelle, setParcelle] = useState(false);
+  const fermer = (): void => {
+    setOuvert(false);
+    setParcelle(false);
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className="pl-bouton"
+        aria-expanded={ouvert}
+        disabled={bloque}
+        aria-describedby={bloque ? idRaison : undefined}
+        onClick={() => {
+          if (!ouvert) surOuvrir();
+          setOuvert(!ouvert);
+          setParcelle(false);
+        }}
+      >
+        Ajouter
+      </button>
+      {ouvert && !bloque && (
+        <div role="group" aria-label="Ajouter" className="pl-menu-ajouter">
+          <button
+            type="button"
+            className="pl-bouton"
+            onClick={() => {
+              fermer();
+              surSerre();
+            }}
+          >
+            Serre ou tunnel
+          </button>
+          <button
+            type="button"
+            className="pl-bouton"
+            onClick={() => {
+              setParcelle(true);
+            }}
+          >
+            Parcelle de plein champ
+          </button>
+          <button
+            type="button"
+            className="pl-bouton"
+            onClick={() => {
+              fermer();
+              surBatiment();
+            }}
+          >
+            Bâtiment
+          </button>
+          {parcelle && (
+            <p role="status" className="pl-aide">
+              Choisissez la zone dans la liste « Zones » : « Dessiner depuis les planches » la dessine d’un tap, ou « Tracer le contour » sommet par sommet.
+            </p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Nouveau bâtiment ────────────────────────────────────────────────────────────────────────────
+
+/** T89 : une serre ou un tunnel s'ajoute par sa fiche (« Ajouter », « Serre ou tunnel ») : « Nouveau bâtiment » ne les propose plus. */
+const estSerre = (t: TypeBatiment): boolean => t === 'serre_tunnel' || t === 'serre_chapelle';
 
 export function FormulaireBatiment({ outils, surPoser, surFermer }: { readonly outils: Outils; readonly surPoser: (n: NouveauBatiment) => void; readonly surFermer: () => void }): ReactElement {
   const idType = useId();
   const idNom = useId();
   const idRaison = useId();
-  const [type, setType] = useState<TypeBatiment>('serre_tunnel');
+  const [type, setType] = useState<TypeBatiment>('hangar');
   const [nom, setNom] = useState('');
   const [longueur, setLongueur] = useState('30');
   const [largeur, setLargeur] = useState('8');
@@ -615,11 +700,11 @@ export function FormulaireBatiment({ outils, surPoser, surFermer }: { readonly o
           value={type}
           onChange={(e) => {
             const v = e.target.value;
-            const trouve = TYPES_BATIMENT.find((t) => t === v);
+            const trouve = TYPES_BATIMENT.find((t) => t === v && !estSerre(t));
             if (trouve !== undefined) setType(trouve);
           }}
         >
-          {outils.types.map((t) => (
+          {outils.types.filter((t) => !estSerre(t.valeur)).map((t) => (
             <option key={t.valeur} value={t.valeur}>
               {t.libelle}
             </option>

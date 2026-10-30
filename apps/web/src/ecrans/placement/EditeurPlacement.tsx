@@ -63,6 +63,7 @@ import {
 } from './gestes.ts';
 import type * as ModuleChemins from './chemins.tsx';
 import type * as ModuleZone from './zone-ecran.tsx';
+import type * as ModuleSerre from './serre-fiche.tsx';
 import type { InfoBande } from './bandes-serre.ts';
 import type { RectangleEnglobant } from '@planif/core/placement';
 import { DELAI_RELANCE_TUILE_MS, depuisEcran, ESSAIS_TUILE_MAX, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_DEPART_SANS_POSITION, ZOOM_INITIAL, ZOOM_MIN_VUE, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
@@ -433,7 +434,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [ferme, setFerme] = useState<{ readonly valeur: FermeLue | null } | null>(null);
   const [roles, setRoles] = useState<readonly string[] | null>(null);
   const [lusB, setLusB] = useState<readonly Batiment[] | null>(null);
-  const [zones, setZones] = useState<readonly Zone[] | null>(null);
+  const [zonesLues, setZones] = useState<readonly Zone[] | null>(null);
   const [lusP, setLusP] = useState<readonly Planche[] | null>(null);
   const [lusE, setLusE] = useState<readonly EmplacementPlace[] | null>(null);
   // T85 : les emplacements en service (placés ou non), pour « Dessiner depuis les planches ».
@@ -471,6 +472,12 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   useEffect(() => porte.surveiller(requeteVannes(fermeId, jour), (l) => { setLusV(sansNull(l)); }), [porte, fermeId, jour]);
   useEffect(() => porte.surveiller(requeteChemins(fermeId), (l) => { setLusC(sansNull(l)); }), [porte, fermeId]);
   const cheminEnCours = chemin !== null && mChemin !== null ? { b: chemin, m: mChemin } : null;
+  // T89 : la fiche « Serre ou tunnel » (./serre-fiche.tsx, chargée au toucher de « Ajouter » ou de « Placer la serre »), et ce
+  // qu'elle a mis au brouillon : zones, sous-zones et planches à créer, affichées comme si elles étaient lues.
+  const [mSerre, setMSerre] = useState<typeof ModuleSerre | null>(null);
+  const [fiche, setFiche] = useState<{ readonly zoneId: string | null } | null>(null);
+  const [creation, setCreation] = useState<ModuleSerre.CreationSerre | null>(null);
+  const zones = creation === null || zonesLues === null || mSerre === null ? zonesLues : mSerre.zonesAvec(zonesLues, creation);
 
   const gerant = roles?.includes('gerant') === true;
   const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null && (echecZone || (mZone !== null && lusS !== null));
@@ -722,9 +729,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const choisi = selection === null ? undefined : [...elements.batiments, ...elements.planches, ...elements.vannes].find((e) => e.id === selection);
   const batimentChoisi = choisi?.sorte === 'batiment' ? batimentsAff.find((b) => b.id === choisi.id) : undefined;
 
-  const changements = useMemo(
-    () =>
-      pret
+  const changements = useMemo(() => {
+    const c = pret
         ? changementsDuBrouillon({
             batiments: lusB,
             // Ce qui est écrit respecte la borne même si le champ n'a pas été quitté.
@@ -746,9 +752,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             chemin !== null && mChemin !== null ? mChemin.changements(chemin) : [],
             mZone?.changementsDesBandes(zones, lusP, brouillonP, brouillonZ, bandes) ?? [],
           )
-        : [],
-    [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, calages, brouillonV, lusV, chemin, mChemin, mZone, bandes],
-  );
+        : [];
+    return creation === null || mSerre === null ? c : mSerre.avecCreation(creation, c, brouillonP);
+  }, [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, calages, brouillonV, lusV, chemin, mChemin, mZone, bandes, creation, mSerre]);
   const modifie = changements.length > 0;
   const contoursModifies = [...zonesInfo.values()].filter((i) => i.change);
   const contoursInvalides = contoursModifies.filter((i) => i.verdict?.ok === false);
@@ -829,6 +835,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setCalages(new Map());
     setTrace(null);
     setChemin(null);
+    setCreation(null);
     setMessageContour(null);
     setErreur(null);
   }
@@ -1054,7 +1061,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   async function enregistrer(): Promise<boolean> {
     if (!peutEnregistrer) return false;
-    const [ecritsB, ecritsP, ecritsZ, ecritsV, ecritC, ecritsCal] = [brouillonB, brouillonP, brouillonZ, brouillonV, chemin, calages];
+    const [ecritsB, ecritsP, ecritsZ, ecritsV, ecritC, ecritsCal, ecriteS] = [brouillonB, brouillonP, brouillonZ, brouillonV, chemin, calages, creation];
     const entree = await ecrire(changements);
     if (entree === null) return false;
     // Seul ce qui vient d'être écrit sort du brouillon : un geste fait pendant l'écriture reste.
@@ -1069,6 +1076,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setBrouillonV((prev) => sans(prev, ecritsV));
     setCalages((prev) => sans(prev, ecritsCal));
     setChemin((c) => (c === ecritC ? null : c));
+    setCreation((c) => (c === ecriteS ? null : c));
     setDernier(entree);
     return true;
   }
@@ -1373,6 +1381,12 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     );
   }
 
+  /** T89 : charge la fiche de la serre (une fois), puis l'ouvre si `zoneId` est donné (null : serre neuve ; undefined : charger seulement). */
+  function ouvrirFiche(zoneId?: string | null): void {
+    if (zoneId !== undefined) setFiche({ zoneId });
+    if (mSerre === null) void import('./serre-fiche.tsx').then(setMSerre, (e: unknown) => { setErreur(messageDe(e)); });
+  }
+
   function identifiantNeuf(): string {
     generateur.current ??= creerGenerateurId({ horloge: () => Date.now(), aleatoire: (n) => crypto.getRandomValues(new Uint8Array(n)) });
     return generateur.current<'Batiment'>();
@@ -1571,6 +1585,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           </button>
         </>
       )}
+      {mZone !== null && <mZone.MenuAjouter bloque={nouveauBloque} idRaison={idRaisonNouveau} surOuvrir={ouvrirFiche} surSerre={() => { ouvrirFiche(null); }} surBatiment={() => { setFormulaire(true); }} />}
       <button
         type="button"
         className="pl-bouton"
@@ -2000,7 +2015,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             )}
             {pose !== null && (
               <p role="status" data-testid="message-pose" className="pl-message">
-                Touchez la photo où se trouve {pose.type.startsWith('serre') ? 'la serre' : 'le bâtiment'} « {pose.nom} ».{' '}
+                Touchez la photo où se trouve le bâtiment « {pose.nom} ».{' '}
                 <button
                   type="button"
                   className="pl-bouton"
@@ -2021,6 +2036,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 </button>
               </p>
             )}
+            {creation !== null && mSerre !== null && <mSerre.BrouillonSerre c={creation} />}
             {tropDeChangements && (
               <p role="status" className="pl-message">
                 {MESSAGES_CONTOURS.tropDeChangements} ({String(changements.length)} sur {String(ECRITURES_MAX_PAR_LOT)} au plus). Abandonnez une partie des changements, puis enregistrez en plusieurs fois.
@@ -2076,7 +2092,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                   }}
                   surRenoncer={abandonnerTrace}
                   surSerre={() => {
-                    if (zoneChoisie.affiche === null) placerSerre(zoneChoisie.zone.id, null);
+                    if (zoneChoisie.affiche === null) ouvrirFiche(zoneChoisie.zone.id);
                     else remplacerParSerre(zoneChoisie.zone.id);
                   }}
                   passePied={passePied}
@@ -2134,6 +2150,26 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             }}
             surFermer={() => {
               setFormulaire(false);
+            }}
+          />
+        )}
+        {fiche !== null && mSerre !== null && (
+          <mSerre.FicheSerre
+            zones={zones ?? []}
+            batiments={lusB ?? []}
+            emplacements={lusS ?? []}
+            zoneId={fiche.zoneId}
+            centre={vue.centre}
+            nouvelId={() => nouvelId?.() ?? identifiantNeuf()}
+            surCreer={(r) => {
+              setFiche(null);
+              setBrouillonB((prev) => new Map(prev).set(r.batiment.id, r.batiment));
+              setBrouillonP((prev) => new Map([...prev, ...r.planches.map((x): [string, Planche] => [x.id, x])]));
+              setCreation((c) => mSerre.ajouterCreation(c, r.creation));
+              selectionner(r.batiment.id);
+            }}
+            surFermer={() => {
+              setFiche(null);
             }}
           />
         )}
