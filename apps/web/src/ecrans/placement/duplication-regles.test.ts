@@ -109,3 +109,23 @@ describe('T90 : l’ordre des sous-zones est gardé (« Z 9 » avant « Z 10 »)
     expect([zoneDe(-5, 0), zoneDe(5, 0), zoneDe(-5, 1), zoneDe(5, 1)]).toEqual(['Z 11', 'Z 12', 'Z 13', 'Z 14']);
   });
 });
+
+describe('T90 : le brouillon fait foi sur les planches placées', () => {
+  it('une planche placée en base mais absente de l’affichage (retirée au brouillon) n’est pas copiée', () => {
+    const { r } = copie(contexte({ planches: [planche('p10', 'z10', 'P1', 5)] }));
+    expect(r.creation.planches.map((p) => p.code).sort()).toEqual(['P1', 'P2', 'P2', 'R1', 'T-1']);
+    expect(r.planches).toHaveLength(1);
+  });
+
+  it('une planche changée de zone au brouillon est copiée dans la copie de sa zone du brouillon', () => {
+    const { r } = copie(contexte({ planches: [planche('p9', 'z10', 'P1', -5), planche('p10', 'z10', 'P1', 5)] }));
+    const zoneDe = (x: number) => r.creation.zones.find((z) => z.id === r.planches.find((p) => p.placement.x === x)?.zoneId)?.nom;
+    expect(zoneDe(-5)).toBe('Z 12');
+    expect(zoneDe(5)).toBe('Z 12');
+  });
+
+  it('une planche déplacée hors de la zone dupliquée n’est pas copiée', () => {
+    const { r } = copie(contexte({ planches: [planche('p9', 'autre', 'P1', -5), planche('p10', 'z10', 'P1', 5)] }));
+    expect(r.creation.planches.map((p) => p.code).sort()).toEqual(['P1', 'P2', 'P2', 'R1', 'T-1']);
+  });
+});
