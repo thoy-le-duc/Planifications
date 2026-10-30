@@ -395,7 +395,8 @@ describe('T28b : gérant sur ordinateur, ferme placée', () => {
 
   it('créer un bâtiment : type, nom, dimensions, puis le poser ; enregistré ; « Annuler » le supprime (suppression douce)', async () => {
     const b = await ouvrir({ origine: true });
-    await toucher(bouton('Nouveau bâtiment'));
+    await toucher(bouton('Ajouter'));
+    await toucher(bouton('Bâtiment'));
     const formulaire = dialogues().find((d) => d.getAttribute('data-testid') !== T.editeur && ((d.getAttribute('aria-label') ?? '') + texte(d)).includes('Nouveau bâtiment'));
     expect(formulaire, 'formulaire « Nouveau bâtiment »').toBeDefined();
     if (formulaire === undefined) return;
@@ -443,6 +444,9 @@ describe('T28b : gérant sur ordinateur, ferme placée', () => {
 
   it('lier une serre à une zone qui a un contour : confirmation, contour effacé puis serre liée, en un appel ; annulable', async () => {
     const b = await ouvrir({ origine: true });
+    // T92 : seules les zones tunnel ou serre sont proposées : « Plein champ » en devient une.
+    b.base.recevoir("UPDATE zone SET type_abri = 'tunnel' WHERE id = ?", [ZONE_CHAMP]);
+    await unTour();
     await selectionner(batimentOuEchec(SERRE));
     await remplir(liste('Zone abritée', panneau()), ZONE_CHAMP);
     await confirmer(new RegExp(MESSAGES_PLACEMENT.contourRemplace));
@@ -462,7 +466,7 @@ describe('T28b : gérant sur ordinateur, ferme placée', () => {
   });
 
   it('lier une serre à une zone sans contour : pas de confirmation', async () => {
-    const b = await ouvrir({ origine: true });
+    const b = await ouvrir({ origine: true, zoneTunnel: true });
     await selectionner(batimentOuEchec(SERRE));
     await remplir(liste('Zone abritée', panneau()), ZONE_TUNNEL);
     expect(confirmation(new RegExp(MESSAGES_PLACEMENT.contourRemplace))).toBeUndefined();
@@ -490,7 +494,7 @@ describe('T28b : sans point de départ, on le pose d’abord', () => {
     expect(message).not.toBeNull();
     expect(message?.getAttribute('role')).toBe('status');
     expect(texte(message)).toMatch(/point de départ/i);
-    expect(desactive(bouton('Nouveau bâtiment'))).toBe(true);
+    expect(desactive(bouton('Ajouter'))).toBe(true);
     expect(b.placements).toEqual([]);
   });
 
@@ -503,7 +507,7 @@ describe('T28b : sans point de départ, on le pose d’abord', () => {
     expect(b.placements[0]).toEqual([{ sorte: 'origine', origine: { latitude: POSITION.latitude, longitude: POSITION.longitude } }]);
     expect(origineEnBase(b)).toEqual(POSITION);
     await attendre(() => editeurOuEchec().getAttribute('data-origine') === '44,1.5', 'data-origine');
-    await attendre(() => !desactive(bouton('Nouveau bâtiment')), 'Nouveau bâtiment possible');
+    await attendre(() => !desactive(bouton('Ajouter')), 'Nouveau bâtiment possible');
     expect(un(T.origineAbsente)).toBeNull();
   });
 
@@ -583,7 +587,7 @@ describe('T28b : seul le gérant modifie', () => {
     await touche(serre, 'ArrowRight', { shiftKey: true });
     await touche(serre, ']');
     expect(poignees(), 'aucune poignée pour un équipier').toEqual([]);
-    expect(boutonsNommes(/^(Enregistrer|Nouveau bâtiment|Utiliser la position)/), 'aucun bouton d’écriture').toEqual([]);
+    expect(boutonsNommes(/^(Enregistrer|Ajouter|Utiliser la position)/), 'aucun bouton d’écriture').toEqual([]);
     expect(nombre(batimentOuEchec(SERRE), 'data-x')).toBeCloseTo(40, 2);
     expect(nombre(batimentOuEchec(SERRE), 'data-orientation')).toBeCloseTo(0, 2);
     const p = un(T.panneau);
@@ -613,7 +617,7 @@ describe('T28b : seul le gérant modifie', () => {
     await selectionner(serre);
     await touche(serre, 'ArrowRight');
     expect(poignees()).toEqual([]);
-    expect(boutonsNommes(/^(Enregistrer|Nouveau bâtiment)/)).toEqual([]);
+    expect(boutonsNommes(/^(Enregistrer|Ajouter)/)).toEqual([]);
     expect(b.placements).toEqual([]);
   });
 });

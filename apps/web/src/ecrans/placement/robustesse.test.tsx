@@ -238,7 +238,8 @@ describe('T28b, B1 : la ferme active change sans démonter l’éditeur', () => 
     const b = suivre(base, FERME_B);
     await rendre(a, FERME);
     await bougerSerre();
-    await toucher(bouton('Nouveau bâtiment'));
+    await toucher(bouton('Ajouter'));
+    await toucher(bouton('Bâtiment'));
     const f = dialogues().find((d) => d.getAttribute('data-testid') !== T.editeur && texte(d).includes('Nouveau bâtiment'));
     expect(f).toBeDefined();
     expect(a.placements).toEqual([]);

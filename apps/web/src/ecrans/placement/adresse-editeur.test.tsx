@@ -16,7 +16,7 @@ import { attendre, champ, desactive, liste, remplir, texte, toucher, unTour } fr
 import { versGeographique } from './coeur.ts';
 import type { ModuleEditeur, ProprietesEditeurPlacement } from './test/contrat.ts';
 import { MESSAGES_ADRESSE, MOISSAC, MOTIF_INDISPONIBLE, NOM_CHAMP_ADRESSE, NUMERO_MOISSAC, reponseGeocodage, RUE_MOISSAC, TESTID_ADRESSE as A, type ModuleAdresse, type ModuleTuilesT28h } from './test/contrat-adresse.ts';
-import { ecrireFermePlacement, FERME, POSITION, UTILISATEUR, ZONE_CHAMP, ZONE_ENFANT, ZONE_SITE2, ZONE_TUNNEL, type OptionsFermePlacement } from './test/ferme-placement.ts';
+import { ecrireFermePlacement, FERME, POSITION, SERRE, UTILISATEUR, ZONE_CHAMP, ZONE_ENFANT, ZONE_SITE2, ZONE_TUNNEL, type OptionsFermePlacement } from './test/ferme-placement.ts';
 import { TESTID_PLACEMENT as T } from './test/contrat.ts';
 import { deverrouiller } from './test/deverrouiller.ts';
 
@@ -561,7 +561,7 @@ describe('T28h : plusieurs sites', () => {
   const ORIGINE = POSITION;
   const geo = (x: number, y: number): { latitude: number; longitude: number } => versGeographique(ORIGINE, { x, y });
 
-  it('« Aller à » liste les zones de premier niveau placées (ni sous-zone, ni zone sans contour), dans l’ordre de la base', async () => {
+  it('« Aller à » liste les zones de premier niveau placées (ni sous-zone, ni zone sans contour), puis les serres', async () => {
     await ouvrir({ origine: true, deuxSites: true });
     const l = liste('Aller à');
     expect(l.getAttribute('data-testid')).toBe(A.allerA);
@@ -570,6 +570,8 @@ describe('T28h : plusieurs sites', () => {
     expect(options.slice(1)).toEqual([
       [ZONE_CHAMP, 'Plein champ'],
       [ZONE_SITE2, 'Verger nord'],
+      // T92 : les serres s'ajoutent aux zones.
+      [SERRE, 'Serre M1'],
     ]);
     expect(options.map((o) => o[0])).not.toContain(ZONE_ENFANT);
     expect(options.map((o) => o[0])).not.toContain(ZONE_TUNNEL);
@@ -591,7 +593,8 @@ describe('T28h : plusieurs sites', () => {
     expect(b, 'bouton « Toute la ferme »').not.toBeNull();
     expect(texte(b)).toMatch(/Toute la ferme/);
     if (b) await toucher(b);
-    attendreCentre(geo(10120, 15), 'milieu des deux sites');
+    // T92 : la serre M1 (x de 36 à 44, y de 25 à 55) entre dans l'emprise : x de 36 à 20140, y de 0 à 55.
+    attendreCentre(geo(10088, 27.5), 'milieu des deux sites');
     expect(zoomAffiche()).toBe(12);
   });
 
@@ -599,15 +602,17 @@ describe('T28h : plusieurs sites', () => {
     await ouvrir({ origine: true, deuxSites: true });
     await remplir(liste('Aller à'), ZONE_SITE2);
     await toucher(un(A.toutelaFerme) ?? document.body);
-    attendreCentre(geo(10120, 15), 'milieu des deux sites');
+    // T92 : la serre M1 (x de 36 à 44, y de 25 à 55) entre dans l'emprise : x de 36 à 20140, y de 0 à 55.
+    attendreCentre(geo(10088, 27.5), 'milieu des deux sites');
     expect(zoomAffiche()).toBe(12);
   });
 
-  it('une seule zone placée : « Toute la ferme » cadre cette zone ; aucune « Aller à » ni écriture', async () => {
+  it('une seule zone placée : « Toute la ferme » cadre cette zone et la serre ; aucune « Aller à » ni écriture', async () => {
     const b = await ouvrir({ origine: true });
-    expect([...liste('Aller à').options].map((o) => o.value)).toEqual(['', ZONE_CHAMP]);
+    expect([...liste('Aller à').options].map((o) => o.value)).toEqual(['', ZONE_CHAMP, SERRE]);
     await toucher(un(A.toutelaFerme) ?? document.body);
-    attendreCentre(geo(120, 15), 'zone unique');
+    // T92 : avec la serre M1 : x de 36 à 140, y de 0 à 55.
+    attendreCentre(geo(88, 27.5), 'zone et serre');
     expect(zoomAffiche()).toBe(19);
     expect(b.placements).toEqual([]);
     expect(b.autresEcritures).toEqual([]);

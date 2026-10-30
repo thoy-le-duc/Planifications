@@ -100,7 +100,8 @@ async function confirmer(page: Page, texte: RegExp): Promise<void> {
 
 /** Pose un bâtiment au milieu du plan (formulaire « Nouveau bâtiment ») et enregistre. */
 async function poserUnBatiment(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Nouveau bâtiment', exact: true }).click();
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+  await page.getByRole('button', { name: 'Bâtiment', exact: true }).click();
   const f = fenetre(page, /Nouveau bâtiment/);
   await expect(f).toBeVisible();
   await f.getByLabel('Type', { exact: true }).selectOption('hangar');

@@ -131,7 +131,8 @@ async function enregistrer(page: Page): Promise<void> {
 }
 
 async function nouveauBatiment(page: Page, nom: string, ou: { x: number; y: number }): Promise<Locator> {
-  await page.getByRole('button', { name: 'Nouveau bâtiment', exact: true }).click();
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+  await page.getByRole('button', { name: 'Bâtiment', exact: true }).click();
   const f = fenetre(page, /Nouveau bâtiment/);
   await expect(f).toBeVisible();
   // T89 (règle 6) : « Nouveau bâtiment » ne propose plus les types serre (fiche « Serre ou tunnel »).
@@ -186,7 +187,7 @@ test('ordinateur en ligne : photo IGN, point de départ, poser une serre, la tou
   await test.step('sans point de départ : on le pose d’abord, au clic, avec confirmation', async () => {
     await expect(editeur(page)).toHaveAttribute('data-origine', '');
     await expect(page.getByTestId(T.origineAbsente)).toContainText(/point de départ/i);
-    await expect(page.getByRole('button', { name: 'Nouveau bâtiment', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Ajouter', exact: true })).toBeDisabled();
     const milieu = await centreDe(plan(page));
     await page.mouse.click(milieu.x, milieu.y);
     await confirmer(page, /point de départ/i);
@@ -196,7 +197,7 @@ test('ordinateur en ligne : photo IGN, point de départ, poser une serre, la tou
     // Vue centrée sur la position de la ferme : le milieu du plan est à quelques pixels près dessus.
     const ecart = versLocal(POSITION, { latitude, longitude });
     expect(Math.hypot(ecart.x, ecart.y), `point de départ à ${origine}`).toBeLessThan(2);
-    await expect(page.getByRole('button', { name: 'Nouveau bâtiment', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Ajouter', exact: true })).toBeEnabled();
   });
 
   const serre = batiments(page).first();

@@ -73,6 +73,11 @@ interface ZoneLue {
   /** T82 : liste de la zone ; nulle : celle de son type d'abri. */
   readonly equipementsAbri: readonly EquipementAbri[] | null;
 }
+/** T92 : une serre (ou tout bâtiment) qui abrite une zone. */
+interface SerreLue {
+  readonly nom: string;
+  readonly zoneId: string;
+}
 interface PlancheLue {
   readonly id: string;
   readonly zoneId: string;
@@ -310,20 +315,37 @@ function parentesPossibles(zones: readonly ZoneLue[], zoneId: string | null): Zo
   return zones.filter((z) => !exclues.has(z.id));
 }
 
+/** La serre qui abrite la zone, ou la zone dont elle est une sous-zone (de proche en proche) ; undefined sans serre. */
+function serreDe(zone: ZoneLue, zones: readonly ZoneLue[], serres: readonly SerreLue[]): SerreLue | undefined {
+  const vues = new Set<string>();
+  let id: string | null = zone.id;
+  while (id !== null && !vues.has(id)) {
+    vues.add(id);
+    const courant: string = id;
+    const trouvee = serres.find((x) => x.zoneId === courant);
+    if (trouvee !== undefined) return trouvee;
+    id = zones.find((x) => x.id === courant)?.parenteId ?? null;
+  }
+  return undefined;
+}
+
 function FormulaireZone({
   ctx,
   zone,
   zones,
+  serres,
   surFermer,
   surEnregistre,
   surSupprimee,
-}: ProprietesFormulaire & { readonly zone: ZoneLue | null; readonly zones: readonly ZoneLue[]; readonly surSupprimee: () => void }) {
+}: ProprietesFormulaire & { readonly zone: ZoneLue | null; readonly zones: readonly ZoneLue[]; readonly serres: readonly SerreLue[]; readonly surSupprimee: () => void }) {
   const [nom, setNom] = useState(zone?.nom ?? '');
   const [type, setType] = useState(zone?.typeAbri ?? 'plein_champ');
   const [parente, setParente] = useState(zone?.parenteId ?? '');
   const [message, setMessage] = useState<string | null>(null);
   const [occupe, setOccupe] = useState(false);
   const possibles = parentesPossibles(zones, zone?.id ?? null);
+  // T92 : une zone abritée (ou sous-zone d'une zone abritée) a le type d'abri de sa serre.
+  const serre = zone === null ? undefined : serreDe(zone, zones, serres);
 
   async function faire(action: () => Promise<Enregistrement | null>, apres?: () => void): Promise<void> {
     setOccupe(true);
@@ -359,7 +381,13 @@ function FormulaireZone({
           }}
           large
         />
-        <Liste etiquette="Type d’abri" valeur={type} surChange={setType} options={TYPES_ABRI.map((t) => [t, LIBELLES_ABRI[t]] as const)} large />
+        {serre === undefined ? (
+          <Liste etiquette="Type d’abri" valeur={type} surChange={setType} options={TYPES_ABRI.map((t) => [t, LIBELLES_ABRI[t]] as const)} large />
+        ) : (
+          <p className="parc-aide">
+            Type d’abri : {libelleAbri(type)}. Défini par la serre {serre.nom}.
+          </p>
+        )}
         <Liste etiquette="Dans la zone" valeur={parente} surChange={setParente} options={[['', 'Aucune (zone principale)'] as const, ...possibles.map((z) => [z.id, z.nom] as const)]} large />
       </div>
       <div className="parc-actions">
@@ -753,6 +781,7 @@ export function EcranParcellaire({ porte, fermeId, section, surFermer, surImport
   const ctx = useMemo<ContexteParcellaire>(() => ({ porte, fermeId, maintenant, aujourdhui: jour }), [porte, fermeId, maintenant, jour]);
   const [saisons, setSaisons] = useState<SaisonLue[] | null>(null);
   const [zones, setZones] = useState<ZoneLue[] | null>(null);
+  const [serres, setSerres] = useState<readonly SerreLue[]>([]);
   const [planches, setPlanches] = useState<PlancheLue[] | null>(null);
   const [zoneOuverte, setZoneOuverte] = useState<string | null>(null);
   const [formulaire, setFormulaire] = useState<(Formulaire & { readonly numero: number }) | null>(null);
@@ -789,6 +818,20 @@ export function EcranParcellaire({ porte, fermeId, section, surFermer, surImport
           convertir: (l: L) => ({ id: txt(l.id), nom: txt(l.nom), typeAbri: txt(l.type_abri), parenteId: txtOuNul(l.zone_parente_id), equipementsAbri: equipementsLus(l.equipements_abri) }),
         },
         setZones,
+      ),
+    [porte, fermeId],
+  );
+  // T92 : les zones abritées par un bâtiment (leur type d'abri est celui de la serre : il ne se change plus ici).
+  useEffect(
+    () =>
+      porte.surveiller<SerreLue>(
+        {
+          sql: 'SELECT nom, zone_id FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL AND zone_id IS NOT NULL ORDER BY nom, id',
+          parametres: [fermeId],
+          tables: ['batiment'],
+          convertir: (l: L) => ({ nom: txt(l.nom), zoneId: txt(l.zone_id) }),
+        },
+        setSerres,
       ),
     [porte, fermeId],
   );
@@ -1095,6 +1138,7 @@ export function EcranParcellaire({ porte, fermeId, section, surFermer, surImport
           ctx={ctx}
           zone={formulaire.zone}
           zones={listeZones}
+          serres={serres}
           surFermer={() => {
             setFormulaire(null);
           }}

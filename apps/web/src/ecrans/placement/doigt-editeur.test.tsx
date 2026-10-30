@@ -174,7 +174,7 @@ describe('T28k : droits sur téléphone', () => {
     expect(un(T.editeur)?.getAttribute('data-mode')).toBe('edition');
     expect(un(T.editeur)?.getAttribute('data-ecran')).toBe('telephone');
     expect(texte(un(T.editeur))).not.toContain(MESSAGES_PLACEMENT.ordinateur);
-    expect(boutonsNommes(/^Nouveau bâtiment/)).toHaveLength(1);
+    expect(boutonsNommes(/^Ajouter$/)).toHaveLength(1);
     expect(boutonsNommes(/^Enregistrer/)).toHaveLength(1);
     await selectionnerAuDoigt();
     expect(tous(T.poigneeRotation)).toHaveLength(1);
@@ -195,7 +195,7 @@ describe('T28k : droits sur téléphone', () => {
     expect(tous(D.tournerMoins)).toHaveLength(0);
     expect(tous(D.tournerPlus)).toHaveLength(0);
     expect(tous(T.poigneeRotation)).toHaveLength(0);
-    expect(boutonsNommes(/^(Enregistrer|Nouveau bâtiment)/)).toEqual([]);
+    expect(boutonsNommes(/^(Enregistrer|Ajouter)/)).toEqual([]);
     const x0 = nombre(serreOuEchec(), 'data-x');
     await glisser(serreOuEchec(), 300, 300, 400, 300);
     expect(nombre(serreOuEchec(), 'data-x')).toBe(x0);

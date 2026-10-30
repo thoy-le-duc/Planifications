@@ -31,7 +31,7 @@ export interface Outils {
 }
 
 export { mouvoirBloc } from './bloc.ts';
-export { dimensionsParDefaut, typeDeSerrePourZone } from './serre-zone.ts';
+export { typeDeSerrePourZone } from './serre-zone.ts';
 // T89 et T90 : le cumul des créations au brouillon, partagé par la fiche de la serre et la duplication (un morceau de moins à citer).
 export { ajouterCreation } from './creation-serre.ts';
 // T90 : le bouton « Dupliquer » du panneau (la fiche, ./duplication.tsx, ne se charge qu'à son toucher).
@@ -452,7 +452,7 @@ export interface ProprietesPanneauZone {
   readonly conteneur: RefObject<HTMLDivElement | null>;
   readonly surTracer: () => void;
   readonly surRenoncer: () => void;
-  /** « Placer la serre » (zone sans contour) ou « Remplacer par une serre » (zone avec contour). */
+  /** « Placer la serre » : la fiche de la serre (T89), après confirmation si la zone a un contour tracé (T92). */
   readonly surSerre: () => void;
   readonly surSommet: (index: number, point: Point) => void;
   readonly passePied: string;
@@ -535,7 +535,7 @@ export function PanneauZone({
             aria-describedby={origineSouhaitee && !occupe ? undefined : idRaison}
             onClick={typeSerre === null ? surTracer : surSerre}
           >
-            {typeSerre === null ? 'Tracer le contour' : contour === null ? 'Placer la serre' : 'Remplacer par une serre'}
+            {typeSerre === null ? 'Tracer le contour' : 'Placer la serre'}
           </button>
           <p id={idRaison} className="pl-aide">
             {occupe
@@ -610,7 +610,7 @@ export function PanneauZone({
 
 export interface ProprietesMenuAjouter {
   /**
-   * Pourquoi « Ajouter » et « Nouveau bâtiment » sont bloqués (point de départ à poser, pose ou tracé en cours), ou null ; affichée
+   * Pourquoi « Ajouter » est bloqué (point de départ à poser, pose ou tracé en cours), ou null ; affichée
    * sous les boutons, avec l'identifiant `idRaison` (« Tracer un chemin » de l'éditeur s'y réfère aussi).
    */
   readonly raison: string | null;
@@ -623,8 +623,8 @@ export interface ProprietesMenuAjouter {
 
 /**
  * « Ajouter » : Serre ou tunnel (la fiche de T89), Parcelle de plein champ (le chemin de T85 : choisir la zone, puis
- * « Dessiner depuis les planches »), Bâtiment (« Nouveau bâtiment », sans les types serre). Le bouton « Nouveau bâtiment »
- * d'avant reste à côté (T92 fera le tri) ; il n'ouvre son formulaire, comme avant, que ce morceau chargé.
+ * « Dessiner depuis les planches »), Bâtiment (le formulaire « Nouveau bâtiment », sans les types serre) :
+ * le seul chemin pour poser un bâtiment (T92).
  */
 export function MenuAjouter({ raison, idRaison, surOuvrir, surBatiment }: ProprietesMenuAjouter): ReactElement {
   const bloque = raison !== null;
@@ -688,17 +688,6 @@ export function MenuAjouter({ raison, idRaison, surOuvrir, surBatiment }: Propri
           )}
         </div>
       )}
-      <button
-        type="button"
-        className="pl-bouton"
-        disabled={bloque}
-        aria-describedby={bloque ? idRaison : undefined}
-        onClick={() => {
-          surBatiment(true);
-        }}
-      >
-        Nouveau bâtiment
-      </button>
       {bloque && (
         <p id={idRaison} className="pl-aide">
           {raison}

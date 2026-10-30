@@ -244,7 +244,7 @@ export const ENTREE_PLACEMENT = 'Placer sur la photo aérienne';
  *   endroit) y pose le point de départ ou le nouveau bâtiment.
  * `origine-absente` : message (role="status") quand la ferme n'a pas d'origine, qui contient
  *   « point de départ » ; en mode édition, un bouton « Utiliser la position de la ferme »
- *   (si ferme.position existe). Sans origine : « Nouveau bâtiment » désactivé, rien d'autre ne
+ *   (si ferme.position existe). Sans origine : « Ajouter » désactivé, rien d'autre ne
  *   s'écrit (Q31 : aucun placement sans point de départ).
  *   Un clic sur le plan (ou le bouton) ouvre une confirmation (role="alertdialog" ou "dialog",
  *   texte « point de départ ») ; « Confirmer » écrit porte.placer([{ sorte: 'origine', … }]) —
@@ -259,9 +259,9 @@ export const ENTREE_PLACEMENT = 'Placer sur la photo aérienne';
  *   `poignee-cote` × 4 (data-cote = 'avant' | 'arriere' | 'droite' | 'gauche').
  * `panneau-placement` : champs <input type="number"> du sélectionné, noms accessibles
  *   « x (m) », « y (m) », « Orientation (°) », « Longueur (m) », « Largeur (m) », « Hauteur (m) »,
- *   et une liste <select> « Zone abritée » (option '' = aucune). Une saisie (événement change)
+ *   et, pour une serre seulement (T92), une liste <select> « Zone abritée » (option '' = aucune ; zones tunnel ou serre sans bâtiment). Une saisie (événement change)
  *   modifie le brouillon. En lecture : champs désactivés (disabled ou readonly).
- * Boutons (mode édition seulement) : « Nouveau bâtiment » (formulaire role="dialog" nommé
+ * Boutons (mode édition seulement) : « Ajouter » puis « Bâtiment » (T92 : plus de bouton « Nouveau bâtiment » ; formulaire role="dialog" nommé
  *   « Nouveau bâtiment » : liste « Type » dont les valeurs d'option sont les codes de
  *   TYPES_BATIMENT, champs « Nom », « Longueur (m) », « Largeur (m) », « Hauteur (m) », bouton
  *   « Poser » ; le clic suivant sur le plan pose le centre, orientation 0, sans zone ; le

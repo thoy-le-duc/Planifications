@@ -218,7 +218,8 @@ async function enregistrer(): Promise<void> {
 
 /** Ouvre le formulaire « Nouveau bâtiment », le remplit et touche « Poser » : le mode pose commence. */
 async function commencerPose(nom = 'Serre M3'): Promise<void> {
-  await toucher(bouton('Nouveau bâtiment'));
+  await toucher(bouton('Ajouter'));
+  await toucher(bouton('Bâtiment'));
   const formulaire = dialogues().find((d) => d.getAttribute('data-testid') !== T.editeur && ((d.getAttribute('aria-label') ?? '') + texte(d)).includes('Nouveau bâtiment'));
   expect(formulaire, 'formulaire « Nouveau bâtiment »').toBeDefined();
   if (formulaire === undefined) return;
@@ -513,7 +514,10 @@ describe('T28e : la ferme active change avec un brouillon ouvert', () => {
 
 describe('T28e : confirmation d’abri', () => {
   it('le texte dit que les planches de la zone suivront la serre, en gardant l’avertissement sur le contour', async () => {
-    await ouvrir({ origine: true });
+    const b = await ouvrir({ origine: true });
+    // T92 : seules les zones tunnel ou serre sont proposées : « Plein champ » en devient une.
+    b.base.recevoir("UPDATE zone SET type_abri = 'tunnel' WHERE id = ?", [ZONE_CHAMP]);
+    await unTour();
     await selectionner(batiment(SERRE) ?? document.body);
     await remplir(liste('Zone abritée', panneau()), ZONE_CHAMP);
     await attendre(() => confirmation(new RegExp(MESSAGES_PLACEMENT.contourRemplace)) !== undefined, 'confirmation d’abri');

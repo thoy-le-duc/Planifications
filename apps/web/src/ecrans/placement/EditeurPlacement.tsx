@@ -65,7 +65,6 @@ import type * as ModuleChemins from './chemins.tsx';
 import type * as ModuleZone from './zone-ecran.tsx';
 import type * as ModuleSerre from './serre-fiche.tsx';
 import type { InfoBande } from './bandes-serre.ts';
-import type { RectangleEnglobant } from '@planif/core/placement';
 import { DELAI_RELANCE_TUILE_MS, depuisEcran, ESSAIS_TUILE_MAX, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_DEPART_SANS_POSITION, ZOOM_INITIAL, ZOOM_MIN_VUE, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
 
 export const MESSAGES_PLACEMENT = {
@@ -250,7 +249,7 @@ export interface Trace {
 type Confirmation =
   | { readonly type: 'origine'; readonly position: Position }
   | { readonly type: 'zone'; readonly batimentId: string; readonly zoneId: string }
-  | { readonly type: 'remplacer'; readonly zoneId: string; readonly englobant: RectangleEnglobant | null; readonly avis: string | null; readonly converties: readonly (readonly [string, Planche])[] }
+  | { readonly type: 'remplacer'; readonly zoneId: string }
   | { readonly type: 'fermer' }
   | { readonly type: 'terminer' };
 
@@ -617,12 +616,6 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     [origineVue, centreEffectif, zoom, taille],
   );
 
-  // Sites : les zones de premier niveau déjà placées (chacune peut être un site à part).
-  const zonesPlacees = useMemo(
-    () => (origine === null ? [] : (zones ?? []).flatMap((z) => (z.parenteId == null && z.contour !== null ? [{ id: z.id, nom: z.nom, contour: z.contour }] : []))),
-    [origine, zones],
-  );
-
   const batimentsAff = useMemo(() => {
     const lus = lusB ?? [];
     const connus = new Set(lus.map((b) => b.id));
@@ -650,6 +643,30 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     }
     return m;
   }, [zones, batimentsAff, brouillonZ, bandes]);
+
+  // Sites (« Aller à », « Toute la ferme ») : les zones de premier niveau au contour tracé, les serres, et les zones qu'elles abritent
+  // (sous-zones comprises : elles se cadrent sur leur serre). T92.
+  const sites = useMemo(() => {
+    if (origine === null) return [];
+    const coins = (b: Batiment): Point[] => {
+      const r = (b.orientationDeg * Math.PI) / 180;
+      return ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([sx, sy]) => {
+        const x = (sx * b.largeurM) / 2;
+        const y = (sy * b.longueurM) / 2;
+        return { x: b.centre.x + x * Math.cos(r) + y * Math.sin(r), y: b.centre.y - x * Math.sin(r) + y * Math.cos(r) };
+      });
+    };
+    const liste: { readonly id: string; readonly nom: string; readonly points: readonly Point[] }[] = [];
+    for (const i of zonesInfo.values()) {
+      const serre = i.abritee ? batimentsAff.find((b) => b.zoneId === (bandes.get(i.zone.id)?.racineId ?? i.zone.id)) : undefined;
+      if (serre !== undefined) liste.push({ id: i.zone.id, nom: i.zone.nom, points: coins(serre) });
+      else if (i.zone.parenteId == null && i.zone.contour !== null) liste.push({ id: i.zone.id, nom: i.zone.nom, points: i.zone.contour });
+    }
+    for (const b of batimentsAff) {
+      if ((b.type === 'serre_tunnel' || b.type === 'serre_chapelle') && !liste.some((x) => x.id === b.zoneId)) liste.push({ id: b.id, nom: b.nom, points: coins(b) });
+    }
+    return liste;
+  }, [origine, zonesInfo, batimentsAff, bandes]);
 
   /** Repère d'affichage de chaque zone (contour du brouillon s'il est valide), et repère où les planches gardent leur placement au brouillon (contour de la base). */
   const reperes = useMemo(() => {
@@ -1358,30 +1375,6 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     setPose(null);
   }
 
-  /**
-   * T81 : pose une serre pour la zone, au brouillon, rattachée à elle (un seul « Enregistrer » crée
-   * le bâtiment et efface le contour). Sans rectangle : au centre de la vue ; avec : sur le
-   * rectangle de surface minimale du contour tracé.
-   */
-  function placerSerre(zoneId: string, englobant: RectangleEnglobant | null): void {
-    const info = zonesInfo.get(zoneId);
-    const type = mZone?.typeDeSerrePourZone(info?.zone.typeAbri);
-    if (mZone === null || info === undefined || type == null) return;
-    ajouterBatiment({ ...(englobant ?? { ...mZone.dimensionsParDefaut(batimentsAff, type), centre: { x: arrondi(vue.centre.x), y: arrondi(vue.centre.y) }, orientationDeg: 0 }), nom: info.zone.nom, type, zoneId });
-  }
-
-  /** Charge le calcul du rectangle englobant (à la demande), puis demande confirmation, avec ce qu'il faut savoir. */
-  function remplacerParSerre(zoneId: string): void {
-    void import('./serre-englobante.ts').then(
-      (m) => {
-        setConfirmation({ type: 'remplacer', zoneId, ...m.preparerRemplacement(zonesInfo.get(zoneId)?.affiche, planchesAff.filter((p) => p.zoneId === zoneId), reperes.get(zoneId)?.affichage) });
-      },
-      (e: unknown) => {
-        setErreur(messageDe(e));
-      },
-    );
-  }
-
   /** T89 : charge la fiche de la serre (le module est gardé par le navigateur), et l'ouvre si `zoneId` est donné (null : serre neuve). */
   function ouvrirFiche(zoneId?: string | null): void {
     if (zoneId !== undefined) setFiche(zoneId);
@@ -1693,7 +1686,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
         <div className="pl-recherches">
           <RechercheAdresse champ={champAdresse} enLigne={enLigneEffectif} misEnAvant={pret && origine === null && ferme.valeur?.position == null} surChoix={allerAuLieu} />
-          {pret && zonesPlacees.length > 0 && (
+          {pret && sites.length > 0 && (
             <div className="pl-sites">
               <select
                 data-testid="aller-a"
@@ -1701,13 +1694,13 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 className="pl-aller-a"
                 value=""
                 onChange={(e) => {
-                  const zone = zonesPlacees.find((z) => z.id === e.target.value);
-                  const emprise = zone === undefined ? null : empriseDeContours([zone.contour]);
+                  const site = sites.find((z) => z.id === e.target.value);
+                  const emprise = site === undefined ? null : empriseDeContours([site.points]);
                   if (emprise !== null) cadrer(emprise);
                 }}
               >
                 <option value="">Aller à…</option>
-                {zonesPlacees.map((z) => (
+                {sites.map((z) => (
                   <option key={z.id} value={z.id}>
                     {z.nom}
                   </option>
@@ -1718,7 +1711,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 data-testid="toute-la-ferme"
                 className="pl-bouton"
                 onClick={() => {
-                  const emprise = empriseDeContours(zonesPlacees.map((z) => z.contour));
+                  const emprise = empriseDeContours(sites.map((z) => z.points));
                   if (emprise !== null) cadrer(emprise);
                 }}
               >
@@ -2078,8 +2071,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                   }}
                   surRenoncer={abandonnerTrace}
                   surSerre={() => {
+                    // T92 : un contour tracé s'efface avec la serre : confirmation d'abord, puis la même fiche.
                     if (zoneChoisie.affiche === null) ouvrirFiche(zoneChoisie.zone.id);
-                    else remplacerParSerre(zoneChoisie.zone.id);
+                    else setConfirmation({ type: 'remplacer', zoneId: zoneChoisie.zone.id });
                   }}
                   passePied={passePied}
                   surPassePied={setPassePied}
@@ -2109,7 +2103,8 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                   element={choisi}
                   batiment={batimentChoisi}
                   lecture={!edition}
-                  zones={(zones ?? []).filter((z) => !batimentsAff.some((b) => b.zoneId === z.id && b.id !== choisi.id))}
+                  // T92 : seules les serres abritent une zone, et une zone tunnel ou serre qui n'a pas déjà son bâtiment.
+                  zones={(zones ?? []).filter((z) => z.id === batimentChoisi?.zoneId || ((z.typeAbri === 'tunnel' || z.typeAbri === 'serre') && !batimentsAff.some((b) => b.zoneId === z.id)))}
                   surRectangle={(r) => {
                     majRectangle(choisi, r);
                   }}
@@ -2206,7 +2201,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             }}
           >
             <p>
-              {MESSAGES_PLACEMENT.contourRemplace}. {confirmation.type === 'remplacer' ? confirmation.avis : MESSAGES_CONTOURS.planchesSuivent}
+              {MESSAGES_PLACEMENT.contourRemplace}.{confirmation.type === 'zone' ? ` ${MESSAGES_CONTOURS.planchesSuivent}` : ' Les planches déjà placées seront rangées dans les cases de la serre.'}
             </p>
             <div className="pl-modale-actions">
               <button
@@ -2214,10 +2209,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 className="pl-bouton pl-principal"
                 onClick={() => {
                   if (confirmation.type === 'zone') majBatiment(confirmation.batimentId, { zoneId: confirmation.zoneId });
-                  else {
-                    placerSerre(confirmation.zoneId, confirmation.englobant);
-                    setBrouillonP((prev) => new Map([...prev, ...confirmation.converties]));
-                  }
+                  else ouvrirFiche(confirmation.zoneId);
                   setConfirmation(null);
                 }}
               >
@@ -2340,6 +2332,7 @@ function ChampsElement({ element, batiment, lecture, zones, surRectangle, surBat
       {batiment !== undefined && (
         <>
           <Champ etiquette="Hauteur (m)" valeur={batiment.hauteurM} desactive={lecture} surChange={(hauteurM) => { surBatiment({ hauteurM }); }} />
+          {(batiment.type === 'serre_tunnel' || batiment.type === 'serre_chapelle') && (
           <div className="pl-champ">
             <label htmlFor={idZone}>Zone abritée</label>
             <select
@@ -2358,6 +2351,7 @@ function ChampsElement({ element, batiment, lecture, zones, surRectangle, surBat
               ))}
             </select>
           </div>
+          )}
         </>
       )}
     </>

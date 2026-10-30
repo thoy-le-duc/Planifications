@@ -53,7 +53,7 @@ export type EtatEtape = 'faite' | 'en-cours' | 'a-venir';
 export const TITRES_ETAPES = {
   1: 'Trouver la ferme',
   2: 'Poser le point de départ',
-  3: 'Ajouter une serre ou un bâtiment',
+  3: 'Ajouter une serre, une parcelle ou un bâtiment',
   4: 'Ajuster et tracer les zones',
 } as const;
 
