@@ -2,6 +2,24 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-30 — T91 : la 3D montre exactement le plan
+
+- **Fait** : plus de grille inventée en 3D : seules les serres (avec leurs cases), les zones avec contour et les planches placées apparaissent. Un bouton « À placer (n) » liste les zones non placées ; le gérant ouvre l'éditeur dessus en modification. Une planche d'une sous-zone hors serre est au même point dans l'éditeur, le plan 2D et la 3D (test sur l'éditeur réel).
+- **Décidé** : aucun placement stocké réécrit (ticket non critique) ; une planche d'une sous-zone sans contour se lit dans le repère de la racine partout. Nouvelle borne e2e de la récolte 3D (9 appels, 38 000 triangles, mesuré jusqu'à 36 218) sur la ferme d'essai désormais placée ; aucun budget de poids relevé.
+- **Bloquant** : rien. Une planche sans placement dans une zone placée reste rangée automatiquement (T28c) : à trancher (Q56).
+
+## 2026-10-30 — T88 : une serre découpée en zones, chapelles × tronçons
+
+- **Fait** : trois colonnes facultatives sur `batiment` (`nb_chapelles`, `nb_troncons`, `largeur_allee_m`, migration 0048 ; workflow « Migrations de production » vert), calcul des cases dans le cœur, cases dans l'éditeur, le plan 2D et la 3D, « Ranger les planches » range dans les cases, colonnes dans l'export. Serre à légumes 6 × 3 avec allées de 4,40 m et tunnel Manon 3 × 1 testés.
+- **Décidé** : tronçons ou allée sans nombre de chapelles refusés partout (plus de chapelles déduites, qui faisaient bouger les cases à chaque zone ajoutée) ; une case fait au moins 1 mm de côté ; allée de 500 m au plus ; base, cœur, API et téléphone appliquent exactement les mêmes règles (deux relectures critiques).
+- **Bloquant** : rien. Écran de création : T89.
+
+## 2026-10-30 — T87 : le plan s'ouvre verrouillé
+
+- **Fait** : l'éditeur de placement s'ouvre verrouillé pour tout le monde (défiler, zoomer, un tap montre la fiche) ; le gérant a « Modifier le plan » puis « Terminer » (Enregistrer / Abandonner si changements). En modification, un glisser ne déplace qu'un élément déjà choisi, à la souris comme au doigt. Une ferme neuve au parcours guidé s'ouvre directement en modification.
+- **Décidé** : une mise à jour de la synchro ne déverrouille jamais un plan verrouillé (relecture). Budget du morceau de l'éditeur relevé de 21,1 à 21,5 Kio (mesuré 21,4) : le verrou pèse 0,3 Kio et la marge était nulle.
+- **Bloquant** : rien. Cadenas par serre : seulement si Théophane le demande (Q55, point 2).
+
 ## 2026-10-26 — T86 : une serre à plusieurs tunnels, ses zones dessinées dedans
 
 - **Fait** : une serre qui abrite une zone à sous-zones (Tri-tunnel avec Manon 1, 2, 3) se découpe en bandes de même largeur, de bout en bout, dans l'ordre des noms ; chaque bande porte son nom dans l'éditeur, le plan et la 3D. « Ranger les planches dans les bandes » range chaque sous-zone dans la sienne (règle de T85), en un seul enregistrement annulable ; un dépassement est signalé sans bloquer.
