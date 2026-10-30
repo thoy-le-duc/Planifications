@@ -155,7 +155,8 @@ test('téléphone : point de départ, serre, glisser, tourner à deux doigts, en
 
   const serre = batiments(page).first();
   await test.step('ajouter une serre : formulaire, « Poser », tap sur la photo', async () => {
-    await page.getByRole('button', { name: 'Nouveau bâtiment', exact: true }).tap();
+    await page.getByRole('button', { name: 'Ajouter', exact: true }).tap();
+    await page.getByRole('button', { name: 'Bâtiment', exact: true }).tap();
     const f = fenetre(page, /Nouveau bâtiment/);
     await expect(f).toBeVisible();
     // T89 (règle 6) : « Nouveau bâtiment » ne propose plus les types serre (fiche « Serre ou tunnel »).

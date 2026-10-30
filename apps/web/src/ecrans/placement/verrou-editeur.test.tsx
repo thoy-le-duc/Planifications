@@ -123,7 +123,7 @@ describe('T87 : le plan s’ouvre verrouillé', () => {
   it('gérant : aucun bouton de modification, glisser sur un bâtiment ne change rien, un tap ouvre sa fiche en lecture', async () => {
     await ouvrir({ origine: true });
     expect(editeur()?.getAttribute('data-mode')).toBe('lecture');
-    expect(boutonsNommes(/^(Enregistrer|Nouveau bâtiment|Terminer|Abandonner|Tracer)/), 'aucun bouton qui modifie').toEqual([]);
+    expect(boutonsNommes(/^(Enregistrer|Ajouter|Terminer|Abandonner|Tracer)/), 'aucun bouton qui modifie').toEqual([]);
     expect(un(DEVERROUILLER_PLAN)?.textContent.trim()).toBe('Modifier le plan');
     expect(un(VERROUILLER_PLAN)).toBeNull();
 
@@ -189,7 +189,7 @@ describe('T87 : « Modifier le plan »', () => {
     expect(texte(editeur())).toContain('Modification du plan');
     expect(un(DEVERROUILLER_PLAN)).toBeNull();
     expect(un(VERROUILLER_PLAN)?.textContent.trim()).toBe('Terminer');
-    expect(boutonsNommes(/^Nouveau bâtiment/)).toHaveLength(1);
+    expect(boutonsNommes(/^Ajouter$/)).toHaveLength(1);
   });
 
   it('glisser sur un bâtiment non choisi fait défiler la carte ; le choisir puis glisser le déplace (souris)', async () => {
@@ -293,7 +293,8 @@ describe('T87 : le verrou tient', () => {
   it('« Nouveau bâtiment » (pose en cours) puis « Terminer » : reverrouille et reste verrouillé', async () => {
     await ouvrir({ origine: true });
     await deverrouillerPlan();
-    await toucher(bouton('Nouveau bâtiment'));
+    await toucher(bouton('Ajouter'));
+    await toucher(bouton('Bâtiment'));
     const formulaire = dialogues().find((d) => d.getAttribute('data-testid') !== T.editeur && texte(d).includes('Nouveau bâtiment'));
     if (formulaire === undefined) throw new Error('formulaire « Nouveau bâtiment » absent');
     await remplir(liste('Type', formulaire), 'serre_tunnel');

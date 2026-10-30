@@ -14,7 +14,7 @@
  * base locale n'est jamais montré.
  *
  * Gérant actif sur ordinateur, point de départ du plan posé :
- *   - bouton « Tracer un chemin » (désactivé sans point de départ, comme « Nouveau bâtiment »).
+ *   - bouton « Tracer un chemin » (désactivé sans point de départ, comme « Ajouter »).
  *     Le toucher ouvre le tracé : `chemin-edition` data-etat="trace" ; chaque clic sur le plan
  *     (pointerdown + pointerup + click au même endroit) pose un point `point-chemin` (data-index,
  *     data-x, data-y en mètres du repère de la ferme, valeurs AFFICHÉES). Pendant le tracé,
@@ -316,7 +316,8 @@ describe('T61 : chemins dans l’éditeur de placement', () => {
 describe('T61 : bâtiments hangar, local, chambre froide, magasin dans « Nouveau bâtiment »', () => {
   it('la liste « Type » propose les sept sortes, dans l’ordre', async () => {
     await ouvrir({ origine: true, sansChemins: true });
-    await toucher(bouton('Nouveau bâtiment'));
+    await toucher(bouton('Ajouter'));
+    await toucher(bouton('Bâtiment'));
     const formulaire = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find((d) => d.getAttribute('data-testid') !== T.editeur && texte(d).includes('Nouveau bâtiment'));
     expect(formulaire, 'formulaire « Nouveau bâtiment »').toBeDefined();
     if (formulaire === undefined) return;
@@ -333,7 +334,8 @@ describe('T61 : bâtiments hangar, local, chambre froide, magasin dans « Nouvea
 
   it('une chambre froide de 6 × 4 m posée, enregistrée avec son type, annulable', async () => {
     const { p, b } = await ouvrir({ origine: true, sansChemins: true });
-    await toucher(bouton('Nouveau bâtiment'));
+    await toucher(bouton('Ajouter'));
+    await toucher(bouton('Bâtiment'));
     const formulaire = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].find((d) => d.getAttribute('data-testid') !== T.editeur && texte(d).includes('Nouveau bâtiment'));
     if (formulaire === undefined) throw new Error('formulaire absent');
     await remplir(liste('Type', formulaire), 'chambre_froide');

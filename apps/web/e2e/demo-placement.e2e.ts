@@ -131,7 +131,8 @@ async function pointLibre(page: Page): Promise<{ x: number; y: number }> {
 
 /** Ajoute une serre (formulaire « Nouveau bâtiment »), la pose sur un point libre, enregistre. */
 async function ajouterUneSerre(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Nouveau bâtiment', exact: true }).click();
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click();
+  await page.getByRole('button', { name: 'Bâtiment', exact: true }).click();
   const f = fenetre(page, /Nouveau bâtiment/);
   await expect(f).toBeVisible();
   // T89 (règle 6) : « Nouveau bâtiment » ne propose plus les types serre (fiche « Serre ou tunnel »).

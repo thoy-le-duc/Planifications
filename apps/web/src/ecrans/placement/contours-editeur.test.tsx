@@ -695,7 +695,7 @@ describe('T28d : une zone abritée suit sa serre, pas de contour à tracer', () 
   });
 
   it('zone abritée au brouillon (serre liée, pas encore enregistrée) : même message', async () => {
-    await ouvrir({ origine: true });
+    await ouvrir({ origine: true, zoneTunnel: true });
     const serre = document.querySelector<HTMLElement>(`[data-testid="${T.batiment}"][data-id="${SERRE}"]`);
     if (serre === null) throw new Error('serre absente');
     await selectionner(serre);

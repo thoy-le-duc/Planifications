@@ -122,7 +122,8 @@ async function poserOrigineParLaPosition(): Promise<void> {
 
 /** « Nouveau bâtiment » → formulaire rempli → « Poser ». Le tap sur la photo reste à faire. */
 async function commencerPose(): Promise<void> {
-  await toucher(bouton('Nouveau bâtiment'));
+  await toucher(bouton('Ajouter'));
+  await toucher(bouton('Bâtiment'));
   const formulaire = dialogues().find((d) => d.getAttribute('data-testid') !== T.editeur && texte(d).includes('Nouveau bâtiment'));
   expect(formulaire, 'formulaire « Nouveau bâtiment »').toBeDefined();
   if (formulaire === undefined) return;
@@ -254,7 +255,7 @@ describe('T28j : pendant la pose', () => {
 describe('T28j : un bouton grisé dit pourquoi', () => {
   it('« Nouveau bâtiment » sans origine : grisé, avec la raison reliée par aria-describedby', async () => {
     await ouvrir();
-    const b = bouton('Nouveau bâtiment');
+    const b = bouton('Ajouter');
     expect(desactive(b)).toBe(true);
     const ids = (b.getAttribute('aria-describedby') ?? '').split(/\s+/).filter((i) => i !== '');
     expect(ids.length, 'aria-describedby renseigné').toBeGreaterThan(0);
@@ -264,7 +265,7 @@ describe('T28j : un bouton grisé dit pourquoi', () => {
 
   it('la raison est lisible à l’écran (pas masquée)', async () => {
     await ouvrir();
-    const b = bouton('Nouveau bâtiment');
+    const b = bouton('Ajouter');
     const cible = (b.getAttribute('aria-describedby') ?? '').split(/\s+/).map((i) => document.getElementById(i)).find((el) => el !== null && MESSAGES_ETAPES.raisonSansOrigine.test(texte(el)));
     expect(cible, 'élément porteur de la raison').toBeDefined();
     expect(cible?.hidden).toBe(false);
@@ -281,7 +282,7 @@ describe('T28j : un bouton grisé dit pourquoi', () => {
 
   it('origine posée, rien à enregistrer : « Enregistrer » grisé a sa raison ; « Nouveau bâtiment » est actif', async () => {
     await ouvrir({ origine: true });
-    expect(desactive(bouton('Nouveau bâtiment'))).toBe(false);
+    expect(desactive(bouton('Ajouter'))).toBe(false);
     const enregistrer = bouton('Enregistrer');
     expect(desactive(enregistrer)).toBe(true);
     expect(raison(enregistrer)).not.toBe('');
@@ -290,9 +291,9 @@ describe('T28j : un bouton grisé dit pourquoi', () => {
   it('une fois l’origine posée, « Nouveau bâtiment » n’affiche plus la raison « étape 2 »', async () => {
     await ouvrir();
     await poserOrigineParLaPosition();
-    await attendre(() => !desactive(bouton('Nouveau bâtiment')), 'Nouveau bâtiment actif');
+    await attendre(() => !desactive(bouton('Ajouter')), 'Nouveau bâtiment actif');
     expect(un(E.bandeau), 'bandeau etapes-placement').not.toBeNull();
-    expect(raison(bouton('Nouveau bâtiment'))).not.toMatch(MESSAGES_ETAPES.raisonSansOrigine);
+    expect(raison(bouton('Ajouter'))).not.toMatch(MESSAGES_ETAPES.raisonSansOrigine);
   });
 });
 

@@ -6,7 +6,7 @@
  * ── Bouton « Ajouter » (mode édition, gérant seulement) ──────────────────────────────────────
  *
  * Un bouton « Ajouter » ouvre un menu de trois boutons : « Serre ou tunnel », « Parcelle de plein champ », « Bâtiment ».
- * Désactivé comme « Nouveau bâtiment » tant que le plan n'a pas d'origine. Absent en lecture seule et pour un équipier.
+ * Désactivé tant que le plan n'a pas d'origine. Absent en lecture seule et pour un équipier.
  * « Bâtiment » ouvre le formulaire « Nouveau bâtiment » existant, dont la liste « Type » ne propose plus serre_tunnel ni serre_chapelle (règle 6).
  *
  * ── Fiche (role="dialog", nom accessible « Serre ou tunnel », data-testid `fiche-serre`) ──────
