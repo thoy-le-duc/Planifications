@@ -337,6 +337,13 @@
       "when": 1792663784572,
       "tag": "0047_etat_abri",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793341964852,
+      "tag": "0048_serre_grille",
+      "breakpoints": true
     }
   ]
 }

@@ -311,10 +311,22 @@ export const batiment = pgTable(
     orientationDeg: decimal('orientation_deg').notNull(),
     /** Zone de culture abritée, de la même ferme (clé étrangère composée). */
     zoneId: idDe<'Zone'>('zone_id'),
+    /**
+     * T88 : la grille de la serre, chapelles (dans la largeur) × tronçons (dans la longueur), allées entre les tronçons.
+     * Nulles : une bande par sous-zone sur toute la longueur (T86). Dimensions d'une case dérivées, jamais stockées.
+     */
+    nbChapelles: integer('nb_chapelles'),
+    nbTroncons: integer('nb_troncons'),
+    // Numérique exact (mode texte de Drizzle) : la base vérifie le millimètre.
+    largeurAlleeM: numeric('largeur_allee_m'),
     ...horodatages(),
   },
   (t) => [
     verif('batiment', 'type', parmi(t.type, TYPES_BATIMENT)),
+    verif('batiment', 'nb_chapelles', sql`${t.nbChapelles} >= 1 AND ${t.nbChapelles} <= 100`),
+    verif('batiment', 'nb_troncons', sql`${t.nbTroncons} >= 1 AND ${t.nbTroncons} <= 50`),
+    verif('batiment', 'largeur_allee', sql`${t.largeurAlleeM} >= 0 AND ${t.largeurAlleeM} <= 500 AND ${t.largeurAlleeM} = round(${t.largeurAlleeM}, 3)`),
+    verif('batiment', 'grille', sql`${t.longueurM} - (coalesce(${t.nbTroncons}, 1) - 1) * coalesce(${t.largeurAlleeM}, 0) > 0`),
     verif('batiment', 'longueur', sql`${t.longueurM} > 0 AND ${t.longueurM} <= 500`),
     verif('batiment', 'largeur', sql`${t.largeurM} > 0 AND ${t.largeurM} <= 200`),
     verif('batiment', 'hauteur', sql`${t.hauteurM} > 0 AND ${t.hauteurM} <= 30`),
