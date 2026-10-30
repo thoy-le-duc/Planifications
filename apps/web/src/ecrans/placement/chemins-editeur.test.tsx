@@ -321,9 +321,8 @@ describe('T61 : bâtiments hangar, local, chambre froide, magasin dans « Nouvea
     expect(formulaire, 'formulaire « Nouveau bâtiment »').toBeDefined();
     if (formulaire === undefined) return;
     const options = [...liste('Type', formulaire).options].map((o) => [o.value, o.textContent.trim()]);
+    // T89 (règle 6) : les serres s'ajoutent par la fiche « Serre ou tunnel », plus par « Nouveau bâtiment ».
     expect(options).toEqual([
-      ['serre_tunnel', 'Serre tunnel'],
-      ['serre_chapelle', 'Serre chapelle'],
       ['hangar', 'Hangar'],
       ['local', 'Local'],
       ['chambre_froide', 'Chambre froide'],

@@ -126,7 +126,8 @@ async function commencerPose(): Promise<void> {
   const formulaire = dialogues().find((d) => d.getAttribute('data-testid') !== T.editeur && texte(d).includes('Nouveau bâtiment'));
   expect(formulaire, 'formulaire « Nouveau bâtiment »').toBeDefined();
   if (formulaire === undefined) return;
-  await remplir(liste('Type', formulaire), 'serre_tunnel');
+  // T89 (règle 6) : « Nouveau bâtiment » ne propose plus les types serre.
+  await remplir(liste('Type', formulaire), 'hangar');
   await remplir(champ('Nom', formulaire), 'Serre M3');
   await remplir(champ('Longueur (m)', formulaire), '40');
   await remplir(champ('Largeur (m)', formulaire), '8');
@@ -216,7 +217,7 @@ describe('T28j : le bandeau d’étapes', () => {
 // ── Pose d'un bâtiment : le message ──────────────────────────────────────────────────────────
 
 describe('T28j : pendant la pose', () => {
-  it('le message « Touchez la photo où se trouve la serre » est affiché, et l’étape 3 est en cours', async () => {
+  it('le message « Touchez la photo où se trouve le bâtiment » est affiché, et l’étape 3 est en cours', async () => {
     await ouvrir({ origine: true });
     await attendreEtats(ETATS('faite', 'faite', 'faite', 'en-cours'));
     expect(un(E.messagePose), 'pas de message hors pose').toBeNull();
@@ -224,7 +225,8 @@ describe('T28j : pendant la pose', () => {
     await attendre(() => un(E.messagePose) !== null, 'message-pose affiché');
     const message = un(E.messagePose);
     expect(message?.getAttribute('role')).toBe('status');
-    expect(texte(message)).toContain(MESSAGES_ETAPES.poseSerre);
+    // T89 (règle 6) : une serre ne se pose plus par « Nouveau bâtiment », la pose est celle d'un bâtiment.
+    expect(texte(message)).toContain('Touchez la photo où se trouve le bâtiment');
     await attendreEtats(ETATS('faite', 'faite', 'en-cours', 'a-venir'));
   });
 

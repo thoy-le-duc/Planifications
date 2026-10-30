@@ -399,7 +399,8 @@ describe('T28b : gérant sur ordinateur, ferme placée', () => {
     const formulaire = dialogues().find((d) => d.getAttribute('data-testid') !== T.editeur && ((d.getAttribute('aria-label') ?? '') + texte(d)).includes('Nouveau bâtiment'));
     expect(formulaire, 'formulaire « Nouveau bâtiment »').toBeDefined();
     if (formulaire === undefined) return;
-    await remplir(liste('Type', formulaire), 'serre_tunnel');
+    // T89 (règle 6) : « Nouveau bâtiment » ne propose plus les types serre.
+    await remplir(liste('Type', formulaire), 'hangar');
     await remplir(champ('Nom', formulaire), 'Serre M3');
     await remplir(champ('Longueur (m)', formulaire), '40');
     await remplir(champ('Largeur (m)', formulaire), '8');
@@ -423,7 +424,7 @@ describe('T28b : gérant sur ordinateur, ferme placée', () => {
     expect(ligne(b, 'batiment', id)).toMatchObject({
       ferme_id: FERME,
       nom: 'Serre M3',
-      type: 'serre_tunnel',
+      type: 'hangar',
       longueur_m: 40,
       largeur_m: 8,
       hauteur_m: 3.5,
