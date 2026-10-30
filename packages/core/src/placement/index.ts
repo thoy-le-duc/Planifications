@@ -71,7 +71,7 @@ export {
   type PlancheRangee,
 } from './parcelle.ts';
 // T86 : les sous-zones d'une serre en bandes, et le rangement de leurs planches.
-export { bandesDeSerre, rangerDansBande, type BandeSerre, type RangementDeBande, type SousZoneDeSerre } from './bandes.ts';
+export { bandesDeSerre, comparerNoms, rangerDansBande, type BandeSerre, type RangementDeBande, type SousZoneDeSerre } from './bandes.ts';
 // T88 : une serre découpée en cases (chapelles × tronçons, allées entre les tronçons).
 export {
   GRILLE_SERRE,
@@ -99,3 +99,15 @@ export {
   type PlanchesDeSerre,
   type ResumeSerre,
 } from './serre-fiche.ts';
+// T90 : dupliquer une serre ou une parcelle (noms et positions des copies).
+export {
+  COPIES_MAX,
+  COPIES_PAR_DEFAUT,
+  ECART_PAR_DEFAUT_M,
+  decalageDeCopie,
+  erreurDuplication,
+  largeurDuContour,
+  nomsDesCopies,
+  positionsDesCopies,
+  type CopiePositionnee,
+} from './duplication.ts';

@@ -78,7 +78,6 @@ export const MESSAGES_PLACEMENT = {
 
 /** Contours de zones (T28d). */
 export const MESSAGES_CONTOURS = {
-  zoneAbritee: 'sa forme est celle de la serre',
   sommetsMin: 'au moins 3 sommets',
   tropDeChangements: 'Trop de changements à enregistrer en une fois',
   planchesSuivent: 'Les planches de la zone suivront la serre.',
@@ -86,7 +85,7 @@ export const MESSAGES_CONTOURS = {
 } as const;
 
 /** Ce que le morceau « zone » (./zone-ecran.tsx) emprunte à l'éditeur. */
-const OUTILS: ModuleZone.Outils = { Champ, Modale, verifierContour, types: TYPES, zoneAbritee: MESSAGES_CONTOURS.zoneAbritee, fiche: MESSAGES_ETAPES.fiche };
+const OUTILS: ModuleZone.Outils = { Champ, Modale, verifierContour, types: TYPES };
 
 const MESSAGE_SOMMETS_MIN = `Un contour garde ${MESSAGES_CONTOURS.sommetsMin}.`;
 
@@ -2120,6 +2119,19 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                   surZone={(zoneId) => {
                     if (batimentChoisi !== undefined) choisirZone(batimentChoisi, zoneId);
                   }}
+                />
+              )}
+              {edition && mZone !== null && (
+                <mZone.Dupliquer
+                  batiment={batimentChoisi}
+                  zone={zoneChoisie}
+                  batiments={batimentsAff}
+                  planches={planchesAff}
+                  infos={zonesInfo}
+                  occupe={occupe}
+                  nouvelId={nouvelId ?? identifiantNeuf}
+                  porte={porte}
+                  editeur={[ouvrirFiche, setBrouillonB, setBrouillonP, setCreation, selectionner, changements.length, setBrouillonZ]}
                 />
               )}
             </section>

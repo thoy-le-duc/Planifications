@@ -21,7 +21,6 @@ export const MESSAGES_ETAPES = {
   rienAEnregistrer: 'Rien à enregistrer : aucun changement',
   contourInvalide: 'Corrigez d’abord le contour refusé',
   occupe: 'Enregistrement en cours',
-  fiche: 'Donnez un nom et des dimensions positives',
   zoomMax: 'Zoom maximal atteint',
   zoomMin: 'Zoom minimal atteint',
 } as const;

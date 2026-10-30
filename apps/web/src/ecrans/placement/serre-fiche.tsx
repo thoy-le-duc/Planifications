@@ -16,6 +16,8 @@ import type { ChangementPlacement } from '@planif/sync';
 import { bandesDeLaZone, DEFAUTS_SERRE, decouperSerres, defautsSerre, erreurFicheSerre, nombrePlanchesParDefaut, nomsDesZones, rangerDansBande, rangerDansBandes, resumeSerre, typeDeSerre } from './zone-ecran.tsx';
 import type { FicheSerre, MesuresSerre } from '@planif/core/placement';
 import type { Batiment, EmplacementEnService, Planche, Zone } from './donnees.ts';
+import { ajouterCreation, type CreationSerre, type GrilleCreee, type PlancheCreee } from './creation-serre.ts';
+export { ajouterCreation, type CreationSerre, type GrilleCreee, type PlancheCreee };
 import type { Point } from './tuiles.ts';
 
 /** Écritures au plus par enregistrement (ECRITURES_MAX_PAR_LOT du cœur, comme brouillon.ts : le cœur entier n'entre pas ici). */
@@ -27,38 +29,6 @@ const mm = (v: number): number => Math.round(v * 1000) / 1000 + 0;
 const cle = (texte: string): string => texte.trim().toLowerCase();
 
 // ── Ce que « Créer » met au brouillon ────────────────────────────────────────────────────────────
-
-/** Une planche créée par la fiche (son placement est celui que le brouillon de l'éditeur garde). */
-export interface PlancheCreee {
-  readonly id: string;
-  readonly zoneId: string;
-  readonly code: string;
-  readonly longueurM: number;
-  readonly largeurM: number;
-}
-
-export interface GrilleCreee {
-  readonly nb_chapelles: number;
-  readonly nb_troncons: number;
-  readonly largeur_allee_m: number | null;
-}
-
-/** Les lignes que la fiche crée (une ou plusieurs serres avant « Enregistrer »), et la grille de chaque bâtiment créé. */
-export interface CreationSerre {
-  readonly grilles: Readonly<Record<string, GrilleCreee>>;
-  /** Zones abritées (si elles sont nouvelles) et sous-zones créées. */
-  readonly zones: readonly Zone[];
-  readonly surfaces: Readonly<Record<string, number>>;
-  readonly planches: readonly PlancheCreee[];
-  /** Planches existantes rangées dans leur case : leur placement s'écrit avec la serre. */
-  readonly reprises: readonly string[];
-}
-
-/** Une serre de plus au brouillon (une autre fiche avant « Enregistrer »). */
-export function ajouterCreation(a: CreationSerre | null, b: CreationSerre): CreationSerre {
-  if (a === null) return b;
-  return { grilles: { ...a.grilles, ...b.grilles }, zones: [...a.zones, ...b.zones], surfaces: { ...a.surfaces, ...b.surfaces }, planches: [...a.planches, ...b.planches], reprises: [...a.reprises, ...b.reprises] };
-}
 
 export interface ResultatFiche {
   readonly creation: CreationSerre;
@@ -97,7 +67,7 @@ export function avecCreation(c: CreationSerre | null, changements: ChangementPla
       valeurs: {
         zone_id: p.zoneId,
         code: p.code,
-        sorte: 'planche',
+        sorte: p.sorte ?? 'planche',
         longueur_m: p.longueurM,
         largeur_m: p.largeurM,
         placement: place === undefined ? null : { x: mm(place.x), y: mm(place.y), orientation_deg: mm((((place.orientation_deg % 360) + 360) % 360) % 360) },
@@ -124,9 +94,10 @@ export function BrouillonSerre({ c }: { readonly c: CreationSerre | null }): Rea
   if (c === null) return null;
   const zones = c.zones.filter((z) => z.parenteId == null).length;
   const sousZones = c.zones.length - zones;
+  const nb = Object.keys(c.grilles).length;
   return (
-    <p role="status" data-testid="brouillon-serre" data-batiments={Object.keys(c.grilles).length} data-zones={zones} data-sous-zones={sousZones} data-emplacements={c.planches.length} className="pl-message pl-message-info">
-      {`Au brouillon : ${Object.keys(c.grilles).length > 1 ? 'les serres' : 'la serre'}, ${String(c.zones.length)} zone${c.zones.length > 1 ? 's' : ''} et ${String(c.planches.length)} planche${c.planches.length > 1 ? 's' : ''} à créer. Glissez à sa place, puis « Enregistrer ».`}
+    <p role="status" data-testid="brouillon-serre" data-batiments={nb} data-zones={zones} data-sous-zones={sousZones} data-emplacements={c.planches.length} className="pl-message pl-message-info">
+      {`Au brouillon : ${nb === 0 ? (zones > 1 ? 'les parcelles' : 'la parcelle') : nb > 1 ? 'les serres' : 'la serre'}, ${String(c.zones.length)} zone${c.zones.length > 1 ? 's' : ''} et ${String(c.planches.length)} planche${c.planches.length > 1 ? 's' : ''} à créer. Glissez à sa place, puis « Enregistrer ».`}
     </p>
   );
 }
