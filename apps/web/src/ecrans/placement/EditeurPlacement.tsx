@@ -64,7 +64,6 @@ import {
 import type * as ModuleChemins from './chemins.tsx';
 import type * as ModuleZone from './zone-ecran.tsx';
 import type * as ModuleSerre from './serre-fiche.tsx';
-import { typeDeSerrePourZone } from './serre-zone.ts';
 import type { InfoBande } from './bandes-serre.ts';
 import { DELAI_RELANCE_TUILE_MS, depuisEcran, ESSAIS_TUILE_MAX, MENTION_IGN, metresParPixel, tuilesVisibles, versEcran, ZOOM_DEPART_SANS_POSITION, ZOOM_INITIAL, ZOOM_MIN_VUE, ZOOM_TUILES_MAX, type Point, type Position, type VueCarte } from './tuiles.ts';
 
@@ -2105,7 +2104,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                   batiment={batimentChoisi}
                   lecture={!edition}
                   // T92 : seules les serres abritent une zone, et une zone tunnel ou serre qui n'a pas déjà son bâtiment.
-                  zones={(zones ?? []).filter((z) => z.id === batimentChoisi?.zoneId || (typeDeSerrePourZone(z.typeAbri) !== null && !batimentsAff.some((b) => b.zoneId === z.id)))}
+                  zones={(zones ?? []).filter((z) => z.id === batimentChoisi?.zoneId || ((z.typeAbri === 'tunnel' || z.typeAbri === 'serre') && !batimentsAff.some((b) => b.zoneId === z.id)))}
                   surRectangle={(r) => {
                     majRectangle(choisi, r);
                   }}
