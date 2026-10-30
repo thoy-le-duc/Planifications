@@ -176,7 +176,8 @@ test('ordinateur : recherche d’adresse (réseau simulé), recul, « Aller à �
     await expect.poll(async () => Math.abs((await centreDe(page)).longitude - attendu.longitude)).toBeLessThan(1e-4);
     await expect(editeur(page)).toHaveAttribute('data-zoom', '19');
     await page.getByTestId(A.toutelaFerme).click();
-    const milieu = versGeographique(POSITION, { x: 10120, y: 15 });
+    // T92 : la serre M1 (x de 36 à 44, y de 25 à 55) entre dans l'emprise : x de 36 à 20140, y de 0 à 55.
+    const milieu = versGeographique(POSITION, { x: 10088, y: 27.5 });
     await expect.poll(async () => Math.abs((await centreDe(page)).longitude - milieu.longitude)).toBeLessThan(1e-4);
     await expect(editeur(page)).toHaveAttribute('data-zoom', '12');
     await expect(editeur(page)).toHaveAttribute('data-origine', origineAvant ?? '');
