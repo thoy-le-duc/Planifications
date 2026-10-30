@@ -248,12 +248,12 @@ describe('T92 règle 5 : « Aller à » et « Toute la ferme »', () => {
     expect(Math.abs(centre().y - 60)).toBeLessThan(1.5);
   });
 
-  it('« Toute la ferme » englobe le plein champ et les deux serres : x de 25 à 220, y de 0 à 74,4 (centre 122,5 ; 37,2)', async () => {
+  it('« Toute la ferme » englobe le plein champ et les deux serres : x de 36 à 214,4, y de 0 à 80 (centre 125,2 ; 40)', async () => {
     await ouvrir({ triTunnel: true });
     await toucher(bouton('Toute la ferme'));
     await unTour();
-    expect(Math.abs(centre().x - 122.5)).toBeLessThan(1.5);
-    expect(Math.abs(centre().y - 37.2)).toBeLessThan(1.5);
+    expect(Math.abs(centre().x - 125.2)).toBeLessThan(1.5);
+    expect(Math.abs(centre().y - 40)).toBeLessThan(1.5);
   });
 
   it('sans aucun contour, les serres suffisent : « Aller à » est proposé', async () => {
