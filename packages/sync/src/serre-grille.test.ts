@@ -157,6 +157,20 @@ describe('T88 : la porte écrit la grille et rend de quoi l’annuler', () => {
     expect(ligne(NOUVELLE)?.longueur_m).toBe(128.8);
   });
 
+  it('allée à un flottant près (0,1 × 3) : la valeur écrite en local est l’arrondie au millimètre (0,3)', async () => {
+    await placer([batimentDe(NOUVELLE, { ...LEGUMES, largeur_allee_m: 0.1 * 3 })]);
+    expect(ligne(NOUVELLE)?.largeur_allee_m).toBe(0.3);
+  });
+
+  it.each([
+    ['nb_troncons sans nb_chapelles', { nb_chapelles: null, nb_troncons: 3 }],
+    ['allée sans nb_chapelles', { nb_chapelles: null, nb_troncons: null, largeur_allee_m: 4.4 }],
+    ['grille minuscule (0,02 m en 50 tronçons)', { nb_chapelles: 1, nb_troncons: 50, largeur_allee_m: 0, longueur_m: 0.02 }],
+  ])('%s : rejeté, rien d’écrit', async (_cas, grille) => {
+    await expect(placer([batimentDe(NOUVELLE, { ...LEGUMES, ...grille })])).rejects.toThrow();
+    expect(ligne(NOUVELLE)).toBeUndefined();
+  });
+
   it('isolement : la serre d’une autre ferme n’est pas modifiable par la porte, sa grille reste nulle', async () => {
     await expect(placer([batimentDe(SERRE_VOISINE, { nb_chapelles: 3 })])).rejects.toThrow();
     expect(ligne(SERRE_VOISINE)?.nb_chapelles).toBeNull();

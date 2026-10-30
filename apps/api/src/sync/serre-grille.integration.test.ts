@@ -209,9 +209,9 @@ decrireAvecBase('T88')('T88 : la grille d’une serre dans POST /sync/upload', {
     });
 
     it.each([
-      ['0 tronçon', { nb_troncons: 0 }],
-      ['51 tronçons', { nb_troncons: 51 }],
-      ['1,5 tronçon', { nb_troncons: 1.5 }],
+      ['0 tronçon', { nb_chapelles: 2, nb_troncons: 0 }],
+      ['51 tronçons', { nb_chapelles: 2, nb_troncons: 51 }],
+      ['1,5 tronçon', { nb_chapelles: 2, nb_troncons: 1.5 }],
     ])('%s', async (_cas, grille) => {
       const b = putSerre(grille);
       await refuse([b], b, /tronçon/iu);
@@ -219,9 +219,9 @@ decrireAvecBase('T88')('T88 : la grille d’une serre dans POST /sync/upload', {
     });
 
     it.each([
-      ['allée négative', { nb_troncons: 3, largeur_allee_m: -1 }],
-      ['allée plus fine que le millimètre', { nb_troncons: 3, largeur_allee_m: 4.4005 }],
-      ['allée en texte', { nb_troncons: 3, largeur_allee_m: '4,4' }],
+      ['allée négative', { nb_chapelles: 2, nb_troncons: 3, largeur_allee_m: -1 }],
+      ['allée plus fine que le millimètre', { nb_chapelles: 2, nb_troncons: 3, largeur_allee_m: 4.4005 }],
+      ['allée en texte', { nb_chapelles: 2, nb_troncons: 3, largeur_allee_m: '4,4' }],
     ])('%s', async (_cas, grille) => {
       const b = putSerre(grille);
       await refuse([b], b, /allée/iu);
@@ -252,6 +252,33 @@ decrireAvecBase('T88')('T88 : la grille d’une serre dans POST /sync/upload', {
       const reponse = await envoyer([b], gerant.jeton);
       expect(reponse.refus.map((r) => r.id)).toContain(b.id);
       expect(await ligne(b.id)).toBeNull();
+    });
+
+    it('allée à un flottant près (0,1 × 3) : acceptée et écrite au millimètre (0,3), comme la base l’accepte', async () => {
+      const b = putSerre({ nb_chapelles: 6, nb_troncons: 3, largeur_allee_m: 0.1 * 3 });
+      await accepte([b]);
+      expect((await ligne(b.id))?.largeur_allee_m).toBe(0.3);
+    });
+
+    it.each([
+      ['nb_troncons sans nb_chapelles', { nb_troncons: 3 }],
+      ['largeur_allee_m sans nb_chapelles', { largeur_allee_m: 4.4 }],
+      ['les deux sans nb_chapelles', { nb_troncons: 3, largeur_allee_m: 4.4 }],
+    ])('%s : refusé, message en français, rien d’écrit', async (_cas, grille) => {
+      const b = putSerre(grille);
+      await refuse([b], b, /chapelle/iu);
+      expect(await ligne(b.id)).toBeNull();
+    });
+
+    it('nb_chapelles seul : accepté', async () => {
+      await accepte([putSerre({ nb_chapelles: 3 })]);
+    });
+
+    it('grille minuscule : 0,02 m en 50 tronçons → refusé ; 0,05 m en 50 tronçons → accepté', async () => {
+      const b = putSerre({ nb_chapelles: 1, nb_troncons: 50, largeur_allee_m: 0, longueur_m: 0.02 });
+      await refuse([b], b, /tronçon|allée|longueur/iu);
+      expect(await ligne(b.id)).toBeNull();
+      await accepte([putSerre({ nb_chapelles: 1, nb_troncons: 50, largeur_allee_m: 0, longueur_m: 0.05 })]);
     });
 
     it('un lot valide qui contient une grille impossible : tout est refusé (tout ou rien)', async () => {

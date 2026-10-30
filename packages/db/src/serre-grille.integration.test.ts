@@ -7,6 +7,8 @@
  *   batiment.nb_chapelles     integer, facultative ; 1 à 100.
  *   batiment.nb_troncons      integer, facultative ; 1 à 50.
  *   batiment.largeur_allee_m  numeric, facultative ; ≥ 0, au millimètre (au plus 3 décimales : refusée sinon).
+ *   nb_troncons ou largeur_allee_m renseigné sans nb_chapelles : refusé (CHECK) ; nb_chapelles seul : nb_troncons = 1, allée 0.
+ *   Tronçon (longueur − (T − 1) × allée) / T arrondi au millimètre ≥ 0,001 m : sinon refusé (CHECK).
  *   Grille qui tient : longueur_m − (nb_troncons − 1) × largeur_allee_m > 0 (nb_troncons et allée nuls = 1 et 0).
  *
  * Drizzle : `nbChapelles`, `nbTroncons`, `largeurAlleeM` sur la table `batiment` de @planif/db.
@@ -125,7 +127,7 @@ decrireAvecBase('T88 : serre en grille en base (PostgreSQL)', { timeout: 30_000 
   it('colonnes nulles acceptées (les trois, ou une partie)', async () => {
     await serre([null, null, null]);
     await serre([3, null, null]);
-    await serre([null, 3, 4.4]);
+    await serre([3, 3, 4.4]);
   });
 
   it('serre à légumes : 6 chapelles, 3 tronçons, allée de 4,40 m → acceptée et relue telle quelle', async () => {
@@ -148,7 +150,7 @@ decrireAvecBase('T88 : serre en grille en base (PostgreSQL)', { timeout: 30_000 
 
   it('nb_troncons hors bornes (0, −1, 51) : refusé', async () => {
     await serre([6, 3, 4.4]); // la forme valide passe d'abord
-    for (const n of [0, -1, 51]) expect(await codeErreur(serre([null, n, null])), `nb_troncons ${String(n)}`).toBe(VIOLATION_CHECK);
+    for (const n of [0, -1, 51]) expect(await codeErreur(serre([6, n, null])), `nb_troncons ${String(n)}`).toBe(VIOLATION_CHECK);
   });
 
   it('largeur d’allée négative, ou plus fine que le millimètre : refusée', async () => {
@@ -176,5 +178,25 @@ decrireAvecBase('T88 : serre en grille en base (PostgreSQL)', { timeout: 30_000 
 
   it('allée nulle avec plusieurs tronçons : acceptée (allées de 0 m)', async () => {
     await serre([6, 3, null]);
+  });
+
+  it('nb_troncons ou allée sans nb_chapelles : refusé (plus de nombre de chapelles déduit) ; nb_chapelles seul accepté', async () => {
+    await serre([6, 3, 4.4]); // la forme valide passe d'abord
+    expect(await codeErreur(serre([null, 3, null]))).toBe(VIOLATION_CHECK);
+    expect(await codeErreur(serre([null, null, 4.4]))).toBe(VIOLATION_CHECK);
+    expect(await codeErreur(serre([null, 3, 4.4]))).toBe(VIOLATION_CHECK);
+    await serre([3, null, null]);
+  });
+
+  it('allée pas au millimètre : refusée même à un flottant près (0,30000000000000004)', async () => {
+    await serre([6, 3, 0.3]); // la forme valide passe d'abord
+    expect(await codeErreur(serre([6, 3, 0.1 * 3]))).toBe(VIOLATION_CHECK);
+  });
+
+  it('grille minuscule : tronçon arrondi à moins de 0,001 m refusé (0,02 m en 50 tronçons) ; 0,05 m en 50 tronçons accepté', async () => {
+    await serre([1, 50, 0], 0.05);
+    expect(await codeErreur(serre([1, 50, 0], 0.02))).toBe(VIOLATION_CHECK);
+    expect(await codeErreur(serre([1, 50, 0.0199], 1))).toBe(VIOLATION_CHECK); // reste 0,0249 m : 0,0005 m par tronçon
+    await serre([1, 50, 0.019], 1); // reste 0,069 m : 0,00138 m par tronçon
   });
 });

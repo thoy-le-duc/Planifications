@@ -298,11 +298,11 @@ describe('T88 : validerPlacement, bâtiment avec grille (mêmes règles que la b
   });
 
   it('nb_troncons : 0, 51, 1,5, texte → refusé, champ nb_troncons', () => {
-    for (const v of [0, -1, 51, 1.5, '3', Number.NaN]) expect(champ({ nb_troncons: v }), String(v)).toBe('nb_troncons');
+    for (const v of [0, -1, 51, 1.5, '3', Number.NaN]) expect(champ({ nb_chapelles: 3, nb_troncons: v }), String(v)).toBe('nb_troncons');
   });
 
   it('largeur d’allée : négative, infinie, texte, plus fine que le millimètre → refusée, champ largeur_allee_m', () => {
-    for (const v of [-0.001, Number.POSITIVE_INFINITY, '4,4', 4.4005]) expect(champ({ nb_troncons: 3, largeur_allee_m: v }), String(v)).toBe('largeur_allee_m');
+    for (const v of [-0.001, Number.POSITIVE_INFINITY, '4,4', 4.4005]) expect(champ({ nb_chapelles: 3, nb_troncons: 3, largeur_allee_m: v }), String(v)).toBe('largeur_allee_m');
   });
 
   it('grille impossible : 128,8 m, 3 tronçons, allées de 64,4 m → refusé (champ largeur_allee_m, message en français) ; 64,39 m passe', () => {
@@ -319,3 +319,71 @@ describe('T88 : validerPlacement, bâtiment avec grille (mêmes règles que la b
     expect(valider({ nb_chapelles: 6, nb_troncons: 1, largeur_allee_m: 500 }).ok).toBe(true);
   });
 });
+
+describe('T88 : millimètre, grille minuscule, chapelles obligatoires (relecture critique)', () => {
+  const base = { nom: 'Serre', type: 'serre_chapelle', longueur_m: 128.8, largeur_m: 57.6, hauteur_m: 5, centre_x_m: 0, centre_y_m: 0, orientation_deg: 0 };
+  const valider = (grille: Readonly<Record<string, unknown>>, dims: Readonly<Record<string, unknown>> = {}) => validerPlacement({ table: 'batiment', ligne: { ...base, ...dims, ...grille } });
+
+  it('la valeur rendue est au millimètre : 0,1 × 3 → 0,3 exactement ; 4,4000000001 → 4,4', () => {
+    const a = valider({ nb_chapelles: 6, nb_troncons: 3, largeur_allee_m: 0.1 * 3 });
+    expect(a.ok && a.valeur.largeur_allee_m).toBe(0.3);
+    const b = valider({ nb_chapelles: 6, nb_troncons: 3, largeur_allee_m: 4.4000000001 });
+    expect(b.ok && b.valeur.largeur_allee_m).toBe(4.4);
+  });
+
+  it('4,4005 (pas au millimètre) : refusé, champ largeur_allee_m', () => {
+    const r = valider({ nb_chapelles: 6, nb_troncons: 3, largeur_allee_m: 4.4005 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.erreur.champ).toBe('largeur_allee_m');
+  });
+
+  it('grille minuscule : tronçon arrondi au millimètre < 0,001 m → refusé (0,02 m en 50 tronçons) ; 0,05 m en 50 tronçons passe', () => {
+    const refuse = valider({ nb_chapelles: 1, nb_troncons: 50, largeur_allee_m: 0 }, { longueur_m: 0.02 });
+    expect(refuse.ok).toBe(false);
+    if (!refuse.ok) expect(refuse.erreur.message).toMatch(/tronçon|allée|longueur/i);
+    expect(valider({ nb_chapelles: 1, nb_troncons: 50, largeur_allee_m: 0 }, { longueur_m: 0.05 }).ok).toBe(true);
+    // 1 m, 50 tronçons, allées de 1,99 cm : reste 0,0249 m, soit 0,0005 m par tronçon → 0 mm : refusé.
+    expect(valider({ nb_chapelles: 1, nb_troncons: 50, largeur_allee_m: 0.0199 }, { longueur_m: 1 }).ok).toBe(false);
+  });
+
+  it('accord avec le calcul : tout bâtiment que validerPlacement accepte produit nb_chapelles × nb_troncons cases', () => {
+    const essais: readonly [number, number, number, number][] = [
+      [0.05, 1, 50, 0],
+      [1, 1, 50, 0.019],
+      [1, 2, 50, 0.0189],
+      [0.003, 3, 3, 0],
+      [128.8, 6, 3, 4.4],
+      [40, 3, 1, 500],
+    ];
+    for (const [longueur, c, t, allee] of essais) {
+      const r = valider({ nb_chapelles: c, nb_troncons: t, largeur_allee_m: allee }, { longueur_m: longueur });
+      if (!r.ok) continue;
+      const { cases } = fonction('casesDeSerre')({ longueurM: longueur, largeurM: 57.6, nbChapelles: c, nbTroncons: t, largeurAlleeM: allee }, []);
+      expect(cases, JSON.stringify([longueur, c, t, allee])).toHaveLength(c * t);
+    }
+    expect(fonction('casesDeSerre')({ longueurM: 0.05, largeurM: 57.6, nbChapelles: 1, nbTroncons: 50, largeurAlleeM: 0 }, []).cases).toHaveLength(50);
+  });
+
+  it('refus aussi côté calcul : tronçon qui arrondit à 0 → aucune case', () => {
+    expect(fonction('casesDeSerre')({ longueurM: 0.02, largeurM: 57.6, nbChapelles: 1, nbTroncons: 50, largeurAlleeM: 0 }, []).cases).toEqual([]);
+    expect(fonction('dimensionsGrille')({ longueurM: 0.02, largeurM: 57.6, nbChapelles: 1, nbTroncons: 50, largeurAlleeM: 0 })).toBeNull();
+  });
+
+  it('nb_troncons ou largeur_allee_m sans nb_chapelles : refusé (message en français, champ nb_chapelles)', () => {
+    for (const grille of [{ nb_troncons: 3 }, { largeur_allee_m: 4.4 }, { nb_troncons: 3, largeur_allee_m: 4.4 }, { nb_chapelles: null, nb_troncons: 2 }, { nb_troncons: 1 }]) {
+      const r = valider(grille);
+      expect(r.ok, JSON.stringify(grille)).toBe(false);
+      if (!r.ok) {
+        expect(r.erreur.champ).toBe('nb_chapelles');
+        expect(r.erreur.message).toMatch(/chapelle/i);
+      }
+    }
+  });
+
+  it('nb_chapelles seul : accepté, nb_troncons rendu 1 par le calcul et allée 0 (2 chapelles → 2 cases)', () => {
+    expect(valider({ nb_chapelles: 3 }).ok).toBe(true);
+    expect(fonction('dimensionsGrille')({ longueurM: 40, largeurM: 28.8, nbChapelles: 3 })).toEqual({ largeurChapelleM: 9.6, longueurTronconM: 40 });
+    expect(fonction('casesDeSerre')({ longueurM: 40, largeurM: 28.8, nbChapelles: 3 }, zones(3)).cases.map((c) => [c.chapelle, c.troncon])).toEqual([[1, 1], [2, 1], [3, 1]]);
+  });
+});
+
