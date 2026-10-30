@@ -112,7 +112,9 @@ describe('T28c : construirePlan recopie le placement', () => {
     const socles = new Map(s.socles.map((z) => [z.id, z]));
     expect((socles.get(Z.tunnel2) as { placee?: boolean } | undefined)?.placee).toBe(true);
     expect((socles.get(Z.tunnel10) as { placee?: boolean } | undefined)?.placee).toBe(true);
-    expect((socles.get(Z.serre) as { placee?: boolean } | undefined)?.placee).toBe(false);
+    // T91 : une zone sans contour ni serre n'est plus dans la scène (elle est « à placer »).
+    expect(socles.has(Z.serre)).toBe(false);
+    expect((s as { aPlacer?: readonly { id: string }[] }).aPlacer?.map((z) => z.id)).toContain(Z.serre);
   });
 });
 
