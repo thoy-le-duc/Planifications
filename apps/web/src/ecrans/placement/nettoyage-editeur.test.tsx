@@ -160,6 +160,63 @@ describe('T92 règle 1 : zone tunnel avec un contour tracé', () => {
   });
 });
 
+describe('T92 règle 1, relecture : planches déjà placées dans la zone au contour', () => {
+  const IDS = ['0192f0c1-28b0-7000-8000-0000000000e1', '0192f0c1-28b0-7000-8000-0000000000e2', '0192f0c1-28b0-7000-8000-0000000000e3'] as const;
+  const avant = (base: BaseMemoire): void => {
+    manon(base);
+    IDS.forEach((id, i) => {
+      base.recevoir(
+        `INSERT INTO emplacement (id, ferme_id, zone_id, code, sorte, longueur_m, largeur_m, actif_du, actif_au, remplace, placement_x_m, placement_y_m, orientation_deg, supprime_le)
+         VALUES (?, ?, ?, ?, 'planche', 3, 0.8, '2020-01-01', NULL, '[]', ?, ?, 0, NULL)`,
+        [id, FERME, ZONE_TUNNEL, `M-${String(i + 1)}`, i * 2, i],
+      );
+    });
+  };
+  const lignes = (b: Banc): Readonly<Record<string, string | number | null>>[] =>
+    b.base.lireDirect<Readonly<Record<string, string | number | null>>>('SELECT * FROM emplacement WHERE supprime_le IS NULL AND code LIKE ?', ['M-%']);
+
+  it('la confirmation prévient que les planches déjà placées seront rangées dans les cases de la serre', async () => {
+    await ouvrir({ avant });
+    await choisirZone(ZONE_TUNNEL);
+    await toucher(bouton('Placer la serre'));
+    await attendre(() => confirmation(new RegExp(MESSAGES_PLACEMENT.contourRemplace)) !== undefined, 'confirmation');
+    expect(texte(confirmation(new RegExp(MESSAGES_PLACEMENT.contourRemplace)))).toContain('planches déjà placées seront rangées dans les cases de la serre');
+  });
+
+  it('mêmes identifiants, aucune planche dupliquée, contour effacé dans le même appel ; Annuler rétablit contour et places', async () => {
+    const b = await ouvrir({ avant });
+    const avantPlaces = IDS.map((id) => [ligne(b, 'emplacement', id)?.placement_x_m, ligne(b, 'emplacement', id)?.placement_y_m, ligne(b, 'emplacement', id)?.orientation_deg]);
+    await choisirZone(ZONE_TUNNEL);
+    await toucher(bouton('Placer la serre'));
+    await attendre(() => confirmation(new RegExp(MESSAGES_PLACEMENT.contourRemplace)) !== undefined, 'confirmation');
+    const d = confirmation(new RegExp(MESSAGES_PLACEMENT.contourRemplace));
+    if (d !== undefined) await toucher(bouton('Confirmer', d));
+    await attendre(() => un('fiche-serre') !== null, 'fiche');
+    await toucher(bouton('Créer', un('fiche-serre') ?? document.body));
+    await toucher(bouton('Enregistrer'));
+    await attendre(() => b.placements.length === 1, 'un appel');
+    const appel = b.placements[0] ?? [];
+    expect(appel).toContainEqual({ sorte: 'zone', id: ZONE_TUNNEL, contour: null });
+    await attendre(() => b.base.lireDirect<{ id: string }>('SELECT id FROM batiment WHERE zone_id = ? AND supprime_le IS NULL', [ZONE_TUNNEL]).length === 1, 'serre rattachée');
+    // Les planches d'origine sont toujours là, sous les mêmes identifiants, une seule fois chacune.
+    const apres = lignes(b);
+    expect(apres.map((l) => l.code).sort()).toEqual(['M-1', 'M-2', 'M-3']);
+    expect(apres.map((l) => l.id).sort()).toEqual([...IDS].sort());
+    // Leur écriture est dans le même appel que l'effacement du contour.
+    for (const id of IDS) expect(appel.some((c) => c.sorte === 'emplacement' && c.id === id), `${id} dans l’appel`).toBe(true);
+    expect(ligne(b, 'zone', ZONE_TUNNEL)?.contour).toBeNull();
+
+    await attendre(() => un(T.annuler) !== null, 'Annuler');
+    const a = un(T.annuler);
+    if (a !== null) await toucher(a);
+    await attendre(() => ligne(b, 'zone', ZONE_TUNNEL)?.contour !== null, 'contour rétabli');
+    expect(JSON.parse(String(ligne(b, 'zone', ZONE_TUNNEL)?.contour)) as unknown).toEqual(CONTOUR_MANON);
+    await attendre(() => b.base.lireDirect<{ id: string }>('SELECT id FROM batiment WHERE zone_id = ? AND supprime_le IS NULL', [ZONE_TUNNEL]).length === 0, 'serre retirée');
+    expect(IDS.map((id) => [ligne(b, 'emplacement', id)?.placement_x_m, ligne(b, 'emplacement', id)?.placement_y_m, ligne(b, 'emplacement', id)?.orientation_deg])).toEqual(avantPlaces);
+    expect(lignes(b)).toHaveLength(3);
+  });
+});
+
 // ── Règle 2 : « Zone abritée » réservée aux serres ───────────────────────────────────────────
 
 describe('T92 règle 2 : la liste « Zone abritée » d’un bâtiment', () => {
@@ -254,6 +311,28 @@ describe('T92 règle 5 : « Aller à » et « Toute la ferme »', () => {
     await unTour();
     expect(Math.abs(centre().x - 125.2)).toBeLessThan(1.5);
     expect(Math.abs(centre().y - 40)).toBeLessThan(1.5);
+  });
+
+  it('une serre qui abrite une zone n’est listée que par sa zone, même sous un autre nom ; deux serres libres de même nom sont toutes deux listées', async () => {
+    await ouvrir({
+      avant: (b) => {
+        b.recevoir('UPDATE batiment SET zone_id = ? WHERE id = ?', [ZONE_TUNNEL, SERRE]);
+        b.recevoir(
+          `INSERT INTO batiment (id, ferme_id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, zone_id, cree_le, modifie_le, supprime_le)
+           VALUES (?, ?, 'Libre', 'serre_tunnel', 10, 5, 3, 80, 80, 0, NULL, '2026-01-01T08:00:00.000Z', '2026-01-01T08:00:00.000Z', NULL)`,
+          ['0192f0c1-28b0-7000-8000-0000000000b1', FERME],
+        );
+        b.recevoir(
+          `INSERT INTO batiment (id, ferme_id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, zone_id, cree_le, modifie_le, supprime_le)
+           VALUES (?, ?, 'Libre', 'serre_tunnel', 10, 5, 3, 90, 90, 0, NULL, '2026-01-01T08:00:00.000Z', '2026-01-01T08:00:00.000Z', NULL)`,
+          ['0192f0c1-28b0-7000-8000-0000000000b2', FERME],
+        );
+      },
+    });
+    const choix = options(liste('Aller à'));
+    expect(choix.filter((n) => n === 'Tunnel 1')).toHaveLength(1);
+    expect(choix).not.toContain('Serre M1');
+    expect(choix.filter((n) => n === 'Libre')).toHaveLength(2);
   });
 
   it('sans aucun contour, les serres suffisent : « Aller à » est proposé', async () => {

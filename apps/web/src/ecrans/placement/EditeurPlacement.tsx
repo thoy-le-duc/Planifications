@@ -663,7 +663,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
       else if (i.zone.parenteId == null && i.zone.contour !== null) liste.push({ id: i.zone.id, nom: i.zone.nom, points: i.zone.contour });
     }
     for (const b of batimentsAff) {
-      if ((b.type === 'serre_tunnel' || b.type === 'serre_chapelle') && !liste.some((x) => x.nom === b.nom)) liste.push({ id: b.id, nom: b.nom, points: coins(b) });
+      if ((b.type === 'serre_tunnel' || b.type === 'serre_chapelle') && !liste.some((x) => x.id === b.zoneId)) liste.push({ id: b.id, nom: b.nom, points: coins(b) });
     }
     return liste;
   }, [origine, zonesInfo, batimentsAff, bandes]);
@@ -2201,7 +2201,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             }}
           >
             <p>
-              {MESSAGES_PLACEMENT.contourRemplace}.{confirmation.type === 'zone' && ` ${MESSAGES_CONTOURS.planchesSuivent}`}
+              {MESSAGES_PLACEMENT.contourRemplace}.{confirmation.type === 'zone' ? ` ${MESSAGES_CONTOURS.planchesSuivent}` : ' Les planches déjà placées seront rangées dans les cases de la serre.'}
             </p>
             <div className="pl-modale-actions">
               <button
