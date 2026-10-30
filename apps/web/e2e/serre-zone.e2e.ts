@@ -109,6 +109,8 @@ test('ordinateur : placer une serre depuis sa zone, enregistrer, recharger : la 
     await zoneTunnel(page).click();
     await expect(page.getByRole('button', { name: 'Tracer le contour', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Placer la serre', exact: true }).click();
+    // T89 : « Placer la serre » ouvre la fiche « Serre ou tunnel », « Créer » met la serre au brouillon.
+    await page.getByTestId('fiche-serre').getByRole('button', { name: 'Créer', exact: true }).click();
     await expect(serre(page)).toHaveCount(1);
     await expect(serre(page)).toHaveAttribute('data-longueur', '40');
     await expect(serre(page)).toHaveAttribute('data-largeur', '9.6');

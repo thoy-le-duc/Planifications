@@ -84,3 +84,18 @@ export {
   type GrilleSerre,
   type ResultatCases,
 } from './cases.ts';
+// T89 : la fiche « Serre ou tunnel » (valeurs par défaut, résumé, type et noms des zones).
+export {
+  DEFAUTS_SERRE,
+  PLANCHES_PAR_ZONE_MAX,
+  defautsSerre,
+  erreurFicheSerre,
+  nombrePlanchesParDefaut,
+  nomsDesZones,
+  resumeSerre,
+  typeDeSerre,
+  type FicheSerre,
+  type MesuresSerre,
+  type PlanchesDeSerre,
+  type ResumeSerre,
+} from './serre-fiche.ts';

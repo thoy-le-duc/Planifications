@@ -133,6 +133,13 @@ async function enregistrer(): Promise<void> {
   await toucher(bouton('Enregistrer'));
   await unTour();
 }
+/** T89 : « Placer la serre » ouvre la fiche « Serre ou tunnel » ; « Créer » met la serre au brouillon (réglages facultatifs avant). */
+async function creerDepuisLaFiche(reglages: Readonly<Record<string, string>> = {}): Promise<void> {
+  await attendre(() => un('fiche-serre') !== null, 'fiche « Serre ou tunnel »');
+  const f = un('fiche-serre') ?? document.body;
+  for (const [nom, valeur] of Object.entries(reglages)) await remplir(champ(nom, f), valeur);
+  await toucher(bouton('Créer', f));
+}
 async function annulerDernier(): Promise<void> {
   await attendre(() => un(T.annuler) !== null, '« Annuler » après l’enregistrement');
   const a = un(T.annuler);
@@ -148,18 +155,19 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     expect(boutonsNommes(/^Remplacer par une serre$/)).toHaveLength(0);
   });
 
-  it('« Placer la serre » pose un rectangle nommé comme la zone, 30 × 8 m, au centre de la vue, rien d’écrit', async () => {
+  it('« Placer la serre » pose un rectangle nommé comme la zone, 40 × 9,6 m (fiche T89), au centre de la vue, rien d’écrit', async () => {
     const b = await ouvrir();
     await choisirZone(ZONE_TUNNEL);
     await toucher(bouton('Placer la serre'));
+    await creerDepuisLaFiche();
     const serre = nouveaux()[0];
     expect(serre, 'nouvelle serre au plan').toBeDefined();
     if (serre === undefined) return;
     expect(serre.getAttribute('data-id')).toMatch(MOTIF_UUID_V7);
     expect(serre.getAttribute('aria-pressed')).toBe('true');
     expect(serre.getAttribute('aria-label') ?? '').toMatch(/^Tunnel 1/);
-    expect(nombre(serre, 'data-longueur')).toBeCloseTo(30, 3);
-    expect(nombre(serre, 'data-largeur')).toBeCloseTo(8, 3);
+    expect(nombre(serre, 'data-longueur')).toBeCloseTo(40, 3);
+    expect(nombre(serre, 'data-largeur')).toBeCloseTo(9.6, 3);
     expect(nombre(serre, 'data-orientation')).toBeCloseTo(0, 3);
     const [lat, lon] = (un(T.editeur)?.getAttribute('data-centre') ?? '0,0').split(',').map(Number);
     const centre = versLocal(POSITION, { latitude: lat ?? 0, longitude: lon ?? 0 });
@@ -176,11 +184,13 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
   it('mesures de départ : celles du dernier bâtiment du même type de la ferme', async () => {
     await ouvrir({
       avant: (base) => {
-        base.recevoir('UPDATE batiment SET longueur_m = 40, largeur_m = 6 WHERE id = ?', [SERRE]);
+        // T89 : la dernière serre créée compte si elle a sa grille (une chapelle de 6 m, un tronçon de 40 m).
+        base.recevoir('UPDATE batiment SET longueur_m = 40, largeur_m = 6, nb_chapelles = 1 WHERE id = ?', [SERRE]);
       },
     });
     await choisirZone(ZONE_TUNNEL);
     await toucher(bouton('Placer la serre'));
+    await creerDepuisLaFiche();
     const serre = nouveaux()[0];
     expect(nombre(serre ?? document.body, 'data-longueur')).toBeCloseTo(40, 3);
     expect(nombre(serre ?? document.body, 'data-largeur')).toBeCloseTo(6, 3);
@@ -195,6 +205,7 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     });
     await choisirZone(ZONE_TUNNEL);
     await toucher(bouton('Placer la serre'));
+    await creerDepuisLaFiche();
     const serre = nouveaux()[0];
     expect(serre, 'nouvelle serre au plan').toBeDefined();
     expect(nombre(serre ?? document.body, 'data-longueur')).toBeCloseTo(40, 3);
@@ -209,6 +220,7 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     });
     await choisirZone(ZONE_TUNNEL);
     await toucher(bouton('Placer la serre'));
+    await creerDepuisLaFiche();
     const serre = nouveaux()[0];
     expect(serre, 'nouvelle serre au plan').toBeDefined();
     expect(nombre(serre ?? document.body, 'data-longueur')).toBeCloseTo(40, 3);
@@ -219,6 +231,8 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     const b = await ouvrir({ avant: typeSerre });
     await choisirZone(ZONE_TUNNEL);
     await toucher(bouton('Placer la serre'));
+    // T89 : le type suit le nombre de chapelles (plusieurs : serre chapelle).
+    await creerDepuisLaFiche({ 'Nombre de chapelles': '2' });
     await enregistrer();
     await attendre(() => batimentsDeLaZone(b, ZONE_TUNNEL).length === 1, 'serre écrite');
     expect(batimentsDeLaZone(b, ZONE_TUNNEL)[0]?.type).toBe('serre_chapelle');
@@ -228,6 +242,8 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     const b = await ouvrir();
     await choisirZone(ZONE_TUNNEL);
     await toucher(bouton('Placer la serre'));
+    // T89 : une chapelle de 8 m, sans planche à créer : seul le bâtiment s'écrit.
+    await creerDepuisLaFiche({ 'Largeur d’une chapelle (m)': '8', 'Planches par zone': '0' });
     await remplir(champ('Longueur (m)', panneau()), '36');
     await enregistrer();
     await attendre(() => batimentsDeLaZone(b, ZONE_TUNNEL).length === 1, 'serre écrite');
@@ -248,6 +264,7 @@ describe('T81 : zone tunnel sans bâtiment ni contour', () => {
     const b = await ouvrir();
     await choisirZone(ZONE_TUNNEL);
     await toucher(bouton('Placer la serre'));
+    await creerDepuisLaFiche();
     expect(nouveaux()).toHaveLength(1);
     expect(b.placements).toEqual([]);
     expect(batimentsDeLaZone(b, ZONE_TUNNEL)).toHaveLength(0);
@@ -546,6 +563,7 @@ describe('T81 : au doigt, sur téléphone', () => {
     const b = await ouvrir({ ordinateur: false });
     await choisirZone(ZONE_TUNNEL);
     await toucher(bouton('Placer la serre'));
+    await creerDepuisLaFiche();
     await attendre(() => nouveaux().length === 1, 'serre posée');
     const serre = (): HTMLElement => nouveaux()[0] ?? document.body;
     expect(serre().getAttribute('aria-pressed')).toBe('true');

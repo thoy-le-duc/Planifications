@@ -38,8 +38,13 @@ export { mouvoirBloc } from './bloc.ts';
 export { dimensionsParDefaut, typeDeSerrePourZone } from './serre-zone.ts';
 export { preparerParcelle } from './parcelle-planches.ts';
 export { bandesDesSerres, changementsDesBandes, type InfoBande, type RangementBandes } from './bandes-serre.ts';
+// T89 : ce que la fiche « Serre ou tunnel » (./serre-fiche.tsx, à la demande) calcule, pris ici pour rester dans ce morceau.
+export { bandesDeLaZone, decouperSerres, rangerDansBandes } from './bandes-serre.ts';
+export { DEFAUTS_SERRE, defautsSerre, erreurFicheSerre, nombrePlanchesParDefaut, nomsDesZones, rangerDansBande, resumeSerre, typeDeSerre } from '@planif/core/placement';
 
 const PASSE_PIED_MAX_CM = 500;
+/** Raison d'un bouton bloqué pendant une écriture (même texte que MESSAGES_ETAPES.occupe, dans le morceau de l'éditeur). */
+const OCCUPE = 'Enregistrement en cours';
 /** Un passe-pied valide : un entier de 0 à 500 cm. */
 const passePiedValide = (texte: string): boolean => /^\d{1,3}$/.test(texte.trim()) && Number(texte) <= PASSE_PIED_MAX_CM;
 
@@ -434,6 +439,8 @@ export interface ProprietesPanneauZone {
   readonly edition: boolean;
   /** Le point de départ du plan est posé et aucun bâtiment n'est en cours de pose. */
   readonly origineSouhaitee: boolean;
+  /** T89 : une écriture est en cours : « Placer la serre » (et « Tracer le contour ») attendent. */
+  readonly occupe: boolean;
   readonly trace: Trace | null;
   readonly message: string | null;
   readonly conteneur: RefObject<HTMLDivElement | null>;
@@ -461,6 +468,7 @@ export function PanneauZone({
   info,
   edition,
   origineSouhaitee,
+  occupe,
   trace,
   message,
   conteneur,
@@ -517,16 +525,18 @@ export function PanneauZone({
             type="button"
             className="pl-bouton"
             data-action="tracer"
-            disabled={!origineSouhaitee}
-            aria-describedby={origineSouhaitee ? undefined : idRaison}
+            disabled={!origineSouhaitee || occupe}
+            aria-describedby={origineSouhaitee && !occupe ? undefined : idRaison}
             onClick={typeSerre === null ? surTracer : surSerre}
           >
             {typeSerre === null ? 'Tracer le contour' : contour === null ? 'Placer la serre' : 'Remplacer par une serre'}
           </button>
           <p id={idRaison} className="pl-aide">
-            {origineSouhaitee
-              ? typeSerre === null && 'Posez les sommets un à un sur la photo, puis fermez le tracé.'
-              : 'Posez d’abord le point de départ du plan.'}
+            {occupe
+              ? OCCUPE
+              : origineSouhaitee
+                ? typeSerre === null && 'Posez les sommets un à un sur la photo, puis fermez le tracé.'
+                : 'Posez d’abord le point de départ du plan.'}
           </p>
         </>
       )}
@@ -590,13 +600,118 @@ export function PanneauZone({
   );
 }
 
+// ── Ajouter (T89) ───────────────────────────────────────────────────────────────────────────────
+
+export interface ProprietesMenuAjouter {
+  /**
+   * Pourquoi « Ajouter » et « Nouveau bâtiment » sont bloqués (point de départ à poser, pose ou tracé en cours), ou null ; affichée
+   * sous les boutons, avec l'identifiant `idRaison` (« Tracer un chemin » de l'éditeur s'y réfère aussi).
+   */
+  readonly raison: string | null;
+  readonly idRaison: string;
+  /** « Ajouter » touché : l'éditeur charge la fiche de la serre d'avance ; « Serre ou tunnel » (null) l'ouvre pour une serre neuve. */
+  readonly surOuvrir: (serreNeuve?: null) => void;
+  /** Ouvre le formulaire « Nouveau bâtiment » (sans les types serre). */
+  readonly surBatiment: (ouvrir: true) => void;
+}
+
+/**
+ * « Ajouter » : Serre ou tunnel (la fiche de T89), Parcelle de plein champ (le chemin de T85 : choisir la zone, puis
+ * « Dessiner depuis les planches »), Bâtiment (« Nouveau bâtiment », sans les types serre). Le bouton « Nouveau bâtiment »
+ * d'avant reste à côté (T92 fera le tri) ; il n'ouvre son formulaire, comme avant, que ce morceau chargé.
+ */
+export function MenuAjouter({ raison, idRaison, surOuvrir, surBatiment }: ProprietesMenuAjouter): ReactElement {
+  const bloque = raison !== null;
+  const [ouvert, setOuvert] = useState(false);
+  const [parcelle, setParcelle] = useState(false);
+  const fermer = (): void => {
+    setOuvert(false);
+    setParcelle(false);
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className="pl-bouton"
+        aria-expanded={ouvert}
+        disabled={bloque}
+        aria-describedby={bloque ? idRaison : undefined}
+        onClick={() => {
+          if (!ouvert) surOuvrir();
+          setOuvert(!ouvert);
+          setParcelle(false);
+        }}
+      >
+        Ajouter
+      </button>
+      {ouvert && !bloque && (
+        <div role="group" aria-label="Ajouter" className="pl-menu-ajouter">
+          <button
+            type="button"
+            className="pl-bouton"
+            onClick={() => {
+              fermer();
+              surOuvrir(null);
+            }}
+          >
+            Serre ou tunnel
+          </button>
+          <button
+            type="button"
+            className="pl-bouton"
+            onClick={() => {
+              setParcelle(true);
+            }}
+          >
+            Parcelle de plein champ
+          </button>
+          <button
+            type="button"
+            className="pl-bouton"
+            onClick={() => {
+              fermer();
+              surBatiment(true);
+            }}
+          >
+            Bâtiment
+          </button>
+          {parcelle && (
+            <p role="status" className="pl-aide">
+              Choisissez la zone dans la liste « Zones » : « Dessiner depuis les planches » la dessine d’un tap, ou « Tracer le contour » sommet par sommet.
+            </p>
+          )}
+        </div>
+      )}
+      <button
+        type="button"
+        className="pl-bouton"
+        disabled={bloque}
+        aria-describedby={bloque ? idRaison : undefined}
+        onClick={() => {
+          surBatiment(true);
+        }}
+      >
+        Nouveau bâtiment
+      </button>
+      {bloque && (
+        <p id={idRaison} className="pl-aide">
+          {raison}
+        </p>
+      )}
+    </>
+  );
+}
+
 // ── Nouveau bâtiment ────────────────────────────────────────────────────────────────────────────
+
+/** T89 : une serre ou un tunnel s'ajoute par sa fiche (« Ajouter », « Serre ou tunnel ») : « Nouveau bâtiment » ne les propose plus. */
+const estSerre = (t: TypeBatiment): boolean => t === 'serre_tunnel' || t === 'serre_chapelle';
 
 export function FormulaireBatiment({ outils, surPoser, surFermer }: { readonly outils: Outils; readonly surPoser: (n: NouveauBatiment) => void; readonly surFermer: () => void }): ReactElement {
   const idType = useId();
   const idNom = useId();
   const idRaison = useId();
-  const [type, setType] = useState<TypeBatiment>('serre_tunnel');
+  const [type, setType] = useState<TypeBatiment>('hangar');
   const [nom, setNom] = useState('');
   const [longueur, setLongueur] = useState('30');
   const [largeur, setLargeur] = useState('8');
@@ -615,11 +730,11 @@ export function FormulaireBatiment({ outils, surPoser, surFermer }: { readonly o
           value={type}
           onChange={(e) => {
             const v = e.target.value;
-            const trouve = TYPES_BATIMENT.find((t) => t === v);
+            const trouve = TYPES_BATIMENT.find((t) => t === v && !estSerre(t));
             if (trouve !== undefined) setType(trouve);
           }}
         >
-          {outils.types.map((t) => (
+          {outils.types.filter((t) => !estSerre(t.valeur)).map((t) => (
             <option key={t.valeur} value={t.valeur}>
               {t.libelle}
             </option>

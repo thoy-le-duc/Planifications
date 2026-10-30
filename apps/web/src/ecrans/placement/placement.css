@@ -843,3 +843,36 @@
   width: 100%;
   height: 100%;
 }
+
+/* T89 : le menu « Ajouter » (une ligne à part dans la barre) et la fiche « Serre ou tunnel ». */
+.pl-menu-ajouter {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pl-champs-planches {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--couleur-secondaire);
+  border-radius: var(--rayon-bouton);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pl-champs-planches legend {
+  padding: 0 4px;
+  font-size: 15px;
+}
+
+.pl-resume-serre {
+  font-weight: 700;
+}
+
+label.pl-champ > span {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--couleur-secondaire);
+}

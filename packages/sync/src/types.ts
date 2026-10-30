@@ -182,7 +182,37 @@ export type ChangementPlacement =
   /** T61 : une place nommée dans un lieu de rangement, créée, renommée ou retirée. */
   | { readonly sorte: 'place_rangement'; readonly id: string; readonly valeurs: ValeursPlaceRangement }
   /** T61 : un outil et son lieu de rangement, créé, déplacé ou retiré. */
-  | { readonly sorte: 'outil'; readonly id: string; readonly valeurs: ValeursOutil };
+  | { readonly sorte: 'outil'; readonly id: string; readonly valeurs: ValeursOutil }
+  /** T89 : une zone (ou sous-zone) créée avec la serre qui l'abrite ; son annulation est une suppression douce. */
+  | { readonly sorte: 'zone_creation'; readonly id: string; readonly valeurs: ValeursZoneCreation }
+  /** T89 : un emplacement (planche) créé dans une zone de la serre, placé ou non ; son annulation est une suppression douce. */
+  | { readonly sorte: 'emplacement_creation'; readonly id: string; readonly valeurs: ValeursEmplacementCreation };
+
+/**
+ * T89 : colonnes d'une zone créée par `placer` (format local, snake_case). Création : `nom` requis, `type_abri` 'plein_champ'
+ * si absent ; modification (annulation, rétablissement) : celles qui changent.
+ */
+export interface ValeursZoneCreation {
+  readonly nom?: string;
+  readonly zone_parente_id?: string | null;
+  readonly type_abri?: string | null;
+  readonly surface_m2?: number | null;
+  readonly supprime_le?: string | null;
+}
+
+/**
+ * T89 : colonnes d'un emplacement créé par `placer`. Création : `zone_id`, `code`, `longueur_m` requis, `sorte` 'planche' si
+ * absente ; `placement` dans le repère de sa zone (null : rangement automatique).
+ */
+export interface ValeursEmplacementCreation {
+  readonly zone_id?: string;
+  readonly code?: string;
+  readonly sorte?: string;
+  readonly longueur_m?: number;
+  readonly largeur_m?: number | null;
+  readonly placement?: { readonly x: number; readonly y: number; readonly orientation_deg: number } | null;
+  readonly supprime_le?: string | null;
+}
 
 /**
  * T61 : colonnes des éléments du plan et du rangement données à `placer` (format local,
