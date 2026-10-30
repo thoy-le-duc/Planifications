@@ -52,12 +52,12 @@ describe('T91 : « À placer (n) »', () => {
   it('le bouton porte le nombre de zones ; la liste est repliée puis se déplie au tap', async () => {
     await rendre(ZONES, true);
     const b = un('a-placer-3d');
-    expect(b?.textContent?.trim()).toBe('À placer (2)');
+    expect(b?.textContent.trim()).toBe('À placer (2)');
     expect(b?.getAttribute('aria-expanded')).toBe('false');
     expect(un('a-placer-liste')).toBeNull();
     if (b !== null) await toucher(b);
     expect(un('a-placer-3d')?.getAttribute('aria-expanded')).toBe('true');
-    expect(tous('a-placer-zone').map((z) => z.textContent?.trim())).toEqual(['Verger', 'Tunnel 3']);
+    expect(tous('a-placer-zone').map((z) => z.textContent.trim())).toEqual(['Verger', 'Tunnel 3']);
   });
 
   it('gérant : un tap sur une zone demande d’ouvrir l’éditeur sur elle', async () => {
@@ -76,7 +76,7 @@ describe('T91 : « À placer (n) »', () => {
     await rendre(ZONES, false, ouvertes);
     const b = un('a-placer-3d');
     if (b !== null) await toucher(b);
-    expect(tous('a-placer-zone').map((z) => z.textContent?.trim())).toEqual(['Verger', 'Tunnel 3']);
+    expect(tous('a-placer-zone').map((z) => z.textContent.trim())).toEqual(['Verger', 'Tunnel 3']);
     expect(tous('a-placer-zone').every((z) => z.tagName !== 'BUTTON')).toBe(true);
     expect(ouvertes).toEqual([]);
   });

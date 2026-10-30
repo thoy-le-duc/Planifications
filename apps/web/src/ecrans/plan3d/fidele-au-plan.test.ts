@@ -18,11 +18,13 @@ import type { LigneEmplacementPlan, LigneZonePlan, Plan, PointPlan, SemainePlan,
 import { sceneDeLaSemaine, versScene, type Scene } from './scene.ts';
 
 // Les champs de T91, déclarés ici pour que le fichier se lise sans dépendre de l'ordre d'écriture du code.
-type ZoneAPlacer = { readonly id: string; readonly nom: string };
+interface ZoneAPlacer {
+  readonly id: string;
+  readonly nom: string;
+}
 type SceneT91 = Scene & { readonly aPlacer?: readonly ZoneAPlacer[] };
 type SousZoneT91 = SousZonePlan & { readonly contour?: readonly PointPlan[] | null };
 type PlancheT91 = LigneEmplacementPlan & { readonly zoneDirecteId?: string };
-type PlanT91 = Omit<Plan, 'sousZones'> & { readonly sousZones?: readonly SousZoneT91[] };
 
 const semaines: SemainePlan[] = [0, 1].map((i) => ({ annee: 2026, semaine: i + 1, libelle: `S0${String(i + 1)}`, lundi: `2026-01-${String(5 + 7 * i).padStart(2, '0')}` }));
 
@@ -60,7 +62,7 @@ const plan = (lignes: Plan['lignes'], sousZones: readonly SousZoneT91[] = [], ba
     lignes,
     ...(batiments.length === 0 ? {} : { batiments }),
     ...(sousZones.length === 0 ? {} : { sousZones }),
-  }) as PlanT91 as Plan;
+  });
 
 const scene = (p: Plan): SceneT91 => versScene(p, 0);
 const volume = (s: Scene, id: string) => {

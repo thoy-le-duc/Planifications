@@ -13,7 +13,7 @@ import type { ModuleScene } from './test/contrat.ts';
 import type { CibleVol as CibleT29, ModuleCadrage } from './test/contrat-camera.ts';
 import type { FiltresScene, ModuleFiltres } from './test/contrat-filtres.ts';
 import type { BatimentPlan, BatimentScene, ModuleJumeau, PlacementPlanche, PlanJumeau, PointFerme, SceneJumeau, SocleJumeau, TypeBatiment, VolumeJumeau } from './test/contrat-jumeau.ts';
-import { aabb, coinsBatiment, coinsSocle, coinsVolume, dansRect, formeSocle, memeAngle, RAD, rectDeAabb, recouvre, TOL, type Pt } from './test/geometrie.ts';
+import { aabb, coinsBatiment, coinsSocle, coinsVolume, dansRect, formeSocle, memeAngle, RAD, rectDeAabb, recouvre, type Pt } from './test/geometrie.ts';
 import { coinsDe } from './test/projection.ts';
 
 const CHEMIN_SCENE = './scene.ts';

@@ -1708,7 +1708,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               {peutModifier ? (
                 <>
                   <p>Placez votre ferme sur la photo aérienne</p>
-                  <button type="button" data-testid="modifier-plan" className="plan3d-bouton" onClick={() => { surModifierPlan?.(); }}>
+                  <button type="button" data-testid="modifier-plan" className="plan3d-bouton" onClick={() => { surModifierPlan(); }}>
                     Modifier le plan
                   </button>
                 </>

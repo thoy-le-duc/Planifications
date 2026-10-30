@@ -13,7 +13,7 @@
  *     est rangée dans cette zone (./disposition.ts). Une planche d'une sous-zone hors serre est lue dans
  *     le repère de la sous-zone si elle a un contour, sinon dans celui de la racine (comme l'éditeur).
  */
-import { coinsEmprise, depuisRepereZone, repereZone, versRepereZone, type RepereZone } from '@planif/core/placement';
+import { depuisRepereZone, repereZone, versRepereZone, type RepereZone } from '@planif/core/placement';
 import type { BatimentPlan, CheminPlan, CleFamille, LigneEmplacementPlan, LigneZonePlan, Plan, PointPlan, SemainePlan } from '../plan/calculs.ts';
 import { COULEUR_ESTOMPEE, COULEURS, FAMILLES } from '../../ui/jetons.ts';
 import { bandesDesSerres, type BandeScene } from './bandes-scene.ts';
