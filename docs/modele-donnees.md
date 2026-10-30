@@ -107,6 +107,19 @@ Validée par Théophane le 2026-10-07 (réponses à Q30 et Q31), posée par T28a
 
 **Synchro et export** : `batiment` descend sur les téléphones avec le même découpage par ferme que `zone` ; l'export ajoute `batiment.csv` et les nouvelles colonnes, décrites dans LISEZMOI.txt.
 
+**Serre en grille** (T88, migration 0048) : trois colonnes facultatives de `batiment` découpent une serre en cases, chapelles (dans la largeur) × tronçons (dans la longueur), avec des allées entre les tronçons.
+
+| Colonne | Type | Règle |
+| --- | --- | --- |
+| `nb_chapelles` | entier, nul permis | 1 à 100 ; obligatoire dès que `nb_troncons` ou `largeur_allee_m` est renseigné (aucun nombre de chapelles n'est déduit) |
+| `nb_troncons` | entier, nul permis | 1 à 50 ; nul avec `nb_chapelles` renseigné : un seul tronçon |
+| `largeur_allee_m` | numérique, nul permis | 0 à 500 m, au millimètre (trois décimales au plus) ; nulle : allée de 0 |
+
+- Contraintes CHECK : les bornes ci-dessus, le millimètre (`largeur_allee_m = round(largeur_allee_m, 3)`), les chapelles obligatoires, et un tronçon d'au moins un millimètre une fois arrondi : `round((longueur_m − (nb_troncons − 1) × largeur_allee_m) / nb_troncons, 3) ≥ 0,001` quand `nb_chapelles` est renseigné.
+- Les trois colonnes nulles : comportement de T86 (une bande par sous-zone sur toute la longueur). Dimensions d'une case dérivées, jamais stockées : largeur ÷ `nb_chapelles`, (longueur − (`nb_troncons` − 1) × allée) ÷ `nb_troncons`, au millimètre.
+- Les sous-zones remplissent les cases dans l'ordre naturel de leurs noms, tronçon par tronçon (tronçon 1 chapelles 1 à C, puis tronçon 2…) ; les surnuméraires n'ont pas de case (avertissement).
+- Mêmes règles dans `validerPlacement` (cœur), la porte du téléphone et `POST /sync/upload` (gérant seulement) ; l'allée est écrite arrondie au millimètre. Synchro par `SELECT *` (aucune règle PowerSync changée) ; l'export complet inclut les trois colonnes.
+
 ## 1 ter. Chemins, repères et rangement des outils — v1.x (T61, Q44)
 
 Un nouvel ouvrier trouve son chemin et l'outil de sa consigne sans demander. Cinq tables de ferme (`ferme_id`, horodatages, `supprime_le`, UUID v7) ; une ferme qui n'en a pas ne change pas.

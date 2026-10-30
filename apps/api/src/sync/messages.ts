@@ -234,6 +234,8 @@ export function refusDuCoeur(erreur: ErreurSaisie, fermeId: string | null): Refu
 const MANQUE_AU_PLACEMENT: Readonly<Record<string, string>> = {
   placement_x_m: 'la position est-ouest',
   placement_y_m: 'la position nord-sud',
+  // T88 : tronçons ou allées donnés sans le nombre de chapelles.
+  nb_chapelles: 'le nombre de chapelles de la serre',
   orientation_deg: 'l’orientation',
   longueur_m: 'la longueur',
   largeur_m: 'la largeur',
@@ -280,7 +282,7 @@ export function precisionDuPlacement(erreur: ErreurPlacement): string {
     dimension_invalide: GRILLE[champ] ?? `${DIMENSIONS[champ] ?? 'chaque dimension'} du bâtiment doit être un nombre de mètres plus grand que zéro`,
     plafond_depasse:
       champ === 'largeur_allee_m'
-        ? 'les allées prennent toute la longueur de la serre : il ne reste rien pour les tronçons'
+        ? 'les tronçons de la serre feraient moins d’un millimètre : réduisez la largeur des allées ou le nombre de tronçons'
         : `${DIMENSIONS[champ] ?? 'une dimension'} du bâtiment dépasse le maximum permis`,
     zone_abritee_avec_contour: 'cette zone est abritée par un bâtiment : elle prend sa forme et n’a pas de contours à elle',
   };

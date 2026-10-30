@@ -53,8 +53,6 @@ export interface ResultatCases {
 const mm = (v: number): number => Math.round(v * 1000) / 1000 + 0;
 const positif = (v: number): boolean => Number.isFinite(v) && v > 0;
 const entierDans = (v: number, max: number): boolean => Number.isInteger(v) && v >= 1 && v <= max;
-/** Tolérance des flottants sur le reste de longueur (m) : la base compare en numérique exact. */
-const EPSILON_M = 1e-9;
 
 interface Grille {
   readonly chapelles: number;
@@ -64,23 +62,27 @@ interface Grille {
   readonly longueurTroncon: number;
 }
 
+/** Plus courte longueur d'un tronçon (m) : un millimètre, une fois arrondi. */
+export const TRONCON_MIN_M = 0.001;
+
 /**
- * La grille effective, sans arrondi. Grille nulle : une chapelle par sous-zone (au moins une), un seul tronçon. Seulement le
- * nombre de tronçons : autant de chapelles qu'il en faut pour loger les sous-zones. null : dimensions non positives, valeurs
- * hors bornes ou allées qui prennent toute la longueur.
+ * La grille effective, sans arrondi. Grille nulle (les trois colonnes nulles) : une chapelle par sous-zone (au moins une), un
+ * seul tronçon (T86). nb_chapelles seul : un tronçon, allée de 0. Tronçons ou allée sans nb_chapelles : pas de grille (la base
+ * et le serveur le refusent). null aussi : dimensions non positives, valeurs hors bornes, ou tronçon de moins d'un millimètre.
  */
 function grille(serre: GrilleSerre, nbSousZones: number): Grille | null {
   if (!positif(serre.longueurM) || !positif(serre.largeurM)) return null;
+  const nbChapelles = serre.nbChapelles ?? null;
+  if (nbChapelles === null && ((serre.nbTroncons ?? null) !== null || (serre.largeurAlleeM ?? null) !== null)) return null;
   const troncons = serre.nbTroncons ?? 1;
   const allee = serre.largeurAlleeM ?? 0;
-  const chapelles = serre.nbChapelles ?? Math.max(1, Math.ceil(nbSousZones / troncons));
+  const chapelles = nbChapelles ?? Math.max(1, nbSousZones);
   if (!entierDans(troncons, GRILLE_SERRE.tronconsMax) || !entierDans(chapelles, GRILLE_SERRE.chapellesMax)) return null;
   if (!Number.isFinite(allee) || allee < 0) return null;
   const reste = troncons === 1 ? serre.longueurM : serre.longueurM - (troncons - 1) * allee;
-  if (!(reste > EPSILON_M)) return null;
   const longueurTroncon = reste / troncons;
   const largeurChapelle = serre.largeurM / chapelles;
-  if (!(mm(longueurTroncon) > 0) || !(mm(largeurChapelle) > 0)) return null;
+  if (!(mm(longueurTroncon) >= TRONCON_MIN_M) || !(mm(largeurChapelle) > 0)) return null;
   return { chapelles, troncons, allee: troncons === 1 ? 0 : allee, largeurChapelle, longueurTroncon };
 }
 
@@ -90,8 +92,9 @@ export function dimensionsGrille(serre: GrilleSerre, nbSousZones = 0): Dimension
   return g === null ? null : { largeurChapelleM: mm(g.largeurChapelle), longueurTronconM: mm(g.longueurTroncon) };
 }
 
-/** La serre a une grille renseignée (au moins le nombre de chapelles ou de tronçons). */
-export const aUneGrille = (serre: GrilleSerre): boolean => (serre.nbChapelles ?? null) !== null || (serre.nbTroncons ?? null) !== null;
+/** La serre a une grille renseignée (au moins une des trois colonnes ; sans nb_chapelles, elle est refusée et n'a pas de case). */
+export const aUneGrille = (serre: GrilleSerre): boolean =>
+  (serre.nbChapelles ?? null) !== null || (serre.nbTroncons ?? null) !== null || (serre.largeurAlleeM ?? null) !== null;
 
 const avertir = (n: number): string | null =>
   n === 0 ? null : n === 1 ? '1 zone n’a pas de place dans la serre.' : `${String(n)} zones n’ont pas de place dans la serre.`;
