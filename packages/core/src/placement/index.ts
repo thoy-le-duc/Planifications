@@ -99,3 +99,15 @@ export {
   type PlanchesDeSerre,
   type ResumeSerre,
 } from './serre-fiche.ts';
+// T90 : dupliquer une serre ou une parcelle (noms et positions des copies).
+export {
+  COPIES_MAX,
+  COPIES_PAR_DEFAUT,
+  ECART_PAR_DEFAUT_M,
+  decalageDeCopie,
+  erreurDuplication,
+  largeurDuContour,
+  nomsDesCopies,
+  positionsDesCopies,
+  type CopiePositionnee,
+} from './duplication.ts';
