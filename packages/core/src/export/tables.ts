@@ -85,6 +85,9 @@ export const TABLES_EXPORTEES: Readonly<Record<string, DescriptionTable>> = /* @
       centre_y_m: reel('position du centre vers le nord, en mètres depuis l’origine du plan (ferme.origine_plan)'),
       orientation_deg: reel('orientation de la longueur, en degrés dans le sens horaire depuis le nord (0 à 360)'),
       zone_id: texte('zone de culture abritée par le bâtiment, s’il y en a une (voir zone.csv)'),
+      nb_chapelles: entier('nombre de chapelles de la serre, dans la largeur (1 à 100) ; vide : une chapelle par sous-zone'),
+      nb_troncons: entier('nombre de tronçons de la serre, dans la longueur (1 à 50) ; vide : un seul tronçon'),
+      largeur_allee_m: reel('largeur des allées entre deux tronçons, en mètres ; les dimensions d’une case (chapelle × tronçon) se déduisent de la longueur et de la largeur du bâtiment'),
       ...HORODATAGE,
     }),
     campagne: table('Campagnes annuelles des plantations pérennes : récoltes et rendement prévus de l’année.', {

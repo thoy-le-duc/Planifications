@@ -157,6 +157,10 @@ describe('T28a : colonnes du placement dans la liste blanche', () => {
       centre_y_m: 'reel',
       orientation_deg: 'reel',
       zone_id: 'texte',
+      // T88 : la grille de la serre (chapelles × tronçons, allées).
+      nb_chapelles: 'entier',
+      nb_troncons: 'entier',
+      largeur_allee_m: 'reel',
       cree_le: 'instant',
       modifie_le: 'instant',
       supprime_le: 'instant',

@@ -28,7 +28,22 @@ export interface ContextePlacement {
 }
 
 /** Colonnes d'un bâtiment que `placer` écrit. */
-const COLONNES_BATIMENT = ['nom', 'type', 'longueur_m', 'largeur_m', 'hauteur_m', 'centre_x_m', 'centre_y_m', 'orientation_deg', 'zone_id', 'supprime_le'] as const;
+const COLONNES_BATIMENT = [
+  'nom',
+  'type',
+  'longueur_m',
+  'largeur_m',
+  'hauteur_m',
+  'centre_x_m',
+  'centre_y_m',
+  'orientation_deg',
+  'zone_id',
+  'supprime_le',
+  // T88 : la grille de la serre (facultative).
+  'nb_chapelles',
+  'nb_troncons',
+  'largeur_allee_m',
+] as const;
 type ColonneBatiment = (typeof COLONNES_BATIMENT)[number];
 const estColonneBatiment = (c: string): c is ColonneBatiment => (COLONNES_BATIMENT as readonly string[]).includes(c);
 
@@ -112,13 +127,15 @@ async function placerBatiment(tx: TransactionLocale, ctx: ContextePlacement, id:
     if (existant === undefined) throw new Error('Un bâtiment ne se crée pas déjà supprimé.');
     recues.supprime_le = instantNormalise(valeurs.supprime_le) ?? fautif('Date de suppression illisible : un instant complet avec son fuseau est attendu.');
   }
-  const ligne: Readonly<Record<string, unknown>> = { zone_id: null, supprime_le: null, ...existant, ...recues };
-  if (typeof ligne.nom !== 'string' || ligne.nom.trim() === '') throw new Error('Il manque le nom du bâtiment.');
-  if (ligne.nom.includes('\u0000')) throw new Error('Le nom du bâtiment contient un caractère interdit.');
-  if (ligne.nom.length > NOM_CARACTERES_MAX) throw new Error('Le nom du bâtiment est trop long.');
-  if (typeof ligne.type !== 'string' || !(TYPES_BATIMENT as readonly string[]).includes(ligne.type)) throw new Error('Type de bâtiment inconnu.');
-  const r = validerPlacement({ table: 'batiment', ligne });
+  const ligneRecue: Readonly<Record<string, unknown>> = { zone_id: null, supprime_le: null, ...existant, ...recues };
+  if (typeof ligneRecue.nom !== 'string' || ligneRecue.nom.trim() === '') throw new Error('Il manque le nom du bâtiment.');
+  if (ligneRecue.nom.includes('\u0000')) throw new Error('Le nom du bâtiment contient un caractère interdit.');
+  if (ligneRecue.nom.length > NOM_CARACTERES_MAX) throw new Error('Le nom du bâtiment est trop long.');
+  if (typeof ligneRecue.type !== 'string' || !(TYPES_BATIMENT as readonly string[]).includes(ligneRecue.type)) throw new Error('Type de bâtiment inconnu.');
+  const r = validerPlacement({ table: 'batiment', ligne: ligneRecue });
   if (!r.ok) throw new Error(r.erreur.message);
+  // T88 : la grille telle que le cœur la rend (allée arrondie au millimètre, comme la base l'exige).
+  const ligne: Readonly<Record<string, unknown>> = { ...ligneRecue, nb_chapelles: r.valeur.nb_chapelles, nb_troncons: r.valeur.nb_troncons, largeur_allee_m: r.valeur.largeur_allee_m };
   const supprime = ligne.supprime_le;
   const zone = ligne.zone_id;
   if (zone !== null && typeof zone !== 'string') throw new Error('Zone introuvable dans cette ferme.');

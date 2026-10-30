@@ -311,10 +311,32 @@ export const batiment = pgTable(
     orientationDeg: decimal('orientation_deg').notNull(),
     /** Zone de culture abritée, de la même ferme (clé étrangère composée). */
     zoneId: idDe<'Zone'>('zone_id'),
+    /**
+     * T88 : la grille de la serre, chapelles (dans la largeur) × tronçons (dans la longueur), allées entre les tronçons.
+     * Nulles : une bande par sous-zone sur toute la longueur (T86). Dimensions d'une case dérivées, jamais stockées.
+     */
+    nbChapelles: integer('nb_chapelles'),
+    nbTroncons: integer('nb_troncons'),
+    // Numérique exact (mode texte de Drizzle) : la base vérifie le millimètre.
+    largeurAlleeM: numeric('largeur_allee_m'),
     ...horodatages(),
   },
   (t) => [
     verif('batiment', 'type', parmi(t.type, TYPES_BATIMENT)),
+    verif('batiment', 'nb_chapelles', sql`${t.nbChapelles} >= 1 AND ${t.nbChapelles} <= 100`),
+    verif('batiment', 'nb_troncons', sql`${t.nbTroncons} >= 1 AND ${t.nbTroncons} <= 50`),
+    verif('batiment', 'largeur_allee', sql`${t.largeurAlleeM} >= 0 AND ${t.largeurAlleeM} <= 500 AND ${t.largeurAlleeM} = round(${t.largeurAlleeM}, 3)`),
+    // Tronçons ou allée sans nombre de chapelles : refusé (aucun nombre de chapelles n'est déduit).
+    verif('batiment', 'grille_chapelles', sql`${t.nbChapelles} IS NOT NULL OR (${t.nbTroncons} IS NULL AND ${t.largeurAlleeM} IS NULL)`),
+    // Une chapelle, arrondie au millimètre, fait au moins un millimètre de large.
+    verif('batiment', 'grille_chapelle', sql`CASE WHEN coalesce(${t.nbChapelles}, 0) < 1 THEN true ELSE round(${t.largeurM} / ${t.nbChapelles}, 3) >= 0.001 END`),
+    // Un tronçon, arrondi au millimètre, fait au moins un millimètre.
+    verif(
+      'batiment',
+      'grille',
+      // Nombre de tronçons hors bornes : refusé par batiment_nb_troncons, sans division par zéro ici.
+      sql`${t.nbChapelles} IS NULL OR CASE WHEN coalesce(${t.nbTroncons}, 1) < 1 THEN true ELSE round((${t.longueurM} - (coalesce(${t.nbTroncons}, 1) - 1) * coalesce(${t.largeurAlleeM}, 0)) / coalesce(${t.nbTroncons}, 1), 3) >= 0.001 END`,
+    ),
     verif('batiment', 'longueur', sql`${t.longueurM} > 0 AND ${t.longueurM} <= 500`),
     verif('batiment', 'largeur', sql`${t.largeurM} > 0 AND ${t.largeurM} <= 200`),
     verif('batiment', 'hauteur', sql`${t.hauteurM} > 0 AND ${t.hauteurM} <= 30`),

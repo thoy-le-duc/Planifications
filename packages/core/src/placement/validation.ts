@@ -77,6 +77,10 @@ export interface PlacementBatiment {
   readonly centre_x_m: number;
   readonly centre_y_m: number;
   readonly orientation_deg: number;
+  /** T88 : la grille de la serre (chapelles × tronçons, allées) ; nulle = une bande par sous-zone (T86). */
+  readonly nb_chapelles: number | null;
+  readonly nb_troncons: number | null;
+  readonly largeur_allee_m: number | null;
 }
 export interface PlacementZone {
   readonly contour: readonly PointLocal[] | null;

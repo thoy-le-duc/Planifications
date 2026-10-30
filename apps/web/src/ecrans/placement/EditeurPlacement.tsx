@@ -1789,7 +1789,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
               {pret && elements.batiments.map(dessiner)}
               {pret && elements.vannes.map(dessiner)}
               {pret && mZone !== null && (
-                <mZone.CoucheBandes bandes={bandes} versEcran={(p) => versEcran(vue, p)} choisie={zoneSel} surChoisir={choisirZoneListe} />
+                <mZone.CoucheBandes bandes={bandes} zones={zones} batiments={batimentsAff} versEcran={(p) => versEcran(vue, p)} choisie={zoneSel} surChoisir={choisirZoneListe} />
               )}
 
               {pret && mZone !== null && blocZone !== null && poigneeBloc !== null && (

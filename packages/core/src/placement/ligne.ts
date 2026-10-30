@@ -22,6 +22,7 @@ import {
   type PlacementZone,
   type ResultatPlacement,
 } from './validation.ts';
+import { GRILLE_SERRE, TRONCON_MIN_M } from './cases.ts';
 
 // ── Placement d'une ligne ────────────────────────────────────────────────────────────────────
 
@@ -105,10 +106,65 @@ function validerBatiment(ligne: Readonly<Record<string, unknown>>): ResultatPlac
   if (longueur === undefined || largeur === undefined || hauteur === undefined) {
     return refus('dimension_invalide', 'longueur_m', 'Les dimensions du bâtiment sont illisibles.');
   }
+  const grille = validerGrille(ligne, longueur, largeur);
+  if (!grille.ok) return grille;
   return {
     ok: true,
-    valeur: { longueur_m: longueur, largeur_m: largeur, hauteur_m: hauteur, centre_x_m: cx, centre_y_m: cy, orientation_deg: o },
+    valeur: { longueur_m: longueur, largeur_m: largeur, hauteur_m: hauteur, centre_x_m: cx, centre_y_m: cy, orientation_deg: o, ...grille.valeur },
   };
+}
+
+interface GrilleValide {
+  readonly nb_chapelles: number | null;
+  readonly nb_troncons: number | null;
+  readonly largeur_allee_m: number | null;
+}
+
+/** Au millimètre ; `+ 0` efface le zéro négatif. */
+const mm = (v: number): number => Math.round(v * 1000) / 1000 + 0;
+/** Au plus trois décimales (au millimètre), à l'imprécision des flottants près. */
+const auMillimetre = (v: number): boolean => Math.abs(v * 1000 - Math.round(v * 1000)) < 1e-6;
+
+/**
+ * T88 : la grille de la serre, facultative (nulle = comportement de T86). Mêmes règles que la base : chapelles 1 à 100 (obligatoires
+ * dès que tronçons ou allée sont donnés), tronçons 1 à 50, allée de 0 à 500 m au millimètre (rendue arrondie au millimètre), et
+ * des chapelles et des tronçons d'au moins un millimètre une fois arrondis : (longueur − (tronçons − 1) × allée) ÷ tronçons ≥ 0,001 m.
+ */
+function validerGrille(ligne: Readonly<Record<string, unknown>>, longueur: number, largeur: number): ResultatPlacement<GrilleValide> {
+  const c = ligne.nb_chapelles;
+  const t = ligne.nb_troncons;
+  const a = ligne.largeur_allee_m;
+  const entier = (v: unknown, max: number): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= max;
+  if (!estNul(c) && !entier(c, GRILLE_SERRE.chapellesMax)) {
+    return refus('dimension_invalide', 'nb_chapelles', `Le nombre de chapelles doit être un nombre entier de 1 à ${String(GRILLE_SERRE.chapellesMax)}.`);
+  }
+  if (!estNul(t) && !entier(t, GRILLE_SERRE.tronconsMax)) {
+    return refus('dimension_invalide', 'nb_troncons', `Le nombre de tronçons doit être un nombre entier de 1 à ${String(GRILLE_SERRE.tronconsMax)}.`);
+  }
+  if (!estNul(a) && (!estNombre(a) || a < 0 || a > GRILLE_SERRE.alleeMaxM || !auMillimetre(a))) {
+    return refus('dimension_invalide', 'largeur_allee_m', `La largeur d’une allée doit être un nombre de mètres de 0 à ${String(GRILLE_SERRE.alleeMaxM)}, au millimètre près.`);
+  }
+  if (estNul(c) && (!estNul(t) || !estNul(a))) {
+    return refus('incomplet', 'nb_chapelles', 'Donnez le nombre de chapelles de la serre avant ses tronçons et ses allées.');
+  }
+  const chapelles = estNul(c) ? null : (c as number);
+  // Une chapelle, arrondie au millimètre, fait au moins un millimètre (même seuil et même tolérance que les tronçons).
+  if (chapelles !== null && !(largeur / chapelles >= TRONCON_MIN_M / 2 + 1e-9)) {
+    return refus('plafond_depasse', 'nb_chapelles', `Les chapelles de la serre feraient moins d’un millimètre de large : réduisez le nombre de chapelles (${String(chapelles)}).`);
+  }
+  const troncons = estNul(t) ? null : (t as number);
+  const allee = estNul(a) ? null : mm(a as number);
+  const n = troncons ?? 1;
+  // La base arrondit le tronçon au millimètre en numérique exact : ici, un tronçon à l'imprécision des flottants près d'un
+  // demi-millimètre est refusé (jamais accepté ici puis refusé par la base).
+  if (chapelles !== null && !((longueur - (n - 1) * (allee ?? 0)) / n >= TRONCON_MIN_M / 2 + 1e-9)) {
+    return refus(
+      'plafond_depasse',
+      'largeur_allee_m',
+      `Les tronçons de la serre feraient moins d’un millimètre : réduisez la largeur des allées ou le nombre de tronçons (${String(n)}).`,
+    );
+  }
+  return { ok: true, valeur: { nb_chapelles: chapelles, nb_troncons: troncons, largeur_allee_m: allee } };
 }
 
 function validerZone(ligne: Readonly<Record<string, unknown>>, abritee: boolean): ResultatPlacement<PlacementZone> {

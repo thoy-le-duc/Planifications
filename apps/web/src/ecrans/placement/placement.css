@@ -811,6 +811,34 @@
   border-color: var(--couleur-orange);
 }
 
+/* T88 : une case vide d'une serre en grille (moins de sous-zones que de cases), dessinée en pointillés. */
+.pl-case-vide {
+  stroke-dasharray: 6 4;
+  fill: none;
+}
+
+.pl-case-vide-repere {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* T88 : des sous-zones n'ont pas de place dans la serre ; posé au bout sud de la serre, non bloquant. */
+.pl-serre-avertissement {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, 0);
+  margin: 0;
+  padding: 4px 8px;
+  max-width: 60vw;
+  border-radius: var(--rayon-etiquette);
+  background: var(--couleur-surface);
+  color: var(--couleur-texte);
+  font-weight: 700;
+  pointer-events: none;
+}
+
 .pl-svg-bandes {
   width: 100%;
   height: 100%;

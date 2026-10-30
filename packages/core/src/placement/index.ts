@@ -72,3 +72,15 @@ export {
 } from './parcelle.ts';
 // T86 : les sous-zones d'une serre en bandes, et le rangement de leurs planches.
 export { bandesDeSerre, rangerDansBande, type BandeSerre, type RangementDeBande, type SousZoneDeSerre } from './bandes.ts';
+// T88 : une serre découpée en cases (chapelles × tronçons, allées entre les tronçons).
+export {
+  GRILLE_SERRE,
+  aUneGrille,
+  casesDeSerre,
+  dimensionsGrille,
+  rangerDansCase,
+  type CaseSerre,
+  type DimensionsGrille,
+  type GrilleSerre,
+  type ResultatCases,
+} from './cases.ts';

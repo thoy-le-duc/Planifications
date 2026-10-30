@@ -20,6 +20,12 @@ export interface Batiment {
   readonly zoneId: string | null;
   /** Posé dans le brouillon, pas encore écrit. */
   readonly nouveau: boolean;
+  /**
+   * T88 : la ligne lue, d'où le morceau de la zone (bandes-serre.ts, `grilleDe`) tire la grille de la serre (nb_chapelles,
+   * nb_troncons, largeur_allee_m) ; absente pour un bâtiment du brouillon : une bande par sous-zone (T86). Gardée brute pour
+   * ne pas alourdir le morceau de l'éditeur (budget.json).
+   */
+  readonly ligne?: Readonly<Record<string, unknown>>;
 }
 
 export interface Zone {
@@ -109,7 +115,8 @@ export const requeteRoles = (fermeId: string, utilisateurId: string): RequeteSur
 });
 
 export const requeteBatiments = (fermeId: string): RequeteSurveillee<Batiment | null> => ({
-  sql: 'SELECT id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, zone_id FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY id',
+  // T88 : toutes les colonnes (grille de la serre comprise) ; la liste explicite pesait sur le morceau de l'éditeur.
+  sql: 'SELECT * FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY id',
   parametres: [fermeId],
   tables: ['batiment'],
   convertir: (l: Ligne) => {
@@ -117,7 +124,19 @@ export const requeteBatiments = (fermeId: string): RequeteSurveillee<Batiment | 
     const nom = texte(l.nom);
     const [longueurM, largeurM, hauteurM, x, y, o] = [l.longueur_m, l.largeur_m, l.hauteur_m, l.centre_x_m, l.centre_y_m, l.orientation_deg].map(nombre);
     if (id === null || nom === null || !estType(l.type) || longueurM == null || largeurM == null || hauteurM == null || x == null || y == null || o == null) return null;
-    return { id, nom, type: l.type, centre: { x, y }, orientationDeg: o, longueurM, largeurM, hauteurM, zoneId: texte(l.zone_id), nouveau: false };
+    return {
+      id,
+      nom,
+      type: l.type,
+      centre: { x, y },
+      orientationDeg: o,
+      longueurM,
+      largeurM,
+      hauteurM,
+      zoneId: texte(l.zone_id),
+      nouveau: false,
+      ligne: l,
+    };
   },
 });
 

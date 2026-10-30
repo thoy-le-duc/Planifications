@@ -21,7 +21,7 @@ export const TABLES_LOCALES = {
   article_stock: { ferme_id: T, espece_id: T, variete_id: T, unite: T, categorie: T, cree_le: T, modifie_le: T, supprime_le: T },
   assolement: { ferme_id: T, saison_id: T, zone_id: T, emplacement_id: T, famille_id: T, espece_id: T, nature: T, source_import: T, cree_le: T, modifie_le: T, supprime_le: T },
   attribution: { ferme_id: T, personne_id: T, cle_tache: T, cree_le: T, modifie_le: T, supprime_le: T },
-  batiment: { ferme_id: T, nom: T, type: T, longueur_m: 'reel', largeur_m: 'reel', hauteur_m: 'reel', centre_x_m: 'reel', centre_y_m: 'reel', orientation_deg: 'reel', zone_id: T, cree_le: T, modifie_le: T, supprime_le: T },
+  batiment: { ferme_id: T, nom: T, type: T, longueur_m: 'reel', largeur_m: 'reel', hauteur_m: 'reel', centre_x_m: 'reel', centre_y_m: 'reel', orientation_deg: 'reel', zone_id: T, nb_chapelles: 'entier', nb_troncons: 'entier', largeur_allee_m: 'reel', cree_le: T, modifie_le: T, supprime_le: T },
   campagne: { ferme_id: T, plantation_id: T, annee: 'entier', debut_recolte_prevu: T, fin_recolte_prevue: T, rendement_prevu: T, cree_le: T, modifie_le: T, supprime_le: T },
   // T61 : chemin du plan, points en texte JSON [{x, y}] (jsonb), comme zone.contour.
   chemin: { ferme_id: T, nom: T, points: T, largeur_m: 'reel', cree_le: T, modifie_le: T, supprime_le: T },

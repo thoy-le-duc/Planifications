@@ -85,7 +85,7 @@ describe('T28a : validerPlacement, bâtiment', () => {
   const batiment = (ligne: Readonly<Record<string, unknown>>) => m.validerPlacement({ table: 'batiment', ligne });
 
   it('tunnel de 40 × 8 m : accepté, valeurs rendues', () => {
-    expect(valide(batiment({ ...TUNNEL, nom: 'M3', type: 'serre_tunnel' }))).toEqual(TUNNEL);
+    expect(valide(batiment({ ...TUNNEL, nom: 'M3', type: 'serre_tunnel' }))).toEqual({ ...TUNNEL, nb_chapelles: null, nb_troncons: null, largeur_allee_m: null });
   });
 
   it('plafonds atteints pile (500 × 200 × 30 m) : acceptés', () => {

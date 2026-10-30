@@ -119,7 +119,25 @@ export const COLONNES_STRUCTURE: Readonly<Record<TableEcrite, readonly string[]>
   variete: ['id', 'ferme_id', 'espece_id', 'nom', 'fournisseur', 'poids_mille_graines_g', 'taux_germination', 'supprime_le'],
   saison: ['id', 'ferme_id', 'nom', 'debut', 'fin', 'supprime_le'],
   assolement: ['id', 'ferme_id', 'saison_id', 'zone_id', 'emplacement_id', 'famille_id', 'espece_id', 'nature', 'source_import', 'supprime_le'],
-  batiment: ['id', 'ferme_id', 'nom', 'type', 'longueur_m', 'largeur_m', 'hauteur_m', 'centre_x_m', 'centre_y_m', 'orientation_deg', 'zone_id', 'supprime_le'],
+  // T88 : la grille de la serre (nb_chapelles, nb_troncons, largeur_allee_m), facultative ; un téléphone d'avant T88 ne
+  // l'envoie pas (PUT : nulle, une bande par sous-zone ; PATCH : la valeur en base est gardée).
+  batiment: [
+    'id',
+    'ferme_id',
+    'nom',
+    'type',
+    'longueur_m',
+    'largeur_m',
+    'hauteur_m',
+    'centre_x_m',
+    'centre_y_m',
+    'orientation_deg',
+    'zone_id',
+    'nb_chapelles',
+    'nb_troncons',
+    'largeur_allee_m',
+    'supprime_le',
+  ],
   // T57 : l'adresse Modbus (phase 3) n'est pas écrite par le téléphone.
   secteur_irrigation: ['id', 'ferme_id', 'numero_vanne', 'nom', 'debit_litres_heure', ...COLONNES_PLACEMENT_VANNE, 'supprime_le'],
   secteur_emplacement: ['id', 'ferme_id', 'secteur_irrigation_id', 'emplacement_id', 'du', 'au', 'supprime_le'],
