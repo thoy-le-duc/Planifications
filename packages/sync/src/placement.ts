@@ -28,7 +28,22 @@ export interface ContextePlacement {
 }
 
 /** Colonnes d'un bâtiment que `placer` écrit. */
-const COLONNES_BATIMENT = ['nom', 'type', 'longueur_m', 'largeur_m', 'hauteur_m', 'centre_x_m', 'centre_y_m', 'orientation_deg', 'zone_id', 'supprime_le'] as const;
+const COLONNES_BATIMENT = [
+  'nom',
+  'type',
+  'longueur_m',
+  'largeur_m',
+  'hauteur_m',
+  'centre_x_m',
+  'centre_y_m',
+  'orientation_deg',
+  'zone_id',
+  'supprime_le',
+  // T88 : la grille de la serre (facultative).
+  'nb_chapelles',
+  'nb_troncons',
+  'largeur_allee_m',
+] as const;
 type ColonneBatiment = (typeof COLONNES_BATIMENT)[number];
 const estColonneBatiment = (c: string): c is ColonneBatiment => (COLONNES_BATIMENT as readonly string[]).includes(c);
 

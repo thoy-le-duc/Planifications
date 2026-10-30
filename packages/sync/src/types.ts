@@ -151,6 +151,10 @@ export interface ValeursBatiment {
   readonly zone_id?: string | null;
   /** Instant ISO UTC de la suppression douce, ou null pour rétablir. */
   readonly supprime_le?: string | null;
+  /** T88 : la grille de la serre, chapelles (1 à 100) × tronçons (1 à 50), allées en mètres ; null = une bande par sous-zone (T86). */
+  readonly nb_chapelles?: number | null;
+  readonly nb_troncons?: number | null;
+  readonly largeur_allee_m?: number | null;
 }
 
 /**

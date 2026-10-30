@@ -185,6 +185,10 @@ const LIBELLES_DES_CHAMPS: Readonly<Record<string, string>> = {
   hauteur_m: 'hauteur',
   centre_x_m: 'position',
   centre_y_m: 'position',
+  // T88 : la grille d'une serre.
+  nb_chapelles: 'nombre de chapelles',
+  nb_troncons: 'nombre de tronçons',
+  largeur_allee_m: 'largeur des allées',
   origine_plan: 'point de départ du plan',
   // T32a : profil de croissance d'une espèce (structure-lignes.ts).
   profil_croissance: 'profil de croissance',
@@ -238,6 +242,13 @@ const MANQUE_AU_PLACEMENT: Readonly<Record<string, string>> = {
   centre_y_m: 'la position nord-sud du centre',
 };
 
+/** T88 : la grille d'une serre (champ d'une erreur du placement), en français, sans seuil de l'envoi. */
+const GRILLE: Readonly<Record<string, string>> = {
+  nb_chapelles: 'le nombre de chapelles de la serre doit être un nombre entier de 1 à 100',
+  nb_troncons: 'le nombre de tronçons de la serre doit être un nombre entier de 1 à 50',
+  largeur_allee_m: 'la largeur des allées de la serre doit être un nombre de mètres positif ou nul, au millimètre près',
+};
+
 /** Dimensions d'un bâtiment (champ d'une erreur du placement), en français. */
 const DIMENSIONS: Readonly<Record<string, string>> = { longueur_m: 'la longueur', largeur_m: 'la largeur', hauteur_m: 'la hauteur' };
 
@@ -266,9 +277,10 @@ export function precisionDuPlacement(erreur: ErreurPlacement): string {
     aire_nulle: 'la surface de la zone est nulle ou trop petite',
     incomplet: `placement incomplet : il manque ${MANQUE_AU_PLACEMENT[champ] ?? 'une information'}`,
     orientation_invalide: 'l’orientation doit être comprise entre 0 et 360 degrés, 360 exclu',
-    dimension_invalide: `${DIMENSIONS[champ] ?? 'chaque dimension'} du bâtiment doit être un nombre de mètres plus grand que zéro`,
+    dimension_invalide: GRILLE[champ] ?? `${DIMENSIONS[champ] ?? 'chaque dimension'} du bâtiment doit être un nombre de mètres plus grand que zéro`,
     plafond_depasse: `${DIMENSIONS[champ] ?? 'une dimension'} du bâtiment dépasse le maximum permis`,
     zone_abritee_avec_contour: 'cette zone est abritée par un bâtiment : elle prend sa forme et n’a pas de contours à elle',
+    grille_impossible: 'les allées prennent toute la longueur de la serre : il ne reste rien pour les tronçons',
   };
   return precisions[erreur.code];
 }
