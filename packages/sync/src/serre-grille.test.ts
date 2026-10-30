@@ -165,6 +165,7 @@ describe('T88 : la porte écrit la grille et rend de quoi l’annuler', () => {
   it.each([
     ['nb_troncons sans nb_chapelles', { nb_chapelles: null, nb_troncons: 3 }],
     ['allée sans nb_chapelles', { nb_chapelles: null, nb_troncons: null, largeur_allee_m: 4.4 }],
+    ['chapelle minuscule (0,01 m en 100 chapelles)', { nb_chapelles: 100, nb_troncons: null, largeur_allee_m: null, largeur_m: 0.01 }],
     ['grille minuscule (0,02 m en 50 tronçons)', { nb_chapelles: 1, nb_troncons: 50, largeur_allee_m: 0, longueur_m: 0.02 }],
   ])('%s : rejeté, rien d’écrit', async (_cas, grille) => {
     await expect(placer([batimentDe(NOUVELLE, { ...LEGUMES, ...grille })])).rejects.toThrow();

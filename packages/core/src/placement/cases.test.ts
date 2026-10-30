@@ -385,5 +385,22 @@ describe('T88 : millimètre, grille minuscule, chapelles obligatoires (relecture
     expect(fonction('dimensionsGrille')({ longueurM: 40, largeurM: 28.8, nbChapelles: 3 })).toEqual({ largeurChapelleM: 9.6, longueurTronconM: 40 });
     expect(fonction('casesDeSerre')({ longueurM: 40, largeurM: 28.8, nbChapelles: 3 }, zones(3)).cases.map((c) => [c.chapelle, c.troncon])).toEqual([[1, 1], [2, 1], [3, 1]]);
   });
-});
 
+  it('chapelle minuscule : largeur ÷ chapelles arrondie au millimètre < 0,001 m → refusé (0,01 m en 100 chapelles), partout', () => {
+    const refuse = valider({ nb_chapelles: 100 }, { largeur_m: 0.01 });
+    expect(refuse.ok).toBe(false);
+    if (!refuse.ok) {
+      expect(refuse.erreur.champ).toBe('nb_chapelles');
+      expect(refuse.erreur.message).toMatch(/chapelle/i);
+    }
+    expect(fonction('dimensionsGrille')({ longueurM: 40, largeurM: 0.01, nbChapelles: 100 })).toBeNull();
+    expect(fonction('casesDeSerre')({ longueurM: 40, largeurM: 0.01, nbChapelles: 100 }, zones(3)).cases).toEqual([]);
+  });
+
+  it('0,1 m en 100 chapelles : accepté, et donne 100 cases', () => {
+    expect(valider({ nb_chapelles: 100 }, { largeur_m: 0.1 }).ok).toBe(true);
+    const { cases } = fonction('casesDeSerre')({ longueurM: 40, largeurM: 0.1, nbChapelles: 100 }, []);
+    expect(cases).toHaveLength(100);
+    expect(cases[0]?.largeurM).toBe(0.001);
+  });
+});

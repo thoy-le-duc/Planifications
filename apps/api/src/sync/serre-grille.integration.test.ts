@@ -274,6 +274,13 @@ decrireAvecBase('T88')('T88 : la grille d’une serre dans POST /sync/upload', {
       await accepte([putSerre({ nb_chapelles: 3 })]);
     });
 
+    it('chapelle minuscule : 0,01 m en 100 chapelles → refusé ; 0,1 m en 100 chapelles → accepté', async () => {
+      const b = putSerre({ nb_chapelles: 100, largeur_m: 0.01 });
+      await refuse([b], b, /chapelle/iu);
+      expect(await ligne(b.id)).toBeNull();
+      await accepte([putSerre({ nb_chapelles: 100, largeur_m: 0.1 })]);
+    });
+
     it('grille minuscule : 0,02 m en 50 tronçons → refusé ; 0,05 m en 50 tronçons → accepté', async () => {
       const b = putSerre({ nb_chapelles: 1, nb_troncons: 50, largeur_allee_m: 0, longueur_m: 0.02 });
       await refuse([b], b, /tronçon|allée|longueur/iu);

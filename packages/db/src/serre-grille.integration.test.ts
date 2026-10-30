@@ -87,11 +87,11 @@ decrireAvecBase('T88 : serre en grille en base (PostgreSQL)', { timeout: 30_000 
   const ancien = randomUUID();
 
   /** Serre à légumes de la ferme : 128,8 × 57,6 m. Les colonnes de la grille, dans l'ordre : chapelles, tronçons, allée. */
-  function serre(grille: readonly [unknown, unknown, unknown], longueur = 128.8, id: string = randomUUID()): Promise<unknown> {
+  function serre(grille: readonly [unknown, unknown, unknown], longueur = 128.8, id: string = randomUUID(), largeur = 57.6): Promise<unknown> {
     return c.query(
       `INSERT INTO batiment (id, ferme_id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, nb_chapelles, nb_troncons, largeur_allee_m)
-       VALUES ($1, $2, $3, 'serre_chapelle', $4, 57.6, 5, 0, 0, 0, $5, $6, $7)`,
-      [id, ferme, `Serre ${id.slice(0, 6)}`, longueur, grille[0], grille[1], grille[2]],
+       VALUES ($1, $2, $3, 'serre_chapelle', $4, $8, 5, 0, 0, 0, $5, $6, $7)`,
+      [id, ferme, `Serre ${id.slice(0, 6)}`, longueur, grille[0], grille[1], grille[2], largeur],
     );
   }
 
@@ -198,5 +198,11 @@ decrireAvecBase('T88 : serre en grille en base (PostgreSQL)', { timeout: 30_000 
     expect(await codeErreur(serre([1, 50, 0], 0.02))).toBe(VIOLATION_CHECK);
     expect(await codeErreur(serre([1, 50, 0.0199], 1))).toBe(VIOLATION_CHECK); // reste 0,0249 m : 0,0005 m par tronçon
     await serre([1, 50, 0.019], 1); // reste 0,069 m : 0,00138 m par tronçon
+  });
+
+  it('chapelle minuscule : largeur ÷ chapelles arrondie à moins de 0,001 m refusée (0,01 m en 100 chapelles) ; 0,1 m en 100 chapelles accepté', async () => {
+    await serre([100, null, null], 128.8, randomUUID(), 0.1);
+    expect(await codeErreur(serre([100, null, null], 128.8, randomUUID(), 0.01))).toBe(VIOLATION_CHECK);
+    expect(await codeErreur(serre([100, 3, 4.4], 128.8, randomUUID(), 0.04))).toBe(VIOLATION_CHECK); // 0,0004 m par chapelle
   });
 });
