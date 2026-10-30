@@ -22,6 +22,7 @@ import {
   type PlacementZone,
   type ResultatPlacement,
 } from './validation.ts';
+import { GRILLE_SERRE } from './cases.ts';
 
 // ── Placement d'une ligne ────────────────────────────────────────────────────────────────────
 
@@ -105,10 +106,54 @@ function validerBatiment(ligne: Readonly<Record<string, unknown>>): ResultatPlac
   if (longueur === undefined || largeur === undefined || hauteur === undefined) {
     return refus('dimension_invalide', 'longueur_m', 'Les dimensions du bâtiment sont illisibles.');
   }
+  const grille = validerGrille(ligne, longueur);
+  if (!grille.ok) return grille;
   return {
     ok: true,
-    valeur: { longueur_m: longueur, largeur_m: largeur, hauteur_m: hauteur, centre_x_m: cx, centre_y_m: cy, orientation_deg: o },
+    valeur: { longueur_m: longueur, largeur_m: largeur, hauteur_m: hauteur, centre_x_m: cx, centre_y_m: cy, orientation_deg: o, ...grille.valeur },
   };
+}
+
+interface GrilleValide {
+  readonly nb_chapelles: number | null;
+  readonly nb_troncons: number | null;
+  readonly largeur_allee_m: number | null;
+}
+
+/** Au plus trois décimales (au millimètre), à l'imprécision des flottants près. */
+const auMillimetre = (v: number): boolean => Math.abs(v * 1000 - Math.round(v * 1000)) < 1e-6;
+
+/**
+ * T88 : la grille de la serre, facultative (nulle = comportement de T86). Mêmes règles que la base : chapelles 1 à 100,
+ * tronçons 1 à 50, allée de 0 à 500 m au millimètre, et une grille qui tient : longueur − (tronçons − 1) × allée > 0.
+ */
+function validerGrille(ligne: Readonly<Record<string, unknown>>, longueur: number): ResultatPlacement<GrilleValide> {
+  const c = ligne.nb_chapelles;
+  const t = ligne.nb_troncons;
+  const a = ligne.largeur_allee_m;
+  const entier = (v: unknown, max: number): boolean => typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= max;
+  if (!estNul(c) && !entier(c, GRILLE_SERRE.chapellesMax)) {
+    return refus('dimension_invalide', 'nb_chapelles', `Le nombre de chapelles doit être un nombre entier de 1 à ${String(GRILLE_SERRE.chapellesMax)}.`);
+  }
+  if (!estNul(t) && !entier(t, GRILLE_SERRE.tronconsMax)) {
+    return refus('dimension_invalide', 'nb_troncons', `Le nombre de tronçons doit être un nombre entier de 1 à ${String(GRILLE_SERRE.tronconsMax)}.`);
+  }
+  if (!estNul(a) && (!estNombre(a) || a < 0 || a > GRILLE_SERRE.alleeMaxM || !auMillimetre(a))) {
+    return refus('dimension_invalide', 'largeur_allee_m', `La largeur d’une allée doit être un nombre de mètres de 0 à ${String(GRILLE_SERRE.alleeMaxM)}, au millimètre près.`);
+  }
+  const chapelles = estNul(c) ? null : (c as number);
+  const troncons = estNul(t) ? null : (t as number);
+  const allee = estNul(a) ? null : (a as number);
+  const n = troncons ?? 1;
+  // La base compare en numérique exact : un reste nul à l'imprécision des flottants près est refusé ici.
+  if (n > 1 && !(longueur - (n - 1) * (allee ?? 0) > 1e-9)) {
+    return refus(
+      'grille_impossible',
+      'largeur_allee_m',
+      `Les allées prennent toute la longueur du bâtiment : il ne reste rien pour les ${String(n)} tronçons. Réduisez la largeur des allées ou le nombre de tronçons.`,
+    );
+  }
+  return { ok: true, valeur: { nb_chapelles: chapelles, nb_troncons: troncons, largeur_allee_m: allee } };
 }
 
 function validerZone(ligne: Readonly<Record<string, unknown>>, abritee: boolean): ResultatPlacement<PlacementZone> {

@@ -33,7 +33,7 @@ const mm = (v: number): number => Math.round(v * 1000) / 1000 + 0;
 /** Tolérance sur le bord de la bande (m) : un millimètre. */
 const TOLERANCE_M = 0.001;
 
-const comparerNoms = (a: SousZoneDeSerre, b: SousZoneDeSerre): number =>
+export const comparerNoms = (a: SousZoneDeSerre, b: SousZoneDeSerre): number =>
   a.nom.localeCompare(b.nom, 'fr', { numeric: true, sensitivity: 'base' }) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 const positif = (v: number): boolean => Number.isFinite(v) && v > 0;
@@ -66,6 +66,18 @@ export interface RangementDeBande {
  * passe-pied hors bornes (entier de 0 à 500 cm) ou longueur qui n'est pas un nombre positif.
  */
 export function rangerDansBande(bande: BandeSerre, planches: readonly PlancheDeParcelle[], passePiedCm: number): RangementDeBande | null {
+  return rangerDansRectangle(bande, planches, passePiedCm);
+}
+
+/** Un rectangle de la serre (bande de T86 ou case de T88) : centre dans le repère de la serre, dimensions en mètres. */
+export interface RectangleDeSerre {
+  readonly centre: { readonly x: number; readonly y: number };
+  readonly longueurM: number;
+  readonly largeurM: number;
+}
+
+/** Règle de T85 dans un rectangle de la serre : bloc centré, planches qui dépassent du rectangle signalées. */
+export function rangerDansRectangle(bande: RectangleDeSerre, planches: readonly PlancheDeParcelle[], passePiedCm: number): RangementDeBande | null {
   const parcelle = parcelleDepuisPlanches(planches, passePiedCm);
   if (parcelle === null) return null;
   const rangees = parcelle.planches.map((p): PlancheRangee => ({ ...p, centre: { x: mm(bande.centre.x + p.centre.x), y: mm(bande.centre.y + p.centre.y) } }));

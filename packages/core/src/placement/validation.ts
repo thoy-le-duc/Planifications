@@ -38,7 +38,9 @@ export type CodeErreurPlacement =
   | 'orientation_invalide'
   | 'dimension_invalide'
   | 'plafond_depasse'
-  | 'zone_abritee_avec_contour';
+  | 'zone_abritee_avec_contour'
+  // T88 : les allées d'une serre prennent toute sa longueur.
+  | 'grille_impossible';
 
 export interface ErreurPlacement {
   readonly code: CodeErreurPlacement;
@@ -77,6 +79,10 @@ export interface PlacementBatiment {
   readonly centre_x_m: number;
   readonly centre_y_m: number;
   readonly orientation_deg: number;
+  /** T88 : la grille de la serre (chapelles × tronçons, allées) ; nulle = une bande par sous-zone (T86). */
+  readonly nb_chapelles: number | null;
+  readonly nb_troncons: number | null;
+  readonly largeur_allee_m: number | null;
 }
 export interface PlacementZone {
   readonly contour: readonly PointLocal[] | null;
