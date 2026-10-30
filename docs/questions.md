@@ -539,6 +539,10 @@ Reste à confirmer (seules les valeurs par défaut en dépendent, T89 avance san
 1. Dans une chapelle de 9,60 m, combien de planches, de quelle largeur, avec quel passe-pied, et de quelle longueur ? Proposé par défaut : 8 planches de 75 cm, passe-pied de 45 cm, longueur du tronçon moins 2 m, dans la longueur de la serre.
 2. Un bouton « Modifier le plan » pour tout le plan suffit-il, ou faut-il en plus un cadenas par serre ?
 
+### Q56 — 3D : une planche sans placement dans une zone placée (posée le 2026-10-30, relecture T91)
+
+Depuis T91, la 3D ne montre que ce qui est placé, et les zones non placées sont listées dans « À placer ». Une planche qui n'a pas de placement à elle, dans une zone qui en a un, reste rangée automatiquement dans sa zone (comme depuis T28c). Proposé : on garde ce rangement automatique, plus pratique pour une parcelle dont on n'a pas encore placé chaque planche. Ou préfères-tu la cacher et la lister dans « À placer » ?
+
 ## Questions ouvertes du brief
 
 - Nom du produit.
