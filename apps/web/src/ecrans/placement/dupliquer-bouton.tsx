@@ -45,7 +45,7 @@ export interface ProprietesDupliquer {
 /** « Dupliquer » (si l'élément choisi se duplique) et, une fois touché, la fiche chargée à la demande. */
 export function Dupliquer(p: ProprietesDupliquer): ReactElement | null {
   const [fiche, setFiche] = useState<{ readonly racineId: string; readonly emplacements: readonly LigneEmplacement[]; readonly m: { readonly FicheDuplication: typeof FicheDuplication } } | null>(null);
-  const [echec, setEchec] = useState(false);
+  const [echec, setEchec] = useState<string | null>(null);
   const [charger, ...reste] = p.editeur;
   const cible = cibleDuplication(p.batiment, p.zone, p.batiments);
   return (
@@ -57,16 +57,19 @@ export function Dupliquer(p: ProprietesDupliquer): ReactElement | null {
           data-testid="dupliquer"
           disabled={p.occupe}
           onClick={() => {
-            setEchec(false);
+            setEchec(null);
             charger();
             import('./duplication.tsx')
-              .then(async (m) => ({ m, emplacements: await m.lireEmplacements(p.porte, cible) }))
               .then(
-                (r) => {
-                  setFiche({ racineId: cible, ...r });
+                async (m) => {
+                  try {
+                    setFiche({ racineId: cible, m, emplacements: await m.lireEmplacements(p.porte, cible) });
+                  } catch {
+                    setEchec('La base du téléphone n’a pas pu être lue : réessayez, puis rechargez la page si cela persiste.');
+                  }
                 },
                 () => {
-                  setEchec(true);
+                  setEchec('Impossible de charger la duplication : vérifiez la connexion, puis réessayez.');
                 },
               );
           }}
@@ -74,9 +77,9 @@ export function Dupliquer(p: ProprietesDupliquer): ReactElement | null {
           Dupliquer
         </button>
       )}
-      {echec && (
+      {echec !== null && (
         <p role="alert" className="pl-message pl-erreur">
-          Impossible de charger la duplication : vérifiez la connexion, puis réessayez.
+          {echec}
         </p>
       )}
       {fiche !== null && (

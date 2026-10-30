@@ -59,7 +59,8 @@ const texteOuNul = (v: unknown): string | null => (typeof v === 'string' ? v : n
 export async function lireEmplacements(porte: Pick<PorteDonnees, 'lire'>, racineId: string): Promise<LigneEmplacement[]> {
   const lignes = await porte.lire<LigneBrute>(
     `SELECT id, zone_id, code, sorte, longueur_m, largeur_m, placement_x_m, placement_y_m, orientation_deg FROM emplacement
-      WHERE supprime_le IS NULL AND actif_au IS NULL AND ferme_id = (SELECT ferme_id FROM zone WHERE id = ?)`,
+      WHERE supprime_le IS NULL AND actif_au IS NULL AND ferme_id = (SELECT ferme_id FROM zone WHERE id = ?)
+      ORDER BY zone_id, code`,
     [racineId],
   );
   return lignes.flatMap((l): LigneEmplacement[] => {
@@ -114,7 +115,11 @@ export function analyserSource(c: ContexteDuplication): Source | string {
   const affichees = new Map(c.planches.map((p) => [p.id, p]));
   const lus = new Set(c.emplacements.map((e) => e.id));
   const emplacements: LigneEmplacement[] = [
-    ...c.emplacements.filter((e) => ids.has(e.zoneId)).map((e) => ({ ...e, placement: affichees.get(e.id)?.placement ?? e.placement })),
+    // Une planche placée en base mais absente de l'affichage est retirée au brouillon ; une planche déplacée suit sa zone du brouillon.
+    ...c.emplacements
+      .filter((e) => !(e.sorte === 'planche' && e.placement !== null && !affichees.has(e.id)))
+      .map((e) => ({ ...e, zoneId: affichees.get(e.id)?.zoneId ?? e.zoneId, placement: affichees.get(e.id)?.placement ?? e.placement }))
+      .filter((e) => ids.has(e.zoneId)),
     ...c.planches.filter((p) => ids.has(p.zoneId) && !lus.has(p.id)).map((p): LigneEmplacement => ({ id: p.id, zoneId: p.zoneId, code: p.code, sorte: 'planche', longueurM: p.longueurM, largeurM: p.largeurM, placement: p.placement })),
   ];
   if (emplacements.some((e) => (e.sorte !== 'planche' && e.sorte !== 'rang') || !(e.longueurM > 0))) return 'Cet élément contient des emplacements qui ne se dupliquent pas encore (gouttière, ou longueur inconnue).';
