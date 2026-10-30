@@ -132,13 +132,13 @@ async function amorcerAujourdhui(date: string, travaux: boolean, placer = false)
 
 /**
  * T91 : la 3D ne dessine que ce qui est placé. `&place=1` donne à chaque zone de premier niveau un rectangle de
- * 36 × 24 m, à 40 m du précédent (serrés comme la ferme, la caméra les voit de près), pour que la ferme du jour apparaisse dans la scène (e2e/vue-3d-plants.e2e.ts).
+ * 34 × 8 m, l'un au-dessus de l'autre à 12 m d'écart (compacts comme la ferme, la caméra les voit de près), pour que la ferme du jour apparaisse dans la scène (e2e/vue-3d-plants.e2e.ts).
  */
 async function donnerUnContourAuxZones(base: BaseLocale, fermeId: string): Promise<void> {
   const zones = await base.getAll<{ id: string }>('SELECT id FROM zone WHERE ferme_id = ? AND zone_parente_id IS NULL AND contour IS NULL ORDER BY id', [fermeId]);
   await base.writeTransaction(async (tx) => {
     for (const [i, z] of zones.entries()) {
-      const contour = [{ x: 40 * i, y: 0 }, { x: 40 * i + 36, y: 0 }, { x: 40 * i + 36, y: 24 }, { x: 40 * i, y: 24 }];
+      const contour = [{ x: 0, y: 12 * i }, { x: 34, y: 12 * i }, { x: 34, y: 12 * i + 8 }, { x: 0, y: 12 * i + 8 }];
       await tx.execute('UPDATE zone SET contour = ? WHERE id = ?', [JSON.stringify(contour), z.id]);
     }
   });

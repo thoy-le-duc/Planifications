@@ -4,7 +4,7 @@ import { TESTID_3D } from '../src/ecrans/plan3d/test/contrat.ts';
 import { TESTID_3D_CAMERA as T } from '../src/ecrans/plan3d/test/contrat-camera.ts';
 import { TESTID_3D_RECOLTE as R } from '../src/ecrans/plan3d/test/contrat-recolte.ts';
 import { MENTION_DERNIERES_RECOLTES } from '../src/ecrans/plan3d/test/contrat-recolte-suites.ts';
-import { arreterImages, BORNES_JUMEAU_T07, demarrerImages, instrumenter3d, verifierGardeFous } from './fluidite-3d.ts';
+import { arreterImages, BORNES_JUMEAU_RECOLTE_T07, demarrerImages, instrumenter3d, verifierGardeFous } from './fluidite-3d.ts';
 
 /**
  * T32f — la récolte en pleine saison dans la grande ferme de T07 (`pnpm e2e`, ordinateur : Chromium
@@ -23,7 +23,7 @@ import { arreterImages, BORNES_JUMEAU_T07, demarrerImages, instrumenter3d, verif
  *      non estompées ; `resume-recolte-3d` annonce ce nombre ; la ligne dit « dernières récoltes » ;
  *   2. une semaine en pleine récolte (au moins 3 planches à récolter) existe dans la saison de la ferme T07 ;
  *   3. vol vers la zone la plus chargée en balises : la vue reste en détail (data-plants > 0), les garde-fous
- *      de T29b (BORNES_JUMEAU_T07, la ferme est placée depuis T91 : appels de dessin et triangles par image,
+ *      de T29b (BORNES_JUMEAU_RECOLTE_T07, la ferme est placée depuis T91 : appels de dessin et triangles par image,
  *      JavaScript par image) tiennent pendant un glissé en pleine récolte.
  * Si la semaine de pleine récolte n'existait pas dans la saison par défaut, le test échoue (il ne passe pas à vide).
  */
@@ -172,6 +172,6 @@ test('récolte dans la grande ferme de T07 : balises jusqu’à la fin de récol
   // Un glissé en pleine récolte, en zoom serré : mêmes garde-fous, bornes de T07 inchangées.
   await demarrerImages(page);
   await glisser(page);
-  verifierGardeFous('glissé en zoom serré, pleine récolte', await arreterImages(page), BORNES_JUMEAU_T07, IMAGES_PAR_GLISSE / 2);
+  verifierGardeFous('glissé en zoom serré, pleine récolte', await arreterImages(page), BORNES_JUMEAU_RECOLTE_T07, IMAGES_PAR_GLISSE / 2);
   await expect(resume(page)).toHaveText(phrase(await nombre(page, 'data-planches-a-recolter')));
 });
