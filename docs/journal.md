@@ -2,6 +2,24 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-10-30 — T92 : une seule façon de faire chaque chose dans le plan
+
+- **Fait** : « Remplacer par une serre » et « Nouveau bâtiment » retirés (tout passe par « Ajouter » et « Placer la serre », qui efface le contour et range les planches en un enregistrement) ; « Zone abritée » seulement pour une serre ; « Défini par la serre X » dans Ma ferme ; parcours guidé à jour ; « Aller à » inclut serres et zones abritées.
+- **Décidé** : anciens tests du chemin retiré supprimés et remplacés par ceux de la règle 1 (planches gardées, Annuler rétablit tout) ; aucun budget relevé (éditeur 21,7 Kio).
+- **Bloquant** : rien. Le type d'abri d'une zone ne suit pas encore un changement de type de la serre, et une serre passée en hangar garde sa zone (Q57).
+
+## 2026-10-30 — T90 : dupliquer une serre ou une parcelle
+
+- **Fait** : « Dupliquer » (1 à 20 copies, écart 1,5 m) pose les copies à côté, même orientation, avec grille, sous-zones, toutes les planches et rangs (placés ou non) ; noms incrémentés sans doublon (« Manon 1 » → « Manon 4 ») ; un seul Enregistrer, Annuler retire tout.
+- **Décidé** : sous-zones copiées dans l'ordre naturel (« Z 9 » avant « Z 10 ») ; gouttières non copiées (refus avec message) ; un élément qui contient un autre bâtiment est refusé ; pas d'alerte si une copie chevauche autre chose.
+- **Bloquant** : rien. Copier une parcelle avec le tunnel qu'elle contient : Q57.
+
+## 2026-10-30 — T89 : « Ajouter une serre ou un tunnel », une fiche, un tap
+
+- **Fait** : bouton « Ajouter » (serre ou tunnel, parcelle, bâtiment) ; la fiche calcule « 57,6 × 128,8 m, 18 zones, 144 planches » et « Créer » pose bâtiment, zones et planches rangées au centre de la vue, en un enregistrement annulable ; « Placer la serre » sur une zone existante ne crée que ce qui manque.
+- **Décidé** : ticket passé **critique** (la synchro ne savait pas créer de zone ni de planche) : `placer` crée zones et planches, contrôlées par ferme et par gérant, serveur inchangé ; défauts de la dernière serre ou ceux de Q55 ; budget de l'éditeur relevé de 21,5 à 21,7 Kio (justifié dans la PR #267).
+- **Bloquant** : rien. Les valeurs par défaut attendent toujours Q55.
+
 ## 2026-10-30 — T91 : la 3D montre exactement le plan
 
 - **Fait** : plus de grille inventée en 3D : seules les serres (avec leurs cases), les zones avec contour et les planches placées apparaissent. Un bouton « À placer (n) » liste les zones non placées ; le gérant ouvre l'éditeur dessus en modification. Une planche d'une sous-zone hors serre est au même point dans l'éditeur, le plan 2D et la 3D (test sur l'éditeur réel).
