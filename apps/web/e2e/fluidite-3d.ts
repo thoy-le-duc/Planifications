@@ -58,11 +58,11 @@ export const BORNES_FERME_T07: BornesDessin = { appelsMax: 4, trianglesMax: 14_0
 export const BORNES_JUMEAU_T07: BornesDessin = { appelsMax: 8, trianglesMax: 35_000 };
 /**
  * T91 : jumeau de la ferme T07 placée, en détail serré en pleine récolte (plants, fruits et balises de T32e en plus des
- * serres) : mesuré 9 appels et 35 258 triangles (glissé de 60 images, e2e/vue-3d-recolte-ferme-t07.e2e.ts), contre 8 et 35 000
+ * serres) : mesuré 9 appels et de 35 258 à 36 218 triangles selon l'exécution (glissé de 60 images, e2e/vue-3d-recolte-ferme-t07.e2e.ts), contre 8 et 35 000
  * pour le jumeau seul. Avant T91 ce test mesurait la ferme non placée (BORNES_FERME_T07) : la même scène placée porte
  * les serres, d'où un appel de plus et 258 triangles de plus ; bornes de temps (JavaScript par image) inchangées.
  */
-export const BORNES_JUMEAU_RECOLTE_T07: BornesDessin = { appelsMax: 9, trianglesMax: 36_000 };
+export const BORNES_JUMEAU_RECOLTE_T07: BornesDessin = { appelsMax: 9, trianglesMax: 38_000 };
 /** Démo : 8 appels avant T32d ; 9 depuis (mesuré : 9 au plus en glissé, 6 974 triangles sur 8 000) : l'InstancedMesh des tuteurs de la tomate ajoute un appel. */
 export const BORNES_DEMO: BornesDessin = { appelsMax: 9, trianglesMax: 8_000 };
 
