@@ -1,6 +1,6 @@
 /**
  * T85 : de la parcelle calculée par le cœur au contour et aux placements du brouillon. Chargé à la
- * demande (geste rare, comme serre-englobante.ts) : il n'alourdit pas l'ouverture de l'éditeur.
+ * demande (geste rare) : il n'alourdit pas l'ouverture de l'éditeur.
  *
  * Le rectangle se pose autour de `centre` (repère de la ferme), longueur vers le nord ; chaque
  * emplacement reçoit son placement dans le repère du contour (millimètre, millième de degré), cap

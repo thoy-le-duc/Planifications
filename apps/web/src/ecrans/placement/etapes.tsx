@@ -10,8 +10,8 @@ export type NumeroEtape = 1 | 2 | 3 | 4;
 const ETAPES: readonly { readonly n: NumeroEtape; readonly titre: string; readonly consigne: string }[] = [
   { n: 1, titre: 'Trouver la ferme', consigne: 'Cherchez l’adresse, ou déplacez la carte, jusqu’à voir la ferme sur la photo.' },
   { n: 2, titre: 'Poser le point de départ', consigne: 'Touchez la photo au centre de la ferme, ou « Utiliser la position de la ferme ».' },
-  { n: 3, titre: 'Ajouter une serre ou un bâtiment', consigne: 'Touchez « Nouveau bâtiment », remplissez la fiche, puis touchez la photo à son emplacement.' },
-  { n: 4, titre: 'Ajuster et tracer les zones', consigne: 'Déplacez, tournez, « Tracer le contour » d’une zone, puis touchez « Enregistrer ».' },
+  { n: 3, titre: 'Ajouter une serre, une parcelle ou un bâtiment', consigne: 'Touchez « Ajouter », choisissez ce que vous posez, remplissez la fiche, puis placez-le sur la photo.' },
+  { n: 4, titre: 'Ajuster et tracer les zones', consigne: 'Déplacez, tournez, « Dupliquer » ou « Tracer le contour » d’une zone, puis touchez « Enregistrer ». Plus tard, « Modifier le plan » rouvre l’édition.' },
 ];
 
 export const MESSAGES_ETAPES = {
