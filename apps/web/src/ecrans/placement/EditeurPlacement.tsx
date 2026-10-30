@@ -736,13 +736,13 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [abandonAffiche, setAbandonAffiche] = useState(brouillonAbandonne);
   if (brouillonOuvert && abandonAffiche) setAbandonAffiche(false);
   const courante = etapeCourante(origine !== null, pose !== null, batimentsAff.length);
-  // Le parcours guidé déverrouille de lui-même, mais seulement quand les DONNÉES de la ferme sont à une étape guidée
-  // (< 4 : point de départ ou premier bâtiment à poser), à l'ouverture ou quand elles y reviennent. Ni la pose en cours ni
-  // le brouillon ne comptent, sinon « Terminer » (qui annule la pose) rouvrirait l'édition. Arriver à l'étape 4 ne déverrouille jamais.
+  // Le parcours guidé déverrouille de lui-même à l'ouverture seulement, et seulement si les DONNÉES de la ferme sont à une
+  // étape guidée (< 4 : point de départ ou premier bâtiment à poser). Ni la pose ni le brouillon ne comptent. Ensuite on est déjà
+  // en modification pendant le parcours ; une mise à jour des données ne déverrouille jamais un plan verrouillé.
   const etapeDonnees = etapeCourante(origine !== null, false, lusB?.length ?? 0);
-  const [derniereEtape, setDerniereEtape] = useState<NumeroEtape | null>(null);
-  if (pret && gerant && derniereEtape !== etapeDonnees) {
-    setDerniereEtape(etapeDonnees);
+  const [ouvertureTraitee, setOuvertureTraitee] = useState(false);
+  if (pret && gerant && !ouvertureTraitee) {
+    setOuvertureTraitee(true);
     if (etapeDonnees < 4) setModification(true);
   }
   const etapeVue = retour !== null && retour < courante ? retour : courante;

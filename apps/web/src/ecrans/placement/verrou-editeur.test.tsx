@@ -13,7 +13,7 @@ import { creerPorte, SCHEMA_LOCAL, type ChangementPlacement, type PorteDonnees }
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
 import { attendre, bouton, champ, dialogues, liste, remplir, texte, toucher, unTour } from '../itineraires/test/outils.ts';
 import { TESTID_PLACEMENT as T, type ModuleEditeur, type ProprietesEditeurPlacement } from './test/contrat.ts';
-import { ecrireFermePlacement, FERME, SERRE, UTILISATEUR, type OptionsFermePlacement } from './test/ferme-placement.ts';
+import { ecrireFermePlacement, FERME, HANGAR, SERRE, UTILISATEUR, type OptionsFermePlacement } from './test/ferme-placement.ts';
 import { DEVERROUILLER_PLAN, VERROUILLER_PLAN } from './test/deverrouiller.ts';
 
 const CHEMIN = './index.ts';
@@ -278,12 +278,14 @@ describe('T87 : le parcours guidé déverrouille de lui-même', () => {
     expect(un(VERROUILLER_PLAN)).not.toBeNull();
   });
 
-  it('quand le dernier bâtiment disparaît (étape « Ajouter une serre ou un bâtiment ») : passe en modification', async () => {
+  it('verrouillé, une mise à jour des données (dernier bâtiment supprimé ailleurs) ne déverrouille pas', async () => {
     await ouvrir({ origine: true });
     expect(editeur()?.getAttribute('data-mode')).toBe('lecture');
     if (base === null) throw new Error('base absente');
     await base.execute('UPDATE batiment SET supprime_le = ? WHERE ferme_id = ?', ['2026-10-08T09:00:00.000Z', FERME]);
-    await attendre(() => editeur()?.getAttribute('data-mode') === 'edition', 'passé en modification');
+    await attendre(() => batiment(SERRE) === null, 'bâtiments disparus');
+    await unTour();
+    expect(editeur()?.getAttribute('data-mode')).toBe('lecture');
   });
 });
 
@@ -310,17 +312,19 @@ describe('T87 : le verrou tient', () => {
     expect(un(DEVERROUILLER_PLAN)).not.toBeNull();
   });
 
-  it('plan verrouillé dont l’étape change vers 4 (premier bâtiment ajouté ailleurs) : reste verrouillé', async () => {
+  it('en modification, le dernier bâtiment disparaît (synchro) puis « Terminer » → « Abandonner » : reste verrouillé', async () => {
     await ouvrir({ origine: true });
+    await deverrouillerPlan();
+    await taper(serre());
+    await glisser(serre(), 300, 300, 400, 300);
     if (base === null) throw new Error('base absente');
     await base.execute('UPDATE batiment SET supprime_le = ? WHERE ferme_id = ?', ['2026-10-08T09:00:00.000Z', FERME]);
-    await attendre(() => editeur()?.getAttribute('data-mode') === 'edition', 'étape guidée : modification');
+    await attendre(() => batiment(HANGAR) === null, 'bâtiments disparus (mise à jour des données)');
     await toucher(bouton('Terminer'));
-    expect(editeur()?.getAttribute('data-mode')).toBe('lecture');
-    await base.execute('UPDATE batiment SET supprime_le = NULL WHERE ferme_id = ?', [FERME]);
-    await attendre(() => batiment(SERRE) !== null, 'bâtiments revenus');
+    await toucher(bouton('Abandonner les changements', confirmation()));
     await unTour();
-    expect(editeur()?.getAttribute('data-mode'), 'étape 4 atteinte : on ne déverrouille pas').toBe('lecture');
+    expect(editeur()?.getAttribute('data-mode'), 'les données passent à l’étape 3 : le plan reste verrouillé').toBe('lecture');
+    expect(un(DEVERROUILLER_PLAN)).not.toBeNull();
   });
 
   it('« Terminer » sur une ferme sans bâtiment ne se rouvre pas tout seul', async () => {
