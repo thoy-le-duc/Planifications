@@ -66,6 +66,8 @@ describe('T89 : depuis une zone existante', () => {
     const zones = [zone('z', 'Tri'), zone('a', 'Tri 1', 'z')];
     const r = preparerCreation(fiche({ nbChapelles: 3, prefixeZones: 'Tri', planches: { ...defautsSerre().planches, nombre: 0 } }), contexte({ zones, zoneId: 'z' }));
     expect(r.creation.zones.map((z) => z.nom)).toEqual(['Tri 2', 'Tri 3']);
+    // 3 chapelles, mais la zone est un tunnel : ses sous-zones aussi.
+    expect(r.creation.zones.map((z) => z.typeAbri)).toEqual(['tunnel', 'tunnel']);
   });
 });
 

@@ -38,6 +38,9 @@ export { mouvoirBloc } from './bloc.ts';
 export { dimensionsParDefaut, typeDeSerrePourZone } from './serre-zone.ts';
 export { preparerParcelle } from './parcelle-planches.ts';
 export { bandesDesSerres, changementsDesBandes, type InfoBande, type RangementBandes } from './bandes-serre.ts';
+// T89 : ce que la fiche « Serre ou tunnel » (./serre-fiche.tsx, à la demande) calcule, pris ici pour rester dans ce morceau.
+export { bandesDeLaZone, decouperSerres, rangerDansBandes } from './bandes-serre.ts';
+export { DEFAUTS_SERRE, defautsSerre, erreurFicheSerre, nombrePlanchesParDefaut, nomsDesZones, rangerDansBande, resumeSerre, typeDeSerre } from '@planif/core/placement';
 
 const PASSE_PIED_MAX_CM = 500;
 /** Un passe-pied valide : un entier de 0 à 500 cm. */
@@ -593,21 +596,25 @@ export function PanneauZone({
 // ── Ajouter (T89) ───────────────────────────────────────────────────────────────────────────────
 
 export interface ProprietesMenuAjouter {
-  /** « Ajouter » attend l'origine, et la fin d'une pose ou d'un tracé (comme « Nouveau bâtiment »). */
-  readonly bloque: boolean;
-  /** La raison affichée quand c'est bloqué. */
+  /**
+   * Pourquoi « Ajouter » et « Nouveau bâtiment » sont bloqués (point de départ à poser, pose ou tracé en cours), ou null ; affichée
+   * sous les boutons, avec l'identifiant `idRaison` (« Tracer un chemin » de l'éditeur s'y réfère aussi).
+   */
+  readonly raison: string | null;
   readonly idRaison: string;
-  /** « Ajouter » touché : l'éditeur charge la fiche de la serre d'avance. */
-  readonly surOuvrir: () => void;
-  readonly surSerre: () => void;
-  readonly surBatiment: () => void;
+  /** « Ajouter » touché : l'éditeur charge la fiche de la serre d'avance ; « Serre ou tunnel » (null) l'ouvre pour une serre neuve. */
+  readonly surOuvrir: (serreNeuve?: null) => void;
+  /** Ouvre le formulaire « Nouveau bâtiment » (sans les types serre). */
+  readonly surBatiment: (ouvrir: true) => void;
 }
 
 /**
  * « Ajouter » : Serre ou tunnel (la fiche de T89), Parcelle de plein champ (le chemin de T85 : choisir la zone, puis
- * « Dessiner depuis les planches »), Bâtiment (« Nouveau bâtiment », sans les types serre).
+ * « Dessiner depuis les planches »), Bâtiment (« Nouveau bâtiment », sans les types serre). Le bouton « Nouveau bâtiment »
+ * d'avant reste à côté (T92 fera le tri) ; il n'ouvre son formulaire, comme avant, que ce morceau chargé.
  */
-export function MenuAjouter({ bloque, idRaison, surOuvrir, surSerre, surBatiment }: ProprietesMenuAjouter): ReactElement {
+export function MenuAjouter({ raison, idRaison, surOuvrir, surBatiment }: ProprietesMenuAjouter): ReactElement {
+  const bloque = raison !== null;
   const [ouvert, setOuvert] = useState(false);
   const [parcelle, setParcelle] = useState(false);
   const fermer = (): void => {
@@ -637,7 +644,7 @@ export function MenuAjouter({ bloque, idRaison, surOuvrir, surSerre, surBatiment
             className="pl-bouton"
             onClick={() => {
               fermer();
-              surSerre();
+              surOuvrir(null);
             }}
           >
             Serre ou tunnel
@@ -656,7 +663,7 @@ export function MenuAjouter({ bloque, idRaison, surOuvrir, surSerre, surBatiment
             className="pl-bouton"
             onClick={() => {
               fermer();
-              surBatiment();
+              surBatiment(true);
             }}
           >
             Bâtiment
@@ -667,6 +674,22 @@ export function MenuAjouter({ bloque, idRaison, surOuvrir, surSerre, surBatiment
             </p>
           )}
         </div>
+      )}
+      <button
+        type="button"
+        className="pl-bouton"
+        disabled={bloque}
+        aria-describedby={bloque ? idRaison : undefined}
+        onClick={() => {
+          surBatiment(true);
+        }}
+      >
+        Nouveau bâtiment
+      </button>
+      {bloque && (
+        <p id={idRaison} className="pl-aide">
+          {raison}
+        </p>
       )}
     </>
   );

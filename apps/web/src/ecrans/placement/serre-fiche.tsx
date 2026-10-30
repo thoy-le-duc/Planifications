@@ -8,12 +8,13 @@
  * (« Placer la serre »), ses sous-zones et ses planches sont reprises : seules les manquantes sont créées. Un seul « Enregistrer »
  * de l'éditeur écrit tout, par `porte.placer` (`avecCreation`).
  *
- * Aucun import du morceau de l'éditeur (scripts/placement.test.ts) : des types, le cœur, React et bandes-serre.ts.
+ * Aucun import du morceau de l'éditeur (scripts/placement.test.ts) : des types, React et le morceau de la zone (./zone-ecran.tsx).
  */
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 import type { ChangementPlacement } from '@planif/sync';
-import { DEFAUTS_SERRE, defautsSerre, rangerDansBande, erreurFicheSerre, nombrePlanchesParDefaut, nomsDesZones, resumeSerre, typeDeSerre, type FicheSerre, type MesuresSerre } from '@planif/core/placement';
-import { bandesDeLaZone, decouperSerres, rangerDansBandes } from './bandes-serre.ts';
+// Le calcul (cœur, bandes) vient du morceau de la zone, déjà chargé avec l'éditeur : pas de morceau partagé de plus à citer.
+import { bandesDeLaZone, DEFAUTS_SERRE, decouperSerres, defautsSerre, erreurFicheSerre, nombrePlanchesParDefaut, nomsDesZones, rangerDansBande, rangerDansBandes, resumeSerre, typeDeSerre } from './zone-ecran.tsx';
+import type { FicheSerre, MesuresSerre } from '@planif/core/placement';
 import type { Batiment, EmplacementEnService, Planche, Zone } from './donnees.ts';
 import type { Point } from './tuiles.ts';
 
@@ -68,7 +69,8 @@ export interface ResultatFiche {
 }
 
 /** Les zones lues, et celles du brouillon de la fiche (sans doublon : après l'enregistrement, la base les a). */
-export function zonesAvec(lues: readonly Zone[], c: CreationSerre): Zone[] {
+export function zonesAvec(lues: readonly Zone[] | null, c: CreationSerre | null): readonly Zone[] | null {
+  if (lues === null || c === null) return lues;
   return [...lues, ...c.zones.filter((z) => !lues.some((l) => l.id === z.id))];
 }
 
@@ -77,7 +79,8 @@ export function zonesAvec(lues: readonly Zone[], c: CreationSerre): Zone[] {
  * le reste du brouillon, dont le bâtiment (qui reçoit sa grille) et le placement des planches reprises. Le placement d'une planche
  * créée est celui du brouillon (elle a pu être déplacée).
  */
-export function avecCreation(c: CreationSerre, changements: readonly ChangementPlacement[], brouillonPlanches: ReadonlyMap<string, Planche>): ChangementPlacement[] {
+export function avecCreation(c: CreationSerre | null, changements: ChangementPlacement[], brouillonPlanches: ReadonlyMap<string, Planche>): ChangementPlacement[] {
+  if (c === null) return changements;
   const creees = new Set(c.planches.map((p) => p.id));
   const zones = c.zones.map(
     (z): ChangementPlacement => ({
@@ -117,7 +120,8 @@ export function avecCreation(c: CreationSerre, changements: readonly ChangementP
 }
 
 /** Ce que l'éditeur affiche tant que le brouillon contient des créations (et les compte, pour les tests). */
-export function BrouillonSerre({ c }: { readonly c: CreationSerre }): ReactElement {
+export function BrouillonSerre({ c }: { readonly c: CreationSerre | null }): ReactElement | null {
+  if (c === null) return null;
   const zones = c.zones.filter((z) => z.parenteId == null).length;
   const sousZones = c.zones.length - zones;
   return (
@@ -208,7 +212,9 @@ export function raisonFiche(f: FicheSerre, ctx: Pick<ContexteFiche, 'zones' | 'e
 export function preparerCreation(f: FicheSerre, ctx: ContexteFiche): ResultatFiche {
   const r = resumeSerre(f);
   const type = typeDeSerre(f.nbChapelles);
-  const abri = typeAbri(f.nbChapelles);
+  // Depuis une zone existante, les sous-zones créées prennent son type d'abri (tunnel ou serre), comme leurs sœurs.
+  const typeDeLaZone = ctx.zones.find((z) => z.id === ctx.zoneId)?.typeAbri;
+  const abri = typeDeLaZone === 'tunnel' || typeDeLaZone === 'serre' ? typeDeLaZone : typeAbri(f.nbChapelles);
   const cases = r.nbZones;
   const racineId = ctx.zoneId ?? ctx.nouvelId();
   const creees: Zone[] = ctx.zoneId === null ? [{ id: racineId, nom: f.nom.trim(), contour: null, parenteId: null, typeAbri: abri }] : [];
@@ -339,15 +345,42 @@ function depart(ctx: ContexteFiche): { readonly saisie: Saisie; readonly planche
   };
 }
 
-export interface ProprietesFicheSerre extends ContexteFiche {
-  readonly surCreer: (r: ResultatFiche) => void;
-  readonly surFermer: () => void;
+type Etat<T> = (maj: (avant: T) => T) => void;
+
+/**
+ * Ce que la fiche fait dans l'éditeur, dans cet ordre (un tableau : il pèse moins dans le morceau de l'éditeur) : se fermer ; à
+ * « Créer », poser au brouillon le bâtiment, les planches et la création ; choisir la serre.
+ */
+export type EditeurDeLaFiche = readonly [
+  fermer: (fermee: undefined) => void,
+  batiments: Etat<ReadonlyMap<string, Batiment>>,
+  planches: Etat<ReadonlyMap<string, Planche>>,
+  creation: Etat<CreationSerre | null>,
+  choisir: (id: string) => void,
+];
+
+export interface ProprietesFicheSerre extends Omit<ContexteFiche, 'zones' | 'batiments' | 'emplacements'> {
+  /** Lectures de l'éditeur, nulles tant qu'elles ne sont pas arrivées. */
+  readonly zones: readonly Zone[] | null;
+  readonly batiments: readonly Batiment[] | null;
+  readonly emplacements: readonly EmplacementEnService[] | null;
+  readonly editeur: EditeurDeLaFiche;
+}
+
+/** « Créer » : la serre, ses zones et ses planches vont au brouillon de l'éditeur ; la serre est choisie. */
+function poser([fermer, batiments, planches, creation, choisir]: EditeurDeLaFiche, r: ResultatFiche): void {
+  fermer(undefined);
+  batiments((avant) => new Map(avant).set(r.batiment.id, r.batiment));
+  planches((avant) => new Map([...avant, ...r.planches.map((x): [string, Planche] => [x.id, x])]));
+  creation((avant) => ajouterCreation(avant, r.creation));
+  choisir(r.batiment.id);
 }
 
 const FOCALISABLES = 'button:not([disabled]), input:not([disabled])';
 
 /** La fiche « Serre ou tunnel », sur un seul écran. */
-export function FicheSerre(p: ProprietesFicheSerre): ReactElement {
+export function FicheSerre(props: ProprietesFicheSerre): ReactElement {
+  const p: ContexteFiche & { readonly editeur: EditeurDeLaFiche } = { ...props, zones: props.zones ?? [], batiments: props.batiments ?? [], emplacements: props.emplacements ?? [] };
   const idTitre = useId();
   const idAide = useId();
   const ref = useRef<HTMLDivElement>(null);
@@ -402,7 +435,7 @@ export function FicheSerre(p: ProprietesFicheSerre): ReactElement {
         data-testid="fiche-serre"
         className="pl-modale"
         onKeyDown={(e) => {
-          if (e.key === 'Escape') p.surFermer();
+          if (e.key === 'Escape') p.editeur[0](undefined);
           if (e.key === 'Tab') {
             const tous = [...e.currentTarget.querySelectorAll<HTMLElement>(FOCALISABLES)];
             const bout = e.shiftKey ? tous[0] : tous.at(-1);
@@ -445,12 +478,18 @@ export function FicheSerre(p: ProprietesFicheSerre): ReactElement {
             disabled={raison !== null}
             aria-describedby={raison === null ? undefined : idAide}
             onClick={() => {
-              if (raison === null) p.surCreer(preparerCreation(f, p));
+              if (raison === null) poser(p.editeur, preparerCreation(f, p));
             }}
           >
             Créer
           </button>
-          <button type="button" className="pl-bouton" onClick={p.surFermer}>
+          <button
+            type="button"
+            className="pl-bouton"
+            onClick={() => {
+              p.editeur[0](undefined);
+            }}
+          >
             Annuler
           </button>
         </div>

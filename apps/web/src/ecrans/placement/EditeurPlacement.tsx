@@ -475,9 +475,10 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   // T89 : la fiche « Serre ou tunnel » (./serre-fiche.tsx, chargée au toucher de « Ajouter » ou de « Placer la serre »), et ce
   // qu'elle a mis au brouillon : zones, sous-zones et planches à créer, affichées comme si elles étaient lues.
   const [mSerre, setMSerre] = useState<typeof ModuleSerre | null>(null);
-  const [fiche, setFiche] = useState<{ readonly zoneId: string | null } | null>(null);
+  // La fiche ouverte : la zone dont on place la serre, null pour une serre neuve ; undefined : fermée.
+  const [fiche, setFiche] = useState<string | null | undefined>(undefined);
   const [creation, setCreation] = useState<ModuleSerre.CreationSerre | null>(null);
-  const zones = creation === null || zonesLues === null || mSerre === null ? zonesLues : mSerre.zonesAvec(zonesLues, creation);
+  const zones = mSerre?.zonesAvec(zonesLues, creation) ?? zonesLues;
 
   const gerant = roles?.includes('gerant') === true;
   const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null && (echecZone || (mZone !== null && lusS !== null));
@@ -753,7 +754,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             mZone?.changementsDesBandes(zones, lusP, brouillonP, brouillonZ, bandes) ?? [],
           )
         : [];
-    return creation === null || mSerre === null ? c : mSerre.avecCreation(creation, c, brouillonP);
+    return mSerre?.avecCreation(creation, c, brouillonP) ?? c;
   }, [pret, lusB, brouillonB, zones, lusP, lusE, brouillonP, brouillonZ, zonesInfo, calages, brouillonV, lusV, chemin, mChemin, mZone, bandes, creation, mSerre]);
   const modifie = changements.length > 0;
   const contoursModifies = [...zonesInfo.values()].filter((i) => i.change);
@@ -1381,10 +1382,10 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     );
   }
 
-  /** T89 : charge la fiche de la serre (une fois), puis l'ouvre si `zoneId` est donné (null : serre neuve ; undefined : charger seulement). */
+  /** T89 : charge la fiche de la serre (le module est gardé par le navigateur), et l'ouvre si `zoneId` est donné (null : serre neuve). */
   function ouvrirFiche(zoneId?: string | null): void {
-    if (zoneId !== undefined) setFiche({ zoneId });
-    if (mSerre === null) void import('./serre-fiche.tsx').then(setMSerre, (e: unknown) => { setErreur(messageDe(e)); });
+    if (zoneId !== undefined) setFiche(zoneId);
+    void import('./serre-fiche.tsx').then(setMSerre, (e: unknown) => { setErreur(messageDe(e)); });
   }
 
   function identifiantNeuf(): string {
@@ -1585,23 +1586,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           </button>
         </>
       )}
-      {mZone !== null && <mZone.MenuAjouter bloque={nouveauBloque} idRaison={idRaisonNouveau} surOuvrir={ouvrirFiche} surSerre={() => { ouvrirFiche(null); }} surBatiment={() => { setFormulaire(true); }} />}
-      <button
-        type="button"
-        className="pl-bouton"
-        disabled={nouveauBloque}
-        aria-describedby={nouveauBloque ? idRaisonNouveau : undefined}
-        onClick={() => {
-          setFormulaire(true);
-        }}
-      >
-        Nouveau bâtiment
-      </button>
-      {nouveauBloque && (
-        <p id={idRaisonNouveau} className="pl-aide">
-          {raisonNouveau}
-        </p>
-      )}
+      {mZone !== null && <mZone.MenuAjouter raison={nouveauBloque ? raisonNouveau : null} idRaison={idRaisonNouveau} surOuvrir={ouvrirFiche} surBatiment={setFormulaire} />}
       {surOrdinateur && (
         <button
           type="button"
@@ -2036,7 +2021,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                 </button>
               </p>
             )}
-            {creation !== null && mSerre !== null && <mSerre.BrouillonSerre c={creation} />}
+            {mSerre !== null && <mSerre.BrouillonSerre c={creation} />}
             {tropDeChangements && (
               <p role="status" className="pl-message">
                 {MESSAGES_CONTOURS.tropDeChangements} ({String(changements.length)} sur {String(ECRITURES_MAX_PAR_LOT)} au plus). Abandonnez une partie des changements, puis enregistrez en plusieurs fois.
@@ -2153,24 +2138,15 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             }}
           />
         )}
-        {fiche !== null && mSerre !== null && (
+        {fiche !== undefined && mSerre !== null && (
           <mSerre.FicheSerre
-            zones={zones ?? []}
-            batiments={lusB ?? []}
-            emplacements={lusS ?? []}
-            zoneId={fiche.zoneId}
+            zones={zones}
+            batiments={lusB}
+            emplacements={lusS}
+            zoneId={fiche}
             centre={vue.centre}
-            nouvelId={() => nouvelId?.() ?? identifiantNeuf()}
-            surCreer={(r) => {
-              setFiche(null);
-              setBrouillonB((prev) => new Map(prev).set(r.batiment.id, r.batiment));
-              setBrouillonP((prev) => new Map([...prev, ...r.planches.map((x): [string, Planche] => [x.id, x])]));
-              setCreation((c) => mSerre.ajouterCreation(c, r.creation));
-              selectionner(r.batiment.id);
-            }}
-            surFermer={() => {
-              setFiche(null);
-            }}
+            nouvelId={nouvelId ?? identifiantNeuf}
+            editeur={[setFiche, setBrouillonB, setBrouillonP, setCreation, selectionner]}
           />
         )}
         {confirmation?.type === 'origine' && (
