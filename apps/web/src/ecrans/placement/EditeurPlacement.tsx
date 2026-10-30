@@ -2146,6 +2146,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             zoneId={fiche}
             centre={vue.centre}
             nouvelId={nouvelId ?? identifiantNeuf}
+            deja={changements.length}
             editeur={[setFiche, setBrouillonB, setBrouillonP, setCreation, selectionner]}
           />
         )}

@@ -172,6 +172,8 @@ export interface ContexteFiche {
   /** Centre de la vue, repère de la ferme. */
   readonly centre: Point;
   readonly nouvelId: () => string;
+  /** Changements déjà au brouillon de l'éditeur (une autre serre avant « Enregistrer »…), comptés avec ceux de la fiche. */
+  readonly deja?: number;
 }
 
 const sousZonesDe = (zones: readonly Zone[], zoneId: string | null): Zone[] => (zoneId === null ? [] : zones.filter((z) => z.parenteId === zoneId));
@@ -196,14 +198,22 @@ function ecritures(f: FicheSerre, ctx: Pick<ContexteFiche, 'zones' | 'emplacemen
 }
 
 /** Pourquoi « Créer » est refusé, ou null. */
-export function raisonFiche(f: FicheSerre, ctx: Pick<ContexteFiche, 'zones' | 'emplacements' | 'zoneId'>): string | null {
+export function raisonFiche(f: FicheSerre, ctx: Pick<ContexteFiche, 'zones' | 'emplacements' | 'zoneId' | 'deja'>): string | null {
   const erreur = erreurFicheSerre(f);
   if (erreur !== null) return erreur;
+  const cases = f.nbChapelles * f.nbTroncons;
   const existantes = sousZonesDe(ctx.zones, ctx.zoneId).length;
-  if (f.nbChapelles * f.nbTroncons < existantes) return `La zone a déjà ${String(existantes)} sous-zones : il faut au moins ${String(existantes)} cases (chapelles × tronçons).`;
-  const n = ecritures(f, ctx);
+  if (cases < existantes) return `La zone a déjà ${String(existantes)} sous-zones : il faut au moins ${String(existantes)} cases (chapelles × tronçons).`;
+  // Relecture T89 : des planches rangées dans la zone elle-même n'ont pas de case quand la serre en a plusieurs (elles seraient en double).
+  if (ctx.zoneId !== null && existantes === 0 && cases > 1 && ctx.emplacements.some((e) => e.zoneId === ctx.zoneId)) {
+    return 'Cette zone a déjà des planches : créez d’abord ses zones dans Parcellaire, ou gardez une seule case (1 chapelle, 1 tronçon).';
+  }
+  const deja = ctx.deja ?? 0;
+  const n = ecritures(f, ctx) + deja;
   if (n > ECRITURES_MAX) {
-    return `Cette serre demande ${String(n)} écritures en un seul enregistrement, ${String(ECRITURES_MAX)} au plus : réduisez le nombre de zones ou de planches par zone.`;
+    return deja > 0
+      ? `Avec les changements déjà au brouillon, l’enregistrement demanderait ${String(n)} écritures, ${String(ECRITURES_MAX)} au plus : enregistrez d’abord, puis créez cette serre.`
+      : `Cette serre demande ${String(n)} écritures en un seul enregistrement, ${String(ECRITURES_MAX)} au plus : réduisez le nombre de zones ou de planches par zone.`;
   }
   return null;
 }
