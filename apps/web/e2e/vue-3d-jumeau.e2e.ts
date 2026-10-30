@@ -215,8 +215,10 @@ test('jumeau 3D : grande ferme de T07 placée, ordinateur, WebGL', async ({ page
   test.setTimeout(DELAI_AMORCAGE_MS + 300_000);
   const attendu = await planAttendu(true);
   const { plan, scene } = attendu;
-  const nbPlanches = plan.lignes.filter((l) => l.sorte === 'emplacement').length;
-  expect(nbPlanches, 'grande ferme').toBeGreaterThanOrEqual(400);
+  expect(plan.lignes.filter((l) => l.sorte === 'emplacement').length, 'grande ferme').toBeGreaterThanOrEqual(400);
+  // T91 : la scène ne contient que les planches des zones placées (les 4 zones non placées sont « à placer »).
+  const nbPlanches = scene.volumes.length;
+  expect(nbPlanches, 'planches placées').toBeGreaterThan(200);
   expect(scene.batiments.length, 'la ferme de l’essai est placée').toBe(14);
   expect(attenduJumeau(scene).arceaux, 'serres en tunnels').toBeGreaterThan(200);
   const violations = await surveillerCsp(page);
@@ -316,16 +318,18 @@ test('jumeau 3D : grande ferme de T07 placée, ordinateur, WebGL', async ({ page
   expect(await violations(), 'violations de la CSP (three, fiber)').toEqual([]);
 });
 
-test('jumeau 3D : une ferme sans placement garde la disposition de T27 (aucun bâtiment, rien de placé)', async ({ page }) => {
+test('jumeau 3D : une ferme sans placement n’invente rien (T91) : scène vide, toutes les zones « À placer »', async ({ page }) => {
   test.setTimeout(DELAI_AMORCAGE_MS + 120_000);
   const attendu = await planAttendu(false);
-  const nbPlanches = attendu.plan.lignes.filter((l) => l.sorte === 'emplacement').length;
+  const nbZones = attendu.plan.lignes.filter((l) => l.sorte === 'zone').length;
   expect(attendu.scene.batiments).toEqual([]);
+  expect(attendu.scene.volumes, 'rien de placé : aucun volume').toEqual([]);
   await ouvrirPlanches(page, attendu, '');
   await ouvrirEn3d(page);
-  await expect(toile(page)).toHaveAttribute('data-volumes', String(nbPlanches));
+  await expect(toile(page)).toHaveAttribute('data-volumes', '0');
   expect(await lireJumeau(page)).toEqual({ batiments: 0, arceaux: 0, placees: 0 });
   await expect(page.getByTestId(TESTID_3D_JUMEAU.listeBatiments)).toHaveCount(0);
+  await expect(page.getByTestId('a-placer-3d')).toHaveText(`À placer (${String(nbZones)})`);
 });
 
 test('jumeau 3D sur la démo : la vue 3D s’ouvre hors ligne avec ses serres', async ({ page, context }) => {

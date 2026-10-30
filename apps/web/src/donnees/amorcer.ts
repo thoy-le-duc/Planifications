@@ -24,6 +24,7 @@
  * T28c — `?jeu=t07-place` : la même ferme, placée (origine du plan, serres, contours, bâtiments, planches ;
  * packages/sync/src/test/placement-t07.ts), pour e2e/vue-3d-jumeau.e2e.ts.
  *
+ * T91 — `?jeu=aujourdhui&date=…&place=1` : la ferme du jour, chaque zone de premier niveau avec un contour (la 3D ne dessine que ce qui est placé ; e2e/vue-3d-plants.e2e.ts).
  * T14b — `?jeu=import` : la ferme de l'import (src/ecrans/import/test/ferme-import.ts, dates fixes).
  * T85 — `?jeu=placement&planches=1` : « Tunnel 1 » a trois planches non placées (e2e/parcelle-planches.e2e.ts).
  * T81 — `?jeu=placement&tunnel=1` : « Tunnel 1 » est une zone de type tunnel (e2e/serre-zone.e2e.ts).
@@ -118,12 +119,29 @@ async function amorcerT07Place(): Promise<Amorcage> {
  * T13 : la ferme du jour, datée relativement à `date` ('AAAA-MM-JJ'). T22 : `travaux`, la même
  * ferme avec des travaux prévus dans les itinéraires et les séries (?jeu=aujourdhui-travaux).
  */
-async function amorcerAujourdhui(date: string, travaux: boolean): Promise<Amorcage> {
+async function amorcerAujourdhui(date: string, travaux: boolean, placer = false): Promise<Amorcage> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`date invalide : « ${date} » (AAAA-MM-JJ attendu)`);
   const options = { travaux };
   const ferme = fermeDuJour(date, options);
-  await remplirBase(ferme.utilisateurId, ferme.fermeId, (base) => ecrireFermeDuJour(base, date, options));
+  await remplirBase(ferme.utilisateurId, ferme.fermeId, async (base) => {
+    await ecrireFermeDuJour(base, date, options);
+    if (placer) await donnerUnContourAuxZones(base, ferme.fermeId);
+  });
   return { utilisateurId: ferme.utilisateurId, fermeId: ferme.fermeId, lignes: ferme.total };
+}
+
+/**
+ * T91 : la 3D ne dessine que ce qui est placé. `&place=1` donne à chaque zone de premier niveau un rectangle de
+ * 60 × 40 m, à 100 m du précédent, pour que la ferme du jour apparaisse dans la scène (e2e/vue-3d-plants.e2e.ts).
+ */
+async function donnerUnContourAuxZones(base: BaseLocale, fermeId: string): Promise<void> {
+  const zones = await base.getAll<{ id: string }>('SELECT id FROM zone WHERE ferme_id = ? AND zone_parente_id IS NULL AND contour IS NULL ORDER BY id', [fermeId]);
+  await base.writeTransaction(async (tx) => {
+    for (const [i, z] of zones.entries()) {
+      const contour = [{ x: 100 * i, y: 0 }, { x: 100 * i + 60, y: 0 }, { x: 100 * i + 60, y: 40 }, { x: 100 * i, y: 40 }];
+      await tx.execute('UPDATE zone SET contour = ? WHERE id = ?', [JSON.stringify(contour), z.id]);
+    }
+  });
 }
 
 /** T13b : la grande ferme d'Aujourd'hui, datée relativement à `date` ('AAAA-MM-JJ'). */
@@ -207,7 +225,7 @@ function amorcer(): Promise<Amorcage> {
   const jeu = parametres.get('jeu');
   if (jeu === null) return amorcerT07();
   if (jeu === 't07-place') return amorcerT07Place();
-  if (jeu === 'aujourdhui') return amorcerAujourdhui(parametres.get('date') ?? '', false);
+  if (jeu === 'aujourdhui') return amorcerAujourdhui(parametres.get('date') ?? '', false, parametres.get('place') === '1');
   if (jeu === 'aujourdhui-travaux') return amorcerAujourdhui(parametres.get('date') ?? '', true);
   if (jeu === 'aujourdhui-grande-ferme') return amorcerGrandeFerme(parametres.get('date') ?? '');
   if (jeu === 'serie') return amorcerSerie();

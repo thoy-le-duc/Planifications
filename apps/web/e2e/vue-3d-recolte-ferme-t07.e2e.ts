@@ -95,7 +95,8 @@ test('récolte dans la grande ferme de T07 : balises jusqu’à la fin de récol
   test.setTimeout(DELAI_AMORCAGE_MS + 420_000);
   await instrumenter3d(page);
 
-  await page.goto('/diagnostic/amorcer.html');
+  // T91 : la 3D ne dessine que ce qui est placé : la grande ferme de T07 placée.
+  await page.goto('/diagnostic/amorcer.html?jeu=t07-place');
   await expect(page).toHaveTitle('Amorçage de la base locale (tests)');
   const poignee = await page.waitForFunction(() => (window as unknown as { __amorcage?: unknown }).__amorcage, undefined, { timeout: DELAI_AMORCAGE_MS });
   const a = (await poignee.jsonValue()) as { erreur?: string; utilisateurId?: string };
