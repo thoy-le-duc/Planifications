@@ -15,8 +15,9 @@
  */
 import { useEffect, useId, useRef, useState, type ReactElement } from 'react';
 // Le calcul (cœur) vient du morceau de la zone, déjà chargé avec l'éditeur : pas de morceau partagé de plus à citer (comme serre-fiche.tsx).
-import { ajouterCreation, decouperSerres, COPIES_MAX, COPIES_PAR_DEFAUT, ECART_PAR_DEFAUT_M, erreurDuplication, largeurDuContour, nomsDesCopies, positionsDesCopies, repereZone } from './zone-ecran.tsx';
+import { ajouterCreation, comparerNoms, decouperSerres, COPIES_MAX, COPIES_PAR_DEFAUT, ECART_PAR_DEFAUT_M, erreurDuplication, largeurDuContour, nomsDesCopies, positionsDesCopies, repereZone } from './zone-ecran.tsx';
 import type { RepereZone } from '@planif/core/placement';
+import type { PorteDonnees } from '@planif/sync';
 import type { InfoBande } from './bandes-serre.ts';
 import type { CreationSerre, GrilleCreee, PlancheCreee } from './creation-serre.ts';
 import type { Batiment, Planche, Zone } from './donnees.ts';
@@ -37,28 +38,62 @@ interface ZoneLue {
   readonly affiche: readonly Point[] | null;
 }
 
+/** Un emplacement en service lu en base, avec ce que la copie en reprend : sa sorte, ses mesures et sa place dans la zone (nulle s'il n'est pas placé). */
+export interface LigneEmplacement {
+  readonly id: string;
+  readonly zoneId: string;
+  readonly code: string;
+  readonly sorte: string;
+  readonly longueurM: number;
+  readonly largeurM: number | null;
+  readonly placement: { readonly x: number; readonly y: number; readonly orientation_deg: number } | null;
+}
+
+type LigneBrute = Readonly<Record<string, unknown>>;
+const texteOuNul = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+
+/**
+ * Tous les emplacements en service de la ferme de la zone `racineId` (placés ou non, toutes sortes), lus en base : l'éditeur ne
+ * connaît que les planches placées. Une ligne illisible est écartée.
+ */
+export async function lireEmplacements(porte: Pick<PorteDonnees, 'lire'>, racineId: string): Promise<LigneEmplacement[]> {
+  const lignes = await porte.lire<LigneBrute>(
+    `SELECT id, zone_id, code, sorte, longueur_m, largeur_m, placement_x_m, placement_y_m, orientation_deg FROM emplacement
+      WHERE supprime_le IS NULL AND actif_au IS NULL AND ferme_id = (SELECT ferme_id FROM zone WHERE id = ?)`,
+    [racineId],
+  );
+  return lignes.flatMap((l): LigneEmplacement[] => {
+    const [id, zoneId, code, sorte] = [texteOuNul(l.id), texteOuNul(l.zone_id), texteOuNul(l.code), texteOuNul(l.sorte)];
+    const [x, y, o] = [nombreOuNul(l.placement_x_m), nombreOuNul(l.placement_y_m), nombreOuNul(l.orientation_deg)];
+    if (id === null || zoneId === null || code === null || sorte === null) return [];
+    return [{ id, zoneId, code, sorte, longueurM: nombreOuNul(l.longueur_m) ?? 0, largeurM: nombreOuNul(l.largeur_m), placement: x === null || y === null || o === null ? null : { x, y, orientation_deg: o } }];
+  });
+}
+
 export interface ContexteDuplication {
   /** Les bâtiments affichés (brouillon compris), les planches placées affichées (brouillon compris). */
   readonly batiments: readonly Batiment[];
   readonly planches: readonly Planche[];
+  /** Les emplacements en service lus en base (`lireEmplacements`) : ceux du brouillon n'y sont pas, les planches affichées les complètent. */
+  readonly emplacements: readonly LigneEmplacement[];
   /** Les zones affichées (celles du brouillon comprises), par identifiant. */
   readonly infos: ReadonlyMap<string, ZoneLue>;
   /** La zone à dupliquer : la zone abritée par une serre, ou une zone de plein champ avec contour. */
   readonly racineId: string;
 }
 
-/** Ce qu'on duplique : les zones (la racine d'abord, parents avant enfants), le bâtiment s'il y en a un, les planches placées. */
+/** Ce qu'on duplique : les zones (la racine d'abord, parents avant enfants), le bâtiment s'il y en a un, tous les emplacements. */
 interface Source {
   readonly zones: readonly Zone[];
   /** Toutes les zones de la ferme (les noms pris) et la surface de chaque bande de la serre. */
   readonly toutes: readonly Zone[];
   readonly surfaces: ReadonlyMap<string, number>;
   readonly batiment: Batiment | null;
-  readonly planches: readonly Planche[];
+  readonly emplacements: readonly LigneEmplacement[];
   /** Repère de l'original et sa largeur (selon x') : la serre, ou le contour de la parcelle. */
   readonly repere: RepereZone;
   readonly largeurM: number;
-  /** Écritures d'une copie : zones, planches, bâtiment, contours. */
+  /** Écritures d'une copie : zones, emplacements, bâtiment, contours. */
   readonly ecrituresParCopie: number;
 }
 
@@ -69,12 +104,20 @@ export function analyserSource(c: ContexteDuplication): Source | string {
   const toutes = [...c.infos.values()].map((i) => i.zone);
   const racine = c.infos.get(c.racineId)?.zone;
   if (racine === undefined) return 'Cet élément n’existe plus.';
+  // Les filles de chaque zone dans l'ordre naturel des noms (« Z 9 » avant « Z 10 ») : les copies prennent leurs noms dans cet ordre.
   const zones: Zone[] = [racine];
-  for (const z of zones) zones.push(...toutes.filter((f) => f.parenteId === z.id && !zones.includes(f)));
+  for (const z of zones) zones.push(...toutes.filter((f) => f.parenteId === z.id && !zones.includes(f)).sort(comparerNoms));
   const ids = new Set(zones.map((z) => z.id));
   const batiment = c.batiments.find((b) => b.zoneId === racine.id && estSerre(b)) ?? null;
   if (c.batiments.some((b) => b.zoneId !== null && b.id !== batiment?.id && ids.has(b.zoneId))) return 'Cet élément contient un autre bâtiment : dupliquez-le d’abord seul.';
-  const planches = c.planches.filter((p) => ids.has(p.zoneId));
+  // Tous les emplacements de la base, la place affichée (brouillon) faisant foi ; puis les planches du brouillon, absentes de la base.
+  const affichees = new Map(c.planches.map((p) => [p.id, p]));
+  const lus = new Set(c.emplacements.map((e) => e.id));
+  const emplacements: LigneEmplacement[] = [
+    ...c.emplacements.filter((e) => ids.has(e.zoneId)).map((e) => ({ ...e, placement: affichees.get(e.id)?.placement ?? e.placement })),
+    ...c.planches.filter((p) => ids.has(p.zoneId) && !lus.has(p.id)).map((p): LigneEmplacement => ({ id: p.id, zoneId: p.zoneId, code: p.code, sorte: 'planche', longueurM: p.longueurM, largeurM: p.largeurM, placement: p.placement })),
+  ];
+  if (emplacements.some((e) => (e.sorte !== 'planche' && e.sorte !== 'rang') || !(e.longueurM > 0))) return 'Cet élément contient des emplacements qui ne se dupliquent pas encore (gouttière, ou longueur inconnue).';
   const contourRacine = batiment === null ? (c.infos.get(racine.id)?.affiche ?? null) : null;
   let repere: RepereZone | null;
   let largeurM: number;
@@ -89,7 +132,7 @@ export function analyserSource(c: ContexteDuplication): Source | string {
   const contours = batiment === null ? zones.filter((z) => (c.infos.get(z.id)?.affiche ?? null) !== null).length : 0;
   const bandes = batiment === null ? new Map<string, InfoBande>() : decouperSerres(toutes, c.batiments).bandes;
   const surfaces = new Map([...bandes].map(([id, b]): [string, number] => [id, mm(b.bande.largeurM * b.bande.longueurM)]));
-  return { zones, toutes, surfaces, batiment, planches, repere, largeurM, ecrituresParCopie: zones.length + planches.length + (batiment === null ? 0 : 1) + contours };
+  return { zones, toutes, surfaces, batiment, emplacements, repere, largeurM, ecrituresParCopie: zones.length + emplacements.length + (batiment === null ? 0 : 1) + contours };
 }
 
 /** Pourquoi « Dupliquer » est refusé, ou null. `deja` : changements déjà au brouillon, comptés avec ceux des copies. */
@@ -151,11 +194,12 @@ export function preparerDuplication(c: ContexteDuplication, s: Source, d: { read
       batiments.push(b);
       grilles[b.id] = grille;
     }
-    for (const p of s.planches) {
+    for (const e of s.emplacements) {
       const id = nouvelId();
-      const zoneId = nouvelle.get(p.zoneId) ?? '';
-      creees.push({ id, zoneId, code: p.code, longueurM: p.longueurM, largeurM: p.largeurM });
-      planches.push({ ...p, id, zoneId, placement: { ...p.placement } });
+      const zoneId = nouvelle.get(e.zoneId) ?? '';
+      creees.push({ id, zoneId, code: e.code, longueurM: e.longueurM, largeurM: e.largeurM, sorte: e.sorte });
+      // Un emplacement non placé reste non placé ; un placé garde sa place dans la zone (largeur d'affichage 0,8 m s'il n'en a pas).
+      if (e.placement !== null) planches.push({ id, zoneId, code: e.code, longueurM: e.longueurM, largeurM: e.largeurM ?? 0.8, placement: { ...e.placement } });
     }
   }
   return { creation: { grilles, zones, surfaces, planches: creees, reprises: [] }, batiments, planches, contours, premier: batiments[0]?.id ?? null };
@@ -203,7 +247,7 @@ export function FicheDuplication(p: ProprietesFicheDuplication): ReactElement {
   const source = analyserSource(p);
   const demande = { nombre: lu(saisie.nombre), ecartM: lu(saisie.ecart) };
   const raison = raisonDuplication(source, demande, deja);
-  const resume = typeof source === 'string' || erreurDuplication(demande) !== null ? '' : `${pluriel(demande.nombre, 'copie')} : ${pluriel(demande.nombre * source.zones.length, 'zone')}, ${pluriel(demande.nombre * source.planches.length, 'planche')}${source.batiment === null ? '' : `, ${pluriel(demande.nombre, 'bâtiment')}`}`;
+  const resume = typeof source === 'string' || erreurDuplication(demande) !== null ? '' : `${pluriel(demande.nombre, 'copie')} : ${pluriel(demande.nombre * source.zones.length, 'zone')}, ${pluriel(demande.nombre * source.emplacements.length, 'emplacement')}${source.batiment === null ? '' : `, ${pluriel(demande.nombre, 'bâtiment')}`}`;
 
   const champ = (cle: 'nombre' | 'ecart', etiquette: string): ReactElement => (
     <label className="pl-champ">

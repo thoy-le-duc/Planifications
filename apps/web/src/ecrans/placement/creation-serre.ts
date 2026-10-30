@@ -10,7 +10,10 @@ export interface PlancheCreee {
   readonly zoneId: string;
   readonly code: string;
   readonly longueurM: number;
-  readonly largeurM: number;
+  /** Nulle pour un emplacement sans largeur (T90). */
+  readonly largeurM: number | null;
+  /** T90 : la sorte copiée (planche ou rang) ; absente : une planche. */
+  readonly sorte?: string;
 }
 
 export interface GrilleCreee {

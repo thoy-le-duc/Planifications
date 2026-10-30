@@ -41,7 +41,7 @@ export { bandesDesSerres, changementsDesBandes, type InfoBande, type RangementBa
 // T89 : ce que la fiche « Serre ou tunnel » (./serre-fiche.tsx, à la demande) calcule, pris ici pour rester dans ce morceau.
 export { bandesDeLaZone, decouperSerres, rangerDansBandes } from './bandes-serre.ts';
 // T90 : ce que la duplication (./duplication.tsx, à la demande) calcule.
-export { COPIES_MAX, COPIES_PAR_DEFAUT, ECART_PAR_DEFAUT_M, erreurDuplication, largeurDuContour, nomsDesCopies, positionsDesCopies, repereZone } from '@planif/core/placement';
+export { COPIES_MAX, COPIES_PAR_DEFAUT, comparerNoms, ECART_PAR_DEFAUT_M, erreurDuplication, largeurDuContour, nomsDesCopies, positionsDesCopies, repereZone } from '@planif/core/placement';
 export { DEFAUTS_SERRE, defautsSerre, erreurFicheSerre, nombrePlanchesParDefaut, nomsDesZones, rangerDansBande, resumeSerre, typeDeSerre } from '@planif/core/placement';
 
 /** Message d'une zone abritée (T28d) et d'un formulaire de bâtiment incomplet : ici plutôt que dans l'éditeur, qui n'en a pas l'usage (budget.json). */

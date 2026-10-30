@@ -106,7 +106,7 @@ describe('T90 : la copie reprend tous les emplacements, placés ou non', () => {
     await ouvrir();
     await dupliquerLeTunnel();
     await toucher(bouton(B.enregistrer));
-    await attendre(() => placements.length === 1, 'copie écrite');
+    await attendre(() => placements.length === 1 && lignes("SELECT id FROM batiment WHERE nom = 'Tri-tunnel 2'").length === 1, 'copie écrite');
     expect(placements[0]).toHaveLength(14);
     const copie = lignes("SELECT id FROM zone WHERE nom = 'Tri-tunnel 2' AND supprime_le IS NULL")[0];
     expect(copie).toBeDefined();

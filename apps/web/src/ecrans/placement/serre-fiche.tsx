@@ -67,7 +67,7 @@ export function avecCreation(c: CreationSerre | null, changements: ChangementPla
       valeurs: {
         zone_id: p.zoneId,
         code: p.code,
-        sorte: 'planche',
+        sorte: p.sorte ?? 'planche',
         longueur_m: p.longueurM,
         largeur_m: p.largeurM,
         placement: place === undefined ? null : { x: mm(place.x), y: mm(place.y), orientation_deg: mm((((place.orientation_deg % 360) + 360) % 360) % 360) },

@@ -5,7 +5,8 @@
  */
 import { useState, type ReactElement } from 'react';
 import type { Batiment, Planche } from './donnees.ts';
-import type { EditeurDeLaDuplication, FicheDuplication } from './duplication.tsx';
+import type { PorteDonnees } from '@planif/sync';
+import type { EditeurDeLaDuplication, FicheDuplication, LigneEmplacement } from './duplication.tsx';
 import type { ZoneAffichee } from './EditeurPlacement.tsx';
 
 const estSerre = (b: Batiment): boolean => (b.type === 'serre_tunnel' || b.type === 'serre_chapelle') && b.zoneId !== null;
@@ -36,12 +37,14 @@ export interface ProprietesDupliquer {
   /** Un enregistrement est en cours : « Dupliquer » attend. */
   readonly occupe: boolean;
   readonly nouvelId: () => string;
+  /** La base locale : la fiche y lit tous les emplacements de l'élément (placés ou non, toutes sortes) à son ouverture. */
+  readonly porte: PorteDonnees;
   readonly editeur: EditeurDuBouton;
 }
 
 /** « Dupliquer » (si l'élément choisi se duplique) et, une fois touché, la fiche chargée à la demande. */
 export function Dupliquer(p: ProprietesDupliquer): ReactElement | null {
-  const [fiche, setFiche] = useState<{ readonly racineId: string; readonly m: { readonly FicheDuplication: typeof FicheDuplication } } | null>(null);
+  const [fiche, setFiche] = useState<{ readonly racineId: string; readonly emplacements: readonly LigneEmplacement[]; readonly m: { readonly FicheDuplication: typeof FicheDuplication } } | null>(null);
   const [echec, setEchec] = useState(false);
   const [charger, ...reste] = p.editeur;
   const cible = cibleDuplication(p.batiment, p.zone, p.batiments);
@@ -56,14 +59,16 @@ export function Dupliquer(p: ProprietesDupliquer): ReactElement | null {
           onClick={() => {
             setEchec(false);
             charger();
-            import('./duplication.tsx').then(
-              (m) => {
-                setFiche({ racineId: cible, m });
-              },
-              () => {
-                setEchec(true);
-              },
-            );
+            import('./duplication.tsx')
+              .then(async (m) => ({ m, emplacements: await m.lireEmplacements(p.porte, cible) }))
+              .then(
+                (r) => {
+                  setFiche({ racineId: cible, ...r });
+                },
+                () => {
+                  setEchec(true);
+                },
+              );
           }}
         >
           Dupliquer
@@ -79,6 +84,7 @@ export function Dupliquer(p: ProprietesDupliquer): ReactElement | null {
           racineId={fiche.racineId}
           batiments={p.batiments}
           planches={p.planches}
+          emplacements={fiche.emplacements}
           infos={p.infos}
           nouvelId={p.nouvelId}
           editeur={[() => { setFiche(null); }, ...reste]}
