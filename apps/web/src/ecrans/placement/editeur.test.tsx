@@ -16,6 +16,7 @@ import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync
 import { attendre, bouton, champ, desactive, dialogues, liste, remplir, texte, toucher, unTour } from '../itineraires/test/outils.ts';
 import { MESSAGES_PLACEMENT, TESTID_PLACEMENT as T, type ModuleEditeur, type ProprietesEditeurPlacement } from './test/contrat.ts';
 import { CONTOUR_CHAMP, ecrireFermePlacement, FERME, HANGAR, PLANCHE, POSITION, SERRE, UTILISATEUR, ZONE_CHAMP, ZONE_TUNNEL, type OptionsFermePlacement } from './test/ferme-placement.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 const CHEMIN = './index.ts';
 const MAINTENANT = new Date('2026-10-08T08:00:00.000Z');
@@ -122,6 +123,7 @@ async function ouvrir(options: OptionsFermePlacement & Partial<Pick<ProprietesEd
     await Promise.resolve();
   });
   await attendre(() => editeur() !== null && (editeur()?.getAttribute('data-mode') ?? '') !== '', 'éditeur affiché, avec data-mode');
+  await deverrouiller();
   if (options.origine === true) await attendre(() => batiment(SERRE) !== null && batiment(HANGAR) !== null, 'bâtiments affichés');
   return b;
 }
@@ -320,9 +322,10 @@ describe('T28b : gérant sur ordinateur, ferme placée', () => {
     expect(b.autresEcritures).toEqual([]);
   });
 
-  it('glisser à la souris : rien n’est écrit pendant ni après le geste, jusqu’à « Enregistrer »', async () => {
+  it('glisser à la souris (T87 : l’élément est d’abord choisi) : rien n’est écrit pendant ni après le geste, jusqu’à « Enregistrer »', async () => {
     const b = await ouvrir({ origine: true });
     const serre = batimentOuEchec(SERRE);
+    await selectionner(serre);
     await pointeur(serre, 'pointerdown', 300, 300);
     await pointeur(serre, 'pointermove', 350, 300);
     await pointeur(serre, 'pointermove', 400, 300);

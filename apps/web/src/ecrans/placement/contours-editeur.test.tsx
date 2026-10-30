@@ -23,6 +23,7 @@ import { attendre, bouton, champ, desactive, liste, remplir, texte, toucher, unT
 import { TESTID_PLACEMENT as T, type ModuleEditeur, type Point, type ProprietesEditeurPlacement } from './test/contrat.ts';
 import { BOUTONS_CONTOURS as B, MESSAGES_CONTOURS, TESTID_CONTOURS as TC } from './test/contrat-contours.ts';
 import { CONTOUR_CHAMP, ecrireFermePlacement, FERME, PLANCHE, SERRE, UTILISATEUR, ZONE_CHAMP, ZONE_TUNNEL, type OptionsFermePlacement } from './test/ferme-placement.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 const CHEMIN = './index.ts';
 const MAINTENANT = new Date('2026-10-08T08:00:00.000Z');
@@ -148,6 +149,7 @@ async function rendre(p: PorteSuivie, fermeId: string, o: Partial<ProprietesEdit
     await Promise.resolve();
   });
   await attendre(() => (editeur()?.getAttribute('data-mode') ?? '') !== '', 'éditeur affiché, avec data-mode');
+  await deverrouiller();
 }
 
 async function ouvrir(o: OptionsBanc & Partial<Pick<ProprietesEditeurPlacement, 'ordinateur' | 'enLigne'>> = {}): Promise<PorteSuivie> {
