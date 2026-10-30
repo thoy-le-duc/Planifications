@@ -26,6 +26,7 @@ import { TESTID_PLACEMENT as T, type ModuleEditeur, type ProprietesEditeurPlacem
 import { TESTID_CONTOURS as TC } from './test/contrat-contours.ts';
 import { BOUTONS_BANDES as B, TESTID_BANDES as TB } from './test/contrat-bandes.ts';
 import { TESTID_CASES as TK } from './test/contrat-cases.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 import { ecrireFermePlacement, FERME, MANON, TRI_TUNNEL, UTILISATEUR, ZONE_TRI } from './test/ferme-placement.ts';
 
 const CHEMIN = './index.ts';
@@ -129,6 +130,7 @@ async function ouvrir(o: Options = {}): Promise<Banc> {
     await Promise.resolve();
   });
   await attendre(() => (un(T.editeur)?.getAttribute('data-mode') ?? '') !== '', 'éditeur affiché');
+  await deverrouiller();
   await attendre(() => zoneChoix(ZONE_TRI) !== null, 'liste des zones affichée');
   return b;
 }
