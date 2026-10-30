@@ -28,19 +28,25 @@ export interface Outils {
   readonly Modale: (p: ProprietesModale) => ReactElement;
   readonly verifierContour: (contour: readonly Point[]) => { readonly ok: true } | { readonly ok: false; readonly message: string };
   readonly types: readonly { readonly valeur: TypeBatiment; readonly libelle: string }[];
-  /** Message d'une zone abritée (« sa forme est celle de la serre »). */
-  readonly zoneAbritee: string;
-  /** Message d'un formulaire de bâtiment incomplet. */
-  readonly fiche: string;
 }
 
 export { mouvoirBloc } from './bloc.ts';
 export { dimensionsParDefaut, typeDeSerrePourZone } from './serre-zone.ts';
+// T89 et T90 : le cumul des créations au brouillon, partagé par la fiche de la serre et la duplication (un morceau de moins à citer).
+export { ajouterCreation } from './creation-serre.ts';
+// T90 : le bouton « Dupliquer » du panneau (la fiche, ./duplication.tsx, ne se charge qu'à son toucher).
+export { Dupliquer } from './dupliquer-bouton.tsx';
 export { preparerParcelle } from './parcelle-planches.ts';
 export { bandesDesSerres, changementsDesBandes, type InfoBande, type RangementBandes } from './bandes-serre.ts';
 // T89 : ce que la fiche « Serre ou tunnel » (./serre-fiche.tsx, à la demande) calcule, pris ici pour rester dans ce morceau.
 export { bandesDeLaZone, decouperSerres, rangerDansBandes } from './bandes-serre.ts';
+// T90 : ce que la duplication (./duplication.tsx, à la demande) calcule.
+export { COPIES_MAX, COPIES_PAR_DEFAUT, ECART_PAR_DEFAUT_M, erreurDuplication, largeurDuContour, nomsDesCopies, positionsDesCopies, repereZone } from '@planif/core/placement';
 export { DEFAUTS_SERRE, defautsSerre, erreurFicheSerre, nombrePlanchesParDefaut, nomsDesZones, rangerDansBande, resumeSerre, typeDeSerre } from '@planif/core/placement';
+
+/** Message d'une zone abritée (T28d) et d'un formulaire de bâtiment incomplet : ici plutôt que dans l'éditeur, qui n'en a pas l'usage (budget.json). */
+const ZONE_ABRITEE = 'sa forme est celle de la serre';
+const FICHE_INCOMPLETE = 'Donnez un nom et des dimensions positives';
 
 const PASSE_PIED_MAX_CM = 500;
 /** Raison d'un bouton bloqué pendant une écriture (même texte que MESSAGES_ETAPES.occupe, dans le morceau de l'éditeur). */
@@ -507,7 +513,7 @@ export function PanneauZone({
       )}
       {info.abritee && enBande === undefined && (
         <p role="status" data-testid="zone-abritee" className="pl-aide">
-          Cette zone est abritée par un bâtiment : {outils.zoneAbritee}, il n’y a pas de contour à tracer.
+          Cette zone est abritée par un bâtiment : {ZONE_ABRITEE}, il n’y a pas de contour à tracer.
         </p>
       )}
       {edition && sesBandes.length > 0 && (
@@ -758,7 +764,7 @@ export function FormulaireBatiment({ outils, surPoser, surFermer }: { readonly o
       {champ('Hauteur (m)', hauteur, setHauteur)}
       {!valide && (
         <p id={idRaison} className="pl-aide">
-          {outils.fiche}
+          {FICHE_INCOMPLETE}
         </p>
       )}
       <div className="pl-modale-actions">
