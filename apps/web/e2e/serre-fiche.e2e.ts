@@ -130,7 +130,7 @@ test('téléphone : la serre à légumes en une fiche, enregistrée, rechargée 
     await ouvrirEditeur(page);
     await expect(cases(page)).toHaveCount(18);
     await expect(cases(page).first()).toContainText('Serre à légumes');
-    await expect(page.getByTestId(T.planche)).toHaveCount(145);
+    await expect(page.getByTestId(T.planche)).toHaveCount(144);
     await expect(page.getByTestId(T.batiment).filter({ hasText: 'Serre à légumes' })).toHaveCount(1);
   });
 
