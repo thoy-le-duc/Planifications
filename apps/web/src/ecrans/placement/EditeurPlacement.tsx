@@ -736,12 +736,14 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [abandonAffiche, setAbandonAffiche] = useState(brouillonAbandonne);
   if (brouillonOuvert && abandonAffiche) setAbandonAffiche(false);
   const courante = etapeCourante(origine !== null, pose !== null, batimentsAff.length);
-  // Le parcours guidé déverrouille de lui-même : à l'ouverture d'une ferme qui n'a pas fini ses étapes
-  // (point de départ, premier bâtiment), puis à chaque changement d'étape.
+  // Le parcours guidé déverrouille de lui-même, mais seulement quand les DONNÉES de la ferme sont à une étape guidée
+  // (< 4 : point de départ ou premier bâtiment à poser), à l'ouverture ou quand elles y reviennent. Ni la pose en cours ni
+  // le brouillon ne comptent, sinon « Terminer » (qui annule la pose) rouvrirait l'édition. Arriver à l'étape 4 ne déverrouille jamais.
+  const etapeDonnees = etapeCourante(origine !== null, false, lusB?.length ?? 0);
   const [derniereEtape, setDerniereEtape] = useState<NumeroEtape | null>(null);
-  if (pret && gerant && derniereEtape !== courante) {
-    setDerniereEtape(courante);
-    if (derniereEtape !== null || courante < 4) setModification(true);
+  if (pret && gerant && derniereEtape !== etapeDonnees) {
+    setDerniereEtape(etapeDonnees);
+    if (etapeDonnees < 4) setModification(true);
   }
   const etapeVue = retour !== null && retour < courante ? retour : courante;
   // Un seul calcul : « Enregistrer » est possible quand rien ne l'empêche, sinon la raison s'affiche.

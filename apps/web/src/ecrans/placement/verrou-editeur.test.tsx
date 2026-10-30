@@ -11,7 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import type { Id } from '@planif/core';
 import { creerPorte, SCHEMA_LOCAL, type ChangementPlacement, type PorteDonnees } from '@planif/sync';
 import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync/src/test/base-memoire.ts';
-import { attendre, bouton, dialogues, texte, toucher, unTour } from '../itineraires/test/outils.ts';
+import { attendre, bouton, champ, dialogues, liste, remplir, texte, toucher, unTour } from '../itineraires/test/outils.ts';
 import { TESTID_PLACEMENT as T, type ModuleEditeur, type ProprietesEditeurPlacement } from './test/contrat.ts';
 import { ecrireFermePlacement, FERME, SERRE, UTILISATEUR, type OptionsFermePlacement } from './test/ferme-placement.ts';
 import { DEVERROUILLER_PLAN, VERROUILLER_PLAN } from './test/deverrouiller.ts';
@@ -284,5 +284,50 @@ describe('T87 : le parcours guidé déverrouille de lui-même', () => {
     if (base === null) throw new Error('base absente');
     await base.execute('UPDATE batiment SET supprime_le = ? WHERE ferme_id = ?', ['2026-10-08T09:00:00.000Z', FERME]);
     await attendre(() => editeur()?.getAttribute('data-mode') === 'edition', 'passé en modification');
+  });
+});
+
+describe('T87 : le verrou tient', () => {
+  it('« Nouveau bâtiment » (pose en cours) puis « Terminer » : reverrouille et reste verrouillé', async () => {
+    await ouvrir({ origine: true });
+    await deverrouillerPlan();
+    await toucher(bouton('Nouveau bâtiment'));
+    const formulaire = dialogues().find((d) => d.getAttribute('data-testid') !== T.editeur && texte(d).includes('Nouveau bâtiment'));
+    if (formulaire === undefined) throw new Error('formulaire « Nouveau bâtiment » absent');
+    await remplir(liste('Type', formulaire), 'serre_tunnel');
+    await remplir(champ('Nom', formulaire), 'Serre M3');
+    await remplir(champ('Longueur (m)', formulaire), '40');
+    await remplir(champ('Largeur (m)', formulaire), '8');
+    await remplir(champ('Hauteur (m)', formulaire), '3.5');
+    await toucher(bouton('Poser', formulaire));
+    await unTour();
+    expect(un('message-pose'), 'pose en cours (« Touchez la photo… »)').not.toBeNull();
+    await toucher(bouton('Terminer'));
+    const choix = confirmation();
+    if (choix !== undefined) await toucher(bouton('Abandonner les changements', choix));
+    await unTour();
+    expect(editeur()?.getAttribute('data-mode')).toBe('lecture');
+    expect(un(DEVERROUILLER_PLAN)).not.toBeNull();
+  });
+
+  it('plan verrouillé dont l’étape change vers 4 (premier bâtiment ajouté ailleurs) : reste verrouillé', async () => {
+    await ouvrir({ origine: true });
+    if (base === null) throw new Error('base absente');
+    await base.execute('UPDATE batiment SET supprime_le = ? WHERE ferme_id = ?', ['2026-10-08T09:00:00.000Z', FERME]);
+    await attendre(() => editeur()?.getAttribute('data-mode') === 'edition', 'étape guidée : modification');
+    await toucher(bouton('Terminer'));
+    expect(editeur()?.getAttribute('data-mode')).toBe('lecture');
+    await base.execute('UPDATE batiment SET supprime_le = NULL WHERE ferme_id = ?', [FERME]);
+    await attendre(() => batiment(SERRE) !== null, 'bâtiments revenus');
+    await unTour();
+    expect(editeur()?.getAttribute('data-mode'), 'étape 4 atteinte : on ne déverrouille pas').toBe('lecture');
+  });
+
+  it('« Terminer » sur une ferme sans bâtiment ne se rouvre pas tout seul', async () => {
+    await ouvrir({});
+    expect(editeur()?.getAttribute('data-mode')).toBe('edition');
+    await toucher(bouton('Terminer'));
+    await unTour();
+    expect(editeur()?.getAttribute('data-mode')).toBe('lecture');
   });
 });
