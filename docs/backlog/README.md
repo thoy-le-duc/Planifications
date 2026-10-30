@@ -164,7 +164,7 @@ T07 n'a pas de dépendance et porte le plus gros risque technique (le budget de 
 
 ## Phase 1 — Mise en ligne, usage réel, jumeau, phyto et fertilisation (octobre 2026)
 
-Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : **chantier « plan simple et rationnel »** (demande de Théophane du 28 octobre, Q55) : T87, T88 et T91 faits le 30 octobre ; puis T89, puis T90, puis T92. Q49, Q50.1, Q52, Q53 et Q55 (valeurs par défaut des planches, cadenas) restent ouvertes ; Q54 est remplacée par Q55.
+Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque fin de session, voir `docs/demarrage.md`). Ordre de priorité des tickets à faire : **chantier « plan simple et rationnel »** (demande de Théophane du 28 octobre, Q55) : T87 à T92 faits le 30 octobre (chantier terminé). Q49, Q50.1, Q52, Q53 et Q55 (valeurs par défaut des planches, cadenas) restent ouvertes ; Q54 est remplacée par Q55.
 
 | Ticket | Sujet | Dépend de | Statut |
 | --- | --- | --- | --- |
@@ -222,10 +222,10 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T86](T86-sous-zones-dans-serre.md) | Placement : une serre à plusieurs tunnels, ses zones dessinées dedans (Q54) | T85 | fait |
 | [T87](T87-plan-verrouille.md) | Plan verrouillé : « Modifier le plan » pour bouger quelque chose (Q55) | — | fait |
 | [T88](T88-serre-en-grille-modele.md) | Serre découpée en zones : chapelles × tronçons, modèle et base (Q55) — **critique** | T86 | fait |
-| [T89](T89-ajouter-serre.md) | « Ajouter une serre ou un tunnel » : une fiche, un tap, zones et planches en place (Q55) | T87, T88 | à faire |
-| [T90](T90-dupliquer.md) | Dupliquer une serre ou une parcelle, avec zones et planches (Q55) | T89 | à faire |
+| [T89](T89-ajouter-serre.md) | « Ajouter une serre ou un tunnel » : une fiche, un tap, zones et planches en place (Q55) — **critique** | T87, T88 | fait |
+| [T90](T90-dupliquer.md) | Dupliquer une serre ou une parcelle, avec zones et planches (Q55) | T89 | fait |
 | [T91](T91-3d-fidele-au-plan.md) | La 3D montre exactement le plan, rien d'inventé (Q55) | T88 | fait |
-| [T92](T92-nettoyage-anciens-chemins.md) | Plan : retirer les anciens chemins en double (Q55) | T89, T90, T91 | à faire |
+| [T92](T92-nettoyage-anciens-chemins.md) | Plan : retirer les anciens chemins en double (Q55) | T89, T90, T91 | fait |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 

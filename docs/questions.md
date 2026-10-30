@@ -543,6 +543,11 @@ Reste à confirmer (seules les valeurs par défaut en dépendent, T89 avance san
 
 Depuis T91, la 3D ne montre que ce qui est placé, et les zones non placées sont listées dans « À placer ». Une planche qui n'a pas de placement à elle, dans une zone qui en a un, reste rangée automatiquement dans sa zone (comme depuis T28c). Proposé : on garde ce rangement automatique, plus pratique pour une parcelle dont on n'a pas encore placé chaque planche. Ou préfères-tu la cacher et la lister dans « À placer » ?
 
+### Q57 — Plan : dupliquer une parcelle qui contient un tunnel, type d'abri d'une zone abritée (posée le 2026-10-30, relectures T90 et T92)
+
+1. « Dupliquer » refuse aujourd'hui une zone qui contient un autre bâtiment (par exemple une parcelle avec un tunnel dedans). Faut-il copier aussi le tunnel et ses zones, ou garder ce refus ?
+2. Quand on change le type d'une serre (tunnel ↔ chapelle) ou qu'on la passe en hangar, faut-il que la zone abritée suive toute seule (type d'abri mis à jour, ou zone détachée du hangar) ? Proposé : oui, dans un petit ticket.
+
 ## Questions ouvertes du brief
 
 - Nom du produit.
