@@ -6,6 +6,7 @@ import { TESTID_3D } from '../src/ecrans/plan3d/test/contrat.ts';
 import { TESTID_3D_JUMEAU } from '../src/ecrans/plan3d/test/contrat-jumeau.ts';
 import { TESTID_3D_EDITEUR as T, TEXTES_3D_EDITEUR as TEXTE } from '../src/ecrans/plan3d/test/contrat-editeur.ts';
 import { surveillerCsp } from './outils.ts';
+import { deverrouillerPlan } from './deverrouiller-plan.ts';
 
 /**
  * T28f — trouver et ouvrir l'éditeur de placement depuis la vue 3D (Q32), sur ordinateur
@@ -165,6 +166,7 @@ test('gérant, ferme vide : encart avec le bouton, l’éditeur s’ouvre, on y 
   await test.step('un tap ouvre l’éditeur de placement', async () => {
     await modifierPlan(page).click();
     await expect(editeur(page)).toBeVisible({ timeout: DELAI_MS });
+    await deverrouillerPlan(page);
     await expect(editeur(page)).toHaveAttribute('data-mode', 'edition');
     await expect(vue(page), 'la 3D reste montée sous l’éditeur').toHaveCount(1);
   });
@@ -202,6 +204,7 @@ test('gérant, ferme placée : pas d’encart, le bouton ouvre l’éditeur, « 
   await expect(modifierPlan(page)).toBeVisible();
   await modifierPlan(page).click();
   await expect(editeur(page)).toBeVisible({ timeout: DELAI_MS });
+  await deverrouillerPlan(page);
   await expect(editeur(page)).toHaveAttribute('data-mode', 'edition');
   await expect(editeur(page)).toHaveAttribute('data-origine', '44,1.5');
   await editeur(page).getByRole('button', { name: 'Fermer', exact: true }).click();
@@ -277,6 +280,7 @@ test('démo : « Modifier le plan » ouvre l’éditeur hors ligne (fond neutre)
   await expect(modifierPlan(page)).toBeVisible();
   await modifierPlan(page).click();
   await expect(editeur(page)).toBeVisible({ timeout: DELAI_MS });
+  await deverrouillerPlan(page);
   await expect(editeur(page), 'démo : rôle gérant').toHaveAttribute('data-mode', 'edition');
   await expect(editeur(page)).toHaveAttribute('data-fond', 'neutre');
   await expect(page.getByTestId(P.fondNeutre)).toContainText(MESSAGES_PLACEMENT.horsLigne);

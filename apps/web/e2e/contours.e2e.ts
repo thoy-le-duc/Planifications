@@ -5,6 +5,7 @@ import { ENTREE_PLACEMENT, TESTID_PLACEMENT as T, type Point } from '../src/ecra
 import { BOUTONS_CONTOURS as B, TESTID_CONTOURS as TC } from '../src/ecrans/placement/test/contrat-contours.ts';
 import { fermePlacement, ZONE_CHAMP } from '../src/ecrans/placement/test/ferme-placement.ts';
 import { surveillerCsp } from './outils.ts';
+import { deverrouillerPlan } from './deverrouiller-plan.ts';
 
 /**
  * T28d — contours de zones en formes libres, de bout en bout, sur ordinateur (Chromium
@@ -96,6 +97,7 @@ async function ouvrirEditeur(page: Page): Promise<void> {
   await onglet(page, 'Ferme').click();
   await page.getByRole('button', { name: new RegExp(ENTREE_PLACEMENT) }).click();
   await expect(editeur(page)).toBeVisible({ timeout: 15_000 });
+  await deverrouillerPlan(page);
   await expect(editeur(page)).toHaveAttribute('data-mode', 'edition');
 }
 

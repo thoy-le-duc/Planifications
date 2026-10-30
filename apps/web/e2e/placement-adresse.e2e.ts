@@ -5,6 +5,7 @@ import { ENTREE_PLACEMENT, TESTID_PLACEMENT as T, type ModuleTuiles } from '../s
 import { MOISSAC, MOTIF_INDISPONIBLE, NOM_CHAMP_ADRESSE, NUMERO_MOISSAC, reponseGeocodage, RUE_MOISSAC, TESTID_ADRESSE as A, type ModuleAdresse } from '../src/ecrans/placement/test/contrat-adresse.ts';
 import { fermePlacement, POSITION, ZONE_SITE2 } from '../src/ecrans/placement/test/ferme-placement.ts';
 import { surveillerCsp } from './outils.ts';
+import { deverrouillerPlan } from './deverrouiller-plan.ts';
 
 /**
  * T28h — chercher une adresse, voir large, plusieurs sites, de bout en bout, sur ordinateur
@@ -93,6 +94,7 @@ async function amorcerEtOuvrir(page: Page): Promise<void> {
   await page.getByRole('navigation', { name: 'Navigation principale' }).locator('button').filter({ hasText: 'Ferme' }).click();
   await page.getByRole('button', { name: new RegExp(ENTREE_PLACEMENT) }).click();
   await expect(editeur(page)).toBeVisible({ timeout: 15_000 });
+  await deverrouillerPlan(page);
   await expect(editeur(page)).toHaveAttribute('data-mode', 'edition');
 }
 

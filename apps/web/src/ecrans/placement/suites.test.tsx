@@ -18,6 +18,7 @@ import { MESSAGES_PLACEMENT, TESTID_PLACEMENT as T, type ModuleEditeur, type Mod
 import { BOUTONS_CONTOURS as B } from './test/contrat-contours.ts';
 import { BOUTON_POSER_AU_CENTRE, MESSAGES_SUITES, type ConstantesSuites } from './test/contrat-suites.ts';
 import { ecrireFermePlacement, FERME, HANGAR, SERRE, UTILISATEUR, ZONE_CHAMP, ZONE_TUNNEL, type OptionsFermePlacement } from './test/ferme-placement.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 const CHEMIN = './index.ts';
 const CHEMIN_TUILES = './tuiles.ts';
@@ -117,6 +118,7 @@ async function rendre(porte: PorteDonnees, fermeId: string, o: Partial<Propriete
     await Promise.resolve();
   });
   await attendre(() => (editeur()?.getAttribute('data-mode') ?? '') !== '', 'éditeur affiché, avec data-mode');
+  await deverrouiller();
 }
 
 async function ouvrir(options: OptionsFermePlacement & Partial<Pick<ProprietesEditeurPlacement, 'enLigne' | 'ordinateur'>> = {}): Promise<Banc> {

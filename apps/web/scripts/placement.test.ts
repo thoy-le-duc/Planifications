@@ -250,7 +250,7 @@ describe('T28f : l’éditeur s’ouvre aussi depuis la vue 3D, sans bouger les 
     const b = JSON.parse(readFileSync(join(WEB, 'budget.json'), 'utf8')) as BudgetJson & { readonly jsVue3dGzKio?: number };
     expect(b.jsInitialGzKio).toBe(BUDGET_DEMARRAGE_KIO);
     expect(b.jsVue3dGzKio).toBe(207.9); // T37b : 207,1 → 207,9 (mesuré 207,695 : filtres au téléphone, masques des travaux, enveloppe de triangles) ; T32c : 206,8 → 207,1 (champ fougereApresRecolte, mesuré 206,9) ; T32f : 206,7 → 206,8 (mesuré 206,5 → 206,77 : balise pâle, récoltes courtes, pérennes d'hiver), T32e : 204,3 → 206,7, plafond de Q33 : 228
-    expect(b.jsPlacementGzKio).toBe(21.1); // T57 : 20,6 → 21,1 (vannes posées dans l'éditeur, 20,37 → 21,04 mesuré, chiffré dans la PR) ; T13r : l'éditeur ne charge plus fait-unique.ts (20,30 mesuré, marge 0,3 ; était 22,2) ; T13n : clé d'horodatage SQL dans fait-unique.ts, 22,11 mesuré ; T28k : placement au doigt (+0,9 Kio mesuré : 20,9 → 21,8 ; marge 0,3), chiffré dans la PR ; T28j : 19,9 → 20,9
+    expect(b.jsPlacementGzKio).toBe(21.5); // T87 : 21,1 → 21,5 (verrou de l'éditeur : barre verrouillée, bandeau, choix de fin ; 21,4 mesuré, chiffré dans la PR) ; T57 : 20,6 → 21,1 (vannes posées dans l'éditeur, 20,37 → 21,04 mesuré, chiffré dans la PR) ; T13r : l'éditeur ne charge plus fait-unique.ts (20,30 mesuré, marge 0,3 ; était 22,2) ; T13n : clé d'horodatage SQL dans fait-unique.ts, 22,11 mesuré ; T28k : placement au doigt (+0,9 Kio mesuré : 20,9 → 21,8 ; marge 0,3), chiffré dans la PR ; T28j : 19,9 → 20,9
   });
 });
 

@@ -23,6 +23,7 @@ import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync
 import { attendre, bouton, desactive, dialogues, texte, toucher, unTour } from '../itineraires/test/outils.ts';
 import { MESSAGES_PLACEMENT, TESTID_PLACEMENT as T, type ModuleEditeur, type ProprietesEditeurPlacement } from './test/contrat.ts';
 import { ecrireFermePlacement, FERME, SERRE, UTILISATEUR } from './test/ferme-placement.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 const CHEMIN = './index.ts';
 const MAINTENANT = new Date('2026-10-08T08:00:00.000Z');
@@ -156,6 +157,7 @@ async function rendre(p: PorteSuivie, fermeId: string, o: Partial<ProprietesEdit
     await Promise.resolve();
   });
   await attendre(() => (editeur()?.getAttribute('data-mode') ?? '') !== '', 'éditeur affiché');
+  await deverrouiller();
 }
 
 const editeur = (): HTMLElement | null => document.querySelector<HTMLElement>(`[data-testid="${T.editeur}"]`);

@@ -12,6 +12,7 @@ import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync
 import { attendre } from '../itineraires/test/outils.ts';
 import type { ModuleEditeur } from './test/contrat.ts';
 import { ecrireFermePlacement, FERME, UTILISATEUR } from './test/ferme-placement.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 vi.mock('./zone-ecran.tsx', () => {
   throw new Error('chargement impossible (test)');
@@ -51,6 +52,7 @@ describe('T85 : morceau « zone » indisponible', () => {
       await Promise.resolve();
     });
     await attendre(() => document.querySelector('[role="alert"]')?.textContent.includes('n’a pas pu se charger') === true, 'message visible');
+    await deverrouiller();
     expect(document.querySelector('[data-testid="editeur-placement"]')?.getAttribute('data-mode')).toBe('edition');
   });
 });

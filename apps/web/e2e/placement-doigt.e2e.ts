@@ -4,6 +4,7 @@ import { ENTREE_PLACEMENT, TESTID_PLACEMENT as T } from '../src/ecrans/placement
 import { BOUTONS_DOIGT, TAILLE_MIN_CIBLE_PX, TESTID_DOIGT as D } from '../src/ecrans/placement/test/contrat-doigt.ts';
 import { fermePlacement } from '../src/ecrans/placement/test/ferme-placement.ts';
 import { surveillerCsp } from './outils.ts';
+import { deverrouillerPlan } from './deverrouiller-plan.ts';
 
 /**
  * T28k — placement au doigt sur le téléphone, de bout en bout (Chromium 390 × 844, écran tactile),
@@ -83,6 +84,7 @@ async function ouvrirEditeur(page: Page): Promise<void> {
   await expect(editeur(page)).toBeVisible({ timeout: 15_000 });
   // Téléphone : le gérant édite (T28k), plus de « à faire sur ordinateur ».
   await expect(editeur(page)).toHaveAttribute('data-ecran', 'telephone');
+  await deverrouillerPlan(page);
   await expect(editeur(page)).toHaveAttribute('data-mode', 'edition');
 }
 

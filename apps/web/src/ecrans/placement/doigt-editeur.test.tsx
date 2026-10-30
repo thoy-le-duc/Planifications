@@ -17,6 +17,7 @@ import { TESTID_CONTOURS as TC } from './test/contrat-contours.ts';
 import { TESTID_ETAPES as E } from './test/contrat-etapes.ts';
 import { BOUTONS_DOIGT, DELAI_APPUI_LONG_MS, PAS_ROTATION_DEG, TAILLE_MIN_CIBLE_PX, TESTID_DOIGT as D } from './test/contrat-doigt.ts';
 import { ecrireFermePlacement, FERME, SERRE, UTILISATEUR, ZONE_CHAMP, type OptionsFermePlacement } from './test/ferme-placement.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 const CHEMIN = './index.ts';
 const MAINTENANT = new Date('2026-10-09T08:00:00.000Z');
@@ -72,6 +73,7 @@ async function ouvrir(options: OptionsFermePlacement & { readonly ordinateur?: b
     await Promise.resolve();
   });
   await attendre(() => (un(T.editeur)?.getAttribute('data-mode') ?? '') !== '', 'éditeur affiché, avec data-mode');
+  await deverrouiller();
   if (options.origine === true) await attendre(() => serre() !== null, 'serre affichée');
 }
 
