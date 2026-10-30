@@ -42,7 +42,7 @@ const batiment = (extra: Record<string, string | number | null> = {}) => ({
   ...extra,
 });
 const plan = (b: Record<string, string | number | null>): Plan =>
-  calculs.construirePlan({ ...PETITE_FERME, batiment: [b] }, { saison: SAISON_2026, aujourdhui: '2026-06-10' }) as unknown as Plan;
+  calculs.construirePlan({ ...PETITE_FERME, ...{ batiment: [b] } }, { saison: SAISON_2026, aujourdhui: '2026-06-10' }) as unknown as Plan;
 
 describe('T88 : le plan porte la grille de la serre', () => {
   it('batiments : nbChapelles, nbTroncons, largeurAlleeM recopiés quand ils sont renseignés', () => {

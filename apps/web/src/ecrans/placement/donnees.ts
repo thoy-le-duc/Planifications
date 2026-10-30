@@ -20,10 +20,12 @@ export interface Batiment {
   readonly zoneId: string | null;
   /** Posé dans le brouillon, pas encore écrit. */
   readonly nouveau: boolean;
-  /** T88 : la grille de la serre (chapelles × tronçons, allées) ; nulle ou absente : une bande par sous-zone (T86). */
-  readonly nbChapelles?: number | null;
-  readonly nbTroncons?: number | null;
-  readonly largeurAlleeM?: number | null;
+  /**
+   * T88 : la ligne lue, d'où le morceau de la zone (bandes-serre.ts, `grilleDe`) tire la grille de la serre (nb_chapelles,
+   * nb_troncons, largeur_allee_m) ; absente pour un bâtiment du brouillon : une bande par sous-zone (T86). Gardée brute pour
+   * ne pas alourdir le morceau de l'éditeur (budget.json).
+   */
+  readonly ligne?: Readonly<Record<string, unknown>>;
 }
 
 export interface Zone {
@@ -113,7 +115,8 @@ export const requeteRoles = (fermeId: string, utilisateurId: string): RequeteSur
 });
 
 export const requeteBatiments = (fermeId: string): RequeteSurveillee<Batiment | null> => ({
-  sql: 'SELECT id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, zone_id, nb_chapelles, nb_troncons, largeur_allee_m FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY id',
+  // T88 : toutes les colonnes (grille de la serre comprise) ; la liste explicite pesait sur le morceau de l'éditeur.
+  sql: 'SELECT * FROM batiment WHERE ferme_id = ? AND supprime_le IS NULL ORDER BY id',
   parametres: [fermeId],
   tables: ['batiment'],
   convertir: (l: Ligne) => {
@@ -132,9 +135,7 @@ export const requeteBatiments = (fermeId: string): RequeteSurveillee<Batiment | 
       hauteurM,
       zoneId: texte(l.zone_id),
       nouveau: false,
-      nbChapelles: nombre(l.nb_chapelles),
-      nbTroncons: nombre(l.nb_troncons),
-      largeurAlleeM: nombre(l.largeur_allee_m),
+      ligne: l,
     };
   },
 });

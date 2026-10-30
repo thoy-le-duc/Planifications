@@ -9,7 +9,7 @@
  * T88 : une serre qui a une grille (nb_chapelles ou nb_troncons) se dessine en cases (chapelles × tronçons, `casesDeSerre`) à la
  * place des bandes ; une sous-zone y occupe sa case, et ses planches s'y rangent (`rangerDansCase`, même règle).
  */
-import { aUneGrille, casesDeSerre, depuisRepereZone, rangerDansBande, rangerDansCase, type BandeSerre, type CaseSerre, type RepereZone } from '@planif/core/placement';
+import { aUneGrille, casesDeSerre, depuisRepereZone, rangerDansBande, rangerDansCase, type BandeSerre, type CaseSerre, type GrilleSerre, type RepereZone } from '@planif/core/placement';
 import type { ChangementPlacement } from '@planif/sync';
 import type { Batiment, EmplacementEnService, Planche, Zone } from './donnees.ts';
 import type { Point } from './tuiles.ts';
@@ -36,6 +36,19 @@ export interface InfoBande {
   readonly centre: Point;
   /** Où le nom de la bande se pose : près de son bout nord, dans le repère de la ferme. */
   readonly etiquette: Point;
+}
+
+const nombreOuNul = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/** T88 : le bâtiment et sa grille (lue dans sa ligne ; nulle pour un bâtiment du brouillon), au format du cœur. */
+export function grilleDe(b: Batiment): GrilleSerre {
+  return {
+    longueurM: b.longueurM,
+    largeurM: b.largeurM,
+    nbChapelles: nombreOuNul(b.ligne?.nb_chapelles),
+    nbTroncons: nombreOuNul(b.ligne?.nb_troncons),
+    largeurAlleeM: nombreOuNul(b.ligne?.largeur_allee_m),
+  };
 }
 
 const estSerre = (b: Batiment): boolean => b.type === 'serre_tunnel' || b.type === 'serre_chapelle';
@@ -87,8 +100,9 @@ export function decouperSerres(zones: readonly Zone[], batiments: readonly Batim
       const p = depuisRepereZone(repere, { x, y });
       return { x: mm(p.x), y: mm(p.y) };
     };
-    const enGrille = aUneGrille(serre);
-    const { cases, avertissement } = casesDeSerre(serre, filles);
+    const grille = grilleDe(serre);
+    const enGrille = aUneGrille(grille);
+    const { cases, avertissement } = casesDeSerre(grille, filles);
     const occupees = cases.filter((c) => c.id !== null);
     occupees.forEach((c, i) => {
       const zone = filles.find((z) => z.id === c.id);
