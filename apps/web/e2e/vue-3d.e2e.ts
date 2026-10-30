@@ -3,11 +3,12 @@ import type { Id } from '@planif/core';
 import { creerPorte, SCHEMA_LOCAL } from '@planif/sync';
 import { creerBaseMemoire } from '../../../packages/sync/src/test/base-memoire.ts';
 import { remplirJeuT07 } from '../../../packages/sync/src/test/jeu-t07.ts';
+import { placerJeuT07 } from '../../../packages/sync/src/test/placement-t07.ts';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { MARQUES_3D, TESTID_3D, type ModuleScene, type Plan3d, type Scene } from '../src/ecrans/plan3d/test/contrat.ts';
 import { decrireSerie, repeterMesures, REPETITIONS_MESURE, surveillerCsp, type PassageDefilement, jugerSerie } from './outils.ts';
-import { arreterImages, BORNES_FERME_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous, type Plancher } from './fluidite-3d.ts';
+import { arreterImages, BORNES_JUMEAU_T07, decrireRelatif, demarrerImages, instrumenter3d, jugerDefilementRelatif, mesurerPlancher, verifierGardeFous, type Plancher } from './fluidite-3d.ts';
 
 /**
  * T27 — vue 3D, de bout en bout, sur ordinateur (Chromium 1280 × 800, sans ralentissement du CPU :
@@ -79,6 +80,8 @@ async function planAttendu(): Promise<Attendu> {
   const base = creerBaseMemoire(SCHEMA_LOCAL);
   try {
     const jeu = await remplirJeuT07(base);
+    // T91 : la 3D ne dessine que ce qui est placé : la grande ferme de T07 est placée (comme `?jeu=t07-place` dans le navigateur).
+    await placerJeuT07(base, jeu.principale.fermeId);
     const porte = creerPorte(base, { utilisateurId: jeu.utilisateurId as Id<'Utilisateur'>, fermeId: jeu.principale.fermeId as Id<'Ferme'> });
     const aujourdhui = jourLocal(new Date());
     const saison = calculs.saisonParDefaut(await calculs.chargerSaisons(porte, jeu.principale.fermeId), aujourdhui);
@@ -98,7 +101,7 @@ const curseur = (page: Page) => page.getByTestId(TESTID_3D.curseur);
 
 /** Amorce la base locale (page de diagnostic), range la session, installe le service worker, ouvre Planches. */
 async function ouvrirPlanches(page: Page, attendu: Attendu): Promise<void> {
-  await page.goto('/diagnostic/amorcer.html');
+  await page.goto('/diagnostic/amorcer.html?jeu=t07-place');
   await expect(page).toHaveTitle('Amorçage de la base locale (tests)');
   const poignee = await page.waitForFunction(() => (window as unknown as { __amorcage?: unknown }).__amorcage, undefined, { timeout: DELAI_AMORCAGE_MS });
   const a = (await poignee.jsonValue()) as { erreur?: string; fermeId?: string };
@@ -236,9 +239,11 @@ test('vue 3D : grande ferme de T07, ordinateur, WebGL', async ({ page }) => {
   test.setTimeout(DELAI_AMORCAGE_MS + 300_000);
   const attendu = await planAttendu();
   const { plan } = attendu;
-  const nbPlanches = plan.lignes.filter((l) => l.sorte === 'emplacement').length;
-  expect(nbPlanches, 'grande ferme').toBeGreaterThanOrEqual(400);
+  expect(plan.lignes.filter((l) => l.sorte === 'emplacement').length, 'grande ferme').toBeGreaterThanOrEqual(400);
   const semaineInitiale = plan.semaineCourante ?? 0;
+  // T91 : la scène ne contient que les planches des zones placées.
+  const nbPlanches = attendu.scene.versScene(plan, semaineInitiale).volumes.length;
+  expect(nbPlanches, 'planches placées de la grande ferme').toBeGreaterThan(200);
   const violations = await surveillerCsp(page);
   await instrumenter3d(page);
 
@@ -353,7 +358,7 @@ test('vue 3D : grande ferme de T07, ordinateur, WebGL', async ({ page }) => {
   await test.step('navigation au pointeur : 5 passages, aucun intervalle au-delà du seuil relatif au plancher (4 passages saccadés ou plus de 6 intervalles : échec)', async () => {
     await demarrerImages(page);
     const passages = await glisserCinqFois(page);
-    verifierGardeFous('navigation 3D', await arreterImages(page), BORNES_FERME_T07, IMAGES_PAR_PASSAGE);
+    verifierGardeFous('navigation 3D', await arreterImages(page), BORNES_JUMEAU_T07, IMAGES_PAR_PASSAGE);
     const verdict = jugerDefilementRelatif(passages, seuilMs, PASSAGES_SACCADES_ECHEC, RAFALES_TOTAL_MAX);
     console.log(decrireRelatif('navigation 3D', plancher, verdict));
     for (const [i, p] of passages.entries()) {

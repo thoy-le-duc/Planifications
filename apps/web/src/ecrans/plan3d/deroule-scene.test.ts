@@ -11,6 +11,7 @@ import type { BarrePlan, Plan, SemainePlan } from '../plan/calculs.ts';
 import { AvancePlants, occupationsParPlanche, plantsDeLaSemaine, sceneSelonMode, type ModeDates } from './deroule-plants.ts';
 import type { CultureLue, CulturesLues } from './donnees-plants.ts';
 import { COULEUR_NEUTRE, sceneDeLaSemaine, versScene } from './scene.ts';
+import { avecZonesPlacees } from './test/zones-placees.ts';
 
 const d = (s: string): DateCalendaire => s as DateCalendaire;
 const LUNDIS = ['2027-03-01', '2027-03-08', '2027-03-15', '2027-03-22', '2027-03-29', '2027-04-05'];
@@ -45,8 +46,10 @@ const CULTURES: CulturesLues = {
   ]),
   horsSol: new Set(),
 };
-const GEOMETRIE = versScene(PLAN, 0);
-const OCCUPATIONS = occupationsParPlanche(PLAN);
+// T91 : la scène ne contient que ce qui est placé : la zone du plan écrit à la main reçoit un contour.
+const PLAN_PLACE = avecZonesPlacees(PLAN);
+const GEOMETRIE = versScene(PLAN_PLACE, 0);
+const OCCUPATIONS = occupationsParPlanche(PLAN_PLACE);
 const sceneDe = (semaine: number, mode: ModeDates) => sceneSelonMode(sceneDeLaSemaine(GEOMETRIE, PLAN, semaine), PLAN, OCCUPATIONS, CULTURES, d(LUNDIS[semaine] ?? ''), mode);
 const entree = (semaine: number, mode: ModeDates) => ({ scene: sceneDe(semaine, mode), occupations: OCCUPATIONS, cultures: CULTURES, jour: d(LUNDIS[semaine] ?? ''), mode });
 

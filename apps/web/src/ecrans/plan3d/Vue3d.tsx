@@ -56,6 +56,7 @@ import type { AvancePlants, ModeDates, occupationsParPlanche, sceneSelonMode } f
 import { MARQUE_LECTURE, piloterLecture, VITESSE_DEROULE_PAR_DEFAUT, VITESSES_DEROULE, type HorlogeDeroule, type PiloteDeroule, type VitesseDeroule } from './deroule.ts';
 import type { Plants } from './Plants.tsx';
 import { PanneauTravaux3d } from './PanneauTravaux.tsx';
+import { APlacer } from './APlacer.tsx';
 import { CouchePastilles, placerPastilles, type PastilleDessinee, type PointPose } from './Pastilles.tsx';
 import type { EtatVannes3d, ProprietesVannes3d } from './Vannes3d.tsx';
 // T58 : les serres (repères, fiche, filtre « Serres »), chargées à part par ./abris-differees.ts ; ici, leurs types seulement.
@@ -100,7 +101,8 @@ export interface ProprietesVue3d {
    * T28f : ouvre l'éditeur de placement (« Modifier le plan »). Absent ou `gerant` faux : pas de
    * bouton. L'écran Planches le charge ; la vue n'importe pas l'éditeur.
    */
-  readonly surModifierPlan?: () => void;
+  /** T91 : `zoneId` quand le tap vient de « À placer » (l'éditeur s'ouvre sur cette zone, en modification) ; sans argument : « Modifier le plan ». */
+  readonly surModifierPlan?: (zoneId?: string) => void;
   /** T28f : l'utilisateur est gérant de la ferme (seul à pouvoir placer). */
   readonly gerant?: boolean;
   /** T28i : build de la démo, la vue invite à essayer le placement d'une serre. Défaut : faux, rien n'est rendu. */
@@ -1692,10 +1694,11 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
           Filtres
         </button>
         {peutModifier && !sansPlacement && (
-          <button type="button" data-testid="modifier-plan" className="plan3d-bouton" onClick={surModifierPlan}>
+          <button type="button" data-testid="modifier-plan" className="plan3d-bouton" onClick={() => { surModifierPlan(); }}>
             Modifier le plan
           </button>
         )}
+        <APlacer zones={geometrie?.aPlacer ?? []} gerant={peutModifier} surOuvrir={(id) => { surModifierPlan?.(id); }} />
       </div>
       {invitation(invitationDemo)}
       <div className="plan3d-corps">
@@ -1705,7 +1708,7 @@ export function Vue3d({ plan, surRetour, surEchec, surModifierPlan, gerant = fal
               {peutModifier ? (
                 <>
                   <p>Placez votre ferme sur la photo aérienne</p>
-                  <button type="button" data-testid="modifier-plan" className="plan3d-bouton" onClick={surModifierPlan}>
+                  <button type="button" data-testid="modifier-plan" className="plan3d-bouton" onClick={() => { surModifierPlan(); }}>
                     Modifier le plan
                   </button>
                 </>

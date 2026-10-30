@@ -10,6 +10,7 @@ import { deltaE76 } from '../../ui/test/couleurs.ts';
 import type { BarrePlan, SemainePlan } from '../plan/calculs.ts';
 import type { ModuleCalculsPlan } from '../plan/test/contrat.ts';
 import type { ModuleScene, Plan3d, Scene } from './test/contrat.ts';
+import { avecZonesPlacees } from './test/zones-placees.ts';
 import {
   CLES_FAMILLES,
   type DimensionFiltre,
@@ -82,7 +83,8 @@ const PLAN: Plan3d = {
   ],
 };
 
-const scene = (): Scene => m.versScene(PLAN, 0);
+// T91 : la scène ne contient que ce qui est placé : chaque zone du plan écrit à la main reçoit un contour.
+const scene = (): Scene => m.versScene(avecZonesPlacees(PLAN), 0);
 const ids = (v: readonly { id: string }[]) => v.map((x) => x.id);
 const estompes = (s: SceneFiltree) => ids(s.volumes.filter((v) => v.estompe));
 const nonEstompes = (s: SceneFiltree) => ids(s.volumes.filter((v) => !v.estompe));
@@ -120,7 +122,7 @@ describe('T27b : ferme de démo — courgette, asperge, fraise ne ressemblent pl
     if (s === undefined) throw new Error('démo sans saison 2026');
     const donnees = { zone: g('zone'), emplacement: g('emplacement'), occupation: g('occupation'), serie: g('serie'), plantation: g('plantation'), espece: g('espece'), variete: g('variete'), famille: g('famille') };
     const plan = calculs.construirePlan(donnees, { saison: { id: String(s.id), nom: '2026', debut: String(s.debut), fin: String(s.fin) }, aujourdhui: '2026-09-30' });
-    return plan as unknown as Plan3d;
+    return avecZonesPlacees(plan as unknown as Plan3d);
   }
 
   it('sur toutes les semaines : courgette, asperge et fraise ont la couleur de leur famille', () => {
@@ -179,7 +181,7 @@ describe('T27b : options de filtre de la semaine', () => {
 
   it('suit la semaine : sans culture, aucune famille ni culture', () => {
     const vide: Plan3d = { ...PLAN, lignes: [{ sorte: 'zone', id: 'z1', nom: 'Tunnel 1' }, planche('p1', 'z1', [])] };
-    const o = m.optionsFiltres(m.versScene(vide, 0));
+    const o = m.optionsFiltres(m.versScene(avecZonesPlacees(vide), 0));
     expect(o.familles).toEqual([]);
     expect(o.cultures).toEqual([]);
     expect(o.zones).toEqual([{ id: 'z1', nom: 'Tunnel 1' }]);

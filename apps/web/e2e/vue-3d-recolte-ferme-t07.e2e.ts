@@ -4,7 +4,7 @@ import { TESTID_3D } from '../src/ecrans/plan3d/test/contrat.ts';
 import { TESTID_3D_CAMERA as T } from '../src/ecrans/plan3d/test/contrat-camera.ts';
 import { TESTID_3D_RECOLTE as R } from '../src/ecrans/plan3d/test/contrat-recolte.ts';
 import { MENTION_DERNIERES_RECOLTES } from '../src/ecrans/plan3d/test/contrat-recolte-suites.ts';
-import { arreterImages, BORNES_FERME_T07, demarrerImages, instrumenter3d, verifierGardeFous } from './fluidite-3d.ts';
+import { arreterImages, BORNES_JUMEAU_RECOLTE_T07, demarrerImages, instrumenter3d, verifierGardeFous } from './fluidite-3d.ts';
 
 /**
  * T32f — la récolte en pleine saison dans la grande ferme de T07 (`pnpm e2e`, ordinateur : Chromium
@@ -22,10 +22,9 @@ import { arreterImages, BORNES_FERME_T07, demarrerImages, instrumenter3d, verifi
  *      `data-planches-a-recolter` = `data-balises` = nombre de lignes « à récolter » ou « fin de récolte »
  *      non estompées ; `resume-recolte-3d` annonce ce nombre ; la ligne dit « dernières récoltes » ;
  *   2. une semaine en pleine récolte (au moins 3 planches à récolter) existe dans la saison de la ferme T07 ;
- *   3. zoom serré sur la zone la plus chargée en balises : la molette rapproche la caméra, la vue reste
- *      en détail (data-plants > 0), les garde-fous de T29b (BORNES_FERME_T07 : appels de dessin et
- *      triangles par image, JavaScript par image) tiennent pendant un glissé en pleine récolte, et pendant
- *      le zoom lui-même.
+ *   3. vol vers la zone la plus chargée en balises : la vue reste en détail (data-plants > 0), les garde-fous
+ *      de T29b (BORNES_JUMEAU_RECOLTE_T07, la ferme est placée depuis T91 : appels de dessin et triangles par image,
+ *      JavaScript par image) tiennent pendant un glissé en pleine récolte.
  * Si la semaine de pleine récolte n'existait pas dans la saison par défaut, le test échoue (il ne passe pas à vide).
  */
 
@@ -95,7 +94,8 @@ test('récolte dans la grande ferme de T07 : balises jusqu’à la fin de récol
   test.setTimeout(DELAI_AMORCAGE_MS + 420_000);
   await instrumenter3d(page);
 
-  await page.goto('/diagnostic/amorcer.html');
+  // T91 : la 3D ne dessine que ce qui est placé : la grande ferme de T07 placée.
+  await page.goto('/diagnostic/amorcer.html?jeu=t07-place');
   await expect(page).toHaveTitle('Amorçage de la base locale (tests)');
   const poignee = await page.waitForFunction(() => (window as unknown as { __amorcage?: unknown }).__amorcage, undefined, { timeout: DELAI_AMORCAGE_MS });
   const a = (await poignee.jsonValue()) as { erreur?: string; utilisateurId?: string };
@@ -164,28 +164,14 @@ test('récolte dans la grande ferme de T07 : balises jusqu’à la fin de récol
   await page.locator(`[data-testid="${T.zone}"][data-id="${zoneChoisie.id.replace(/"/g, '\\"')}"]`).click();
   await expect(toile(page)).toHaveAttribute('data-vol', 'non', { timeout: DELAI_MS });
 
-  const boite = await toile(page).boundingBox();
-  if (boite === null) throw new Error('toile 3D sans boîte');
-  const centre = { x: boite.x + boite.width / 2, y: boite.y + boite.height / 2 };
-  const distance = async (): Promise<number> => {
-    const p = JSON.parse((await toile(page).getAttribute('data-camera')) ?? 'null') as { position: { x: number; y: number; z: number }; cible: { x: number; y: number; z: number } };
-    return Math.hypot(p.position.x - p.cible.x, p.position.y - p.cible.y, p.position.z - p.cible.z);
-  };
-  const avant = await distance();
-  await demarrerImages(page);
-  await page.mouse.move(centre.x, centre.y);
-  for (let i = 0; i < 12; i += 1) {
-    await page.mouse.wheel(0, -240);
-    await page.evaluate(() => new Promise<void>((fini) => { requestAnimationFrame(() => { requestAnimationFrame(() => { fini(); }); }); }));
-  }
-  verifierGardeFous('zoom serré en pleine récolte (molette)', await arreterImages(page), BORNES_FERME_T07, 10);
-  expect(await distance(), 'la caméra s’est rapprochée').toBeLessThan(avant);
-  expect(await nombre(page, 'data-plants'), 'plants en détail au zoom serré').toBeGreaterThan(0);
+  // T91 : la ferme est maintenant PLACÉE (serres, champs à leur vraie place) : le vol vers la zone amène déjà la caméra plus près que
+  // le plancher de la molette (15 % de la distance de départ, Vue3d.tsx), la molette n'y rapproche plus rien. Le zoom serré est celui du vol.
+  expect(await nombre(page, 'data-plants'), 'plants en détail au zoom serré (après le vol)').toBeGreaterThan(0);
   expect(await nombre(page, 'data-balises'), 'les balises sont toujours là').toBe(meilleure.balises);
 
   // Un glissé en pleine récolte, en zoom serré : mêmes garde-fous, bornes de T07 inchangées.
   await demarrerImages(page);
   await glisser(page);
-  verifierGardeFous('glissé en zoom serré, pleine récolte', await arreterImages(page), BORNES_FERME_T07, IMAGES_PAR_GLISSE / 2);
+  verifierGardeFous('glissé en zoom serré, pleine récolte', await arreterImages(page), BORNES_JUMEAU_RECOLTE_T07, IMAGES_PAR_GLISSE / 2);
   await expect(resume(page)).toHaveText(phrase(await nombre(page, 'data-planches-a-recolter')));
 });

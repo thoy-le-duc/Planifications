@@ -11,6 +11,7 @@ import type { BarrePlan, Plan, SemainePlan } from '../plan/calculs.ts';
 import type { CultureLue, CulturesLues } from './donnees-plants.ts';
 import type { PlantsPlanche } from './plants.ts';
 import { versScene } from './scene.ts';
+import { avecZonesPlacees } from './test/zones-placees.ts';
 import type { ModeDates, ModuleDeroulePlants } from './test/contrat-deroule.ts';
 
 /** Chemin tenu dans une variable : le typage ne dépend pas du module pas encore écrit. */
@@ -74,7 +75,8 @@ const CULTURES: CulturesLues = {
 };
 
 function plantsDe(semaine: number, mode: ModeDates): readonly (PlantsPlanche | null)[] {
-  const scene = versScene(PLAN, semaine);
+  // T91 : la scène ne contient que ce qui est placé : la zone du plan écrit à la main reçoit un contour.
+  const scene = versScene(avecZonesPlacees(PLAN), semaine);
   return m.plantsDeLaSemaine({ scene, occupations: m.occupationsParPlanche(PLAN), cultures: CULTURES, jour: d(LUNDIS[semaine] ?? ''), mode });
 }
 

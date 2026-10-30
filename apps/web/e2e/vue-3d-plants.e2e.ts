@@ -67,7 +67,7 @@ test('plants 3D : la planche de tomates grandit semaine après semaine (ferme du
   test.skip(process.env.E2E_DEMO === '1', 'ne tourne pas sur la démo : elle a son propre test dans vue-3d-jumeau.e2e.ts');
   test.setTimeout(DELAI_AMORCAGE_MS + 180_000);
   const aujourdhui = jourLocal(new Date());
-  await page.goto(`/diagnostic/amorcer.html?jeu=aujourdhui&date=${aujourdhui}`);
+  await page.goto(`/diagnostic/amorcer.html?jeu=aujourdhui&date=${aujourdhui}&place=1`);
   await expect(page).toHaveTitle('Amorçage de la base locale (tests)');
   const poignee = await page.waitForFunction(() => (window as unknown as { __amorcage?: unknown }).__amorcage, undefined, { timeout: DELAI_AMORCAGE_MS });
   const a = (await poignee.jsonValue()) as { erreur?: string; utilisateurId?: string; fermeId?: string };

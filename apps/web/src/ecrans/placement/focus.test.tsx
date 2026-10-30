@@ -211,23 +211,34 @@ describe('T28g : encart de la vue 3D', () => {
     expect(encart?.contains(document.activeElement), `l’encart ne prend pas le focus (focus : ${focus()})`).toBe(false);
   });
 
-  it('le texte annoncé change quand une zone est choisie (« Aller à … ») et mentionne la zone', async () => {
+  // T91 : la 3D ne dessine plus les zones non placées : sans placement, il n'y a aucune zone où « Aller » ; elles sont
+  // dans « À placer (n) » (un tap ouvre l'éditeur sur la zone), et l'encart garde son texte et son rôle d'annonce.
+  it('ferme sans placement : pas de zone où aller, les zones sont « À placer », l’encart reste une annonce', async () => {
     await ouvrirLa3d({});
-    const avant = (un(ENCART)?.textContent ?? '').replace(/\s+/g, ' ').trim();
-    const zones = [...document.querySelectorAll<HTMLElement>('[data-testid="aller-zone-3d"]')];
-    expect(zones.length, 'au moins une zone à choisir').toBeGreaterThan(0);
-    const choisie = zones[0];
-    if (choisie === undefined) throw new Error('aucune zone');
-    const nom = choisie.textContent.replace(/^Aller à\s*/, '').trim();
-    await toucher(choisie);
-    await unTour();
+    expect(document.querySelectorAll('[data-testid="aller-zone-3d"]').length, 'aucune zone dessinée').toBe(0);
+    const aPlacer = un('a-placer-3d');
+    expect(aPlacer, '« À placer (n) » affiché').not.toBeNull();
+    expect(aPlacer?.textContent).toMatch(/^À placer \(\d+\)$/);
     const encart = un(ENCART);
     expect(encart, 'l’encart reste là').not.toBeNull();
-    const apres = (encart?.textContent ?? '').replace(/\s+/g, ' ').trim();
-    expect(apres, 'le texte annoncé a changé').not.toBe(avant);
-    expect(apres, `le texte cite la zone « ${nom} »`).toContain(nom);
+    expect(encart?.getAttribute('role')).toBe('status');
     expect(encart?.contains(document.activeElement), 'l’encart ne vole pas le focus').toBe(false);
-    expect(encart?.getAttribute('role'), 'le changement est annoncé : role="status"').toBe('status');
+  });
+
+  it('T91 : « À placer » → un tap sur la zone ouvre l’éditeur sur elle, en modification (gérant) ; « Fermer » ramène sur la 3D', async () => {
+    await ouvrirLa3d({});
+    await toucher(requis('a-placer-3d'));
+    const premiere = document.querySelector<HTMLElement>('[data-testid="a-placer-zone"]');
+    expect(premiere, 'une zone à placer').not.toBeNull();
+    const zoneId = premiere?.getAttribute('data-id') ?? '';
+    if (premiere !== null) await toucher(premiere);
+    await attendre(() => editeur() !== null, 'éditeur ouvert (import dynamique compris)');
+    await attendre(() => (editeur()?.getAttribute('data-mode') ?? '') !== '', 'éditeur prêt');
+    expect(editeur()?.getAttribute('data-mode')).toBe('edition');
+    expect(document.querySelector(`[data-testid="zone-choix"][data-id="${zoneId}"]`)?.getAttribute('aria-pressed')).toBe('true');
+    await fermerLediteur();
+    expect(editeur(), 'éditeur fermé').toBeNull();
+    expect(un('vue-3d'), 'la 3D est toujours là').not.toBeNull();
   });
 });
 

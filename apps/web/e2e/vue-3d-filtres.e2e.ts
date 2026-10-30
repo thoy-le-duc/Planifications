@@ -3,6 +3,7 @@ import type { Id } from '@planif/core';
 import { creerPorte, SCHEMA_LOCAL } from '@planif/sync';
 import { creerBaseMemoire } from '../../../packages/sync/src/test/base-memoire.ts';
 import { remplirJeuT07 } from '../../../packages/sync/src/test/jeu-t07.ts';
+import { placerJeuT07 } from '../../../packages/sync/src/test/placement-t07.ts';
 import { CLE_SESSION } from '../src/connexion/session.ts';
 import type { ModuleCalculsPlan } from '../src/ecrans/plan/test/contrat.ts';
 import { MARQUES_3D, TESTID_3D, type ModuleScene, type Plan3d } from '../src/ecrans/plan3d/test/contrat.ts';
@@ -61,6 +62,8 @@ async function planAttendu(): Promise<Attendu> {
   const base = creerBaseMemoire(SCHEMA_LOCAL);
   try {
     const jeu = await remplirJeuT07(base);
+    // T91 : la 3D ne dessine que ce qui est placé : la grande ferme de T07 est placée (comme `?jeu=t07-place` dans le navigateur).
+    await placerJeuT07(base, jeu.principale.fermeId);
     const porte = creerPorte(base, { utilisateurId: jeu.utilisateurId as Id<'Utilisateur'>, fermeId: jeu.principale.fermeId as Id<'Ferme'> });
     const aujourdhui = jourLocal(new Date());
     const saison = calculs.saisonParDefaut(await calculs.chargerSaisons(porte, jeu.principale.fermeId), aujourdhui);
@@ -83,7 +86,7 @@ const boutonTout = (page: Page, dimension: DimensionFiltre) => page.locator(`[da
 const boutonRien = (page: Page, dimension: DimensionFiltre) => page.locator(`[data-testid="${T.rien}"][data-dimension="${dimension}"]`);
 
 async function ouvrirPlanches(page: Page, attendu: Attendu): Promise<void> {
-  await page.goto('/diagnostic/amorcer.html');
+  await page.goto('/diagnostic/amorcer.html?jeu=t07-place');
   await expect(page).toHaveTitle('Amorçage de la base locale (tests)');
   const poignee = await page.waitForFunction(() => (window as unknown as { __amorcage?: unknown }).__amorcage, undefined, { timeout: DELAI_AMORCAGE_MS });
   const a = (await poignee.jsonValue()) as { erreur?: string; fermeId?: string };
@@ -153,10 +156,12 @@ test('vue 3D : filtres et légende, grande ferme de T07, ordinateur', async ({ p
   test.setTimeout(DELAI_AMORCAGE_MS + 240_000);
   const attendu = await planAttendu();
   const { plan, m } = attendu;
-  const nbPlanches = plan.lignes.filter((l) => l.sorte === 'emplacement').length;
-  expect(nbPlanches, 'grande ferme').toBeGreaterThanOrEqual(400);
+  expect(plan.lignes.filter((l) => l.sorte === 'emplacement').length, 'grande ferme').toBeGreaterThanOrEqual(400);
   const semaine = plan.semaineCourante ?? 0;
   const scene = m.versScene(plan, semaine);
+  // T91 : la scène ne contient que les planches des zones placées.
+  const nbPlanches = scene.volumes.length;
+  expect(nbPlanches, 'planches placées de la grande ferme').toBeGreaterThan(200);
   const options = m.optionsFiltres(scene);
   expect(options.familles.length, 'la grande ferme a au moins 3 familles cette semaine').toBeGreaterThanOrEqual(3);
   expect(options.zones.length, 'et au moins 2 zones').toBeGreaterThanOrEqual(2);

@@ -1034,7 +1034,10 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
     );
   }, [porte, fermeId, utilisateurId]);
   const [EditeurPlacement, setEditeurPlacement] = useState<EditeurPlacementCharge | null>(null);
-  const modifierPlan = useCallback(() => {
+  // T91 : « À placer » ouvre l'éditeur sur la zone, en modification (le gérant seul le voit).
+  const [zoneOuverte, setZoneOuverte] = useState<string | undefined>(undefined);
+  const modifierPlan = useCallback((zoneId?: string) => {
+    setZoneOuverte(zoneId);
     import('../ferme/EcranFerme.tsx')
       .then((m) => m.chargerPlacement())
       .then(
@@ -1214,8 +1217,10 @@ function Ecran({ porte, fermeId, aujourdhui = jourDuTelephone, utilisateurId, st
           fermeId={fermeId}
           utilisateurId={utilisateurId}
           invitationDemo={DEMO}
+          {...(zoneOuverte === undefined ? {} : { zoneInitiale: zoneOuverte, modificationInitiale: true })}
           surFermer={() => {
             rendreFocus.current = true;
+            setZoneOuverte(undefined);
             setEditeurPlacement(null);
           }}
         />

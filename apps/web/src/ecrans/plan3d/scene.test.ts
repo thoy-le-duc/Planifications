@@ -11,6 +11,7 @@ import type { ModuleCalculsPlan } from '../plan/test/contrat.ts';
 import { PETITE_FERME, SAISON_2026 } from '../plan/test/petite-ferme.ts';
 import type { BarrePlan, SemainePlan } from '../plan/calculs.ts';
 import type { LigneEmplacementPlan3d, ModuleScene, Plan3d, Scene, SocleScene, VolumeScene } from './test/contrat.ts';
+import { avecZonesPlacees } from './test/zones-placees.ts';
 
 /** Chemins tenus dans des variables : le typage ne dépend pas des modules pas encore écrits. */
 const CHEMIN_SCENE = './scene.ts';
@@ -54,7 +55,8 @@ function planche(id: string, zoneId: string, longueurM: number, largeurM: number
   return { sorte: 'emplacement', id, code: id.toUpperCase(), zoneId, chapelleId, barres, conflits: [], longueurM, largeurM };
 }
 
-const PLAN: Plan3d = {
+// T91 : la scène ne contient que ce qui est placé : chaque zone du plan écrit à la main reçoit un contour (un rectangle de 60 × 40 m).
+const PLAN: Plan3d = avecZonesPlacees({
   saison: { id: 's', nom: '2026', debut: '2026-01-05', fin: '2026-02-01' },
   semaines,
   semaineCourante: 0,
@@ -73,7 +75,7 @@ const PLAN: Plan3d = {
     // Zone sans aucune planche (ligne de zone seule).
     { sorte: 'zone', id: 'z3', nom: 'Verger' },
   ],
-};
+});
 
 const volume = (s: Scene, id: string): VolumeScene => {
   const v = s.volumes.find((x) => x.id === id);
@@ -283,7 +285,7 @@ describe('T27 : entrées invalides, pureté, aucun calcul agronomique', () => {
 });
 
 describe('T27 : sur le plan réel de la petite ferme (construirePlan, vue 2D)', () => {
-  const plan = (): Plan3d => calculs.construirePlan(PETITE_FERME, { saison: SAISON_2026, aujourdhui: '2026-06-10' }) as unknown as Plan3d;
+  const plan = (): Plan3d => avecZonesPlacees(calculs.construirePlan(PETITE_FERME, { saison: SAISON_2026, aujourdhui: '2026-06-10' }) as unknown as Plan3d);
   const indexSemaine = (p: Plan3d, jour: string) => p.semaines.findIndex((w) => w.lundi <= jour && jour < new Date(Date.parse(w.lundi) + 7 * 86_400_000).toISOString().slice(0, 10));
 
   it('le plan de la 2D porte la taille de chaque emplacement (longueurM, largeurM), recopiée de la base', () => {

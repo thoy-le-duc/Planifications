@@ -13,7 +13,7 @@ import type { ModuleScene } from './test/contrat.ts';
 import type { CibleVol as CibleT29, ModuleCadrage } from './test/contrat-camera.ts';
 import type { FiltresScene, ModuleFiltres } from './test/contrat-filtres.ts';
 import type { BatimentPlan, BatimentScene, ModuleJumeau, PlacementPlanche, PlanJumeau, PointFerme, SceneJumeau, SocleJumeau, TypeBatiment, VolumeJumeau } from './test/contrat-jumeau.ts';
-import { aabb, coinsBatiment, coinsSocle, coinsVolume, dansRect, formeSocle, memeAngle, RAD, rectDeAabb, recouvre, TOL, type Pt } from './test/geometrie.ts';
+import { aabb, coinsBatiment, coinsSocle, coinsVolume, dansRect, formeSocle, memeAngle, RAD, rectDeAabb, recouvre, type Pt } from './test/geometrie.ts';
 import { coinsDe } from './test/projection.ts';
 
 const CHEMIN_SCENE = './scene.ts';
@@ -302,49 +302,12 @@ describe('T28c : zone en L (sol extrudé depuis le polygone)', () => {
 
 // ── Repli : ce qui n'est pas placé garde la disposition de T27, à côté ──────────────────────
 
-describe('T28c : zones et planches non placées (repli sur T27)', () => {
-  const placees = (s: SceneJumeau): Pt[] => [
-    ...s.socles.filter((z) => z.placee).flatMap(formeSocle),
-    ...s.batiments.flatMap(coinsBatiment),
-    ...s.volumes.filter((v) => v.placee).flatMap(coinsVolume),
-  ];
-
-  it('une zone sans contour ni serre est non placée : socle rectangulaire sans angle ni contour', () => {
+describe('T28c puis T91 : zones et planches non placées (plus de grille inventée)', () => {
+  it('T91 : une zone sans contour ni serre n’est pas dans la scène : ni socle ni planche ; elle est « à placer »', () => {
     const s = scene();
-    for (const id of ['zu', 'zv']) {
-      const z = socle(s, id);
-      expect(z.placee, id).toBe(false);
-      expect(z.contour, id).toBeNull();
-      expect(z.batimentId, id).toBeNull();
-      expect(z.angle, id).toBe(0);
-      expect(z.largeur).toBeGreaterThan(0);
-      expect(z.profondeur).toBeGreaterThan(0);
-    }
-  });
-
-  it('elle est rangée à côté de la partie placée : hors de sa boîte englobante, sans recouvrement', () => {
-    const s = scene();
-    const zone_placee = aabb(placees(s));
-    for (const id of ['zu', 'zv']) {
-      const b = aabb(formeSocle(socle(s, id)));
-      const separe = b.x1 <= zone_placee.x0 + TOL || b.x0 >= zone_placee.x1 - TOL || b.z1 <= zone_placee.z0 + TOL || b.z0 >= zone_placee.z1 - TOL;
-      expect(separe, `${id} dans la partie placée`).toBe(true);
-    }
-    expect(recouvre(formeSocle(socle(s, 'zu')), formeSocle(socle(s, 'zv')))).toBe(false);
-  });
-
-  it('ses planches sont rangées sur son socle, sans angle, même si elles portent un placement (sans repère, il n’a pas de sens)', () => {
-    const s = scene();
-    const u = socle(s, 'zu');
-    for (const id of ['u1', 'u2', 'u3']) {
-      const v = vol(s, id);
-      expect(v.placee, id).toBe(false);
-      expect(v.angle, id).toBe(0);
-      expect(dansRect(coinsVolume(v), coinsSocle(u)), `${id} hors du socle`).toBe(true);
-    }
-    // Le placement ignoré ne change rien : mêmes positions que sans placement.
-    const sans: PlanJumeau = { ...PLAN, lignes: PLAN.lignes.map((l) => (l.sorte === 'emplacement' && l.id === 'u1' ? { ...l, placement: null } : l)) };
-    expect(vol(scene(sans), 'u1')).toEqual(vol(s, 'u1'));
+    for (const id of ['zu', 'zv']) expect(s.socles.some((z) => z.id === id), id).toBe(false);
+    for (const id of ['u1', 'u2', 'u3']) expect(s.volumes.some((v) => v.id === id), id).toBe(false);
+    expect((s as SceneJumeau & { aPlacer?: readonly { id: string }[] }).aPlacer?.map((z) => z.id)).toEqual(['zu', 'zv']);
   });
 
   it('aucune planche ne recouvre une autre, et chacune est dans le socle de sa zone', () => {
@@ -376,7 +339,7 @@ describe('T28c : zones et planches non placées (repli sur T27)', () => {
     }
   });
 
-  it('un plan sans aucun placement donne la scène de T27 : rien de placé, aucun bâtiment, aucun angle', () => {
+  it('T91 : un plan sans aucun placement donne une scène vide, toutes les zones sont à placer', () => {
     const base = { saison: PLAN.saison, semaines: PLAN.semaines, semaineCourante: PLAN.semaineCourante };
     const nu: PlanJumeau = {
       ...base,
@@ -384,8 +347,9 @@ describe('T28c : zones et planches non placées (repli sur T27)', () => {
     };
     const s = scene(nu);
     expect(s.batiments).toEqual([]);
-    expect(s.socles.every((z) => !z.placee && z.angle === 0 && z.contour === null && z.batimentId === null)).toBe(true);
-    expect(s.volumes.every((v) => !v.placee && v.angle === 0)).toBe(true);
+    expect(s.socles).toEqual([]);
+    expect(s.volumes).toEqual([]);
+    expect((s as SceneJumeau & { aPlacer?: readonly { id: string }[] }).aPlacer?.map((z) => z.id)).toEqual(['zt', 'zc', 'zl', 'zr', 'zu', 'zv']);
     // Les champs absents (plan de la 2D d’avant T28c) valent les champs nuls.
     const ancien: PlanJumeau = {
       ...nu,
@@ -528,10 +492,10 @@ describe('T28c : invariants', () => {
     expect(vol(a, 'p1').culture).toBe('Tomate');
   });
 
-  it('un volume par planche et un socle par zone, dans l’ordre du plan, comme en T27', () => {
+  it('un volume par planche placée et un socle par zone placée, dans l’ordre du plan (T91 : sans les zones à placer)', () => {
     const s = scene();
-    expect(s.socles.map((z) => z.id)).toEqual(['zt', 'zc', 'zl', 'zr', 'zu', 'zv']);
-    expect(s.volumes.map((v) => v.id)).toEqual(['p1', 'p2', 'p3', 'pa', 'q1', 'q2', 'q3', 'qc', 'l1', 'l2', 'l3', 'r1', 'u1', 'u2', 'u3']);
+    expect(s.socles.map((z) => z.id)).toEqual(['zt', 'zc', 'zl', 'zr']);
+    expect(s.volumes.map((v) => v.id)).toEqual(['p1', 'p2', 'p3', 'pa', 'q1', 'q2', 'q3', 'qc', 'l1', 'l2', 'l3', 'r1']);
   });
 
   it('pure : l’entrée figée n’est pas modifiée, deux appels donnent le même résultat', () => {
@@ -574,7 +538,7 @@ describe('T28c : les filtres de T27b restent valides sur une ferme placée', () 
 
   it('la zone d’une serre est une zone comme les autres pour le filtre « zones »', () => {
     const s = scene();
-    expect(m.optionsFiltres(s).zones.map((z) => z.id)).toEqual(['zt', 'zc', 'zl', 'zr', 'zu', 'zv']);
+    expect(m.optionsFiltres(s).zones.map((z) => z.id)).toEqual(['zt', 'zc', 'zl', 'zr']);
     const f = filtrer(s, { familles: null, cultures: null, zones: new Set(['zt']) });
     expect(f.volumes.filter((v) => !v.estompe).map((v) => v.zoneId)).toEqual(['zt', 'zt', 'zt', 'zt']);
   });
@@ -611,17 +575,15 @@ describe('T28c : le vol de T29 vise aussi une serre', () => {
     expect([a.x0, a.x1, a.z0, a.z1].map((n) => n.toFixed(5))).toEqual([e.x0, e.x1, e.z0, e.z1].map((n) => n.toFixed(5)));
   });
 
-  it('zone à contour : la boîte du socle, sans angle ; zone non placée : inchangé (socle et planches)', () => {
+  it('zone à contour : la boîte du socle, sans angle ; zone non placée : inconnue de la scène (T91)', () => {
     const s = scene();
     const l = boiteDe(s, { sorte: 'zone', id: 'zl' });
     if (l === null) throw new Error('boîte nulle');
     expect(l.angle ?? 0).toBe(0);
     expect(l.max.x - l.min.x).toBeCloseTo(20, 6);
     expect(l.max.z - l.min.z).toBeCloseTo(30, 6);
-    const u = boiteDe(s, { sorte: 'zone', id: 'zu' });
-    if (u === null) throw new Error('boîte nulle');
-    expect(u.angle ?? 0).toBe(0);
-    expect(u.max.y).toBeCloseTo(vol(s, 'u1').hauteur, 6);
+    // T91 : une zone non placée n'est plus dans la scène, on ne peut pas y voler.
+    expect(() => boiteDe(s, { sorte: 'zone', id: 'zu' })).toThrow(RangeError);
   });
 
   it('bâtiment sans zone : sa boîte, avec son angle ; identifiant inconnu → RangeError', () => {

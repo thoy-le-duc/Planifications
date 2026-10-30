@@ -213,6 +213,27 @@ test('gérant, ferme placée : pas d’encart, le bouton ouvre l’éditeur, « 
   expect(await nbBatiments3d(page)).toBe(2);
 });
 
+test('T91 : ferme sans placement, « À placer (n) » liste les zones, un tap ouvre l’éditeur sur la zone en modification', async ({ page, context }) => {
+  test.skip(DEMO, 'amorçage de la page de diagnostic : pas dans la démo');
+  test.setTimeout(DELAI_AMORCAGE_MS + 120_000);
+  await bloquerLeReseau(context);
+  await ouvrirEn3d(page, '');
+  const aPlacer = vue(page).getByTestId('a-placer-3d');
+  await expect(aPlacer).toHaveText(/^À placer \(\d+\)$/);
+  await expect(page.getByTestId('aller-zone-3d'), 'aucune zone inventée dans la scène').toHaveCount(0);
+  await aPlacer.click();
+  const zone = page.getByTestId('a-placer-zone').first();
+  await expect(zone).toBeVisible();
+  const id = await zone.getAttribute('data-id');
+  await zone.click();
+  await expect(editeur(page)).toBeVisible({ timeout: DELAI_MS });
+  await expect(editeur(page)).toHaveAttribute('data-mode', 'edition');
+  await expect(page.locator(`[data-testid="zone-choix"][data-id="${id ?? ''}"]`)).toHaveAttribute('aria-pressed', 'true');
+  await editeur(page).getByRole('button', { name: 'Fermer', exact: true }).click();
+  await expect(editeur(page)).toHaveCount(0);
+  await expect(vue(page)).toHaveAttribute('data-etat', 'pret');
+});
+
 test('équipier : jamais de bouton ; ferme vide, l’encart dit qui peut placer la ferme', async ({ page, context }) => {
   test.skip(DEMO, 'amorçage de la page de diagnostic : pas dans la démo');
   test.setTimeout(DELAI_AMORCAGE_MS + 120_000);
