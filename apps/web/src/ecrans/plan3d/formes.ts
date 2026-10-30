@@ -74,11 +74,26 @@ export function geometrieSol(empreintes: readonly (readonly PointScene[])[], epa
 const HAUTEUR_LIMITE_M = 0.02;
 const LARGEUR_LIMITE_M = 0.12;
 
-/** T86 : le rectangle de la limite de chaque bande sauf la première de sa serre (son bord de x local négatif), en repère de scène. */
+/**
+ * T86 : le rectangle de la limite de chaque bande sauf la première de sa serre (son bord de x local négatif), en repère de scène.
+ * T88 : une case de serre en grille a la limite de son bord de x local négatif sauf en chapelle 1 et, quand la serre a plusieurs
+ * tronçons (séparés par des allées), celles de ses deux bouts (y local négatif et positif).
+ */
 export function limitesDeBandes(bandes: readonly BandeScene[]): PointScene[][] {
-  return bandes
-    .filter((b) => b.rang > 1)
-    .map((b) => coinsRectScene(b.x - (b.largeur / 2) * Math.cos(b.angle), b.z + (b.largeur / 2) * Math.sin(b.angle), LARGEUR_LIMITE_M, b.profondeur, b.angle));
+  const limites: PointScene[][] = [];
+  for (const b of bandes) {
+    const cos = Math.cos(b.angle);
+    const sin = Math.sin(b.angle);
+    const ouest = b.chapelle === undefined ? b.rang > 1 : b.chapelle > 1;
+    if (ouest) limites.push(coinsRectScene(b.x - (b.largeur / 2) * cos, b.z + (b.largeur / 2) * sin, LARGEUR_LIMITE_M, b.profondeur, b.angle));
+    if ((b.nbTroncons ?? 1) > 1) {
+      // Axe de la longueur de la serre en repère de scène : (−sin, −cos).
+      const d = b.profondeur / 2;
+      limites.push(coinsRectScene(b.x + d * sin, b.z + d * cos, b.largeur, LARGEUR_LIMITE_M, b.angle));
+      limites.push(coinsRectScene(b.x - d * sin, b.z - d * cos, b.largeur, LARGEUR_LIMITE_M, b.angle));
+    }
+  }
+  return limites;
 }
 
 /**

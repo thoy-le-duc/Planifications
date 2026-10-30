@@ -5,8 +5,11 @@
  * Une zone abritée par une serre (tunnel ou chapelle) qui a des sous-zones se dessine en bandes (calcul pur du cœur,
  * `bandesDeSerre`) ; les planches d'une sous-zone se rangent dans sa bande (`rangerDansBande`), au même repère que les autres
  * planches de la serre : celui du bâtiment. Rien n'est stocké : les bandes se recalculent depuis le bâtiment et les sous-zones.
+ *
+ * T88 : une serre qui a une grille (nb_chapelles ou nb_troncons) se dessine en cases (chapelles × tronçons, `casesDeSerre`) à la
+ * place des bandes ; une sous-zone y occupe sa case, et ses planches s'y rangent (`rangerDansCase`, même règle).
  */
-import { bandesDeSerre, depuisRepereZone, rangerDansBande, type BandeSerre, type RepereZone } from '@planif/core/placement';
+import { aUneGrille, casesDeSerre, depuisRepereZone, rangerDansBande, rangerDansCase, type BandeSerre, type CaseSerre, type RepereZone } from '@planif/core/placement';
 import type { ChangementPlacement } from '@planif/sync';
 import type { Batiment, EmplacementEnService, Planche, Zone } from './donnees.ts';
 import type { Point } from './tuiles.ts';
@@ -23,6 +26,8 @@ export interface InfoBande {
   /** Nom de la serre. */
   readonly serre: string;
   readonly bande: BandeSerre;
+  /** T88 : la case de la sous-zone quand la serre a une grille (la bande en reprend le centre et les dimensions), sinon null. */
+  readonly case: CaseSerre | null;
   /** Repère de la serre, où les planches de la bande gardent leur placement. */
   readonly repere: RepereZone;
   /** Les 4 coins de la bande dans le repère de la ferme, sens antihoraire. */
@@ -35,9 +40,40 @@ export interface InfoBande {
 
 const estSerre = (b: Batiment): boolean => b.type === 'serre_tunnel' || b.type === 'serre_chapelle';
 
-/** Les bandes de chaque sous-zone (par identifiant) des zones abritées par une serre ; vide si aucune. */
-export function bandesDesSerres(zones: readonly Zone[], batiments: readonly Batiment[]): Map<string, InfoBande> {
-  const resultat = new Map<string, InfoBande>();
+/** T88 : une case vide d'une serre en grille (moins de sous-zones que de cases), dessinée vide. */
+export interface CaseVide {
+  /** La zone abritée par la serre. */
+  readonly racineId: string;
+  readonly case: CaseSerre;
+  /** Les 4 coins de la case dans le repère de la ferme, sens antihoraire. */
+  readonly contour: readonly Point[];
+  /** Centre de la case dans le repère de la ferme. */
+  readonly centre: Point;
+  readonly etiquette: Point;
+}
+
+/** T88 : sous-zones sans case (plus de sous-zones que de cases) d'une serre en grille. */
+export interface AvertissementSerre {
+  readonly racineId: string;
+  readonly serre: string;
+  /** « 2 zones n'ont pas de place dans la serre. » */
+  readonly message: string;
+  /** Où le message se pose : le bout sud de la serre, dans le repère de la ferme. */
+  readonly position: Point;
+}
+
+export interface SerresDecoupees {
+  /** Bande ou case de chaque sous-zone (par identifiant). */
+  readonly bandes: Map<string, InfoBande>;
+  readonly vides: readonly CaseVide[];
+  readonly avertissements: readonly AvertissementSerre[];
+}
+
+/** Bandes (T86) ou cases (T88) des serres qui abritent une zone à sous-zones. */
+export function decouperSerres(zones: readonly Zone[], batiments: readonly Batiment[]): SerresDecoupees {
+  const bandes = new Map<string, InfoBande>();
+  const vides: CaseVide[] = [];
+  const avertissements: AvertissementSerre[] = [];
   const abritees = new Set(batiments.map((b) => b.zoneId));
   const vues = new Set<string>();
   for (const serre of batiments) {
@@ -51,26 +87,43 @@ export function bandesDesSerres(zones: readonly Zone[], batiments: readonly Bati
       const p = depuisRepereZone(repere, { x, y });
       return { x: mm(p.x), y: mm(p.y) };
     };
-    for (const bande of bandesDeSerre(serre, filles)) {
-      const zone = filles.find((z) => z.id === bande.id);
-      if (zone === undefined) continue;
-      const l = bande.largeurM / 2;
-      const L = bande.longueurM / 2;
-      const { x, y } = bande.centre;
-      resultat.set(bande.id, {
-        zoneId: bande.id,
+    const enGrille = aUneGrille(serre);
+    const { cases, avertissement } = casesDeSerre(serre, filles);
+    const occupees = cases.filter((c) => c.id !== null);
+    occupees.forEach((c, i) => {
+      const zone = filles.find((z) => z.id === c.id);
+      if (zone === undefined) return;
+      const l = c.largeurM / 2;
+      const L = c.longueurM / 2;
+      const { x, y } = c.centre;
+      bandes.set(zone.id, {
+        zoneId: zone.id,
         zone,
         racineId,
         serre: serre.nom,
-        bande,
+        bande: { id: zone.id, nom: zone.nom, rang: i + 1, total: occupees.length, centre: c.centre, longueurM: c.longueurM, largeurM: c.largeurM },
+        case: enGrille ? c : null,
         repere,
         contour: [coin(x - l, y - L), coin(x + l, y - L), coin(x + l, y + L), coin(x - l, y + L)],
         centre: coin(x, y),
         etiquette: coin(x, y + L * 0.8),
       });
+    });
+    for (const c of cases) {
+      if (c.id !== null) continue;
+      const l = c.largeurM / 2;
+      const L = c.longueurM / 2;
+      const { x, y } = c.centre;
+      vides.push({ racineId, case: c, contour: [coin(x - l, y - L), coin(x + l, y - L), coin(x + l, y + L), coin(x - l, y + L)], centre: coin(x, y), etiquette: coin(x, y + L * 0.8) });
     }
+    if (avertissement !== null && cases.length > 0) avertissements.push({ racineId, serre: serre.nom, message: avertissement, position: coin(0, -serre.longueurM / 2) });
   }
-  return resultat;
+  return { bandes, vides, avertissements };
+}
+
+/** Les bandes (ou cases) de chaque sous-zone (par identifiant) des zones abritées par une serre ; vide si aucune. */
+export function bandesDesSerres(zones: readonly Zone[], batiments: readonly Batiment[]): Map<string, InfoBande> {
+  return decouperSerres(zones, batiments).bandes;
 }
 
 /** Les bandes d'une zone abritée, dans l'ordre (de l'ouest à l'est). */
@@ -97,11 +150,8 @@ export function rangerDansBandes(bandes: readonly InfoBande[], emplacements: rea
   for (const b of bandes) {
     const siens = emplacements.filter((e) => e.zoneId === b.zoneId);
     if (siens.length === 0) continue;
-    const r = rangerDansBande(
-      b.bande,
-      siens.map((e) => ({ id: e.id, code: e.code, longueurM: e.longueurM, largeurM: e.largeurM })),
-      passePiedCm,
-    );
+    const planchesDeZone = siens.map((e) => ({ id: e.id, code: e.code, longueurM: e.longueurM, largeurM: e.largeurM }));
+    const r = b.case === null ? rangerDansBande(b.bande, planchesDeZone, passePiedCm) : rangerDansCase(b.case, planchesDeZone, passePiedCm);
     if (r === null) return null;
     const parId = new Map(siens.map((e) => [e.id, e]));
     for (const p of r.planches) {
@@ -109,7 +159,7 @@ export function rangerDansBandes(bandes: readonly InfoBande[], emplacements: rea
       if (e !== undefined) planches.push({ id: e.id, zoneId: e.zoneId, code: e.code, longueurM: p.longueurM, largeurM: p.largeurM, placement: { x: mm(p.centre.x), y: mm(p.centre.y), orientation_deg: 0 } });
     }
     const n = r.depassent.length;
-    if (n > 0) avertissements.push(`${b.zone.nom} : ${String(n)} planche${n > 1 ? 's dépassent' : ' dépasse'} de la bande.`);
+    if (n > 0) avertissements.push(`${b.zone.nom} : ${String(n)} planche${n > 1 ? 's dépassent' : ' dépasse'} de la ${b.case === null ? 'bande' : 'case'}.`);
   }
   if (planches.length === 0) return null;
   return {

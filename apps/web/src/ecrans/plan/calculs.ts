@@ -131,6 +131,13 @@ export interface BatimentPlan {
   readonly orientationDeg: number;
   /** Zone racine abritée, ou nul. */
   readonly zoneId: string | null;
+  /**
+   * T88 : la grille de la serre, chapelles × tronçons, allées entre les tronçons (m) ; absente = une bande par sous-zone (T86).
+   * La 3D en tire les cases (casesDeSerre du cœur), une par sous-zone.
+   */
+  readonly nbChapelles?: number;
+  readonly nbTroncons?: number;
+  readonly largeurAlleeM?: number;
 }
 
 export interface LigneEmplacementPlan {
@@ -269,6 +276,10 @@ function versBatiment(l: LigneLocale): BatimentPlan {
     centre: { x: nombre(l.centre_x_m), y: nombre(l.centre_y_m) },
     orientationDeg: nombre(l.orientation_deg),
     zoneId: texteOuNul(l.zone_id),
+    // T88 : la grille, seulement si elle est renseignée (une serre sans grille garde la forme de T86).
+    ...(typeof l.nb_chapelles === 'number' ? { nbChapelles: l.nb_chapelles } : {}),
+    ...(typeof l.nb_troncons === 'number' ? { nbTroncons: l.nb_troncons } : {}),
+    ...(typeof l.largeur_allee_m === 'number' ? { largeurAlleeM: l.largeur_allee_m } : {}),
   };
 }
 
@@ -670,7 +681,7 @@ const COLONNES = {
   zone: 'id, nom, zone_parente_id, contour, supprime_le',
   emplacement:
     'id, ferme_id, zone_id, code, sorte, longueur_m, largeur_m, nombre_places, nombre_pains, actif_du, actif_au, supprime_le, placement_x_m, placement_y_m, orientation_deg',
-  batiment: 'id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, zone_id, supprime_le',
+  batiment: 'id, nom, type, longueur_m, largeur_m, hauteur_m, centre_x_m, centre_y_m, orientation_deg, zone_id, nb_chapelles, nb_troncons, largeur_allee_m, supprime_le',
   occupation:
     'id, ferme_id, emplacement_id, serie_id, plantation_id, evenement_id, longueur_m, nombre_places, position_m, prevu_du, prevu_au, reel_du, reel_au, supprime_le',
   occupant: 'id, espece_id, variete_id',

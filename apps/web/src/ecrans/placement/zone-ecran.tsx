@@ -9,14 +9,14 @@
  * Aucun import du morceau de l'éditeur (scripts/placement.test.ts) : ce module ne prend que des types, le cœur
  * et React. Ce qu'il emprunte à l'éditeur (champ, fenêtre, messages…) lui est donné dans `Outils`.
  */
-import { useId, useState, type PointerEvent, type ReactElement, type RefObject } from 'react';
+import { useId, useMemo, useState, type PointerEvent, type ReactElement, type RefObject } from 'react';
 import type { RequeteSurveillee } from '@planif/sync';
 import type { TypeBatiment } from '@planif/core';
 import { TYPES_BATIMENT, versRepereZone, type RepereZone } from '@planif/core/placement';
-import { bandesDeLaZone, type InfoBande, type RangementBandes, rangerDansBandes } from './bandes-serre.ts';
+import { bandesDeLaZone, decouperSerres, type InfoBande, type RangementBandes, rangerDansBandes } from './bandes-serre.ts';
 import type { MouvementBloc } from './bloc.ts';
 import type { ProprietesChamp, ProprietesModale } from './composants.tsx';
-import type { EmplacementEnService } from './donnees.ts';
+import type { Batiment, EmplacementEnService, Zone } from './donnees.ts';
 import type { NouveauBatiment, Trace, ZoneAffichee } from './EditeurPlacement.tsx';
 import type { RectanglePlace } from './gestes.ts';
 import { typeDeSerrePourZone } from './serre-zone.ts';
@@ -235,14 +235,26 @@ export function CoucheBloc({ zoneId, largeurPx, hauteurPx, points, centre, poign
 
 export interface ProprietesCoucheBandes {
   readonly bandes: ReadonlyMap<string, InfoBande>;
+  /** T88 : zones et bâtiments affichés, pour les cases vides et l'avertissement d'une serre en grille. */
+  readonly zones?: readonly Zone[] | null;
+  readonly batiments?: readonly Batiment[];
   /** Repère de la ferme → écran. */
   readonly versEcran: (p: Point) => Point;
   readonly choisie: string | null;
   readonly surChoisir: (zoneId: string) => void;
 }
 
-/** Les bandes d'une serre (leur contour, comme celui d'une zone) et leur nom : le toucher choisit la sous-zone. */
-export function CoucheBandes({ bandes, versEcran, choisie, surChoisir }: ProprietesCoucheBandes): ReactElement {
+/**
+ * Les bandes d'une serre (T86), ou ses cases quand elle a une grille (T88) : leur contour, comme celui d'une zone, et leur nom ;
+ * le toucher choisit la sous-zone. Une case vide est dessinée vide ; des sous-zones sans case donnent un avertissement.
+ */
+export function CoucheBandes({ bandes, zones, batiments, versEcran, choisie, surChoisir }: ProprietesCoucheBandes): ReactElement {
+  const { vides, avertissements } = useMemo(() => decouperSerres(zones ?? [], batiments ?? []), [zones, batiments]);
+  const enPoints = (contour: readonly Point[]): string =>
+    contour
+      .map(versEcran)
+      .map((p) => `${String(p.x)},${String(p.y)}`)
+      .join(' ');
   return (
     <>
       <svg className="pl-svg pl-svg-bandes" aria-hidden="true">
@@ -252,23 +264,26 @@ export function CoucheBandes({ bandes, versEcran, choisie, surChoisir }: Proprie
             data-testid="zone-contour"
             data-id={b.zoneId}
             className={`pl-contour${choisie === b.zoneId ? ' pl-contour-choisi' : ''}`}
-            points={b.contour
-              .map(versEcran)
-              .map((p) => `${String(p.x)},${String(p.y)}`)
-              .join(' ')}
+            points={enPoints(b.contour)}
           />
+        ))}
+        {vides.map((v) => (
+          <polygon key={`${v.racineId}-${String(v.case.chapelle)}-${String(v.case.troncon)}`} className="pl-contour pl-case-vide" points={enPoints(v.contour)} />
         ))}
       </svg>
       {[...bandes.values()].map((b) => {
         const p = versEcran(b.etiquette);
+        const c = b.case;
+        const attributs =
+          c === null
+            ? { 'data-testid': 'bande-serre', 'data-rang': b.bande.rang, 'data-total': b.bande.total }
+            : { 'data-testid': 'case-serre', 'data-chapelle': c.chapelle, 'data-troncon': c.troncon, 'data-vide': 'false' };
         return (
           <button
             key={b.zoneId}
             type="button"
-            data-testid="bande-serre"
+            {...attributs}
             data-id={b.zoneId}
-            data-rang={b.bande.rang}
-            data-total={b.bande.total}
             data-x={b.centre.x}
             data-y={b.centre.y}
             data-longueur={b.bande.longueurM}
@@ -285,6 +300,31 @@ export function CoucheBandes({ bandes, versEcran, choisie, surChoisir }: Proprie
           >
             {b.zone.nom}
           </button>
+        );
+      })}
+      {vides.map((v) => (
+        <span
+          key={`${v.racineId}-${String(v.case.chapelle)}-${String(v.case.troncon)}`}
+          aria-hidden="true"
+          data-testid="case-serre"
+          data-id=""
+          data-chapelle={v.case.chapelle}
+          data-troncon={v.case.troncon}
+          data-x={v.centre.x}
+          data-y={v.centre.y}
+          data-longueur={v.case.longueurM}
+          data-largeur={v.case.largeurM}
+          data-vide="true"
+          className="pl-case-vide-repere"
+          style={{ left: versEcran(v.centre).x, top: versEcran(v.centre).y }}
+        />
+      ))}
+      {avertissements.map((a) => {
+        const p = versEcran(a.position);
+        return (
+          <p key={a.racineId} role="status" data-testid="serre-avertissement" className="pl-serre-avertissement" style={{ left: p.x, top: p.y }}>
+            {`${a.serre} : ${a.message}`}
+          </p>
         );
       })}
     </>
@@ -452,7 +492,9 @@ export function PanneauZone({
       <h3>{info.zone.nom}</h3>
       {enBande !== undefined && (
         <p role="status" data-testid="zone-en-bande" className="pl-aide">
-          {`Dans la serre ${enBande.serre}, bande ${String(enBande.bande.rang)} sur ${String(enBande.bande.total)}.`}
+          {enBande.case === null
+            ? `Dans la serre ${enBande.serre}, bande ${String(enBande.bande.rang)} sur ${String(enBande.bande.total)}.`
+            : `Dans la serre ${enBande.serre}, chapelle ${String(enBande.case.chapelle)}, tronçon ${String(enBande.case.troncon)}.`}
         </p>
       )}
       {info.abritee && enBande === undefined && (
