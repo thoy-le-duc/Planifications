@@ -23,6 +23,7 @@ import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync
 import { attendre, bouton, desactive, unTour } from '../itineraires/test/outils.ts';
 import type { ModuleEditeur, ProprietesEditeurPlacement } from './test/contrat.ts';
 import { ecrireFermePlacement, FERME, PLANCHE, UTILISATEUR } from './test/ferme-placement.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 const CHEMIN = './index.ts';
 const MAINTENANT = new Date('2026-10-19T08:00:00.000Z');
@@ -96,6 +97,7 @@ async function ouvrir(role: 'gerant' | 'equipier' = 'gerant'): Promise<void> {
     await Promise.resolve();
   });
   await attendre(() => marqueurs().length === 2, 'deux vannes affichées');
+  await deverrouiller();
 }
 
 const marqueurs = (): HTMLElement[] => [...document.querySelectorAll<HTMLElement>('[data-testid="vanne"]')];

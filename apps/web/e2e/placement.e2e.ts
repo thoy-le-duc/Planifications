@@ -4,6 +4,7 @@ import { CLE_SESSION } from '../src/connexion/session.ts';
 import { ENTREE_PLACEMENT, MESSAGES_PLACEMENT, TESTID_PLACEMENT as T, type ModuleTuiles } from '../src/ecrans/placement/test/contrat.ts';
 import { fermePlacement, POSITION } from '../src/ecrans/placement/test/ferme-placement.ts';
 import { surveillerCsp } from './outils.ts';
+import { deverrouillerPlan } from './deverrouiller-plan.ts';
 
 /**
  * T28b — éditeur de placement sur photo aérienne, de bout en bout, sur ordinateur (Chromium
@@ -96,6 +97,7 @@ async function ouvrirEditeur(page: Page): Promise<void> {
   await onglet(page, 'Ferme').click();
   await page.getByRole('button', { name: new RegExp(ENTREE_PLACEMENT) }).click();
   await expect(editeur(page)).toBeVisible({ timeout: 15_000 });
+  await deverrouillerPlan(page);
   await expect(editeur(page)).toHaveAttribute('data-mode', 'edition');
 }
 

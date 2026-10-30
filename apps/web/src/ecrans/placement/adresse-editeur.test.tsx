@@ -18,6 +18,7 @@ import type { ModuleEditeur, ProprietesEditeurPlacement } from './test/contrat.t
 import { MESSAGES_ADRESSE, MOISSAC, MOTIF_INDISPONIBLE, NOM_CHAMP_ADRESSE, NUMERO_MOISSAC, reponseGeocodage, RUE_MOISSAC, TESTID_ADRESSE as A, type ModuleAdresse, type ModuleTuilesT28h } from './test/contrat-adresse.ts';
 import { ecrireFermePlacement, FERME, POSITION, UTILISATEUR, ZONE_CHAMP, ZONE_ENFANT, ZONE_SITE2, ZONE_TUNNEL, type OptionsFermePlacement } from './test/ferme-placement.ts';
 import { TESTID_PLACEMENT as T } from './test/contrat.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 const CHEMIN = './index.ts';
 const CHEMIN_ADRESSE = './adresse.ts';
@@ -110,6 +111,7 @@ async function ouvrir(options: OptionsFermePlacement & Partial<Pick<ProprietesEd
     await Promise.resolve();
   });
   await attendre(() => editeur() !== null && (editeur()?.getAttribute('data-mode') ?? '') !== '', 'éditeur affiché');
+  await deverrouiller();
   if (options.origine === true) await attendre(() => document.querySelector(`[data-testid="${T.batiment}"]`) !== null, 'bâtiments affichés');
   return b;
 }

@@ -5,6 +5,7 @@ import { TESTID_CONTOURS as TC } from '../src/ecrans/placement/test/contrat-cont
 import { BOUTONS_PARCELLE as B, CHAMPS_PARCELLE as C, TESTID_PARCELLE as TP } from '../src/ecrans/placement/test/contrat-parcelle.ts';
 import { fermePlacement, ZONE_TUNNEL } from '../src/ecrans/placement/test/ferme-placement.ts';
 import { surveillerCsp } from './outils.ts';
+import { deverrouillerPlan } from './deverrouiller-plan.ts';
 
 /**
  * T85 — dessiner la parcelle d'une zone à partir de ses planches, de bout en bout, sur ordinateur
@@ -82,6 +83,7 @@ async function ouvrirEditeur(page: Page): Promise<void> {
   await onglet(page, 'Ferme').click();
   await page.getByRole('button', { name: new RegExp(ENTREE_PLACEMENT) }).click();
   await expect(editeur(page)).toBeVisible({ timeout: 15_000 });
+  await deverrouillerPlan(page);
   await expect(editeur(page)).toHaveAttribute('data-mode', 'edition');
 }
 

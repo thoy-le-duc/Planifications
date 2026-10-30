@@ -227,7 +227,7 @@ export const ENTREE_PLACEMENT = 'Placer sur la photo aérienne';
  * ── DOM de l'éditeur (data-testid), lu par editeur.test.tsx et e2e/placement.e2e.ts ──────────
  *
  * `editeur-placement` : racine (role="dialog", nom accessible commençant par « Placement »).
- *   data-mode   = 'edition' (gérant actif sur ordinateur) | 'lecture' (équipier, ou téléphone) ;
+ *   data-mode   = 'edition' (gérant, après « Modifier le plan » ou parcours guidé en cours) | 'lecture' (verrouillé à l'ouverture, ou équipier) ;
  *   data-fond   = 'photo' | 'neutre' ;
  *   data-zoom   = zoom des tuiles affichées (entier) ;
  *   data-origine = 'latitude,longitude' de l'origine du plan enregistrée, '' sans origine.
@@ -284,7 +284,7 @@ export const ENTREE_PLACEMENT = 'Placer sur la photo aérienne';
  * Zone abritée qui a un contour : confirmation (texte MESSAGES_PLACEMENT.contourRemplace) ;
  *   « Confirmer » met au brouillon [{ sorte: 'zone', id, contour: null }, puis le bâtiment avec
  *   zone_id], écrits dans cet ordre en un seul appel.
- * Lecture seule (data-mode 'lecture') : aucune poignée, ni « Enregistrer », ni « Nouveau
+ * Lecture seule (data-mode 'lecture', T87 : l'éditeur s'ouvre ainsi pour tout le monde ; le gérant déverrouille par `deverrouiller-plan`, « Terminer » = `verrouiller-plan`) : aucune poignée, ni « Enregistrer », ni « Nouveau
  *   bâtiment », ni « Utiliser la position de la ferme » ; un clic sur le plan n'ouvre rien ;
  *   les touches ne changent rien. Message role="status" : équipier → MESSAGES_PLACEMENT.seulGerant ;
  *   téléphone → MESSAGES_PLACEMENT.ordinateur.

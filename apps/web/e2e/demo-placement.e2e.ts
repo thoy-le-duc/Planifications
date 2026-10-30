@@ -6,6 +6,7 @@ import { MOISSAC, MOTIF_INDISPONIBLE, NOM_CHAMP_ADRESSE, NUMERO_MOISSAC, reponse
 import { TESTID_3D } from '../src/ecrans/plan3d/test/contrat.ts';
 import { TESTID_3D_EDITEUR } from '../src/ecrans/plan3d/test/contrat-editeur.ts';
 import { surveillerCsp } from './outils.ts';
+import { deverrouillerPlan } from './deverrouiller-plan.ts';
 
 /**
  * T28i — essayer le placement d'une serre dans la démo en ligne, de bout en bout, sur `dist-demo/`
@@ -101,6 +102,7 @@ async function ouvrirLa3d(page: Page): Promise<void> {
 async function ouvrirEditeurDepuisLa3d(page: Page): Promise<void> {
   await page.getByTestId(TESTID_3D_EDITEUR.modifierPlan).click();
   await expect(editeur(page)).toBeVisible({ timeout: DELAI_MS });
+  await deverrouillerPlan(page);
   await expect(editeur(page), 'démo : le visiteur est gérant').toHaveAttribute('data-mode', 'edition');
 }
 

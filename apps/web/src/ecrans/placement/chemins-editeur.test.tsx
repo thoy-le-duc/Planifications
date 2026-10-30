@@ -44,6 +44,7 @@ import { creerBaseMemoire, type BaseMemoire } from '../../../../../packages/sync
 import { attendre, bouton, champ, desactive, liste, remplir, texte, toucher, unTour } from '../itineraires/test/outils.ts';
 import { TESTID_PLACEMENT as T, type ModuleEditeur, type ProprietesEditeurPlacement } from './test/contrat.ts';
 import { ecrireFermePlacement, FERME, HANGAR, SERRE, UTILISATEUR, type OptionsFermePlacement } from './test/ferme-placement.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 const CHEMIN_EDITEUR = './index.ts';
 const MAINTENANT = new Date('2026-10-21T08:00:00.000Z');
@@ -141,6 +142,7 @@ async function ouvrir(o: OptionsFermePlacement & Partial<Pick<ProprietesEditeurP
     await Promise.resolve();
   });
   await attendre(() => (un(T.editeur)?.getAttribute('data-mode') ?? '') !== '', 'éditeur affiché, avec data-mode');
+  await deverrouiller();
   return { p, b };
 }
 

@@ -24,6 +24,7 @@ import { TESTID_PLACEMENT as T, type ModuleEditeur, type ProprietesEditeurPlacem
 import { TESTID_CONTOURS as TC } from './test/contrat-contours.ts';
 import { BOUTONS_PARCELLE as B, CHAMPS_PARCELLE as C, PASSE_PIED_DEPART_CM, TESTID_PARCELLE as TP } from './test/contrat-parcelle.ts';
 import { ecrireFermePlacement, FERME, PLANCHE, PLANCHES_TUNNEL, POSITION, SERRE, UTILISATEUR, ZONE_CHAMP, ZONE_TUNNEL } from './test/ferme-placement.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 const CHEMIN = './index.ts';
 const MAINTENANT = new Date('2026-10-26T08:00:00.000Z');
@@ -126,6 +127,7 @@ async function ouvrir(o: Options = {}): Promise<Banc> {
     await Promise.resolve();
   });
   await attendre(() => (un(T.editeur)?.getAttribute('data-mode') ?? '') !== '', 'éditeur affiché');
+  await deverrouiller();
   await attendre(() => zoneChoix(ZONE_TUNNEL) !== null && zoneChoix(ZONE_CHAMP) !== null, 'liste des zones affichée');
   return b;
 }

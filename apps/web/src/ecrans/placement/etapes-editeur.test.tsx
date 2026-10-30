@@ -16,6 +16,7 @@ import { attendre, bouton, champ, desactive, dialogues, liste, remplir, texte, t
 import { TESTID_PLACEMENT as T, type ModuleEditeur, type ProprietesEditeurPlacement } from './test/contrat.ts';
 import { MESSAGES_ETAPES, TESTID_ETAPES as E, TITRES_ETAPES, type EtatEtape } from './test/contrat-etapes.ts';
 import { ecrireFermePlacement, FERME, UTILISATEUR, type OptionsFermePlacement } from './test/ferme-placement.ts';
+import { deverrouiller } from './test/deverrouiller.ts';
 
 const CHEMIN = './index.ts';
 const MAINTENANT = new Date('2026-10-09T08:00:00.000Z');
@@ -69,6 +70,7 @@ async function ouvrir(options: OptionsFermePlacement = {}): Promise<void> {
     await Promise.resolve();
   });
   await attendre(() => (un(T.editeur)?.getAttribute('data-mode') ?? '') !== '', 'éditeur affiché, avec data-mode');
+  await deverrouiller();
 }
 
 const un = (testid: string): HTMLElement | null => document.querySelector<HTMLElement>(`[data-testid="${testid}"]`);
