@@ -123,6 +123,10 @@ export interface ProprietesEditeurPlacement {
   readonly nouvelId?: () => string;
   /** T28i : build de la démo, l'éditeur invite à essayer (« Essayez : ajoutez une serre… »). Défaut : faux, rien n'est rendu. */
   readonly invitationDemo?: boolean;
+  /** T91 : zone choisie à l'ouverture (la 3D y envoie depuis « À placer »), comme un tap sur sa ligne de la liste. */
+  readonly zoneInitiale?: string;
+  /** T91 : s'ouvre directement en modification, si l'utilisateur est gérant (« Modifier le plan » déjà tapé). */
+  readonly modificationInitiale?: boolean;
 }
 
 const ZOOM_MAX = 22;
@@ -351,6 +355,18 @@ function capturer(e: PointerEvent): void {
   }
 }
 
+/** T91 : la racine d'une zone (elle-même si elle n'a pas de parente) ; une boucle dans les parentes s'arrête là où elle se ferme. */
+function racineDe(id: string, zonesInfo: ReadonlyMap<string, ZoneAffichee>): string {
+  let courant = id;
+  const vues = new Set<string>();
+  for (;;) {
+    vues.add(courant);
+    const parent = zonesInfo.get(courant)?.zone.parenteId ?? null;
+    if (parent === null || vues.has(parent) || !zonesInfo.has(parent)) return courant;
+    courant = parent;
+  }
+}
+
 /** Identité d'une porte, pour repartir de zéro quand la ferme active change sans démontage. */
 const identitesPortes = new WeakMap<object, number>();
 let dernièreIdentité = 0;
@@ -389,7 +405,7 @@ interface ProprietesEditeurFerme extends ProprietesEditeurPlacement {
   readonly surBrouillon: (ouvert: boolean) => void;
 }
 
-function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, enLigne, delaiAnnulationMs = DELAI_ANNULATION_MS, nouvelId, invitationDemo = false, brouillonAbandonne, surBrouillon }: ProprietesEditeurFerme): ReactElement {
+function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, enLigne, delaiAnnulationMs = DELAI_ANNULATION_MS, nouvelId, invitationDemo = false, zoneInitiale, modificationInitiale = false, brouillonAbandonne, surBrouillon }: ProprietesEditeurFerme): ReactElement {
   const idTitre = useId();
   const idRaisonZoom = useId();
   const idRaisonNouveau = useId();
@@ -459,7 +475,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const gerant = roles?.includes('gerant') === true;
   const pret = ferme !== null && roles !== null && lusB !== null && zones !== null && lusP !== null && lusE !== null && (echecZone || (mZone !== null && lusS !== null));
   /** T87 : l'éditeur s'ouvre verrouillé, même pour le gérant ; « Modifier le plan » déverrouille, « Terminer » reverrouille. */
-  const [modification, setModification] = useState(false);
+  const [modification, setModification] = useState(modificationInitiale);
   const mode = !pret ? undefined : gerant && modification ? 'edition' : 'lecture';
   const edition = mode === 'edition';
 
@@ -472,7 +488,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
   const [calages, setCalages] = useState<ReadonlyMap<string, RepereZone>>(() => new Map());
   const [passePied, setPassePied] = useState(PASSE_PIED_DEPART_CM);
   const [selection, setSelection] = useState<string | null>(null);
-  const [zoneSel, setZoneSel] = useState<string | null>(null);
+  const [zoneSel, setZoneSel] = useState<string | null>(zoneInitiale ?? null);
   const [trace, setTrace] = useState<Trace | null>(null);
   const [sommetSel, setSommetSel] = useState<number | null>(null);
   const [messageContour, setMessageContour] = useState<string | null>(null);
@@ -630,12 +646,20 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
 
   /** Repère d'affichage de chaque zone (contour du brouillon s'il est valide), et repère où les planches gardent leur placement au brouillon (contour de la base). */
   const reperes = useMemo(() => {
-    const m = new Map<string, { readonly affichage: Repere | null; readonly base: Repere | null }>();
+    const m = new Map<string, { readonly affichage: Repere | null; readonly base: Repere | null; readonly proprietaire: string }>();
     for (const i of zonesInfo.values()) {
       const abri = batimentsAff.find((b) => b.zoneId === (bandes.get(i.zone.id)?.racineId ?? i.zone.id));
       const abritee = abri === undefined ? null : { centre: abri.centre, orientationDeg: abri.orientationDeg };
       const affichage = repereZone({ contour: abri === undefined ? i.effectif : null }, abritee);
-      m.set(i.zone.id, { affichage, base: abri === undefined ? (calages.get(i.zone.id) ?? repereZone({ contour: i.zone.contour })) : affichage });
+      m.set(i.zone.id, { affichage, base: abri === undefined ? (calages.get(i.zone.id) ?? repereZone({ contour: i.zone.contour })) : affichage, proprietaire: i.zone.id });
+    }
+    // T91 : une sous-zone hors serre sans contour garde les planches dans le repère de sa racine (la 3D les lit au même endroit).
+    for (const i of zonesInfo.values()) {
+      const propre = m.get(i.zone.id);
+      if (propre?.affichage != null || i.abritee) continue;
+      const racine = racineDe(i.zone.id, zonesInfo);
+      const reperRacine = racine === i.zone.id ? undefined : m.get(racine);
+      if (reperRacine !== undefined) m.set(i.zone.id, reperRacine);
     }
     return m;
   }, [zonesInfo, batimentsAff, calages, bandes]);
@@ -647,10 +671,12 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
     const lues = lusP ?? [];
     const connues = new Set(lues.map((p) => p.id));
     return [...lues, ...[...brouillonP.values()].filter((p) => !connues.has(p.id))].map((p) => {
-      const info = zonesInfo.get(p.zoneId);
       const base = brouillonP.get(p.id) ?? p;
       const r = reperes.get(p.zoneId);
-      if (info === undefined || info.abritee || r?.base == null || r.affichage == null || !(info.change || calages.has(p.zoneId))) return base;
+      // T91 : une sous-zone sans contour suit le repère de sa racine (donc son contour changé et son calage).
+      const proprietaire = r?.proprietaire ?? p.zoneId;
+      const info = zonesInfo.get(proprietaire);
+      if (info === undefined || info.abritee || r?.base == null || r.affichage == null || !(info.change || calages.has(proprietaire))) return base;
       const [replacee] = replacerEntreReperes(r.base, r.affichage, [{ id: p.id, placement: base.placement }]);
       return replacee === undefined ? base : { ...base, placement: replacee.placement };
     });

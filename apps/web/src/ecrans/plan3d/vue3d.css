@@ -350,6 +350,38 @@
   flex-wrap: wrap;
 }
 
+/* T91 : « À placer (n) », la liste des zones que la scène ne dessine pas. */
+.plan3d-a-placer {
+  position: relative;
+}
+
+.plan3d-a-placer-liste {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 3;
+  margin: var(--espace-xs) 0 0;
+  padding: var(--espace-s);
+  list-style: none;
+  display: grid;
+  gap: var(--espace-xs);
+  min-width: 200px;
+  background: var(--couleur-surface);
+  border: 1px solid var(--couleur-trait);
+  border-radius: var(--rayon-etiquette);
+}
+
+.plan3d-a-placer-liste .plan3d-bouton {
+  width: 100%;
+  min-height: 48px;
+  margin-left: 0;
+}
+
+.plan3d-a-placer-liste span {
+  display: block;
+  padding: var(--espace-xs) var(--espace-s);
+}
+
 /* T28f : invitation à placer la ferme, posée sur la scène. */
 .plan3d-encart {
   position: absolute;

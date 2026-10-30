@@ -116,6 +116,8 @@ export interface SousZonePlan {
   readonly id: string;
   readonly nom: string;
   readonly parenteId: string;
+  /** T91 : contour de la sous-zone (repère de la ferme), s'il y en a un : c'est le repère de ses planches hors serre. */
+  readonly contour?: readonly PointPlan[] | null;
 }
 
 /** Bâtiment non supprimé de la ferme (T28a), recopié de la base sans calcul (T28c). */
@@ -148,6 +150,8 @@ export interface LigneEmplacementPlan {
   readonly zoneId: string;
   /** Chapelle (sous-zone) de rattachement, null si l'emplacement est directement dans la zone. */
   readonly chapelleId: string | null;
+  /** T91 : la zone où l'emplacement est rangé, quand ce n'est pas la racine (sous-zone de n'importe quelle profondeur) ; absent = la racine. */
+  readonly zoneDirecteId?: string;
   /** Longueur de l'emplacement (m), recopiée de la base (T27 : taille des volumes de la 3D). */
   readonly longueurM: number;
   /** Largeur de l'emplacement (m), nulle si non renseignée (T27). */
@@ -609,6 +613,7 @@ export function construirePlan(donnees: DonneesPlan, options: OptionsPlan): Plan
       code: emplacement.code,
       zoneId,
       chapelleId,
+      ...(texte(e.zone_id) === zoneId ? {} : { zoneDirecteId: texte(e.zone_id) }),
       longueurM: emplacement.longueurM,
       largeurM: emplacement.largeurM,
       ...(placement === null ? {} : { placement }),
@@ -646,7 +651,9 @@ export function construirePlan(donnees: DonneesPlan, options: OptionsPlan): Plan
   const sousZones = donnees.zone
     .flatMap((z): SousZonePlan[] => {
       const parenteId = texteOuNul(z.zone_parente_id);
-      return z.supprime_le == null && parenteId !== null ? [{ id: texte(z.id), nom: texte(z.nom), parenteId }] : [];
+      if (z.supprime_le != null || parenteId === null) return [];
+      const contour = lireContour(z.contour);
+      return [{ id: texte(z.id), nom: texte(z.nom), parenteId, ...(contour === null ? {} : { contour }) }];
     })
     .sort((a, b) => comparerTexte(a.nom, a.id, b.nom, b.id));
   return {

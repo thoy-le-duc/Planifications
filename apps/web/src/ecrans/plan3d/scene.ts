@@ -8,9 +8,10 @@
  *   - Ce qui est placé (T28a) est posé à sa vraie place : le repère de chaque zone est celui du
  *     moteur (`repereZone`), la planche est à `depuisRepereZone`, la serre à `coinsEmprise`.
  *     Mètres réels = mètres de scène (échelle 1) ; x_scène = x_ferme, z_scène = −y_ferme.
- *   - Ce qui n'est pas placé garde la disposition de T27 (socles rectangulaires, planches en
- *     colonnes, zones en rangées), à côté de la partie placée ; une planche non placée d'une zone
- *     placée est rangée dans cette zone (./disposition.ts).
+ *   - T91 : la scène ne contient QUE ce qui est placé. Une zone sans contour ni serre n'y est plus (plus
+ *     de grille inventée) : elle est listée dans `aPlacer`. Une planche non placée d'une zone placée
+ *     est rangée dans cette zone (./disposition.ts). Une planche d'une sous-zone hors serre est lue dans
+ *     le repère de la sous-zone si elle a un contour, sinon dans celui de la racine (comme l'éditeur).
  */
 import { coinsEmprise, depuisRepereZone, repereZone, versRepereZone, type RepereZone } from '@planif/core/placement';
 import type { BatimentPlan, CheminPlan, CleFamille, LigneEmplacementPlan, LigneZonePlan, Plan, PointPlan, SemainePlan } from '../plan/calculs.ts';
@@ -41,6 +42,8 @@ export interface SocleScene {
   readonly placee: boolean;
   /** Bâtiment qui abrite la zone, ou nul. */
   readonly batimentId: string | null;
+  /** T91 : pour le socle d'une sous-zone avec contour, la zone racine ; absent pour une zone racine. */
+  readonly racineId?: string;
 }
 
 export interface VolumeScene {
@@ -104,10 +107,18 @@ export interface Scene {
   readonly socles: readonly SocleScene[];
   readonly volumes: readonly VolumeScene[];
   readonly batiments: readonly BatimentScene[];
+  /** T91 : les zones sans contour ni serre, absentes de la scène (dans l'ordre du plan) ; versScene le rend toujours (vide : rien à placer). */
+  readonly aPlacer?: readonly ZoneAPlacer[];
   /** T61 : chemins posés au sol, en bandes plates ; versScene le rend toujours (vide sans chemin). */
   readonly chemins?: readonly CheminScene[];
   /** T86 : les bandes des serres qui abritent une zone à sous-zones ; absent : aucune. */
   readonly bandes?: readonly BandeScene[];
+}
+
+/** T91 : une zone qui n'est pas dans la scène faute de contour et de serre. */
+export interface ZoneAPlacer {
+  readonly id: string;
+  readonly nom: string;
 }
 
 /** T61 : une bande d'un chemin, rectangle de la famille des bâtiments (longueur selon z local, angle = −cap). */
@@ -149,14 +160,6 @@ export const LARGEUR_PAR_DEFAUT_M = 0.8;
 const ECHELLE = 1;
 /** Hauteur d'une planche (m de scène), la même pour toutes. */
 const HAUTEUR = 0.3 * ECHELLE;
-/** Passe-pied entre deux planches, et entre deux colonnes de planches d'une zone. */
-const ALLEE = 0.5 * ECHELLE;
-/** Bord du socle autour des planches. */
-const BORD = 1 * ECHELLE;
-/** Chemin entre deux socles. */
-const CHEMIN = 3 * ECHELLE;
-/** Côté du socle d'une zone sans planche. */
-const COTE_ZONE_VIDE = 4 * ECHELLE;
 
 // ── Serres et bâtiments (T28c) ───────────────────────────────────────────────────────────────
 
@@ -168,8 +171,6 @@ const LARGEUR_NEF_M = 6;
 const NEF_MAX_M = 10;
 /** Opacité de la bâche : peu opaque, les cultures se voient à travers. */
 export const OPACITE_BACHE = 0.15;
-/** Écart (m) entre la partie placée et les zones non placées rangées à côté. */
-const ECART_PARTIE_PLACEE = 10;
 
 /** Couleur de chaque type de bâtiment : des jetons de l'appli. */
 const COULEUR_BATIMENT: Readonly<Record<BatimentPlan['type'], string>> = {
@@ -295,60 +296,15 @@ function placementValide(l: LigneEmplacementPlan): { x: number; y: number; orien
   return typeof x === 'number' && typeof y === 'number' && typeof orientationDeg === 'number' && Number.isFinite(x + y + orientationDeg) ? { x, y, orientationDeg } : null;
 }
 
-/** Une zone qui a un repère : serre ou contour (la serre prime). */
-interface ZonePlacee {
+/** Une zone qui a un repère : racine avec serre ou contour (la serre prime), ou (T91) sous-zone avec contour hors serre. */
+interface Porteur {
+  readonly id: string;
+  readonly nom: string;
+  /** La racine d'une sous-zone ; nul pour une racine. */
+  readonly racineId: string | null;
   readonly repere: RepereZone;
   readonly batiment: BatimentPlan | null;
   readonly contour: readonly PointPlan[] | null;
-}
-
-interface Place {
-  readonly ligne: LigneEmplacementPlan;
-  readonly longueur: number;
-  readonly largeur: number;
-  /** Coin (x, z) dans le socle, depuis son bord. */
-  readonly x: number;
-  readonly z: number;
-}
-
-interface ZoneRangee {
-  readonly zone: LigneZonePlan;
-  readonly largeur: number;
-  readonly profondeur: number;
-  readonly places: readonly Place[];
-}
-
-/**
- * Planches d'une zone en colonnes : chaque planche dans sa longueur selon x, empilées selon z ;
- * une colonne se ferme quand elle dépasse la profondeur visée (zone à peu près carrée).
- */
-function rangerZone(zone: LigneZonePlan, planches: readonly LigneEmplacementPlan[]): ZoneRangee {
-  if (planches.length === 0) return { zone, largeur: COTE_ZONE_VIDE, profondeur: COTE_ZONE_VIDE, places: [] };
-  const tailles = planches.map((ligne) => ({
-    ligne,
-    longueur: ligne.longueurM * ECHELLE,
-    largeur: (ligne.largeurM ?? LARGEUR_PAR_DEFAUT_M) * ECHELLE,
-  }));
-  const aire = tailles.reduce((s, t) => s + (t.longueur + ALLEE) * (t.largeur + ALLEE), 0);
-  const profondeurVisee = Math.max(Math.sqrt(aire), ...tailles.map((t) => t.largeur));
-
-  const places: Place[] = [];
-  let x = 0;
-  let z = 0;
-  let longueurColonne = 0;
-  let profondeur = 0;
-  for (const t of tailles) {
-    if (z > 0 && z + t.largeur > profondeurVisee) {
-      x += longueurColonne + ALLEE;
-      z = 0;
-      longueurColonne = 0;
-    }
-    places.push({ ...t, x, z });
-    longueurColonne = Math.max(longueurColonne, t.longueur);
-    profondeur = Math.max(profondeur, z + t.largeur);
-    z += t.largeur + ALLEE;
-  }
-  return { zone, largeur: x + longueurColonne + 2 * BORD, profondeur: profondeur + 2 * BORD, places };
 }
 
 /** Culture en place la semaine `i` : la barre qui couvre le plus de jours de [7i, 7i + 7[. */
@@ -440,24 +396,44 @@ export function versScene(plan: Plan, semaine: number): Scene {
   const batimentDeZone = new Map<string, BatimentPlan>();
   for (const b of batimentsPlan) if (b.zoneId !== null && !batimentDeZone.has(b.zoneId)) batimentDeZone.set(b.zoneId, b);
 
-  // Repère de chaque zone placée (celui du moteur de T28a) ; les autres sont rangées comme en T27.
-  const placees = new Map<string, ZonePlacee>();
+  // Un porteur = une zone qui a un repère (celui du moteur de T28a) : une racine avec serre ou contour, ou (T91) une
+  // sous-zone avec contour hors serre. Les autres racines ne sont pas dans la scène : elles sont « à placer ».
+  const sousZones = plan.sousZones ?? [];
+  const sousZonePar = new Map(sousZones.map((s) => [s.id, s]));
+  const racineDe = (id: string): string => {
+    let courant = id;
+    for (let i = 0; i <= sousZones.length; i++) {
+      const parent = sousZonePar.get(courant)?.parenteId;
+      if (parent === undefined) break;
+      courant = parent;
+    }
+    return courant;
+  };
+  const porteurs = new Map<string, Porteur>();
   for (const z of zones) {
     const batiment = batimentDeZone.get(z.id) ?? null;
     const contour = batiment === null ? (z.contour ?? null) : null;
     const repere = repereZone({ contour }, batiment === null ? undefined : { centre: batiment.centre, orientationDeg: batiment.orientationDeg });
-    if (repere !== null) placees.set(z.id, { repere, batiment, contour });
+    if (repere !== null) porteurs.set(z.id, { id: z.id, nom: z.nom, racineId: null, repere, batiment, contour });
   }
+  for (const sz of sousZones) {
+    const racineId = racineDe(sz.id);
+    if (batimentDeZone.has(racineId)) continue; // Sous-zone d'une serre : une bande ou une case, son contour est ignoré.
+    const contour = sz.contour ?? null;
+    const repere = repereZone({ contour });
+    if (repere !== null) porteurs.set(sz.id, { id: sz.id, nom: sz.nom, racineId, repere, batiment: null, contour });
+  }
+  /** Qui porte la planche : sa sous-zone si elle a un contour (hors serre), sinon sa racine (T91, règle 3). */
+  const porteurDe = (l: LigneEmplacementPlan): Porteur | undefined => {
+    const directe = l.zoneDirecteId ?? l.zoneId;
+    return (directe === l.zoneId ? undefined : porteurs.get(directe)) ?? porteurs.get(l.zoneId);
+  };
 
   const socles = new Map<string, SocleScene>();
   const volumesPar = new Map<string, VolumeScene>();
-  /** Emprise de tout ce qui est placé (socles, bâtiments, planches) : les zones non placées se rangent à côté. */
-  let emprise: Boite2 | null = null;
 
-  for (const b of batimentsPlan) emprise = etendre(emprise, coinsEmprise(b.centre, b.longueurM, b.largeurM, b.orientationDeg).map((p) => ({ x: p.x, z: -p.y })));
   // T61 : les chemins sont placés aussi (repère de la ferme).
   const chemins = (plan.chemins ?? []).map(versCheminScene);
-  for (const c of plan.chemins ?? []) emprise = etendre(emprise, c.points.map((p) => ({ x: p.x, z: -p.y })));
 
   const volumeDe = (l: LigneEmplacementPlan, x: number, z: number, angle: number, placee: boolean): VolumeScene => ({
     id: l.id,
@@ -473,24 +449,53 @@ export function versScene(plan: Plan, semaine: number): Scene {
     ...cultureDeLaSemaine(l, semaine),
   });
 
+  // Les planches de chaque porteur, dans l'ordre du plan.
+  const planchesDuPorteur = new Map<string, LigneEmplacementPlan[]>();
+  const sansPorteur = new Set<string>();
   for (const z of zones) {
-    const info = placees.get(z.id);
-    if (info === undefined) continue;
-    const { repere, batiment, contour } = info;
-    let socle: SocleScene;
-    if (batiment !== null) {
-      socle = { id: z.id, nom: z.nom, x: batiment.centre.x, z: -batiment.centre.y, largeur: batiment.largeurM, profondeur: batiment.longueurM, angle: -batiment.orientationDeg * RAD, contour: null, placee: true, batimentId: batiment.id };
-    } else {
-      const points = (contour ?? []).map((p) => ({ x: p.x, z: -p.y }));
-      const boite = etendre(null, points);
-      if (boite === null) continue;
-      socle = { id: z.id, nom: z.nom, x: (boite.x0 + boite.x1) / 2, z: (boite.z0 + boite.z1) / 2, largeur: boite.x1 - boite.x0, profondeur: boite.z1 - boite.z0, angle: 0, contour: points, placee: true, batimentId: null };
-      emprise = etendre(emprise, points);
+    for (const l of planchesPar.get(z.id) ?? []) {
+      const porteur = porteurDe(l);
+      if (porteur === undefined) {
+        sansPorteur.add(z.id);
+        continue;
+      }
+      const liste = planchesDuPorteur.get(porteur.id);
+      if (liste === undefined) planchesDuPorteur.set(porteur.id, [l]);
+      else liste.push(l);
     }
-    socles.set(z.id, socle);
+  }
 
-    // Planches placées : dans le repère de la zone, tournées avec elle.
-    const planches = planchesPar.get(z.id) ?? [];
+  const socleDe = (info: Porteur): SocleScene | null => {
+    const { batiment, contour } = info;
+    if (batiment !== null) {
+      return { id: info.id, nom: info.nom, x: batiment.centre.x, z: -batiment.centre.y, largeur: batiment.largeurM, profondeur: batiment.longueurM, angle: -batiment.orientationDeg * RAD, contour: null, placee: true, batimentId: batiment.id };
+    }
+    const points = (contour ?? []).map((p) => ({ x: p.x, z: -p.y }));
+    const boite = etendre(null, points);
+    if (boite === null) return null;
+    return {
+      id: info.id,
+      nom: info.nom,
+      x: (boite.x0 + boite.x1) / 2,
+      z: (boite.z0 + boite.z1) / 2,
+      largeur: boite.x1 - boite.x0,
+      profondeur: boite.z1 - boite.z0,
+      angle: 0,
+      contour: points,
+      placee: true,
+      batimentId: null,
+      ...(info.racineId === null ? {} : { racineId: info.racineId }),
+    };
+  };
+
+  for (const info of porteurs.values()) {
+    const { repere, batiment, contour } = info;
+    const socle = socleDe(info);
+    if (socle === null) continue;
+    socles.set(info.id, socle);
+
+    // Planches placées : dans le repère du porteur, tournées avec lui.
+    const planches = planchesDuPorteur.get(info.id) ?? [];
     const deja: RectZone[] = [];
     const aRanger: LigneEmplacementPlan[] = [];
     for (const l of planches) {
@@ -523,60 +528,19 @@ export function versScene(plan: Plan, semaine: number): Scene {
       });
     }
   }
-  // Ce qui est posé (planches comprises, au cas où l'une déborderait) est dans l'emprise.
-  for (const v of volumesPar.values()) emprise = etendre(emprise, coinsRectScene(v.x, v.z, v.longueur, v.largeur, v.angle));
-  for (const s of socles.values()) if (s.contour === null) emprise = etendre(emprise, coinsRectScene(s.x, s.z, s.largeur, s.profondeur, s.angle));
 
-  // Zones non placées : disposition de T27, centrée sur l'origine s'il n'y a rien de placé, sinon à l'est de la partie placée.
-  const aRanger = zones.filter((z) => !placees.has(z.id));
-  const rangees = aRanger.map((z) => rangerZone(z, planchesPar.get(z.id) ?? []));
-  const aire = rangees.reduce((s, r) => s + (r.largeur + CHEMIN) * (r.profondeur + CHEMIN), 0);
-  const largeurVisee = Math.max(Math.sqrt(aire) * 1.4, ...rangees.map((r) => r.largeur), 0);
-  const coins: { x: number; z: number }[] = [];
-  let x = 0;
-  let z = 0;
-  let profondeurRangee = 0;
-  let largeurTotale = 0;
-  for (const r of rangees) {
-    if (x > 0 && x + r.largeur > largeurVisee) {
-      x = 0;
-      z += profondeurRangee + CHEMIN;
-      profondeurRangee = 0;
-    }
-    coins.push({ x, z });
-    largeurTotale = Math.max(largeurTotale, x + r.largeur);
-    profondeurRangee = Math.max(profondeurRangee, r.profondeur);
-    x += r.largeur + CHEMIN;
-  }
-  const dx = emprise === null ? -largeurTotale / 2 : emprise.x1 + ECART_PARTIE_PLACEE;
-  const dz = emprise === null ? -(z + profondeurRangee) / 2 : emprise.z0;
+  // T91 : les racines sans repère sont « à placer » (ordre du plan), sauf celles dont toutes les planches sont déjà dans une sous-zone placée.
+  const toutesPlacees = (id: string): boolean => (planchesPar.get(id)?.length ?? 0) > 0 && !sansPorteur.has(id);
+  const aPlacer: ZoneAPlacer[] = zones.filter((z) => !porteurs.has(z.id) && !toutesPlacees(z.id)).map((z) => ({ id: z.id, nom: z.nom }));
 
-  rangees.forEach((r, k) => {
-    const coin = coins[k] ?? { x: 0, z: 0 };
-    const gauche = coin.x + dx;
-    const haut = coin.z + dz;
-    socles.set(r.zone.id, { id: r.zone.id, nom: r.zone.nom, x: gauche + r.largeur / 2, z: haut + r.profondeur / 2, largeur: r.largeur, profondeur: r.profondeur, angle: 0, contour: null, placee: false, batimentId: null });
-    for (const p of r.places) {
-      volumesPar.set(p.ligne.id, {
-        id: p.ligne.id,
-        code: p.ligne.code,
-        zoneId: p.ligne.zoneId,
-        x: gauche + BORD + p.x + p.longueur / 2,
-        z: haut + BORD + p.z + p.largeur / 2,
-        longueur: p.longueur,
-        largeur: p.largeur,
-        hauteur: HAUTEUR,
-        angle: 0,
-        placee: false,
-        ...cultureDeLaSemaine(p.ligne, semaine),
-      });
-    }
-  });
-
-  // Socles dans l'ordre du plan, volumes dans l'ordre du plan.
+  // Socles : les racines dans l'ordre du plan, puis les sous-zones avec contour (ordre du plan).
   const sortieSocles: SocleScene[] = [];
   for (const zone of zones) {
     const s = socles.get(zone.id);
+    if (s !== undefined) sortieSocles.push(s);
+  }
+  for (const sz of sousZones) {
+    const s = socles.get(sz.id);
     if (s !== undefined) sortieSocles.push(s);
   }
   const volumes: VolumeScene[] = [];
@@ -587,7 +551,7 @@ export function versScene(plan: Plan, semaine: number): Scene {
   }
   // T86 : une bande par sous-zone directe d'une zone abritée par une serre (même sans planche).
   const bandes = bandesDesSerres(batimentDeZone, plan.sousZones ?? []);
-  return { semaine, libelleSemaine, socles: sortieSocles, volumes, batiments, chemins, ...(bandes.length === 0 ? {} : { bandes }) };
+  return { semaine, libelleSemaine, socles: sortieSocles, volumes, batiments, aPlacer, chemins, ...(bandes.length === 0 ? {} : { bandes }) };
 }
 
 // ── Filtres (T27b) ───────────────────────────────────────────────────────────────────────────
@@ -645,7 +609,8 @@ export function optionsFiltres(scene: Scene): OptionsFiltres {
   return {
     familles: ORDRE_FAMILLES.filter((cle) => familles.has(cle)),
     cultures: [...cultures].sort((a, b) => a.localeCompare(b, 'fr')),
-    zones: scene.socles.map((s) => ({ id: s.id, nom: s.nom })),
+    // T91 : le filtre par zone se fait sur les zones racines (le volume porte sa racine) : pas sur les socles de sous-zones.
+    zones: scene.socles.filter((s) => s.racineId === undefined).map((s) => ({ id: s.id, nom: s.nom })),
   };
 }
 
