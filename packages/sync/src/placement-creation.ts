@@ -93,6 +93,18 @@ function recues(valeurs: Ligne, colonnes: readonly string[], existante: Ligne | 
   return r;
 }
 
+/**
+ * Relecture T89 : sur une ligne déjà enregistrée, ces sortes ne servent qu'à l'annulation et au rétablissement (`supprime_le`),
+ * et au placement d'une planche (`permises`). Toute autre colonne doit garder la valeur de la ligne : sinon rejet.
+ */
+function exigerInchangee(donnees: Readonly<Record<string, unknown>>, existante: Ligne | undefined, permises: readonly string[], quoi: string): void {
+  if (existante === undefined) return;
+  for (const [c, v] of Object.entries(donnees)) {
+    if (permises.includes(c) || (v ?? null) === (existante[c] ?? null)) continue;
+    throw new Error(`${quoi} déjà enregistrée ne se modifie pas ici : seuls sa suppression, son rétablissement${permises.includes('placement') ? ' et son placement' : ''} passent par ce changement.`);
+  }
+}
+
 /** Une zone active de la ferme de la porte ; sinon rejet. */
 async function exigerZoneActive(tx: TransactionLocale, ctx: ContexteCreation, id: string, message: string): Promise<void> {
   const [z] = await lire<{ n: number }>(tx, 'SELECT 1 AS n FROM zone WHERE id = ? AND ferme_id = ? AND supprime_le IS NULL', [id, ctx.fermeId]);
@@ -161,6 +173,7 @@ export async function placerZoneCreation(tx: TransactionLocale, ctx: ContexteCre
   if (donnees.zone_parente_id !== undefined && donnees.zone_parente_id !== null) {
     donnees.zone_parente_id = identifiantNormalise(donnees.zone_parente_id) ?? fautif('Zone parente introuvable dans cette ferme.');
   }
+  exigerInchangee(donnees, existante, ['supprime_le'], 'Une zone');
   const ligne: Ligne = { zone_parente_id: null, type_abri: 'plein_champ', surface_m2: null, supprime_le: null, ...existante, ...donnees };
   const nom = texte(ligne.nom, 'le nom de la zone');
   const typeAbri = ligne.type_abri ?? 'plein_champ';
@@ -216,6 +229,7 @@ export async function placerEmplacementCreation(
   if (existante !== undefined && existante.ferme_id !== ctx.fermeId) throw new Error('Emplacement introuvable dans cette ferme.');
   const donnees = recues(valeurs as Ligne, COLONNES_EMPLACEMENT, existante, 'emplacement');
   if (donnees.zone_id !== undefined) donnees.zone_id = identifiantNormalise(donnees.zone_id) ?? fautif('Zone introuvable dans cette ferme.');
+  exigerInchangee(donnees, existante, ['supprime_le', 'placement'], 'Une planche');
   const placementAvant: PlacementRecu =
     typeof existante?.placement_x_m === 'number' && typeof existante.placement_y_m === 'number' && typeof existante.orientation_deg === 'number'
       ? { x: existante.placement_x_m, y: existante.placement_y_m, orientation_deg: existante.orientation_deg }
