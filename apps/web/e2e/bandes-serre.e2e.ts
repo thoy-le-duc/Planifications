@@ -57,7 +57,8 @@ const onglet = (page: Page, libelle: string) => navigation(page).locator('button
 const editeur = (page: Page) => page.getByTestId(T.editeur);
 const zoneTri = (page: Page) => page.locator(`[data-testid="${TC.zoneChoix}"][data-id="${ZONE_TRI}"]`);
 const boutonEnregistrer = (page: Page) => page.getByRole('button', { name: 'Enregistrer', exact: true });
-const bandes = (page: Page) => page.locator(`[data-testid="${TB.bande}"]`);
+// T89 : la seule façon de poser une serre est la fiche, qui écrit toujours sa grille (T88) : les bandes sont des cases.
+const bandes = (page: Page) => page.locator('[data-testid="case-serre"]');
 
 async function amorcerEtOuvrir(page: Page): Promise<void> {
   await page.goto('/diagnostic/amorcer.html?jeu=placement&tri=1');
@@ -105,6 +106,11 @@ test('ordinateur : placer la serre, ranger les planches dans les bandes, enregis
     await zoneTri(page).click();
     await expect(bandes(page)).toHaveCount(0);
     await page.getByRole('button', { name: 'Placer la serre', exact: true }).click();
+    // T89 : la fiche, préremplie à 3 chapelles ; chapelles de 3,2 m et aucune planche à créer, pour garder le scénario de T86.
+    const fiche = page.getByTestId('fiche-serre');
+    await fiche.getByLabel('Largeur d’une chapelle (m)', { exact: true }).fill('3.2');
+    await fiche.getByLabel('Planches par zone', { exact: true }).fill('0');
+    await fiche.getByRole('button', { name: 'Créer', exact: true }).click();
     await expect(bandes(page)).toHaveCount(3);
     await expect(bandes(page)).toHaveText(['Manon 1', 'Manon 2', 'Manon 3']);
     await expect(bandes(page).nth(1)).toHaveAttribute('data-largeur', '3.2');
@@ -115,7 +121,7 @@ test('ordinateur : placer la serre, ranger les planches dans les bandes, enregis
     await expect(page.getByLabel(C.passePied)).toHaveValue('45');
     await page.getByRole('button', { name: B.ranger, exact: true }).click();
     for (const id of MANON_PLANCHES.flat()) await expect(page.locator(`[data-testid="${T.planche}"][data-id="${id}"]`)).toHaveCount(1);
-    await expect(page.getByTestId(TB.avertissement)).toContainText('Manon 2 : 2 planches dépassent de la bande');
+    await expect(page.getByTestId(TB.avertissement)).toContainText('Manon 2 : 2 planches dépassent de la case');
     await boutonEnregistrer(page).click();
     await expect(page.getByTestId(T.annuler), 'Annuler proposé après l’enregistrement').toBeVisible();
   });
@@ -128,7 +134,7 @@ test('ordinateur : placer la serre, ranger les planches dans les bandes, enregis
     await expect(bandes(page)).toHaveCount(3);
     for (const id of MANON_PLANCHES.flat()) await expect(page.locator(`[data-testid="${T.planche}"][data-id="${id}"]`)).toHaveCount(1);
     await page.locator(`[data-testid="${TC.zoneChoix}"][data-id="${MANON[1]}"]`).click();
-    await expect(page.getByTestId(T.panneau)).toContainText('Dans la serre Tri-tunnel, bande 2 sur 3');
+    await expect(page.getByTestId(T.panneau)).toContainText('Dans la serre Tri-tunnel, chapelle 2, tronçon 1');
     await expect(page.getByRole('button', { name: 'Tracer le contour', exact: true })).toHaveCount(0);
   });
 

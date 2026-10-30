@@ -134,7 +134,8 @@ async function nouveauBatiment(page: Page, nom: string, ou: { x: number; y: numb
   await page.getByRole('button', { name: 'Nouveau bâtiment', exact: true }).click();
   const f = fenetre(page, /Nouveau bâtiment/);
   await expect(f).toBeVisible();
-  await f.getByLabel('Type', { exact: true }).selectOption('serre_tunnel');
+  // T89 (règle 6) : « Nouveau bâtiment » ne propose plus les types serre (fiche « Serre ou tunnel »).
+  await f.getByLabel('Type', { exact: true }).selectOption('hangar');
   await f.getByLabel('Nom', { exact: true }).fill(nom);
   await f.getByLabel('Longueur (m)', { exact: true }).fill('40');
   await f.getByLabel('Largeur (m)', { exact: true }).fill('8');
