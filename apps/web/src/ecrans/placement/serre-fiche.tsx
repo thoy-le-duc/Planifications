@@ -367,9 +367,11 @@ export type EditeurDeLaFiche = readonly [
   planches: Etat<ReadonlyMap<string, Planche>>,
   creation: Etat<CreationSerre | null>,
   choisir: (id: string) => void,
+  /** Changements déjà au brouillon de l'éditeur, comptés avec ceux de la fiche contre 500. */
+  deja: number,
 ];
 
-export interface ProprietesFicheSerre extends Omit<ContexteFiche, 'zones' | 'batiments' | 'emplacements'> {
+export interface ProprietesFicheSerre extends Omit<ContexteFiche, 'zones' | 'batiments' | 'emplacements' | 'deja'> {
   /** Lectures de l'éditeur, nulles tant qu'elles ne sont pas arrivées. */
   readonly zones: readonly Zone[] | null;
   readonly batiments: readonly Batiment[] | null;
@@ -390,7 +392,7 @@ const FOCALISABLES = 'button:not([disabled]), input:not([disabled])';
 
 /** La fiche « Serre ou tunnel », sur un seul écran. */
 export function FicheSerre(props: ProprietesFicheSerre): ReactElement {
-  const p: ContexteFiche & { readonly editeur: EditeurDeLaFiche } = { ...props, zones: props.zones ?? [], batiments: props.batiments ?? [], emplacements: props.emplacements ?? [] };
+  const p: ContexteFiche & { readonly editeur: EditeurDeLaFiche } = { ...props, zones: props.zones ?? [], batiments: props.batiments ?? [], emplacements: props.emplacements ?? [], deja: props.editeur[5] };
   const idTitre = useId();
   const idAide = useId();
   const ref = useRef<HTMLDivElement>(null);

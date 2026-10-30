@@ -43,6 +43,8 @@ export { bandesDeLaZone, decouperSerres, rangerDansBandes } from './bandes-serre
 export { DEFAUTS_SERRE, defautsSerre, erreurFicheSerre, nombrePlanchesParDefaut, nomsDesZones, rangerDansBande, resumeSerre, typeDeSerre } from '@planif/core/placement';
 
 const PASSE_PIED_MAX_CM = 500;
+/** Raison d'un bouton bloqué pendant une écriture (même texte que MESSAGES_ETAPES.occupe, dans le morceau de l'éditeur). */
+const OCCUPE = 'Enregistrement en cours';
 /** Un passe-pied valide : un entier de 0 à 500 cm. */
 const passePiedValide = (texte: string): boolean => /^\d{1,3}$/.test(texte.trim()) && Number(texte) <= PASSE_PIED_MAX_CM;
 
@@ -437,6 +439,8 @@ export interface ProprietesPanneauZone {
   readonly edition: boolean;
   /** Le point de départ du plan est posé et aucun bâtiment n'est en cours de pose. */
   readonly origineSouhaitee: boolean;
+  /** T89 : une écriture est en cours : « Placer la serre » (et « Tracer le contour ») attendent. */
+  readonly occupe: boolean;
   readonly trace: Trace | null;
   readonly message: string | null;
   readonly conteneur: RefObject<HTMLDivElement | null>;
@@ -464,6 +468,7 @@ export function PanneauZone({
   info,
   edition,
   origineSouhaitee,
+  occupe,
   trace,
   message,
   conteneur,
@@ -520,16 +525,18 @@ export function PanneauZone({
             type="button"
             className="pl-bouton"
             data-action="tracer"
-            disabled={!origineSouhaitee}
-            aria-describedby={origineSouhaitee ? undefined : idRaison}
+            disabled={!origineSouhaitee || occupe}
+            aria-describedby={origineSouhaitee && !occupe ? undefined : idRaison}
             onClick={typeSerre === null ? surTracer : surSerre}
           >
             {typeSerre === null ? 'Tracer le contour' : contour === null ? 'Placer la serre' : 'Remplacer par une serre'}
           </button>
           <p id={idRaison} className="pl-aide">
-            {origineSouhaitee
-              ? typeSerre === null && 'Posez les sommets un à un sur la photo, puis fermez le tracé.'
-              : 'Posez d’abord le point de départ du plan.'}
+            {occupe
+              ? OCCUPE
+              : origineSouhaitee
+                ? typeSerre === null && 'Posez les sommets un à un sur la photo, puis fermez le tracé.'
+                : 'Posez d’abord le point de départ du plan.'}
           </p>
         </>
       )}

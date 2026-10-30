@@ -794,8 +794,9 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             ? null
             : MESSAGES_ETAPES.rienAEnregistrer;
   /** « Nouveau bâtiment » et « Tracer un chemin » attendent l'origine, et la fin d'une pose ou d'un tracé. */
-  const nouveauBloque = origine === null || pose !== null || trace !== null;
-  const raisonNouveau = origine === null ? MESSAGES_ETAPES.sansOrigine : pose !== null ? MESSAGES_ETAPES.poseEnCours : MESSAGES_ETAPES.traceEnCours;
+  // T89 : rien ne s'ajoute pendant une écriture (le brouillon écrit sortirait avec, une seconde serre y serait perdue).
+  const raisonNouveau = occupe ? MESSAGES_ETAPES.occupe : origine === null ? MESSAGES_ETAPES.sansOrigine : pose !== null ? MESSAGES_ETAPES.poseEnCours : trace !== null ? MESSAGES_ETAPES.traceEnCours : null;
+  const nouveauBloque = raisonNouveau !== null;
   const peutEnregistrer = raisonEnregistrer === null;
 
   // Les tuiles ne sont demandées qu'une fois les données de la ferme lues (la vue est alors la bonne).
@@ -1586,7 +1587,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
           </button>
         </>
       )}
-      {mZone !== null && <mZone.MenuAjouter raison={nouveauBloque ? raisonNouveau : null} idRaison={idRaisonNouveau} surOuvrir={ouvrirFiche} surBatiment={setFormulaire} />}
+      {mZone !== null && <mZone.MenuAjouter raison={raisonNouveau} idRaison={idRaisonNouveau} surOuvrir={ouvrirFiche} surBatiment={setFormulaire} />}
       {surOrdinateur && (
         <button
           type="button"
@@ -2069,6 +2070,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
                   info={zoneChoisie}
                   edition={edition}
                   origineSouhaitee={origine !== null && pose === null}
+                  occupe={occupe}
                   trace={traceZone}
                   message={messageContour}
                   conteneur={conteneurContour}
@@ -2146,8 +2148,7 @@ function EditeurFerme({ porte, fermeId, utilisateurId, surFermer, ordinateur, en
             zoneId={fiche}
             centre={vue.centre}
             nouvelId={nouvelId ?? identifiantNeuf}
-            deja={changements.length}
-            editeur={[setFiche, setBrouillonB, setBrouillonP, setCreation, selectionner]}
+            editeur={[setFiche, setBrouillonB, setBrouillonP, setCreation, selectionner, changements.length]}
           />
         )}
         {confirmation?.type === 'origine' && (
