@@ -278,9 +278,11 @@ export function precisionDuPlacement(erreur: ErreurPlacement): string {
     incomplet: `placement incomplet : il manque ${MANQUE_AU_PLACEMENT[champ] ?? 'une information'}`,
     orientation_invalide: 'l’orientation doit être comprise entre 0 et 360 degrés, 360 exclu',
     dimension_invalide: GRILLE[champ] ?? `${DIMENSIONS[champ] ?? 'chaque dimension'} du bâtiment doit être un nombre de mètres plus grand que zéro`,
-    plafond_depasse: `${DIMENSIONS[champ] ?? 'une dimension'} du bâtiment dépasse le maximum permis`,
+    plafond_depasse:
+      champ === 'largeur_allee_m'
+        ? 'les allées prennent toute la longueur de la serre : il ne reste rien pour les tronçons'
+        : `${DIMENSIONS[champ] ?? 'une dimension'} du bâtiment dépasse le maximum permis`,
     zone_abritee_avec_contour: 'cette zone est abritée par un bâtiment : elle prend sa forme et n’a pas de contours à elle',
-    grille_impossible: 'les allées prennent toute la longueur de la serre : il ne reste rien pour les tronçons',
   };
   return precisions[erreur.code];
 }

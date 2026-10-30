@@ -145,10 +145,11 @@ function validerGrille(ligne: Readonly<Record<string, unknown>>, longueur: numbe
   const troncons = estNul(t) ? null : (t as number);
   const allee = estNul(a) ? null : (a as number);
   const n = troncons ?? 1;
-  // La base compare en numérique exact : un reste nul à l'imprécision des flottants près est refusé ici.
+  // La base compare en numérique exact : un reste nul à l'imprécision des flottants près est refusé ici. Les allées dépassent ce
+  // que la longueur permet : 'plafond_depasse' sur largeur_allee_m.
   if (n > 1 && !(longueur - (n - 1) * (allee ?? 0) > 1e-9)) {
     return refus(
-      'grille_impossible',
+      'plafond_depasse',
       'largeur_allee_m',
       `Les allées prennent toute la longueur du bâtiment : il ne reste rien pour les ${String(n)} tronçons. Réduisez la largeur des allées ou le nombre de tronçons.`,
     );

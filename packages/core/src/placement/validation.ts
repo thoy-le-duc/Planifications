@@ -38,9 +38,7 @@ export type CodeErreurPlacement =
   | 'orientation_invalide'
   | 'dimension_invalide'
   | 'plafond_depasse'
-  | 'zone_abritee_avec_contour'
-  // T88 : les allées d'une serre prennent toute sa longueur.
-  | 'grille_impossible';
+  | 'zone_abritee_avec_contour';
 
 export interface ErreurPlacement {
   readonly code: CodeErreurPlacement;
