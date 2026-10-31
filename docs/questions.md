@@ -548,6 +548,13 @@ Depuis T91, la 3D ne montre que ce qui est placé, et les zones non placées son
 1. « Dupliquer » refuse aujourd'hui une zone qui contient un autre bâtiment (par exemple une parcelle avec un tunnel dedans). Faut-il copier aussi le tunnel et ses zones, ou garder ce refus ?
 2. Quand on change le type d'une serre (tunnel ↔ chapelle) ou qu'on la passe en hangar, faut-il que la zone abritée suive toute seule (type d'abri mis à jour, ou zone détachée du hangar) ? Proposé : oui, dans un petit ticket.
 
+### Q58 — Quel chantier après le plan ? (posée le 2026-10-31, backlog vide)
+
+Le chantier « plan simple et rationnel » (T87 à T92) est terminé depuis le 30 octobre au soir et le backlog est vide : la boucle s'arrête jusqu'à ta réponse.
+
+1. As-tu pu construire ta ferme avec « Ajouter » → « Serre ou tunnel » et « Dupliquer » ? Qu'est-ce qui coince encore ? Chaque retour devient un ticket.
+2. Si rien ne coince : on prend les deux tickets proposés en Q52 (journal des modifications consultable, puis sauvegardes chaque nuit hors de Neon), et le petit ticket de Q57.2 (type d'abri qui suit la serre) ? Une réponse « oui » suffit.
+
 ## Questions ouvertes du brief
 
 - Nom du produit.
