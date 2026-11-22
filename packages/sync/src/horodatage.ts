@@ -8,9 +8,11 @@
  *   - en JavaScript : `instantHorodatage`, `comparerSaisies` (enVigueur, historique de l'écran) ;
  *   - en SQL : `cleHorodatageSql` (fait-unique.ts, les chaînes), par `julianday` de SQLite, à
  *     côté du SQL qui l'utilise (morceau `fait` depuis T13r).
- * `instantHorodatage` reproduit la lecture de SQLite (3.51 et plus : Node et wa-sqlite) des
- * formes admises : l'instant est le « jour julien » de SQLite en millisecondes (entier). L'égalité
- * avec `julianday` est vérifiée par horodatage-instant.test.ts sur une base node:sqlite.
+ * `instantHorodatage` reproduit la lecture de SQLite 3.54 (Node 22.23.5) des formes admises :
+ * l'instant est le « jour julien » de SQLite en millisecondes (entier). L'égalité avec `julianday`
+ * est vérifiée par horodatage-instant.test.ts sur une base node:sqlite. Le wa-sqlite de
+ * @powersync/web (3.53.0) peut encore lire une heure 24 non pile (« 24:30 ») : écart accepté,
+ * l'appli n'écrit jamais cette forme.
  *
  * Formes admises (gardées par le même filtre des deux côtés) : `AAAA-MM-JJ`, puis `T` ou une
  * espace, puis éventuellement `HH:MM[:SS[.fraction]]` et un fuseau (`Z`, `±HH:MM` ; `±HH` et
@@ -62,8 +64,9 @@ export function instantHorodatage(h: unknown): number {
   const jour = Number(j);
   const [heure, minute, seconde] = [Number(hh ?? 0), Number(mi ?? 0), Number(ss ?? 0)];
   const [fuseauH, fuseauM] = [Number(fh ?? 0), Number(fm ?? 0)];
-  // Bornes de SQLite (getDigits) : hors d'elles, la date est illisible.
+  // Bornes de SQLite (getDigits, et depuis 3.54 une heure 24 seulement pile, sans minute, seconde ni chiffre de fraction non nuls) : hors d'elles, la date est illisible.
   if (mois < 1 || mois > 12 || jour < 1 || jour > 31 || heure > 24 || minute > 59 || seconde > 59 || fuseauH > 14 || fuseauM > 59) return 0;
+  if (heure === 24 && (minute !== 0 || seconde !== 0 || /[1-9]/.test(fraction ?? ''))) return 0;
   // computeJD de SQLite, à l'identique (divisions entières de C).
   if (mois <= 2) {
     annee -= 1;

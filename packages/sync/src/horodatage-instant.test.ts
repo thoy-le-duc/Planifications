@@ -46,6 +46,12 @@ const FORMES = [
   '2026-10-01 ',
   '2026-10-01TT 10:00:00Z ',
   '2026-02-30T24:00:00Z',
+  '2026-10-01T24:00:00Z',
+  '2026-10-01T24:00Z',
+  '2026-10-01T24:00:00.000Z',
+  '2026-10-01T24:00:00.0000000Z',
+  '2026-10-01 24:00 ',
+  '2026-10-01T24:00:00-05:30',
   '2026-01-15T12:00:00Z',
   '2024-02-29T23:59:59.999Z',
   '0000-01-01T00:00:00Z',
@@ -54,6 +60,11 @@ const FORMES = [
   '1582-10-15T00:00:00Z',
   '9999-12-31T23:59:59.999Z',
   // Illisibles : instant 0 des deux côtés.
+  '2026-10-01T24:00:01Z',
+  '2026-10-01T24:01Z',
+  '2026-10-01 24:59:59',
+  '2026-10-01T24:00:00.5Z',
+  '2026-10-01T24:00:00.0001Z',
   '2026-10-01T10:00:00+15:00',
   '2026-10-01T10:60:00Z',
   '2026-10-01T25:00:00Z',
@@ -143,6 +154,14 @@ describe('T13n : instantHorodatage, comme julianday de SQLite', () => {
     expect(comparerSaisies(s('b', '2026-10-10 10:00:00+00'), s('a', '2026-10-10T10:00:00.000Z'))).toBeGreaterThan(0);
     const [ka, kb] = clesSql(['2026-10-10 10:00:00.5+00', '2026-10-10T10:00:00.400Z']);
     expect((ka ?? '') > (kb ?? '')).toBe(true);
+  });
+
+  it('T93 : une heure 24 n’est lisible que pile (minutes, secondes et fraction nulles), comme dans SQLite 3.54', () => {
+    for (const h of ['2026-10-01T24:01Z', '2026-10-01T24:00:01Z', '2026-10-01T24:00:00.5Z', '2026-10-01T24:00:00.0001Z']) {
+      expect(instantHorodatage(h), h).toBe(0);
+    }
+    expect(instantHorodatage('2026-10-01T24:00:00Z')).not.toBe(0);
+    expect(instantHorodatage('2026-10-01T24:00:00Z')).toBe(instantHorodatage('2026-10-02T00:00:00Z'));
   });
 
   it('sans fuseau, l’heure est en UTC', () => {

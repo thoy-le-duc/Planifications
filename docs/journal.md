@@ -2,6 +2,18 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-11-22 (soir) — T93 : main de nouveau verte, « 24 h » lu comme SQLite 3.54
+
+- **Fait** : depuis Node 22.23.5 (SQLite 3.54.1), la CI était rouge sur toute PR : `julianday` refuse une heure 24 qui n'est pas exactement 24:00:00. `instantHorodatage` suit maintenant cette règle. Tests rouges écrits d'abord, relecture critique sans point bloquant.
+- **Décidé** : suivre le SQLite le plus récent ; le wa-sqlite des téléphones (3.53.0) peut encore lire « 24:30 », écart accepté puisque l'appli n'écrit jamais cette forme. Le cas « 9999-12-31 24 h + fuseau positif », qui existait déjà, part en T93b.
+- **Bloquant** : rien. Les tests d'horodatage dépendent de la version de Node (un poste en Node 22.18 à 22.23.4 les verrait rouges) : raison de plus de répondre à Q53 (épingler Node).
+
+## 2026-11-22 (soir) — Surveillance : base de production au-delà du quota Neon
+
+- **Fait** : backlog vide, aucune PR de la boucle ouverte, CI de `main` verte. Le workflow « Migrations de production » du 19 novembre est rouge : Neon répond « quota dépassé » (code 53000). Question Q59 posée, Théophane prévenu.
+- **Décidé** : aucun ticket lancé (backlog vide, Q58 sans réponse) ; aucune relance des migrations par la boucle, rien à corriger dans le code.
+- **Bloquant** : quota de la base de production à régler par Théophane dans la console Neon (Q59) ; Q58 (chantier suivant) toujours sans réponse.
+
 ## 2026-10-30 — T92 : une seule façon de faire chaque chose dans le plan
 
 - **Fait** : « Remplacer par une serre » et « Nouveau bâtiment » retirés (tout passe par « Ajouter » et « Placer la serre », qui efface le contour et range les planches en un enregistrement) ; « Zone abritée » seulement pour une serre ; « Défini par la serre X » dans Ma ferme ; parcours guidé à jour ; « Aller à » inclut serres et zones abritées.
