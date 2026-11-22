@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-11-22 (soir) — T93 : main de nouveau verte, « 24 h » lu comme SQLite 3.54
+
+- **Fait** : depuis Node 22.23.5 (SQLite 3.54.1), la CI était rouge sur toute PR : `julianday` refuse une heure 24 qui n'est pas exactement 24:00:00. `instantHorodatage` suit maintenant cette règle. Tests rouges écrits d'abord, relecture critique sans point bloquant.
+- **Décidé** : suivre le SQLite le plus récent ; le wa-sqlite des téléphones (3.53.0) peut encore lire « 24:30 », écart accepté puisque l'appli n'écrit jamais cette forme. Le cas « 9999-12-31 24 h + fuseau positif », qui existait déjà, part en T93b.
+- **Bloquant** : rien. Les tests d'horodatage dépendent de la version de Node (un poste en Node 22.18 à 22.23.4 les verrait rouges) : raison de plus de répondre à Q53 (épingler Node).
+
 ## 2026-11-22 (soir) — Surveillance : base de production au-delà du quota Neon
 
 - **Fait** : backlog vide, aucune PR de la boucle ouverte, CI de `main` verte. Le workflow « Migrations de production » du 19 novembre est rouge : Neon répond « quota dépassé » (code 53000). Question Q59 posée, Théophane prévenu.
