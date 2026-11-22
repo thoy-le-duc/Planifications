@@ -555,6 +555,14 @@ Le chantier « plan simple et rationnel » (T87 à T92) est terminé depuis le 3
 1. As-tu pu construire ta ferme avec « Ajouter » → « Serre ou tunnel » et « Dupliquer » ? Qu'est-ce qui coince encore ? Chaque retour devient un ticket.
 2. Si rien ne coince : on prend les deux tickets proposés en Q52 (journal des modifications consultable, puis sauvegardes chaque nuit hors de Neon), et le petit ticket de Q57.2 (type d'abri qui suit la serre) ? Une réponse « oui » suffit.
 
+### Q59 — Base de production : quota Neon dépassé (posée le 2026-11-22, migrations du 19 novembre)
+
+Le workflow « Migrations de production » (run 77, 19 novembre, après la fusion du catalogue e-phy du 17/11) est **rouge** : la base répond « code 53000 : Your account or project has exceeded the quota. Upgrade your plan to increase limits. » Ce n'est ni une migration fautive (cette fusion n'en apportait aucune) ni le secret : la connexion arrive bien jusqu'à Neon, qui refuse. Les runs précédents (53 à 76) étaient verts. **L'appli en ligne risque de ne plus pouvoir lire ni écrire sur le serveur** tant que le quota est dépassé (les téléphones gardent leurs saisies hors ligne).
+
+1. Dans la console Neon (projet de l'appli) : quel quota est dépassé (stockage, heures de calcul, transfert) ? Selon le cas, attendre la remise à zéro du mois, libérer de la place ou passer à l'offre payante.
+2. Une fois réglé, relancer le dernier run de « Migrations de production » depuis l'onglet Actions (ou attendre la prochaine fusion) : il doit redevenir vert. La boucle ne relance jamais les migrations de production elle-même.
+3. Veux-tu un ticket pour être prévenu plus tôt (alerte sur la place occupée et le temps de calcul Neon) ? « Oui » suffit.
+
 ## Questions ouvertes du brief
 
 - Nom du produit.

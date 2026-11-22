@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-11-22 (soir) — Surveillance : base de production au-delà du quota Neon
+
+- **Fait** : backlog vide, aucune PR de la boucle ouverte, CI de `main` verte. Le workflow « Migrations de production » du 19 novembre est rouge : Neon répond « quota dépassé » (code 53000). Question Q59 posée, Théophane prévenu.
+- **Décidé** : aucun ticket lancé (backlog vide, Q58 sans réponse) ; aucune relance des migrations par la boucle, rien à corriger dans le code.
+- **Bloquant** : quota de la base de production à régler par Théophane dans la console Neon (Q59) ; Q58 (chantier suivant) toujours sans réponse.
+
 ## 2026-10-30 — T92 : une seule façon de faire chaque chose dans le plan
 
 - **Fait** : « Remplacer par une serre » et « Nouveau bâtiment » retirés (tout passe par « Ajouter » et « Placer la serre », qui efface le contour et range les planches en un enregistrement) ; « Zone abritée » seulement pour une serre ; « Défini par la serre X » dans Ma ferme ; parcours guidé à jour ; « Aller à » inclut serres et zones abritées.
