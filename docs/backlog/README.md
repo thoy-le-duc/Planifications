@@ -226,6 +226,7 @@ Ce tableau est la **source de vérité** des statuts (à tenir à jour à chaque
 | [T90](T90-dupliquer.md) | Dupliquer une serre ou une parcelle, avec zones et planches (Q55) | T89 | fait |
 | [T91](T91-3d-fidele-au-plan.md) | La 3D montre exactement le plan, rien d'inventé (Q55) | T88 | fait |
 | [T92](T92-nettoyage-anciens-chemins.md) | Plan : retirer les anciens chemins en double (Q55) | T89, T90, T91 | fait |
+| [T93](T93-heure-24-sqlite.md) | Main verte : « 24 h » lu comme SQLite 3.54 (horodatages) — **critique** | T13n, T13q | à faire |
 
 Vue 3D et jumeau numérique (Q30, priorité de la semaine du 2026-10-07) : T27b et T28a d'abord, en parallèle (fichiers disjoints) ; puis T29 et T28s ; puis T28c et T28b ; puis T28d.
 
