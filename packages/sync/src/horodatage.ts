@@ -62,8 +62,9 @@ export function instantHorodatage(h: unknown): number {
   const jour = Number(j);
   const [heure, minute, seconde] = [Number(hh ?? 0), Number(mi ?? 0), Number(ss ?? 0)];
   const [fuseauH, fuseauM] = [Number(fh ?? 0), Number(fm ?? 0)];
-  // Bornes de SQLite (getDigits) : hors d'elles, la date est illisible.
+  // Bornes de SQLite (getDigits, et depuis 3.54 une heure 24 seulement pile, sans minute, seconde ni chiffre de fraction non nuls) : hors d'elles, la date est illisible.
   if (mois < 1 || mois > 12 || jour < 1 || jour > 31 || heure > 24 || minute > 59 || seconde > 59 || fuseauH > 14 || fuseauM > 59) return 0;
+  if (heure === 24 && (minute !== 0 || seconde !== 0 || /[1-9]/.test(fraction ?? ''))) return 0;
   // computeJD de SQLite, à l'identique (divisions entières de C).
   if (mois <= 2) {
     annee -= 1;
