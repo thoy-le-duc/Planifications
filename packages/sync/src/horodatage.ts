@@ -8,9 +8,11 @@
  *   - en JavaScript : `instantHorodatage`, `comparerSaisies` (enVigueur, historique de l'écran) ;
  *   - en SQL : `cleHorodatageSql` (fait-unique.ts, les chaînes), par `julianday` de SQLite, à
  *     côté du SQL qui l'utilise (morceau `fait` depuis T13r).
- * `instantHorodatage` reproduit la lecture de SQLite (3.51 et plus : Node et wa-sqlite) des
- * formes admises : l'instant est le « jour julien » de SQLite en millisecondes (entier). L'égalité
- * avec `julianday` est vérifiée par horodatage-instant.test.ts sur une base node:sqlite.
+ * `instantHorodatage` reproduit la lecture de SQLite 3.54 (Node 22.23.5) des formes admises :
+ * l'instant est le « jour julien » de SQLite en millisecondes (entier). L'égalité avec `julianday`
+ * est vérifiée par horodatage-instant.test.ts sur une base node:sqlite. Le wa-sqlite de
+ * @powersync/web (3.53.0) peut encore lire une heure 24 non pile (« 24:30 ») : écart accepté,
+ * l'appli n'écrit jamais cette forme.
  *
  * Formes admises (gardées par le même filtre des deux côtés) : `AAAA-MM-JJ`, puis `T` ou une
  * espace, puis éventuellement `HH:MM[:SS[.fraction]]` et un fuseau (`Z`, `±HH:MM` ; `±HH` et
