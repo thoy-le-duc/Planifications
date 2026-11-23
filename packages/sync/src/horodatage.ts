@@ -91,6 +91,9 @@ export function instantHorodatage(h: unknown): number {
     }
     instant += heure * 3_600_000 + minute * 60_000 + Math.trunc((seconde + ms) * 1000 + 0.5);
   }
+  // Comme SQLite : l'heure locale (avant le fuseau) doit déjà être dans les bornes ; seule
+  // « 9999-12-31 24 h » en sort (le 10000-01-01), illisible quel que soit le fuseau.
+  if (instant > JULIEN_MAX) return 0;
   if (signe !== undefined) instant -= (signe === '-' ? -1 : 1) * (fuseauM + fuseauH * 60) * 60_000;
   return instant >= 0 && instant <= JULIEN_MAX ? instant : 0;
 }
