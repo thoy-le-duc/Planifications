@@ -2,6 +2,12 @@
 
 Trois lignes par ticket terminé : fait, décidé, bloquant. Le plus récent en haut.
 
+## 2026-11-23 (matin) — T93b : « 9999-12-31 24 h » illisible quel que soit le fuseau, comme SQLite
+
+- **Fait** : `instantHorodatage` refuse désormais une date locale au-delà de la borne avant d'appliquer le fuseau, comme SQLite 3.54.1 ; « 9999-12-31T24:00 » est illisible (0) avec ou sans fuseau. Tests rouges écrits d'abord par le testeur (11 formes ajoutées à `FORMES`), relecture critique sans point bloquant (215 831 formes comparées à SQLite, aucun écart).
+- **Décidé** : le ticket supposait une valeur pour « 9999-12-31T24:00:00-05:00 » ; SQLite la lit aussi comme illisible, le test suit SQLite. Aucune donnée réelle concernée.
+- **Bloquant** : rien pour le code. Le backlog est de nouveau vide. Migrations de production toujours rouges sur le quota Neon (code 53000, run du 22 novembre) : Q59 attend Théophane ; Q58 (chantier suivant) aussi.
+
 ## 2026-11-22 (soir) — T93 : main de nouveau verte, « 24 h » lu comme SQLite 3.54
 
 - **Fait** : depuis Node 22.23.5 (SQLite 3.54.1), la CI était rouge sur toute PR : `julianday` refuse une heure 24 qui n'est pas exactement 24:00:00. `instantHorodatage` suit maintenant cette règle. Tests rouges écrits d'abord, relecture critique sans point bloquant.
